@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rijksmuseum Artwork Viewer</title>
+  <link rel="stylesheet" href="./src/viewer.css">
+  <script
+    src="https://cdn.jsdelivr.net/npm/openseadragon@4.1.1/build/openseadragon/openseadragon.min.js"
+    integrity="sha384-SslUh5K0qRJYyxhoVK+XxSxjS0BNDdgc3cLvY4+nMEmnLtgdEK3UaBTDaHOk8T9S"
+    crossorigin="anonymous"
+  ></script>
+</head>
+<body>
+  <div id="app">
+    <div class="loading">
+      <div class="loading-spinner"></div>
+      <p>Loading artwork...</p>
+    </div>
+  </div>
+  <script type="module" src="./src/viewer.ts"></script>
+</body>
+</html>

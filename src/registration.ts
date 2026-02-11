@@ -1,7 +1,20 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  registerAppTool,
+  registerAppResource,
+  RESOURCE_MIME_TYPE,
+} from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
 /**
  * Register all tools, resources, and prompts on the given McpServer.
@@ -14,6 +27,7 @@ export function registerAll(
 ): void {
   registerTools(server, apiClient, httpPort);
   registerResources(server, apiClient);
+  registerAppViewerResource(server);
   registerPrompts(server);
 }
 
@@ -134,13 +148,15 @@ function registerTools(
     }
   );
 
-  // ── get_artwork_image ───────────────────────────────────────────
+  // ── get_artwork_image (MCP App with inline IIIF viewer) ────────
 
-  server.registerTool(
+  registerAppTool(
+    server,
     "get_artwork_image",
     {
       description:
         "Get IIIF image information for an artwork, including URLs for thumbnails, full-resolution images, and deep-zoom viewing. " +
+        "In supported clients, shows an interactive inline IIIF viewer with zoom/pan/rotate. " +
         "Optionally include a base64-encoded thumbnail. Not all artworks have images available.",
       inputSchema: {
         objectNumber: z
@@ -153,6 +169,9 @@ function registerTools(
             "If true, includes a small base64-encoded JPEG thumbnail (~200px, 5-10KB)"
           ),
       },
+      _meta: {
+        ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
+      },
     },
     async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
@@ -162,7 +181,7 @@ function registerTools(
         return {
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: JSON.stringify(
                 {
                   objectNumber: args.objectNumber,
@@ -182,17 +201,33 @@ function registerTools(
         imageInfo.viewerUrl = `http://localhost:${httpPort}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
+      // Enrich with artwork metadata for the MCP App viewer
+      const title = RijksmuseumApiClient.parseTitle(object);
+      const creator = RijksmuseumApiClient.parseCreator(object);
+      const date = RijksmuseumApiClient.parseDate(object);
+      const objectNumber = RijksmuseumApiClient.parseObjectNumber(object);
+      const collectionUrl = `https://www.rijksmuseum.nl/en/collection/${objectNumber}`;
+
+      const viewerData = {
+        ...imageInfo,
+        objectNumber,
+        title,
+        creator,
+        date,
+        collectionUrl,
+      };
+
       const contentBlocks: Array<
         | { type: "text"; text: string }
         | { type: "image"; data: string; mimeType: string }
       > = [
         {
           type: "text" as const,
-          text: JSON.stringify(imageInfo, null, 2),
+          text: JSON.stringify(viewerData, null, 2),
         },
       ];
 
-      // Optionally fetch and include thumbnail
+      // Optionally fetch and include thumbnail for non-MCP-Apps clients
       if (args.includeThumbnail) {
         const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, 200);
         contentBlocks.push({
@@ -343,6 +378,55 @@ function registerResources(
         ],
       };
     }
+  );
+}
+
+// ─── MCP App Resource ────────────────────────────────────────────────
+
+function registerAppViewerResource(server: McpServer): void {
+  const loadViewerHtml = (): string => {
+    const htmlPath = path.join(__dirname, "..", "dist", "apps", "index.html");
+    try {
+      return fs.readFileSync(htmlPath, "utf-8");
+    } catch {
+      return `<!DOCTYPE html>
+<html><head><title>Artwork Viewer</title></head>
+<body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">
+<div style="text-align:center;color:#666;">
+<h1>Viewer Not Built</h1><p>Run <code>npm run build:ui</code> to build the viewer.</p>
+</div></body></html>`;
+    }
+  };
+
+  registerAppResource(
+    server,
+    "Rijksmuseum Artwork Viewer",
+    ARTWORK_VIEWER_RESOURCE_URI,
+    {
+      description:
+        "Interactive IIIF deep-zoom viewer for Rijksmuseum artworks",
+      mimeType: RESOURCE_MIME_TYPE,
+    },
+    async () => ({
+      contents: [
+        {
+          uri: ARTWORK_VIEWER_RESOURCE_URI,
+          mimeType: RESOURCE_MIME_TYPE,
+          text: loadViewerHtml(),
+          _meta: {
+            ui: {
+              csp: {
+                resourceDomains: [
+                  "https://iiif.micr.io",
+                  "https://cdn.jsdelivr.net",
+                  "https://unpkg.com",
+                ],
+              },
+            },
+          },
+        },
+      ],
+    })
   );
 }
 
