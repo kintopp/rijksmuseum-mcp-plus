@@ -3,11 +3,18 @@
  * Loads OpenSeadragon from CDN — no server-side image proxying.
  */
 export function getViewerHtml(iiifId: string, title: string = "Artwork"): string {
-  const escapedTitle = title
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  if (!/^[a-zA-Z0-9_-]+$/.test(iiifId)) {
+    throw new Error("Invalid IIIF ID format");
+  }
+
+  const htmlEscapeMap: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+  };
+
+  const escapedTitle = title.replace(/[&<>"]/g, (char) => htmlEscapeMap[char]);
 
   return `<!DOCTYPE html>
 <html lang="en">

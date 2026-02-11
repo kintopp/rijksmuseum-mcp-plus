@@ -13,6 +13,14 @@ import { getViewerHtml } from "./viewer.js";
 const SERVER_NAME = "rijksmuseum-mcp+";
 const SERVER_VERSION = "2.0.0";
 
+// ─── Types ───────────────────────────────────────────────────────────
+
+type SessionData = {
+  server: McpServer;
+  transport: StreamableHTTPServerTransport;
+  lastActivity: number;
+};
+
 // ─── Determine transport mode ────────────────────────────────────────
 
 function shouldUseHttp(): boolean {
@@ -65,58 +73,76 @@ async function runHttp(): Promise<void> {
   );
   app.use(express.json());
 
-  // Track active sessions
-  const sessions = new Map<
-    string,
-    { server: McpServer; transport: StreamableHTTPServerTransport }
-  >();
+  // Track active sessions (with last-activity timestamp for TTL cleanup)
+  const MAX_SESSIONS = 100;
+  const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+  const sessions = new Map<string, SessionData>();
+
+  // Periodically purge stale sessions
+  const cleanupInterval = setInterval(() => {
+    purgeStaleSessionsFrom(sessions, SESSION_TTL_MS);
+  }, 60_000);
+  cleanupInterval.unref(); // Don't prevent process exit
 
   // ── MCP endpoint ────────────────────────────────────────────────
 
   app.all("/mcp", async (req: express.Request, res: express.Response) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    try {
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-    if (req.method === "GET" || req.method === "DELETE") {
-      // GET = SSE stream, DELETE = close session
-      if (!sessionId || !sessions.has(sessionId)) {
-        res.status(400).json({ error: "Invalid or missing session ID" });
-        return;
-      }
-      const session = sessions.get(sessionId)!;
+      // Handle GET (SSE stream) or DELETE (close session)
+      if (req.method === "GET" || req.method === "DELETE") {
+        if (!sessionId || !sessions.has(sessionId)) {
+          res.status(400).json({ error: "Invalid or missing session ID" });
+          return;
+        }
 
-      if (req.method === "DELETE") {
+        const session = sessions.get(sessionId)!;
+        session.lastActivity = Date.now();
         await session.transport.handleRequest(req, res);
-        sessions.delete(sessionId);
+
+        if (req.method === "DELETE") {
+          sessions.delete(sessionId);
+        }
         return;
       }
 
-      await session.transport.handleRequest(req, res);
-      return;
+      // POST to existing session
+      if (sessionId && sessions.has(sessionId)) {
+        const session = sessions.get(sessionId)!;
+        session.lastActivity = Date.now();
+        await session.transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      // POST to create new session — enforce limit
+      if (sessions.size >= MAX_SESSIONS) {
+        res.status(503).json({ error: "Too many active sessions" });
+        return;
+      }
+
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto.randomUUID(),
+      });
+
+      const server = createServer(port);
+      registerCleanup(transport, sessions);
+
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+
+      // Store session after handleRequest (sessionId is assigned during initialize)
+      const newSessionId = transport.sessionId;
+      if (newSessionId) {
+        sessions.set(newSessionId, { server, transport, lastActivity: Date.now() });
+      }
+    } catch (err) {
+      console.error("MCP endpoint error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
     }
-
-    // POST — could be a new session (initialize) or existing session message
-    if (sessionId && sessions.has(sessionId)) {
-      await sessions.get(sessionId)!.transport.handleRequest(req, res, req.body);
-      return;
-    }
-
-    // New session
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
-    });
-
-    const server = createServer(port);
-    registerCleanup(transport, sessions);
-
-    await server.connect(transport);
-
-    // Store session after connection (transport now has a sessionId)
-    const newSessionId = transport.sessionId;
-    if (newSessionId) {
-      sessions.set(newSessionId, { server, transport });
-    }
-
-    await transport.handleRequest(req, res, req.body);
   });
 
   // ── Viewer endpoint ─────────────────────────────────────────────
@@ -130,7 +156,11 @@ async function runHttp(): Promise<void> {
       return;
     }
 
-    res.type("html").send(getViewerHtml(iiifId, title));
+    try {
+      res.type("html").send(getViewerHtml(iiifId, title));
+    } catch {
+      res.status(400).json({ error: "Invalid IIIF ID format" });
+    }
   });
 
   // ── Health check ────────────────────────────────────────────────
@@ -149,14 +179,25 @@ async function runHttp(): Promise<void> {
   });
 }
 
-/** Clean up session when transport closes */
+function purgeStaleSessionsFrom(sessions: Map<string, SessionData>, ttlMs: number): void {
+  const now = Date.now();
+  for (const [sid, session] of sessions) {
+    if (now - session.lastActivity > ttlMs) {
+      session.transport.close?.();
+      sessions.delete(sid);
+    }
+  }
+}
+
 function registerCleanup(
   transport: StreamableHTTPServerTransport,
-  sessions: Map<string, { server: McpServer; transport: StreamableHTTPServerTransport }>
+  sessions: Map<string, SessionData>
 ): void {
   transport.onclose = () => {
     const sid = transport.sessionId;
-    if (sid) sessions.delete(sid);
+    if (sid) {
+      sessions.delete(sid);
+    }
   };
 }
 
