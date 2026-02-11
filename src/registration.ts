@@ -45,9 +45,17 @@ function registerTools(
     {
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
-        "Supports filtering by title, creator, type, material, technique, and creation date. " +
+        "At least one search filter is required. " +
+        "Available filters: query (searches titles), title, creator, type, material, technique, creationDate, description. " +
+        "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
         "Use creationDate with wildcards for ranges (e.g. '16*' for 1600s, '164*' for 1640s).",
       inputSchema: {
+        query: z
+          .string()
+          .optional()
+          .describe(
+            "General search term — searches by title. For more targeted results, use the specific field parameters instead (title, creator, description, etc.)"
+          ),
         title: z
           .string()
           .optional()
@@ -74,6 +82,10 @@ function registerTools(
           .describe(
             "Filter by creation date. Exact year ('1642') or wildcard ('16*' for 1600s, '164*' for 1640s)"
           ),
+        description: z
+          .string()
+          .optional()
+          .describe("Search in artwork descriptions (e.g. subject matter, depicted scenes)"),
         maxResults: z
           .number()
           .int()
@@ -125,7 +137,10 @@ function registerTools(
     {
       description:
         "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch). " +
-        "Returns title, creator, date, description, technique, dimensions, provenance, credit line, inscriptions, and more.",
+        "Returns 24 metadata categories including titles, creator, date, description, curatorial narrative, " +
+        "dimensions (text + structured), materials, object type, production details, provenance, " +
+        "credit line, inscriptions, license, related objects, collection sets, and more. " +
+        "Also reports the bibliography count — use get_artwork_bibliography for full citations.",
       inputSchema: {
         objectNumber: z
           .string()
@@ -136,12 +151,60 @@ function registerTools(
     },
     async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
-      const detail = RijksmuseumApiClient.toDetail(object, uri);
+      const detail = await api.toDetailEnriched(object, uri);
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(detail, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // ── get_artwork_bibliography ───────────────────────────────────
+
+  server.registerTool(
+    "get_artwork_bibliography",
+    {
+      description:
+        "Get bibliography and scholarly references for an artwork. " +
+        "By default returns a summary (total count + first 5 citations). " +
+        "Set full=true to retrieve all citations (can be 100+ entries for major works — consider the context window). " +
+        "Supports plaintext and BibTeX output formats.",
+      inputSchema: {
+        objectNumber: z
+          .string()
+          .describe(
+            "The object number of the artwork (e.g. 'SK-C-5')"
+          ),
+        format: z
+          .enum(["text", "bibtex"])
+          .default("text")
+          .describe(
+            "Output format: 'text' for readable citations, 'bibtex' for structured BibTeX entries"
+          ),
+        full: z
+          .boolean()
+          .default(false)
+          .describe(
+            "If true, returns ALL bibliography entries (may be 100+). Default: first 5 entries with total count."
+          ),
+      },
+    },
+    async (args) => {
+      const { object } = await api.findByObjectNumber(args.objectNumber);
+      const result = await api.getBibliography(object, {
+        limit: args.full ? 0 : 5,
+        format: args.format,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
           },
         ],
       };
@@ -420,6 +483,9 @@ function registerAppViewerResource(server: McpServer): void {
                   "https://iiif.micr.io",
                   "https://cdn.jsdelivr.net",
                   "https://unpkg.com",
+                ],
+                connectDomains: [
+                  "https://iiif.micr.io",
                 ],
               },
             },

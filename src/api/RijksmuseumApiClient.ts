@@ -1,13 +1,22 @@
 import axios, { AxiosInstance } from "axios";
 import {
   AAT,
+  AAT_UNIT_LABELS,
   LinkedArtObject,
   ReferredToBy,
   SearchApiResponse,
   SearchParams,
   ArtworkSummary,
   ArtworkDetail,
+  ArtworkDetailEnriched,
   ArtworkImageInfo,
+  TitleVariant,
+  StructuredDimension,
+  RelatedObject,
+  ResolvedTerm,
+  ProductionParticipant,
+  BibliographyEntry,
+  BibliographyResult,
   VisualItem,
   DigitalObject,
   IIIFInfoResponse,
@@ -60,14 +69,31 @@ export class RijksmuseumApiClient {
 
   async search(params: SearchParams): Promise<SearchApiResponse> {
     const query: Record<string, string> = {};
+
+    // Map 'query' to 'title' — the API has no general full-text search,
+    // and title is the most intuitive match for free-text queries.
+    // Explicit 'title' takes precedence over 'query'.
     if (params.title) query.title = params.title;
+    else if (params.query) query.title = params.query;
+
     if (params.creator) query.creator = params.creator;
     if (params.objectNumber) query.objectNumber = params.objectNumber;
     if (params.type) query.type = params.type;
     if (params.material) query.material = params.material;
     if (params.technique) query.technique = params.technique;
     if (params.creationDate) query.creationDate = params.creationDate;
+    if (params.description) query.description = params.description;
     if (params.pageToken) query.pageToken = params.pageToken;
+
+    // Guard against unfiltered searches — the API returns the entire
+    // collection (837K+ items) when no filters are provided.
+    const hasFilter = Object.keys(query).some((k) => k !== "pageToken");
+    if (!hasFilter) {
+      throw new Error(
+        "At least one search filter is required (e.g. title, creator, type, material, technique, creationDate, or description). " +
+        "Searching without any filter would return the entire collection."
+      );
+    }
 
     const { data } = await this.http.get<SearchApiResponse>(
       RijksmuseumApiClient.SEARCH_URL,
@@ -303,6 +329,133 @@ export class RijksmuseumApiClient {
     return parts.length > 0 ? parts.join("-") : null;
   }
 
+  // ── Group A Parsers (no HTTP) ─────────────────────────────────
+
+  /** Extract all title variants with language and qualifier */
+  static parseTitles(obj: LinkedArtObject): TitleVariant[] {
+    return (obj.identified_by ?? [])
+      .filter((i) => i.type === "Name")
+      .map((n) => {
+        const langId = getLangId(n.language);
+        const language: TitleVariant["language"] =
+          langId === AAT.LANG_EN ? "en" : langId === AAT.LANG_NL ? "nl" : "other";
+
+        const isBrief =
+          hasClassification(n.classified_as, AAT.BRIEF_TEXT) ||
+          hasClassification(n.classified_as, AAT.TITLE_TYPE);
+        const isFull = hasClassification(n.classified_as, AAT.FULL_TITLE);
+        const qualifier: TitleVariant["qualifier"] = isBrief
+          ? "brief"
+          : isFull
+            ? "full"
+            : "other";
+
+        return { title: n.content, language, qualifier };
+      });
+  }
+
+  /** Extract curatorial narrative (museum wall text) in EN and NL */
+  static parseNarrative(obj: LinkedArtObject): {
+    en: string | null;
+    nl: string | null;
+  } {
+    let en: string | null = null;
+    let nl: string | null = null;
+
+    for (const s of obj.subject_of ?? []) {
+      // Language is on the parent subject_of entry, not on parts
+      const langId = getLangId(s.language);
+      const isEn = langId === AAT.LANG_EN;
+      const isNl = langId === AAT.LANG_NL;
+      if (!isEn && !isNl) continue;
+
+      // Find the narrative part classified as AAT description (300048722)
+      for (const p of s.part ?? []) {
+        if (
+          p.content &&
+          hasClassification(p.classified_as, AAT.NARRATIVE)
+        ) {
+          if (isEn && !en) en = p.content;
+          if (isNl && !nl) nl = p.content;
+        }
+      }
+    }
+    return { en, nl };
+  }
+
+  /** Extract license/rights URI (e.g. CC0) */
+  static parseLicense(obj: LinkedArtObject): string | null {
+    for (const s of obj.subject_of ?? []) {
+      for (const st of s.subject_to ?? []) {
+        if (st.classified_as?.[0]) {
+          const cls = st.classified_as[0];
+          const uri = typeof cls === "string" ? cls : cls.id;
+          if (uri) return uri;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Extract web page URL from subject_of with digitally_carried_by */
+  static parseWebPage(obj: LinkedArtObject): string | null {
+    for (const s of obj.subject_of ?? []) {
+      for (const d of s.digitally_carried_by ?? []) {
+        if (d.format === "text/html" && d.access_point?.[0]?.id) {
+          return d.access_point[0].id;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Extract structured numeric dimensions (value + unit + label) */
+  static parseDimensions(obj: LinkedArtObject): StructuredDimension[] {
+    return (obj.dimension ?? [])
+      .filter((d) => d.value != null)
+      .map((d) => {
+        const unitUri = d.unit?.id ?? d.unit?._label ?? "";
+        const unit = AAT_UNIT_LABELS[unitUri] ?? unitUri;
+        const typeUri = d.classified_as?.[0]?.id ?? "";
+        const note = d.referred_to_by?.[0]?.content ?? null;
+        return { type: typeUri, value: d.value!, unit, note };
+      });
+  }
+
+  /** Extract related object references from attributed_by */
+  static parseRelatedObjects(obj: LinkedArtObject): RelatedObject[] {
+    const results: RelatedObject[] = [];
+    for (const a of obj.attributed_by ?? []) {
+      // Prefer English label
+      const labels = a.identified_by ?? [];
+      const enLabel = labels.find(
+        (l) => getLangId(l.language) === AAT.LANG_EN
+      );
+      const label = enLabel?.content ?? labels[0]?.content ?? "related";
+      const uri = a.assigned?.[0]?.id;
+      if (uri) results.push({ relationship: label, objectUri: uri });
+    }
+    // Deduplicate by URI (EN and NL labels create duplicate entries)
+    const seen = new Set<string>();
+    return results.filter((r) => {
+      if (seen.has(r.objectUri)) return false;
+      seen.add(r.objectUri);
+      return true;
+    });
+  }
+
+  /** Extract persistent identifier (handle.net) from equivalent */
+  static parsePersistentId(obj: LinkedArtObject): string | null {
+    return obj.equivalent?.[0]?.id ?? null;
+  }
+
+  /** Count bibliography entries (for discoverability) */
+  static parseBibliographyCount(obj: LinkedArtObject): number {
+    return (obj.assigned_by ?? []).filter((a) =>
+      hasClassification(a.classified_as, AAT.CITATION)
+    ).length;
+  }
+
   // ── Mappers ────────────────────────────────────────────────────
 
   static toSummary(obj: LinkedArtObject, uri: string): ArtworkSummary {
@@ -357,6 +510,465 @@ export class RijksmuseumApiClient {
           .map((i) => [i.content, i.classified_as?.[0] && typeof i.classified_as[0] !== "string" ? i.classified_as[0].id ?? "" : ""])
       ),
     };
+  }
+
+  // ── Vocabulary Resolution (Group B) ───────────────────────────
+
+  /**
+   * Resolve a Rijksmuseum vocabulary URI to extract the English label
+   * and external equivalents (AAT, Wikidata).
+   */
+  async resolveVocabTerm(uri: string): Promise<ResolvedTerm> {
+    const { data } = await this.http.get(uri);
+
+    // Extract English label, falling back to Dutch, then _label, then URI
+    const names = ((data.identified_by ?? []) as any[]).filter(
+      (i: any) => i.type === "Name"
+    );
+    const enName = names.find(
+      (n: any) => getLangId(n.language) === AAT.LANG_EN
+    );
+    const nlName = names.find(
+      (n: any) => getLangId(n.language) === AAT.LANG_NL
+    );
+    const label =
+      enName?.content ?? nlName?.content ?? data._label ?? uri.split("/").pop() ?? uri;
+
+    // Extract external equivalents (AAT, Wikidata)
+    const equivalents: Record<string, string> = {};
+    for (const eq of (data.equivalent ?? []) as any[]) {
+      const eqId: string = eq.id ?? "";
+      if (eqId.includes("vocab.getty.edu")) equivalents.aat = eqId;
+      else if (eqId.includes("wikidata.org")) equivalents.wikidata = eqId;
+    }
+
+    return {
+      id: uri,
+      label,
+      ...(Object.keys(equivalents).length > 0 ? { equivalents } : {}),
+    };
+  }
+
+  /**
+   * Batch-resolve all vocabulary URIs from a Linked Art object.
+   * Returns resolved terms for object types, materials, production
+   * participants, collection sets, and dimension types.
+   */
+  async resolveVocabulary(obj: LinkedArtObject): Promise<{
+    objectTypes: ResolvedTerm[];
+    materials: ResolvedTerm[];
+    production: ProductionParticipant[];
+    collectionSetLabels: ResolvedTerm[];
+    dimensionTypeLabels: Map<string, string>;
+  }> {
+    // Collect all URIs that need resolution
+    const typeUris = (obj.classified_as ?? [])
+      .map((c) => (typeof c === "string" ? c : c.id))
+      .filter(Boolean) as string[];
+    const materialUris = (obj.made_of ?? [])
+      .map((m) => m.id)
+      .filter(Boolean);
+    const collectionUris = (obj.member_of ?? [])
+      .map((m) => m.id)
+      .filter(Boolean);
+
+    // Production parts: collect actor, technique, place URIs
+    const prodParts = obj.produced_by?.part ?? [];
+    const actorUris = prodParts.flatMap(
+      (p) => (p.carried_out_by ?? []).map((a) => a.id).filter(Boolean)
+    );
+    const techniqueUris = prodParts.flatMap(
+      (p) => (p.technique ?? []).map((t) => t.id).filter(Boolean)
+    );
+    const placeUris = prodParts.flatMap(
+      (p) => (p.took_place_at ?? []).map((pl) => pl.id).filter(Boolean)
+    );
+
+    // Dimension type URIs (Rijksmuseum vocabulary)
+    const dimTypeUris = [
+      ...new Set(
+        (obj.dimension ?? [])
+          .map((d) => d.classified_as?.[0]?.id)
+          .filter(Boolean) as string[]
+      ),
+    ];
+
+    // Deduplicate all URIs for batch resolution
+    const allUris = [
+      ...new Set([
+        ...typeUris,
+        ...materialUris,
+        ...collectionUris,
+        ...actorUris,
+        ...techniqueUris,
+        ...placeUris,
+        ...dimTypeUris,
+      ]),
+    ];
+
+    // Resolve all in parallel
+    const settled = await Promise.allSettled(
+      allUris.map((uri) => this.resolveVocabTerm(uri))
+    );
+    const resolved = new Map<string, ResolvedTerm>();
+    for (let i = 0; i < allUris.length; i++) {
+      const result = settled[i];
+      if (result.status === "fulfilled") {
+        resolved.set(allUris[i], result.value);
+      }
+    }
+
+    // Map results back to categories
+    const objectTypes = typeUris
+      .map((u) => resolved.get(u))
+      .filter(Boolean) as ResolvedTerm[];
+    const materials = materialUris
+      .map((u) => resolved.get(u))
+      .filter(Boolean) as ResolvedTerm[];
+    const collectionSetLabels = collectionUris
+      .map((u) => resolved.get(u))
+      .filter(Boolean) as ResolvedTerm[];
+
+    // Build production participants
+    const production: ProductionParticipant[] = prodParts.map((p) => {
+      const actorUri = p.carried_out_by?.[0]?.id ?? "";
+      const actor = resolved.get(actorUri);
+      const tech = p.technique?.[0]?.id
+        ? resolved.get(p.technique[0].id)
+        : undefined;
+      const place = p.took_place_at?.[0]?.id
+        ? resolved.get(p.took_place_at[0].id)
+        : undefined;
+
+      return {
+        name: actor?.label ?? "Unknown",
+        role: tech?.label ?? null,
+        place: place?.label ?? null,
+        actorUri,
+      };
+    });
+
+    // Build dimension type label lookup
+    const dimensionTypeLabels = new Map<string, string>();
+    for (const uri of dimTypeUris) {
+      const term = resolved.get(uri);
+      if (term) dimensionTypeLabels.set(uri, term.label);
+    }
+
+    return {
+      objectTypes,
+      materials,
+      production,
+      collectionSetLabels,
+      dimensionTypeLabels,
+    };
+  }
+
+  /**
+   * Full enriched detail: static parsing + vocabulary resolution.
+   * Returns all 24 metadata categories (everything except bibliography).
+   */
+  async toDetailEnriched(
+    obj: LinkedArtObject,
+    uri: string
+  ): Promise<ArtworkDetailEnriched> {
+    const base = RijksmuseumApiClient.toDetail(obj, uri);
+
+    // Group A: static parsing
+    const titles = RijksmuseumApiClient.parseTitles(obj);
+    const curatorialNarrative = RijksmuseumApiClient.parseNarrative(obj);
+    const license = RijksmuseumApiClient.parseLicense(obj);
+    const webPage = RijksmuseumApiClient.parseWebPage(obj);
+    const rawDimensions = RijksmuseumApiClient.parseDimensions(obj);
+    const relatedObjects = RijksmuseumApiClient.parseRelatedObjects(obj);
+    const persistentId = RijksmuseumApiClient.parsePersistentId(obj);
+    const bibliographyCount =
+      RijksmuseumApiClient.parseBibliographyCount(obj);
+
+    // Group B: vocabulary resolution
+    const vocab = await this.resolveVocabulary(obj);
+
+    // Enrich dimensions with resolved type labels
+    const dimensions = rawDimensions.map((d) => ({
+      ...d,
+      type: vocab.dimensionTypeLabels.get(d.type) ?? d.type,
+    }));
+
+    return {
+      ...base,
+      titles,
+      curatorialNarrative,
+      license,
+      webPage,
+      dimensions,
+      relatedObjects,
+      persistentId,
+      objectTypes: vocab.objectTypes,
+      materials: vocab.materials,
+      production: vocab.production,
+      collectionSetLabels: vocab.collectionSetLabels,
+      bibliographyCount,
+    };
+  }
+
+  // ── Bibliography ──────────────────────────────────────────────
+
+  /**
+   * Resolve a Schema.org Book URI (publication or BIBFRAME Instance).
+   * Returns author, title, place, year, ISBN, WorldCat, library URL.
+   */
+  private async resolveSchemaOrgBook(
+    uri: string
+  ): Promise<Record<string, any> | null> {
+    try {
+      const { data } = await this.http.get(uri);
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Format a Schema.org Book record as a plaintext citation */
+  private static formatBookCitation(
+    book: Record<string, any>,
+    pages?: string
+  ): string {
+    const parts: string[] = [];
+
+    if (book.creditText) parts.push(book.creditText);
+    if (book.name) parts.push(book.name);
+
+    const pub = book.publication?.[0];
+    const locParts: string[] = [];
+    if (pub?.location?.name) locParts.push(pub.location.name);
+    if (pub?.startDate) locParts.push(pub.startDate);
+    if (locParts.length > 0) parts.push(`(${locParts.join(", ")})`);
+
+    if (pages) parts.push(pages);
+
+    return parts.join(", ");
+  }
+
+  /** Generate a BibTeX key from author + year or fallback */
+  private static makeBibtexKey(
+    book: Record<string, any> | null,
+    index: number
+  ): string {
+    if (book?.creditText) {
+      const first = book.creditText.split(/[,;]/)[0].trim();
+      const surname = first.split(/\s+/).pop()?.replace(/[^a-zA-Z]/g, "") ?? "";
+      const year = book.publication?.[0]?.startDate ?? "";
+      if (surname) return `${surname}${year}`.toLowerCase();
+    }
+    return `ref_${index}`;
+  }
+
+  /** Escape special BibTeX characters */
+  private static bibtexEscape(s: string): string {
+    return s.replace(/[&%$#_{}~^\\]/g, (c) => `\\${c}`);
+  }
+
+  /** Format a Schema.org Book as a BibTeX entry */
+  private static formatBibtex(
+    book: Record<string, any> | null,
+    pages: string | undefined,
+    index: number,
+    citationString?: string
+  ): string {
+    // If no resolved book data, fall back to @misc with citation string
+    if (!book) {
+      const key = `ref_${index}`;
+      const note = RijksmuseumApiClient.bibtexEscape(citationString ?? "");
+      return `@misc{${key},\n  note = {${note}}\n}`;
+    }
+
+    const key = RijksmuseumApiClient.makeBibtexKey(book, index);
+    const entryType = pages ? "incollection" : "book";
+    const fields: string[] = [];
+
+    if (book.creditText)
+      fields.push(
+        `  author = {${RijksmuseumApiClient.bibtexEscape(book.creditText)}}`
+      );
+    if (book.name)
+      fields.push(
+        `  title = {${RijksmuseumApiClient.bibtexEscape(book.name)}}`
+      );
+
+    const pub = book.publication?.[0];
+    if (pub?.publishedBy?.name)
+      fields.push(
+        `  publisher = {${RijksmuseumApiClient.bibtexEscape(pub.publishedBy.name)}}`
+      );
+    if (pub?.location?.name)
+      fields.push(
+        `  address = {${RijksmuseumApiClient.bibtexEscape(pub.location.name)}}`
+      );
+    if (pub?.startDate) fields.push(`  year = {${pub.startDate}}`);
+
+    if (book.isbn) fields.push(`  isbn = {${book.isbn}}`);
+    if (pages)
+      fields.push(
+        `  pages = {${pages.replace(/^p\.\s*/, "").replace(/-/g, "--")}}`
+      );
+    if (book.url)
+      fields.push(`  url = {${book.url}}`);
+
+    return `@${entryType}{${key},\n${fields.join(",\n")}\n}`;
+  }
+
+  /**
+   * Get bibliography for a Linked Art object.
+   * Parses assigned_by entries, optionally resolves publication URIs.
+   * @param limit Max entries to return (0 = all)
+   */
+  async getBibliography(
+    obj: LinkedArtObject,
+    options: { limit?: number; format?: "text" | "bibtex" } = {}
+  ): Promise<BibliographyResult> {
+    const { limit = 0, format = "text" } = options;
+    const objectNumber = RijksmuseumApiClient.parseObjectNumber(obj);
+
+    // Filter to citation entries only
+    const citationEntries = (obj.assigned_by ?? []).filter((a: any) =>
+      hasClassification(a.classified_as, AAT.CITATION)
+    );
+    const total = citationEntries.length;
+
+    // Apply limit (0 = all)
+    const entries = limit > 0 ? citationEntries.slice(0, limit) : citationEntries;
+
+    // Categorize entries and collect URIs to resolve
+    interface ParsedEntry {
+      type: "A" | "B" | "C";
+      sequence: number | null;
+      citationString?: string;
+      pages?: string;
+      resolveUri?: string;
+    }
+
+    const parsed: ParsedEntry[] = entries.map((entry: any) => {
+      const assigned = entry.assigned?.[0];
+      const seq = entry.identified_by
+        ?.find((i: any) =>
+          hasClassification(
+            i.classified_as,
+            "http://vocab.getty.edu/aat/300456575"
+          )
+        )
+        ?.content;
+      const sequence = seq ? parseInt(seq) : null;
+
+      if (!assigned) {
+        return { type: "B" as const, sequence, citationString: "" };
+      }
+
+      // Type B: has inline citation string
+      const citId = assigned.identified_by?.find((i: any) =>
+        hasClassification(
+          i.classified_as,
+          "http://vocab.getty.edu/aat/300311705"
+        )
+      );
+      const citationString = citId?.content ?? citId?.part?.[0]?.content;
+
+      // Type A: has part_of (publication reference)
+      if (assigned.part_of?.[0]?.id) {
+        const pages = assigned.identified_by
+          ?.find((i: any) =>
+            hasClassification(
+              i.classified_as,
+              "http://vocab.getty.edu/aat/300311705"
+            )
+          )
+          ?.part?.[0]?.content;
+        return {
+          type: "A" as const,
+          sequence,
+          pages,
+          resolveUri: assigned.part_of[0].id,
+        };
+      }
+
+      // Type C: BIBFRAME Instance (bare URI)
+      if (
+        assigned.type === "http://id.loc.gov/ontologies/bibframe/Instance" &&
+        assigned.id
+      ) {
+        return {
+          type: "C" as const,
+          sequence,
+          resolveUri: assigned.id,
+        };
+      }
+
+      // Type B: inline citation string
+      return { type: "B" as const, sequence, citationString };
+    });
+
+    // Resolve all publication URIs in parallel
+    const urisToResolve = [
+      ...new Set(
+        parsed
+          .map((p) => p.resolveUri)
+          .filter(Boolean) as string[]
+      ),
+    ];
+
+    const resolved = new Map<string, Record<string, any>>();
+    if (urisToResolve.length > 0) {
+      const settled = await Promise.allSettled(
+        urisToResolve.map((uri) => this.resolveSchemaOrgBook(uri))
+      );
+      for (let i = 0; i < urisToResolve.length; i++) {
+        const result = settled[i];
+        if (result.status === "fulfilled" && result.value) {
+          resolved.set(urisToResolve[i], result.value);
+        }
+      }
+    }
+
+    // Build output entries
+    const bibEntries: BibliographyEntry[] = parsed.map((p, i) => {
+      const book = p.resolveUri ? resolved.get(p.resolveUri) ?? null : null;
+
+      let citation: string;
+      if (format === "bibtex") {
+        citation = RijksmuseumApiClient.formatBibtex(
+          book,
+          p.pages,
+          i + 1,
+          p.citationString
+        );
+      } else if (p.type === "B" && p.citationString) {
+        citation = p.citationString;
+      } else if (book) {
+        citation = RijksmuseumApiClient.formatBookCitation(book, p.pages);
+      } else {
+        citation = p.citationString ?? "(unresolvable reference)";
+      }
+
+      const entry: BibliographyEntry = {
+        sequence: p.sequence,
+        citation,
+      };
+
+      // Add enrichment fields from resolved book
+      if (book) {
+        if (p.resolveUri) entry.publicationUri = p.resolveUri;
+        if (p.pages) entry.pages = p.pages;
+        if (book.isbn) entry.isbn = book.isbn;
+        if (book.sameAs) entry.worldcatUri = book.sameAs;
+        if (book.url) entry.libraryUrl = book.url;
+      }
+
+      return entry;
+    });
+
+    // Sort by sequence number where available
+    bibEntries.sort((a, b) => (a.sequence ?? 9999) - (b.sequence ?? 9999));
+
+    return { objectNumber, total, entries: bibEntries };
   }
 
   // ── High-level methods for tools ──────────────────────────────
