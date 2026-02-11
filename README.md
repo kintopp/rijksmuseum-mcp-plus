@@ -4,7 +4,7 @@ An AI-powered interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collec
 
 Built on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/) and the [Linked Art](https://linked.art/) data model using the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP).
 
-> This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server. That version used the legacy REST API and requires an API key. This is a ground-up rewrite using the museum's newer Linked Open Data infrastructure and adds features like an interactive inline image viewer.
+> This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server. That version used the museum's REST API which is no longer supported. This is a ground-up rewrite using the museum's newer Linked Open Data infrastructure and adds features like an interactive inline image viewer.
 
 ## Quick Start
 
