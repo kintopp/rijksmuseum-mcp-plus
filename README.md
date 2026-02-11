@@ -2,7 +2,7 @@
 
 # rijksmuseum-mcp+
 
-An AI-powered interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, read about their history, and view high-resolution images — all through natural conversation. No API key required.
+An AI-powered interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, explore their history, view high-resolution images, and access scholarly references — all through natural conversation. No API key required.
 
 Built on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/) and the [Linked Art](https://linked.art/) data model using the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP).
 
@@ -36,11 +36,24 @@ Once connected, just ask questions in plain language. Here are some things you c
 
 ### Learning about specific artworks
 
+Each artwork comes with up to 24 metadata categories — including curatorial narratives, materials, object types, production details, structured dimensions, provenance, and links to external identifiers (Getty AAT, Wikidata).
+
 ```
 "Tell me everything about The Night Watch"
 "What's the story behind Vermeer's Milkmaid?"
 "Describe the provenance of SK-A-4691"
-"What are the dimensions and technique of The Jewish Bride?"
+"What materials and technique were used for The Jewish Bride?"
+"What collections is The Night Watch part of?"
+```
+
+### Scholarly references
+
+For major works, the Rijksmuseum provides extensive bibliography data — over 100 scholarly references for The Night Watch alone. You can browse citations in plain text or export them as BibTeX.
+
+```
+"Show me the bibliography for The Night Watch"
+"Get all references for SK-C-5 in BibTeX format"
+"How many scholarly publications mention The Milkmaid?"
 ```
 
 ### Viewing high-resolution images
@@ -131,8 +144,9 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Tool | Description |
 |---|---|
-| `search_artwork` | Search by title, creator, type, material, technique, date. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. |
-| `get_artwork_details` | Full details by object number (e.g. `SK-C-5`): title, creator, date, description, technique, dimensions, provenance, credit line, inscriptions. |
+| `search_artwork` | Search by query, title, creator, type, material, technique, date, or description. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. |
+| `get_artwork_details` | 24 metadata categories by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT and Wikidata. |
+| `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Plaintext or BibTeX output. Resolves publication records with ISBNs and WorldCat links. |
 | `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Falls back to JSON + optional base64 thumbnail in text-only clients. |
 | `get_artist_timeline` | Chronological timeline of an artist's works in the collection. |
 | `open_in_browser` | Open any URL (artwork page, image, viewer) in the user's default browser. |
@@ -155,7 +169,7 @@ src/
   types.ts                    — Linked Art, IIIF, and output types
   viewer.ts                   — OpenSeadragon HTML generator (HTTP mode)
   api/
-    RijksmuseumApiClient.ts   — Linked Art API client + IIIF image chain
+    RijksmuseumApiClient.ts   — Linked Art API client, vocabulary resolver, bibliography, IIIF image chain
   utils/
     SystemIntegration.ts      — Cross-platform browser opening
 apps/
@@ -168,11 +182,15 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 | API | URL | Purpose |
 |---|---|---|
-| Search API | `https://data.rijksmuseum.nl/search/collection` | Full-text search, returns Linked Art URIs |
-| Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata as JSON-LD |
+| Search API | `https://data.rijksmuseum.nl/search/collection` | Field-based search (title, creator, type, material, technique, date, description), returns Linked Art URIs |
+| Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata, vocabulary terms, and bibliography as JSON-LD |
 | IIIF Image API | `https://iiif.micr.io/{id}/info.json` | High-resolution image tiles |
 
 **Image discovery chain (4 HTTP hops):** Object `.shows` > VisualItem `.digitally_shown_by` > DigitalObject `.access_point` > IIIF info.json
+
+**Vocabulary resolution:** Material, object type, technique, place, and collection terms are Rijksmuseum vocabulary URIs. These are resolved in parallel to obtain English labels and links to external authorities (Getty AAT, Wikidata).
+
+**Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
 ### Configuration
 
