@@ -1,10 +1,10 @@
 # rijksmuseum-mcp+
 
-An AI-powered interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, explore their history, view high-resolution images, and access scholarly references — all through natural conversation. No API key required.
+An AI-powered interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, explore their history, view high-resolution images, and access scholarly references — all through natural conversation.
 
 Built on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/) and the [Linked Art](https://linked.art/) data model using the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP).
 
-> This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server. That version uses the legacy REST API and requires an API key. This is a ground-up rewrite using the museum's newer Linked Open Data infrastructure and adds features like an interactive inline image viewer.
+> This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server. That version used the legacy REST API and requires an API key. This is a ground-up rewrite using the museum's newer Linked Open Data infrastructure and adds features like an interactive inline image viewer.
 
 ## Quick Start
 
@@ -39,7 +39,7 @@ Each artwork comes with up to 24 metadata categories — including curatorial na
 ```
 "Tell me everything about The Night Watch"
 "What's the story behind Vermeer's Milkmaid?"
-"Describe the provenance of SK-A-4691"
+"Describe the provenance of Frans Hals's Portrait of Duijfje van Gerwen"
 "What materials and technique were used for The Jewish Bride?"
 "What collections is The Night Watch part of?"
 ```
