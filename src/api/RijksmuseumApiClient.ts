@@ -42,9 +42,15 @@ function getLangId(langs: { id: string }[] | undefined): string | undefined {
 
 /** Extract IIIF identifier from a full IIIF URL */
 function extractIiifId(url: string): string | null {
-  // https://iiif.micr.io/PJEZO/full/max/0/default.jpg → PJEZO
   const match = url.match(/iiif\.micr\.io\/([^/]+)/);
   return match ? match[1] : null;
+}
+
+/** Extract the pageToken query parameter from a next-page URL */
+function extractPageToken(nextRef: { id: string } | undefined): string | undefined {
+  if (!nextRef?.id) return undefined;
+  const url = new URL(nextRef.id);
+  return url.searchParams.get("pageToken") ?? undefined;
 }
 
 // ─── Client ─────────────────────────────────────────────────────────
@@ -54,7 +60,6 @@ export class RijksmuseumApiClient {
 
   private static readonly SEARCH_URL =
     "https://data.rijksmuseum.nl/search/collection";
-  private static readonly ID_BASE = "https://id.rijksmuseum.nl";
   private static readonly IIIF_BASE = "https://iiif.micr.io";
   private static readonly WEB_BASE = "https://www.rijksmuseum.nl/en/collection";
 
@@ -73,17 +78,16 @@ export class RijksmuseumApiClient {
     // Map 'query' to 'title' — the API has no general full-text search,
     // and title is the most intuitive match for free-text queries.
     // Explicit 'title' takes precedence over 'query'.
-    if (params.title) query.title = params.title;
-    else if (params.query) query.title = params.query;
+    query.title = params.title ?? params.query ?? "";
+    if (!query.title) delete query.title;
 
-    if (params.creator) query.creator = params.creator;
-    if (params.objectNumber) query.objectNumber = params.objectNumber;
-    if (params.type) query.type = params.type;
-    if (params.material) query.material = params.material;
-    if (params.technique) query.technique = params.technique;
-    if (params.creationDate) query.creationDate = params.creationDate;
-    if (params.description) query.description = params.description;
-    if (params.pageToken) query.pageToken = params.pageToken;
+    const passthroughFields = [
+      "creator", "objectNumber", "type", "material",
+      "technique", "creationDate", "description", "pageToken",
+    ] as const;
+    for (const field of passthroughFields) {
+      if (params[field]) query[field] = params[field];
+    }
 
     // Guard against unfiltered searches — the API returns the entire
     // collection (837K+ items) when no filters are provided.
@@ -337,18 +341,16 @@ export class RijksmuseumApiClient {
       .filter((i) => i.type === "Name")
       .map((n) => {
         const langId = getLangId(n.language);
-        const language: TitleVariant["language"] =
-          langId === AAT.LANG_EN ? "en" : langId === AAT.LANG_NL ? "nl" : "other";
+        let language: TitleVariant["language"] = "other";
+        if (langId === AAT.LANG_EN) language = "en";
+        else if (langId === AAT.LANG_NL) language = "nl";
 
         const isBrief =
           hasClassification(n.classified_as, AAT.BRIEF_TEXT) ||
           hasClassification(n.classified_as, AAT.TITLE_TYPE);
-        const isFull = hasClassification(n.classified_as, AAT.FULL_TITLE);
-        const qualifier: TitleVariant["qualifier"] = isBrief
-          ? "brief"
-          : isFull
-            ? "full"
-            : "other";
+        let qualifier: TitleVariant["qualifier"] = "other";
+        if (isBrief) qualifier = "brief";
+        else if (hasClassification(n.classified_as, AAT.FULL_TITLE)) qualifier = "full";
 
         return { title: n.content, language, qualifier };
       });
@@ -507,7 +509,11 @@ export class RijksmuseumApiClient {
       externalIds: Object.fromEntries(
         (obj.identified_by ?? [])
           .filter((i) => i.type === "Identifier")
-          .map((i) => [i.content, i.classified_as?.[0] && typeof i.classified_as[0] !== "string" ? i.classified_as[0].id ?? "" : ""])
+          .map((i) => {
+            const cls = i.classified_as?.[0];
+            const classUri = cls && typeof cls !== "string" ? cls.id ?? "" : "";
+            return [i.content, classUri];
+          })
       ),
     };
   }
@@ -542,11 +548,9 @@ export class RijksmuseumApiClient {
       else if (eqId.includes("wikidata.org")) equivalents.wikidata = eqId;
     }
 
-    return {
-      id: uri,
-      label,
-      ...(Object.keys(equivalents).length > 0 ? { equivalents } : {}),
-    };
+    const term: ResolvedTerm = { id: uri, label };
+    if (Object.keys(equivalents).length > 0) term.equivalents = equivalents;
+    return term;
   }
 
   /**
@@ -1006,14 +1010,11 @@ export class RijksmuseumApiClient {
       })
     );
 
-    // Extract next page token from URL if present
-    let nextPageToken: string | undefined;
-    if (searchResponse.next?.id) {
-      const url = new URL(searchResponse.next.id);
-      nextPageToken = url.searchParams.get("pageToken") ?? undefined;
-    }
-
-    return { totalResults, results: resolved, nextPageToken };
+    return {
+      totalResults,
+      results: resolved,
+      nextPageToken: extractPageToken(searchResponse.next),
+    };
   }
 
   /** Search in compact mode — returns just count + IDs, no resolution */
@@ -1025,16 +1026,10 @@ export class RijksmuseumApiClient {
     const searchResponse = await this.search(params);
     const totalResults = searchResponse.partOf?.totalItems ?? searchResponse.orderedItems.length;
 
-    let nextPageToken: string | undefined;
-    if (searchResponse.next?.id) {
-      const url = new URL(searchResponse.next.id);
-      nextPageToken = url.searchParams.get("pageToken") ?? undefined;
-    }
-
     return {
       totalResults,
       ids: searchResponse.orderedItems.map((i) => i.id),
-      nextPageToken,
+      nextPageToken: extractPageToken(searchResponse.next),
     };
   }
 }

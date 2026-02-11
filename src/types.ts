@@ -13,7 +13,6 @@ export const AAT = {
 
   // Identifier classifications
   OBJECT_NUMBER: "http://vocab.getty.edu/aat/300312355",
-  ACCESSION_NUMBER: "http://vocab.getty.edu/aat/300312355",
 
   // referred_to_by statement types
   DESCRIPTION: "http://vocab.getty.edu/aat/300435452",
@@ -328,15 +327,6 @@ export interface ArtworkImageInfo {
   width: number;
   height: number;
   viewerUrl?: string;
-}
-
-export interface TimelineEntry {
-  year: string;
-  title: string;
-  objectNumber: string;
-  creator: string;
-  id: string;
-  url: string;
 }
 
 // ─── Search Parameters ──────────────────────────────────────────────

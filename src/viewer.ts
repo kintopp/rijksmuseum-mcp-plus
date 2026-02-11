@@ -1,20 +1,20 @@
-/**
- * Generates a self-contained HTML page with an OpenSeadragon IIIF deep-zoom viewer.
- * Loads OpenSeadragon from CDN — no server-side image proxying.
- */
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+};
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"]/g, (char) => HTML_ESCAPE_MAP[char]);
+}
+
 export function getViewerHtml(iiifId: string, title: string = "Artwork"): string {
   if (!/^[a-zA-Z0-9_-]+$/.test(iiifId)) {
     throw new Error("Invalid IIIF ID format");
   }
 
-  const htmlEscapeMap: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-  };
-
-  const escapedTitle = title.replace(/[&<>"]/g, (char) => htmlEscapeMap[char]);
+  const escapedTitle = escapeHtml(title);
 
   return `<!DOCTYPE html>
 <html lang="en">

@@ -16,6 +16,10 @@ const __dirname = path.dirname(__filename);
 
 const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
+function jsonResponse(data: unknown): { content: [{ type: "text"; text: string }] } {
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+}
+
 /**
  * Register all tools, resources, and prompts on the given McpServer.
  * `httpPort` is provided when running in HTTP mode so viewer URLs can be generated.
@@ -106,27 +110,10 @@ function registerTools(
       },
     },
     async (args) => {
-      if (args.compact) {
-        const result = await api.searchCompact(args);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      const result = await api.searchAndResolve(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+      const result = args.compact
+        ? await api.searchCompact(args)
+        : await api.searchAndResolve(args);
+      return jsonResponse(result);
     }
   );
 
@@ -152,14 +139,7 @@ function registerTools(
     async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
       const detail = await api.toDetailEnriched(object, uri);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(detail, null, 2),
-          },
-        ],
-      };
+      return jsonResponse(detail);
     }
   );
 
@@ -199,15 +179,7 @@ function registerTools(
         limit: args.full ? 0 : 5,
         format: args.format,
       });
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+      return jsonResponse(result);
     }
   );
 
@@ -237,64 +209,41 @@ function registerTools(
       },
     },
     async (args) => {
-      const { uri, object } = await api.findByObjectNumber(args.objectNumber);
+      const { object } = await api.findByObjectNumber(args.objectNumber);
       const imageInfo = await api.getImageInfo(object);
 
       if (!imageInfo) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  objectNumber: args.objectNumber,
-                  error: "No image available for this artwork",
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return jsonResponse({
+          objectNumber: args.objectNumber,
+          error: "No image available for this artwork",
+        });
       }
 
-      // Add viewer URL if running in HTTP mode
+      const title = RijksmuseumApiClient.parseTitle(object);
+      const objectNumber = RijksmuseumApiClient.parseObjectNumber(object);
+
       if (httpPort) {
-        const title = RijksmuseumApiClient.parseTitle(object);
         imageInfo.viewerUrl = `http://localhost:${httpPort}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
-
-      // Enrich with artwork metadata for the MCP App viewer
-      const title = RijksmuseumApiClient.parseTitle(object);
-      const creator = RijksmuseumApiClient.parseCreator(object);
-      const date = RijksmuseumApiClient.parseDate(object);
-      const objectNumber = RijksmuseumApiClient.parseObjectNumber(object);
-      const collectionUrl = `https://www.rijksmuseum.nl/en/collection/${objectNumber}`;
 
       const viewerData = {
         ...imageInfo,
         objectNumber,
         title,
-        creator,
-        date,
-        collectionUrl,
+        creator: RijksmuseumApiClient.parseCreator(object),
+        date: RijksmuseumApiClient.parseDate(object),
+        collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
       };
 
       const contentBlocks: Array<
         | { type: "text"; text: string }
         | { type: "image"; data: string; mimeType: string }
-      > = [
-        {
-          type: "text" as const,
-          text: JSON.stringify(viewerData, null, 2),
-        },
-      ];
+      > = [{ type: "text", text: JSON.stringify(viewerData, null, 2) }];
 
-      // Optionally fetch and include thumbnail for non-MCP-Apps clients
       if (args.includeThumbnail) {
         const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, 200);
         contentBlocks.push({
-          type: "image" as const,
+          type: "image",
           data: base64,
           mimeType: "image/jpeg",
         });
@@ -331,45 +280,15 @@ function registerTools(
         maxResults: args.maxWorks,
       });
 
-      // Sort by date and map to timeline entries
-      const timeline: Array<{
-        year: string;
-        title: string;
-        objectNumber: string;
-        creator: string;
-        id: string;
-        url: string;
-      }> = result.results
-        .map((r) => ({
-          year: r.date,
-          title: r.title,
-          objectNumber: r.objectNumber,
-          creator: r.creator,
-          id: r.id,
-          url: r.url,
-        }))
-        .sort((a, b) => {
-          const yearA = parseInt(a.year) || 0;
-          const yearB = parseInt(b.year) || 0;
-          return yearA - yearB;
-        });
+      const timeline = result.results
+        .map(({ date, ...rest }) => ({ year: date, ...rest }))
+        .sort((a, b) => (parseInt(a.year) || 0) - (parseInt(b.year) || 0));
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              {
-                artist: args.artist,
-                totalWorksInCollection: result.totalResults,
-                timeline,
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
+      return jsonResponse({
+        artist: args.artist,
+        totalWorksInCollection: result.totalResults,
+        timeline,
+      });
     }
   );
 
@@ -446,21 +365,23 @@ function registerResources(
 
 // ─── MCP App Resource ────────────────────────────────────────────────
 
-function registerAppViewerResource(server: McpServer): void {
-  const loadViewerHtml = (): string => {
-    const htmlPath = path.join(__dirname, "..", "dist", "apps", "index.html");
-    try {
-      return fs.readFileSync(htmlPath, "utf-8");
-    } catch {
-      return `<!DOCTYPE html>
+const VIEWER_FALLBACK_HTML = `<!DOCTYPE html>
 <html><head><title>Artwork Viewer</title></head>
 <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">
 <div style="text-align:center;color:#666;">
 <h1>Viewer Not Built</h1><p>Run <code>npm run build:ui</code> to build the viewer.</p>
 </div></body></html>`;
-    }
-  };
 
+function loadViewerHtml(): string {
+  const htmlPath = path.join(__dirname, "..", "dist", "apps", "index.html");
+  try {
+    return fs.readFileSync(htmlPath, "utf-8");
+  } catch {
+    return VIEWER_FALLBACK_HTML;
+  }
+}
+
+function registerAppViewerResource(server: McpServer): void {
   registerAppResource(
     server,
     "Rijksmuseum Artwork Viewer",
@@ -513,9 +434,9 @@ function registerPrompts(server: McpServer): void {
     async (args) => ({
       messages: [
         {
-          role: "user" as const,
+          role: "user",
           content: {
-            type: "text" as const,
+            type: "text",
             text:
               `Analyze the composition, style, and historical context of artwork ${args.artworkId}. ` +
               `First use the get_artwork_details tool with objectNumber="${args.artworkId}" to retrieve the artwork data, ` +
@@ -546,9 +467,9 @@ function registerPrompts(server: McpServer): void {
     async (args) => ({
       messages: [
         {
-          role: "user" as const,
+          role: "user",
           content: {
-            type: "text" as const,
+            type: "text",
             text:
               `Create a visual timeline showing the chronological progression of ${args.artist}'s most notable works` +
               `${args.maxWorks ? ` (limited to ${args.maxWorks} works)` : ""}.\n\n` +
