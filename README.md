@@ -49,7 +49,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "rijksmuseum": {
       "command": "npx",
-      "args": ["-y", "mcp-server-rijksmuseum"]
+      "args": ["-y", "rijksmuseum-mcp-plus"]
     }
   }
 }

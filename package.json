@@ -1,10 +1,10 @@
 {
-  "name": "mcp-server-rijksmuseum",
+  "name": "rijksmuseum-mcp-plus",
   "version": "2.0.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp-server-rijksmuseum": "./dist/index.js"
+    "rijksmuseum-mcp-plus": "./dist/index.js"
   },
   "scripts": {
     "build": "npm run build:ui && tsc",

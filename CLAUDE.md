@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MCP (Model Context Protocol) server that wraps the Rijksmuseum Linked Open Data APIs, exposing artwork search, details, IIIF image access, and artist timelines as MCP tools. Supports both stdio and HTTP transports. Published to npm as `mcp-server-rijksmuseum`.
+MCP (Model Context Protocol) server that wraps the Rijksmuseum Linked Open Data APIs, exposing artwork search, details, IIIF image access, and artist timelines as MCP tools. Supports both stdio and HTTP transports. Published to npm as `rijksmuseum-mcp-plus`.
 
 **No API key required** — the Rijksmuseum's Linked Open Data APIs are fully open.
 

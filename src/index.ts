@@ -10,7 +10,7 @@ import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { registerAll } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 
-const SERVER_NAME = "rijksmuseum-server";
+const SERVER_NAME = "rijksmuseum-mcp+";
 const SERVER_VERSION = "2.0.0";
 
 // ─── Determine transport mode ────────────────────────────────────────
