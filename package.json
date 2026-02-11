@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-rijksmuseum",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -8,15 +8,20 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "serve": "node dist/index.js --http"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "axios": "^1.7.9",
-    "dotenv": "^16.4.7"
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
-    "typescript": "^5.0.0"
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
   }
 }
