@@ -45,6 +45,8 @@ Each artwork comes with up to 25 metadata categories — including curatorial na
 "Who are the depicted persons in Rembrandt's Anatomy Lesson of Dr Nicolaes Tulp?"
 ```
 
+Note: iconographic subjects (Iconclass codes, depicted persons, and places) are available per artwork but cannot be searched across the collection — the Rijksmuseum's search API has no subject filter. Use the `description` parameter as a text proxy for thematic queries.
+
 ### Bibliographic references
 
 The Rijksmuseum provides bibliography data for its artworks — from a handful of references for lesser-known works to over a hundred for the most studied pieces.
