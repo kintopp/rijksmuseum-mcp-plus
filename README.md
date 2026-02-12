@@ -45,7 +45,7 @@ Each artwork comes with up to 24 metadata categories — including curatorial na
 
 ### Bibliographic references
 
-The Rijksmuseum provides bibliography data for its artworks — from a handful of references for lesser-known works to over a hundred for the most studied pieces. You can browse citations in plain text or export them as BibTeX.
+The Rijksmuseum provides bibliography data for its artworks — from a handful of references for lesser-known works to over a hundred for the most studied pieces.
 
 ```
 "Show me the bibliography for Saenredam's Assendelft church interior"
