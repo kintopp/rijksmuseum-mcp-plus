@@ -2,7 +2,7 @@
 
 An AI-powered interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, explore their history, view high-resolution images, and access scholarly references — all through natural conversation.
 
-Built on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/) and the [Linked Art](https://linked.art/) data model using the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP).
+Built on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards, and the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP).
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server. That version used the museum's REST API which is no longer supported. This is a ground-up rewrite using the museum's newer Linked Open Data infrastructure and adds features like an interactive inline image viewer.
 
