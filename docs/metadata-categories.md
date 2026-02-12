@@ -1,6 +1,6 @@
 # Artwork Metadata Categories
 
-The `get_artwork_details` tool returns up to **24 metadata categories** for each artwork. These are divided into two groups internally: 12 base categories parsed directly from the Linked Art JSON-LD object, and 12 enriched categories that require additional vocabulary resolution (resolving Rijksmuseum vocabulary URIs to English labels with links to Getty AAT and Wikidata).
+The `get_artwork_details` tool returns up to **25 metadata categories** for each artwork. These are divided into groups internally: 12 base categories parsed directly from the Linked Art JSON-LD object, 12 enriched categories that require vocabulary resolution (resolving Rijksmuseum vocabulary URIs to English labels with links to Getty AAT, Wikidata, and Iconclass), and 1 subject category derived from the VisualItem layer.
 
 All categories are returned together in a single response.
 
@@ -51,33 +51,40 @@ All categories are returned together in a single response.
 | 19 | **Collection sets** | `collectionSets` | Raw Rijksmuseum vocabulary URIs for the collections this object belongs to (from `member_of`). |
 | 20 | **Collection set labels** | `collectionSetLabels` | Resolved English names for each collection set, with AAT and Wikidata equivalents. |
 
+## Iconography
+
+| # | Category | Field | Description |
+|---|----------|-------|-------------|
+| 21 | **Subjects** | `subjects` | Iconographic subject annotations, structured into three arrays: `iconclass` ([Iconclass](https://iconclass.org/) concepts — e.g. "civic guard", "group portrait"), `depictedPersons` (named individuals), and `depictedPlaces` (geographical locations). Each entry is a resolved vocabulary term with `label`, `id`, and `equivalents` linking to Iconclass, Getty AAT, or Wikidata URIs. Derived from the VisualItem layer: Object `.shows` > VisualItem `.represents_instance_of_type` (concepts) + `.represents` (persons/places). Not all artworks have subject annotations — objects without them return empty arrays. |
+
 ## Digital & Rights
 
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
-| 21 | **Web page** | `webPage` | URL of the artwork's page on the Rijksmuseum website, extracted from `subject_of.digitally_carried_by` where the format is `text/html`. |
-| 22 | **License** | `license` | Rights/license URI (e.g. CC0 1.0, Public Domain Mark), extracted from `subject_of.subject_to`. |
+| 22 | **Web page** | `webPage` | URL of the artwork's page on the Rijksmuseum website, extracted from `subject_of.digitally_carried_by` where the format is `text/html`. |
+| 23 | **License** | `license` | Rights/license URI (e.g. CC0 1.0, Public Domain Mark), extracted from `subject_of.subject_to`. |
 
 ## Related Works
 
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
-| 23 | **Related objects** | `relatedObjects` | Links to related artworks, extracted from `attributed_by`. Each entry has a `relationship` label (in English) and an `objectUri` pointing to the related Linked Art record. |
+| 24 | **Related objects** | `relatedObjects` | Links to related artworks, extracted from `attributed_by`. Each entry has a `relationship` label (in English) and an `objectUri` pointing to the related Linked Art record. |
 
 ## Bibliography
 
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
-| 24 | **Bibliography count** | `bibliographyCount` | Number of scholarly references associated with this artwork. This is a count only — use the `get_artwork_bibliography` tool to retrieve full citations in plaintext or BibTeX format. Major works like The Night Watch can have over 100 references. |
+| 25 | **Bibliography count** | `bibliographyCount` | Number of scholarly references associated with this artwork. This is a count only — use the `get_artwork_bibliography` tool to retrieve full citations in plaintext. Major works like The Night Watch can have over 100 references. |
 
 ---
 
 ## Vocabulary Resolution
 
-Categories marked with resolved terms (object types, materials, production details, collection set labels, structured dimension types) go through **vocabulary resolution**: each Rijksmuseum vocabulary URI is fetched to extract an English label and links to external authority files:
+Categories marked with resolved terms (object types, materials, production details, collection set labels, structured dimension types, and subjects) go through **vocabulary resolution**: each Rijksmuseum vocabulary URI is fetched to extract an English label and links to external authority files:
 
 - **Getty AAT** (Art & Architecture Thesaurus) — standardised art terminology
 - **Wikidata** — structured linked data
+- **Iconclass** — iconographic classification system for cultural heritage (subject annotations only)
 
 For example, a material URI like `https://id.rijksmuseum.nl/vocabulary/material/13438` resolves to:
 
@@ -92,7 +99,19 @@ For example, a material URI like `https://id.rijksmuseum.nl/vocabulary/material/
 }
 ```
 
-All vocabulary URIs for an artwork (~17 on average) are resolved in a single parallel batch.
+Subject URIs follow the same pattern but may include an `iconclass` equivalent instead of (or in addition to) AAT:
+
+```json
+{
+  "id": "https://id.rijksmuseum.nl/vocabulary/subject/12345",
+  "label": "civic guard",
+  "equivalents": {
+    "iconclass": "http://iconclass.org/45(+26)"
+  }
+}
+```
+
+All vocabulary and subject URIs for an artwork are resolved in a single parallel batch.
 
 ## Data Model
 

@@ -33,7 +33,7 @@ Once connected, just ask questions in plain language. Here are some things you c
 
 ### Learning about specific artworks
 
-Each artwork comes with up to 24 metadata categories — including curatorial narratives, materials, object types, production details, structured dimensions, provenance, and links to external identifiers (Getty AAT, Wikidata). See [Artwork Metadata Categories](docs/metadata-categories.md) for a full catalogue of these categories.
+Each artwork comes with up to 25 metadata categories — including curatorial narratives, materials, object types, production details, structured dimensions, provenance, iconographic subjects (Iconclass codes, depicted persons, and places), and links to external identifiers (Getty AAT, Wikidata, Iconclass). See [Artwork Metadata Categories](docs/metadata-categories.md) for a full catalogue of these categories.
 
 ```
 "What inscriptions did Saenredam include on his painting of the Assendelft church?"
@@ -41,6 +41,8 @@ Each artwork comes with up to 24 metadata categories — including curatorial na
 "What materials and techniques were used for the Shiva Nataraja (AK-MAK-187)?"
 "Tell me about Rachel Ruysch's Still Life with Flowers in a Glass Vase"
 "Show me the production details for The Windmill at Wijk bij Duurstede"
+"What Iconclass subjects are depicted in The Night Watch?"
+"Who are the depicted persons in Rembrandt's Anatomy Lesson of Dr Nicolaes Tulp?"
 ```
 
 ### Bibliographic references
@@ -194,14 +196,14 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | Tool | Description |
 |---|---|
 | `search_artwork` | Search by query, title, creator, type, material, technique, date, or description. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. |
-| `get_artwork_details` | 24 metadata categories by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT and Wikidata. |
+| `get_artwork_details` | 25 metadata categories by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
 | `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
 | `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Falls back to JSON + optional base64 thumbnail in text-only clients. |
 | `get_artist_timeline` | Chronological timeline of an artist's works in the collection. |
 | `open_in_browser` | Open any URL (artwork page, image, viewer) in the user's default browser. |
 | `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic selections). Optional name filter. Via OAI-PMH. |
-| `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, and IIIF URLs. Pagination via resumption token. |
-| `get_recent_changes` | Track additions and modifications by date range. Full EDM records or lightweight headers (`identifiersOnly`). Pagination via resumption token. |
+| `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, IIIF URLs, and iconographic subjects (Iconclass, depicted persons, places). Pagination via resumption token. |
+| `get_recent_changes` | Track additions and modifications by date range. Full EDM records (including subjects) or lightweight headers (`identifiersOnly`). Pagination via resumption token. |
 
 ### Prompts and Resources
 
@@ -242,7 +244,9 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 **Image discovery chain (4 HTTP hops):** Object `.shows` > VisualItem `.digitally_shown_by` > DigitalObject `.access_point` > IIIF info.json
 
-**Vocabulary resolution:** Material, object type, technique, place, and collection terms are Rijksmuseum vocabulary URIs. These are resolved in parallel to obtain English labels and links to external authorities (Getty AAT, Wikidata).
+**Vocabulary resolution:** Material, object type, technique, place, collection, and subject terms are Rijksmuseum vocabulary URIs. These are resolved in parallel to obtain English labels and links to external authorities (Getty AAT, Wikidata, Iconclass).
+
+**Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
 
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
