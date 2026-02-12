@@ -772,8 +772,9 @@ export class RijksmuseumApiClient {
   }
 
   /** Escape special BibTeX characters */
-  private static bibtexEscape(s: string): string {
-    return s.replace(/[&%$#_{}~^\\]/g, (c) => `\\${c}`);
+  private static bibtexEscape(s: unknown): string {
+    const str = typeof s === "string" ? s : String(s ?? "");
+    return str.replace(/[&%$#_{}~^\\]/g, (c) => `\\${c}`);
   }
 
   /** Format a Schema.org Book as a BibTeX entry */

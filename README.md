@@ -27,10 +27,9 @@ Once connected, just ask questions in plain language. Here are some things you c
 "Show me woodcuts by Hokusai"
 "Search for paintings from the 1640s"
 "What porcelain objects are in the collection?"
-"Find artworks depicting tulips"
+"Find portraits depicting Willem van Oranje"
 "Show me drawings by Gesina ter Borch"
 "How many mezzotints are in the collection?"
-"Find portraits depicting Willem van Oranje"
 "Search for paintings by Vermeer that have images available"
 ```
 
@@ -46,7 +45,7 @@ Each artwork comes with up to 24 metadata categories — including curatorial na
 "Show me the production details for The Windmill at Wijk bij Duurstede"
 ```
 
-### Scholarly references
+### Bibliographic references
 
 The Rijksmuseum provides bibliography data for its artworks — from a handful of references for lesser-known works to over a hundred for the most studied pieces. You can browse citations in plain text or export them as BibTeX.
 
@@ -66,7 +65,7 @@ The server includes an interactive deep-zoom viewer that renders directly in you
 "Show me the image for AK-MAK-187"
 ```
 
-In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (e.g. Claude Desktop), you get an interactive OpenSeadragon IIIF viewer with zoom, pan, and rotate controls. In other clients, you still get image URLs and an optional thumbnail.
+In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (e.g. Claude Desktop, https://claude.ai), you get an interactive OpenSeadragon IIIF viewer with zoom, pan, and rotate controls. In other clients, you still get image URLs and an optional thumbnail.
 
 ### Exploring an artist's career
 
