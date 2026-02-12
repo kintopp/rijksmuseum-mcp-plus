@@ -47,7 +47,7 @@ Key layers:
 - **`src/types.ts`** — Linked Art primitives, Search API types, IIIF types, parsed output types, AAT constants.
 - **`src/viewer.ts`** — Generates self-contained OpenSeadragon HTML for IIIF deep-zoom.
 - **`src/utils/SystemIntegration.ts`** — Cross-platform browser opening.
-- **`apps/artwork-viewer/`** — MCP Apps inline IIIF viewer (Vite + vite-plugin-singlefile + OpenSeadragon). Built by `npm run build:ui` into `dist/apps/index.html`. Loaded at runtime by `registration.ts` via `fs.readFileSync`. The `tsconfig.json` excludes `apps/` so tsc doesn't compile it.
+- **`apps/artwork-viewer/`** — MCP Apps inline IIIF viewer (Vite + vite-plugin-singlefile + OpenSeadragon). Controls: zoom, rotate, flip, keyboard shortcuts overlay (`?`), conditional fullscreen (only when `document.fullscreenEnabled`). Built by `npm run build:ui` into `dist/apps/index.html`. Loaded at runtime by `registration.ts` via `fs.readFileSync`. The `tsconfig.json` excludes `apps/` so tsc doesn't compile it.
 
 ## Tools
 
@@ -55,7 +55,7 @@ Key layers:
 |---|---|
 | `search_artwork` | Search by query (→title), title, creator, type, material, technique, creationDate, description. At least one filter required. Supports compact mode. |
 | `get_artwork_details` | Full details by objectNumber (e.g. `SK-C-5`). 24 metadata categories including resolved vocabulary terms. 2 + ~17 HTTP calls (search + resolve object + parallel vocabulary resolution). |
-| `get_artwork_bibliography` | Bibliography/references for an artwork. Text or BibTeX format. Summary (5) or full (100+). Resolves Schema.org Book records. |
+| `get_artwork_bibliography` | Bibliography/references for an artwork. Plaintext citations. Summary (5) or full (100+). Resolves Schema.org Book records. |
 | `get_artwork_image` | IIIF image info + inline MCP Apps viewer + optional base64 thumbnail. 4-6 HTTP calls for image chain. Uses `registerAppTool` with `_meta.ui.resourceUri`. |
 | `get_artist_timeline` | Chronological timeline by creator name. N+1 calls (search + resolve each). |
 | `open_in_browser` | Opens any URL in user's default browser. |

@@ -63,7 +63,7 @@ The server includes an interactive deep-zoom viewer that renders directly in you
 "Show me the image for AK-MAK-187"
 ```
 
-In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (e.g. [Claude Desktop](https://claude.com/download), [claude.ai](https://claude.ai), you get an interactive viewer with zoom, pan, and rotate controls. In other clients, you still get image URLs and an optional thumbnail.
+In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (e.g. [Claude Desktop](https://claude.com/download), [claude.ai](https://claude.ai)), you get an interactive viewer with zoom, pan, rotate, and flip controls, plus keyboard shortcuts. In other clients, you still get image URLs and an optional thumbnail.
 
 ### Exploring an artist's career
 
@@ -71,6 +71,29 @@ In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-a
 "Create a timeline of Hendrick Goltzius's works in the Rijksmuseum"
 "Show me Gesina ter Borch's works in chronological order"
 "Map out Jacob van Ruisdael's artistic development from the Rijksmuseum collection"
+```
+
+### Browsing curated sets
+
+The Rijksmuseum organises its collection into 192 curated sets — exhibition groupings, scholarly themes, and curatorial selections. You can explore these sets and browse their contents.
+
+```
+"What curated sets relate to the Dutch Golden Age maritime trade?"
+"Browse the Rijksprentenkabinet's Japanese print collection"
+"Show me what's in the Rijksmuseum's selection of medieval illuminated manuscripts"
+"Are there any curated sets devoted to Haarlem mannerism?"
+```
+
+Each record bridges directly to the full Linked Art tools — you can ask for details, images, or bibliography on anything you find.
+
+### Tracking collection changes
+
+The server exposes the museum's change-tracking feed, so you can see what's been recently added or updated.
+
+```
+"What has the Rijksmuseum added to its collection in the last month?"
+"Show me recent acquisitions of Asian art"
+"Have any Saenredam records been updated recently?"
 ```
 
 ### The LLM fills in the gaps
@@ -176,6 +199,9 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Falls back to JSON + optional base64 thumbnail in text-only clients. |
 | `get_artist_timeline` | Chronological timeline of an artist's works in the collection. |
 | `open_in_browser` | Open any URL (artwork page, image, viewer) in the user's default browser. |
+| `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic selections). Optional name filter. Via OAI-PMH. |
+| `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, and IIIF URLs. Pagination via resumption token. |
+| `get_recent_changes` | Track additions and modifications by date range. Full EDM records or lightweight headers (`identifiersOnly`). Pagination via resumption token. |
 
 ### Prompts and Resources
 
@@ -196,6 +222,7 @@ src/
   viewer.ts                   — OpenSeadragon HTML generator (HTTP mode)
   api/
     RijksmuseumApiClient.ts   — Linked Art API client, vocabulary resolver, bibliography, IIIF image chain
+    OaiPmhClient.ts           — OAI-PMH client (curated sets, EDM records, change tracking)
   utils/
     SystemIntegration.ts      — Cross-platform browser opening
 apps/
@@ -211,6 +238,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 | Search API | `https://data.rijksmuseum.nl/search/collection` | Field-based search (title, creator, type, material, technique, date, description), returns Linked Art URIs |
 | Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata, vocabulary terms, and bibliography as JSON-LD |
 | IIIF Image API | `https://iiif.micr.io/{id}/info.json` | High-resolution image tiles |
+| OAI-PMH | `https://data.rijksmuseum.nl/oai` | Curated sets, EDM metadata records, date-based change tracking. 192 sets, 836K+ records. |
 
 **Image discovery chain (4 HTTP hops):** Object `.shows` > VisualItem `.digitally_shown_by` > DigitalObject `.access_point` > IIIF info.json
 
