@@ -163,19 +163,12 @@ function registerTools(
       description:
         "Get bibliography and scholarly references for an artwork. " +
         "By default returns a summary (total count + first 5 citations). " +
-        "Set full=true to retrieve all citations (can be 100+ entries for major works — consider the context window). " +
-        "Supports plaintext and BibTeX output formats.",
+        "Set full=true to retrieve all citations (can be 100+ entries for major works — consider the context window).",
       inputSchema: {
         objectNumber: z
           .string()
           .describe(
             "The object number of the artwork (e.g. 'SK-C-5')"
-          ),
-        format: z
-          .enum(["text", "bibtex"])
-          .default("text")
-          .describe(
-            "Output format: 'text' for readable citations, 'bibtex' for structured BibTeX entries"
           ),
         full: z
           .boolean()
@@ -189,7 +182,6 @@ function registerTools(
       const { object } = await api.findByObjectNumber(args.objectNumber);
       const result = await api.getBibliography(object, {
         limit: args.full ? 0 : 5,
-        format: args.format,
       });
       return jsonResponse(result);
     }

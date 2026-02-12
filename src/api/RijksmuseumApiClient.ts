@@ -757,75 +757,6 @@ export class RijksmuseumApiClient {
     return parts.join(", ");
   }
 
-  /** Generate a BibTeX key from author + year or fallback */
-  private static makeBibtexKey(
-    book: Record<string, any> | null,
-    index: number
-  ): string {
-    if (book?.creditText) {
-      const first = book.creditText.split(/[,;]/)[0].trim();
-      const surname = first.split(/\s+/).pop()?.replace(/[^a-zA-Z]/g, "") ?? "";
-      const year = book.publication?.[0]?.startDate ?? "";
-      if (surname) return `${surname}${year}`.toLowerCase();
-    }
-    return `ref_${index}`;
-  }
-
-  /** Escape special BibTeX characters */
-  private static bibtexEscape(s: unknown): string {
-    const str = typeof s === "string" ? s : String(s ?? "");
-    return str.replace(/[&%$#_{}~^\\]/g, (c) => `\\${c}`);
-  }
-
-  /** Format a Schema.org Book as a BibTeX entry */
-  private static formatBibtex(
-    book: Record<string, any> | null,
-    pages: string | undefined,
-    index: number,
-    citationString?: string
-  ): string {
-    // If no resolved book data, fall back to @misc with citation string
-    if (!book) {
-      const key = `ref_${index}`;
-      const note = RijksmuseumApiClient.bibtexEscape(citationString ?? "");
-      return `@misc{${key},\n  note = {${note}}\n}`;
-    }
-
-    const key = RijksmuseumApiClient.makeBibtexKey(book, index);
-    const entryType = pages ? "incollection" : "book";
-    const fields: string[] = [];
-
-    if (book.creditText)
-      fields.push(
-        `  author = {${RijksmuseumApiClient.bibtexEscape(book.creditText)}}`
-      );
-    if (book.name)
-      fields.push(
-        `  title = {${RijksmuseumApiClient.bibtexEscape(book.name)}}`
-      );
-
-    const pub = book.publication?.[0];
-    if (pub?.publishedBy?.name)
-      fields.push(
-        `  publisher = {${RijksmuseumApiClient.bibtexEscape(pub.publishedBy.name)}}`
-      );
-    if (pub?.location?.name)
-      fields.push(
-        `  address = {${RijksmuseumApiClient.bibtexEscape(pub.location.name)}}`
-      );
-    if (pub?.startDate) fields.push(`  year = {${pub.startDate}}`);
-
-    if (book.isbn) fields.push(`  isbn = {${book.isbn}}`);
-    if (pages)
-      fields.push(
-        `  pages = {${pages.replace(/^p\.\s*/, "").replace(/-/g, "--")}}`
-      );
-    if (book.url)
-      fields.push(`  url = {${book.url}}`);
-
-    return `@${entryType}{${key},\n${fields.join(",\n")}\n}`;
-  }
-
   /**
    * Get bibliography for a Linked Art object.
    * Parses assigned_by entries, optionally resolves publication URIs.
@@ -833,9 +764,9 @@ export class RijksmuseumApiClient {
    */
   async getBibliography(
     obj: LinkedArtObject,
-    options: { limit?: number; format?: "text" | "bibtex" } = {}
+    options: { limit?: number } = {}
   ): Promise<BibliographyResult> {
-    const { limit = 0, format = "text" } = options;
+    const { limit = 0 } = options;
     const objectNumber = RijksmuseumApiClient.parseObjectNumber(obj);
 
     // Filter to citation entries only
@@ -942,14 +873,7 @@ export class RijksmuseumApiClient {
       const book = p.resolveUri ? resolved.get(p.resolveUri) ?? null : null;
 
       let citation: string;
-      if (format === "bibtex") {
-        citation = RijksmuseumApiClient.formatBibtex(
-          book,
-          p.pages,
-          i + 1,
-          p.citationString
-        );
-      } else if (p.type === "B" && p.citationString) {
+      if (p.type === "B" && p.citationString) {
         citation = p.citationString;
       } else if (book) {
         citation = RijksmuseumApiClient.formatBookCitation(book, p.pages);
