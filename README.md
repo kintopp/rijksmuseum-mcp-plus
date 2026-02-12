@@ -74,6 +74,35 @@ In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-a
 "Map out Jacob van Ruisdael's artistic development from the Rijksmuseum collection"
 ```
 
+### The LLM fills in the gaps
+
+Because the MCP client is itself a large language model, you don't need to know the exact search terms, language, or spelling the API expects. The LLM bridges the gap using its background knowledge — translating, correcting, cross-referencing, and explaining when something falls outside the collection.
+
+```
+"Laat me De Bedreigde Zwaan zien"
+```
+*Translates from Dutch, identifies The Threatened Swan by Jan Asselijn (SK-A-4), and retrieves its details.*
+
+```
+"Find the dollhouse that inspired Jessie Burton's novel The Miniaturist"
+```
+*Knows the novel was inspired by Petronella Oortman's dollhouse (SK-A-4245) and searches by the Dutch catalogue title.*
+
+```
+"Show me works by the artist who taught Rembrandt"
+```
+*Identifies Pieter Lastman as Rembrandt's teacher and finds his 7 works in the collection.*
+
+```
+"What etchings by Hercules Seghers are in the collection?"
+```
+*Recognises "Seghers" as a common historical variant and searches under the Rijksmuseum's canonical spelling "Segers" (77 works).*
+
+```
+"Show me Vermeer's Girl with a Pearl Earring"
+```
+*Explains that this painting is at the Mauritshuis in The Hague, not the Rijksmuseum, and offers to show Vermeer works that are in the collection.*
+
 ---
 
 ## Technical Guide
