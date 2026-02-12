@@ -17,6 +17,7 @@ import {
   ProductionParticipant,
   BibliographyEntry,
   BibliographyResult,
+  SubjectData,
   VisualItem,
   DigitalObject,
   IIIFInfoResponse,
@@ -544,12 +545,13 @@ export class RijksmuseumApiClient {
     const label =
       enName?.content ?? nlName?.content ?? data._label ?? uri.split("/").pop() ?? uri;
 
-    // Extract external equivalents (AAT, Wikidata)
+    // Extract external equivalents (AAT, Wikidata, Iconclass)
     const equivalents: Record<string, string> = {};
     for (const eq of (data.equivalent ?? []) as any[]) {
       const eqId: string = eq.id ?? "";
       if (eqId.includes("vocab.getty.edu")) equivalents.aat = eqId;
       else if (eqId.includes("wikidata.org")) equivalents.wikidata = eqId;
+      else if (eqId.includes("iconclass.org")) equivalents.iconclass = eqId;
     }
 
     const term: ResolvedTerm = { id: uri, label };
@@ -568,6 +570,7 @@ export class RijksmuseumApiClient {
     production: ProductionParticipant[];
     collectionSetLabels: ResolvedTerm[];
     dimensionTypeLabels: Map<string, string>;
+    subjects: SubjectData;
   }> {
     // Collect all URIs that need resolution
     const typeUris = (obj.classified_as ?? [])
@@ -601,6 +604,24 @@ export class RijksmuseumApiClient {
       ),
     ];
 
+    // Subject URIs from VisualItem (represents_instance_of_type + represents)
+    let subjectConceptUris: string[] = [];
+    let subjectEntityUris: string[] = [];
+    try {
+      const visualItemRef = obj.shows?.[0];
+      if (visualItemRef?.id) {
+        const { data: vi } = await this.http.get<VisualItem>(visualItemRef.id);
+        subjectConceptUris = (vi.represents_instance_of_type ?? [])
+          .map((r) => r.id)
+          .filter(Boolean);
+        subjectEntityUris = (vi.represents ?? [])
+          .map((r) => r.id)
+          .filter(Boolean);
+      }
+    } catch {
+      // VisualItem fetch failed — subjects will be empty
+    }
+
     // Deduplicate all URIs for batch resolution
     const allUris = [
       ...new Set([
@@ -611,6 +632,8 @@ export class RijksmuseumApiClient {
         ...techniqueUris,
         ...placeUris,
         ...dimTypeUris,
+        ...subjectConceptUris,
+        ...subjectEntityUris,
       ]),
     ];
 
@@ -663,12 +686,32 @@ export class RijksmuseumApiClient {
       if (term) dimensionTypeLabels.set(uri, term.label);
     }
 
+    // Partition subject URIs into iconclass / persons / places
+    const iconclass = subjectConceptUris
+      .map((u) => resolved.get(u))
+      .filter(Boolean) as ResolvedTerm[];
+
+    const depictedPersons: ResolvedTerm[] = [];
+    const depictedPlaces: ResolvedTerm[] = [];
+    for (const uri of subjectEntityUris) {
+      const term = resolved.get(uri);
+      if (!term) continue;
+      // Place URIs link to GeoNames/TGN or contain "/place/" in the path;
+      // everything else is treated as a person (ULAN/VIAF).
+      const eqValues = Object.values(term.equivalents ?? {});
+      const isPlace =
+        eqValues.some((v) => v.includes("geonames.org") || v.includes("vocab.getty.edu/tgn")) ||
+        uri.includes("/place/");
+      (isPlace ? depictedPlaces : depictedPersons).push(term);
+    }
+
     return {
       objectTypes,
       materials,
       production,
       collectionSetLabels,
       dimensionTypeLabels,
+      subjects: { iconclass, depictedPersons, depictedPlaces },
     };
   }
 
@@ -715,6 +758,7 @@ export class RijksmuseumApiClient {
       materials: vocab.materials,
       production: vocab.production,
       collectionSetLabels: vocab.collectionSetLabels,
+      subjects: vocab.subjects,
       bibliographyCount,
     };
   }

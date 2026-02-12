@@ -195,6 +195,8 @@ export interface VisualItem {
   id: string;
   type: "VisualItem";
   digitally_shown_by?: LinkedArtRef[];
+  represents_instance_of_type?: LinkedArtRef[];
+  represents?: LinkedArtRef[];
 }
 
 export interface DigitalObject {
@@ -281,6 +283,12 @@ export interface ProductionParticipant {
   actorUri: string;
 }
 
+export interface SubjectData {
+  iconclass: ResolvedTerm[];
+  depictedPersons: ResolvedTerm[];
+  depictedPlaces: ResolvedTerm[];
+}
+
 export interface ArtworkDetailEnriched extends ArtworkDetail {
   // Group A: parsed from existing object (no HTTP)
   titles: TitleVariant[];
@@ -296,6 +304,9 @@ export interface ArtworkDetailEnriched extends ArtworkDetail {
   materials: ResolvedTerm[];
   production: ProductionParticipant[];
   collectionSetLabels: ResolvedTerm[];
+
+  // Group C: subject annotations (from VisualItem)
+  subjects: SubjectData;
 
   // Bibliography count (for discoverability — full data via separate tool)
   bibliographyCount: number;
@@ -369,6 +380,13 @@ export interface OaiCreator {
   authorityLinks: Record<string, string>;
 }
 
+export interface OaiSubject {
+  label: string;
+  type: "iconclass" | "place" | "person";
+  code?: string;
+  uri?: string;
+}
+
 export interface OaiParsedRecord {
   lodUri: string;
   objectNumber: string;
@@ -385,6 +403,7 @@ export interface OaiParsedRecord {
   iiifServiceUrl: string | null;
   rights: string | null;
   setMemberships: string[];
+  subjects: OaiSubject[];
 }
 
 export interface OaiListResult<T> {

@@ -5,6 +5,7 @@ import type {
   OaiRecordHeader,
   OaiCreator,
   OaiParsedRecord,
+  OaiSubject,
   OaiListResult,
 } from "../types.js";
 
@@ -39,6 +40,8 @@ const ARRAY_TAGS = new Set([
   "edm:WebResource",
   "ore:Aggregation",
   "edm:ProvidedCHO",
+  "edm:Place",
+  "edm:Agent",
   "svcs:has_service",
 ]);
 
@@ -275,6 +278,9 @@ export class OaiPmhClient {
     // Set memberships — resolve all dcterms:isPartOf labels
     const setMemberships = OaiPmhClient.resolveAllLabels(cho["dcterms:isPartOf"] ?? [], entityMap);
 
+    // Subjects — resolve dc:subject references into typed entries
+    const subjects = OaiPmhClient.resolveSubjects(cho["dc:subject"] ?? [], entityMap);
+
     return {
       lodUri,
       objectNumber,
@@ -291,6 +297,7 @@ export class OaiPmhClient {
       iiifServiceUrl,
       rights,
       setMemberships,
+      subjects,
     };
   }
 
@@ -304,11 +311,11 @@ export class OaiPmhClient {
   private static buildEntityMap(rdf: any): Map<string, any> {
     const map = new Map<string, any>();
 
-    for (const tag of ["rdf:Description", "skos:Concept"]) {
+    for (const tag of ["rdf:Description", "skos:Concept", "edm:Place", "edm:Agent"]) {
       const entities = rdf[tag] ?? [];
       for (const entity of entities) {
         const about = entity["@rdf:about"];
-        if (about) map.set(about, entity);
+        if (about) map.set(about, { ...entity, _entityTag: tag });
       }
     }
 
@@ -446,6 +453,73 @@ export class OaiPmhClient {
     if (raw == null) return null;
     const text = String(typeof raw === "object" ? raw["#text"] ?? "" : raw);
     return text || null;
+  }
+
+  /**
+   * Resolve dc:subject references into typed OaiSubject entries.
+   * Classifies each subject by entity tag (edm:Place, edm:Agent)
+   * or as Iconclass for skos:Concept / rdf:Description entities.
+   */
+  private static resolveSubjects(
+    subjectRefs: any[],
+    entityMap: Map<string, any>
+  ): OaiSubject[] {
+    const subjects: OaiSubject[] = [];
+
+    for (const ref of subjectRefs) {
+      const uri = OaiPmhClient.resourceUri(ref);
+      if (!uri) continue;
+
+      const entity = entityMap.get(uri);
+      if (!entity) continue;
+
+      const label = OaiPmhClient.preferLangFromEntity(entity) ?? uri.split("/").pop() ?? uri;
+      const tag: string = entity._entityTag ?? "";
+
+      if (tag === "edm:Place" || tag === "edm:Agent") {
+        const subject: OaiSubject = {
+          label,
+          type: tag === "edm:Place" ? "place" : "person",
+        };
+        const extUri = OaiPmhClient.extractSameAsUri(entity);
+        if (extUri) subject.uri = extUri;
+        subjects.push(subject);
+      } else {
+        // skos:Concept or rdf:Description — Iconclass subject
+        const subject: OaiSubject = { label, type: "iconclass" };
+
+        // Prefer Iconclass URI from owl:sameAs, fall back to any other
+        const extUri = OaiPmhClient.extractSameAsUri(entity, "iconclass.org")
+          ?? OaiPmhClient.extractSameAsUri(entity);
+        if (extUri) subject.uri = extUri;
+
+        // Extract Iconclass notation code from skos:altLabel (starts with digit)
+        const altLabels = entity["skos:altLabel"] ?? [];
+        const altArr = Array.isArray(altLabels) ? altLabels : [altLabels];
+        const code = altArr
+          .map((a: any) => (typeof a === "string" ? a : a["#text"] ?? ""))
+          .find((t: string) => /^[0-9]/.test(t));
+        if (code) subject.code = code;
+
+        subjects.push(subject);
+      }
+    }
+
+    return subjects;
+  }
+
+  /**
+   * Extract an owl:sameAs URI from an entity.
+   * If domainHint is provided, returns the first URI containing that string.
+   * Otherwise returns the first available URI.
+   */
+  private static extractSameAsUri(entity: any, domainHint?: string): string | null {
+    for (const sa of entity["owl:sameAs"] ?? []) {
+      const uri = typeof sa === "object" ? sa["@rdf:resource"] : sa;
+      if (!uri) continue;
+      if (!domainHint || uri.includes(domainHint)) return uri;
+    }
+    return null;
   }
 
   private static parseCreatorFromEntity(entity: any): OaiCreator {
