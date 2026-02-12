@@ -126,7 +126,7 @@ function registerTools(
         "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch). " +
         "Returns 24 metadata categories including titles, creator, date, description, curatorial narrative, " +
         "dimensions (text + structured), materials, object type, production details, provenance, " +
-        "credit line, inscriptions, license, related objects, collection sets, and more. " +
+        "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
         "Also reports the bibliography count — use get_artwork_bibliography for full citations.",
       inputSchema: {
         objectNumber: z

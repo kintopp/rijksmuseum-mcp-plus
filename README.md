@@ -23,35 +23,35 @@ Once connected, just ask questions in plain language. Here are some things you c
 ### Searching the collection
 
 ```
-"Show me paintings by Rembrandt"
-"Find drawings by Hokusai in the Rijksmuseum"
-"Search for still life paintings from the 1600s"
-"What prints by Albrecht Dürer are in the collection?"
-"Show me artworks made with watercolour on paper"
-"Find works by female artists from the 17th century"
-"How many etchings by Rembrandt are there?"
+"Find Pieter Saenredam's paintings of church interiors"
+"Show me woodcuts by Hokusai"
+"Search for paintings from the 1640s"
+"What porcelain objects are in the collection?"
+"Find artworks depicting tulips"
+"Show me drawings by Gesina ter Borch"
+"How many mezzotints are in the collection?"
 ```
 
 ### Learning about specific artworks
 
-Each artwork comes with up to 24 metadata categories — including curatorial narratives, materials, object types, production details, structured dimensions, provenance, and links to external identifiers (Getty AAT, Wikidata).
+Each artwork comes with up to 24 metadata categories — including curatorial narratives, materials, object types, production details, structured dimensions, provenance, and links to external identifiers (Getty AAT, Wikidata). See [Artwork Metadata Categories](docs/metadata-categories.md) for a full catalogue of these categories.
 
 ```
-"Tell me everything about The Night Watch"
-"What's the story behind Vermeer's Milkmaid?"
-"Describe the provenance of Frans Hals's Portrait of Duijfje van Gerwen"
-"What materials and technique were used for The Jewish Bride?"
-"What collections is The Night Watch part of?"
+"What inscriptions did Saenredam include on his painting of the Assendelft church?"
+"Trace the provenance of Avercamp's Winter Landscape with Ice Skaters"
+"What materials and techniques were used for the Shiva Nataraja (AK-MAK-187)?"
+"Tell me about Rachel Ruysch's Still Life with Flowers in a Glass Vase"
+"Show me the production details for The Windmill at Wijk bij Duurstede"
 ```
 
 ### Scholarly references
 
-For major works, the Rijksmuseum provides extensive bibliography data — over 100 scholarly references for The Night Watch alone. You can browse citations in plain text or export them as BibTeX.
+The Rijksmuseum provides bibliography data for its artworks — from a handful of references for lesser-known works to over a hundred for the most studied pieces. You can browse citations in plain text or export them as BibTeX.
 
 ```
-"Show me the bibliography for The Night Watch"
-"Get all references for SK-C-5 in BibTeX format"
-"How many scholarly publications mention The Milkmaid?"
+"Show me the bibliography for Saenredam's Assendelft church interior"
+"Get scholarly references for the Shiva Nataraja (AK-MAK-187) in BibTeX format"
+"How many publications cite Avercamp's Winter Landscape with Ice Skaters?"
 ```
 
 ### Viewing high-resolution images
@@ -59,9 +59,9 @@ For major works, the Rijksmuseum provides extensive bibliography data — over 1
 The server includes an interactive deep-zoom viewer that renders directly in your chat. You can zoom into brushstroke-level detail, pan across the canvas, and rotate the image — without leaving the conversation.
 
 ```
-"Show me a high-resolution image of The Night Watch"
-"Let me zoom into the details of Vermeer's The Love Letter"
-"Show me the image for SK-A-3262"
+"Show me a high-resolution image of Avercamp's Winter Landscape with Ice Skaters"
+"Let me zoom into the brushwork on Rachel Ruysch's flower painting"
+"Show me the image for AK-MAK-187"
 ```
 
 In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (e.g. Claude Desktop), you get an interactive OpenSeadragon IIIF viewer with zoom, pan, and rotate controls. In other clients, you still get image URLs and an optional thumbnail.
@@ -69,9 +69,9 @@ In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-a
 ### Exploring an artist's career
 
 ```
-"Create a timeline of Rembrandt's works in the Rijksmuseum"
-"Show me Johannes Vermeer's works in chronological order"
-"Map out Van Gogh's artistic development from the Rijksmuseum collection"
+"Create a timeline of Hendrick Goltzius's works in the Rijksmuseum"
+"Show me Gesina ter Borch's works in chronological order"
+"Map out Jacob van Ruisdael's artistic development from the Rijksmuseum collection"
 ```
 
 ---
