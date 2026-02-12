@@ -63,7 +63,7 @@ The server includes an interactive deep-zoom viewer that renders directly in you
 "Show me the image for AK-MAK-187"
 ```
 
-In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (e.g. Claude Desktop, https://claude.ai), you get an interactive OpenSeadragon IIIF viewer with zoom, pan, and rotate controls. In other clients, you still get image URLs and an optional thumbnail.
+In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (e.g. [Claude Desktop](https://claude.com/download), [claude.ai](https://claude.ai), you get an interactive OpenSeadragon IIIF viewer with zoom, pan, and rotate controls. In other clients, you still get image URLs and an optional thumbnail.
 
 ### Exploring an artist's career
 
