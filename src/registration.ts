@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
+import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +21,30 @@ function jsonResponse(data: unknown): { content: [{ type: "text"; text: string }
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
+/** Format an OAI-PMH paginated list result into a tool response. */
+function paginatedResponse(
+  result: { records: unknown[]; completeListSize: number | null; resumptionToken: string | null },
+  maxResults: number,
+  totalLabel: string,
+  toolName: string,
+  extra?: Record<string, unknown>
+): { content: [{ type: "text"; text: string }] } {
+  const records = result.records.slice(0, maxResults);
+
+  return jsonResponse({
+    ...(result.completeListSize != null ? { [totalLabel]: result.completeListSize } : {}),
+    returnedCount: records.length,
+    ...extra,
+    records,
+    ...(result.resumptionToken
+      ? {
+          resumptionToken: result.resumptionToken,
+          hint: `Pass this resumptionToken to ${toolName} to get the next page.`,
+        }
+      : {}),
+  });
+}
+
 /**
  * Register all tools, resources, and prompts on the given McpServer.
  * `httpPort` is provided when running in HTTP mode so viewer URLs can be generated.
@@ -27,9 +52,10 @@ function jsonResponse(data: unknown): { content: [{ type: "text"; text: string }
 export function registerAll(
   server: McpServer,
   apiClient: RijksmuseumApiClient,
+  oaiClient: OaiPmhClient,
   httpPort?: number
 ): void {
-  registerTools(server, apiClient, httpPort);
+  registerTools(server, apiClient, oaiClient, httpPort);
   registerResources(server, apiClient);
   registerAppViewerResource(server);
   registerPrompts(server);
@@ -40,6 +66,7 @@ export function registerAll(
 function registerTools(
   server: McpServer,
   api: RijksmuseumApiClient,
+  oai: OaiPmhClient,
   httpPort?: number
 ): void {
   // ── search_artwork ──────────────────────────────────────────────
@@ -332,6 +359,145 @@ function registerTools(
           isError: true,
         };
       }
+    }
+  );
+
+  // ── list_curated_sets ───────────────────────────────────────────
+
+  server.registerTool(
+    "list_curated_sets",
+    {
+      description:
+        "List curated collection sets from the Rijksmuseum (exhibitions, scholarly groupings, thematic collections). " +
+        "Returns set identifiers that can be used with browse_set to explore their contents. " +
+        "Optionally filter by name substring.",
+      inputSchema: {
+        query: z
+          .string()
+          .optional()
+          .describe(
+            "Filter sets by name (case-insensitive substring match). E.g. 'painting', 'Rembrandt', 'Japanese'"
+          ),
+      },
+    },
+    async (args) => {
+      const allSets = await oai.listSets();
+      let sets = allSets;
+
+      if (args.query) {
+        const q = args.query.toLowerCase();
+        sets = allSets.filter((s) => s.name.toLowerCase().includes(q));
+      }
+
+      return jsonResponse({
+        totalSets: sets.length,
+        ...(args.query ? { filteredFrom: allSets.length, query: args.query } : {}),
+        sets,
+      });
+    }
+  );
+
+  // ── browse_set ──────────────────────────────────────────────────
+
+  server.registerTool(
+    "browse_set",
+    {
+      description:
+        "Browse artworks in a curated collection set. Returns parsed EDM records with titles, creators, dates, " +
+        "image URLs, and IIIF service URLs. Each record includes an objectNumber that can be used with " +
+        "get_artwork_details, get_artwork_image, or get_artwork_bibliography for full Linked Art data. " +
+        "Supports pagination via resumptionToken.",
+      inputSchema: {
+        setSpec: z
+          .string()
+          .describe(
+            "Set identifier from list_curated_sets (e.g. '26121')"
+          ),
+        maxResults: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .default(10)
+          .describe("Maximum records to return (1-50, default 10)"),
+        resumptionToken: z
+          .string()
+          .optional()
+          .describe(
+            "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
+          ),
+      },
+    },
+    async (args) => {
+      const result = args.resumptionToken
+        ? await oai.listRecords({ resumptionToken: args.resumptionToken })
+        : await oai.listRecords({ set: args.setSpec });
+
+      return paginatedResponse(result, args.maxResults, "totalInSet", "browse_set");
+    }
+  );
+
+  // ── get_recent_changes ──────────────────────────────────────────
+
+  server.registerTool(
+    "get_recent_changes",
+    {
+      description:
+        "Track recent additions and modifications to the Rijksmuseum collection. " +
+        "Returns records changed within a date range. Use identifiersOnly=true for a lightweight " +
+        "listing (headers only, no full metadata). Each record includes an objectNumber for use with " +
+        "get_artwork_details, get_artwork_image, or get_artwork_bibliography.",
+      inputSchema: {
+        from: z
+          .string()
+          .describe(
+            "Start date in ISO 8601 format (e.g. '2026-02-01T00:00:00Z' or '2026-02-01')"
+          ),
+        until: z
+          .string()
+          .optional()
+          .describe(
+            "End date in ISO 8601 format (defaults to now)"
+          ),
+        setSpec: z
+          .string()
+          .optional()
+          .describe("Restrict to changes within a specific set"),
+        identifiersOnly: z
+          .boolean()
+          .default(false)
+          .describe(
+            "If true, returns only record headers (identifier, datestamp, set memberships) — much faster"
+          ),
+        maxResults: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .default(10)
+          .describe("Maximum records to return (1-50, default 10)"),
+        resumptionToken: z
+          .string()
+          .optional()
+          .describe(
+            "Pagination token from a previous get_recent_changes result. When provided, all other filters are ignored."
+          ),
+      },
+    },
+    async (args) => {
+      const opts = {
+        from: args.from,
+        until: args.until,
+        set: args.setSpec,
+        resumptionToken: args.resumptionToken,
+      };
+
+      const result = args.identifiersOnly
+        ? await oai.listIdentifiers(opts)
+        : await oai.listRecords(opts);
+
+      const extra = args.identifiersOnly ? { identifiersOnly: true } : undefined;
+      return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra);
     }
   );
 }

@@ -7,6 +7,7 @@ import cors from "cors";
 import crypto from "node:crypto";
 
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
+import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { registerAll } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 
@@ -46,7 +47,8 @@ function createServer(httpPort?: number): McpServer {
   );
 
   const apiClient = new RijksmuseumApiClient();
-  registerAll(server, apiClient, httpPort);
+  const oaiClient = new OaiPmhClient();
+  registerAll(server, apiClient, oaiClient, httpPort);
   return server;
 }
 

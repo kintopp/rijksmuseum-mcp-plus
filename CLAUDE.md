@@ -31,17 +31,19 @@ No test suite or linter is configured.
 
 Dual-transport MCP server using `McpServer` from `@modelcontextprotocol/sdk`. Entry point: `src/index.ts`.
 
-**Request flow:** MCP SDK dispatches → `registration.ts` tool callbacks → `RijksmuseumApiClient` → returns formatted JSON.
+**Request flow:** MCP SDK dispatches → `registration.ts` tool callbacks → `RijksmuseumApiClient` or `OaiPmhClient` → returns formatted JSON.
 
 **Data sources:**
 - Search API: `https://data.rijksmuseum.nl/search/collection` — returns Linked Art URIs. Supported parameters: `title`, `creator`, `objectNumber`, `type`, `material`, `technique`, `creationDate`, `description`, `pageToken`. No general full-text search exists; unknown parameters are silently ignored and an unfiltered request returns the entire collection (837K+).
 - Resolver: `https://id.rijksmuseum.nl/{numericId}` — returns Linked Art JSON-LD
 - IIIF: `https://iiif.micr.io/{iiifId}/info.json` — image metadata and tiles
+- OAI-PMH: `https://data.rijksmuseum.nl/oai` — curated sets, date-based change tracking, EDM metadata. 192 sets, 836K+ records, 50 records/page with base64 resumption tokens.
 
 Key layers:
 - **`src/index.ts`** — Dual-transport entry (stdio default, HTTP when `PORT` env or `--http` flag). HTTP mode uses Express + StreamableHTTPServerTransport with per-session McpServer instances.
-- **`src/registration.ts`** — Registers 6 tools, 2 resources, 2 prompts. `get_artwork_image` uses `registerAppTool` from `@modelcontextprotocol/ext-apps/server` (links to MCP App viewer). Other tools use `McpServer.registerTool()` with Zod input schemas.
+- **`src/registration.ts`** — Registers 9 tools, 2 resources, 2 prompts. `get_artwork_image` uses `registerAppTool` from `@modelcontextprotocol/ext-apps/server` (links to MCP App viewer). Other tools use `McpServer.registerTool()` with Zod input schemas.
 - **`src/api/RijksmuseumApiClient.ts`** — Axios client for Linked Art APIs. Static parsers extract fields from JSON-LD using AAT URIs. Vocabulary resolution via `resolveVocabTerm()` for bilingual labels + AAT/Wikidata equivalents. Bibliography parsing handles 3 entry types (structured refs, inline citations, BIBFRAME). Image chain follows 4 hops: Object → VisualItem → DigitalObject → IIIF.
+- **`src/api/OaiPmhClient.ts`** — Axios + fast-xml-parser client for OAI-PMH endpoint. Parses EDM records with namespace-aware XML parsing. Provides `listSets()`, `listRecords()`, `listIdentifiers()` with resumption token pagination.
 - **`src/types.ts`** — Linked Art primitives, Search API types, IIIF types, parsed output types, AAT constants.
 - **`src/viewer.ts`** — Generates self-contained OpenSeadragon HTML for IIIF deep-zoom.
 - **`src/utils/SystemIntegration.ts`** — Cross-platform browser opening.
@@ -57,6 +59,9 @@ Key layers:
 | `get_artwork_image` | IIIF image info + inline MCP Apps viewer + optional base64 thumbnail. 4-6 HTTP calls for image chain. Uses `registerAppTool` with `_meta.ui.resourceUri`. |
 | `get_artist_timeline` | Chronological timeline by creator name. N+1 calls (search + resolve each). |
 | `open_in_browser` | Opens any URL in user's default browser. |
+| `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings). Optional name filter. Via OAI-PMH. |
+| `browse_set` | Browse artworks in a curated set. Returns parsed EDM records with titles, creators, images. Pagination via resumptionToken. |
+| `get_recent_changes` | Track additions/modifications by date range. Full EDM records or lightweight headers (identifiersOnly). Pagination via resumptionToken. |
 
 ## Conventions
 
