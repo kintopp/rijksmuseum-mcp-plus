@@ -26,7 +26,6 @@ interface ArtworkImageData {
   iiifId: string;
   iiifInfoUrl: string;
   thumbnailUrl: string;
-  fullUrl: string;
   width: number;
   height: number;
   objectNumber: string;
@@ -34,13 +33,11 @@ interface ArtworkImageData {
   creator: string;
   date: string;
   collectionUrl: string;
-  viewerUrl?: string;
 }
 
 // App state
 let currentData: ArtworkImageData | null = null;
 let viewer: OpenSeadragon.Viewer | null = null;
-let isFullscreen = false;
 let currentRotation = 0;
 let isFlipped = false;
 
@@ -119,10 +116,6 @@ function applyHostContext(
     const { top, right, bottom, left } = params.safeAreaInsets;
     document.body.style.padding = `${top}px ${right}px ${bottom}px ${left}px`;
   }
-  if (params.displayMode) {
-    isFullscreen = params.displayMode === 'fullscreen';
-    document.querySelector('.main')?.classList.toggle('fullscreen', isFullscreen);
-  }
 }
 
 app.onhostcontextchanged = applyHostContext;
@@ -170,18 +163,15 @@ function renderViewer(data: ArtworkImageData): void {
   const appEl = document.getElementById('app');
   if (!appEl) return;
 
-  const externalLinks = [
-    `<a href="${sanitizeUrl(data.collectionUrl)}" data-external-url="${sanitizeUrl(data.collectionUrl)}">Rijksmuseum</a>`,
-    `<a href="${sanitizeUrl(data.fullUrl)}" data-external-url="${sanitizeUrl(data.fullUrl)}">Full image</a>`,
-  ].join('');
+  const collectionUrl = sanitizeUrl(data.collectionUrl);
 
   appEl.innerHTML = `
-    <div class="main${isFullscreen ? ' fullscreen' : ''}">
+    <div class="main">
       <header class="header">
         <div class="header-title-row">
           <h1>${escapeHtml(data.title)}</h1>
-          <div class="header-right">
-            <div class="external-links">${externalLinks}</div>
+          <div class="external-links">
+            <a href="${collectionUrl}" data-external-url="${collectionUrl}">Rijksmuseum</a>
           </div>
         </div>
         <div class="metadata">
@@ -194,6 +184,7 @@ function renderViewer(data: ArtworkImageData): void {
       <div class="content">
         <div id="openseadragon-viewer"></div>
         <div class="image-controls">
+          <button id="show-shortcuts" title="Keyboard Shortcuts">?</button>
           <button id="zoom-in" title="Zoom In">+</button>
           <button id="zoom-out" title="Zoom Out">&minus;</button>
           <button id="reset-view" title="Reset View">Reset</button>
@@ -202,9 +193,6 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="rotate-right" title="Rotate Right">&#8635;</button>
           <span class="control-separator"></span>
           <button id="flip-h" title="Flip Horizontal">&#8660;</button>
-          <span class="control-separator"></span>
-          <button id="show-shortcuts" title="Keyboard Shortcuts">?</button>
-          ${document.fullscreenEnabled ? '<span class="control-separator"></span><button id="fullscreen-toggle" title="Fullscreen">&#9910;</button>' : ''}
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
           <div class="shortcuts-content">
@@ -341,29 +329,6 @@ function attachEventListeners(): void {
         break;
     }
   });
-
-  // Fullscreen toggle (only if browser supports it)
-  if (document.fullscreenEnabled) {
-    document.getElementById('fullscreen-toggle')?.addEventListener('click', () => {
-      const mainEl = document.querySelector('.main');
-      if (!mainEl) return;
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        mainEl.requestFullscreen();
-      }
-    });
-
-    document.addEventListener('fullscreenchange', () => {
-      const isActive = !!document.fullscreenElement;
-      const btn = document.getElementById('fullscreen-toggle');
-      if (btn) {
-        btn.textContent = isActive ? '\u2B8C' : '\u26F6';
-        btn.title = isActive ? 'Exit Fullscreen' : 'Fullscreen';
-      }
-      document.querySelector('.main')?.classList.toggle('browser-fullscreen', isActive);
-    });
-  }
 }
 
 function setupVisibilityObserver(): void {

@@ -67,10 +67,6 @@ html, body {
   background: var(--color-background-primary);
 }
 
-.main.fullscreen {
-  border-radius: 0;
-}
-
 /* Loading state */
 .loading {
   display: flex;
@@ -129,13 +125,6 @@ html, body {
   flex: 1;
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-shrink: 0;
-}
-
 .metadata {
   display: flex;
   gap: 1rem;
@@ -155,6 +144,7 @@ html, body {
 .external-links {
   display: flex;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .external-links a {
@@ -350,17 +340,6 @@ html, body {
 
 .shortcut-row span {
   color: #b0b0b0;
-}
-
-/* Browser fullscreen (user-triggered, distinct from host fullscreen) */
-.main.browser-fullscreen {
-  height: 100vh;
-  width: 100vw;
-  border-radius: 0;
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 9999;
 }
 
 /* Responsive */
