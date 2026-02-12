@@ -293,6 +293,76 @@ html, body {
   background: var(--color-accent-secondary);
 }
 
+/* Shortcuts overlay */
+.shortcuts-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 20;
+}
+
+.shortcuts-overlay.hidden {
+  display: none;
+}
+
+.shortcuts-content {
+  background: rgba(0, 0, 0, 0.85);
+  color: #e5e5e5;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--border-radius-md);
+  min-width: 240px;
+}
+
+.shortcuts-header {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+  color: white;
+}
+
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+}
+
+.shortcut-row kbd {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  min-width: 1.5em;
+  text-align: center;
+}
+
+.shortcut-row span {
+  color: #b0b0b0;
+}
+
+/* Browser fullscreen (user-triggered, distinct from host fullscreen) */
+.main.browser-fullscreen {
+  height: 100vh;
+  width: 100vw;
+  border-radius: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .header {

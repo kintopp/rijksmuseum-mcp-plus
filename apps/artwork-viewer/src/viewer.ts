@@ -42,6 +42,7 @@ let currentData: ArtworkImageData | null = null;
 let viewer: OpenSeadragon.Viewer | null = null;
 let isFullscreen = false;
 let currentRotation = 0;
+let isFlipped = false;
 
 const app = new App(
   { name: 'Rijksmuseum Artwork Viewer', version: '1.0.0' },
@@ -135,9 +136,33 @@ app.onteardown = async () => {
     state.zoom = viewer.viewport.getZoom();
     state.center = viewer.viewport.getCenter();
     state.rotation = currentRotation;
+    state.flipped = isFlipped;
   }
   return state;
 };
+
+// ── Viewer actions ──────────────────────────────────────────────────
+
+function rotateBy(degrees: number): void {
+  if (!viewer) return;
+  currentRotation = (currentRotation + degrees + 360) % 360;
+  viewer.viewport.setRotation(currentRotation);
+}
+
+function toggleFlip(): void {
+  if (!viewer) return;
+  isFlipped = !isFlipped;
+  viewer.viewport.setFlip(isFlipped);
+}
+
+function resetView(): void {
+  if (!viewer) return;
+  currentRotation = 0;
+  isFlipped = false;
+  viewer.viewport.setRotation(0);
+  viewer.viewport.setFlip(false);
+  viewer.viewport.goHome();
+}
 
 // ── Rendering ───────────────────────────────────────────────────────
 
@@ -175,6 +200,25 @@ function renderViewer(data: ArtworkImageData): void {
           <span class="control-separator"></span>
           <button id="rotate-left" title="Rotate Left">&#8634;</button>
           <button id="rotate-right" title="Rotate Right">&#8635;</button>
+          <span class="control-separator"></span>
+          <button id="flip-h" title="Flip Horizontal">&#8660;</button>
+          <span class="control-separator"></span>
+          <button id="show-shortcuts" title="Keyboard Shortcuts">?</button>
+          ${document.fullscreenEnabled ? '<span class="control-separator"></span><button id="fullscreen-toggle" title="Fullscreen">&#9910;</button>' : ''}
+        </div>
+        <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
+          <div class="shortcuts-content">
+            <div class="shortcuts-header">Keyboard Shortcuts</div>
+            <div class="shortcuts-list">
+              <div class="shortcut-row"><kbd>+</kbd> / <kbd>&minus;</kbd><span>Zoom in / out</span></div>
+              <div class="shortcut-row"><kbd>0</kbd><span>Reset view</span></div>
+              <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
+              <div class="shortcut-row"><kbd>R</kbd><span>Rotate right</span></div>
+              <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
+              <div class="shortcut-row"><kbd>F</kbd><span>Flip horizontal</span></div>
+              <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -262,22 +306,64 @@ function attachEventListeners(): void {
   document
     .getElementById('zoom-out')
     ?.addEventListener('click', () => viewer?.viewport.zoomBy(0.67));
-  document.getElementById('reset-view')?.addEventListener('click', () => {
-    if (!viewer) return;
-    currentRotation = 0;
-    viewer.viewport.setRotation(0);
-    viewer.viewport.goHome();
+  document.getElementById('reset-view')?.addEventListener('click', resetView);
+  document.getElementById('rotate-left')?.addEventListener('click', () => rotateBy(-90));
+  document.getElementById('rotate-right')?.addEventListener('click', () => rotateBy(90));
+  document.getElementById('flip-h')?.addEventListener('click', toggleFlip);
+
+  // Shortcuts overlay
+  const shortcutsOverlay = document.getElementById('shortcuts-overlay');
+  document.getElementById('show-shortcuts')?.addEventListener('click', () => {
+    shortcutsOverlay?.classList.toggle('hidden');
   });
-  document.getElementById('rotate-left')?.addEventListener('click', () => {
-    if (!viewer) return;
-    currentRotation = (currentRotation - 90 + 360) % 360;
-    viewer.viewport.setRotation(currentRotation);
+  shortcutsOverlay?.addEventListener('click', (e) => {
+    if (e.target === shortcutsOverlay) shortcutsOverlay.classList.add('hidden');
   });
-  document.getElementById('rotate-right')?.addEventListener('click', () => {
-    if (!viewer) return;
-    currentRotation = (currentRotation + 90) % 360;
-    viewer.viewport.setRotation(currentRotation);
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+    switch (e.key) {
+      case '?':
+        shortcutsOverlay?.classList.toggle('hidden');
+        break;
+      case 'Escape':
+        shortcutsOverlay?.classList.add('hidden');
+        break;
+      case 'r':
+      case 'R':
+        rotateBy(e.shiftKey ? -90 : 90);
+        break;
+      case 'f':
+      case 'F':
+        toggleFlip();
+        break;
+    }
   });
+
+  // Fullscreen toggle (only if browser supports it)
+  if (document.fullscreenEnabled) {
+    document.getElementById('fullscreen-toggle')?.addEventListener('click', () => {
+      const mainEl = document.querySelector('.main');
+      if (!mainEl) return;
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        mainEl.requestFullscreen();
+      }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      const isActive = !!document.fullscreenElement;
+      const btn = document.getElementById('fullscreen-toggle');
+      if (btn) {
+        btn.textContent = isActive ? '\u2B8C' : '\u26F6';
+        btn.title = isActive ? 'Exit Fullscreen' : 'Fullscreen';
+      }
+      document.querySelector('.main')?.classList.toggle('browser-fullscreen', isActive);
+    });
+  }
 }
 
 function setupVisibilityObserver(): void {
