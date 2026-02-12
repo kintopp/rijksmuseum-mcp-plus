@@ -80,10 +80,10 @@ In clients that support [MCP Apps](https://github.com/modelcontextprotocol/ext-a
 The Rijksmuseum organises its collection into 192 curated sets — exhibition groupings, scholarly themes, and curatorial selections. You can explore these sets and browse their contents.
 
 ```
-"What curated sets relate to the Dutch Golden Age maritime trade?"
+"What curated sets cover VOC shipwreck archaeology?"
 "Browse the Rijksprentenkabinet's Japanese print collection"
 "Show me what's in the Rijksmuseum's selection of medieval illuminated manuscripts"
-"Are there any curated sets devoted to Haarlem mannerism?"
+"Are there any curated sets devoted to surimono prints?"
 ```
 
 Each record bridges directly to the full Linked Art tools — you can ask for details, images, or bibliography on anything you find.
