@@ -50,7 +50,7 @@ function registerTools(
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "At least one search filter is required. " +
-        "Available filters: query (searches titles), title, creator, type, material, technique, creationDate, description. " +
+        "Available filters: query (searches titles), title, creator, aboutActor (depicted person), type, material, technique, creationDate, description, imageAvailable. " +
         "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
         "Use creationDate with wildcards for ranges (e.g. '16*' for 1600s, '164*' for 1640s).",
       inputSchema: {
@@ -68,6 +68,12 @@ function registerTools(
           .string()
           .optional()
           .describe("Search by artist name, e.g. 'Rembrandt van Rijn'"),
+        aboutActor: z
+          .string()
+          .optional()
+          .describe(
+            "Search for artworks depicting or about a person (not the creator). E.g. 'Willem van Oranje'"
+          ),
         type: z
           .string()
           .optional()
@@ -90,6 +96,12 @@ function registerTools(
           .string()
           .optional()
           .describe("Search in artwork descriptions (e.g. subject matter, depicted scenes)"),
+        imageAvailable: z
+          .boolean()
+          .optional()
+          .describe(
+            "If true, only return artworks that have a digital image available"
+          ),
         maxResults: z
           .number()
           .int()

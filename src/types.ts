@@ -335,12 +335,14 @@ export interface SearchParams {
   query?: string;
   title?: string;
   creator?: string;
+  aboutActor?: string;
   objectNumber?: string;
   type?: string;
   material?: string;
   technique?: string;
   creationDate?: string;
   description?: string;
+  imageAvailable?: boolean;
   maxResults?: number;
   compact?: boolean;
   pageToken?: string;

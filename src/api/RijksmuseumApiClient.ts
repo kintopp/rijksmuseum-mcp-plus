@@ -82,9 +82,13 @@ export class RijksmuseumApiClient {
     if (!query.title) delete query.title;
 
     const passthroughFields = [
-      "creator", "objectNumber", "type", "material",
+      "creator", "aboutActor", "objectNumber", "type", "material",
       "technique", "creationDate", "description", "pageToken",
     ] as const;
+
+    if (params.imageAvailable != null) {
+      query.imageAvailable = String(params.imageAvailable);
+    }
     for (const field of passthroughFields) {
       if (params[field]) query[field] = params[field];
     }
