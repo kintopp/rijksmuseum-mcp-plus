@@ -13,10 +13,8 @@ The easiest way to try rijksmuseum-mcp+ is through the hosted version — no ins
 **Connect your MCP client to:**
 
 ```
-https://rijksmuseum-mcp-plus.example.com/mcp
+https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-
-*(Placeholder URL — hosted version coming soon)*
 
 Once connected, just ask questions in plain language. Here are some things you can try:
 
@@ -115,8 +113,8 @@ The sections below are for developers who want to run the server locally, deploy
 For use with Claude Desktop or other MCP clients that communicate over stdio:
 
 ```bash
-git clone https://github.com/your-username/rijksmuseum-mcp.git
-cd rijksmuseum-mcp
+git clone https://github.com/kintopp/rijksmuseum-mcp-plus.git
+cd rijksmuseum-mcp-plus
 npm install
 npm run build
 ```
