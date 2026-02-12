@@ -49,7 +49,7 @@ The Rijksmuseum provides bibliography data for its artworks — from a handful o
 
 ```
 "Show me the bibliography for Saenredam's Assendelft church interior"
-"Get scholarly references for the Shiva Nataraja (AK-MAK-187) in BibTeX format"
+"Get scholarly references for the Shiva Nataraja (AK-MAK-187)"
 "How many publications cite Avercamp's Winter Landscape with Ice Skaters?"
 ```
 
@@ -172,7 +172,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 |---|---|
 | `search_artwork` | Search by query, title, creator, type, material, technique, date, or description. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. |
 | `get_artwork_details` | 24 metadata categories by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT and Wikidata. |
-| `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Plaintext or BibTeX output. Resolves publication records with ISBNs and WorldCat links. |
+| `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
 | `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Falls back to JSON + optional base64 thumbnail in text-only clients. |
 | `get_artist_timeline` | Chronological timeline of an artist's works in the collection. |
 | `open_in_browser` | Open any URL (artwork page, image, viewer) in the user's default browser. |
@@ -233,7 +233,7 @@ Collection data and images are provided by the **[Rijksmuseum, Amsterdam](https:
 
 **Licensing:** Information and data that are no longer (or never were) protected by copyright carry the **Public Domain Mark** and/or **[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)**. Where the Rijksmuseum holds copyright, it generally waives its rights under CC0 1.0; in cases where it does exercise copyright, materials are made available under **[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)**. Materials under third-party copyright without express permission are not made available as open data. Individual licence designations appear on the [collection website](https://www.rijksmuseum.nl/en/rijksstudio).
 
-**Attribution:** The Rijksmuseum considers it good practice to provide attribution and/or source citation via a credit line and data citation, regardless of the licence applied. Even where not legally required, the museum asks that users credit the Rijksmuseum (and, where possible, its staff) as the original creator.
+**Attribution:** The Rijksmuseum considers it good practice to provide attribution and/or source citation via a credit line and data citation, regardless of the licence applied.
 
 See the Rijksmuseum's [information and data policy](https://data.rijksmuseum.nl/policy/information-and-data-policy) for the full terms.
 
