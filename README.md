@@ -30,6 +30,8 @@ Once connected, just ask questions in plain language. Here are some things you c
 "Find artworks depicting tulips"
 "Show me drawings by Gesina ter Borch"
 "How many mezzotints are in the collection?"
+"Find portraits depicting Willem van Oranje"
+"Search for paintings by Vermeer that have images available"
 ```
 
 ### Learning about specific artworks
