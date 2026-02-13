@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
+import { VocabularyDb } from "./api/VocabularyDb.js";
 import { registerAll } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 
@@ -32,6 +33,10 @@ function getHttpPort(): number {
   return parseInt(process.env.PORT ?? "3000", 10);
 }
 
+// ─── Shared vocabulary database (one read-only instance) ────────────
+
+const vocabDb = new VocabularyDb();
+
 // ─── Create a configured McpServer ───────────────────────────────────
 
 function createServer(httpPort?: number): McpServer {
@@ -48,7 +53,7 @@ function createServer(httpPort?: number): McpServer {
 
   const apiClient = new RijksmuseumApiClient();
   const oaiClient = new OaiPmhClient();
-  registerAll(server, apiClient, oaiClient, httpPort);
+  registerAll(server, apiClient, oaiClient, vocabDb, httpPort);
   return server;
 }
 

@@ -22,3 +22,6 @@ Thumbs.db
 
 # Local files
 offline/
+
+# Vocabulary database (generated, ~1 GB)
+data/

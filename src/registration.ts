@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
+import { VocabularyDb } from "./api/VocabularyDb.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -53,9 +54,10 @@ export function registerAll(
   server: McpServer,
   apiClient: RijksmuseumApiClient,
   oaiClient: OaiPmhClient,
+  vocabDb: VocabularyDb | null,
   httpPort?: number
 ): void {
-  registerTools(server, apiClient, oaiClient, httpPort);
+  registerTools(server, apiClient, oaiClient, vocabDb, httpPort);
   registerResources(server, apiClient);
   registerAppViewerResource(server);
   registerPrompts(server);
@@ -67,9 +69,14 @@ function registerTools(
   server: McpServer,
   api: RijksmuseumApiClient,
   oai: OaiPmhClient,
+  vocabDb: VocabularyDb | null,
   httpPort?: number
 ): void {
   // ── search_artwork ──────────────────────────────────────────────
+
+  // Vocabulary-backed search params (require vocabulary DB)
+  const vocabAvailable = vocabDb?.available ?? false;
+  const vocabParamKeys = ["subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace"] as const;
 
   server.registerTool(
     "search_artwork",
@@ -79,7 +86,15 @@ function registerTools(
         "At least one search filter is required. " +
         "Available filters: query (searches titles), title, creator, aboutActor (depicted person), type, material, technique, creationDate, description, imageAvailable. " +
         "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
-        "Use creationDate with wildcards for ranges (e.g. '16*' for 1600s, '164*' for 1640s).",
+        "Use creationDate with wildcards for ranges (e.g. '16*' for 1600s, '164*' for 1640s)." +
+        (vocabAvailable
+          ? " Additional vocabulary-based filters: subject (text search on subject labels like Iconclass themes), " +
+            "iconclass (exact Iconclass notation code, e.g. '34B11' for dogs), " +
+            "depictedPerson (text search on depicted person names), " +
+            "depictedPlace (text search on depicted place names), " +
+            "productionPlace (text search on production place names). " +
+            "These can be combined with type, material, and technique for cross-field queries (e.g. subject='dogs' + type='painting')."
+          : ""),
       inputSchema: {
         query: z
           .string()
@@ -129,6 +144,41 @@ function registerTools(
           .describe(
             "If true, only return artworks that have a digital image available"
           ),
+        // Vocabulary-backed params
+        ...(vocabAvailable
+          ? {
+              subject: z
+                .string()
+                .optional()
+                .describe(
+                  "Search by subject matter (Iconclass themes, depicted scenes). Text search on subject labels. Requires vocabulary DB."
+                ),
+              iconclass: z
+                .string()
+                .optional()
+                .describe(
+                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). Requires vocabulary DB."
+                ),
+              depictedPerson: z
+                .string()
+                .optional()
+                .describe(
+                  "Search for artworks depicting a specific person by name (e.g. 'Willem van Oranje'). Requires vocabulary DB."
+                ),
+              depictedPlace: z
+                .string()
+                .optional()
+                .describe(
+                  "Search for artworks depicting a specific place by name (e.g. 'Amsterdam'). Requires vocabulary DB."
+                ),
+              productionPlace: z
+                .string()
+                .optional()
+                .describe(
+                  "Search for artworks produced in a specific place (e.g. 'Delft'). Requires vocabulary DB."
+                ),
+            }
+          : {}),
         maxResults: z
           .number()
           .int()
@@ -149,6 +199,27 @@ function registerTools(
       },
     },
     async (args) => {
+      // Check if any vocabulary param is present → route through VocabularyDb
+      const hasVocabParam = vocabAvailable && vocabParamKeys.some(
+        (k) => (args as Record<string, unknown>)[k] !== undefined
+      );
+
+      if (hasVocabParam && vocabDb) {
+        const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
+        for (const k of vocabParamKeys) {
+          const val = (args as Record<string, unknown>)[k];
+          if (val !== undefined) vocabArgs[k] = val;
+        }
+        // Route material/technique/type through vocab when vocab params are present
+        if (args.material) vocabArgs.material = args.material;
+        if (args.technique) vocabArgs.technique = args.technique;
+        if (args.type) vocabArgs.type = args.type;
+        if (args.creator) vocabArgs.creator = args.creator;
+
+        return jsonResponse(vocabDb.search(vocabArgs as any));
+      }
+
+      // Default: use Search API
       const result = args.compact
         ? await api.searchCompact(args)
         : await api.searchAndResolve(args);
