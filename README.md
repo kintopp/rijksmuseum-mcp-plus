@@ -15,9 +15,7 @@ The easiest way to try rijksmuseum-mcp+ is through the hosted version — no ins
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-## Searching the Collection
-
-The `search_artwork` tool combines filters — creator, type, material, technique, date (with wildcards), description, depicted person (`aboutActor`), and image availability — that can be composed to answer questions no single filter handles alone.
+## Research Scenarios
 
 - [Searching the Collection](#searching-the-collection) (#1–5)
 - [Artwork Details and Metadata](#artwork-details-and-metadata) (#6–10)
@@ -27,6 +25,10 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - [Curated Sets](#curated-sets) (#20–22)
 - [Collection Changes](#collection-changes) (#23–24)
 - [The LLM fills in the gaps](#the-llm-fills-in-the-gaps) (#25–28)
+- 
+## Searching the Collection
+
+The `search_artwork` tool combines filters — creator, type, material, technique, date (with wildcards), description, depicted person (`aboutActor`), and image availability — that can be composed to answer questions no single filter handles alone.
 
 ### 1. Mapping an Artist's Output Across Media
 
