@@ -201,7 +201,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 13. Tracking Exhibition History Through Catalogues
 
-**Research question:** How often has Vermeer's *The Little Street* been lent to exhibitions outside the Rijksmuseum, and which exhibitions chose to feature it?
+**Research question:** How often has Vermeer's *The Little Street* been lent to exhibitions outside the Rijksmuseum?
 
 **How the tools enable it:**
 - `get_artwork_bibliography` with `full: true` on the relevant object number
@@ -305,7 +305,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 20. Reconstructing Past Exhibitions
 
-**Research question:** What was included in a specific Rijksmuseum exhibition, and how did the curatorial selection construct a narrative about the topic?
+**Research question:** What objects were included in Rijksmuseum exhibitions related to Rembrandt, and how did the curatorial selection construct a narrative?
 
 **How the tools enable it:**
 - `list_curated_sets` with a keyword filter to find the relevant set
@@ -350,7 +350,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 23. Monitoring New Acquisitions in a Research Area
 
-**Research question:** Has the Rijksmuseum recently acquired any 18th-century decorative arts that would be relevant to my dissertation on Enlightenment material culture?
+**Research question:** Has the Rijksmuseum recently acquired any works that would be relevant to ongoing research, and how can researchers monitor new additions?
 
 **How the tools enable it:**
 - `get_recent_changes` with a date range covering the last quarter or year
@@ -382,7 +382,7 @@ Because the MCP tools are used through a large language model, the LLM's own kno
 
 ### 25. Multilingual Access to a Dutch Collection
 
-**Research question:** A Japanese scholar studying *Rangaku* (Dutch learning in Edo-period Japan) wants to find VOC-related objects but searches in Japanese and English, not Dutch.
+**Research question:** A Japanese scholar studying *Rangaku* (Dutch learning in Edo-period Japan) wants to find VOC-related objects and materials about the Dutch trading post at Dejima. What does the Rijksmuseum hold?
 
 **How the LLM enables it:**
 - The researcher asks in English: "Find objects related to the Dutch trading post at Dejima"
@@ -395,7 +395,7 @@ Because the MCP tools are used through a large language model, the LLM's own kno
 
 ### 26. Cross-Referencing Art Historical Knowledge
 
-**Research question:** A student in a survey course wants to find works by artists associated with the Utrecht Caravaggisti — but doesn't know which specific artists that includes.
+**Research question:** Show me works by the Utrecht Caravaggisti in the Rijksmuseum — I don't know which specific artists that includes.
 
 **How the LLM enables it:**
 - The student asks: "Show me works by the Utrecht Caravaggisti"
@@ -408,7 +408,7 @@ Because the MCP tools are used through a large language model, the LLM's own kno
 
 ### 27. Disambiguation and Collection Awareness
 
-**Research question:** A student wants to compare Vermeer's *Girl with a Pearl Earring* with his *The Milkmaid*. Are both in the Rijksmuseum?
+**Research question:** I want to compare Vermeer's *Girl with a Pearl Earring* with his *The Milkmaid*. Are both in the Rijksmuseum?
 
 **How the LLM enables it:**
 - The LLM knows that *Girl with a Pearl Earring* is at the Mauritshuis in The Hague, not the Rijksmuseum
@@ -421,7 +421,7 @@ Because the MCP tools are used through a large language model, the LLM's own kno
 
 ### 28. Navigating Variant Names and Historical Spelling
 
-**Research question:** A student searches for "Hercules Seghers" — but the Rijksmuseum catalogues him as "Segers."
+**Research question:** Find all works by Hercules Seghers in the collection.
 
 **How the LLM enables it:**
 - The LLM recognises the spelling variant and searches under the museum's canonical form
