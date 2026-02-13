@@ -29,14 +29,14 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 
 ## Advanced Scenarios
 
-- [Searching the Collection](#searching-the-collection) (#1–5)
-- [Artwork Details and Metadata](#artwork-details-and-metadata) (#6–10)
-- [Bibliographic References](#bibliographic-references) (#11–13)
-- [High-Resolution Images](#high-resolution-images) (#14–16)
-- [Artist Timelines](#artist-timelines) (#17–19)
-- [Curated Sets](#curated-sets) (#20–22)
-- [Collection Changes](#collection-changes) (#23–24)
-- [The LLM fills in the gaps](#the-llm-fills-in-the-gaps) (#25–28)
+- [Searching the Collection](#searching-the-collection)
+- [Artwork Details and Metadata](#artwork-details-and-metadata)
+- [Bibliographic References](#bibliographic-references)
+- [High-Resolution Images](#high-resolution-images)
+- [Artist Timelines](#artist-timelines)
+- [Curated Sets](#curated-sets)
+- [Collection Changes](#collection-changes)
+- [The LLM fills in the gaps](#the-llm-fills-in-the-gaps)
   
 ## Searching the Collection
 
