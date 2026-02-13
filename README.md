@@ -163,7 +163,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ## Bibliographic References
 
-`get_artwork_bibliography` exposes the museum's scholarship tracking — from five references for minor works to over a hundred for masterpieces. This is a ready-made literature review.
+`get_artwork_bibliography` exposes the museum's scholarship tracking — from five references for minor works to over a hundred for masterpieces.
 
 ### 11. Measuring Scholarly Attention
 
@@ -213,7 +213,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Zoom to maximum resolution on areas of known debate (e.g. the background figures vs the central group)
 - Compare paint handling: impasto density, brush direction, layering technique
 
-**Why it matters:** Connoisseurship — attributing hands within a workshop — traditionally requires direct access to an artwork. The IIIF deep-zoom viewer doesn't replace in-person examination, but it enables preliminary analysis and is of great value for teaching.
+**Why it matters:** Connoisseurship — attributing hands within a workshop — traditionally requires direct access to an artwork. The IIIF deep-zoom viewer doesn't replace in-person examination, but could enable preliminary analysis and is a good resource for teaching.
 
 ### 15. Reading Illegible Inscriptions
 
@@ -301,7 +301,6 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 **How the tools enable it:**
 - `list_curated_sets` with `query: "maritime"` or `query: "trade"` or `query: "VOC"`
 - `browse_set` to see the contents — paintings, maps, ship models, porcelain, documents
-- Use the cross-media nature of curated sets to discover objects outside your disciplinary comfort zone
 
 **Why it matters:** Researchers tend to search within their medium speciality. Curated sets cross media boundaries, placing a Delftware plate next to a ship portrait next to a navigation chart. This cross-media juxtaposition can reveal connections that medium-specific searches miss.
 
@@ -314,7 +313,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `browse_set` on relevant sets to assess quantity, quality, and variety
 - `search_artwork` with targeted filters to check for holdings outside the curated sets
 
-**Why it matters:** Grant applications require demonstrating that the proposed research site has adequate resources. Being able to programmatically assess collection depth — and cite specific set identifiers and object counts — strengthens the feasibility argument.
+**Why it matters:** Grant applications require demonstrating that the proposed research site has adequate resources. Being able to programmatically assess collection depth and cite specific set identifiers and object counts strengthens the feasibility argument.
 
 ---
 
