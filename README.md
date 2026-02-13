@@ -25,7 +25,7 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 - [Curated Sets](#curated-sets) (#20–22)
 - [Collection Changes](#collection-changes) (#23–24)
 - [The LLM fills in the gaps](#the-llm-fills-in-the-gaps) (#25–28)
-- 
+  
 ## Searching the Collection
 
 The `search_artwork` tool combines filters — creator, type, material, technique, date (with wildcards), description, depicted person (`aboutActor`), and image availability — that can be composed to answer questions no single filter handles alone.
