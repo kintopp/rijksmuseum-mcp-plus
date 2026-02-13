@@ -17,15 +17,15 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
 ## Basic Queries
 
-"Show me drawings by Gesina ter Borch"
-"Find Pieter Saenredam's paintings"
-"What porcelain objects are in the collection?"
-"Which works are in the museum's Top 100?"
-"Search for paintings from the 1530s"
-"Find portraits depicting Willem van Oranje"
-"Show me woodcuts by Hokusai"
-"How many mezzotints are in the collection?"
-"Are there any curated sets devoted to surimono prints?"
+"Show me drawings by Gesina ter Borch"  
+"Find Pieter Saenredam's paintings"  
+"What porcelain objects are in the collection?"  
+"Which works are in the museum's Top 100?"  
+"Search for paintings from the 1530s"  
+"Find portraits depicting Willem van Oranje"  
+"Show me woodcuts by Hokusai"  
+"How many mezzotints are in the collection?"  
+"Are there any curated sets devoted to surimono prints?"  
 
 ## Advanced Scenarios
 
