@@ -170,7 +170,8 @@ export class RijksmuseumApiClient {
         width: info.width,
         height: info.height,
       };
-    } catch {
+    } catch (err) {
+      console.error("Image chain failed:", err instanceof Error ? err.message : err);
       return null;
     }
   }
@@ -330,8 +331,10 @@ export class RijksmuseumApiClient {
       if (id.content) {
         parts.push(id.content);
       } else if ((id as any).part) {
-        for (const p of (id as any).part) {
-          if (p.content) parts.push(p.content);
+        const rawParts = (id as any).part;
+        const partArray = Array.isArray(rawParts) ? rawParts : [rawParts];
+        for (const p of partArray) {
+          if (p?.content) parts.push(p.content);
         }
       }
     }

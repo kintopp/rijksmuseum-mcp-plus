@@ -40,6 +40,8 @@ let currentData: ArtworkImageData | null = null;
 let viewer: OpenSeadragon.Viewer | null = null;
 let currentRotation = 0;
 let isFlipped = false;
+let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+let visibilityObserver: IntersectionObserver | null = null;
 
 const app = new App(
   { name: 'Rijksmuseum Artwork Viewer', version: '1.0.0' },
@@ -264,7 +266,7 @@ function initializeViewer(iiifInfoUrl: string): void {
       viewerContainer.innerHTML = `
         <div class="image-error">
           <p>Image could not be loaded</p>
-          <p><a href="${iiifInfoUrl}" target="_blank">View IIIF info</a></p>
+          <p><a href="${sanitizeUrl(iiifInfoUrl)}" target="_blank">View IIIF info</a></p>
         </div>
       `;
     }
@@ -308,8 +310,9 @@ function attachEventListeners(): void {
     if (e.target === shortcutsOverlay) shortcutsOverlay.classList.add('hidden');
   });
 
-  // Keyboard shortcuts
-  document.addEventListener('keydown', (e) => {
+  // Keyboard shortcuts — remove previous handler to prevent accumulation
+  if (keydownHandler) document.removeEventListener('keydown', keydownHandler);
+  keydownHandler = (e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
     switch (e.key) {
@@ -328,14 +331,17 @@ function attachEventListeners(): void {
         toggleFlip();
         break;
     }
-  });
+  };
+  document.addEventListener('keydown', keydownHandler);
 }
 
 function setupVisibilityObserver(): void {
+  if (visibilityObserver) visibilityObserver.disconnect();
+
   const mainEl = document.querySelector('.main');
   if (!mainEl) return;
 
-  const observer = new IntersectionObserver(
+  visibilityObserver = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         viewer?.setMouseNavEnabled(entry.isIntersecting);
@@ -343,7 +349,7 @@ function setupVisibilityObserver(): void {
     },
     { threshold: 0.1 }
   );
-  observer.observe(mainEl);
+  visibilityObserver.observe(mainEl);
 }
 
 function updateModelContext(data: ArtworkImageData): void {

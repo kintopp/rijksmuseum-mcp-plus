@@ -145,7 +145,7 @@ export class OaiPmhClient {
       typeof token === "object" ? token["#text"] ?? null : token ?? null;
     const completeListSize =
       typeof token === "object" && token["@completeListSize"]
-        ? parseInt(token["@completeListSize"])
+        ? parseInt(token["@completeListSize"], 10)
         : null;
 
     return { records, completeListSize, resumptionToken };

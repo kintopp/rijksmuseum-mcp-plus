@@ -3,10 +3,11 @@ const HTML_ESCAPE_MAP: Record<string, string> = {
   "<": "&lt;",
   ">": "&gt;",
   '"': "&quot;",
+  "'": "&#39;",
 };
 
 function escapeHtml(text: string): string {
-  return text.replace(/[&<>"]/g, (char) => HTML_ESCAPE_MAP[char]);
+  return text.replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char]);
 }
 
 export function getViewerHtml(iiifId: string, title: string = "Artwork"): string {

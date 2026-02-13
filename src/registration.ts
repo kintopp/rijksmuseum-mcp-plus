@@ -313,7 +313,7 @@ function registerTools(
 
       const timeline = result.results
         .map(({ date, ...rest }) => ({ year: date, ...rest }))
-        .sort((a, b) => (parseInt(a.year) || 0) - (parseInt(b.year) || 0));
+        .sort((a, b) => (parseInt(a.year, 10) || 0) - (parseInt(b.year, 10) || 0));
 
       return jsonResponse({
         artist: args.artist,
