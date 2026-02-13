@@ -19,6 +19,15 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 
 The `search_artwork` tool combines filters — creator, type, material, technique, date (with wildcards), description, depicted person (`aboutActor`), and image availability — that can be composed to answer questions no single filter handles alone.
 
+Searching the Collection (#1–5)
+Artwork Details and Metadata (#6–10)
+Bibliographic References (#11–13)
+High-Resolution Images (#14–16)
+Artist Timelines (#17–19)
+Curated Sets (#20–22)
+Collection Changes (#23–24)
+The LLM fills in the gaps (#25–28)
+
 ### 1. Mapping an Artist's Output Across Media
 
 **Research question:** What is the actual distribution of Rembrandt's works in the Rijksmuseum across painting, printmaking, and drawing — and how does this challenge popular perceptions of him as primarily a painter?
