@@ -19,55 +19,61 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 
 There are three classes of discoverability that users need to keep in mind when using this resource:
 
-1. **Metadata categories that are directly searchable** – For example, `title` , `creator`, `materials`, `objectTypes`, `depictedPerson`, `subject`, and `iconclass`
-2. **Search parameters with no corresponding metadata output** — these are filters (e.g. `birthPlace`, `deathPlace`, `profession` and `productionPlace`) that query data held internally by the Rijksmuseum but are *not* returned in artwork detail records. Users can filter by an artist's birth place but cannot see that birth place in the results.
+1. **Metadata categories that are directly searchable** – For example, `title`, `creator`, `material`, `type`, `depictedPerson`, `subject`, and `iconclass`
+2. **Search parameters with no corresponding metadata output** — these are filters (e.g. `birthPlace`, `deathPlace`, and `profession`) that query data held internally by the Rijksmuseum but are *not* returned in artwork detail records. Users can filter by an artist's birth place but cannot see that birth place in the results.
 3. **Metadata categories that are not searchable at all** — fields like `provenance`, `inscriptions`, `dimensions`, `curatorialNarrative`, and current `location` are returned in detail records but cannot be used as search criteria.
 
 ### Searchable metadata categories
 
-| # | Metadata Category | Field | Search Parameter(s) | Notes |
-|---|---|---|---|---|
-| 1 | Title variants | `titles` | `query`, `title` | `query` searches titles; `title` is more targeted |
-| 5 | Creator | `creator` | `creator` | |
-| 6 | Date | `date` | `creationDate` | Supports wildcards (e.g. `164*` for the 1640s) |
-| 8 | Description | `description` | `description` | |
-| 10 | Object types | `objectTypes` | `type` | |
-| 11 | Materials | `materials` | `material` | |
-| 12 | Technique statement | `techniqueStatement` | `technique` | |
-| 21 | Subjects — Iconclass | `subjects.iconclass` | `subject`, `iconclass` | `subject` searches labels; `iconclass` matches exact notation codes |
-| 21 | Subjects — depicted persons | `subjects.depictedPersons` | `depictedPerson`, `aboutActor` | `depictedPerson` is vocabulary-based and more comprehensive |
-| 21 | Subjects — depicted places | `subjects.depictedPlaces` | `depictedPlace` | |
+| Search Parameter | What it queries | Notes |
+|---|---|---|
+| `query` | Artwork title (broad match) | Less targeted than `title`; no general full-text search exists |
+| `title` | Artwork title (exact field match) | |
+| `creator` | Artist or maker name | |
+| `creationDate` | Year or date range of creation | Supports wildcards: `1642`, `164*` (1640s), `16*` (1600s) |
+| `description` | Free-text description of the artwork | |
+| `type` | Object type: `painting`, `print`, `drawing`, etc. | |
+| `material` | Material: `canvas`, `paper`, `panel`, `oil paint`, etc. | |
+| `technique` | Technique: `oil painting`, `etching`, `mezzotint`, etc. | |
+| `productionPlace` | Place where the work was made | Vocabulary-based; may not match every `production[].place` value in artwork details |
+| `subject` | Iconclass subject labels (themes, scenes) | Text search on vocabulary labels; requires vocabulary DB |
+| `iconclass` | Iconclass notation code (e.g. `34B11` for dogs) | Exact code match; requires vocabulary DB |
+| `depictedPerson` | Named person depicted in the artwork | Vocabulary-based; more comprehensive than `aboutActor` |
+| `aboutActor` | Person depicted or referenced in the artwork | Uses the Search API directly; less comprehensive than `depictedPerson` |
+| `depictedPlace` | Named place depicted in the artwork | Vocabulary-based; requires vocabulary DB |
+| `imageAvailable` | Whether a digital image exists | Boolean filter; not a metadata category |
 
 ### Search-only parameters (no corresponding metadata output)
 
-These parameters are accepted by `search_artwork` and return results, but the underlying data is **not included** in the `get_artwork_details` response for any artwork. The data appears to live in artist/actor authority records that are not exposed through the current API.
+These parameters are accepted by `search_artwork` and return results, but the underlying data is **not included** in the `get_artwork_details` response for any artwork. The data lives in artist/actor authority records that are not exposed through the current API.
 
-| Search Parameter | What it queries | Why it's confusing |
+| Search Parameter | What it queries | Notes |
 |---|---|---|
-| `birthPlace` | Artist's place of birth | You can filter for artists born in Leiden, but the artwork record doesn't confirm this |
-| `deathPlace` | Artist's place of death | Same issue |
-| `profession` | Artist's profession | Same issue |
-| `productionPlace` | Where the work was made | Partially overlaps with `production[].place` in artwork details, but uses a separate vocabulary index |
+| `birthPlace` | Artist's place of birth | Results cannot confirm the match — the artwork record does not include birth place |
+| `deathPlace` | Artist's place of death | Same limitation |
+| `profession` | Artist's profession (e.g. `painter`, `draughtsman`) | Same limitation; vocabulary labels are bilingual (EN/NL) |
 
 ### Non-searchable metadata categories
 
-| # | Metadata Category | Field |
+These fields are returned by `get_artwork_details` but cannot be used as search filters.
+
+| Search Parameter | What it queries | Notes |
 |---|---|---|
-| 2 | Object number | `objectNumber` (lookup key only) |
-| 3 | Persistent identifier | `persistentId` |
-| 4 | External identifiers | `externalIds` |
-| 7 | Production details | `production` (creator name is searchable, but role and full production data are not) |
-| 9 | Curatorial narrative | `curatorialNarrative` |
-| 13 | Dimension statement | `dimensionStatement` |
-| 14 | Structured dimensions | `dimensions` |
-| 15 | Inscriptions | `inscriptions` |
-| 16 | Provenance | `provenance` |
-| 17 | Credit line | `creditLine` |
-| 18 | Current location | `location` |
-| 19–20 | Collection sets / labels | `collectionSets`, `collectionSetLabels` (browsable via `browse_set`, not searchable) |
-| 22 | Web page | `webPage` |
-| 23 | License | `license` |
-| 24 | Related objects | `relatedObjects` |
+| — | Object number (`objectNumber`) | Lookup key for `get_artwork_details`, not a search filter |
+| — | Persistent identifier (`persistentId`) | Stable handle.net URI for citation |
+| — | External identifiers (`externalIds`) | |
+| — | Production details (`production`) | Creator name and place are searchable above; role and actor URI are not |
+| — | Curatorial narrative (`curatorialNarrative`) | Museum wall text in English and Dutch |
+| — | Dimension statement (`dimensionStatement`) | |
+| — | Structured dimensions (`dimensions`) | Numeric height, width, weight, depth with units |
+| — | Inscriptions (`inscriptions`) | Transcribed text from the object surface |
+| — | Provenance (`provenance`) | Ownership history |
+| — | Credit line (`creditLine`) | Acquisition mode and acknowledgement |
+| — | Current location (`location`) | Gallery and room within the museum |
+| — | Collection sets (`collectionSets`, `collectionSetLabels`) | Browsable via `browse_set`, not searchable |
+| — | Web page (`webPage`) | |
+| — | License (`license`) | |
+| — | Related objects (`relatedObjects`) | Links to related artworks |
 
 ## Example Queries
 
@@ -211,7 +217,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `get_artwork_details` on each result — the inscriptions category captures text transcribed from the painting surface
 - Compare inscription content across works: dates, church names, biblical texts, artist signatures
 
-**Why it matters:** Saenredam's inscriptions are unusually rich — they often include the exact date he made the preliminary drawing and the date he completed the painting, sometimes years apart. The `artwork details` metadata category makes this information searchable.
+**Why it matters:** Saenredam's inscriptions are unusually rich — they often include the exact date he made the preliminary drawing and the date he completed the painting, sometimes years apart. The inscriptions metadata category surfaces this information for each artwork, though inscriptions cannot be used as a search filter across the collection.
 
 ### 10. Dimensions as Evidence for Workshop Practice
 
@@ -226,14 +232,14 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 11. Vocabulary Terms and External Authority Links
 
-**Research question:** How does the Rijksmuseum classify its Indonesian textile collection, and how do those classifications map to the Getty Art & Architecture Thesaurus?
+**Research question:** What material and object-type terms does the Rijksmuseum use for its batik holdings, and which of those terms have equivalents in the Getty Art & Architecture Thesaurus?
 
 **How the tools enable it:**
-- `search_artwork` with `material: "batik"` or `type: "textile"` + `description: "Indonesia"`
-- `get_artwork_details` on results — vocabulary terms are resolved to English labels with links to Getty AAT and Wikidata
-- Compare the Rijksmuseum's taxonomy with AAT hierarchies to identify where local classifications diverge from international standards
+- `search_artwork` with `material: "batik"` or `type: "textile"` combined with `description: "Indonesia"`
+- `get_artwork_details` on results — materials and object types are resolved to English labels, each with links to Getty AAT and Wikidata where equivalents exist
+- List the distinct vocabulary terms, noting which carry AAT mappings and which are Rijksmuseum-only
 
-**Why it matters:** Controlled vocabularies shape how collections are discovered and interpreted. When a museum uses its own vocabulary terms rather than (or in addition to) international standards, the mapping between them reveals assumptions about categorisation.
+**Why it matters:** Controlled vocabularies shape how collections are discovered. The resolved vocabulary terms in the detail output make it visible which Rijksmuseum classifications align with international standards and which do not — without needing to consult the AAT directly.
 
 ### 12. Credit Lines and Acquisition Context
 
@@ -254,14 +260,14 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 13. Measuring Scholarly Attention
 
-**Research question:** Which artworks in the Rijksmuseum have received disproportionate scholarly attention, and which major works remain understudied?
+**Research question:** Compare the bibliography counts across Vermeer's paintings in the Rijksmuseum — which have received the most and least scholarly attention?
 
 **How the tools enable it:**
-- `get_artwork_bibliography` with `full: false` (summary mode) on a set of canonical works — returns total citation counts
-- Compare counts: *The Night Watch* (100+) vs lesser-known works by the same artist
-- Identify works with unexpectedly low counts for their significance
+- `search_artwork` with `creator: "Johannes Vermeer"` and `type: "painting"`
+- `get_artwork_bibliography` with `full: false` (summary mode) on each result — returns total citation counts
+- Rank the paintings from most to least studied
 
-**Why it matters:** A researcher looking for a dissertation topic benefits from knowing where the gaps are — a major painting with only a handful of references represents an opportunity, while one with 150 entries signals an already-crowded field.
+**Why it matters:** Vermeer's four paintings in the Rijksmuseum are not equally studied. Comparing bibliography counts reveals which works have attracted disproportionate attention and which represent gaps — useful for identifying a dissertation topic or an overlooked angle.
 
 ### 14. Building a Literature Review
 
@@ -293,38 +299,35 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 16. Technical Art History at the Brushstroke Level
 
-**Research question:** Can we distinguish between Rembrandt's direct brushwork and studio assistant contributions in *The Night Watch* by examining paint application at high magnification?
+**Research question:** What materials, technique, and support were used in Rembrandt's *The Night Watch*, what are its exact dimensions, and what inscriptions does it carry? Open the high-resolution image for close examination of the paint surface.
 
 **How the tools enable it:**
-- `get_artwork_image` with `objectNumber: "SK-C-5"` opens the interactive deep-zoom viewer
-- Zoom to maximum resolution on areas of known debate (e.g. the background figures vs the central group)
-- Compare paint handling: impasto density, brush direction, layering technique
+- `get_artwork_details` with `objectNumber: "SK-C-5"` returns materials, technique statement, structured dimensions, and inscriptions
+- `get_artwork_image` opens the interactive deep-zoom viewer for close examination at maximum magnification
 
-**Why it matters:** Connoisseurship — attributing hands within a workshop — traditionally requires direct access to an artwork. A deep-zoom viewer cannot replace in-person examination, but enables preliminary analysis and is of great value for teaching.
+**Why it matters:** Technical metadata — support material, paint type, exact dimensions — frames what the viewer reveals. Knowing a canvas is 363 x 437 cm contextualises the scale of visible brushwork; knowing the inscription text lets the user verify it against the painted surface at full zoom.
 
 ### 17. Reading Illegible Inscriptions
 
-**Research question:** What text appears on the cartouche in the background of a 17th-century group portrait, and does it identify the sitters or the occasion?
+**Research question:** What inscriptions are recorded on Pieter Saenredam's church interior paintings, and can I verify them against the painted surface at high magnification?
 
 **How the tools enable it:**
-- `search_artwork` to find the relevant group portrait
-- `get_artwork_image` to access the deep-zoom viewer
-- Zoom and rotate to read text that is invisible or illegible in catalogue reproductions
-- Cross-reference with the inscriptions field from `get_artwork_details`
+- `search_artwork` with `creator: "Pieter Saenredam"` and `type: "painting"`
+- `get_artwork_details` on each result — the inscriptions field lists text transcribed from the painting surface
+- `get_artwork_image` on selected works to open the deep-zoom viewer for visual verification
 
-**Why it matters:** Inscriptions in paintings can contain documentary information — dates, names, Latin mottos, biblical references — that is too small to read in printed reproductions or web thumbnails. Deep-zoom access makes this text legible.
+**Why it matters:** Saenredam's inscriptions include exact dates of preliminary drawings, completion dates, and church identifications. The metadata provides the transcription; the viewer lets the researcher confirm it against the original and check for text the catalogue may have missed.
 
 ### 18. Comparative Detail Analysis Across Works
 
-**Research question:** Can deep-zoom comparison reveal differences in paint handling between the Leiden *fijnschilders* and their Haarlem contemporaries — the microscopic precision of the Leiden school versus the visible brushwork of Haarlem?
+**Research question:** How many paintings by Leiden-born painters versus Haarlem-born painters does the Rijksmuseum hold, and who are the leading artists from each school? Open a representative work from each — a Gerrit Dou and a Frans Hals — for side-by-side examination at high zoom.
 
 **How the tools enable it:**
-- `search_artwork` with `birthPlace: "Leiden"`, `profession: "painter"`, `type: "painting"` to find paintings by Leiden-born painters (~1,600 works)
-- Repeat with `birthPlace: "Haarlem"` for the Haarlem school (~3,100 works)
-- `get_artwork_image` on works by Gerrit Dou, Frans van Mieris (Leiden) alongside Frans Hals, Adriaen van Ostade (Haarlem)
-- Zoom to comparable details — faces, hands, fabric — to see the contrast between Leiden's miniaturist blending and Haarlem's bravura brushwork
+- `search_artwork` with `birthPlace: "Leiden"`, `profession: "painter"`, `type: "painting"`, `compact: true` for a count — repeat with `birthPlace: "Haarlem"`
+- Non-compact searches to identify the principal artists from each city
+- `get_artwork_image` on a Dou and a Hals to open both in the deep-zoom viewer
 
-**Why it matters:** A deep-zoom comparison makes the difference directly visible: a Dou face at high magnification shows no individual brushstrokes, while a Hals face at the same zoom reveals every hair of the brush. The `birthPlace` filter identifies the relevant artists without requiring the researcher to already know who belongs to which school.
+**Why it matters:** The `birthPlace` filter identifies artists by geographic origin without requiring the researcher to already know who belongs to which school. The quantitative comparison reveals the relative weight of each school in the collection, and the viewer delivers the images for visual analysis of their contrasting techniques.
 
 ---
 
@@ -332,9 +335,16 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 `get_artist_timeline` arranges an artist's works chronologically, revealing career patterns invisible when browsing search results.
 
-### 19. <to be decided>
+### 19. Tracing Career Evolution Through Subject and Place
 
+**Research question:** Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?
 
+**How the tools enable it:**
+- `get_artist_timeline` with `artist: "Jacob van Ruisdael"` and `maxWorks: 25`
+- `get_artwork_details` on each work — read description, title, and `production[].place` to identify subject matter and where each work was made
+- Map subject type and production place against date: do the dune landscapes cluster in the early years and the waterfalls in the later ones?
+
+**Why it matters:** Art historical narratives about career evolution are often based on a handful of securely dated works. A timeline across a full museum holding tests these narratives against a larger evidence base — and the production-place data can reveal whether the geographic move and the stylistic shift actually coincide.
 
 ### 20. Medium Shifts Within a Career
 
@@ -357,7 +367,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Compare: date ranges, number of works per decade, medium distribution
 - Use `get_artwork_details` on representative works from each to compare subject matter and scale
 
-**Why it matters:** Parallel career comparison is a standard for understanding market positioning, artistic rivalry, and influence. The timeline tool can generates the raw data for these comparisons.
+**Why it matters:** Parallel career comparison is a standard for understanding market positioning, artistic rivalry, and influence. The timeline tool generates the raw data for these comparisons.
 
 ---
 
@@ -388,14 +398,15 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 24. Assessing Collection Depth for Grant Applications
 
-**Research question:** Does the Rijksmuseum have sufficient holdings in Japanese prints to support a multi-year research project, and how are they organised?
+**Research question:** How many Japanese prints does the Rijksmuseum hold, what curated sets relate to Japanese art, what date range do the holdings cover, and which artists are best represented?
 
 **How the tools enable it:**
+- `search_artwork` with `productionPlace: "Japan"`, `type: "print"`, `compact: true` for a total count
 - `list_curated_sets` filtered for Japanese-related sets
-- `browse_set` on relevant sets to assess quantity, quality, and variety
-- `search_artwork` with targeted filters to check for holdings outside the curated sets
+- `browse_set` on relevant sets to see the range of artists, dates, and subjects
+- Non-compact search to identify the most prominent printmakers
 
-**Why it matters:** Grant applications require demonstrating that the proposed research site has adequate resources. Being able to assess collection depth — and cite specific set identifiers and object counts — strengthens the feasibility argument.
+**Why it matters:** Grant applications require demonstrating that the proposed research site has adequate resources. Concrete numbers — total holdings, date range, named artists, curated set identifiers — strengthen the feasibility argument.
 
 ---
 
@@ -405,25 +416,25 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 25. Tracking New Acquisitions in a Research Area
 
-**Research question:** Has the Rijksmuseum recently acquired any works that would be relevant to ongoing research, and how can researchers monitor new additions?
+**Research question:** Has the Rijksmuseum added any new 17th-century paintings to its collection in the past six months? If so, who are the artists and what are the subjects?
 
 **How the tools enable it:**
-- `get_recent_changes` with a date range covering the last quarter or year
-- Use `identifiersOnly: true` for a fast scan, then `get_artwork_details` on promising object numbers
-- Set up a periodic check (monthly) to stay current
+- `get_recent_changes` with a date range covering the last six months
+- Use `identifiersOnly: true` for a fast scan of recently changed object numbers
+- `get_artwork_details` on results to filter for paintings from the 1600s and examine creator, date, and description
 
-**Why it matters:** A recently acquired object can fill a gap in the evidence or provide a crucial comparison. Querying the `‌get_recent_changes` field allows researchers to immediately discover relevant new acquisitions.
+**Why it matters:** New acquisitions can fill gaps in the evidence or provide crucial comparisons for ongoing research. A date-scoped query surfaces recently added or modified records without requiring the researcher to monitor the museum's website.
 
-### 26. Tracking Metadata Enrichment
+### 26. Monitoring Catalogue Activity in a Research Area
 
-**Research question:** Has the Rijksmuseum recently updated its catalogue entries for its Asian art holdings — perhaps adding new provenance information or revised attributions?
+**Research question:** Which objects in the Rijksmuseum's Asian art holdings have been recently modified in the catalogue? Retrieve the current metadata for the most recent changes.
 
 **How the tools enable it:**
-- `get_recent_changes` filtered to a curated set (if one exists for Asian art)
-- Compare current `get_artwork_details` with earlier records to identify what changed
-- Focus on fields like provenance, attribution, and date that affect research conclusions
+- `list_curated_sets` with `query: "Asian"` or `query: "Japan"` to find relevant set identifiers
+- `get_recent_changes` with `setSpec` restricted to that set and a date range covering the last quarter
+- `get_artwork_details` on the returned object numbers to examine the current state of provenance, attribution, and description
 
-**Why it matters:** Museum catalogues are living documents. Attributions change, provenance is discovered, dates are revised. Researchers who rely on catalogue data need to know when it changes, especially for fields like provenance.
+**Why it matters:** Museum catalogues are living documents — attributions change, provenance is discovered, dates are revised. The change-tracking tool identifies *which* records were recently touched; the detail tool reveals their current state. This does not show what changed (no diff is available), but it flags the records a researcher should re-examine.
 
 ---
 
