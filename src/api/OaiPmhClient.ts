@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from "axios";
+import https from "node:https";
 import { XMLParser } from "fast-xml-parser";
 import type {
   OaiSet,
@@ -50,12 +51,14 @@ const ARRAY_TAGS = new Set([
 export class OaiPmhClient {
   private http: AxiosInstance;
   private parser: XMLParser;
+  private cachedSets: OaiSet[] | null = null;
 
   constructor() {
     this.http = axios.create({
       baseURL: OAI_BASE_URL,
       timeout: 30_000,
       headers: { Accept: "text/xml" },
+      httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 5 }),
     });
 
     this.parser = new XMLParser({
@@ -154,10 +157,12 @@ export class OaiPmhClient {
   // ── ListSets ─────────────────────────────────────────────────
 
   async listSets(): Promise<OaiSet[]> {
+    if (this.cachedSets) return this.cachedSets;
+
     const root = await this.oaiRequest({ verb: "ListSets" });
     const rawSets = root.ListSets?.set ?? [];
 
-    return rawSets.map((s: any) => {
+    const sets: OaiSet[] = rawSets.map((s: any) => {
       const spec = String(s.setSpec ?? "");
       return {
         setSpec: spec,
@@ -165,6 +170,8 @@ export class OaiPmhClient {
         lodUri: `https://id.rijksmuseum.nl/${spec}`,
       };
     });
+    this.cachedSets = sets;
+    return sets;
   }
 
   // ── ListRecords ──────────────────────────────────────────────

@@ -157,6 +157,17 @@ export class VocabularyDb {
     };
   }
 
+  /** Return the URIs of the N most frequently referenced vocabulary terms. */
+  topTermUris(limit: number = 200): string[] {
+    if (!this.db) return [];
+    const rows = this.db.prepare(
+      `SELECT v.id AS uri FROM vocabulary v
+       JOIN mappings m ON m.vocab_id = v.id
+       GROUP BY v.id ORDER BY COUNT(*) DESC LIMIT ?`
+    ).all(limit) as { uri: string }[];
+    return rows.map((r) => r.uri);
+  }
+
   /** Look up a vocabulary term by Iconclass notation. */
   lookupByNotation(code: string): { id: string; labelEn: string; labelNl: string } | null {
     if (!this.db) return null;

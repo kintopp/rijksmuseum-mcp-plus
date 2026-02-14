@@ -14,6 +14,7 @@ import { createGunzip } from "node:zlib";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
+import { ResponseCache } from "./utils/ResponseCache.js";
 import { registerAll } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 
@@ -90,6 +91,31 @@ async function initVocabularyDb(): Promise<void> {
   vocabDb = new VocabularyDb();
 }
 
+// ─── Shared client instances (one per process) ──────────────────────
+
+let sharedApiClient: RijksmuseumApiClient;
+let sharedOaiClient: OaiPmhClient;
+
+function initSharedClients(): void {
+  const cache = new ResponseCache(500, 5 * 60_000);
+  sharedApiClient = new RijksmuseumApiClient(cache);
+  sharedOaiClient = new OaiPmhClient();
+}
+
+// ─── Pre-warm vocabulary cache ───────────────────────────────────────
+
+async function warmVocabCache(): Promise<void> {
+  if (!vocabDb?.available) return;
+
+  const uris = vocabDb.topTermUris(200);
+  if (uris.length === 0) return;
+
+  const start = performance.now();
+  const resolved = await sharedApiClient.warmVocabCache(uris);
+  const ms = Math.round(performance.now() - start);
+  console.error(`Vocab cache pre-warmed: ${resolved}/${uris.length} terms in ${ms}ms`);
+}
+
 // ─── Create a configured McpServer ───────────────────────────────────
 
 function createServer(httpPort?: number): McpServer {
@@ -104,9 +130,7 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  const apiClient = new RijksmuseumApiClient();
-  const oaiClient = new OaiPmhClient();
-  registerAll(server, apiClient, oaiClient, vocabDb, httpPort);
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, httpPort);
   return server;
 }
 
@@ -114,6 +138,8 @@ function createServer(httpPort?: number): McpServer {
 
 async function runStdio(): Promise<void> {
   await initVocabularyDb();
+  initSharedClients();
+  await warmVocabCache();
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -124,6 +150,8 @@ async function runStdio(): Promise<void> {
 
 async function runHttp(): Promise<void> {
   await initVocabularyDb();
+  initSharedClients();
+  await warmVocabCache();
   const port = getHttpPort();
   const app = express();
 

@@ -22,6 +22,26 @@ function jsonResponse(data: unknown): { content: [{ type: "text"; text: string }
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
+/** Wrap a tool callback with timing/logging to stderr. */
+function withLogging<A extends unknown[], R>(
+  toolName: string,
+  fn: (...args: A) => Promise<R>
+): (...args: A) => Promise<R> {
+  return async (...args: A): Promise<R> => {
+    const start = performance.now();
+    try {
+      const result = await fn(...args);
+      const ms = Math.round(performance.now() - start);
+      console.error(JSON.stringify({ tool: toolName, ms, ok: true }));
+      return result;
+    } catch (err) {
+      const ms = Math.round(performance.now() - start);
+      console.error(JSON.stringify({ tool: toolName, ms, ok: false, error: err instanceof Error ? err.message : String(err) }));
+      throw err;
+    }
+  };
+}
+
 /** Format an OAI-PMH paginated list result into a tool response. */
 function paginatedResponse(
   result: { records: unknown[]; completeListSize: number | null; resumptionToken: string | null },
@@ -222,7 +242,7 @@ function registerTools(
           .describe("Pagination token from a previous search result. Only applies to Search API queries, not vocabulary-based searches."),
       },
     },
-    async (args) => {
+    withLogging("search_artwork", async (args) => {
       // Check if any vocabulary param is present -> route through VocabularyDb
       const hasVocabParam = vocabAvailable && vocabParamKeys.some(
         (k) => (args as Record<string, unknown>)[k] !== undefined
@@ -244,7 +264,7 @@ function registerTools(
         ? await api.searchCompact(args)
         : await api.searchAndResolve(args);
       return jsonResponse(result);
-    }
+    })
   );
 
   // ── get_artwork_details ─────────────────────────────────────────
@@ -266,11 +286,11 @@ function registerTools(
           ),
       },
     },
-    async (args) => {
+    withLogging("get_artwork_details", async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
       const detail = await api.toDetailEnriched(object, uri);
       return jsonResponse(detail);
-    }
+    })
   );
 
   // ── get_artwork_bibliography ───────────────────────────────────
@@ -296,13 +316,13 @@ function registerTools(
           ),
       },
     },
-    async (args) => {
+    withLogging("get_artwork_bibliography", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
       const result = await api.getBibliography(object, {
         limit: args.full ? 0 : 5,
       });
       return jsonResponse(result);
-    }
+    })
   );
 
   // ── get_artwork_image (MCP App with inline IIIF viewer) ────────
@@ -330,7 +350,7 @@ function registerTools(
         ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
       },
     },
-    async (args) => {
+    withLogging("get_artwork_image", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
       const imageInfo = await api.getImageInfo(object);
 
@@ -372,7 +392,7 @@ function registerTools(
       }
 
       return { content: contentBlocks };
-    }
+    })
   );
 
   // ── get_artist_timeline ─────────────────────────────────────────
@@ -396,7 +416,7 @@ function registerTools(
           .describe("Maximum works to include (1-25, default 10)"),
       },
     },
-    async (args) => {
+    withLogging("get_artist_timeline", async (args) => {
       const result = await api.searchAndResolve({
         creator: args.artist,
         maxResults: args.maxWorks,
@@ -411,7 +431,7 @@ function registerTools(
         totalWorksInCollection: result.totalResults,
         timeline,
       });
-    }
+    })
   );
 
   // ── open_in_browser ─────────────────────────────────────────────
@@ -428,7 +448,7 @@ function registerTools(
           .describe("The URL to open in the browser"),
       },
     },
-    async (args) => {
+    withLogging("open_in_browser", async (args) => {
       try {
         await SystemIntegration.openInBrowser(args.url);
         return {
@@ -450,7 +470,7 @@ function registerTools(
           isError: true,
         };
       }
-    }
+    })
   );
 
   // ── list_curated_sets ───────────────────────────────────────────
@@ -471,7 +491,7 @@ function registerTools(
           ),
       },
     },
-    async (args) => {
+    withLogging("list_curated_sets", async (args) => {
       const allSets = await oai.listSets();
       const q = args.query?.toLowerCase();
       const sets = q
@@ -483,7 +503,7 @@ function registerTools(
         ...(q ? { filteredFrom: allSets.length, query: args.query } : {}),
         sets,
       });
-    }
+    })
   );
 
   // ── browse_set ──────────────────────────────────────────────────
@@ -517,13 +537,13 @@ function registerTools(
           ),
       },
     },
-    async (args) => {
+    withLogging("browse_set", async (args) => {
       const result = args.resumptionToken
         ? await oai.listRecords({ resumptionToken: args.resumptionToken })
         : await oai.listRecords({ set: args.setSpec });
 
       return paginatedResponse(result, args.maxResults, "totalInSet", "browse_set");
-    }
+    })
   );
 
   // ── get_recent_changes ──────────────────────────────────────────
@@ -573,7 +593,7 @@ function registerTools(
           ),
       },
     },
-    async (args) => {
+    withLogging("get_recent_changes", async (args) => {
       const opts = {
         from: args.from,
         until: args.until,
@@ -587,7 +607,7 @@ function registerTools(
 
       const extra = args.identifiersOnly ? { identifiersOnly: true } : undefined;
       return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra);
-    }
+    })
   );
 }
 

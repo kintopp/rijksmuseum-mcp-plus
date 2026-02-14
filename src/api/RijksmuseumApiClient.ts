@@ -1,4 +1,6 @@
 import axios, { AxiosInstance } from "axios";
+import https from "node:https";
+import { ResponseCache } from "../utils/ResponseCache.js";
 import {
   AAT,
   AAT_UNIT_LABELS,
@@ -62,16 +64,23 @@ function extractPageToken(nextRef: { id: string } | undefined): string | undefin
 
 export class RijksmuseumApiClient {
   private http: AxiosInstance;
+  private cache: ResponseCache;
 
   private static readonly SEARCH_URL =
     "https://data.rijksmuseum.nl/search/collection";
   private static readonly IIIF_BASE = "https://iiif.micr.io";
   private static readonly WEB_BASE = "https://www.rijksmuseum.nl/en/collection";
 
-  constructor() {
+  private static readonly TTL_OBJECT = 5 * 60_000;  // 5 min
+  private static readonly TTL_VOCAB = 60 * 60_000;   // 1 hour
+  private static readonly TTL_IMAGE = 60 * 60_000;   // 1 hour
+
+  constructor(cache?: ResponseCache) {
+    this.cache = cache ?? new ResponseCache(500, RijksmuseumApiClient.TTL_OBJECT);
     this.http = axios.create({
       headers: { Accept: "application/ld+json" },
       timeout: 15_000,
+      httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 25 }),
     });
   }
 
@@ -118,7 +127,12 @@ export class RijksmuseumApiClient {
   // ── Resolve ─────────────────────────────────────────────────────
 
   async resolveObject(uri: string): Promise<LinkedArtObject> {
+    const cacheKey = `obj:${uri}`;
+    const cached = this.cache.get(cacheKey) as LinkedArtObject | undefined;
+    if (cached) return cached;
+
     const { data } = await this.http.get<LinkedArtObject>(uri);
+    this.cache.set(cacheKey, data, RijksmuseumApiClient.TTL_OBJECT);
     return data;
   }
 
@@ -147,24 +161,40 @@ export class RijksmuseumApiClient {
       const visualItemRef = object.shows?.[0];
       if (!visualItemRef?.id) return null;
 
-      // Step 2: Resolve VisualItem to get DigitalObject reference
-      const visualItem = await this.http.get<VisualItem>(visualItemRef.id);
-      const digitalObjectRef = visualItem.data.digitally_shown_by?.[0];
+      // Step 2: Resolve VisualItem (cached)
+      const viKey = `vi:${visualItemRef.id}`;
+      let viData = this.cache.get(viKey) as VisualItem | undefined;
+      if (!viData) {
+        const visualItem = await this.http.get<VisualItem>(visualItemRef.id);
+        viData = visualItem.data;
+        this.cache.set(viKey, viData, RijksmuseumApiClient.TTL_IMAGE);
+      }
+      const digitalObjectRef = viData.digitally_shown_by?.[0];
       if (!digitalObjectRef?.id) return null;
 
-      // Step 3: Resolve DigitalObject to get IIIF access point
-      const digitalObject = await this.http.get<DigitalObject>(
-        digitalObjectRef.id
-      );
-      const accessPoint = digitalObject.data.access_point?.[0];
+      // Step 3: Resolve DigitalObject (cached)
+      const doKey = `do:${digitalObjectRef.id}`;
+      let doData = this.cache.get(doKey) as DigitalObject | undefined;
+      if (!doData) {
+        const digitalObject = await this.http.get<DigitalObject>(digitalObjectRef.id);
+        doData = digitalObject.data;
+        this.cache.set(doKey, doData, RijksmuseumApiClient.TTL_IMAGE);
+      }
+      const accessPoint = doData.access_point?.[0];
       if (!accessPoint?.id) return null;
 
-      // Step 4: Extract IIIF ID and fetch info.json
+      // Step 4: Extract IIIF ID and fetch info.json (cached)
       const iiifId = extractIiifId(accessPoint.id);
       if (!iiifId) return null;
 
       const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/info.json`;
-      const { data: info } = await this.http.get<IIIFInfoResponse>(iiifInfoUrl);
+      const iiifKey = `iiif:${iiifId}`;
+      let info = this.cache.get(iiifKey) as IIIFInfoResponse | undefined;
+      if (!info) {
+        const { data } = await this.http.get<IIIFInfoResponse>(iiifInfoUrl);
+        info = data;
+        this.cache.set(iiifKey, info, RijksmuseumApiClient.TTL_IMAGE);
+      }
 
       return {
         iiifId,
@@ -531,6 +561,10 @@ export class RijksmuseumApiClient {
    * and external equivalents (AAT, Wikidata).
    */
   async resolveVocabTerm(uri: string): Promise<ResolvedTerm> {
+    const cacheKey = `vocab:${uri}`;
+    const cached = this.cache.get(cacheKey) as ResolvedTerm | undefined;
+    if (cached) return cached;
+
     const { data } = await this.http.get(uri);
 
     // Extract English label, falling back to Dutch, then _label, then URI
@@ -557,6 +591,7 @@ export class RijksmuseumApiClient {
 
     const term: ResolvedTerm = { id: uri, label };
     if (Object.keys(equivalents).length > 0) term.equivalents = equivalents;
+    this.cache.set(cacheKey, term, RijksmuseumApiClient.TTL_VOCAB);
     return term;
   }
 
@@ -611,7 +646,13 @@ export class RijksmuseumApiClient {
     try {
       const visualItemRef = obj.shows?.[0];
       if (visualItemRef?.id) {
-        const { data: vi } = await this.http.get<VisualItem>(visualItemRef.id);
+        const viKey = `vi:${visualItemRef.id}`;
+        let vi = this.cache.get(viKey) as VisualItem | undefined;
+        if (!vi) {
+          const { data } = await this.http.get<VisualItem>(visualItemRef.id);
+          vi = data;
+          this.cache.set(viKey, vi, RijksmuseumApiClient.TTL_IMAGE);
+        }
         subjectConceptUris = (vi.represents_instance_of_type ?? [])
           .map((r) => r.id)
           .filter(Boolean);
@@ -1005,5 +1046,18 @@ export class RijksmuseumApiClient {
       ids: searchResponse.orderedItems.map((i) => i.id),
       nextPageToken: extractPageToken(searchResponse.next),
     };
+  }
+
+  /** Pre-warm the vocabulary term cache by resolving URIs in parallel. */
+  async warmVocabCache(uris: string[]): Promise<number> {
+    const results = await Promise.allSettled(
+      uris.map((uri) => this.resolveVocabTerm(uri))
+    );
+    return results.filter((r) => r.status === "fulfilled").length;
+  }
+
+  /** Expose cache stats for logging. */
+  get cacheStats() {
+    return this.cache.stats();
   }
 }
