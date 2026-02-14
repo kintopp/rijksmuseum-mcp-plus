@@ -15,6 +15,7 @@ import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
+import { UsageStats } from "./utils/UsageStats.js";
 import { registerAll } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 
@@ -114,6 +115,14 @@ function initSharedClients(): void {
   sharedOaiClient = new OaiPmhClient();
 }
 
+// ─── Usage stats accumulator ─────────────────────────────────────────
+
+let usageStats: UsageStats | undefined;
+
+function initUsageStats(): void {
+  usageStats = new UsageStats();
+}
+
 // ─── Pre-warm vocabulary cache ───────────────────────────────────────
 
 async function warmVocabCache(): Promise<void> {
@@ -142,7 +151,7 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, httpPort);
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, httpPort, usageStats);
   return server;
 }
 
@@ -151,6 +160,7 @@ function createServer(httpPort?: number): McpServer {
 async function runStdio(): Promise<void> {
   await initVocabularyDb();
   initSharedClients();
+  initUsageStats();
   const server = createServer();
   // Pre-warm after server is ready (non-blocking for stdio)
   warmVocabCache();
@@ -164,6 +174,7 @@ async function runStdio(): Promise<void> {
 async function runHttp(): Promise<void> {
   await initVocabularyDb();
   initSharedClients();
+  initUsageStats();
   const port = getHttpPort();
   const app = express();
 
@@ -311,6 +322,7 @@ let httpServer: import("node:http").Server | undefined;
 
 function shutdown() {
   console.error("Shutting down...");
+  usageStats?.flush();
   httpServer?.close();
   process.exit(0);
 }

@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
+import { UsageStats } from "./utils/UsageStats.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,24 +23,28 @@ function jsonResponse(data: unknown): { content: [{ type: "text"; text: string }
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
-/** Wrap a tool callback with timing/logging to stderr. */
-function withLogging<A extends unknown[], R>(
-  toolName: string,
-  fn: (...args: A) => Promise<R>
-): (...args: A) => Promise<R> {
-  return async (...args: A): Promise<R> => {
-    const start = performance.now();
-    try {
-      const result = await fn(...args);
-      const ms = Math.round(performance.now() - start);
-      console.error(JSON.stringify({ tool: toolName, ms, ok: true }));
-      return result;
-    } catch (err) {
-      const ms = Math.round(performance.now() - start);
-      const error = err instanceof Error ? err.message : String(err);
-      console.error(JSON.stringify({ tool: toolName, ms, ok: false, error }));
-      throw err;
-    }
+/** Create a logging wrapper that records timing to stderr and optional UsageStats. */
+function createLogger(stats?: UsageStats) {
+  return function withLogging<A extends unknown[], R>(
+    toolName: string,
+    fn: (...args: A) => Promise<R>
+  ): (...args: A) => Promise<R> {
+    return async (...args: A): Promise<R> => {
+      const start = performance.now();
+      try {
+        const result = await fn(...args);
+        const ms = Math.round(performance.now() - start);
+        console.error(JSON.stringify({ tool: toolName, ms, ok: true }));
+        stats?.record(toolName, ms, true);
+        return result;
+      } catch (err) {
+        const ms = Math.round(performance.now() - start);
+        const error = err instanceof Error ? err.message : String(err);
+        console.error(JSON.stringify({ tool: toolName, ms, ok: false, error }));
+        stats?.record(toolName, ms, false);
+        throw err;
+      }
+    };
   };
 }
 
@@ -76,9 +81,10 @@ export function registerAll(
   apiClient: RijksmuseumApiClient,
   oaiClient: OaiPmhClient,
   vocabDb: VocabularyDb | null,
-  httpPort?: number
+  httpPort?: number,
+  stats?: UsageStats
 ): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, httpPort);
+  registerTools(server, apiClient, oaiClient, vocabDb, httpPort, createLogger(stats));
   registerResources(server, apiClient);
   registerAppViewerResource(server);
   registerPrompts(server);
@@ -91,7 +97,8 @@ function registerTools(
   api: RijksmuseumApiClient,
   oai: OaiPmhClient,
   vocabDb: VocabularyDb | null,
-  httpPort?: number
+  httpPort: number | undefined,
+  withLogging: ReturnType<typeof createLogger>
 ): void {
   // ── search_artwork ──────────────────────────────────────────────
 
