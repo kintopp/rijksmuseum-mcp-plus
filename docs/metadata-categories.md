@@ -1,8 +1,10 @@
 # Artwork Metadata Categories
 
-The `get_artwork_details` tool returns up to **25 metadata categories** for each artwork. These are divided into groups internally: 12 base categories parsed directly from the Linked Art JSON-LD object, 12 enriched categories that require vocabulary resolution (resolving Rijksmuseum vocabulary URIs to English labels with links to Getty AAT, Wikidata, and Iconclass), and 1 subject category derived from the VisualItem layer.
+The `get_artwork_details` tool returns **24 metadata categories** plus a bibliography count for each artwork. These are divided into groups internally: 12 base categories parsed directly from the Linked Art JSON-LD object, 11 enriched categories that require vocabulary resolution (resolving Rijksmuseum vocabulary URIs to English labels with links to Getty AAT, Wikidata, and Iconclass), and 1 subject category derived from the VisualItem layer. The bibliography count is a pointer to the separate `get_artwork_bibliography` tool.
 
 All categories are returned together in a single response.
+
+The subject annotations listed under [Iconography](#iconography) (Iconclass codes, depicted persons, depicted places) are searchable via `search_artwork`'s `subject`, `iconclass`, `depictedPerson`, and `depictedPlace` filters — enabling discovery by *what is depicted* across the full collection.
 
 ---
 
@@ -55,7 +57,7 @@ All categories are returned together in a single response.
 
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
-| 21 | **Subjects** | `subjects` | Iconographic subject annotations, structured into three arrays: `iconclass` ([Iconclass](https://iconclass.org/) concepts — e.g. "civic guard", "group portrait"), `depictedPersons` (named individuals), and `depictedPlaces` (geographical locations). Each entry is a resolved vocabulary term with `label`, `id`, and `equivalents` linking to Iconclass, Getty AAT, or Wikidata URIs. Derived from the VisualItem layer: Object `.shows` > VisualItem `.represents_instance_of_type` (concepts) + `.represents` (persons/places). Not all artworks have subject annotations — objects without them return empty arrays. |
+| 21 | **Subjects** | `subjects` | Iconographic subject annotations, structured into three arrays: `iconclass` ([Iconclass](https://iconclass.org/) concepts — e.g. "civic guard", "group portrait"), `depictedPersons` (named individuals), and `depictedPlaces` (geographical locations). Each entry is a resolved vocabulary term with `label`, `id`, and `equivalents` linking to Iconclass, Getty AAT, or Wikidata URIs. Derived from the VisualItem layer: Object `.shows` > VisualItem `.represents_instance_of_type` (concepts) + `.represents` (persons/places). Not all artworks have subject annotations — objects without them return empty arrays. These subject terms are also searchable across the full collection via `search_artwork`'s `subject`, `iconclass`, `depictedPerson`, and `depictedPlace` filters. |
 
 ## Digital & Rights
 

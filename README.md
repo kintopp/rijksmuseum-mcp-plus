@@ -15,29 +15,32 @@ The easiest way to try rijksmuseum-mcp+ is through the hosted version — no ins
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-## Basic Queries
 
-"Show me drawings by Gesina ter Borch"  
-"Find Pieter Saenredam's paintings"  
-"What porcelain objects are in the collection?"  
-"Which works are in the museum's Top 100?"  
-"Search for paintings from the 1530s"  
-"Find portraits depicting Willem van Oranje"  
-"Show me woodcuts by Hokusai"  
-"How many mezzotints are in the collection?"  
-"Are there any curated sets devoted to surimono prints?"  
+## Sample Queries
 
-## Advanced Scenarios
+“Show me a drawing by Gesina ter Borch”  
+“Find Pieter Saenredam’s paintings”  
+“Give me a list of the Rijksmuseum’s curated collections”  
+“Search for prints from the 1530s”
+“Show me woodcuts by Hokusai”  
+“Find artworks depicting the Raid on the Medway”  
+“What paintings depict Amalia van Solms?”  
+“Show me works about the sense of smell”  
+“Search for winter landscapes from the 17th century”  
+“Find all works made in Haarlem with the mezzotint technique”  
 
-- [Searching the Collection](#searching-the-collection)
-- [Artwork Details and Metadata](#artwork-details-and-metadata)
-- [Bibliographic References](#bibliographic-references)
-- [High-Resolution Images](#high-resolution-images)
-- [Artist Timelines](#artist-timelines)
-- [Curated Sets](#curated-sets)
-- [Collection Changes](#collection-changes)
-- [The LLM fills in the gaps](#the-llm-fills-in-the-gaps)
-  
+## Example Research Scenarios
+
+- [Searching the Collection](#searching-the-collection) (#1–3)
+- [Subject and Iconographic Search](#subject-and-iconographic-search) (#4–7)
+- [Artwork Details and Metadata](#artwork-details-and-metadata) (#8–12)
+- [Bibliographic References](#bibliographic-references) (#13–15)
+- [High-Resolution Images](#high-resolution-images) (#16–18)
+- [Artist Timelines](#artist-timelines) (#19–21)
+- [Curated Sets](#curated-sets) (#22–24)
+- [Collection Changes](#collection-changes) (#25–26)
+- [The LLM fills in the gaps](#the-llm-fills-in-the-gaps) (#27–29)
+
 ## Searching the Collection
 
 The `search_artwork` tool combines filters — creator, type, material, technique, date (with wildcards), description, depicted person (`aboutActor`), and image availability — that can be composed to answer questions no single filter handles alone.
@@ -51,43 +54,21 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Repeat with `type: "painting"`, then `type: "print"`, then `type: "drawing"` to get counts per medium
 - Follow up with `get_artwork_details` on selected works from each category
 
-**Why it matters:** The Rijksmuseum holds ~30 Rembrandt paintings but over 1,000 prints and hundreds of drawings. Most students encounter Rembrandt through a handful of iconic canvases. Seeing the actual proportions reframes his practice as fundamentally graphic — a provocation for any survey course.
+**Why it matters:** The Rijksmuseum holds ~30 Rembrandt paintings but over 1,000 prints and hundreds of drawings. Most students encounter Rembrandt through a handful of iconic canvases. Seeing the actual proportions reframes his practice as fundamentally graphic.
 
-### 2. Tracing Artistic Networks Through Depicted Persons
+### 2. Material Culture Beyond the Canon
 
-**Research question:** How was Stadholder Frederik Hendrik portrayed across different media and by different artists? Can we reconstruct his visual propaganda programme from the collection?
-
-**How the tools enable it:**
-- `search_artwork` with `aboutActor: "Frederik Hendrik"` to find all depictions
-- Filter by `type` to separate paintings, prints, medallions, and applied art
-- Use `get_artwork_details` on results to identify artists, dates, and contexts
-- `get_artist_timeline` on the key portraitists (e.g. Gerard van Honthorst) to see how court commissions fit within their broader careers
-
-**Why it matters:** Court portraiture was a deliberate political instrument. Cross-referencing depicted person with medium and artist reveals whether the stadholder used different artists and formats for different audiences — painted portraits for diplomacy, prints for popular circulation, medals for military commemoration.
-
-### 3. Material Culture Beyond the Canon
-
-**Research question:** What is the scope of the Rijksmuseum's non-European holdings? How many Japanese prints, Indian textiles, Indonesian objects, and Chinese ceramics are in the collection?
+**Research question:** What is the scope of the Rijksmuseum's non-European holdings? How are Indonesian, Japanese, Chinese, and Indian objects distributed across media, and where were they produced?
 
 **How the tools enable it:**
-- `search_artwork` with `compact: true` and targeted material/technique/type filters: `material: "porcelain"`, `technique: "woodcut"`, `type: "textile"`
-- Cross-reference with `description` searches for geographic terms
+- `search_artwork` with `productionPlace: "Japan"` and `compact: true`, then repeat for `"China"`, `"Java"`, `"India"` to map the geographic distribution
+- Cross-reference with `type` filters to distinguish ceramics, textiles, prints, and metalwork
+- Use `depictedPlace` to find works that *represent* these places, regardless of where they were made — separating objects produced in Asia from European depictions of Asia
 - Use `imageAvailable: true` to assess digitisation coverage
 
-**Why it matters:** The Rijksmuseum positions itself as a museum of Dutch art *and* history, which includes centuries of global trade. Researchers planning comparative or postcolonial projects need to know what's actually there — and what's been digitised — before committing to an archival visit.
+**Why it matters:** The Rijksmuseum positions itself as a museum of Dutch art *and* history, which includes centuries of global trade. The combination of `productionPlace` and `depictedPlace` enables a crucial distinction: objects *from* Asia versus European images *of* Asia.
 
-### 4. Technique-Based Discovery
-
-**Research question:** Who were the leading practitioners of mezzotint in the Dutch Republic, and how does the Rijksmuseum's holdings reflect the medium's rise and decline?
-
-**How the tools enable it:**
-- `search_artwork` with `technique: "mezzotint"` and `compact: true` for a total count
-- Add `creationDate: "167*"`, `"168*"`, `"169*"`, `"170*"` to track the technique's trajectory decade by decade
-- Use `get_artwork_details` to identify the printmakers and their connections
-
-**Why it matters:** Mezzotint was a technically demanding medium with a specific historical arc — invented c. 1642, flourishing in the late 17th century, declining in the 18th. The collection search lets you empirically map that arc rather than relying on secondary accounts, and discover lesser-known practitioners alongside the familiar names.
-
-### 5. Date-Range Exploration for Period Studies
+### 3. Date-Range Exploration for Period Studies
 
 **Research question:** What did the Rijksmuseum's holdings look like for the crisis decade of the 1670s — the *Rampjaar* and its aftermath? Is there a measurable drop in artistic production?
 
@@ -96,15 +77,68 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Filter by `type: "painting"` to isolate the medium most sensitive to patronage disruption
 - Examine specific years: `creationDate: "1672"`, `"1673"` for the Rampjaar itself
 
-**Why it matters:** The French invasion of 1672 devastated the Dutch economy and disrupted patronage networks. Art historians debate the severity and duration of the impact. Collection-level counting across date ranges gives a quantitative baseline that complements archival evidence about individual workshops.
+**Why it matters:** The French invasion of 1672 devastated the Dutch economy and disrupted patronage networks. Collection-level counting across date ranges gives a quantitative baseline that complements archival evidence.
+
+---
+
+## Subject and Iconographic Search
+
+`search_artwork` includes five vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, and `productionPlace` — drawn from 148,000 controlled vocabulary terms mapped to 831,000 artworks. These enable searches by *what is depicted* in an artwork, not just who made it or what it is made of.
+
+### 4. Mapping the Visual Rhetoric of the Stadholders
+
+**Research question:** How were the successive Princes of Orange visually represented across different media, and can we trace shifts in propaganda strategy from Maurice to William III?
+
+**How the tools enable it:**
+- `search_artwork` with `depictedPerson: "Maurice"` and `compact: true`, then repeat for `"Frederick Henry"`, `"William II"`, `"William III"`
+- For each stadholder, filter by `type: "painting"` vs `type: "print"` vs `type: "medal"` to map the media distribution
+- Use `get_artwork_details` on selected results to compare how each ruler was staged — martial, dynastic, classical
+
+**Why it matters:** The Orange-Nassau dynasty used visual media strategically, but the balance between painted portraits (diplomatic gifts, court display) and printed imagery (popular circulation, political pamphlets) shifted across generations. A depicted-person search makes this media strategy empirically visible.
+
+### 5. Production Geography and the Migration of Printmaking
+
+**Research question:** How did the centre of gravity of Dutch printmaking shift between Haarlem, Amsterdam, and other cities across the 16th and 17th centuries?
+
+**How the tools enable it:**
+- `search_artwork` with `type: "print"`, `productionPlace: "Haarlem"`, `creationDate: "15*"`, `compact: true` — repeat for `"16*"`
+- Compare with `productionPlace: "Amsterdam"` across the same date ranges
+- Extend to `"Leiden"`, `"Utrecht"`, `"Antwerp"` for the broader network
+- Use `get_artwork_details` on a sample to identify the key printmakers at each centre
+
+**Why it matters:** Haarlem was the dominant centre of printmaking in the late 16th century until Amsterdam overtook it in the 17th. Production-place queries across date ranges provide collection-level evidence for secondary centres whose role may have been overlooked.
+
+### 6. Iconographic Traditions Across Media and Time
+
+**Research question:** How does the iconography of *vanitas* function differently in painting versus printmaking? Do their symbolic conventions appear with the same frequency and combination in both media?
+
+**How the tools enable it:**
+- `search_artwork` with `subject: "vanitas"` to get all works tagged with vanitas-related Iconclass codes
+- Split by `type: "painting"` vs `type: "print"` to compare media
+- Add `creationDate: "16*"` and `"17*"` to track chronological patterns
+- Use `get_artwork_details` on a sample from each group to compare which specific vanitas motifs are present
+
+**Why it matters:** A subject-based search that crosses media boundaries enables systematic comparisons that would otherwise require extensive manual catalogue work.
+
+### 7. Colonial Visual Culture: Representing the East Indies
+
+**Research question:** How did Dutch artists represent the East Indies, and does the production location — metropole versus colony — correlate with differences in how these places were depicted?
+
+**How the tools enable it:**
+- `search_artwork` with `depictedPlace: "Batavia"` to find all works showing the colonial capital
+- Extend to `depictedPlace: "Java"`, `"Sumatra"`, `"Dutch East Indies"`
+- Cross-reference with `productionPlace: "Amsterdam"` vs `productionPlace: "Batavia"` to separate metropolitan and colonial viewpoints
+- Use `get_artwork_details` to examine medium, date, and descriptive context
+
+**Why it matters:** Dutch colonial visual culture is an active area of research, but the question of *where* images of the colonies were produced is methodologically significant. The combination of `depictedPlace` and `productionPlace` makes this metropolitan-colonial distinction searchable for the first time at collection scale.
 
 ---
 
 ## Artwork Details and Metadata
 
-`get_artwork_details` returns up to 24 metadata categories per artwork — far more than a typical museum search interface exposes. This depth enables object-level research that would otherwise require on-site catalogue consultation.
+`get_artwork_details` returns [24 metadata categories](docs/metadata-categories.md) per artwork — far more than a typical museum search interface exposes. This depth enables object-level research that would otherwise require on-site catalogue consultation.
 
-### 6. Provenance as Historical Evidence
+### 8. Provenance as Historical Evidence
 
 **Research question:** What can the ownership history of Vermeer's *The Milkmaid* tell us about the painting's changing reputation from the 17th century to the present?
 
@@ -113,9 +147,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Cross-reference owners and sale dates with the bibliography via `get_artwork_bibliography`
 - Use `get_artwork_image` to examine the painting alongside the provenance narrative
 
-**Why it matters:** When a work changes hands at auction, is gifted to a museum, or passes through a dealer's inventory, each transaction reflects contemporary taste and valuation. The structured provenance data makes this traceable without requesting a physical dossier from the museum.
+**Why it matters:** When a work changes hands at auction, is gifted to a museum, or passes through a dealer's inventory, each transaction reflects contemporary taste and valuation. The structured provenance data makes these transactions traceable.
 
-### 7. Reading Inscriptions as Primary Sources
+### 9. Reading Inscriptions as Primary Sources
 
 **Research question:** What textual information did Pieter Saenredam embed in his church interior paintings, and do the inscriptions serve documentary, devotional, or artistic purposes?
 
@@ -124,9 +158,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `get_artwork_details` on each result — the inscriptions category captures text transcribed from the painting surface
 - Compare inscription content across works: dates, church names, biblical texts, artist signatures
 
-**Why it matters:** Saenredam's inscriptions are unusually rich — they often include the exact date he made the preliminary drawing and the date he completed the painting, sometimes years apart. These inscriptions are primary evidence for his working method and his understanding of architectural accuracy as a form of historical record-keeping. The metadata category makes them searchable without needing to zoom into every painting.
+**Why it matters:** Saenredam's inscriptions are unusually rich — they often include the exact date he made the preliminary drawing and the date he completed the painting, sometimes years apart. The `artwork details` metadata category makes this information searchable.
 
-### 8. Dimensions as Evidence for Workshop Practice
+### 10. Dimensions as Evidence for Workshop Practice
 
 **Research question:** Were there standard panel sizes used in 17th-century Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?
 
@@ -135,9 +169,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `get_artwork_details` on a sample — structured dimensions give height and width in centimetres
 - Tabulate dimensions across dozens of works to look for recurring sizes
 
-**Why it matters:** Art historians know that panel makers supplied standardised supports, but the exact sizes varied by city and period. The Rijksmuseum's structured dimension data — as opposed to free-text descriptions — enables computational analysis across the collection. Clusters in the data would corroborate (or challenge) what we know from guild records.
+**Why it matters:** The Rijksmuseum's structured dimension data — as opposed to free-text descriptions — can corroborate (or challenge) what we know from guild records.
 
-### 9. Vocabulary Terms and External Authority Links
+### 11. Vocabulary Terms and External Authority Links
 
 **Research question:** How does the Rijksmuseum classify its Indonesian textile collection, and how do those classifications map to the Getty Art & Architecture Thesaurus?
 
@@ -146,9 +180,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `get_artwork_details` on results — vocabulary terms are resolved to English labels with links to Getty AAT and Wikidata
 - Compare the Rijksmuseum's taxonomy with AAT hierarchies to identify where local classifications diverge from international standards
 
-**Why it matters:** Controlled vocabularies shape how collections are discovered and interpreted. When a museum uses its own vocabulary terms rather than (or in addition to) international standards, the mapping between them reveals assumptions about categorisation. This is especially significant for non-Western material culture, where Western taxonomies may be inadequate.
+**Why it matters:** Controlled vocabularies shape how collections are discovered and interpreted. When a museum uses its own vocabulary terms rather than (or in addition to) international standards, the mapping between them reveals assumptions about categorisation.
 
-### 10. Credit Lines and Acquisition Context
+### 12. Credit Lines and Acquisition Context
 
 **Research question:** How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, or state allocation, and when?
 
@@ -157,7 +191,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `get_artwork_details` on each — the credit line records the acquisition mode and often the year
 - Cross-reference with provenance for the full chain
 
-**Why it matters:** A museum's acquisition history is itself a subject of art historical study. The pattern of Rembrandt acquisitions — especially in the 19th-century period of national canon-building — reveals institutional priorities and art market dynamics. The credit line field makes this systematically researchable.
+**Why it matters:** A museum's acquisition history is itself a subject of art historical study. The credit line field makes this systematically researchable.
 
 ---
 
@@ -165,7 +199,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 `get_artwork_bibliography` exposes the museum's scholarship tracking — from five references for minor works to over a hundred for masterpieces.
 
-### 11. Measuring Scholarly Attention
+### 13. Measuring Scholarly Attention
 
 **Research question:** Which artworks in the Rijksmuseum have received disproportionate scholarly attention, and which major works remain understudied?
 
@@ -176,7 +210,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **Why it matters:** A researcher looking for a dissertation topic benefits from knowing where the gaps are — a major painting with only a handful of references represents an opportunity, while one with 150 entries signals an already-crowded field.
 
-### 12. Building a Literature Review
+### 14. Building a Literature Review
 
 **Research question:** What is the complete published scholarship on Jan Asselijn's *The Threatened Swan*, and how has its interpretation changed over time?
 
@@ -187,7 +221,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **Why it matters:** The bibliography tool provides a structured starting point with publication metadata (authors, titles, years, ISBNs) that would otherwise require consulting the museum's paper files or visiting the Rijksprentenkabinet library.
 
-### 13. Tracking Exhibition History Through Catalogues
+### 15. Tracking Exhibition History Through Catalogues
 
 **Research question:** How often has Vermeer's *The Little Street* been lent to exhibitions outside the Rijksmuseum?
 
@@ -196,15 +230,15 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Filter results for exhibition catalogue entries (typically identifiable by their format: exhibition venue + date + catalogue number)
 - Map the exhibition loans geographically and chronologically
 
-**Why it matters:** Exhibition history reveals how a work's canonical status is constructed. A Vermeer that travels frequently plays a different role in art historical discourse than one that stays in Amsterdam. The bibliography data captures this exhibition history as a by-product of its cataloguing.
+**Why it matters:** Exhibition history reveals how a work's canonical status is constructed. The bibliography data captures this exhibition history.
 
 ---
 
 ## High-Resolution Images
 
-`get_artwork_image` provides IIIF deep-zoom access — resolution sufficient to examine individual brushstrokes, craquelure patterns, and inscriptions that are invisible in standard reproductions.
+`get_artwork_image` provides an interactive viewer with a high-resolution, deep-zoom feature. For some artworks, this is sufficient to examine individual brushstrokes, craquelure patterns, and inscriptions that are invisible in standard reproductions.
 
-### 14. Technical Art History at the Brushstroke Level
+### 16. Technical Art History at the Brushstroke Level
 
 **Research question:** Can we distinguish between Rembrandt's direct brushwork and studio assistant contributions in *The Night Watch* by examining paint application at high magnification?
 
@@ -213,9 +247,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Zoom to maximum resolution on areas of known debate (e.g. the background figures vs the central group)
 - Compare paint handling: impasto density, brush direction, layering technique
 
-**Why it matters:** Connoisseurship — attributing hands within a workshop — traditionally requires direct access to an artwork. The IIIF deep-zoom viewer doesn't replace in-person examination, but could enable preliminary analysis and is a good resource for teaching.
+**Why it matters:** Connoisseurship — attributing hands within a workshop — traditionally requires direct access to an artwork. A deep-zoom viewer cannot replace in-person examination, but enables preliminary analysis and is of value for teaching.
 
-### 15. Reading Illegible Inscriptions
+### 17. Reading Illegible Inscriptions
 
 **Research question:** What text appears on the cartouche in the background of a 17th-century group portrait, and does it identify the sitters or the occasion?
 
@@ -225,9 +259,11 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Zoom and rotate to read text that is invisible or illegible in catalogue reproductions
 - Cross-reference with the inscriptions field from `get_artwork_details`
 
-**Why it matters:** Inscriptions in paintings can contain documentary information — dates, names, Latin mottos, biblical references — that is simply too small to read in printed reproductions or web thumbnails. Deep-zoom access makes this text legible outside the gallery.
+**Why it matters:** Inscriptions in paintings can contain documentary information — dates, names, Latin mottos, biblical references — that is too small to read in printed reproductions or web thumbnails. Deep-zoom access makes this text legible.
 
-### 16. Comparative Detail Analysis Across Works
+### 18. Comparative Detail Analysis Across Works
+
+<replace with a different example>
 
 **Research question:** How does Rachel Ruysch's rendering of insects evolve across her career — do the entomological details become more or less precise over time?
 
@@ -236,7 +272,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `get_artwork_image` on early, mid-career, and late works
 - Zoom to the insect details in each and compare rendering technique, anatomical accuracy, and compositional placement
 
-**Why it matters:** Ruysch is known for the scientific precision of her natural history details — her father was a renowned anatomist. Tracking the fidelity of her entomological rendering across a 60-year career (she painted into her 80s) addresses questions about ageing, changing standards of naturalism, and the relationship between art and science in the Dutch Republic.
+**Why it matters:** Ruysch is known for the scientific precision of her natural history details. Tracking the fidelity of her entomological rendering across a 60-year career (she painted into her 80s) addresses questions about ageing, changing standards of naturalism, and the relationship between art and science in the Dutch Republic.
 
 ---
 
@@ -244,7 +280,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 `get_artist_timeline` arranges an artist's works chronologically, revealing career patterns invisible when browsing search results.
 
-### 17. Identifying Gaps and Productive Periods
+### 19. Identifying Gaps and Productive Periods
+
+<replace with a different example>
 
 **Research question:** Are there unexplained gaps in Hendrick Goltzius's output at the Rijksmuseum, and do they correspond to known biographical events — his Italian journey, health problems, or the shift from engraving to painting?
 
@@ -255,7 +293,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **Why it matters:** An artist's timeline is a narrative. A gap in the 1590s might mean the museum simply doesn't hold works from that period, or it might reflect a real disruption in practice. The timeline tool makes these patterns visible, prompting the researcher to investigate further.
 
-### 18. Medium Shifts Within a Career
+### 20. Medium Shifts Within a Career
+
+<replace with a different example>
 
 **Research question:** When did Goltzius transition from engraving to painting, and does the collection evidence support the traditional art historical narrative of a sudden conversion?
 
@@ -266,7 +306,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **Why it matters:** The standard account says Goltzius abandoned engraving for painting around 1600 due to arthritis in his right hand. But "abandoned" implies a clean break. If the timeline shows overlapping media — engravings continuing alongside paintings — the biographical narrative needs revision.
 
-### 19. Comparing Parallel Careers
+### 21. Comparing Parallel Careers
 
 **Research question:** How do the career trajectories of Jan Steen and Gabriël Metsu compare — two genre painters active in the same cities at the same time?
 
@@ -275,7 +315,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Compare: date ranges, number of works per decade, medium distribution
 - Use `get_artwork_details` on representative works from each to compare subject matter and scale
 
-**Why it matters:** Parallel career comparison is a standard art historical method for understanding market positioning, artistic rivalry, and influence. The timeline tool generates the raw data for this comparison in seconds rather than hours of catalogue consultation.
+**Why it matters:** Parallel career comparison is a standard for understanding market positioning, artistic rivalry, and influence. The timeline tool can generates the raw data for these comparisons.
 
 ---
 
@@ -283,7 +323,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 `list_curated_sets` and `browse_set` expose the museum's 192 curatorial groupings — thematic, scholarly, and exhibition-based. These sets encode expert knowledge about how objects relate to each other.
 
-### 20. Reconstructing Past Exhibitions
+### 22. Reconstructing Past Exhibitions
 
 **Research question:** What objects were included in Rijksmuseum exhibitions related to Rembrandt, and how did the curatorial selection construct a narrative?
 
@@ -294,7 +334,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **Why it matters:** Exhibitions are arguments made with objects — the selection, sequencing, and juxtaposition of works constitutes an interpretation. Being able to retrieve the object list for a past exhibition enables historiographic analysis of curatorial practice.
 
-### 21. Finding Thematic Connections Curators Have Already Made
+### 23. Finding Thematic Connections Curators Have Already Made
 
 **Research question:** Has the Rijksmuseum curated any groupings related to Dutch maritime trade, and what objects did they consider central to that story?
 
@@ -302,9 +342,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `list_curated_sets` with `query: "maritime"` or `query: "trade"` or `query: "VOC"`
 - `browse_set` to see the contents — paintings, maps, ship models, porcelain, documents
 
-**Why it matters:** Researchers tend to search within their medium speciality. Curated sets cross media boundaries, placing a Delftware plate next to a ship portrait next to a navigation chart. This cross-media juxtaposition can reveal connections that medium-specific searches miss.
+**Why it matters:** Curated sets cross media boundaries. These cross-media juxtaposition can reveal connections that medium-specific searches miss.
 
-### 22. Assessing Collection Depth for Grant Applications
+### 24. Assessing Collection Depth for Grant Applications
 
 **Research question:** Does the Rijksmuseum have sufficient holdings in Japanese prints to support a multi-year research project, and how are they organised?
 
@@ -313,7 +353,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `browse_set` on relevant sets to assess quantity, quality, and variety
 - `search_artwork` with targeted filters to check for holdings outside the curated sets
 
-**Why it matters:** Grant applications require demonstrating that the proposed research site has adequate resources. Being able to programmatically assess collection depth and cite specific set identifiers and object counts strengthens the feasibility argument.
+**Why it matters:** Grant applications require demonstrating that the proposed research site has adequate resources. Being able to assess collection depth — and cite specific set identifiers and object counts — strengthens the feasibility argument.
 
 ---
 
@@ -321,7 +361,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 `get_recent_changes` tracks what the museum adds and updates, providing a live feed of cataloguing activity.
 
-### 23. Monitoring New Acquisitions in a Research Area
+### 25. Tracking New Acquisitions in a Research Area
 
 **Research question:** Has the Rijksmuseum recently acquired any works that would be relevant to ongoing research, and how can researchers monitor new additions?
 
@@ -330,9 +370,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Use `identifiersOnly: true` for a fast scan, then `get_artwork_details` on promising object numbers
 - Set up a periodic check (monthly) to stay current
 
-**Why it matters:** New acquisitions can reshape a research project — a recently acquired object might fill a gap in the evidence, or a newly digitised work might provide a crucial comparison. The change-tracking feed ensures researchers can immediately discover relevant new acquisitions.
+**Why it matters:** A recently acquired object can fill a gap in the evidence or provide a crucial comparison. Querying the `‌get_recent_changes` field allows researchers to immediately discover relevant new acquisitions.
 
-### 24. Tracking Metadata Enrichment
+### 26. Tracking Metadata Enrichment
 
 **Research question:** Has the Rijksmuseum recently updated its catalogue entries for its Asian art holdings — perhaps adding new provenance information or revised attributions?
 
@@ -341,7 +381,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Compare current `get_artwork_details` with earlier records to identify what changed
 - Focus on fields like provenance, attribution, and date that affect research conclusions
 
-**Why it matters:** Museum catalogues are living documents. Attributions change, provenance is discovered, dates are revised. Researchers who rely on catalogue data need to know when it changes, especially for fields like provenance where new information can alter the interpretive framework.
+**Why it matters:** Museum catalogues are living documents. Attributions change, provenance is discovered, dates are revised. Researchers who rely on catalogue data need to know when it changes, especially for fields like provenance.
 
 ---
 
@@ -349,7 +389,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 Because the MCP tools are used through a large language model, the LLM's own knowledge can act as a bridge between the researcher's question and the API's formal parameters.
 
-### 25. Multilingual Access to a Dutch Collection
+### 27. Multilingual Access to a Dutch Collection
 
 **Research question:** A Japanese scholar studying *Rangaku* (Dutch learning in Edo-period Japan) wants to find VOC-related objects and materials about the Dutch trading post at Dejima. What does the Rijksmuseum hold?
 
@@ -358,9 +398,9 @@ Because the MCP tools are used through a large language model, the LLM's own kno
 - The LLM knows that Dejima is romanised from 出島, that the Dutch called it "Deshima," and that the Rijksmuseum catalogues it under various Dutch spellings
 - It searches with the appropriate terms and explains the results in the researcher's language
 
-**Why it matters:** The Rijksmuseum's metadata is partially in Dutch, with varying degrees of English translation. Non-Dutch-speaking researchers face a real language barrier. The LLM doesn't just translate — it can often handle variant spellings, historical place names, and terminological differences between languages.
+**Why it matters:** The Rijksmuseum's metadata is partially in Dutch, with varying degrees of English translation. A LLM doesn't just translate — it can often also handle variant spellings, historical place names, and terminological differences between languages.
 
-### 26. Cross-Referencing Art Historical Knowledge
+### 28. Cross-Referencing Art Historical Knowledge
 
 **Research question:** Show me works by the Utrecht Caravaggisti in the Rijksmuseum — I don't know which specific artists that includes.
 
@@ -371,18 +411,7 @@ Because the MCP tools are used through a large language model, the LLM's own kno
 
 **Why it matters:** Art historical categories like "Utrecht Caravaggisti" are not search terms in the museum's metadata — they are scholarly constructs that group artists by style, period, and geography. The LLM can bridge from the category to the individual names, enabling conceptual searches that no fielded search interface supports.
 
-### 27. Disambiguation and Collection Awareness
-
-**Research question:** I want to compare Vermeer's *Girl with a Pearl Earring* with his *The Milkmaid*. Are both in the Rijksmuseum?
-
-**How the LLM enables it:**
-- The LLM knows that *Girl with a Pearl Earring* is at the Mauritshuis in The Hague, not the Rijksmuseum
-- It explains the distinction, retrieves *The Milkmaid* from the Rijksmuseum, and suggests the Mauritshuis as a second source
-- It can also suggest Vermeer works that *are* in the Rijksmuseum for comparison
-
-**Why it matters:** Students frequently misattribute works to institutions. Rather than returning a confusing 'no results', the LLM can correct the error, explain it, and redirect productively.
-
-### 28. Navigating Variant Names and Historical Spelling
+### 29. Navigating Variant Names and Historical Spelling
 
 **Research question:** Find all works by Hercules Seghers in the collection.
 
@@ -461,8 +490,8 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Tool | Description |
 |---|---|
-| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. |
-| `get_artwork_details` | 24 metadata categories by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
+| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject` (Iconclass themes), `iconclass` (exact Iconclass codes), `depictedPerson`, `depictedPlace`, and `productionPlace` — enable subject and iconographic search across 831,000 artworks. These can be combined with type, material, and technique for cross-field intersection queries. |
+| `get_artwork_details` | [24 metadata categories](docs/metadata-categories.md) by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
 | `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
 | `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Falls back to JSON + optional base64 thumbnail in text-only clients. |
 | `get_artist_timeline` | Chronological timeline of an artist's works in the collection. |
@@ -491,10 +520,13 @@ src/
   api/
     RijksmuseumApiClient.ts   — Linked Art API client, vocabulary resolver, bibliography, IIIF image chain
     OaiPmhClient.ts           — OAI-PMH client (curated sets, EDM records, change tracking)
+    VocabularyDb.ts           — SQLite vocabulary database for subject and iconographic search
   utils/
     SystemIntegration.ts      — Cross-platform browser opening
 apps/
   artwork-viewer/             — MCP Apps inline IIIF viewer (Vite + OpenSeadragon)
+data/
+  vocabulary.db               — Vocabulary database (built from OAI-PMH harvest, not in git)
 ```
 
 ### Data Sources
@@ -513,6 +545,8 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 **Vocabulary resolution:** Material, object type, technique, place, collection, and subject terms are Rijksmuseum vocabulary URIs. These are resolved in parallel to obtain English labels and links to external authorities (Getty AAT, Wikidata, Iconclass).
 
 **Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
+
+**Vocabulary database:** A pre-built SQLite database maps 148,000 controlled vocabulary terms (Iconclass codes, depicted persons, depicted places, production places) to 831,000 artworks. Built from OAI-PMH EDM records and Linked Art vocabulary resolution, it powers the `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, and `productionPlace` filters in `search_artwork`.
 
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 

@@ -6,6 +6,11 @@ import express from "express";
 import cors from "cors";
 import crypto from "node:crypto";
 
+import fs from "node:fs";
+import path from "node:path";
+import { pipeline } from "node:stream/promises";
+import { createGunzip } from "node:zlib";
+
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
@@ -33,9 +38,55 @@ function getHttpPort(): number {
   return parseInt(process.env.PORT ?? "3000", 10);
 }
 
+// ─── Vocabulary DB download (runs once per volume lifetime) ─────────
+
+function resolveDbPath(): string {
+  return process.env.VOCAB_DB_PATH || path.join(process.cwd(), "data", "vocabulary.db");
+}
+
+async function ensureVocabularyDb(): Promise<void> {
+  const dbPath = resolveDbPath();
+  if (fs.existsSync(dbPath)) return;
+
+  const url = process.env.VOCAB_DB_URL;
+  if (!url) return;
+
+  console.error("Downloading vocabulary DB...");
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const tmpPath = dbPath + ".tmp";
+  try {
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+
+    const dest = fs.createWriteStream(tmpPath);
+    const isGzip = url.endsWith(".gz") || res.headers.get("content-type")?.includes("gzip");
+
+    if (isGzip) {
+  
+      await pipeline(res.body, createGunzip(), dest);
+    } else {
+  
+      await pipeline(res.body, dest);
+    }
+
+    fs.renameSync(tmpPath, dbPath);
+    console.error(`Vocabulary DB ready: ${dbPath}`);
+  } catch (err) {
+    console.error(`Failed to download vocabulary DB: ${err instanceof Error ? err.message : err}`);
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  }
+}
+
 // ─── Shared vocabulary database (one read-only instance) ────────────
 
-const vocabDb = new VocabularyDb();
+let vocabDb: VocabularyDb | null = null;
+
+async function initVocabularyDb(): Promise<void> {
+  await ensureVocabularyDb();
+  vocabDb = new VocabularyDb();
+}
 
 // ─── Create a configured McpServer ───────────────────────────────────
 
@@ -60,6 +111,7 @@ function createServer(httpPort?: number): McpServer {
 // ─── Stdio mode ──────────────────────────────────────────────────────
 
 async function runStdio(): Promise<void> {
+  await initVocabularyDb();
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -69,6 +121,7 @@ async function runStdio(): Promise<void> {
 // ─── HTTP mode ───────────────────────────────────────────────────────
 
 async function runHttp(): Promise<void> {
+  await initVocabularyDb();
   const port = getHttpPort();
   const app = express();
 

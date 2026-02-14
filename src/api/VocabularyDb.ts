@@ -10,6 +10,9 @@ export interface VocabSearchParams {
   depictedPerson?: string;
   depictedPlace?: string;
   productionPlace?: string;
+  birthPlace?: string;
+  deathPlace?: string;
+  profession?: string;
   material?: string;
   technique?: string;
   type?: string;
@@ -112,6 +115,39 @@ export class VocabularyDb {
           AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
       )`);
       const pat = `%${params.productionPlace}%`;
+      bindings.push(pat, pat);
+    }
+
+    if (params.birthPlace) {
+      conditions.push(`a.object_number IN (
+        SELECT m.object_number FROM mappings m
+        JOIN vocabulary v ON m.vocab_id = v.id
+        WHERE m.field = 'birth_place' AND v.type = 'place'
+          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
+      )`);
+      const pat = `%${params.birthPlace}%`;
+      bindings.push(pat, pat);
+    }
+
+    if (params.deathPlace) {
+      conditions.push(`a.object_number IN (
+        SELECT m.object_number FROM mappings m
+        JOIN vocabulary v ON m.vocab_id = v.id
+        WHERE m.field = 'death_place' AND v.type = 'place'
+          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
+      )`);
+      const pat = `%${params.deathPlace}%`;
+      bindings.push(pat, pat);
+    }
+
+    if (params.profession) {
+      conditions.push(`a.object_number IN (
+        SELECT m.object_number FROM mappings m
+        JOIN vocabulary v ON m.vocab_id = v.id
+        WHERE m.field = 'profession' AND v.type = 'classification'
+          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
+      )`);
+      const pat = `%${params.profession}%`;
       bindings.push(pat, pat);
     }
 

@@ -76,7 +76,7 @@ function registerTools(
 
   // Vocabulary-backed search params (require vocabulary DB)
   const vocabAvailable = vocabDb?.available ?? false;
-  const vocabParamKeys = ["subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace"] as const;
+  const vocabParamKeys = ["subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace", "birthPlace", "deathPlace", "profession"] as const;
 
   server.registerTool(
     "search_artwork",
@@ -92,7 +92,10 @@ function registerTools(
             "iconclass (exact Iconclass notation code, e.g. '34B11' for dogs), " +
             "depictedPerson (text search on depicted person names), " +
             "depictedPlace (text search on depicted place names), " +
-            "productionPlace (text search on production place names). " +
+            "productionPlace (text search on production place names), " +
+            "birthPlace (search by artist's birth place), " +
+            "deathPlace (search by artist's death place), " +
+            "profession (search by artist's profession, e.g. 'painter', 'printmaker'). " +
             "These can be combined with type, material, and technique for cross-field queries (e.g. subject='dogs' + type='painting')."
           : ""),
       inputSchema: {
@@ -176,6 +179,24 @@ function registerTools(
                 .optional()
                 .describe(
                   "Search for artworks produced in a specific place (e.g. 'Delft'). Requires vocabulary DB."
+                ),
+              birthPlace: z
+                .string()
+                .optional()
+                .describe(
+                  "Search by artist's birth place (e.g. 'Amsterdam'). Requires vocabulary DB."
+                ),
+              deathPlace: z
+                .string()
+                .optional()
+                .describe(
+                  "Search by artist's death place (e.g. 'Paris'). Requires vocabulary DB."
+                ),
+              profession: z
+                .string()
+                .optional()
+                .describe(
+                  "Search by artist's profession (e.g. 'painter', 'printmaker', 'photographer'). Requires vocabulary DB."
                 ),
             }
           : {}),
