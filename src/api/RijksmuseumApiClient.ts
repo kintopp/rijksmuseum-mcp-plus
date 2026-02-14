@@ -83,8 +83,8 @@ export class RijksmuseumApiClient {
     // Map 'query' to 'title' — the API has no general full-text search,
     // and title is the most intuitive match for free-text queries.
     // Explicit 'title' takes precedence over 'query'.
-    query.title = params.title ?? params.query ?? "";
-    if (!query.title) delete query.title;
+    const titleValue = params.title ?? params.query;
+    if (titleValue) query.title = titleValue;
 
     const passthroughFields = [
       "creator", "aboutActor", "objectNumber", "type", "material",
@@ -189,8 +189,7 @@ export class RijksmuseumApiClient {
     const { data } = await this.http.get(url, {
       responseType: "arraybuffer",
     });
-    const base64 = Buffer.from(data).toString("base64");
-    return base64;
+    return Buffer.from(data).toString("base64");
   }
 
   // ── Parsers (static) ───────────────────────────────────────────
@@ -436,26 +435,21 @@ export class RijksmuseumApiClient {
       });
   }
 
-  /** Extract related object references from attributed_by */
+  /** Extract related object references from attributed_by (deduplicated by URI) */
   static parseRelatedObjects(obj: LinkedArtObject): RelatedObject[] {
-    const results: RelatedObject[] = [];
+    const seen = new Map<string, RelatedObject>();
     for (const a of obj.attributed_by ?? []) {
-      // Prefer English label
+      const uri = a.assigned?.[0]?.id;
+      if (!uri || seen.has(uri)) continue;
+
       const labels = a.identified_by ?? [];
       const enLabel = labels.find(
         (l) => getLangId(l.language) === AAT.LANG_EN
       );
       const label = enLabel?.content ?? labels[0]?.content ?? "related";
-      const uri = a.assigned?.[0]?.id;
-      if (uri) results.push({ relationship: label, objectUri: uri });
+      seen.set(uri, { relationship: label, objectUri: uri });
     }
-    // Deduplicate by URI (EN and NL labels create duplicate entries)
-    const seen = new Set<string>();
-    return results.filter((r) => {
-      if (seen.has(r.objectUri)) return false;
-      seen.add(r.objectUri);
-      return true;
-    });
+    return [...seen.values()];
   }
 
   /** Extract persistent identifier (handle.net) from equivalent */
@@ -920,7 +914,7 @@ export class RijksmuseumApiClient {
     }
 
     // Build output entries
-    const bibEntries: BibliographyEntry[] = parsed.map((p, i) => {
+    const bibEntries: BibliographyEntry[] = parsed.map((p) => {
       const book = p.resolveUri ? resolved.get(p.resolveUri) ?? null : null;
 
       let citation: string;

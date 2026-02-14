@@ -473,16 +473,14 @@ function registerTools(
     },
     async (args) => {
       const allSets = await oai.listSets();
-      let sets = allSets;
-
-      if (args.query) {
-        const q = args.query.toLowerCase();
-        sets = allSets.filter((s) => s.name.toLowerCase().includes(q));
-      }
+      const q = args.query?.toLowerCase();
+      const sets = q
+        ? allSets.filter((s) => s.name.toLowerCase().includes(q))
+        : allSets;
 
       return jsonResponse({
         totalSets: sets.length,
-        ...(args.query ? { filteredFrom: allSets.length, query: args.query } : {}),
+        ...(q ? { filteredFrom: allSets.length, query: args.query } : {}),
         sets,
       });
     }
