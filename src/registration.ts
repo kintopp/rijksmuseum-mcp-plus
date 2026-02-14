@@ -90,13 +90,15 @@ function registerTools(
         (vocabAvailable
           ? " Additional vocabulary-based filters: subject (text search on subject labels like Iconclass themes), " +
             "iconclass (exact Iconclass notation code, e.g. '34B11' for dogs), " +
-            "depictedPerson (text search on depicted person names), " +
+            "depictedPerson (text search on depicted person names — more comprehensive than aboutActor), " +
             "depictedPlace (text search on depicted place names), " +
             "productionPlace (text search on production place names), " +
             "birthPlace (search by artist's birth place), " +
             "deathPlace (search by artist's death place), " +
-            "profession (search by artist's profession, e.g. 'painter', 'printmaker'). " +
-            "These can be combined with type, material, and technique for cross-field queries (e.g. subject='dogs' + type='painting')."
+            "profession (search by artist's profession, e.g. 'painter', 'draughtsman'). " +
+            "Vocabulary labels are bilingual (English and Dutch); some terms only have Dutch labels, so try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
+            "Vocabulary filters can be freely combined with each other and with creator, type, material, and technique for cross-field queries (e.g. subject='dogs' + type='painting', or profession='painter' + birthPlace='Amsterdam'). " +
+            "Note: compact and pageToken do not apply to vocabulary-based searches."
           : ""),
       inputSchema: {
         query: z
@@ -117,7 +119,8 @@ function registerTools(
           .string()
           .optional()
           .describe(
-            "Search for artworks depicting or about a person (not the creator). E.g. 'Willem van Oranje'"
+            "Search for artworks depicting or about a person (not the creator). E.g. 'Willem van Oranje'. " +
+            "Uses the Search API. Prefer depictedPerson (vocabulary-based) when available, as it covers more records."
           ),
         type: z
           .string()
@@ -196,7 +199,7 @@ function registerTools(
                 .string()
                 .optional()
                 .describe(
-                  "Search by artist's profession (e.g. 'painter', 'printmaker', 'photographer'). Requires vocabulary DB."
+                  "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor'). Some professions only have Dutch labels (e.g. 'fotograaf' for photographer). Requires vocabulary DB."
                 ),
             }
           : {}),
@@ -211,12 +214,12 @@ function registerTools(
           .boolean()
           .default(false)
           .describe(
-            "If true, returns only total count and IDs without resolving details (faster)"
+            "If true, returns only total count and IDs without resolving details (faster). Only applies to Search API queries, not vocabulary-based searches."
           ),
         pageToken: z
           .string()
           .optional()
-          .describe("Pagination token from a previous search result"),
+          .describe("Pagination token from a previous search result. Only applies to Search API queries, not vocabulary-based searches."),
       },
     },
     async (args) => {
