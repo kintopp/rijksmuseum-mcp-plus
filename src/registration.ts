@@ -359,7 +359,15 @@ function registerTools(
           .boolean()
           .default(false)
           .describe(
-            "If true, includes a small base64-encoded JPEG thumbnail (~200px, 5-10KB)"
+            "If true, includes a base64-encoded JPEG thumbnail (default 400px, ~20-40KB)"
+          ),
+        thumbnailWidth: z
+          .number()
+          .min(100)
+          .max(800)
+          .default(400)
+          .describe(
+            "Thumbnail width in pixels (100-800, default 400). Only used when includeThumbnail is true."
           ),
       },
       _meta: {
@@ -399,7 +407,7 @@ function registerTools(
       > = [{ type: "text", text: JSON.stringify(viewerData, null, 2) }];
 
       if (args.includeThumbnail) {
-        const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, 200);
+        const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, args.thumbnailWidth);
         contentBlocks.push({
           type: "image",
           data: base64,
