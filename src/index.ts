@@ -56,8 +56,8 @@ async function ensureVocabularyDb(): Promise<void> {
       db.close();
       return; // DB is up to date
     } catch {
-      console.error("Vocabulary DB outdated (missing vocab_term_counts) — re-downloading...");
-      fs.unlinkSync(dbPath);
+      console.error("Vocabulary DB outdated (missing vocab_term_counts) — will re-download");
+      // Don't delete yet — keep the old DB as fallback until download succeeds
     }
   }
 
