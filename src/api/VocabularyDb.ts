@@ -31,6 +31,9 @@ export interface VocabSearchResult {
 // in a mapping subquery.  `fields` restricts m.field, `vocabType`
 // restricts v.type, and `matchMode` controls exact vs LIKE matching.
 
+const ALLOWED_FIELDS = new Set(["subject", "spatial", "material", "technique", "type", "creator", "birth_place", "death_place", "profession"]);
+const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification"]);
+
 interface VocabFilter {
   param: keyof VocabSearchParams;
   fields: string[];
@@ -92,6 +95,13 @@ export class VocabularyDb {
     for (const filter of VOCAB_FILTERS) {
       const value = params[filter.param];
       if (value === undefined) continue;
+
+      for (const f of filter.fields) {
+        if (!ALLOWED_FIELDS.has(f)) throw new Error(`Invalid vocab field: ${f}`);
+      }
+      if (filter.vocabType && !ALLOWED_VOCAB_TYPES.has(filter.vocabType)) {
+        throw new Error(`Invalid vocab type: ${filter.vocabType}`);
+      }
 
       const fieldClause = filter.fields.length === 1
         ? `m.field = '${filter.fields[0]}'`

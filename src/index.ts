@@ -56,8 +56,10 @@ async function ensureVocabularyDb(): Promise<void> {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   const tmpPath = dbPath + ".tmp";
+  const controller = new AbortController();
+  const downloadTimer = setTimeout(() => controller.abort(), 300_000);
   try {
-    const res = await fetch(url, { redirect: "follow" });
+    const res = await fetch(url, { redirect: "follow", signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
     const dest = fs.createWriteStream(tmpPath);
@@ -74,6 +76,8 @@ async function ensureVocabularyDb(): Promise<void> {
   } catch (err) {
     console.error(`Failed to download vocabulary DB: ${err instanceof Error ? err.message : err}`);
     if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  } finally {
+    clearTimeout(downloadTimer);
   }
 }
 

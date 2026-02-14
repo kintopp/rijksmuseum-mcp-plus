@@ -50,8 +50,12 @@ function extractIiifId(url: string): string | null {
 /** Extract the pageToken query parameter from a next-page URL */
 function extractPageToken(nextRef: { id: string } | undefined): string | undefined {
   if (!nextRef?.id) return undefined;
-  const url = new URL(nextRef.id);
-  return url.searchParams.get("pageToken") ?? undefined;
+  try {
+    const url = new URL(nextRef.id);
+    return url.searchParams.get("pageToken") ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // ─── Client ─────────────────────────────────────────────────────────
@@ -844,7 +848,7 @@ export class RijksmuseumApiClient {
           )
         )
         ?.content;
-      const sequence = seq ? parseInt(seq) : null;
+      const sequence = seq ? parseInt(seq, 10) : null;
 
       if (!assigned) {
         return { type: "B" as const, sequence, citationString: "" };
