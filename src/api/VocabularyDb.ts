@@ -26,6 +26,33 @@ export interface VocabSearchResult {
   source: "vocabulary";
 }
 
+// ─── Filter definitions ─────────────────────────────────────────────
+// Each entry maps a VocabSearchParams key to the SQL constraints used
+// in a mapping subquery.  `fields` restricts m.field, `vocabType`
+// restricts v.type, and `matchMode` controls exact vs LIKE matching.
+
+interface VocabFilter {
+  param: keyof VocabSearchParams;
+  fields: string[];
+  vocabType?: string;
+  matchMode: "like" | "exact-notation";
+}
+
+const VOCAB_FILTERS: VocabFilter[] = [
+  { param: "iconclass",      fields: ["subject"],               matchMode: "exact-notation" },
+  { param: "subject",        fields: ["subject"],               matchMode: "like" },
+  { param: "depictedPerson", fields: ["subject"],               matchMode: "like", vocabType: "person" },
+  { param: "depictedPlace",  fields: ["subject", "spatial"],    matchMode: "like", vocabType: "place" },
+  { param: "productionPlace",fields: ["spatial"],               matchMode: "like", vocabType: "place" },
+  { param: "birthPlace",     fields: ["birth_place"],           matchMode: "like", vocabType: "place" },
+  { param: "deathPlace",     fields: ["death_place"],           matchMode: "like", vocabType: "place" },
+  { param: "profession",     fields: ["profession"],            matchMode: "like", vocabType: "classification" },
+  { param: "material",       fields: ["material"],              matchMode: "like" },
+  { param: "technique",      fields: ["technique"],             matchMode: "like" },
+  { param: "type",           fields: ["type"],                  matchMode: "like" },
+  { param: "creator",        fields: ["creator"],               matchMode: "like" },
+];
+
 // ─── VocabularyDb ────────────────────────────────────────────────────
 
 export class VocabularyDb {
@@ -62,137 +89,33 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
-    // Each vocabulary param produces a subquery: the artwork must have a mapping
-    // to a vocabulary term matching the criterion for that field.
+    for (const filter of VOCAB_FILTERS) {
+      const value = params[filter.param];
+      if (value === undefined) continue;
 
-    if (params.iconclass) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'subject' AND v.notation = ?
-      )`);
-      bindings.push(params.iconclass);
-    }
+      const fieldClause = filter.fields.length === 1
+        ? `m.field = '${filter.fields[0]}'`
+        : `m.field IN (${filter.fields.map((f) => `'${f}'`).join(", ")})`;
 
-    if (params.subject) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'subject'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.subject}%`;
-      bindings.push(pat, pat);
-    }
+      const typeClause = filter.vocabType ? ` AND v.type = '${filter.vocabType}'` : "";
 
-    if (params.depictedPerson) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'subject' AND v.type = 'person'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.depictedPerson}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.depictedPlace) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field IN ('subject', 'spatial') AND v.type = 'place'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.depictedPlace}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.productionPlace) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'spatial' AND v.type = 'place'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.productionPlace}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.birthPlace) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'birth_place' AND v.type = 'place'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.birthPlace}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.deathPlace) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'death_place' AND v.type = 'place'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.deathPlace}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.profession) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'profession' AND v.type = 'classification'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.profession}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.material) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'material'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.material}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.technique) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'technique'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.technique}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.type) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'type'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.type}%`;
-      bindings.push(pat, pat);
-    }
-
-    if (params.creator) {
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'creator'
-          AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-      )`);
-      const pat = `%${params.creator}%`;
-      bindings.push(pat, pat);
+      if (filter.matchMode === "exact-notation") {
+        conditions.push(`a.object_number IN (
+          SELECT m.object_number FROM mappings m
+          JOIN vocabulary v ON m.vocab_id = v.id
+          WHERE ${fieldClause}${typeClause} AND v.notation = ?
+        )`);
+        bindings.push(value);
+      } else {
+        conditions.push(`a.object_number IN (
+          SELECT m.object_number FROM mappings m
+          JOIN vocabulary v ON m.vocab_id = v.id
+          WHERE ${fieldClause}${typeClause}
+            AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
+        )`);
+        const pat = `%${value}%`;
+        bindings.push(pat, pat);
+      }
     }
 
     if (conditions.length === 0) {
@@ -202,11 +125,9 @@ export class VocabularyDb {
     const where = conditions.join(" AND ");
     const limit = Math.min(params.maxResults ?? 25, 25);
 
-    // Count total
     const countSql = `SELECT COUNT(*) as n FROM artworks a WHERE ${where}`;
     const totalResults = (this.db.prepare(countSql).get(...bindings) as { n: number }).n;
 
-    // Fetch results
     const sql = `SELECT a.object_number, a.title, a.creator_label FROM artworks a WHERE ${where} LIMIT ?`;
     const rows = this.db.prepare(sql).all(...bindings, limit) as {
       object_number: string;

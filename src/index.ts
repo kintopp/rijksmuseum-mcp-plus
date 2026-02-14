@@ -64,10 +64,8 @@ async function ensureVocabularyDb(): Promise<void> {
     const isGzip = url.endsWith(".gz") || res.headers.get("content-type")?.includes("gzip");
 
     if (isGzip) {
-  
       await pipeline(res.body, createGunzip(), dest);
     } else {
-  
       await pipeline(res.body, dest);
     }
 

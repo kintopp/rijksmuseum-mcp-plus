@@ -223,23 +223,19 @@ function registerTools(
       },
     },
     async (args) => {
-      // Check if any vocabulary param is present → route through VocabularyDb
+      // Check if any vocabulary param is present -> route through VocabularyDb
       const hasVocabParam = vocabAvailable && vocabParamKeys.some(
         (k) => (args as Record<string, unknown>)[k] !== undefined
       );
 
       if (hasVocabParam && vocabDb) {
+        const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
+        const allVocabKeys = [...vocabParamKeys, ...crossFilterKeys];
         const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
-        for (const k of vocabParamKeys) {
+        for (const k of allVocabKeys) {
           const val = (args as Record<string, unknown>)[k];
           if (val !== undefined) vocabArgs[k] = val;
         }
-        // Route material/technique/type through vocab when vocab params are present
-        if (args.material) vocabArgs.material = args.material;
-        if (args.technique) vocabArgs.technique = args.technique;
-        if (args.type) vocabArgs.type = args.type;
-        if (args.creator) vocabArgs.creator = args.creator;
-
         return jsonResponse(vocabDb.search(vocabArgs as any));
       }
 
