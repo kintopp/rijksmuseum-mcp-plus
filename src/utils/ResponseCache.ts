@@ -60,6 +60,19 @@ export class ResponseCache<T = unknown> {
     });
   }
 
+  /**
+   * Get a cached value or compute it via `fetch`, storing the result.
+   * Eliminates the repeated get/check/fetch/set pattern at call sites.
+   */
+  async getOrFetch<V extends T>(key: string, fetch: () => Promise<V>, ttlMs?: number): Promise<V> {
+    const cached = this.get(key);
+    if (cached !== undefined) return cached as V;
+
+    const value = await fetch();
+    this.set(key, value, ttlMs);
+    return value;
+  }
+
   stats(): { hits: number; misses: number; size: number } {
     return { hits: this.hits, misses: this.misses, size: this.map.size };
   }

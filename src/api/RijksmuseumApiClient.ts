@@ -127,13 +127,11 @@ export class RijksmuseumApiClient {
   // ── Resolve ─────────────────────────────────────────────────────
 
   async resolveObject(uri: string): Promise<LinkedArtObject> {
-    const cacheKey = `obj:${uri}`;
-    const cached = this.cache.get(cacheKey) as LinkedArtObject | undefined;
-    if (cached) return cached;
-
-    const { data } = await this.http.get<LinkedArtObject>(uri);
-    this.cache.set(cacheKey, data, RijksmuseumApiClient.TTL_OBJECT);
-    return data;
+    return this.cache.getOrFetch(
+      `obj:${uri}`,
+      async () => (await this.http.get<LinkedArtObject>(uri)).data,
+      RijksmuseumApiClient.TTL_OBJECT
+    );
   }
 
   /** Search by objectNumber and resolve the first result */
@@ -162,24 +160,20 @@ export class RijksmuseumApiClient {
       if (!visualItemRef?.id) return null;
 
       // Step 2: Resolve VisualItem (cached)
-      const viKey = `vi:${visualItemRef.id}`;
-      let viData = this.cache.get(viKey) as VisualItem | undefined;
-      if (!viData) {
-        const visualItem = await this.http.get<VisualItem>(visualItemRef.id);
-        viData = visualItem.data;
-        this.cache.set(viKey, viData, RijksmuseumApiClient.TTL_IMAGE);
-      }
+      const viData = await this.cache.getOrFetch<VisualItem>(
+        `vi:${visualItemRef.id}`,
+        async () => (await this.http.get<VisualItem>(visualItemRef.id)).data,
+        RijksmuseumApiClient.TTL_IMAGE
+      );
       const digitalObjectRef = viData.digitally_shown_by?.[0];
       if (!digitalObjectRef?.id) return null;
 
       // Step 3: Resolve DigitalObject (cached)
-      const doKey = `do:${digitalObjectRef.id}`;
-      let doData = this.cache.get(doKey) as DigitalObject | undefined;
-      if (!doData) {
-        const digitalObject = await this.http.get<DigitalObject>(digitalObjectRef.id);
-        doData = digitalObject.data;
-        this.cache.set(doKey, doData, RijksmuseumApiClient.TTL_IMAGE);
-      }
+      const doData = await this.cache.getOrFetch<DigitalObject>(
+        `do:${digitalObjectRef.id}`,
+        async () => (await this.http.get<DigitalObject>(digitalObjectRef.id)).data,
+        RijksmuseumApiClient.TTL_IMAGE
+      );
       const accessPoint = doData.access_point?.[0];
       if (!accessPoint?.id) return null;
 
@@ -188,13 +182,11 @@ export class RijksmuseumApiClient {
       if (!iiifId) return null;
 
       const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/info.json`;
-      const iiifKey = `iiif:${iiifId}`;
-      let info = this.cache.get(iiifKey) as IIIFInfoResponse | undefined;
-      if (!info) {
-        const { data } = await this.http.get<IIIFInfoResponse>(iiifInfoUrl);
-        info = data;
-        this.cache.set(iiifKey, info, RijksmuseumApiClient.TTL_IMAGE);
-      }
+      const info = await this.cache.getOrFetch<IIIFInfoResponse>(
+        `iiif:${iiifId}`,
+        async () => (await this.http.get<IIIFInfoResponse>(iiifInfoUrl)).data,
+        RijksmuseumApiClient.TTL_IMAGE
+      );
 
       return {
         iiifId,
@@ -561,38 +553,39 @@ export class RijksmuseumApiClient {
    * and external equivalents (AAT, Wikidata).
    */
   async resolveVocabTerm(uri: string): Promise<ResolvedTerm> {
-    const cacheKey = `vocab:${uri}`;
-    const cached = this.cache.get(cacheKey) as ResolvedTerm | undefined;
-    if (cached) return cached;
+    return this.cache.getOrFetch<ResolvedTerm>(
+      `vocab:${uri}`,
+      async () => {
+        const { data } = await this.http.get(uri);
 
-    const { data } = await this.http.get(uri);
+        // Extract English label, falling back to Dutch, then _label, then URI
+        const names = ((data.identified_by ?? []) as any[]).filter(
+          (i: any) => i.type === "Name"
+        );
+        const enName = names.find(
+          (n: any) => getLangId(n.language) === AAT.LANG_EN
+        );
+        const nlName = names.find(
+          (n: any) => getLangId(n.language) === AAT.LANG_NL
+        );
+        const label =
+          enName?.content ?? nlName?.content ?? data._label ?? uri.split("/").pop() ?? uri;
 
-    // Extract English label, falling back to Dutch, then _label, then URI
-    const names = ((data.identified_by ?? []) as any[]).filter(
-      (i: any) => i.type === "Name"
+        // Extract external equivalents (AAT, Wikidata, Iconclass)
+        const equivalents: Record<string, string> = {};
+        for (const eq of (data.equivalent ?? []) as any[]) {
+          const eqId: string = eq.id ?? "";
+          if (eqId.includes("vocab.getty.edu")) equivalents.aat = eqId;
+          else if (eqId.includes("wikidata.org")) equivalents.wikidata = eqId;
+          else if (eqId.includes("iconclass.org")) equivalents.iconclass = eqId;
+        }
+
+        const term: ResolvedTerm = { id: uri, label };
+        if (Object.keys(equivalents).length > 0) term.equivalents = equivalents;
+        return term;
+      },
+      RijksmuseumApiClient.TTL_VOCAB
     );
-    const enName = names.find(
-      (n: any) => getLangId(n.language) === AAT.LANG_EN
-    );
-    const nlName = names.find(
-      (n: any) => getLangId(n.language) === AAT.LANG_NL
-    );
-    const label =
-      enName?.content ?? nlName?.content ?? data._label ?? uri.split("/").pop() ?? uri;
-
-    // Extract external equivalents (AAT, Wikidata, Iconclass)
-    const equivalents: Record<string, string> = {};
-    for (const eq of (data.equivalent ?? []) as any[]) {
-      const eqId: string = eq.id ?? "";
-      if (eqId.includes("vocab.getty.edu")) equivalents.aat = eqId;
-      else if (eqId.includes("wikidata.org")) equivalents.wikidata = eqId;
-      else if (eqId.includes("iconclass.org")) equivalents.iconclass = eqId;
-    }
-
-    const term: ResolvedTerm = { id: uri, label };
-    if (Object.keys(equivalents).length > 0) term.equivalents = equivalents;
-    this.cache.set(cacheKey, term, RijksmuseumApiClient.TTL_VOCAB);
-    return term;
   }
 
   /**
@@ -646,13 +639,11 @@ export class RijksmuseumApiClient {
     try {
       const visualItemRef = obj.shows?.[0];
       if (visualItemRef?.id) {
-        const viKey = `vi:${visualItemRef.id}`;
-        let vi = this.cache.get(viKey) as VisualItem | undefined;
-        if (!vi) {
-          const { data } = await this.http.get<VisualItem>(visualItemRef.id);
-          vi = data;
-          this.cache.set(viKey, vi, RijksmuseumApiClient.TTL_IMAGE);
-        }
+        const vi = await this.cache.getOrFetch<VisualItem>(
+          `vi:${visualItemRef.id}`,
+          async () => (await this.http.get<VisualItem>(visualItemRef.id)).data,
+          RijksmuseumApiClient.TTL_IMAGE
+        );
         subjectConceptUris = (vi.represents_instance_of_type ?? [])
           .map((r) => r.id)
           .filter(Boolean);
@@ -1057,7 +1048,7 @@ export class RijksmuseumApiClient {
   }
 
   /** Expose cache stats for logging. */
-  get cacheStats() {
+  get cacheStats(): { hits: number; misses: number; size: number } {
     return this.cache.stats();
   }
 }

@@ -36,7 +36,8 @@ function withLogging<A extends unknown[], R>(
       return result;
     } catch (err) {
       const ms = Math.round(performance.now() - start);
-      console.error(JSON.stringify({ tool: toolName, ms, ok: false, error: err instanceof Error ? err.message : String(err) }));
+      const error = err instanceof Error ? err.message : String(err);
+      console.error(JSON.stringify({ tool: toolName, ms, ok: false, error }));
       throw err;
     }
   };
