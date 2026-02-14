@@ -183,48 +183,56 @@ function registerTools(
           ? {
               subject: z
                 .string()
+                .min(1)
                 .optional()
                 .describe(
                   "Search by subject matter (Iconclass themes, depicted scenes). Text search on subject labels. Requires vocabulary DB."
                 ),
               iconclass: z
                 .string()
+                .min(1)
                 .optional()
                 .describe(
                   "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). Requires vocabulary DB."
                 ),
               depictedPerson: z
                 .string()
+                .min(1)
                 .optional()
                 .describe(
                   "Search for artworks depicting a specific person by name (e.g. 'Willem van Oranje'). Requires vocabulary DB."
                 ),
               depictedPlace: z
                 .string()
+                .min(1)
                 .optional()
                 .describe(
                   "Search for artworks depicting a specific place by name (e.g. 'Amsterdam'). Requires vocabulary DB."
                 ),
               productionPlace: z
                 .string()
+                .min(1)
                 .optional()
                 .describe(
                   "Search for artworks produced in a specific place (e.g. 'Delft'). Requires vocabulary DB."
                 ),
               birthPlace: z
                 .string()
+                .min(1)
                 .optional()
                 .describe(
                   "Search by artist's birth place (e.g. 'Amsterdam'). Requires vocabulary DB."
                 ),
               deathPlace: z
                 .string()
+                .min(1)
                 .optional()
                 .describe(
                   "Search by artist's death place (e.g. 'Paris'). Requires vocabulary DB."
                 ),
               profession: z
                 .string()
+                .min(1)
                 .optional()
                 .describe(
                   "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor'). Requires vocabulary DB."

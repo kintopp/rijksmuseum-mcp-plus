@@ -109,7 +109,7 @@ export class RijksmuseumApiClient {
 
     // Guard against unfiltered searches — the API returns the entire
     // collection (837K+ items) when no filters are provided.
-    const hasFilter = Object.keys(query).some((k) => k !== "pageToken");
+    const hasFilter = Object.keys(query).some((k) => k !== "pageToken" && k !== "page");
     if (!hasFilter) {
       throw new Error(
         "At least one search filter is required (e.g. title, creator, type, material, technique, creationDate, or description). " +

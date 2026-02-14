@@ -70,7 +70,6 @@ export class VocabularyDb {
 
     try {
       this.db = new Database(dbPath, { readonly: true });
-      this.db.pragma("journal_mode = WAL");
       const count = (this.db.prepare("SELECT COUNT(*) as n FROM artworks").get() as { n: number }).n;
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks)`);
     } catch (err) {
