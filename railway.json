@@ -12,7 +12,7 @@
     ]
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "node dist/index.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",

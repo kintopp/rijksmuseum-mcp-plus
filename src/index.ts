@@ -233,7 +233,7 @@ async function runHttp(): Promise<void> {
 
   // ── Start ───────────────────────────────────────────────────────
 
-  app.listen(port, () => {
+  httpServer = app.listen(port, () => {
     console.error(`Rijksmuseum MCP server listening on http://localhost:${port}`);
     console.error(`  MCP endpoint: POST /mcp`);
     console.error(`  Viewer:       GET  /viewer?iiif={id}&title={title}`);
@@ -262,6 +262,19 @@ function registerCleanup(
     }
   };
 }
+
+// ─── Graceful shutdown ───────────────────────────────────────────────
+
+let httpServer: import("node:http").Server | undefined;
+
+function shutdown() {
+  console.error("Shutting down...");
+  httpServer?.close();
+  process.exit(0);
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 
 // ─── Entry point ─────────────────────────────────────────────────────
 
