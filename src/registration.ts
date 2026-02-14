@@ -199,7 +199,7 @@ function registerTools(
                 .string()
                 .optional()
                 .describe(
-                  "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor'). Some professions only have Dutch labels (e.g. 'fotograaf' for photographer). Requires vocabulary DB."
+                  "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor'). Requires vocabulary DB."
                 ),
             }
           : {}),
