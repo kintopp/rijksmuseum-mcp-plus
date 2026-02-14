@@ -31,15 +31,15 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 
 ## Example Research Scenarios
 
-- [Searching the Collection](#searching-the-collection) (#1–3)
-- [Subject and Iconographic Search](#subject-and-iconographic-search) (#4–7)
-- [Artwork Details and Metadata](#artwork-details-and-metadata) (#8–12)
-- [Bibliographic References](#bibliographic-references) (#13–15)
-- [High-Resolution Images](#high-resolution-images) (#16–18)
-- [Artist Timelines](#artist-timelines) (#19–21)
-- [Curated Sets](#curated-sets) (#22–24)
-- [Collection Changes](#collection-changes) (#25–26)
-- [The LLM fills in the gaps](#the-llm-fills-in-the-gaps) (#27–29)
+- [Searching the Collection](#searching-the-collection)
+- [Subject and Iconographic Search](#subject-and-iconographic-search)
+- [Artwork Details and Metadata](#artwork-details-and-metadata)
+- [Bibliographic References](#bibliographic-references)
+- [High-Resolution Images](#high-resolution-images)
+- [Artist Timelines](#artist-timelines)
+- [Curated Sets](#curated-sets)
+- [Collection Changes](#collection-changes)
+- [The LLM fills in the gaps](#the-llm-fills-in-the-gaps)
 
 ## Searching the Collection
 
@@ -83,7 +83,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ## Subject and Iconographic Search
 
-`search_artwork` includes five vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, and `productionPlace` — drawn from 148,000 controlled vocabulary terms mapped to 831,000 artworks. These enable searches by *what is depicted* in an artwork, not just who made it or what it is made of.
+`search_artwork` includes eight vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, and `profession` — drawn from 149,000 controlled vocabulary terms mapped to 831,000 artworks. These enable searches by what is depicted, where it was made, and who made it — including biographical attributes of the artist.
 
 ### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -263,16 +263,15 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 18. Comparative Detail Analysis Across Works
 
-<replace with a different example>
-
-**Research question:** How does Rachel Ruysch's rendering of insects evolve across her career — do the entomological details become more or less precise over time?
+**Research question:** Can deep-zoom comparison reveal differences in paint handling between the Leiden *fijnschilders* and their Haarlem contemporaries — the microscopic precision of the Leiden school versus the visible brushwork of Haarlem?
 
 **How the tools enable it:**
-- `get_artist_timeline` for Rachel Ruysch to get her works in chronological order
-- `get_artwork_image` on early, mid-career, and late works
-- Zoom to the insect details in each and compare rendering technique, anatomical accuracy, and compositional placement
+- `search_artwork` with `birthPlace: "Leiden"`, `profession: "painter"`, `type: "painting"` to find paintings by Leiden-born painters (~1,600 works)
+- Repeat with `birthPlace: "Haarlem"` for the Haarlem school (~3,100 works)
+- `get_artwork_image` on works by Gerrit Dou, Frans van Mieris (Leiden) alongside Frans Hals, Adriaen van Ostade (Haarlem)
+- Zoom to comparable details — faces, hands, fabric — to see the contrast between Leiden's miniaturist blending and Haarlem's bravura brushwork
 
-**Why it matters:** Ruysch is known for the scientific precision of her natural history details. Tracking the fidelity of her entomological rendering across a 60-year career (she painted into her 80s) addresses questions about ageing, changing standards of naturalism, and the relationship between art and science in the Dutch Republic.
+**Why it matters:** The Leiden–Haarlem contrast is a textbook distinction in Dutch art history, but it is usually conveyed in words. Deep-zoom comparison makes it directly visible: a Dou face at high magnification shows no individual brushstrokes, while a Hals face at the same zoom reveals every hair of the brush. The `birthPlace` filter identifies the relevant artists without requiring the researcher to already know who belongs to which school.
 
 ---
 
@@ -282,29 +281,27 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### 19. Identifying Gaps and Productive Periods
 
-<replace with a different example>
-
-**Research question:** Are there unexplained gaps in Hendrick Goltzius's output at the Rijksmuseum, and do they correspond to known biographical events — his Italian journey, health problems, or the shift from engraving to painting?
+**Research question:** Among painters who died in London — the Anglo-Dutch artistic migration — what do the Rijksmuseum's holdings reveal about which phase of their careers the museum collected?
 
 **How the tools enable it:**
-- `get_artist_timeline` with `artist: "Hendrick Goltzius"` and `maxWorks: 25`
-- Map the chronological distribution: clusters, gaps, isolated works
-- Cross-reference gap years with the biography from `get_artwork_details`
+- `search_artwork` with `deathPlace: "London"` and `profession: "painter"` to identify painters who ended their careers in England (~790 works)
+- `get_artist_timeline` on candidates — e.g. Willem van de Velde the Younger, Peter Lely, Godfrey Kneller
+- Map when each artist's Rijksmuseum works cluster: do they concentrate in the Dutch period (before emigration) or span the full career including the English years?
+- Use `get_artwork_details` on works from different periods to compare subject matter and patronage context
 
-**Why it matters:** An artist's timeline is a narrative. A gap in the 1590s might mean the museum simply doesn't hold works from that period, or it might reflect a real disruption in practice. The timeline tool makes these patterns visible, prompting the researcher to investigate further.
+**Why it matters:** The Anglo-Dutch artistic exchange of the 17th century sent painters to England for court patronage and naval commissions. A `deathPlace` search identifies these emigrant artists without requiring prior knowledge of the migration, and the timeline reveals a collection bias: the Rijksmuseum's holdings may cluster in the Dutch years, creating a gap that reflects institutional collecting priorities rather than the artist's actual output.
 
 ### 20. Medium Shifts Within a Career
 
-<replace with a different example>
-
-**Research question:** When did Goltzius transition from engraving to painting, and does the collection evidence support the traditional art historical narrative of a sudden conversion?
+**Research question:** George Hendrik Breitner is classified in the Rijksmuseum's vocabulary as painter, draughtsman, and printmaker. Does the timeline of his works reveal a clear sequence — drawing first, then painting, then prints — or did he work across media simultaneously?
 
 **How the tools enable it:**
-- `get_artist_timeline` for Goltzius to see the full sequence
-- `get_artwork_details` on each work to get medium and technique
-- Show the medium of each work chronologically to see if the shift is abrupt or gradual
+- `search_artwork` with `profession: "painter"` and `creator: "Breitner"` to confirm his multi-profession classification
+- `get_artist_timeline` with `artist: "George Hendrik Breitner"` and `maxWorks: 25`
+- `get_artwork_details` on each work to extract medium and technique
+- Plot medium against date: do drawings cluster in the early years, paintings in the middle, photographs at the end — or is the practice mixed throughout?
 
-**Why it matters:** The standard account says Goltzius abandoned engraving for painting around 1600 due to arthritis in his right hand. But "abandoned" implies a clean break. If the timeline shows overlapping media — engravings continuing alongside paintings — the biographical narrative needs revision.
+**Why it matters:** An artist classified under multiple professions may have practised them simultaneously or sequentially. The timeline reveals which, and whether any transition aligns with documented biographical events. For Breitner, the answer complicates the standard narrative: he was an early adopter of photography and used it as a compositional tool alongside painting, not as a late-career replacement for it.
 
 ### 21. Comparing Parallel Careers
 
@@ -490,7 +487,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Tool | Description |
 |---|---|
-| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject` (Iconclass themes), `iconclass` (exact Iconclass codes), `depictedPerson`, `depictedPlace`, and `productionPlace` — enable subject and iconographic search across 831,000 artworks. These can be combined with type, material, and technique for cross-field intersection queries. |
+| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, and `profession` — enable subject, iconographic, and biographical search across 831,000 artworks. All filters can be freely combined for cross-field intersection queries. Vocabulary labels are bilingual (English and Dutch). |
 | `get_artwork_details` | [24 metadata categories](docs/metadata-categories.md) by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
 | `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
 | `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Falls back to JSON + optional base64 thumbnail in text-only clients. |
@@ -546,7 +543,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 **Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
 
-**Vocabulary database:** A pre-built SQLite database maps 148,000 controlled vocabulary terms (Iconclass codes, depicted persons, depicted places, production places) to 831,000 artworks. Built from OAI-PMH EDM records and Linked Art vocabulary resolution, it powers the `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, and `productionPlace` filters in `search_artwork`.
+**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms (Iconclass codes, depicted persons, depicted places, production places, birth/death places, professions) to 831,000 artworks via 8 million mappings. Built from OAI-PMH EDM records and Linked Art vocabulary resolution, it powers the `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, and `profession` filters in `search_artwork`.
 
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
