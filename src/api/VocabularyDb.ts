@@ -160,20 +160,15 @@ export class VocabularyDb {
   /** Return the URIs of the N most frequently referenced vocabulary terms. */
   topTermUris(limit: number = 200): string[] {
     if (!this.db) return [];
-    // Use pre-computed counts table if available (14ms vs 41s on Railway)
+    // Requires pre-computed vocab_term_counts table (~14ms).
+    // Without it, the GROUP BY over 7.3M rows takes ~41s and blocks the event loop.
     try {
       const rows = this.db.prepare(
         `SELECT vocab_id AS uri FROM vocab_term_counts ORDER BY cnt DESC LIMIT ?`
       ).all(limit) as { uri: string }[];
       return rows.map((r) => r.uri);
     } catch {
-      // Table doesn't exist — fall back to slow aggregation query
-      const rows = this.db.prepare(
-        `SELECT v.id AS uri FROM vocabulary v
-         JOIN mappings m ON m.vocab_id = v.id
-         GROUP BY v.id ORDER BY COUNT(*) DESC LIMIT ?`
-      ).all(limit) as { uri: string }[];
-      return rows.map((r) => r.uri);
+      return [];
     }
   }
 

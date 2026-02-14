@@ -47,7 +47,19 @@ function resolveDbPath(): string {
 
 async function ensureVocabularyDb(): Promise<void> {
   const dbPath = resolveDbPath();
-  if (fs.existsSync(dbPath)) return;
+  if (fs.existsSync(dbPath)) {
+    // Check if DB has required vocab_term_counts table; if not, re-download
+    try {
+      const { default: Database } = await import("better-sqlite3");
+      const db = new Database(dbPath, { readonly: true });
+      db.prepare("SELECT 1 FROM vocab_term_counts LIMIT 1").get();
+      db.close();
+      return; // DB is up to date
+    } catch {
+      console.error("Vocabulary DB outdated (missing vocab_term_counts) — re-downloading...");
+      fs.unlinkSync(dbPath);
+    }
+  }
 
   const url = process.env.VOCAB_DB_URL;
   if (!url) return;
