@@ -15,8 +15,61 @@ The easiest way to try rijksmuseum-mcp+ is through the hosted version — no ins
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
+## Searching the collection
 
-## Sample Queries
+There are three classes of discoverability that users need to keep in mind when using this resource:
+
+1. **Metadata categories that are directly searchable** – For example, `title` , `creator`, `materials`, `objectTypes`, `depictedPerson`, `subject`, and `iconclass`
+2. **Search parameters with no corresponding metadata output** — these are filters (e.g. `birthPlace`, `deathPlace`, `profession` and `productionPlace`) that query data held internally by the Rijksmuseum but are *not* returned in artwork detail records. Users can filter by an artist's birth place but cannot see that birth place in the results.
+3. **Metadata categories that are not searchable at all** — fields like `provenance`, `inscriptions`, `dimensions`, `curatorialNarrative`, and current `location` are returned in detail records but cannot be used as search criteria.
+
+### Searchable metadata categories
+
+| # | Metadata Category | Field | Search Parameter(s) | Notes |
+|---|---|---|---|---|
+| 1 | Title variants | `titles` | `query`, `title` | `query` searches titles; `title` is more targeted |
+| 5 | Creator | `creator` | `creator` | |
+| 6 | Date | `date` | `creationDate` | Supports wildcards (e.g. `164*` for the 1640s) |
+| 8 | Description | `description` | `description` | |
+| 10 | Object types | `objectTypes` | `type` | |
+| 11 | Materials | `materials` | `material` | |
+| 12 | Technique statement | `techniqueStatement` | `technique` | |
+| 21 | Subjects — Iconclass | `subjects.iconclass` | `subject`, `iconclass` | `subject` searches labels; `iconclass` matches exact notation codes |
+| 21 | Subjects — depicted persons | `subjects.depictedPersons` | `depictedPerson`, `aboutActor` | `depictedPerson` is vocabulary-based and more comprehensive |
+| 21 | Subjects — depicted places | `subjects.depictedPlaces` | `depictedPlace` | |
+
+### Search-only parameters (no corresponding metadata output)
+
+These parameters are accepted by `search_artwork` and return results, but the underlying data is **not included** in the `get_artwork_details` response for any artwork. The data appears to live in artist/actor authority records that are not exposed through the current API.
+
+| Search Parameter | What it queries | Why it's confusing |
+|---|---|---|
+| `birthPlace` | Artist's place of birth | You can filter for artists born in Leiden, but the artwork record doesn't confirm this |
+| `deathPlace` | Artist's place of death | Same issue |
+| `profession` | Artist's profession | Same issue |
+| `productionPlace` | Where the work was made | Partially overlaps with `production[].place` in artwork details, but uses a separate vocabulary index |
+
+### Non-searchable metadata categories
+
+| # | Metadata Category | Field |
+|---|---|---|
+| 2 | Object number | `objectNumber` (lookup key only) |
+| 3 | Persistent identifier | `persistentId` |
+| 4 | External identifiers | `externalIds` |
+| 7 | Production details | `production` (creator name is searchable, but role and full production data are not) |
+| 9 | Curatorial narrative | `curatorialNarrative` |
+| 13 | Dimension statement | `dimensionStatement` |
+| 14 | Structured dimensions | `dimensions` |
+| 15 | Inscriptions | `inscriptions` |
+| 16 | Provenance | `provenance` |
+| 17 | Credit line | `creditLine` |
+| 18 | Current location | `location` |
+| 19–20 | Collection sets / labels | `collectionSets`, `collectionSetLabels` (browsable via `browse_set`, not searchable) |
+| 22 | Web page | `webPage` |
+| 23 | License | `license` |
+| 24 | Related objects | `relatedObjects` |
+
+## Example Queries
 
 “Show me a drawing by Gesina ter Borch”  
 “Find Pieter Saenredam’s paintings”  
@@ -247,7 +300,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - Zoom to maximum resolution on areas of known debate (e.g. the background figures vs the central group)
 - Compare paint handling: impasto density, brush direction, layering technique
 
-**Why it matters:** Connoisseurship — attributing hands within a workshop — traditionally requires direct access to an artwork. A deep-zoom viewer cannot replace in-person examination, but enables preliminary analysis and is of value for teaching.
+**Why it matters:** Connoisseurship — attributing hands within a workshop — traditionally requires direct access to an artwork. A deep-zoom viewer cannot replace in-person examination, but enables preliminary analysis and is of great value for teaching.
 
 ### 17. Reading Illegible Inscriptions
 
@@ -271,7 +324,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `get_artwork_image` on works by Gerrit Dou, Frans van Mieris (Leiden) alongside Frans Hals, Adriaen van Ostade (Haarlem)
 - Zoom to comparable details — faces, hands, fabric — to see the contrast between Leiden's miniaturist blending and Haarlem's bravura brushwork
 
-**Why it matters:** The Leiden–Haarlem contrast is a textbook distinction in Dutch art history, but it is usually conveyed in words. Deep-zoom comparison makes it directly visible: a Dou face at high magnification shows no individual brushstrokes, while a Hals face at the same zoom reveals every hair of the brush. The `birthPlace` filter identifies the relevant artists without requiring the researcher to already know who belongs to which school.
+**Why it matters:** A deep-zoom comparison makes the difference directly visible: a Dou face at high magnification shows no individual brushstrokes, while a Hals face at the same zoom reveals every hair of the brush. The `birthPlace` filter identifies the relevant artists without requiring the researcher to already know who belongs to which school.
 
 ---
 
@@ -279,17 +332,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 `get_artist_timeline` arranges an artist's works chronologically, revealing career patterns invisible when browsing search results.
 
-### 19. Identifying Gaps and Productive Periods
+### 19. <to be decided>
 
-**Research question:** Among painters who died in London — the Anglo-Dutch artistic migration — what do the Rijksmuseum's holdings reveal about which phase of their careers the museum collected?
 
-**How the tools enable it:**
-- `search_artwork` with `deathPlace: "London"` and `profession: "painter"` to identify painters who ended their careers in England (~790 works)
-- `get_artist_timeline` on candidates — e.g. Willem van de Velde the Younger, Peter Lely, Godfrey Kneller
-- Map when each artist's Rijksmuseum works cluster: do they concentrate in the Dutch period (before emigration) or span the full career including the English years?
-- Use `get_artwork_details` on works from different periods to compare subject matter and patronage context
-
-**Why it matters:** The Anglo-Dutch artistic exchange of the 17th century sent painters to England for court patronage and naval commissions. A `deathPlace` search identifies these emigrant artists without requiring prior knowledge of the migration, and the timeline reveals a collection bias: the Rijksmuseum's holdings may cluster in the Dutch years, creating a gap that reflects institutional collecting priorities rather than the artist's actual output.
 
 ### 20. Medium Shifts Within a Career
 
@@ -301,7 +346,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `get_artwork_details` on each work to extract medium and technique
 - Plot medium against date: do drawings cluster in the early years, paintings in the middle, photographs at the end — or is the practice mixed throughout?
 
-**Why it matters:** An artist classified under multiple professions may have practised them simultaneously or sequentially. The timeline reveals which, and whether any transition aligns with documented biographical events. For Breitner, the answer complicates the standard narrative: he was an early adopter of photography and used it as a compositional tool alongside painting, not as a late-career replacement for it.
+**Why it matters:** An artist classified under multiple professions may have practised them simultaneously or sequentially. The timeline reveals which, and whether any transition aligns with documented biographical events. 
 
 ### 21. Comparing Parallel Careers
 
@@ -388,14 +433,14 @@ Because the MCP tools are used through a large language model, the LLM's own kno
 
 ### 27. Multilingual Access to a Dutch Collection
 
-**Research question:** A Japanese scholar studying *Rangaku* (Dutch learning in Edo-period Japan) wants to find VOC-related objects and materials about the Dutch trading post at Dejima. What does the Rijksmuseum hold?
+**Research question:** A Japanese scholar studying *Rangaku* (Dutch learning in Edo-period Japan) wants to find VOC-related objects and materials about the Dutch trading post at Dejima. 
 
 **How the LLM enables it:**
 - The researcher asks in English: "Find objects related to the Dutch trading post at Dejima"
 - The LLM knows that Dejima is romanised from 出島, that the Dutch called it "Deshima," and that the Rijksmuseum catalogues it under various Dutch spellings
 - It searches with the appropriate terms and explains the results in the researcher's language
 
-**Why it matters:** The Rijksmuseum's metadata is partially in Dutch, with varying degrees of English translation. A LLM doesn't just translate — it can often also handle variant spellings, historical place names, and terminological differences between languages.
+**Why it matters:** The Rijksmuseum's metadata is partially in Dutch, with varying degrees of English translation. A LLM doesn't just translate — it can often handle variant spellings, historical place names, and terminological differences between languages.
 
 ### 28. Cross-Referencing Art Historical Knowledge
 
