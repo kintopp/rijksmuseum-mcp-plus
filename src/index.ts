@@ -103,17 +103,13 @@ function initSharedClients(): void {
 }
 
 // ─── Pre-warm vocabulary cache ───────────────────────────────────────
+// Disabled: topTermUris runs a GROUP BY over 7.3M rows which takes ~41s
+// on Railway hardware. better-sqlite3 is synchronous, so this blocks the
+// event loop and prevents Express from responding to healthchecks.
+// Re-enable after adding a composite index on mappings(vocab_id) to the DB.
 
 async function warmVocabCache(): Promise<void> {
-  if (!vocabDb?.available) return;
-
-  const uris = vocabDb.topTermUris(200);
-  if (uris.length === 0) return;
-
-  const start = performance.now();
-  const resolved = await sharedApiClient.warmVocabCache(uris);
-  const ms = Math.round(performance.now() - start);
-  console.error(`Vocab cache pre-warmed: ${resolved}/${uris.length} terms in ${ms}ms`);
+  // no-op until the DB has an index that makes topTermUris fast
 }
 
 // ─── Create a configured McpServer ───────────────────────────────────
