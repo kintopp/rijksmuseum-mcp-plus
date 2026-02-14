@@ -139,8 +139,9 @@ function createServer(httpPort?: number): McpServer {
 async function runStdio(): Promise<void> {
   await initVocabularyDb();
   initSharedClients();
-  await warmVocabCache();
   const server = createServer();
+  // Pre-warm after server is ready (non-blocking for stdio)
+  warmVocabCache();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Rijksmuseum MCP server running on stdio");
@@ -151,7 +152,6 @@ async function runStdio(): Promise<void> {
 async function runHttp(): Promise<void> {
   await initVocabularyDb();
   initSharedClients();
-  await warmVocabCache();
   const port = getHttpPort();
   const app = express();
 
@@ -266,6 +266,8 @@ async function runHttp(): Promise<void> {
     console.error(`  MCP endpoint: POST /mcp`);
     console.error(`  Viewer:       GET  /viewer?iiif={id}&title={title}`);
     console.error(`  Health:       GET  /health`);
+    // Pre-warm vocab cache in background after server is accepting connections
+    warmVocabCache();
   });
 }
 
