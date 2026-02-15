@@ -34,7 +34,7 @@ Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan
 
 ## Searching the collection
 
-There are three classes of discoverability that users need to keep in mind when using this resource:
+There are three classes of discoverability that users need to keep in mind when using the current (v0.8) version of the resource:
 
 1. **Metadata categories that are directly searchable** – For example, `title`, `creator`, `material`, `type`, `depictedPerson`, `subject`, and `iconclass`
 2. **Search parameters with no corresponding metadata output** — these are filters (e.g. `birthPlace`, `deathPlace`, and `profession`) that query data held internally by the Rijksmuseum but are *not* returned in artwork detail records. Users can filter by an artist's birth place but cannot see that birth place in the results.
@@ -91,6 +91,8 @@ These fields are returned by `get_artwork_details` but cannot be used as search 
 | — | Web page (`webPage`) | |
 | — | License (`license`) | |
 | — | Related objects (`relatedObjects`) | Links to related artworks | 
+
+Future releases of rijksmuseum-mcp+ will improve this situation.
 
 ## Example Research Scenarios
 
