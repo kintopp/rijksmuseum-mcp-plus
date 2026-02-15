@@ -359,15 +359,15 @@ function registerTools(
           .boolean()
           .default(false)
           .describe(
-            "If true, includes a base64-encoded JPEG thumbnail (default 400px, ~20-40KB)"
+            "Only set to true when the user explicitly asks to analyze or examine the image contents. The interactive viewer already provides visual access. Not all artworks have images available."
           ),
         thumbnailWidth: z
           .number()
           .min(100)
-          .max(800)
-          .default(400)
+          .max(1200)
+          .default(800)
           .describe(
-            "Thumbnail width in pixels (100-800, default 400). Only used when includeThumbnail is true."
+            "Thumbnail width in pixels (100-1200, default 800). Only used when includeThumbnail is true."
           ),
       },
       _meta: {

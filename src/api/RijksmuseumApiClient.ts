@@ -205,7 +205,7 @@ export class RijksmuseumApiClient {
   /** Download a small IIIF thumbnail and return as base64 data URI */
   async fetchThumbnailBase64(
     iiifId: string,
-    width: number = 400
+    width: number = 800
   ): Promise<string> {
     const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/!${width},${width}/0/default.jpg`;
     const { data } = await this.http.get(url, {
