@@ -58,6 +58,8 @@ There are three classes of discoverability that users need to keep in mind when 
 | `depictedPerson` | Named person depicted in the artwork | Vocabulary-based; more comprehensive than `aboutActor` |
 | `aboutActor` | Person depicted or referenced in the artwork | Uses the Search API directly; less comprehensive than `depictedPerson` |
 | `depictedPlace` | Named place depicted in the artwork | Vocabulary-based; requires vocabulary DB |
+| `collectionSet` | Curated collection set name (e.g. 'Rembrandt', 'Japanese') | Vocabulary-based; text search on set names. Use `list_curated_sets` to discover available sets |
+| `license` | Rights/license designation | Matches against rights URI. Common values: `publicdomain`, `zero` (CC0), `by` (CC BY) |
 | `imageAvailable` | Whether a digital image exists | Boolean filter; not a metadata category |
 
 ### Search-only parameters (no corresponding metadata output)
@@ -87,10 +89,8 @@ These fields are returned by `get_artwork_details` but cannot be used as search 
 | — | Provenance (`provenance`) | Ownership history |
 | — | Credit line (`creditLine`) | Acquisition mode and acknowledgement |
 | — | Current location (`location`) | Gallery and room within the museum |
-| — | Collection sets (`collectionSets`, `collectionSetLabels`) | Browsable via `browse_set`, not searchable |
 | — | Web page (`webPage`) | |
-| — | License (`license`) | |
-| — | Related objects (`relatedObjects`) | Links to related artworks | 
+| — | Related objects (`relatedObjects`) | Links to related artworks |
 
 Future releases of rijksmuseum-mcp+ will improve this situation.
 
@@ -133,15 +133,23 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **Why it matters:** The Rijksmuseum positions itself as a museum of Dutch art *and* history, which includes centuries of global trade. The combination of `productionPlace` and `depictedPlace` enables a crucial distinction: objects *from* Asia versus European images *of* Asia.
 
-### 3. tba
+### 3. Tracking the Adoption of Artistic Techniques
 
-<to be added>
+**Research question:** When did etching overtake engraving as the dominant printmaking technique in the Netherlands, and how do lesser-known techniques — mezzotint, aquatint, woodcut — appear in the Rijksmuseum collection over time?
+
+**How the tools enable it:**
+- `search_artwork` with `type: "print"`, `technique: "engraving"`, `creationDate: "15*"`, `compact: true` — repeat for `"16*"` and `"17*"`
+- Compare with `technique: "etching"` across the same date ranges
+- Extend to `technique: "mezzotint"`, `"woodcut"`, `"aquatint"` to map the full technical repertoire
+- Use `get_artwork_details` on selected works from each technique to examine materials and production context
+
+**Why it matters:** The shift from engraving to etching is a defining transition in European printmaking. Date-wildcard queries make this transition quantifiable at collection scale, and the results reveal whether the Rijksmuseum's holdings reflect the standard chronology or complicate it.
 
 ---
 
 ## Subject and Iconographic Search
 
-`search_artwork` includes eight vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, and `profession` — drawn from 149,000 controlled vocabulary terms mapped to 831,000 artworks. These enable searches by what is depicted, where it was made, and who made it — including biographical attributes of the artist.
+`search_artwork` includes ten vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` — drawn from 149,000 controlled vocabulary terms mapped to 831,000 artworks. These enable searches by what is depicted, where it was made, and who made it — including biographical attributes of the artist.
 
 ### 4. Mapping the Visual Rhetoric of the Stadholders
 
