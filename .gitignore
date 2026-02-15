@@ -26,3 +26,4 @@ CLAUDE.md
 
 # Vocabulary database (generated, ~1 GB)
 data/
+__pycache__/
