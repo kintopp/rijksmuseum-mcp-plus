@@ -87,9 +87,9 @@ export function registerAll(
   stats?: UsageStats
 ): void {
   registerTools(server, apiClient, oaiClient, vocabDb, httpPort, createLogger(stats));
-  registerResources(server, apiClient, oaiClient);
+  registerResources(server);
   registerAppViewerResource(server);
-  registerPrompts(server, apiClient);
+  registerPrompts(server, apiClient, oaiClient);
 }
 
 // ─── Tools ──────────────────────────────────────────────────────────
@@ -723,38 +723,9 @@ function registerTools(
 
 function registerResources(
   server: McpServer,
-  _api: RijksmuseumApiClient,
-  oai: OaiPmhClient
 ): void {
-  server.registerResource(
-    "top_100_artworks",
-    "art://collection/top-100",
-    {
-      title: "Top 100 Artworks",
-      description:
-        "The Rijksmuseum's official Top 100 masterpieces — a curated selection of the most " +
-        "important works in the collection, including The Night Watch, The Milkmaid, and more.",
-      mimeType: "application/json",
-    },
-    async () => {
-      const records: unknown[] = [];
-      let result = await oai.listRecords({ set: "260213" });
-      while (true) {
-        records.push(...result.records);
-        if (!result.resumptionToken) break;
-        result = await oai.listRecords({ resumptionToken: result.resumptionToken });
-      }
-      return {
-        contents: [
-          {
-            uri: "art://collection/top-100",
-            mimeType: "application/json",
-            text: JSON.stringify({ totalArtworks: records.length, artworks: records }, null, 2),
-          },
-        ],
-      };
-    }
-  );
+  // Resources registered by registerAppViewerResource() only; others converted to prompts.
+  void server;
 }
 
 // ─── MCP App Resource ────────────────────────────────────────────────
@@ -813,7 +784,7 @@ function registerAppViewerResource(server: McpServer): void {
 
 // ─── Prompts ────────────────────────────────────────────────────────
 
-function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
+function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiPmhClient): void {
   server.registerPrompt(
     "analyse-artwork",
     {
@@ -946,5 +917,52 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
         },
       ],
     })
+  );
+
+  server.registerPrompt(
+    "top-100-artworks",
+    {
+      title: "Top 100 Artworks",
+      description:
+        "The Rijksmuseum's official Top 100 masterpieces. Fetches the full curated list " +
+        "with titles, creators, dates, types, and object numbers for further exploration.",
+      argsSchema: {},
+    },
+    async () => {
+      const records: unknown[] = [];
+      let result = await oai.listRecords({ set: "260213" });
+      while (true) {
+        records.push(...result.records);
+        if (!result.resumptionToken) break;
+        result = await oai.listRecords({ resumptionToken: result.resumptionToken });
+      }
+
+      const listing = JSON.stringify(
+        { totalArtworks: records.length, artworks: records },
+        null,
+        2
+      );
+
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text:
+                `Here is the Rijksmuseum's official Top 100 masterpieces collection (${records.length} works):\n\n` +
+                `${listing}\n\n` +
+                `Each artwork includes an objectNumber that can be used with get_artwork_details, ` +
+                `get_artwork_image, or get_artwork_bibliography for deeper exploration.\n\n` +
+                `Help the user explore this collection. You can:\n` +
+                `- Summarise the highlights and themes\n` +
+                `- Group works by artist, period, type, or subject\n` +
+                `- Recommend specific works based on the user's interests\n` +
+                `- Use the tools above to dive deeper into any individual artwork`,
+            },
+          },
+        ],
+      };
+    }
   );
 }
