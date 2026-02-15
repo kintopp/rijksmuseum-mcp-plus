@@ -774,27 +774,26 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
       const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width);
 
       // Build concise metadata context for the LLM
-      const meta: string[] = [];
-      meta.push(`Title: ${detail.title}`);
-      meta.push(`Creator: ${detail.creator}`);
-      if (detail.date) meta.push(`Date: ${detail.date}`);
-      if (detail.techniqueStatement) meta.push(`Technique: ${detail.techniqueStatement}`);
-      if (detail.dimensionStatement) meta.push(`Dimensions: ${detail.dimensionStatement}`);
-      if (detail.materials.length > 0)
-        meta.push(`Materials: ${detail.materials.map((m) => m.label).join(", ")}`);
-      if (detail.curatorialNarrative?.en)
-        meta.push(`Curatorial narrative: ${detail.curatorialNarrative.en}`);
-      if (detail.inscriptions.length > 0)
-        meta.push(`Inscriptions: ${detail.inscriptions.join(" | ")}`);
-      if (detail.subjects.depictedPersons.length > 0)
-        meta.push(`Depicted persons: ${detail.subjects.depictedPersons.map((p) => p.label).join(", ")}`);
-      if (detail.subjects.depictedPlaces.length > 0)
-        meta.push(`Depicted places: ${detail.subjects.depictedPlaces.map((p) => p.label).join(", ")}`);
-      if (detail.subjects.iconclass.length > 0)
-        meta.push(`Iconographic subjects: ${detail.subjects.iconclass.map((s) => s.label).join(", ")}`);
-      const productionPlaces = detail.production.map((p) => p.place).filter(Boolean);
-      if (productionPlaces.length > 0)
-        meta.push(`Production place: ${productionPlaces.join(", ")}`);
+      const labels = (items: { label: string }[]): string =>
+        items.map((i) => i.label).join(", ");
+
+      const metaEntries: [string, string | undefined][] = [
+        ["Title", detail.title],
+        ["Creator", detail.creator],
+        ["Date", detail.date || undefined],
+        ["Technique", detail.techniqueStatement ?? undefined],
+        ["Dimensions", detail.dimensionStatement ?? undefined],
+        ["Materials", labels(detail.materials) || undefined],
+        ["Curatorial narrative", detail.curatorialNarrative?.en ?? undefined],
+        ["Inscriptions", detail.inscriptions.join(" | ") || undefined],
+        ["Depicted persons", labels(detail.subjects.depictedPersons) || undefined],
+        ["Depicted places", labels(detail.subjects.depictedPlaces) || undefined],
+        ["Iconographic subjects", labels(detail.subjects.iconclass) || undefined],
+        ["Production place", detail.production.map((p) => p.place).filter(Boolean).join(", ") || undefined],
+      ];
+      const meta = metaEntries
+        .filter((entry): entry is [string, string] => entry[1] !== undefined)
+        .map(([label, value]) => `${label}: ${value}`);
 
       return {
         messages: [
