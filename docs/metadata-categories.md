@@ -1,6 +1,6 @@
 # Artwork Metadata Categories
 
-The `get_artwork_details` tool returns **24 metadata categories** plus a bibliography count for each artwork. These are divided into groups internally: 12 base categories parsed directly from the Linked Art JSON-LD object, 11 enriched categories that require vocabulary resolution (resolving Rijksmuseum vocabulary URIs to English labels with links to Getty AAT, Wikidata, and Iconclass), and 1 subject category derived from the VisualItem layer. The bibliography count is a pointer to the separate `get_artwork_bibliography` tool.
+The `get_artwork_details` tool returns **24 metadata categories** plus a bibliography count for each artwork. These are divided into groups internally: 12 base categories parsed directly from the Linked Art JSON-LD object, 11 enriched categories (6 from additional static parsing of the same object, 5 from vocabulary resolution — resolving Rijksmuseum vocabulary URIs to English labels with links to Getty AAT, Wikidata, and Iconclass), and 1 subject category derived from the VisualItem layer. The bibliography count is a pointer to the separate `get_artwork_bibliography` tool.
 
 All categories are returned together in a single response.
 
