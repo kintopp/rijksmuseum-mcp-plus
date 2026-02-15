@@ -127,16 +127,9 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **Why it matters:** The Rijksmuseum positions itself as a museum of Dutch art *and* history, which includes centuries of global trade. The combination of `productionPlace` and `depictedPlace` enables a crucial distinction: objects *from* Asia versus European images *of* Asia.
 
-### 3. Date-Range Exploration for Period Studies
+### 3. tba
 
-**Research question:** What did the Rijksmuseum's holdings look like for the crisis decade of the 1670s — the *Rampjaar* and its aftermath? Is there a measurable drop in artistic production?
-
-**How the tools enable it:**
-- `search_artwork` with `creationDate: "166*"` vs `"167*"` vs `"168*"` and `compact: true` to compare counts
-- Filter by `type: "painting"` to isolate the medium most sensitive to patronage disruption
-- Examine specific years: `creationDate: "1672"`, `"1673"` for the Rampjaar itself
-
-**Why it matters:** The French invasion of 1672 devastated the Dutch economy and disrupted patronage networks. Collection-level counting across date ranges gives a quantitative baseline that complements archival evidence.
+<to be added>
 
 ---
 
