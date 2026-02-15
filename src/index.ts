@@ -212,7 +212,7 @@ async function collectSetLodUris(setSpec: string): Promise<string[]> {
 
 function createServer(httpPort?: number): McpServer {
   const server = new McpServer(
-    { name: SERVER_NAME, version: SERVER_VERSION },
+    { name: SERVER_NAME, version: SERVER_VERSION, title: "Rijksmuseum MCP+" },
     {
       capabilities: { tools: {}, resources: {}, prompts: {} },
       instructions:

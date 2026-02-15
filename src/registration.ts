@@ -111,6 +111,7 @@ function registerTools(
   server.registerTool(
     "search_artwork",
     {
+      title: "Search Artwork",
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "At least one search filter is required. " +
@@ -322,6 +323,7 @@ function registerTools(
   server.registerTool(
     "get_artwork_details",
     {
+      title: "Get Artwork Details",
       description:
         "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch). " +
         "Returns 24 metadata categories including titles, creator, date, description, curatorial narrative, " +
@@ -348,6 +350,7 @@ function registerTools(
   server.registerTool(
     "get_artwork_bibliography",
     {
+      title: "Get Artwork Bibliography",
       description:
         "Get bibliography and scholarly references for an artwork. " +
         "By default returns a summary (total count + first 5 citations). " +
@@ -381,6 +384,7 @@ function registerTools(
     server,
     "get_artwork_image",
     {
+      title: "Get Artwork Image",
       description:
         "Get IIIF image information for an artwork, including deep-zoom viewing. " +
         "In supported clients, shows an interactive inline IIIF viewer with zoom/pan/rotate. " +
@@ -431,6 +435,7 @@ function registerTools(
   server.registerTool(
     "get_artist_timeline",
     {
+      title: "Get Artist Timeline",
       description:
         "Generate a chronological timeline of an artist's works in the Rijksmuseum collection. " +
         "Searches by creator name, resolves each result, and sorts by creation date.",
@@ -470,6 +475,7 @@ function registerTools(
   server.registerTool(
     "open_in_browser",
     {
+      title: "Open in Browser",
       description:
         "Open a URL in the user's default web browser. Useful for opening artwork pages, IIIF images, or the deep-zoom viewer.",
       inputSchema: {
@@ -509,6 +515,7 @@ function registerTools(
   server.registerTool(
     "list_curated_sets",
     {
+      title: "List Curated Sets",
       description:
         "List curated collection sets from the Rijksmuseum (exhibitions, scholarly groupings, thematic collections). " +
         "Returns set identifiers that can be used with browse_set to explore their contents. " +
@@ -542,6 +549,7 @@ function registerTools(
   server.registerTool(
     "browse_set",
     {
+      title: "Browse Set",
       description:
         "Browse artworks in a curated collection set. Returns parsed EDM records with titles, creators, dates, " +
         "image URLs, and IIIF service URLs. Each record includes an objectNumber that can be used with " +
@@ -582,6 +590,7 @@ function registerTools(
   server.registerTool(
     "get_recent_changes",
     {
+      title: "Get Recent Changes",
       description:
         "Track recent additions and modifications to the Rijksmuseum collection. " +
         "Returns records changed within a date range. Use identifiersOnly=true for a lightweight " +
@@ -735,7 +744,8 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
     {
       title: "Analyse Artwork",
       description:
-        "Fetch a high-resolution image of an artwork and analyse its visual content alongside full metadata. " +
+        "Fetch a high-resolution image of an artwork and analyse its visual content alongside key metadata " +
+        "(title, creator, date, technique, dimensions, materials, curatorial narrative, inscriptions, subjects, and production place). " +
         "Returns the image directly so the model can ground its analysis in what it sees.",
       argsSchema: {
         objectNumber: z
