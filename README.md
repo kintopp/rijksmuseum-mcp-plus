@@ -564,8 +564,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Prompt / Resource | Description |
 |---|---|
-| `analyze-artwork` | Prompt: analyze an artwork's composition, style, and historical context |
-| `examine-artwork-image` | Prompt: fetch high-resolution image for LLM visual analysis (1200px default) |
+| `analyse-artwork` | Prompt: fetch high-resolution image and analyse visual content alongside full metadata |
 | `generate-artist-timeline` | Prompt: create a visual timeline of an artist's works |
 | `art://collection/popular` | Resource: a curated selection of notable paintings |
 | `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF viewer (MCP Apps) |

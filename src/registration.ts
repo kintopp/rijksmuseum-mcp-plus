@@ -422,7 +422,7 @@ function registerTools(
         collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
       };
 
-      return { content: [{ type: "text" as const, text: JSON.stringify(viewerData, null, 2) }] };
+      return jsonResponse(viewerData);
     })
   );
 
@@ -731,64 +731,39 @@ function registerAppViewerResource(server: McpServer): void {
 
 function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
   server.registerPrompt(
-    "analyze-artwork",
+    "analyse-artwork",
     {
+      title: "Analyse Artwork",
       description:
-        "Analyze an artwork's composition, style, and historical context",
-      argsSchema: {
-        artworkId: z
-          .string()
-          .describe("The object number of the artwork to analyze (e.g. 'SK-C-5')"),
-      },
-    },
-    async (args) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Analyze the composition, style, and historical context of artwork ${args.artworkId}. ` +
-              `First use the get_artwork_details tool with objectNumber="${args.artworkId}" to retrieve the artwork data, ` +
-              `then provide a detailed analysis covering:\n` +
-              `- Visual composition and artistic technique\n` +
-              `- Historical and cultural context\n` +
-              `- Significance within the artist's body of work\n` +
-              `- Notable details or symbolism`,
-          },
-        },
-      ],
-    })
-  );
-
-  server.registerPrompt(
-    "examine-artwork-image",
-    {
-      description:
-        "Fetch a high-resolution image of an artwork for LLM visual analysis (1200px default). " +
-        "Returns the image directly so the model can describe and examine it.",
+        "Fetch a high-resolution image of an artwork and analyse its visual content alongside full metadata. " +
+        "Returns the image directly so the model can ground its analysis in what it sees.",
       argsSchema: {
         objectNumber: z
           .string()
           .describe("The object number of the artwork (e.g. 'SK-C-5')"),
-        thumbnailWidth: z
+        imageWidth: z
           .string()
           .optional()
-          .describe("Image width in pixels (default: 1200). Passed as string per MCP prompt convention."),
+          .describe("Image width in pixels (default: 1200)"),
       },
     },
     async (args) => {
-      const width = args.thumbnailWidth ? parseInt(args.thumbnailWidth, 10) : 1200;
-      const { object } = await api.findByObjectNumber(args.objectNumber);
-      const imageInfo = await api.getImageInfo(object, width);
+      const width = parseInt(args.imageWidth ?? "", 10) || 1200;
+      const { uri, object } = await api.findByObjectNumber(args.objectNumber);
+
+      // Resolve image and full metadata in parallel
+      const [imageInfo, detail] = await Promise.all([
+        api.getImageInfo(object, width),
+        api.toDetailEnriched(object, uri),
+      ]);
 
       if (!imageInfo) {
         return {
           messages: [
             {
-              role: "user" as const,
+              role: "user",
               content: {
-                type: "text" as const,
+                type: "text",
                 text: `No image is available for artwork ${args.objectNumber}.`,
               },
             },
@@ -797,27 +772,53 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
       }
 
       const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width);
-      const title = RijksmuseumApiClient.parseTitle(object);
-      const creator = RijksmuseumApiClient.parseCreator(object);
+
+      // Build concise metadata context for the LLM
+      const meta: string[] = [];
+      meta.push(`Title: ${detail.title}`);
+      meta.push(`Creator: ${detail.creator}`);
+      if (detail.date) meta.push(`Date: ${detail.date}`);
+      if (detail.techniqueStatement) meta.push(`Technique: ${detail.techniqueStatement}`);
+      if (detail.dimensionStatement) meta.push(`Dimensions: ${detail.dimensionStatement}`);
+      if (detail.materials.length > 0)
+        meta.push(`Materials: ${detail.materials.map((m) => m.label).join(", ")}`);
+      if (detail.curatorialNarrative?.en)
+        meta.push(`Curatorial narrative: ${detail.curatorialNarrative.en}`);
+      if (detail.inscriptions.length > 0)
+        meta.push(`Inscriptions: ${detail.inscriptions.join(" | ")}`);
+      if (detail.subjects.depictedPersons.length > 0)
+        meta.push(`Depicted persons: ${detail.subjects.depictedPersons.map((p) => p.label).join(", ")}`);
+      if (detail.subjects.depictedPlaces.length > 0)
+        meta.push(`Depicted places: ${detail.subjects.depictedPlaces.map((p) => p.label).join(", ")}`);
+      if (detail.subjects.iconclass.length > 0)
+        meta.push(`Iconographic subjects: ${detail.subjects.iconclass.map((s) => s.label).join(", ")}`);
+      const productionPlaces = detail.production.map((p) => p.place).filter(Boolean);
+      if (productionPlaces.length > 0)
+        meta.push(`Production place: ${productionPlaces.join(", ")}`);
 
       return {
         messages: [
           {
-            role: "user" as const,
+            role: "user",
             content: {
-              type: "image" as const,
+              type: "image",
               data: base64,
               mimeType: "image/jpeg",
             },
           },
           {
-            role: "user" as const,
+            role: "user",
             content: {
-              type: "text" as const,
+              type: "text",
               text:
-                `Examine this artwork: "${title}" by ${creator} (${args.objectNumber}). ` +
-                `Describe what you see in the image — composition, colours, figures, setting, technique, ` +
-                `and any notable details. Then provide your art-historical interpretation.`,
+                `Examine the composition, colours, figures, setting, technique, and any notable details ` +
+                `of "${detail.title}" by ${detail.creator} (${args.objectNumber}).\n\n` +
+                `Artwork metadata:\n${meta.join("\n")}\n\n` +
+                `Provide a detailed analysis covering:\n` +
+                `- Visual composition and artistic technique\n` +
+                `- Historical and cultural context\n` +
+                `- Significance within the artist's body of work\n` +
+                `- Notable details or symbolism`,
             },
           },
         ],
@@ -828,14 +829,16 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
   server.registerPrompt(
     "generate-artist-timeline",
     {
+      title: "Artist Timeline",
       description:
-        "Generate a chronological timeline of an artist's most notable works",
+        "Generate a chronological timeline of an artist's works in the collection. " +
+        "Note: limited to 25 works maximum — for prolific artists this is a small sample.",
       argsSchema: {
         artist: z.string().describe("Name of the artist"),
         maxWorks: z
           .string()
           .optional()
-          .describe("Maximum number of works to include (default: 10)"),
+          .describe("Maximum number of works to include (1-25, default: 10)"),
       },
     },
     async (args) => ({
@@ -849,6 +852,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
               `${args.maxWorks ? ` (limited to ${args.maxWorks} works)` : ""}.\n\n` +
               `Use the get_artist_timeline tool with artist="${args.artist}"` +
               `${args.maxWorks ? ` and maxWorks=${args.maxWorks}` : ""} to get the data.\n\n` +
+              `Note: the tool returns at most 25 works. For prolific artists, this is a small sample of their collection.\n\n` +
               `For each work, include:\n` +
               `- Year of creation\n` +
               `- Title of the work\n` +
