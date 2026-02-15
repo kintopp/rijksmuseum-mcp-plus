@@ -553,7 +553,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` — enable subject, iconographic, and biographical search across 831,000 artworks. All filters can be freely combined for cross-field intersection queries. Vocabulary labels are bilingual (English and Dutch). |
 | `get_artwork_details` | [24 metadata categories](docs/metadata-categories.md) by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
 | `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
-| `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Falls back to JSON + optional base64 thumbnail in text-only clients. |
+| `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Returns viewer data (IIIF ID, dimensions, URLs) — no image content. For LLM image analysis, use the `examine-artwork-image` prompt. |
 | `get_artist_timeline` | Chronological timeline of an artist's works in the collection. |
 | `open_in_browser` | Open any URL (artwork page, image, viewer) in the user's default browser. |
 | `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic selections). Optional name filter. Via OAI-PMH. |
@@ -565,6 +565,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | Prompt / Resource | Description |
 |---|---|
 | `analyze-artwork` | Prompt: analyze an artwork's composition, style, and historical context |
+| `examine-artwork-image` | Prompt: fetch high-resolution image for LLM visual analysis (1200px default) |
 | `generate-artist-timeline` | Prompt: create a visual timeline of an artist's works |
 | `art://collection/popular` | Resource: a curated selection of notable paintings |
 | `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF viewer (MCP Apps) |

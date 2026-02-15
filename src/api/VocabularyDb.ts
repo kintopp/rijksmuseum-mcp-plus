@@ -103,6 +103,25 @@ export class VocabularyDb {
     return this.db !== null;
   }
 
+  /**
+   * Touch each mapping field's B-tree pages to load them into SQLite's page cache.
+   * Eliminates the 10–25s cold-start penalty on the first vocab query per field.
+   * Synchronous — blocks the event loop. Call before accepting connections.
+   */
+  warmPageCache(): void {
+    if (!this.db) return;
+    const start = performance.now();
+    const fields = [...new Set(VOCAB_FILTERS.flatMap((f) => f.fields))];
+    for (const field of fields) {
+      const { n } = this.db.prepare(
+        `SELECT COUNT(*) as n FROM mappings WHERE field = ?`
+      ).get(field) as { n: number };
+      console.error(`  ${field}: ${n.toLocaleString()} mappings`);
+    }
+    const ms = Math.round(performance.now() - start);
+    console.error(`SQLite page cache warmed: ${fields.length} fields in ${ms}ms`);
+  }
+
   /** Search artworks by vocabulary criteria. Multiple params are intersected (AND). */
   search(params: VocabSearchParams): VocabSearchResult {
     if (!this.db) {

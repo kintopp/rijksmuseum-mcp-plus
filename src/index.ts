@@ -230,11 +230,11 @@ function createServer(httpPort?: number): McpServer {
 
 async function runStdio(): Promise<void> {
   await initVocabularyDb();
+  vocabDb?.warmPageCache();
   initSharedClients();
   initUsageStats();
   const server = createServer();
-  // Pre-warm caches in background (non-blocking for stdio)
-  // Vocab first so common terms are cached before artwork resolution
+  // Pre-warm HTTP caches in background (non-blocking)
   warmVocabCache().then(() => warmTopArtworkVocab());
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -245,6 +245,7 @@ async function runStdio(): Promise<void> {
 
 async function runHttp(): Promise<void> {
   await initVocabularyDb();
+  vocabDb?.warmPageCache();
   initSharedClients();
   initUsageStats();
   const port = getHttpPort();

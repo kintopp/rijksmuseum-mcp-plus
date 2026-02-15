@@ -89,7 +89,7 @@ export function registerAll(
   registerTools(server, apiClient, oaiClient, vocabDb, httpPort, createLogger(stats));
   registerResources(server, apiClient);
   registerAppViewerResource(server);
-  registerPrompts(server);
+  registerPrompts(server, apiClient);
 }
 
 // ─── Tools ──────────────────────────────────────────────────────────
@@ -382,27 +382,13 @@ function registerTools(
     "get_artwork_image",
     {
       description:
-        "Get IIIF image information for an artwork, including URLs for thumbnails, full-resolution images, and deep-zoom viewing. " +
+        "Get IIIF image information for an artwork, including deep-zoom viewing. " +
         "In supported clients, shows an interactive inline IIIF viewer with zoom/pan/rotate. " +
-        "Optionally include a base64-encoded thumbnail. Not all artworks have images available.",
+        "Not all artworks have images available.",
       inputSchema: {
         objectNumber: z
           .string()
           .describe("The object number of the artwork (e.g. 'SK-C-5')"),
-        includeThumbnail: z
-          .boolean()
-          .default(false)
-          .describe(
-            "Do NOT set to true unless the user explicitly asks you to analyze, examine, or describe the image contents. The interactive viewer already lets the user see the image. Setting this to true wastes bandwidth and tokens."
-          ),
-        thumbnailWidth: z
-          .number()
-          .min(100)
-          .max(1200)
-          .default(800)
-          .describe(
-            "Thumbnail width in pixels (100-1200, default 800). Only used when includeThumbnail is true."
-          ),
       },
       _meta: {
         ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
@@ -410,7 +396,7 @@ function registerTools(
     },
     withLogging("get_artwork_image", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
-      const imageInfo = await api.getImageInfo(object, args.thumbnailWidth);
+      const imageInfo = await api.getImageInfo(object);
 
       if (!imageInfo) {
         return jsonResponse({
@@ -426,8 +412,9 @@ function registerTools(
         imageInfo.viewerUrl = `http://localhost:${httpPort}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
+      const { thumbnailUrl, ...imageData } = imageInfo;
       const viewerData = {
-        ...imageInfo,
+        ...imageData,
         objectNumber,
         title,
         creator: RijksmuseumApiClient.parseCreator(object),
@@ -435,21 +422,7 @@ function registerTools(
         collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
       };
 
-      const contentBlocks: Array<
-        | { type: "text"; text: string }
-        | { type: "image"; data: string; mimeType: string }
-      > = [{ type: "text", text: JSON.stringify(viewerData, null, 2) }];
-
-      if (args.includeThumbnail) {
-        const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, args.thumbnailWidth);
-        contentBlocks.push({
-          type: "image",
-          data: base64,
-          mimeType: "image/jpeg",
-        });
-      }
-
-      return { content: contentBlocks };
+      return { content: [{ type: "text" as const, text: JSON.stringify(viewerData, null, 2) }] };
     })
   );
 
@@ -756,7 +729,7 @@ function registerAppViewerResource(server: McpServer): void {
 
 // ─── Prompts ────────────────────────────────────────────────────────
 
-function registerPrompts(server: McpServer): void {
+function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
   server.registerPrompt(
     "analyze-artwork",
     {
@@ -786,6 +759,70 @@ function registerPrompts(server: McpServer): void {
         },
       ],
     })
+  );
+
+  server.registerPrompt(
+    "examine-artwork-image",
+    {
+      description:
+        "Fetch a high-resolution image of an artwork for LLM visual analysis (1200px default). " +
+        "Returns the image directly so the model can describe and examine it.",
+      argsSchema: {
+        objectNumber: z
+          .string()
+          .describe("The object number of the artwork (e.g. 'SK-C-5')"),
+        thumbnailWidth: z
+          .string()
+          .optional()
+          .describe("Image width in pixels (default: 1200). Passed as string per MCP prompt convention."),
+      },
+    },
+    async (args) => {
+      const width = args.thumbnailWidth ? parseInt(args.thumbnailWidth, 10) : 1200;
+      const { object } = await api.findByObjectNumber(args.objectNumber);
+      const imageInfo = await api.getImageInfo(object, width);
+
+      if (!imageInfo) {
+        return {
+          messages: [
+            {
+              role: "user" as const,
+              content: {
+                type: "text" as const,
+                text: `No image is available for artwork ${args.objectNumber}.`,
+              },
+            },
+          ],
+        };
+      }
+
+      const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width);
+      const title = RijksmuseumApiClient.parseTitle(object);
+      const creator = RijksmuseumApiClient.parseCreator(object);
+
+      return {
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "image" as const,
+              data: base64,
+              mimeType: "image/jpeg",
+            },
+          },
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text:
+                `Examine this artwork: "${title}" by ${creator} (${args.objectNumber}). ` +
+                `Describe what you see in the image — composition, colours, figures, setting, technique, ` +
+                `and any notable details. Then provide your art-historical interpretation.`,
+            },
+          },
+        ],
+      };
+    }
   );
 
   server.registerPrompt(
