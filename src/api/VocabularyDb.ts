@@ -21,7 +21,7 @@ export interface VocabSearchParams {
 }
 
 export interface VocabSearchResult {
-  totalResults: number;
+  totalResults?: number;
   results: { objectNumber: string; title: string; creator: string; url: string }[];
   source: "vocabulary";
   warnings?: string[];
@@ -150,8 +150,11 @@ export class VocabularyDb {
     const where = conditions.join(" AND ");
     const limit = Math.min(params.maxResults ?? 25, 25);
 
-    const countSql = `SELECT COUNT(*) as n FROM artworks a WHERE ${where}`;
-    const totalResults = (this.db.prepare(countSql).get(...bindings) as { n: number }).n;
+    // COUNT is expensive for cross-filter queries (multiple IN-subquery intersections
+    // can scan tens of thousands of rows). Only compute it for single-filter queries.
+    const totalResults = conditions.length === 1
+      ? (this.db.prepare(`SELECT COUNT(*) as n FROM artworks a WHERE ${where}`).get(...bindings) as { n: number }).n
+      : undefined;
 
     const sql = `SELECT a.object_number, a.title, a.creator_label FROM artworks a WHERE ${where} LIMIT ?`;
     const rows = this.db.prepare(sql).all(...bindings, limit) as {
