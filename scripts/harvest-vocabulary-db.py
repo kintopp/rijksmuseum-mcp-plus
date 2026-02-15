@@ -7,16 +7,21 @@ persons/places, materials, techniques, types, creators) to artworks, enabling
 vocabulary-based search in the MCP server.
 
 Phases:
-  0. Parse ALL data dumps (classification, person, place, concept, event, topical_term, organisation)
-  1. Harvest ALL OAI-PMH records (836K+), extract 9 vocabulary fields
-  2. Resolve unmatched vocabulary URIs via Linked Art API (multi-threaded)
-  3. Print validation stats
+  0.  Parse ALL data dumps (classification, person, place, concept, event, topical_term, organisation)
+  0.5 Seed curated set names from OAI-PMH ListSets
+  1.  Harvest ALL OAI-PMH records (836K+), extract 9 vocabulary fields + Linked Art URIs
+  2.  Resolve unmatched vocabulary URIs via Linked Art API (multi-threaded)
+  4.  Resolve all artwork Linked Art URIs for Tier 2 fields: inscriptions, provenance,
+      credit lines, dimensions, production roles, attribution qualifiers (multi-threaded)
+  3.  Post-processing: FTS5 indexes, validation stats (runs last)
 
 Usage:
     python3 scripts/harvest-vocabulary-db.py                # Full run (all phases)
     python3 scripts/harvest-vocabulary-db.py --resume       # Resume from checkpoint
     python3 scripts/harvest-vocabulary-db.py --skip-dump    # Skip Phase 0 (no local dump)
     python3 scripts/harvest-vocabulary-db.py --phase 3      # Run only from phase N onward
+    python3 scripts/harvest-vocabulary-db.py --phase 4      # Run Phase 4 + 3 only
+    python3 scripts/harvest-vocabulary-db.py --threads 16   # Phase 4 thread count
 
 Output: data/vocabulary.db (~1 GB)
 """
@@ -64,8 +69,19 @@ DUMP_CONFIGS = [
 OAI_BASE = "https://data.rijksmuseum.nl/oai"
 LINKED_ART_BASE = "https://data.rijksmuseum.nl"
 USER_AGENT = "rijksmuseum-mcp-harvest/1.0"
-RESOLVE_THREADS = 8
+DEFAULT_THREADS = 8
 BATCH_SIZE = 500  # Commit every N pages
+
+# ─── AAT URIs for Tier 2 Linked Art parsing ─────────────────────────
+
+AAT_INSCRIPTIONS = "http://vocab.getty.edu/aat/300435414"
+AAT_PROVENANCE = "http://vocab.getty.edu/aat/300444174"
+AAT_CREDIT_LINE = "http://vocab.getty.edu/aat/300026687"
+AAT_UNIT_CM = "http://vocab.getty.edu/aat/300379098"
+AAT_UNIT_MM = "http://vocab.getty.edu/aat/300379099"
+AAT_UNIT_M = "http://vocab.getty.edu/aat/300379100"
+AAT_HEIGHT = "http://vocab.getty.edu/aat/300055644"
+AAT_WIDTH = "http://vocab.getty.edu/aat/300055647"
 
 # ─── N-Triples parsing (same as pilot) ──────────────────────────────
 
@@ -153,10 +169,17 @@ CREATE TABLE IF NOT EXISTS vocabulary (
 );
 
 CREATE TABLE IF NOT EXISTS artworks (
-    object_number  TEXT PRIMARY KEY,
-    title          TEXT,
-    creator_label  TEXT,
-    rights_uri     TEXT
+    object_number    TEXT PRIMARY KEY,
+    title            TEXT,
+    creator_label    TEXT,
+    rights_uri       TEXT,
+    linked_art_uri   TEXT,
+    inscription_text TEXT,
+    provenance_text  TEXT,
+    credit_line      TEXT,
+    height_cm        REAL,
+    width_cm         REAL,
+    tier2_done       INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS mappings (
@@ -173,6 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_vocab_label_en ON vocabulary(label_en COLLATE NOC
 CREATE INDEX IF NOT EXISTS idx_vocab_label_nl ON vocabulary(label_nl COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_vocab_notation ON vocabulary(notation);
 CREATE INDEX IF NOT EXISTS idx_vocab_type ON vocabulary(type);
+CREATE INDEX IF NOT EXISTS idx_artworks_tier2 ON artworks(tier2_done);
 """
 
 VOCAB_INSERT_SQL = (
@@ -183,13 +207,31 @@ VOCAB_INSERT_SQL = (
 
 
 def create_or_open_db() -> sqlite3.Connection:
-    """Create or open the SQLite database."""
+    """Create or open the SQLite database, migrating schema if needed."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA cache_size=-64000")  # 64 MB cache
     conn.executescript(SCHEMA_SQL)
+
+    # Migrate existing DBs: add Tier 2 columns if missing
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(artworks)").fetchall()}
+    tier2_cols = [
+        ("linked_art_uri", "TEXT"),
+        ("inscription_text", "TEXT"),
+        ("provenance_text", "TEXT"),
+        ("credit_line", "TEXT"),
+        ("height_cm", "REAL"),
+        ("width_cm", "REAL"),
+        ("tier2_done", "INTEGER DEFAULT 0"),
+    ]
+    for col_name, col_type in tier2_cols:
+        if col_name not in existing_cols:
+            conn.execute(f"ALTER TABLE artworks ADD COLUMN {col_name} {col_type}")
+            print(f"  Migrated: added artworks.{col_name}")
+    conn.commit()
+
     return conn
 
 
@@ -477,6 +519,9 @@ def extract_records(root: ET.Element) -> list[dict]:
         if cho is None:
             continue
 
+        # Extract Linked Art URI from CHO's rdf:about (for Phase 4 resolution)
+        lod_uri = cho.get(RDF_ABOUT, "")
+
         # Extract object number
         object_number = ""
         id_el = cho.find("{http://purl.org/dc/elements/1.1/}identifier")
@@ -553,6 +598,7 @@ def extract_records(root: ET.Element) -> list[dict]:
             "title": title,
             "creator_label": creator_label,
             "rights_uri": rights_uri,
+            "linked_art_uri": lod_uri,
             "mappings": mappings,
         })
 
@@ -609,8 +655,8 @@ def run_phase1(conn: sqlite3.Connection, resume: bool = False):
 
         for rec in records:
             conn.execute(
-                "INSERT OR IGNORE INTO artworks (object_number, title, creator_label, rights_uri) VALUES (?, ?, ?, ?)",
-                (rec["object_number"], rec["title"], rec["creator_label"], rec["rights_uri"]),
+                "INSERT OR IGNORE INTO artworks (object_number, title, creator_label, rights_uri, linked_art_uri) VALUES (?, ?, ?, ?, ?)",
+                (rec["object_number"], rec["title"], rec["creator_label"], rec["rights_uri"], rec["linked_art_uri"]),
             )
             for vocab_id, field in rec["mappings"]:
                 conn.execute(
@@ -738,13 +784,13 @@ def run_phase2(conn: sqlite3.Connection):
         print("  No unmatched vocabulary URIs to resolve.")
         return
 
-    print(f"  Resolving {len(unmatched):,} unmatched vocabulary URIs ({RESOLVE_THREADS} threads)...")
+    print(f"  Resolving {len(unmatched):,} unmatched vocabulary URIs ({DEFAULT_THREADS} threads)...")
 
     resolved = 0
     failed = 0
     t0 = time.time()
 
-    with ThreadPoolExecutor(max_workers=RESOLVE_THREADS) as pool:
+    with ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as pool:
         futures = {pool.submit(resolve_uri, eid): eid for eid in unmatched}
         batch = []
 
@@ -777,6 +823,296 @@ def run_phase2(conn: sqlite3.Connection):
 
     elapsed = time.time() - t0
     print(f"  Resolution complete: {resolved:,} resolved, {failed:,} failed, {elapsed:.0f}s")
+
+
+# ─── Phase 4: Linked Art Resolution (Tier 2) ─────────────────────────
+
+def has_classification(classified_as: list | None, aat_uri: str) -> bool:
+    """Check if a classified_as array contains a given AAT URI."""
+    if not classified_as:
+        return False
+    return any(
+        (c.get("id", "") if isinstance(c, dict) else str(c)) == aat_uri
+        for c in classified_as
+    )
+
+
+def find_statements(referred_to_by: list | None, aat_uri: str) -> list[str]:
+    """Find all referred_to_by statements matching a given AAT classification.
+
+    Returns all matching texts concatenated with ' | ' delimiter.
+    Collects ALL languages — inscriptions are often in Latin/Dutch/mixed.
+    """
+    if not referred_to_by:
+        return []
+    texts = []
+    for stmt in referred_to_by:
+        if not isinstance(stmt, dict):
+            continue
+        if has_classification(stmt.get("classified_as"), aat_uri):
+            content = stmt.get("content", "")
+            if content:
+                texts.append(content)
+    return texts
+
+
+# Conversion factors from unit to centimeters
+UNIT_TO_CM = {
+    AAT_UNIT_CM: 1.0,
+    AAT_UNIT_MM: 0.1,
+    AAT_UNIT_M: 100.0,
+}
+
+
+def extract_dimension_cm(dimensions: list | None, aat_type: str) -> float | None:
+    """Extract a dimension value in centimeters for a given dimension type (height/width)."""
+    if not dimensions:
+        return None
+    for dim in dimensions:
+        if not isinstance(dim, dict):
+            continue
+        value = dim.get("value")
+        if value is None:
+            continue
+        if not has_classification(dim.get("classified_as", []), aat_type):
+            continue
+        unit = dim.get("unit", {})
+        unit_id = unit.get("id", "") if isinstance(unit, dict) else ""
+        try:
+            val = float(value)
+        except (ValueError, TypeError):
+            continue
+        factor = UNIT_TO_CM.get(unit_id, 1.0)  # default to cm
+        return round(val * factor, 2) if factor != 1.0 else val
+    return None
+
+
+def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Extract production roles and attribution qualifiers from produced_by.
+
+    Returns:
+        (roles, qualifiers) where each is a list of (vocab_id, field) tuples.
+
+    Production structure in Linked Art:
+        produced_by: {
+            part: [
+                {
+                    carried_out_by: [{ id: "https://id.rijksmuseum.nl/31xxx" }],
+                    technique: [{ id: "https://id.rijksmuseum.nl/12xxx" }],  # role (painter, printmaker)
+                    classified_as: [{ id: "..." }],  # qualifier (attributed to, workshop of)
+                }
+            ]
+        }
+    """
+    roles: list[tuple[str, str]] = []
+    qualifiers: list[tuple[str, str]] = []
+
+    produced_by = data.get("produced_by")
+    if not isinstance(produced_by, dict):
+        return roles, qualifiers
+
+    parts = produced_by.get("part", [])
+    if not isinstance(parts, list):
+        # Single production event without parts — check top level
+        parts = [produced_by]
+
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        # Extract technique (production role: painter, printmaker, etc.)
+        for tech in part.get("technique", []):
+            if isinstance(tech, dict):
+                tid = tech.get("id", "")
+                if tid:
+                    vid = tid.split("/")[-1]
+                    roles.append((vid, "production_role"))
+        # Extract classified_as (attribution qualifier: attributed to, workshop of, etc.)
+        for cls in part.get("classified_as", []):
+            if isinstance(cls, dict):
+                cid = cls.get("id", "")
+                if cid:
+                    vid = cid.split("/")[-1]
+                    qualifiers.append((vid, "attribution_qualifier"))
+
+    return roles, qualifiers
+
+
+def resolve_artwork(uri: str) -> dict | None:
+    """Resolve a single artwork's Linked Art JSON-LD and extract Tier 2 fields."""
+    req = urllib.request.Request(uri, headers={
+        "Accept": "application/ld+json",
+        "Profile": "https://linked.art/ns/v1/linked-art.json",
+        "User-Agent": USER_AGENT,
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"_status": "not_found"}
+        # Log non-404 HTTP errors for diagnostics (500s, 503s, rate limits)
+        print(f"    HTTP {e.code} for {uri}", flush=True)
+        return None
+    except Exception as e:
+        print(f"    Error for {uri}: {e}", flush=True)
+        return None
+
+    referred_to_by = data.get("referred_to_by", [])
+
+    # Extract text fields by AAT classification
+    def join_statements(aat_uri: str) -> str | None:
+        texts = find_statements(referred_to_by, aat_uri)
+        return " | ".join(texts) if texts else None
+
+    inscription_text = join_statements(AAT_INSCRIPTIONS)
+    provenance_text = join_statements(AAT_PROVENANCE)
+    credit_line = join_statements(AAT_CREDIT_LINE)
+
+    # Structured dimensions
+    dimensions = data.get("dimension", [])
+    height_cm = extract_dimension_cm(dimensions, AAT_HEIGHT)
+    width_cm = extract_dimension_cm(dimensions, AAT_WIDTH)
+
+    # Production roles and attribution qualifiers
+    roles, qualifiers = extract_production_parts(data)
+
+    return {
+        "inscription_text": inscription_text,
+        "provenance_text": provenance_text,
+        "credit_line": credit_line,
+        "height_cm": height_cm,
+        "width_cm": width_cm,
+        "roles": roles,
+        "qualifiers": qualifiers,
+    }
+
+
+def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
+    """Phase 4: Resolve all artwork Linked Art URIs for Tier 2 fields."""
+    cur = conn.cursor()
+
+    # Get all artworks that haven't been processed yet
+    pending = cur.execute("""
+        SELECT object_number, linked_art_uri
+        FROM artworks
+        WHERE tier2_done = 0 AND linked_art_uri IS NOT NULL AND linked_art_uri != ''
+    """).fetchall()
+
+    if not pending:
+        print("  No artworks pending Tier 2 resolution.")
+        return
+
+    total = len(pending)
+    print(f"  Resolving {total:,} artworks for Tier 2 fields ({threads} threads)...")
+
+    processed = 0
+    succeeded = 0
+    failed = 0
+    not_found = 0
+    with_inscription = 0
+    with_provenance = 0
+    with_credit = 0
+    with_dimensions = 0
+    role_count = 0
+    qualifier_count = 0
+    t0 = time.time()
+
+    TIER2_UPDATE_SQL = """
+        UPDATE artworks SET
+            inscription_text = ?,
+            provenance_text = ?,
+            credit_line = ?,
+            height_cm = ?,
+            width_cm = ?,
+            tier2_done = 1
+        WHERE object_number = ?
+    """
+
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        # Submit in batches to avoid excessive memory for futures dict
+        batch_start = 0
+        commit_batch_size = 500
+
+        while batch_start < total:
+            batch_end = min(batch_start + commit_batch_size, total)
+            batch = pending[batch_start:batch_end]
+
+            futures = {
+                pool.submit(resolve_artwork, uri): (obj_num, uri)
+                for obj_num, uri in batch
+            }
+
+            for future in as_completed(futures):
+                obj_num, uri = futures[future]
+                processed += 1
+
+                try:
+                    result = future.result()
+                except Exception:
+                    result = None
+
+                if result is None:
+                    failed += 1
+                    # Don't mark tier2_done — leave for retry
+                    continue
+
+                if result.get("_status") == "not_found":
+                    not_found += 1
+                    # Mark as done so we don't retry 404s
+                    conn.execute("UPDATE artworks SET tier2_done = 1 WHERE object_number = ?", (obj_num,))
+                    continue
+
+                succeeded += 1
+                if result["inscription_text"]:
+                    with_inscription += 1
+                if result["provenance_text"]:
+                    with_provenance += 1
+                if result["credit_line"]:
+                    with_credit += 1
+                if result["height_cm"] is not None or result["width_cm"] is not None:
+                    with_dimensions += 1
+
+                conn.execute(TIER2_UPDATE_SQL, (
+                    result["inscription_text"],
+                    result["provenance_text"],
+                    result["credit_line"],
+                    result["height_cm"],
+                    result["width_cm"],
+                    obj_num,
+                ))
+
+                # Insert production role and attribution qualifier mappings
+                for vocab_id, field in result["roles"] + result["qualifiers"]:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO mappings (object_number, vocab_id, field) VALUES (?, ?, ?)",
+                        (obj_num, vocab_id, field),
+                    )
+                role_count += len(result["roles"])
+                qualifier_count += len(result["qualifiers"])
+
+            conn.commit()
+            batch_start = batch_end
+
+            elapsed = time.time() - t0
+            rate = processed / elapsed if elapsed > 0 else 0
+            remaining = (total - processed) / rate if rate > 0 else 0
+            print(
+                f"  {processed:,}/{total:,} ({succeeded:,} ok, {failed:,} failed, {not_found:,} 404, "
+                f"{rate:.0f}/s, ~{remaining / 60:.0f}min left)",
+                flush=True,
+            )
+
+    elapsed = time.time() - t0
+    print(f"\n  Phase 4 complete in {elapsed / 60:.1f}min:")
+    print(f"    Succeeded:    {succeeded:,}")
+    print(f"    Failed:       {failed:,} (will retry on --resume --phase 4)")
+    print(f"    Not found:    {not_found:,}")
+    print(f"    Inscriptions: {with_inscription:,}")
+    print(f"    Provenance:   {with_provenance:,}")
+    print(f"    Credit lines: {with_credit:,}")
+    print(f"    Dimensions:   {with_dimensions:,}")
+    print(f"    Prod. roles:  {role_count:,}")
+    print(f"    Attr. quals:  {qualifier_count:,}")
 
 
 # ─── Phase 3: Validation ─────────────────────────────────────────────
@@ -859,6 +1195,27 @@ def run_phase3(conn: sqlite3.Connection):
     print(f"    vocabulary_fts: {fts_count:,} rows")
     conn.commit()
 
+    # Create FTS5 virtual table for artwork text fields (Tier 2)
+    has_tier2 = cur.execute(
+        "SELECT COUNT(*) FROM artworks WHERE tier2_done = 1"
+    ).fetchone()[0]
+    if has_tier2 > 0:
+        print("  Building FTS5 index on artwork text fields (Tier 2)...")
+        conn.execute("DROP TABLE IF EXISTS artwork_texts_fts")
+        conn.execute("""
+            CREATE VIRTUAL TABLE artwork_texts_fts USING fts5(
+                inscription_text, provenance_text, credit_line,
+                content='artworks', content_rowid='rowid',
+                tokenize='unicode61 remove_diacritics 2'
+            )
+        """)
+        conn.execute("INSERT INTO artwork_texts_fts(artwork_texts_fts) VALUES('rebuild')")
+        atf_count = cur.execute("SELECT COUNT(*) FROM artwork_texts_fts").fetchone()[0]
+        print(f"    artwork_texts_fts: {atf_count:,} rows")
+        conn.commit()
+    else:
+        print("  Skipping artwork_texts_fts (no Tier 2 data yet)")
+
     # Collection set stats
     set_mappings = cur.execute(
         "SELECT COUNT(*) FROM mappings WHERE field = 'collection_set'"
@@ -888,6 +1245,39 @@ def run_phase3(conn: sqlite3.Connection):
     """).fetchall()
     for uri, cnt in rows:
         print(f"  {cnt:8,}  {uri}")
+
+    # Tier 2 stats
+    if has_tier2 > 0:
+        print(f"\n--- Tier 2 Coverage (of {has_tier2:,} resolved) ---")
+
+        # Text and dimension column coverage
+        col_stats = [
+            ("inscription_text", "Inscriptions", "IS NOT NULL AND {col} != ''"),
+            ("provenance_text",  "Provenance",   "IS NOT NULL AND {col} != ''"),
+            ("credit_line",      "Credit lines", "IS NOT NULL AND {col} != ''"),
+            ("height_cm",        "Height",       "IS NOT NULL"),
+            ("width_cm",         "Width",        "IS NOT NULL"),
+        ]
+        for col, label, where_tpl in col_stats:
+            where = where_tpl.format(col=col)
+            cnt = cur.execute(f"SELECT COUNT(*) FROM artworks WHERE {col} {where}").fetchone()[0]
+            print(f"  {label:20s} {cnt:8,} artworks")
+
+        # Mapping field coverage
+        for field, label in [("production_role", "Prod. roles"), ("attribution_qualifier", "Attr. qualifiers")]:
+            cnt = cur.execute(
+                "SELECT COUNT(*) FROM mappings WHERE field = ?", (field,)
+            ).fetchone()[0]
+            artworks = cur.execute(
+                "SELECT COUNT(DISTINCT object_number) FROM mappings WHERE field = ?", (field,)
+            ).fetchone()[0]
+            print(f"  {label:20s} {cnt:8,} mappings ({artworks:,} artworks)")
+
+        tier2_pending = cur.execute(
+            "SELECT COUNT(*) FROM artworks WHERE tier2_done = 0 AND linked_art_uri IS NOT NULL AND linked_art_uri != ''"
+        ).fetchone()[0]
+        if tier2_pending > 0:
+            print(f"  Still pending:     {tier2_pending:,} artworks (use --resume --phase 4)")
 
     print("\n--- Sample Queries ---")
 
@@ -960,7 +1350,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--phase", type=int, default=0, dest="start_phase",
-        help="Run only from phase N onward (default: 0)",
+        help="Run only from phase N onward (default: 0). Phase 4 = Tier 2 Linked Art resolution.",
+    )
+    parser.add_argument(
+        "--threads", type=int, default=DEFAULT_THREADS,
+        help=f"Thread count for Phase 4 Linked Art resolution (default: {DEFAULT_THREADS})",
     )
     return parser.parse_args()
 
@@ -969,10 +1363,13 @@ def main():
     args = parse_args()
 
     print(f"Database: {DB_PATH}")
-    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}")
+    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}")
     print()
 
     conn = create_or_open_db()
+
+    # Phase ordering: 0 → 0.5 → 1 → 2 → 4 → 3
+    # Phase 3 runs last because it builds FTS indexes and stats on all data.
 
     if args.start_phase <= 0 and not args.skip_dump:
         print("=== Phase 0: Parsing data dumps ===")
@@ -1002,7 +1399,14 @@ def main():
         print(f"  Phase 2 took {time.time() - t0:.1f}s")
         print()
 
-    print("=== Phase 3: Validation ===")
+    if args.start_phase <= 4:
+        print("=== Phase 4: Linked Art Resolution (Tier 2) ===")
+        t0 = time.time()
+        run_phase4(conn, threads=args.threads)
+        print(f"  Phase 4 took {time.time() - t0:.1f}s")
+        print()
+
+    print("=== Phase 3: Validation & Post-processing ===")
     run_phase3(conn)
 
     conn.close()

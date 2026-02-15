@@ -106,7 +106,13 @@ function registerTools(
 
   // Vocabulary-backed search params (require vocabulary DB)
   const vocabAvailable = vocabDb?.available ?? false;
-  const vocabParamKeys = ["subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace", "birthPlace", "deathPlace", "profession", "collectionSet", "license"] as const;
+  const vocabParamKeys = [
+    "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
+    "birthPlace", "deathPlace", "profession", "collectionSet", "license",
+    // Tier 2 (vocabulary DB v1.0+)
+    "inscription", "provenance", "creditLine", "productionRole",
+    "minHeight", "maxHeight", "minWidth", "maxWidth",
+  ] as const;
 
   server.registerTool(
     "search_artwork",
@@ -132,6 +138,12 @@ function registerTools(
             "(e.g. subject='dogs' + type='painting', or profession='painter' + birthPlace='Amsterdam'). " +
             "collectionSet (text search on curated set names, e.g. 'Rembrandt', 'Japanese'), " +
             "license (filter by rights URI: 'publicdomain', 'zero' for CC0, 'by' for CC BY). " +
+            "Tier 2 filters (when available): " +
+            "inscription (full-text search on inscription texts, e.g. 'Rembrandt f.' for signed works), " +
+            "provenance (full-text search on ownership history), " +
+            "creditLine (full-text search on credit/donor lines), " +
+            "productionRole (search by production role, e.g. 'painter', 'printmaker'), " +
+            "minHeight/maxHeight/minWidth/maxWidth (dimension range filters in centimeters). " +
             "Note: compact and pageToken do not apply to vocabulary-based searches."
           : ""),
       inputSchema: {
@@ -258,6 +270,62 @@ function registerTools(
                 .describe(
                   "Filter by license/rights. Common values: 'publicdomain', 'zero' (CC0), 'by' (CC BY). " +
                   "Matches against the rights URI. Requires vocabulary DB."
+                ),
+              inscription: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                  "Full-text search on inscription texts (e.g. 'Rembrandt f.' for signed works, Latin phrases). " +
+                  "Requires vocabulary DB v1.0+."
+                ),
+              provenance: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                  "Full-text search on provenance/ownership history (e.g. 'Six' for the Six collection). " +
+                  "Requires vocabulary DB v1.0+."
+                ),
+              creditLine: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                  "Full-text search on credit/donor lines (e.g. 'Drucker' for Drucker-Fraser bequest). " +
+                  "Requires vocabulary DB v1.0+."
+                ),
+              productionRole: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                  "Search by production role (e.g. 'painter', 'printmaker', 'attributed to'). " +
+                  "Requires vocabulary DB v1.0+."
+                ),
+              minHeight: z
+                .number()
+                .optional()
+                .describe(
+                  "Minimum height in centimeters. Requires vocabulary DB v1.0+."
+                ),
+              maxHeight: z
+                .number()
+                .optional()
+                .describe(
+                  "Maximum height in centimeters. Requires vocabulary DB v1.0+."
+                ),
+              minWidth: z
+                .number()
+                .optional()
+                .describe(
+                  "Minimum width in centimeters. Requires vocabulary DB v1.0+."
+                ),
+              maxWidth: z
+                .number()
+                .optional()
+                .describe(
+                  "Maximum width in centimeters. Requires vocabulary DB v1.0+."
                 ),
             }
           : {}),

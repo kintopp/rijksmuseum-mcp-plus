@@ -19,6 +19,15 @@ export interface VocabSearchParams {
   creator?: string;
   collectionSet?: string;
   license?: string;
+  // Tier 2 fields (require vocabulary DB v1.0+)
+  inscription?: string;
+  provenance?: string;
+  creditLine?: string;
+  productionRole?: string;
+  minHeight?: number;
+  maxHeight?: number;
+  minWidth?: number;
+  maxWidth?: number;
   maxResults?: number;
 }
 
@@ -34,7 +43,7 @@ export interface VocabSearchResult {
 // in a mapping subquery.  `fields` restricts m.field, `vocabType`
 // restricts v.type, and `matchMode` controls exact vs LIKE matching.
 
-const ALLOWED_FIELDS = new Set(["subject", "spatial", "material", "technique", "type", "creator", "birth_place", "death_place", "profession", "collection_set"]);
+const ALLOWED_FIELDS = new Set(["subject", "spatial", "material", "technique", "type", "creator", "birth_place", "death_place", "profession", "collection_set", "production_role", "attribution_qualifier"]);
 const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
 interface VocabFilter {
@@ -60,13 +69,21 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "type",           fields: ["type"],                  matchMode: "like",                               ftsUpgrade: true },
   { param: "creator",        fields: ["creator"],               matchMode: "like",                               ftsUpgrade: true },
   { param: "collectionSet",  fields: ["collection_set"],        matchMode: "like", vocabType: "set",            ftsUpgrade: true },
+  { param: "productionRole",fields: ["production_role"],        matchMode: "like",                               ftsUpgrade: true },
 ];
+
+/** Escape a value for safe FTS5 phrase matching: strip operators, escape quotes. */
+function escapeFts5(value: string): string {
+  return `"${value.replace(/[*^():]/g, "").replace(/"/g, '""')}"`;
+}
 
 // ─── VocabularyDb ────────────────────────────────────────────────────
 
 export class VocabularyDb {
   private db: DatabaseType | null = null;
   private hasFts5 = false;
+  private hasTextFts = false;
+  private hasDimensions = false;
 
   constructor() {
     const dbPath = this.resolveDbPath();
@@ -84,15 +101,17 @@ export class VocabularyDb {
       });
       const count = (this.db.prepare("SELECT COUNT(*) as n FROM artworks").get() as { n: number }).n;
 
-      // Check for FTS5 table (present in v0.9+ DBs)
-      try {
-        this.db.prepare("SELECT 1 FROM vocabulary_fts LIMIT 1").get();
-        this.hasFts5 = true;
-      } catch {
-        this.hasFts5 = false;
-      }
+      // Feature-detect optional DB capabilities (vary by DB version)
+      this.hasFts5 = this.tableExists("vocabulary_fts");
+      this.hasTextFts = this.tableExists("artwork_texts_fts");
+      this.hasDimensions = this.columnExists("artworks", "height_cm");
 
-      console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, FTS5=${this.hasFts5})`);
+      const features = [
+        this.hasFts5 && "vocabFTS5",
+        this.hasTextFts && "textFTS5",
+        this.hasDimensions && "dimensions",
+      ].filter(Boolean).join(", ");
+      console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
       console.error(`Failed to open vocabulary DB: ${err instanceof Error ? err.message : err}`);
       this.db = null;
@@ -103,6 +122,24 @@ export class VocabularyDb {
     return this.db !== null;
   }
 
+  private tableExists(name: string): boolean {
+    try {
+      this.db!.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private columnExists(table: string, column: string): boolean {
+    try {
+      this.db!.prepare(`SELECT ${column} FROM ${table} LIMIT 1`).get();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Touch each mapping field's B-tree pages to load them into SQLite's page cache.
    * Eliminates the 10–25s cold-start penalty on the first vocab query per field.
@@ -111,12 +148,17 @@ export class VocabularyDb {
   warmPageCache(): void {
     if (!this.db) return;
     const start = performance.now();
-    const fields = [...new Set(VOCAB_FILTERS.flatMap((f) => f.fields))];
+    // All mapping fields including attribution_qualifier (used in searches but not in VOCAB_FILTERS)
+    const fields = [...new Set([...VOCAB_FILTERS.flatMap((f) => f.fields), "attribution_qualifier"])];
     for (const field of fields) {
-      const { n } = this.db.prepare(
-        `SELECT COUNT(*) as n FROM mappings WHERE field = ?`
-      ).get(field) as { n: number };
-      console.error(`  ${field}: ${n.toLocaleString()} mappings`);
+      try {
+        const { n } = this.db.prepare(
+          `SELECT COUNT(*) as n FROM mappings WHERE field = ?`
+        ).get(field) as { n: number };
+        console.error(`  ${field}: ${n.toLocaleString()} mappings`);
+      } catch {
+        // Field may not exist yet in older DBs
+      }
     }
     const ms = Math.round(performance.now() - start);
     console.error(`SQLite page cache warmed: ${fields.length} fields in ${ms}ms`);
@@ -130,6 +172,7 @@ export class VocabularyDb {
 
     const conditions: string[] = [];
     const bindings: unknown[] = [];
+    const warnings: string[] = [];
 
     for (const filter of VOCAB_FILTERS) {
       const value = params[filter.param];
@@ -157,11 +200,8 @@ export class VocabularyDb {
       const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
 
       if (useFts) {
-        // FTS5 match: double-quote the value to treat it as a phrase/token.
-        // Escape any embedded double quotes (FTS5 uses "" to escape " inside phrases).
-        const escaped = String(value).replace(/"/g, '""');
         vocabWhere = `rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)`;
-        matchBindings = [`"${escaped}"`];
+        matchBindings = [escapeFts5(String(value))];
       } else {
         switch (filter.matchMode) {
           case "exact-notation":
@@ -194,8 +234,47 @@ export class VocabularyDb {
       bindings.push(`%${params.license}%`);
     }
 
+    // Tier 2: Text FTS filters (inscription, provenance, creditLine)
+    const TEXT_FILTERS: [keyof VocabSearchParams, string][] = [
+      ["inscription", "inscription_text"],
+      ["provenance", "provenance_text"],
+      ["creditLine", "credit_line"],
+    ];
+    const requestedTextFilters = TEXT_FILTERS.filter(([param]) => typeof params[param] === "string");
+    if (requestedTextFilters.length > 0) {
+      if (this.hasTextFts) {
+        for (const [param, column] of requestedTextFilters) {
+          conditions.push(`a.rowid IN (SELECT rowid FROM artwork_texts_fts WHERE ${column} MATCH ?)`);
+          bindings.push(escapeFts5(params[param] as string));
+        }
+      } else {
+        warnings.push(
+          `Text search filters (${requestedTextFilters.map(([p]) => p).join(", ")}) require vocabulary DB v1.0+. These filters were ignored.`
+        );
+      }
+    }
+
+    // Tier 2: Dimension range filters
+    const DIM_FILTERS: [keyof VocabSearchParams, string, string][] = [
+      ["minHeight", "a.height_cm", ">="],
+      ["maxHeight", "a.height_cm", "<="],
+      ["minWidth", "a.width_cm", ">="],
+      ["maxWidth", "a.width_cm", "<="],
+    ];
+    const requestedDimFilters = DIM_FILTERS.filter(([param]) => params[param] != null);
+    if (requestedDimFilters.length > 0) {
+      if (this.hasDimensions) {
+        for (const [param, col, op] of requestedDimFilters) {
+          conditions.push(`${col} ${op} ?`);
+          bindings.push(params[param]!);
+        }
+      } else {
+        warnings.push("Dimension range filters require vocabulary DB v1.0+. These filters were ignored.");
+      }
+    }
+
     if (conditions.length === 0) {
-      return { totalResults: 0, results: [], source: "vocabulary" };
+      return { totalResults: 0, results: [], source: "vocabulary", ...(warnings.length > 0 && { warnings }) };
     }
 
     const where = conditions.join(" AND ");
@@ -223,6 +302,7 @@ export class VocabularyDb {
         url: `https://www.rijksmuseum.nl/en/collection/${r.object_number}`,
       })),
       source: "vocabulary",
+      ...(warnings.length > 0 && { warnings }),
     };
   }
 
