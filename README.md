@@ -12,12 +12,26 @@ The easiest way to try rijksmuseum-mcp+ is through the hosted version — no ins
 
 **Connect your MCP client to:**
 
+Recommended: [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) (require a Pro or better [subscription](https://claude.com/pricing).
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-Recommended MCP Clients are Anthropic's [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). See Anthropic's  ([instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded) for more details.
+For example, in claude.ai: Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's ([instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
 
-Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan.ai](https://jan.zi)) and CLI apps like Claude Code or OpenAI Codex. However, to date, only Claude Desktop and claude.ai support viewing images directly in the chat. All other clients will automatically provide links to open images in a web browser.
+Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan.ai](https://jan.zi)) and CLI apps like Claude Code or OpenAI Codex. Moreover, these can also be used via API charges, instead of a subscription. However, to date, only Claude Desktop and claude.ai support viewing images [directly in the chat](docs/swan.jpg]. All other clients will automatically fallback to providing links to the Rijksmuseum detail page which however also includes options to zoom in/out and export the image.
+
+### Example Queries
+
+“Show me a drawing by Gesina ter Borch”  
+“Find Pieter Saenredam’s paintings”  
+“Give me a list of the Rijksmuseum’s curated collections”  
+“Search for prints from the 1530s”  
+“Show me woodcuts by Hokusai”  
+“Find artworks depicting the Raid on the Medway”  
+“What paintings depict Amalia van Solms?”  
+“Show me works about the sense of smell”  
+“Search for winter landscapes from the 17th century”  
+“Find all works made in Haarlem with the mezzotint technique”
 
 ## Searching the collection
 
@@ -77,20 +91,7 @@ These fields are returned by `get_artwork_details` but cannot be used as search 
 | — | Collection sets (`collectionSets`, `collectionSetLabels`) | Browsable via `browse_set`, not searchable |
 | — | Web page (`webPage`) | |
 | — | License (`license`) | |
-| — | Related objects (`relatedObjects`) | Links to related artworks |
-
-## Example Queries
-
-“Show me a drawing by Gesina ter Borch”  
-“Find Pieter Saenredam’s paintings”  
-“Give me a list of the Rijksmuseum’s curated collections”  
-“Search for prints from the 1530s”  
-“Show me woodcuts by Hokusai”  
-“Find artworks depicting the Raid on the Medway”  
-“What paintings depict Amalia van Solms?”  
-“Show me works about the sense of smell”  
-“Search for winter landscapes from the 17th century”  
-“Find all works made in Haarlem with the mezzotint technique”  
+| — | Related objects (`relatedObjects`) | Links to related artworks | 
 
 ## Example Research Scenarios
 
