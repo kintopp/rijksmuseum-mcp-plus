@@ -17,6 +17,8 @@ export interface VocabSearchParams {
   technique?: string;
   type?: string;
   creator?: string;
+  collectionSet?: string;
+  license?: string;
   maxResults?: number;
 }
 
@@ -32,35 +34,39 @@ export interface VocabSearchResult {
 // in a mapping subquery.  `fields` restricts m.field, `vocabType`
 // restricts v.type, and `matchMode` controls exact vs LIKE matching.
 
-const ALLOWED_FIELDS = new Set(["subject", "spatial", "material", "technique", "type", "creator", "birth_place", "death_place", "profession"]);
-const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification"]);
+const ALLOWED_FIELDS = new Set(["subject", "spatial", "material", "technique", "type", "creator", "birth_place", "death_place", "profession", "collection_set"]);
+const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
 interface VocabFilter {
   param: keyof VocabSearchParams;
   fields: string[];
   vocabType?: string;
   matchMode: "like" | "like-word" | "exact-notation";
+  /** When FTS5 is available, upgrade this mode to FTS5 instead. */
+  ftsUpgrade?: boolean;
 }
 
 const VOCAB_FILTERS: VocabFilter[] = [
   { param: "iconclass",      fields: ["subject"],               matchMode: "exact-notation" },
-  { param: "subject",        fields: ["subject"],               matchMode: "like-word" },
-  { param: "depictedPerson", fields: ["subject"],               matchMode: "like", vocabType: "person" },
-  { param: "depictedPlace",  fields: ["subject", "spatial"],    matchMode: "like", vocabType: "place" },
-  { param: "productionPlace",fields: ["spatial"],               matchMode: "like", vocabType: "place" },
-  { param: "birthPlace",     fields: ["birth_place"],           matchMode: "like", vocabType: "place" },
-  { param: "deathPlace",     fields: ["death_place"],           matchMode: "like", vocabType: "place" },
-  { param: "profession",     fields: ["profession"],            matchMode: "like", vocabType: "classification" },
-  { param: "material",       fields: ["material"],              matchMode: "like" },
-  { param: "technique",      fields: ["technique"],             matchMode: "like" },
-  { param: "type",           fields: ["type"],                  matchMode: "like" },
-  { param: "creator",        fields: ["creator"],               matchMode: "like" },
+  { param: "subject",        fields: ["subject"],               matchMode: "like-word",  ftsUpgrade: true },
+  { param: "depictedPerson", fields: ["subject"],               matchMode: "like", vocabType: "person",         ftsUpgrade: true },
+  { param: "depictedPlace",  fields: ["subject", "spatial"],    matchMode: "like", vocabType: "place",          ftsUpgrade: true },
+  { param: "productionPlace",fields: ["spatial"],               matchMode: "like", vocabType: "place",          ftsUpgrade: true },
+  { param: "birthPlace",     fields: ["birth_place"],           matchMode: "like", vocabType: "place",          ftsUpgrade: true },
+  { param: "deathPlace",     fields: ["death_place"],           matchMode: "like", vocabType: "place",          ftsUpgrade: true },
+  { param: "profession",     fields: ["profession"],            matchMode: "like", vocabType: "classification", ftsUpgrade: true },
+  { param: "material",       fields: ["material"],              matchMode: "like",                               ftsUpgrade: true },
+  { param: "technique",      fields: ["technique"],             matchMode: "like",                               ftsUpgrade: true },
+  { param: "type",           fields: ["type"],                  matchMode: "like",                               ftsUpgrade: true },
+  { param: "creator",        fields: ["creator"],               matchMode: "like",                               ftsUpgrade: true },
+  { param: "collectionSet",  fields: ["collection_set"],        matchMode: "like", vocabType: "set",            ftsUpgrade: true },
 ];
 
 // ─── VocabularyDb ────────────────────────────────────────────────────
 
 export class VocabularyDb {
   private db: DatabaseType | null = null;
+  private hasFts5 = false;
 
   constructor() {
     const dbPath = this.resolveDbPath();
@@ -77,7 +83,16 @@ export class VocabularyDb {
         return new RegExp(`\\b${escaped}\\b`, "i").test(value) ? 1 : 0;
       });
       const count = (this.db.prepare("SELECT COUNT(*) as n FROM artworks").get() as { n: number }).n;
-      console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks)`);
+
+      // Check for FTS5 table (present in v0.9+ DBs)
+      try {
+        this.db.prepare("SELECT 1 FROM vocabulary_fts LIMIT 1").get();
+        this.hasFts5 = true;
+      } catch {
+        this.hasFts5 = false;
+      }
+
+      console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, FTS5=${this.hasFts5})`);
     } catch (err) {
       console.error(`Failed to open vocabulary DB: ${err instanceof Error ? err.message : err}`);
       this.db = null;
@@ -119,19 +134,30 @@ export class VocabularyDb {
       let vocabWhere: string;
       let matchBindings: unknown[];
 
-      switch (filter.matchMode) {
-        case "exact-notation":
-          vocabWhere = "notation = ?";
-          matchBindings = [value];
-          break;
-        case "like-word":
-          vocabWhere = "(regexp_word(?, label_en) OR regexp_word(?, label_nl))";
-          matchBindings = [value, value];
-          break;
-        default: // "like"
-          vocabWhere = "(label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)";
-          matchBindings = [`%${value}%`, `%${value}%`];
-          break;
+      // When FTS5 is available and the filter supports it, use token lookup (~500x faster)
+      const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
+
+      if (useFts) {
+        // FTS5 match: double-quote the value to treat it as a phrase/token.
+        // Escape any embedded double quotes (FTS5 uses "" to escape " inside phrases).
+        const escaped = String(value).replace(/"/g, '""');
+        vocabWhere = `rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)`;
+        matchBindings = [`"${escaped}"`];
+      } else {
+        switch (filter.matchMode) {
+          case "exact-notation":
+            vocabWhere = "notation = ?";
+            matchBindings = [value];
+            break;
+          case "like-word":
+            vocabWhere = "(regexp_word(?, label_en) OR regexp_word(?, label_nl))";
+            matchBindings = [value, value];
+            break;
+          default: // "like"
+            vocabWhere = "(label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)";
+            matchBindings = [`%${value}%`, `%${value}%`];
+            break;
+        }
       }
 
       conditions.push(`a.object_number IN (
@@ -141,6 +167,12 @@ export class VocabularyDb {
         )
       )`);
       bindings.push(...matchBindings);
+    }
+
+    // Direct column filter: license matches against artworks.rights_uri
+    if (params.license) {
+      conditions.push("a.rights_uri LIKE ?");
+      bindings.push(`%${params.license}%`);
     }
 
     if (conditions.length === 0) {

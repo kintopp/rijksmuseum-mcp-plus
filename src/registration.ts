@@ -106,7 +106,7 @@ function registerTools(
 
   // Vocabulary-backed search params (require vocabulary DB)
   const vocabAvailable = vocabDb?.available ?? false;
-  const vocabParamKeys = ["subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace", "birthPlace", "deathPlace", "profession"] as const;
+  const vocabParamKeys = ["subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace", "birthPlace", "deathPlace", "profession", "collectionSet", "license"] as const;
 
   server.registerTool(
     "search_artwork",
@@ -127,7 +127,10 @@ function registerTools(
             "deathPlace (search by artist's death place), " +
             "profession (search by artist's profession, e.g. 'painter', 'draughtsman'). " +
             "Vocabulary labels are bilingual (English and Dutch); some terms only have Dutch labels, so try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
-            "Vocabulary filters can be freely combined with each other and with creator, type, material, and technique for cross-field queries (e.g. subject='dogs' + type='painting', or profession='painter' + birthPlace='Amsterdam'). " +
+            "Vocabulary filters can be freely combined with each other and with creator, type, material, and technique for cross-field queries " +
+            "(e.g. subject='dogs' + type='painting', or profession='painter' + birthPlace='Amsterdam'). " +
+            "collectionSet (text search on curated set names, e.g. 'Rembrandt', 'Japanese'), " +
+            "license (filter by rights URI: 'publicdomain', 'zero' for CC0, 'by' for CC BY). " +
             "Note: compact and pageToken do not apply to vocabulary-based searches."
           : ""),
       inputSchema: {
@@ -238,6 +241,22 @@ function registerTools(
                 .optional()
                 .describe(
                   "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor'). Requires vocabulary DB."
+                ),
+              collectionSet: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                  "Search for artworks in curated collection sets by name (e.g. 'Rembrandt', 'Japanese'). " +
+                  "Use list_curated_sets to discover available sets. Requires vocabulary DB."
+                ),
+              license: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                  "Filter by license/rights. Common values: 'publicdomain', 'zero' (CC0), 'by' (CC BY). " +
+                  "Matches against the rights URI. Requires vocabulary DB."
                 ),
             }
           : {}),

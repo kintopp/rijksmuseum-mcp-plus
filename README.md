@@ -15,6 +15,10 @@ The easiest way to try rijksmuseum-mcp+ is through the hosted version — no ins
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
+Recommended MCP Clients are Anthropic's [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). See Anthropic's  ([instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded) for more details.
+
+Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan.ai](https://jan.zi)) and CLI apps like Claude Code or OpenAI Codex. However, to date, only Claude Desktop and claude.ai support viewing images directly in the chat. All other clients will automatically provide links to open images in a web browser.
+
 ## Searching the collection
 
 There are three classes of discoverability that users need to keep in mind when using this resource:
