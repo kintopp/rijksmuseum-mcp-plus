@@ -30,8 +30,8 @@ function createLogger(stats?: UsageStats) {
     fn: (...args: A) => Promise<R>
   ): (...args: A) => Promise<R> {
     return async (...args: A): Promise<R> => {
-      // args[0] = tool input params, args[1] = MCP session extra (may contain transport info — skip)
-      const input = args[0] != null && typeof args[0] === "object" ? args[0] : undefined;
+      // Log tool input params (args[0]); skip args[1] which is MCP session metadata
+      const input = args[0] && typeof args[0] === "object" ? args[0] : undefined;
       const start = performance.now();
       try {
         const result = await fn(...args);

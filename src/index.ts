@@ -129,7 +129,7 @@ let sharedApiClient: RijksmuseumApiClient;
 let sharedOaiClient: OaiPmhClient;
 
 function initSharedClients(): void {
-  const cache = new ResponseCache(500, 5 * 60_000);
+  const cache = new ResponseCache(1000, 5 * 60_000);
   sharedApiClient = new RijksmuseumApiClient(cache);
   sharedOaiClient = new OaiPmhClient();
 }
@@ -142,8 +142,9 @@ function initUsageStats(): void {
   usageStats = new UsageStats();
 }
 
-// ─── Pre-warm vocabulary cache ───────────────────────────────────────
+// ─── Pre-warm caches ─────────────────────────────────────────────────
 
+/** Pre-warm the top 200 vocabulary terms by frequency in the collection. */
 async function warmVocabCache(): Promise<void> {
   if (!vocabDb?.available) return;
 
@@ -154,6 +155,57 @@ async function warmVocabCache(): Promise<void> {
   const resolved = await sharedApiClient.warmVocabCache(uris);
   const ms = Math.round(performance.now() - start);
   console.error(`Vocab cache pre-warmed: ${resolved}/${uris.length} terms in ${ms}ms`);
+}
+
+/** The museum's "Top 100" curated set — their highlight selection. */
+const TOP_100_SET = "260213";
+
+/**
+ * Pre-warm vocabulary terms referenced by the museum's Top 100 artworks.
+ * Resolves each artwork's Linked Art object, then resolves all vocabulary
+ * URIs found (types, materials, techniques, places, subjects). The vocab
+ * terms are cached at 1-hour TTL; the artwork objects themselves expire
+ * after 5 minutes but that's fine — the value is in the vocab terms.
+ */
+async function warmTopArtworkVocab(): Promise<void> {
+  try {
+    const lodUris = await collectSetLodUris(TOP_100_SET);
+    if (lodUris.length === 0) return;
+
+    // Resolve objects and their vocab terms in batches of 10
+    let vocabCount = 0;
+    for (let i = 0; i < lodUris.length; i += 10) {
+      const batch = lodUris.slice(i, i + 10);
+      const objects = await Promise.allSettled(
+        batch.map((uri) => sharedApiClient.resolveObject(uri))
+      );
+      const resolved = objects
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled")
+        .map((r) => r.value);
+      const vocabResults = await Promise.all(
+        resolved.map((obj) => sharedApiClient.resolveVocabulary(obj).catch(() => null))
+      );
+      vocabCount += vocabResults.filter(Boolean).length;
+    }
+
+    console.error(`Top artwork vocab pre-warmed: ${vocabCount}/${lodUris.length} artworks`);
+  } catch (err) {
+    console.error(`Top artwork vocab pre-warm failed: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
+/** Paginate through an OAI-PMH set and collect all Linked Art URIs. */
+async function collectSetLodUris(setSpec: string): Promise<string[]> {
+  const uris: string[] = [];
+  let result = await sharedOaiClient.listRecords({ set: setSpec });
+  while (true) {
+    for (const rec of result.records) {
+      if (rec.lodUri) uris.push(rec.lodUri);
+    }
+    if (!result.resumptionToken) break;
+    result = await sharedOaiClient.listRecords({ resumptionToken: result.resumptionToken });
+  }
+  return uris;
 }
 
 // ─── Create a configured McpServer ───────────────────────────────────
@@ -181,8 +233,9 @@ async function runStdio(): Promise<void> {
   initSharedClients();
   initUsageStats();
   const server = createServer();
-  // Pre-warm after server is ready (non-blocking for stdio)
-  warmVocabCache();
+  // Pre-warm caches in background (non-blocking for stdio)
+  // Vocab first so common terms are cached before artwork resolution
+  warmVocabCache().then(() => warmTopArtworkVocab());
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Rijksmuseum MCP server running on stdio");
@@ -308,8 +361,9 @@ async function runHttp(): Promise<void> {
     console.error(`  MCP endpoint: POST /mcp`);
     console.error(`  Viewer:       GET  /viewer?iiif={id}&title={title}`);
     console.error(`  Health:       GET  /health`);
-    // Pre-warm vocab cache in background after server is accepting connections
-    warmVocabCache();
+    // Pre-warm caches in background after server is accepting connections
+    // Vocab first so common terms are cached before artwork resolution
+    warmVocabCache().then(() => warmTopArtworkVocab());
   });
 }
 

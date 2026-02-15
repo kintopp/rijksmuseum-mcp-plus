@@ -179,9 +179,9 @@ export class VocabularyDb {
     // Without it, the GROUP BY over 7.3M rows takes ~41s and blocks the event loop.
     try {
       const rows = this.db.prepare(
-        `SELECT vocab_id AS uri FROM vocab_term_counts ORDER BY cnt DESC LIMIT ?`
-      ).all(limit) as { uri: string }[];
-      return rows.map((r) => r.uri);
+        `SELECT vocab_id FROM vocab_term_counts ORDER BY cnt DESC LIMIT ?`
+      ).all(limit) as { vocab_id: string }[];
+      return rows.map((r) => `https://id.rijksmuseum.nl/${r.vocab_id}`);
     } catch {
       return [];
     }
