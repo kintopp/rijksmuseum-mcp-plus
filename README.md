@@ -12,13 +12,12 @@ The easiest way to try rijksmuseum-mcp+ is through the hosted version — no ins
 
 **Connect your MCP client to:**
 
-Recommended: [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) (require a Pro or better [subscription](https://claude.com/pricing).
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-For example, in claude.ai: Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's ([instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
+Recommended: [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). Both require a Pro or better [subscription](https://claude.com/pricing). For example, in claude.ai: Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's ([instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
 
-Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan.ai](https://jan.zi)) and CLI apps like Claude Code or OpenAI Codex. Moreover, these can also be used via API charges, instead of a subscription. However, to date, only Claude Desktop and claude.ai support viewing images [directly in the chat](docs/swan.jpg]. All other clients will automatically fallback to providing links to the Rijksmuseum detail page which however also includes options to zoom in/out and export the image.
+Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan.ai](https://jan.zi)) and CLI coding apps like OpenAI Codex. Moreover, these can also be used via API charges instead of a subscription. However, to date, only Claude Desktop and claude.ai support viewing inline images [directly in the chat](docs/swan.jpg]. All other clients will automatically fall back to providing links to the Rijksmuseum detail page which however also includes options to zoom in/out and export the image.
 
 ### Example Queries
 
