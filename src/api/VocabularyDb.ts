@@ -112,34 +112,35 @@ export class VocabularyDb {
         ? `m.field = '${filter.fields[0]}'`
         : `m.field IN (${filter.fields.map((f) => `'${f}'`).join(", ")})`;
 
-      const typeClause = filter.vocabType ? ` AND v.type = '${filter.vocabType}'` : "";
+      const typeClause = filter.vocabType ? ` AND type = '${filter.vocabType}'` : "";
 
-      if (filter.matchMode === "exact-notation") {
-        conditions.push(`a.object_number IN (
-          SELECT m.object_number FROM mappings m
-          JOIN vocabulary v ON m.vocab_id = v.id
-          WHERE ${fieldClause}${typeClause} AND v.notation = ?
-        )`);
-        bindings.push(value);
-      } else if (filter.matchMode === "like-word") {
-        // Word-boundary matching: "cat" matches whole words only, not substrings like "Catharijnekerk"
-        conditions.push(`a.object_number IN (
-          SELECT m.object_number FROM mappings m
-          JOIN vocabulary v ON m.vocab_id = v.id
-          WHERE ${fieldClause}${typeClause}
-            AND (regexp_word(?, v.label_en) OR regexp_word(?, v.label_nl))
-        )`);
-        bindings.push(value, value);
-      } else {
-        conditions.push(`a.object_number IN (
-          SELECT m.object_number FROM mappings m
-          JOIN vocabulary v ON m.vocab_id = v.id
-          WHERE ${fieldClause}${typeClause}
-            AND (v.label_en LIKE ? COLLATE NOCASE OR v.label_nl LIKE ? COLLATE NOCASE)
-        )`);
-        const pat = `%${value}%`;
-        bindings.push(pat, pat);
+      // Two-step subquery: first narrow vocabulary (149K rows), then index-lookup mappings.
+      // ~20x faster than JOIN which scans up to 2M mapping rows.
+      let vocabWhere: string;
+      let matchBindings: unknown[];
+
+      switch (filter.matchMode) {
+        case "exact-notation":
+          vocabWhere = "notation = ?";
+          matchBindings = [value];
+          break;
+        case "like-word":
+          vocabWhere = "(regexp_word(?, label_en) OR regexp_word(?, label_nl))";
+          matchBindings = [value, value];
+          break;
+        default: // "like"
+          vocabWhere = "(label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)";
+          matchBindings = [`%${value}%`, `%${value}%`];
+          break;
       }
+
+      conditions.push(`a.object_number IN (
+        SELECT m.object_number FROM mappings m
+        WHERE ${fieldClause} AND m.vocab_id IN (
+          SELECT id FROM vocabulary WHERE ${vocabWhere}${typeClause}
+        )
+      )`);
+      bindings.push(...matchBindings);
     }
 
     if (conditions.length === 0) {
