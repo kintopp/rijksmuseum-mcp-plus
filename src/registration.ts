@@ -87,7 +87,7 @@ export function registerAll(
   stats?: UsageStats
 ): void {
   registerTools(server, apiClient, oaiClient, vocabDb, httpPort, createLogger(stats));
-  registerResources(server, apiClient);
+  registerResources(server, apiClient, oaiClient);
   registerAppViewerResource(server);
   registerPrompts(server, apiClient);
 }
@@ -723,26 +723,33 @@ function registerTools(
 
 function registerResources(
   server: McpServer,
-  api: RijksmuseumApiClient
+  _api: RijksmuseumApiClient,
+  oai: OaiPmhClient
 ): void {
   server.registerResource(
-    "popular_artworks",
-    "art://collection/popular",
+    "top_100_artworks",
+    "art://collection/top-100",
     {
-      description: "A curated selection of notable artworks from the Rijksmuseum collection",
+      title: "Top 100 Artworks",
+      description:
+        "The Rijksmuseum's official Top 100 masterpieces — a curated selection of the most " +
+        "important works in the collection, including The Night Watch, The Milkmaid, and more.",
       mimeType: "application/json",
     },
     async () => {
-      const result = await api.searchAndResolve({
-        type: "painting",
-        maxResults: 10,
-      });
+      const records: unknown[] = [];
+      let result = await oai.listRecords({ set: "260213" });
+      while (true) {
+        records.push(...result.records);
+        if (!result.resumptionToken) break;
+        result = await oai.listRecords({ resumptionToken: result.resumptionToken });
+      }
       return {
         contents: [
           {
-            uri: "art://collection/popular",
+            uri: "art://collection/top-100",
             mimeType: "application/json",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify({ totalArtworks: records.length, artworks: records }, null, 2),
           },
         ],
       };
