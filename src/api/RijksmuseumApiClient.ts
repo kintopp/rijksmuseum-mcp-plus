@@ -153,7 +153,7 @@ export class RijksmuseumApiClient {
    * Follow the 4-step image discovery chain:
    * Object.shows → VisualItem.digitally_shown_by → DigitalObject.access_point → IIIF URL
    */
-  async getImageInfo(object: LinkedArtObject): Promise<ArtworkImageInfo | null> {
+  async getImageInfo(object: LinkedArtObject, thumbnailWidth: number = 800): Promise<ArtworkImageInfo | null> {
     try {
       // Step 1: Get VisualItem reference from object
       const visualItemRef = object.shows?.[0];
@@ -191,7 +191,7 @@ export class RijksmuseumApiClient {
       return {
         iiifId,
         iiifInfoUrl,
-        thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/!400,400/0/default.jpg`,
+        thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/!${thumbnailWidth},${thumbnailWidth}/0/default.jpg`,
         fullUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/max/0/default.jpg`,
         width: info.width,
         height: info.height,

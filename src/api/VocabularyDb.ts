@@ -24,6 +24,7 @@ export interface VocabSearchResult {
   totalResults: number;
   results: { objectNumber: string; title: string; creator: string; url: string }[];
   source: "vocabulary";
+  warnings?: string[];
 }
 
 // ─── Filter definitions ─────────────────────────────────────────────
@@ -38,12 +39,12 @@ interface VocabFilter {
   param: keyof VocabSearchParams;
   fields: string[];
   vocabType?: string;
-  matchMode: "like" | "exact-notation";
+  matchMode: "like" | "like-word" | "exact-notation";
 }
 
 const VOCAB_FILTERS: VocabFilter[] = [
   { param: "iconclass",      fields: ["subject"],               matchMode: "exact-notation" },
-  { param: "subject",        fields: ["subject"],               matchMode: "like" },
+  { param: "subject",        fields: ["subject"],               matchMode: "like-word" },
   { param: "depictedPerson", fields: ["subject"],               matchMode: "like", vocabType: "person" },
   { param: "depictedPlace",  fields: ["subject", "spatial"],    matchMode: "like", vocabType: "place" },
   { param: "productionPlace",fields: ["spatial"],               matchMode: "like", vocabType: "place" },
@@ -70,6 +71,11 @@ export class VocabularyDb {
 
     try {
       this.db = new Database(dbPath, { readonly: true });
+      // Word-boundary matching for subject search (e.g. "cat" must not match "Catharijnekerk")
+      this.db.function("regexp_word", (pattern: string, value: string) => {
+        const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(`\\b${escaped}\\b`, "i").test(value) ? 1 : 0;
+      });
       const count = (this.db.prepare("SELECT COUNT(*) as n FROM artworks").get() as { n: number }).n;
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks)`);
     } catch (err) {
@@ -115,6 +121,15 @@ export class VocabularyDb {
           WHERE ${fieldClause}${typeClause} AND v.notation = ?
         )`);
         bindings.push(value);
+      } else if (filter.matchMode === "like-word") {
+        // Word-boundary matching: "cat" matches whole words only, not substrings like "Catharijnekerk"
+        conditions.push(`a.object_number IN (
+          SELECT m.object_number FROM mappings m
+          JOIN vocabulary v ON m.vocab_id = v.id
+          WHERE ${fieldClause}${typeClause}
+            AND (regexp_word(?, v.label_en) OR regexp_word(?, v.label_nl))
+        )`);
+        bindings.push(value, value);
       } else {
         conditions.push(`a.object_number IN (
           SELECT m.object_number FROM mappings m

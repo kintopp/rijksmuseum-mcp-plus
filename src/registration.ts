@@ -166,17 +166,17 @@ function registerTools(
           .string()
           .optional()
           .describe(
-            "Filter by creation date. Exact year ('1642') or wildcard ('16*' for 1600s, '164*' for 1640s)"
+            "Filter by creation date. Exact year ('1642') or wildcard ('16*' for 1600s, '164*' for 1640s). Not supported in vocabulary-based searches."
           ),
         description: z
           .string()
           .optional()
-          .describe("Search in artwork descriptions (e.g. subject matter, depicted scenes)"),
+          .describe("Search in artwork descriptions (e.g. subject matter, depicted scenes). Not supported in vocabulary-based searches."),
         imageAvailable: z
           .boolean()
           .optional()
           .describe(
-            "If true, only return artworks that have a digital image available"
+            "If true, only return artworks that have a digital image available. Not supported in vocabulary-based searches."
           ),
         // Vocabulary-backed params
         ...(vocabAvailable
@@ -186,7 +186,7 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "Search by subject matter (Iconclass themes, depicted scenes). Text search on subject labels. Requires vocabulary DB."
+                  "Search by subject matter (Iconclass themes, depicted scenes). Uses word-boundary matching (e.g. 'cat' matches 'cat' but not 'Catharijnekerk'). For plural/variant forms, search separately or use iconclass for precise animal/theme codes. Requires vocabulary DB."
                 ),
               iconclass: z
                 .string()
@@ -259,9 +259,11 @@ function registerTools(
       },
     },
     withLogging("search_artwork", async (args) => {
+      const argsRecord = args as Record<string, unknown>;
+
       // Check if any vocabulary param is present -> route through VocabularyDb
       const hasVocabParam = vocabAvailable && vocabParamKeys.some(
-        (k) => (args as Record<string, unknown>)[k] !== undefined
+        (k) => argsRecord[k] !== undefined
       );
 
       if (hasVocabParam && vocabDb) {
@@ -269,10 +271,21 @@ function registerTools(
         const allVocabKeys = [...vocabParamKeys, ...crossFilterKeys];
         const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
         for (const k of allVocabKeys) {
-          const val = (args as Record<string, unknown>)[k];
-          if (val !== undefined) vocabArgs[k] = val;
+          if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
         }
-        return jsonResponse(vocabDb.search(vocabArgs as any));
+        const result = vocabDb.search(vocabArgs as any);
+
+        // Warn about Search API-only filters that were silently dropped
+        const searchOnlyKeys = ["query", "title", "aboutActor", "creationDate", "description", "imageAvailable"] as const;
+        const droppedKeys = searchOnlyKeys.filter(k => argsRecord[k] !== undefined);
+        if (droppedKeys.length > 0) {
+          result.warnings = [
+            `The following filters are not supported in vocabulary searches and were ignored: ${droppedKeys.join(", ")}. ` +
+            `Only creator, type, material, and technique can be combined with vocabulary filters.`
+          ];
+        }
+
+        return jsonResponse(result);
       }
 
       // Default: use Search API
@@ -359,7 +372,7 @@ function registerTools(
           .boolean()
           .default(false)
           .describe(
-            "Only set to true when the user explicitly asks to analyze or examine the image contents. The interactive viewer already provides visual access. Not all artworks have images available."
+            "Do NOT set to true unless the user explicitly asks you to analyze, examine, or describe the image contents. The interactive viewer already lets the user see the image. Setting this to true wastes bandwidth and tokens."
           ),
         thumbnailWidth: z
           .number()
@@ -376,7 +389,7 @@ function registerTools(
     },
     withLogging("get_artwork_image", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
-      const imageInfo = await api.getImageInfo(object);
+      const imageInfo = await api.getImageInfo(object, args.thumbnailWidth);
 
       if (!imageInfo) {
         return jsonResponse({
