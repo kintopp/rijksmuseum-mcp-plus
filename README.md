@@ -34,13 +34,17 @@ Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan
 
 ## Search capabilities
 
-There are three classes of discoverability that users need to keep in mind when using the current (v0.8) version of the resource:
+There are three classes of discoverability that users need to keep in mind when using the current (v0.9) version of the resource. New in v0.9: `collectionSet` and `license` filters, FTS5 vocabulary search for improved matching quality, and ~10x faster vocabulary queries.
 
 1. **Metadata categories that are directly searchable** – For example, `title`, `creator`, `material`, `type`, `depictedPerson`, `subject`, and `iconclass`
 2. **Search parameters with no corresponding metadata output** — these are filters (e.g. `birthPlace`, `deathPlace`, and `profession`) that query data held internally by the Rijksmuseum but are *not* returned in artwork detail records. Users can filter by an artist's birth place but cannot see that birth place in the results.
 3. **Metadata categories that are not searchable at all** — fields like `provenance`, `inscriptions`, `dimensions`, `curatorialNarrative`, and current `location` are returned in detail records but cannot be used as search criteria.
 
 ### Searchable metadata categories
+
+#### Search API parameters
+
+These parameters are always available and query the Rijksmuseum Search API directly.
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -52,25 +56,25 @@ There are three classes of discoverability that users need to keep in mind when 
 | `type` | Object type: `painting`, `print`, `drawing`, etc. | |
 | `material` | Material: `canvas`, `paper`, `panel`, `oil paint`, etc. | |
 | `technique` | Technique: `oil painting`, `etching`, `mezzotint`, etc. | |
-| `productionPlace` | Place where the work was made | Vocabulary-based; may not match every `production[].place` value in artwork details |
-| `subject` | Iconclass subject labels (themes, scenes) | Text search on vocabulary labels; requires vocabulary DB |
-| `iconclass` | Iconclass notation code (e.g. `34B11` for dogs) | Exact code match; requires vocabulary DB |
-| `depictedPerson` | Named person depicted in the artwork | Vocabulary-based; more comprehensive than `aboutActor` |
 | `aboutActor` | Person depicted or referenced in the artwork | Uses the Search API directly; less comprehensive than `depictedPerson` |
-| `depictedPlace` | Named place depicted in the artwork | Vocabulary-based; requires vocabulary DB |
-| `collectionSet` | Curated collection set name (e.g. 'Rembrandt', 'Japanese') | Vocabulary-based; text search on set names. Use `list_curated_sets` to discover available sets |
-| `license` | Rights/license designation | Matches against rights URI. Common values: `publicdomain`, `zero` (CC0), `by` (CC BY) |
 | `imageAvailable` | Whether a digital image exists | Boolean filter; not a metadata category |
 
-### Search-only parameters (no corresponding metadata output)
+#### Vocabulary database parameters
 
-These parameters are accepted by `search_artwork` and return results, but the underlying data is **not included** in the `get_artwork_details` response for any artwork. The data lives in artist/actor authority records that are not exposed through the current API.
+These parameters require the vocabulary database (~1 GB SQLite). The hosted version always has the database available. For local installations, see [Local Setup](#local-setup-stdio).
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
-| `birthPlace` | Artist's place of birth | Results cannot confirm the match — the artwork record does not include birth place |
-| `deathPlace` | Artist's place of death | Same limitation |
-| `profession` | Artist's profession (e.g. `painter`, `draughtsman`) | Same limitation; vocabulary labels are bilingual (EN/NL) |
+| `subject` | Iconclass subject labels (themes, scenes) | FTS5 text search on vocabulary labels |
+| `iconclass` | Iconclass notation code (e.g. `34B11` for dogs) | Exact code match |
+| `depictedPerson` | Named person depicted in the artwork | More comprehensive than `aboutActor` |
+| `depictedPlace` | Named place depicted in the artwork | |
+| `productionPlace` | Place where the work was made | May not match every `production[].place` value in artwork details |
+| `birthPlace` | Artist's place of birth | Search-only: not included in `get_artwork_details` output |
+| `deathPlace` | Artist's place of death | Search-only: not included in `get_artwork_details` output |
+| `profession` | Artist's profession (e.g. `painter`, `draughtsman`) | Search-only: not included in detail output; labels are bilingual (EN/NL) |
+| `collectionSet` | Curated collection set name (e.g. 'Rembrandt', 'Japanese') | Text search on set names. Use `list_curated_sets` to discover available sets |
+| `license` | Rights/license designation | Matches against rights URI. Common values: `publicdomain`, `zero` (CC0), `by` (CC BY) |
 
 ### Non-searchable metadata categories
 
@@ -149,7 +153,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ## Subject and Iconographic Search
 
-`search_artwork` includes ten vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` — drawn from 149,000 controlled vocabulary terms mapped to 831,000 artworks. These enable searches by what is depicted, where it was made, and who made it — including biographical attributes of the artist.
+`search_artwork` includes ten database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` — drawn from a pre-built vocabulary database of 149,000 controlled terms mapped to 831,000 artworks via 7.3 million mappings. These enable searches by what is depicted, where it was made, and who made it — including biographical attributes of the artist.
 
 ### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -506,24 +510,16 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "rijksmuseum": {
       "command": "node",
-      "args": ["/absolute/path/to/rijksmuseum-mcp-plus/dist/index.js"]
+      "args": ["/absolute/path/to/rijksmuseum-mcp-plus/dist/index.js"],
+      "env": {
+        "VOCAB_DB_URL": "https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.9/vocabulary.db.gz"
+      }
     }
   }
 }
 ```
 
-Or install from npm without cloning:
-
-```json
-{
-  "mcpServers": {
-    "rijksmuseum": {
-      "command": "npx",
-      "args": ["-y", "rijksmuseum-mcp-plus"]
-    }
-  }
-}
-```
+The server works without the vocabulary database, but [vocabulary-based search parameters](#vocabulary-database-parameters) won't be available. The `VOCAB_DB_URL` setting above enables automatic download (~444 MB compressed, ~1 GB uncompressed) on first start.
 
 Restart your MCP client after updating the config.
 
@@ -553,7 +549,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` — enable subject, iconographic, and biographical search across 831,000 artworks. All filters can be freely combined for cross-field intersection queries. Vocabulary labels are bilingual (English and Dutch). |
 | `get_artwork_details` | [24 metadata categories](docs/metadata-categories.md) by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
 | `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
-| `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Returns viewer data (IIIF ID, dimensions, URLs) — no image content. For LLM image analysis, use the `examine-artwork-image` prompt. |
+| `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Returns viewer data (IIIF ID, dimensions, URLs) — no image content. For LLM image analysis, use the `analyse-artwork` prompt. |
 | `get_artist_timeline` | Chronological timeline of an artist's works in the collection. |
 | `open_in_browser` | Open any URL (artwork page, image, viewer) in the user's default browser. |
 | `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic selections). Optional name filter. Via OAI-PMH. |
@@ -582,6 +578,8 @@ src/
     OaiPmhClient.ts           — OAI-PMH client (curated sets, EDM records, change tracking)
     VocabularyDb.ts           — SQLite vocabulary database for subject and iconographic search
   utils/
+    ResponseCache.ts          — LRU+TTL response cache
+    UsageStats.ts             — Tool call aggregation and periodic flush
     SystemIntegration.ts      — Cross-platform browser opening
 apps/
   artwork-viewer/             — MCP Apps inline IIIF viewer (Vite + OpenSeadragon)
@@ -606,7 +604,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 **Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
 
-**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms (Iconclass codes, depicted persons, depicted places, production places, birth/death places, professions) to 831,000 artworks via 8 million mappings. Built from OAI-PMH EDM records and Linked Art vocabulary resolution, it powers the `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` filters in `search_artwork`.
+**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms (Iconclass codes, depicted persons, depicted places, production places, birth/death places, professions) to 831,000 artworks via 7.3 million mappings. Built from OAI-PMH EDM records and Linked Art vocabulary resolution, it powers the `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` filters in `search_artwork`.
 
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
@@ -616,6 +614,9 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 |---|---|---|
 | `PORT` | HTTP server port (presence triggers HTTP mode) | `3000` |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
+| `VOCAB_DB_PATH` | Path to vocabulary SQLite database | `data/vocabulary.db` |
+| `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
+| `USAGE_STATS_PATH` | Path to usage stats JSON file | `data/usage-stats.json` |
 
 ---
 
