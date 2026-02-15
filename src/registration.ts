@@ -30,17 +30,19 @@ function createLogger(stats?: UsageStats) {
     fn: (...args: A) => Promise<R>
   ): (...args: A) => Promise<R> {
     return async (...args: A): Promise<R> => {
+      // args[0] = tool input params, args[1] = MCP session extra (may contain transport info — skip)
+      const input = args[0] != null && typeof args[0] === "object" ? args[0] : undefined;
       const start = performance.now();
       try {
         const result = await fn(...args);
         const ms = Math.round(performance.now() - start);
-        console.error(JSON.stringify({ tool: toolName, ms, ok: true }));
+        console.error(JSON.stringify({ tool: toolName, ms, ok: true, ...(input && { input }) }));
         stats?.record(toolName, ms, true);
         return result;
       } catch (err) {
         const ms = Math.round(performance.now() - start);
         const error = err instanceof Error ? err.message : String(err);
-        console.error(JSON.stringify({ tool: toolName, ms, ok: false, error }));
+        console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
         stats?.record(toolName, ms, false);
         throw err;
       }
