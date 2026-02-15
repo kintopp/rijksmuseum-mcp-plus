@@ -80,7 +80,7 @@ These fields are returned by `get_artwork_details` but cannot be used as search 
 “Show me a drawing by Gesina ter Borch”  
 “Find Pieter Saenredam’s paintings”  
 “Give me a list of the Rijksmuseum’s curated collections”  
-“Search for prints from the 1530s”
+“Search for prints from the 1530s”  
 “Show me woodcuts by Hokusai”  
 “Find artworks depicting the Raid on the Medway”  
 “What paintings depict Amalia van Solms?”  
