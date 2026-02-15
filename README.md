@@ -17,7 +17,7 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
 Recommended: [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). Both require a Pro or better [subscription](https://claude.com/pricing). For example, in claude.ai: Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
 
-Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan.ai](https://jan.zi)) and CLI coding apps like OpenAI Codex. Moreover, these can also be used via API charges instead of a subscription. However, to date, only Claude Desktop and claude.ai support viewing inline images [directly in the chat](docs/swan.jpg). All other clients will automatically fall back to providing links to the Rijksmuseum detail page which however also includes options to zoom in/out and export the image.
+Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan.ai](https://jan.ai)) and CLI coding apps like OpenAI Codex. Moreover, these can also be used via API charges instead of a subscription. However, to date, only Claude Desktop and claude.ai support viewing inline images [directly in the chat](docs/swan.jpg). All other clients will automatically fall back to providing links to the Rijksmuseum detail page which however also includes options to zoom in/out and export the image.
 
 ### Example Queries
 
@@ -32,7 +32,7 @@ Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan
 “Search for winter landscapes from the 17th century”  
 “Find all works made in Haarlem with the mezzotint technique”
 
-## Searching the collection
+## Search capabilities
 
 There are three classes of discoverability that users need to keep in mind when using the current (v0.8) version of the resource:
 
@@ -401,7 +401,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 - `list_curated_sets` with `query: "maritime"` or `query: "trade"` or `query: "VOC"`
 - `browse_set` to see the contents — paintings, maps, ship models, porcelain, documents
 
-**Why it matters:** Curated sets cross media boundaries. These cross-media juxtaposition can reveal connections that medium-specific searches miss.
+**Why it matters:** Curated sets cross media boundaries. These cross-media juxtapositions can reveal connections that medium-specific searches miss.
 
 ### 24. Assessing Collection Depth for Grant Applications
 
@@ -550,7 +550,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Tool | Description |
 |---|---|
-| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, and `profession` — enable subject, iconographic, and biographical search across 831,000 artworks. All filters can be freely combined for cross-field intersection queries. Vocabulary labels are bilingual (English and Dutch). |
+| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` — enable subject, iconographic, and biographical search across 831,000 artworks. All filters can be freely combined for cross-field intersection queries. Vocabulary labels are bilingual (English and Dutch). |
 | `get_artwork_details` | [24 metadata categories](docs/metadata-categories.md) by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
 | `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
 | `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Falls back to JSON + optional base64 thumbnail in text-only clients. |
@@ -606,7 +606,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 **Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
 
-**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms (Iconclass codes, depicted persons, depicted places, production places, birth/death places, professions) to 831,000 artworks via 8 million mappings. Built from OAI-PMH EDM records and Linked Art vocabulary resolution, it powers the `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, and `profession` filters in `search_artwork`.
+**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms (Iconclass codes, depicted persons, depicted places, production places, birth/death places, professions) to 831,000 artworks via 8 million mappings. Built from OAI-PMH EDM records and Linked Art vocabulary resolution, it powers the `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` filters in `search_artwork`.
 
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 

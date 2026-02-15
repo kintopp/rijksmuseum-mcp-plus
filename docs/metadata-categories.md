@@ -50,7 +50,7 @@ The subject annotations listed under [Iconography](#iconography) (Iconclass code
 | 16 | **Provenance** | `provenance` | Ownership history text, classified under AAT "provenance statement" (300444174). |
 | 17 | **Credit line** | `creditLine` | Acknowledgement text for the current holding (AAT 300026687). |
 | 18 | **Current location** | `location` | Physical location within the museum (e.g. gallery and room identifier). Parsed from `current_location.identified_by`. |
-| 19 | **Collection sets** | `collectionSets` | Raw Rijksmuseum vocabulary URIs for the collections this object belongs to (from `member_of`). |
+| 19 | **Collection sets** | `collectionSets` | Raw Rijksmuseum vocabulary URIs for the collections this object belongs to (from `member_of`). Also searchable via `search_artwork`'s `collectionSet` filter. |
 | 20 | **Collection set labels** | `collectionSetLabels` | Resolved English names for each collection set, with AAT and Wikidata equivalents. |
 
 ## Iconography
@@ -64,7 +64,7 @@ The subject annotations listed under [Iconography](#iconography) (Iconclass code
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
 | 22 | **Web page** | `webPage` | URL of the artwork's page on the Rijksmuseum website, extracted from `subject_of.digitally_carried_by` where the format is `text/html`. |
-| 23 | **License** | `license` | Rights/license URI (e.g. CC0 1.0, Public Domain Mark), extracted from `subject_of.subject_to`. |
+| 23 | **License** | `license` | Rights/license URI (e.g. CC0 1.0, Public Domain Mark), extracted from `subject_of.subject_to`. Also searchable via `search_artwork`'s `license` filter. |
 
 ## Related Works
 
