@@ -6,9 +6,11 @@ import express from "express";
 import cors from "cors";
 import crypto from "node:crypto";
 
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
+import { fileURLToPath } from "node:url";
 import { createGunzip } from "node:zlib";
 
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
@@ -20,7 +22,24 @@ import { registerAll } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 
 const SERVER_NAME = "rijksmuseum-mcp+";
-const SERVER_VERSION = "2.0.0";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8"));
+const SERVER_VERSION: string = pkg.version;
+
+function getGitCommit(): string {
+  // Railway injects this automatically
+  if (process.env.RAILWAY_GIT_COMMIT_SHA) {
+    return process.env.RAILWAY_GIT_COMMIT_SHA.slice(0, 7);
+  }
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+const GIT_COMMIT = getGitCommit();
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -279,7 +298,7 @@ async function runHttp(): Promise<void> {
   // ── Health check ────────────────────────────────────────────────
 
   app.get("/health", (_req: express.Request, res: express.Response) => {
-    res.json({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION });
+    res.json({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION, commit: GIT_COMMIT });
   });
 
   // ── Start ───────────────────────────────────────────────────────
