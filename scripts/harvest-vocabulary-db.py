@@ -79,10 +79,14 @@ AAT_INSCRIPTIONS = "http://vocab.getty.edu/aat/300435414"
 AAT_PROVENANCE = "http://vocab.getty.edu/aat/300444174"
 AAT_CREDIT_LINE = "http://vocab.getty.edu/aat/300026687"
 AAT_UNIT_CM = "http://vocab.getty.edu/aat/300379098"
-AAT_UNIT_MM = "http://vocab.getty.edu/aat/300379099"
+AAT_UNIT_MM = "http://vocab.getty.edu/aat/300379097"
 AAT_UNIT_M = "http://vocab.getty.edu/aat/300379100"
 AAT_HEIGHT = "http://vocab.getty.edu/aat/300055644"
 AAT_WIDTH = "http://vocab.getty.edu/aat/300055647"
+RM_HEIGHT = "https://id.rijksmuseum.nl/22011"
+RM_WIDTH = "https://id.rijksmuseum.nl/22012"
+HEIGHT_URIS = {AAT_HEIGHT, RM_HEIGHT}
+WIDTH_URIS = {AAT_WIDTH, RM_WIDTH}
 
 # ─── N-Triples parsing (same as pilot) ──────────────────────────────
 
@@ -837,12 +841,14 @@ def run_phase2(conn: sqlite3.Connection):
 
 # ─── Phase 4: Linked Art Resolution (Tier 2) ─────────────────────────
 
-def has_classification(classified_as: list | None, aat_uri: str) -> bool:
-    """Check if a classified_as array contains a given AAT URI."""
+def has_classification(classified_as: list | None, uris: str | set[str]) -> bool:
+    """Check if a classified_as array contains any of the given URIs."""
     if not classified_as:
         return False
+    if isinstance(uris, str):
+        uris = {uris}
     return any(
-        (c.get("id", "") if isinstance(c, dict) else str(c)) == aat_uri
+        (c.get("id", "") if isinstance(c, dict) else str(c)) in uris
         for c in classified_as
     )
 
@@ -874,7 +880,7 @@ UNIT_TO_CM = {
 }
 
 
-def extract_dimension_cm(dimensions: list | None, aat_type: str) -> float | None:
+def extract_dimension_cm(dimensions: list | None, type_uris: set[str]) -> float | None:
     """Extract a dimension value in centimeters for a given dimension type (height/width)."""
     if not dimensions:
         return None
@@ -884,7 +890,7 @@ def extract_dimension_cm(dimensions: list | None, aat_type: str) -> float | None
         value = dim.get("value")
         if value is None:
             continue
-        if not has_classification(dim.get("classified_as", []), aat_type):
+        if not has_classification(dim.get("classified_as", []), type_uris):
             continue
         unit = dim.get("unit", {})
         unit_id = unit.get("id", "") if isinstance(unit, dict) else ""
@@ -980,8 +986,8 @@ def resolve_artwork(uri: str) -> dict | None:
 
     # Structured dimensions
     dimensions = data.get("dimension", [])
-    height_cm = extract_dimension_cm(dimensions, AAT_HEIGHT)
-    width_cm = extract_dimension_cm(dimensions, AAT_WIDTH)
+    height_cm = extract_dimension_cm(dimensions, HEIGHT_URIS)
+    width_cm = extract_dimension_cm(dimensions, WIDTH_URIS)
 
     # Production roles and attribution qualifiers
     roles, qualifiers = extract_production_parts(data)
