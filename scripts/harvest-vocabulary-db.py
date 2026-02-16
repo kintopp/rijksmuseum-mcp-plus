@@ -13,7 +13,7 @@ Phases:
   2.  Resolve unmatched vocabulary URIs via Linked Art API (multi-threaded)
   4.  Resolve all artwork Linked Art URIs for Tier 2 fields: inscriptions, provenance,
       credit lines, dimensions, production roles, attribution qualifiers (multi-threaded)
-  3.  Post-processing: FTS5 indexes, validation stats (runs last)
+  3.  Post-processing: geocoding import, normalized labels, FTS5 indexes, validation stats (runs last)
 
 Usage:
     python3 scripts/harvest-vocabulary-db.py                # Full run (all phases)
@@ -22,6 +22,7 @@ Usage:
     python3 scripts/harvest-vocabulary-db.py --phase 3      # Run only from phase N onward
     python3 scripts/harvest-vocabulary-db.py --phase 4      # Run Phase 4 + 3 only
     python3 scripts/harvest-vocabulary-db.py --threads 16   # Phase 4 thread count
+    python3 scripts/harvest-vocabulary-db.py --phase 3 --geo-csv offline/geo/geocoded_places_full.csv
 
 Output: data/vocabulary.db (~1 GB)
 """
@@ -164,8 +165,10 @@ CREATE TABLE IF NOT EXISTS vocabulary (
     external_id TEXT,
     broader_id  TEXT,
     notation    TEXT,
-    lat         REAL,
-    lon         REAL
+    lat             REAL,
+    lon             REAL,
+    label_en_norm   TEXT,
+    label_nl_norm   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS artworks (
@@ -214,6 +217,13 @@ def create_or_open_db() -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA cache_size=-64000")  # 64 MB cache
     conn.executescript(SCHEMA_SQL)
+
+    # Migrate existing DBs: add normalized label columns if missing
+    vocab_cols = {row[1] for row in conn.execute("PRAGMA table_info(vocabulary)").fetchall()}
+    for col_name, col_type in [("label_en_norm", "TEXT"), ("label_nl_norm", "TEXT")]:
+        if col_name not in vocab_cols:
+            conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} {col_type}")
+            print(f"  Migrated: added vocabulary.{col_name}")
 
     # Migrate existing DBs: add Tier 2 columns if missing
     existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(artworks)").fetchall()}
@@ -1115,11 +1125,101 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Attr. quals:  {qualifier_count:,}")
 
 
+# ─── Geocoding Import ────────────────────────────────────────────────
+
+def import_geocoding(conn: sqlite3.Connection, csv_path: str):
+    """Import geocoded place data from CSV into the vocabulary table.
+
+    Updates lat, lon, and (optionally) external_id for existing place records.
+    Only updates external_id if the CSV has a non-empty value that differs from the DB.
+    """
+    import csv
+
+    csv_file = Path(csv_path)
+    if not csv_file.exists():
+        print(f"  ERROR: Geocoding CSV not found: {csv_path}")
+        return
+
+    print(f"  Reading: {csv_path}")
+    updated_coords = 0
+    updated_ext_id = 0
+    skipped_missing = 0
+    skipped_not_place = 0
+
+    with open(csv_file, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        batch = []
+
+        for row in reader:
+            vocab_id = row.get("id", "").strip()
+            lat_str = row.get("lat", "").strip()
+            lon_str = row.get("lon", "").strip()
+            ext_id = row.get("external_id", "").strip()
+
+            if not vocab_id or not lat_str or not lon_str:
+                continue
+
+            try:
+                lat = float(lat_str)
+                lon = float(lon_str)
+            except ValueError:
+                continue
+
+            batch.append((vocab_id, lat, lon, ext_id))
+
+        print(f"  Parsed {len(batch):,} geocoded places from CSV")
+
+    for vocab_id, lat, lon, ext_id in batch:
+        # Check current record
+        existing = conn.execute(
+            "SELECT type, lat, lon, external_id FROM vocabulary WHERE id = ?",
+            (vocab_id,),
+        ).fetchone()
+
+        if existing is None:
+            skipped_missing += 1
+            continue
+
+        if existing[0] != "place":
+            skipped_not_place += 1
+            continue
+
+        # Update lat/lon
+        conn.execute(
+            "UPDATE vocabulary SET lat = ?, lon = ? WHERE id = ?",
+            (lat, lon, vocab_id),
+        )
+        updated_coords += 1
+
+        # Update external_id if CSV has a better one
+        if ext_id and ext_id != existing[3]:
+            conn.execute(
+                "UPDATE vocabulary SET external_id = ? WHERE id = ?",
+                (ext_id, vocab_id),
+            )
+            updated_ext_id += 1
+
+    conn.commit()
+    print(f"  Geocoding import complete:")
+    print(f"    Coordinates updated: {updated_coords:,}")
+    print(f"    External IDs updated: {updated_ext_id:,}")
+    if skipped_missing:
+        print(f"    Skipped (not in DB): {skipped_missing:,}")
+    if skipped_not_place:
+        print(f"    Skipped (not a place): {skipped_not_place:,}")
+
+
 # ─── Phase 3: Validation ─────────────────────────────────────────────
 
-def run_phase3(conn: sqlite3.Connection):
-    """Phase 3: Print validation stats."""
+def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
+    """Phase 3: Post-processing (geocoding import, FTS, stats)."""
     cur = conn.cursor()
+
+    # Import geocoding data if CSV provided
+    if geo_csv:
+        print("\n--- Geocoding Import ---")
+        import_geocoding(conn, geo_csv)
+        print()
 
     print("\n" + "=" * 60)
     print("DATABASE STATISTICS")
@@ -1193,6 +1293,20 @@ def run_phase3(conn: sqlite3.Connection):
     conn.execute("INSERT INTO vocabulary_fts(vocabulary_fts) VALUES('rebuild')")
     fts_count = cur.execute("SELECT COUNT(*) FROM vocabulary_fts").fetchone()[0]
     print(f"    vocabulary_fts: {fts_count:,} rows")
+    conn.commit()
+
+    # Populate normalized label columns (space-stripped lowercase for LIKE fallback)
+    print("  Populating normalized label columns...")
+    conn.execute("""
+        UPDATE vocabulary SET
+            label_en_norm = REPLACE(LOWER(label_en), ' ', ''),
+            label_nl_norm = REPLACE(LOWER(label_nl), ' ', '')
+        WHERE label_en IS NOT NULL OR label_nl IS NOT NULL
+    """)
+    norm_count = cur.execute(
+        "SELECT COUNT(*) FROM vocabulary WHERE label_en_norm IS NOT NULL OR label_nl_norm IS NOT NULL"
+    ).fetchone()[0]
+    print(f"    Normalized labels: {norm_count:,} rows")
     conn.commit()
 
     # Create FTS5 virtual table for artwork text fields (Tier 2)
@@ -1356,6 +1470,11 @@ def parse_args() -> argparse.Namespace:
         "--threads", type=int, default=DEFAULT_THREADS,
         help=f"Thread count for Phase 4 Linked Art resolution (default: {DEFAULT_THREADS})",
     )
+    parser.add_argument(
+        "--geo-csv", type=str, default=None, dest="geo_csv",
+        help="Path to geocoded places CSV (id,place_name,label_en,label_nl,external_id,lat,lon,artwork_count). "
+             "Imports geocoding data into vocabulary table during Phase 3.",
+    )
     return parser.parse_args()
 
 
@@ -1363,7 +1482,7 @@ def main():
     args = parse_args()
 
     print(f"Database: {DB_PATH}")
-    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}")
+    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}")
     print()
 
     conn = create_or_open_db()
@@ -1407,7 +1526,7 @@ def main():
         print()
 
     print("=== Phase 3: Validation & Post-processing ===")
-    run_phase3(conn)
+    run_phase3(conn, geo_csv=args.geo_csv)
 
     conn.close()
     print(f"\nDone. Database at: {DB_PATH}")

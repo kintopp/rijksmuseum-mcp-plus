@@ -84,6 +84,7 @@ export class VocabularyDb {
   private hasFts5 = false;
   private hasTextFts = false;
   private hasDimensions = false;
+  private hasNormLabels = false;
 
   constructor() {
     const dbPath = this.resolveDbPath();
@@ -105,11 +106,13 @@ export class VocabularyDb {
       this.hasFts5 = this.tableExists("vocabulary_fts");
       this.hasTextFts = this.tableExists("artwork_texts_fts");
       this.hasDimensions = this.columnExists("artworks", "height_cm");
+      this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm");
 
       const features = [
         this.hasFts5 && "vocabFTS5",
         this.hasTextFts && "textFTS5",
         this.hasDimensions && "dimensions",
+        this.hasNormLabels && "normLabels",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -191,18 +194,43 @@ export class VocabularyDb {
 
       const typeClause = filter.vocabType ? ` AND type = '${filter.vocabType}'` : "";
 
-      // Two-step subquery: first narrow vocabulary (149K rows), then index-lookup mappings.
-      // ~20x faster than JOIN which scans up to 2M mapping rows.
-      let vocabWhere: string;
-      let matchBindings: unknown[];
-
-      // When FTS5 is available and the filter supports it, use token lookup (~500x faster)
+      // When FTS5 is available and the filter supports it, use token lookup (~500x faster).
+      // If FTS5 returns 0 results and normalized label columns exist, fall back to LIKE
+      // on space-stripped labels (handles compound word variants like "printmaker" vs "print maker").
       const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
 
       if (useFts) {
-        vocabWhere = `rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)`;
-        matchBindings = [escapeFts5(String(value))];
+        // Two-phase vocab ID lookup: FTS5 first, then LIKE fallback on normalized columns
+        const ftsPhrase = escapeFts5(String(value));
+        let vocabIds = this.db!.prepare(
+          `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
+        ).all(ftsPhrase) as { id: string }[];
+
+        // Fallback: if FTS5 found nothing and we have normalized label columns, try LIKE
+        if (vocabIds.length === 0 && this.hasNormLabels) {
+          const normValue = `%${String(value).toLowerCase().replace(/ /g, "")}%`;
+          vocabIds = this.db!.prepare(
+            `SELECT id FROM vocabulary WHERE (label_en_norm LIKE ? OR label_nl_norm LIKE ?)${typeClause}`
+          ).all(normValue, normValue) as { id: string }[];
+        }
+
+        if (vocabIds.length === 0) {
+          // No matching vocab terms — entire search will return 0 results
+          return { totalResults: 0, results: [], source: "vocabulary", ...(warnings.length > 0 && { warnings }) };
+        }
+
+        // Feed vocab IDs into the artwork subquery via placeholders
+        const placeholders = vocabIds.map(() => "?").join(", ");
+        conditions.push(`a.object_number IN (
+          SELECT m.object_number FROM mappings m
+          WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
+        )`);
+        bindings.push(...vocabIds.map((r) => r.id));
       } else {
+        // Non-FTS path: inline vocab subquery as before
+        let vocabWhere: string;
+        let matchBindings: unknown[];
+
         switch (filter.matchMode) {
           case "exact-notation":
             vocabWhere = "notation = ?";
@@ -217,15 +245,15 @@ export class VocabularyDb {
             matchBindings = [`%${value}%`, `%${value}%`];
             break;
         }
-      }
 
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        WHERE ${fieldClause} AND m.vocab_id IN (
-          SELECT id FROM vocabulary WHERE ${vocabWhere}${typeClause}
-        )
-      )`);
-      bindings.push(...matchBindings);
+        conditions.push(`a.object_number IN (
+          SELECT m.object_number FROM mappings m
+          WHERE ${fieldClause} AND m.vocab_id IN (
+            SELECT id FROM vocabulary WHERE ${vocabWhere}${typeClause}
+          )
+        )`);
+        bindings.push(...matchBindings);
+      }
     }
 
     // Direct column filter: license matches against artworks.rights_uri
