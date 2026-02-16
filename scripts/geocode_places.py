@@ -58,7 +58,6 @@ GEONAMES_API = "http://api.geonames.org/getJSON"
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 USER_AGENT = "rijksmuseum-mcp-geocoder/2.0 (https://github.com/kintopp/rijksmuseum-mcp-plus)"
 WHG_RECONCILE_URL = "https://whgazetteer.org/reconcile"
-WHG_ENTITY_URL = "https://whgazetteer.org/entity"
 
 # P31 allowlist for geographic entities (used in Phase 3 scoring)
 GEOGRAPHIC_TYPES = {
@@ -981,11 +980,13 @@ def phase_3_reconciliation(conn: sqlite3.Connection,
 # Phase 3b: World Historical Gazetteer reconciliation
 # ---------------------------------------------------------------------------
 
-def whg_reconcile_batch(queries: dict, token: str, retries: int = 3) -> dict:
-    """POST batch reconciliation queries to WHG. Returns {qN: {result: [...]}}."""
-    url = f"{WHG_RECONCILE_URL}?token={token}"
-    body = urllib.parse.urlencode({"queries": json.dumps(queries)}).encode()
-    req = urllib.request.Request(url, data=body, method="POST")
+WHG_PLACE_TYPE = "https://whgazetteer.org/static/whg_schema.jsonld#Place"
+
+
+def _whg_post(params: dict[str, str], retries: int = 3) -> dict:
+    """POST form-encoded params to the WHG reconciliation endpoint with retries."""
+    body = urllib.parse.urlencode(params).encode()
+    req = urllib.request.Request(WHG_RECONCILE_URL, data=body, method="POST")
     req.add_header("User-Agent", USER_AGENT)
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
 
@@ -997,9 +998,24 @@ def whg_reconcile_batch(queries: dict, token: str, retries: int = 3) -> dict:
             if attempt == retries - 1:
                 raise
             wait = 2 ** (attempt + 1)
-            print(f"  WHG reconcile retry in {wait}s: {e}", file=sys.stderr)
+            print(f"  WHG retry in {wait}s: {e}", file=sys.stderr)
             time.sleep(wait)
     return {}
+
+
+def whg_reconcile_batch(queries: dict) -> dict:
+    """POST batch reconciliation queries to WHG. Returns {qN: {result: [...]}}."""
+    return _whg_post({"queries": json.dumps(queries)})
+
+
+def whg_extend_batch(entity_ids: list[str],
+                     properties: list[str]) -> dict:
+    """POST data extension request to WHG. Returns {rows: {id: {prop: [...]}}}."""
+    extend = {
+        "ids": entity_ids,
+        "properties": [{"id": p} for p in properties],
+    }
+    return _whg_post({"extend": json.dumps(extend)})
 
 
 def _mean_coord(points: list[list[float]]) -> tuple[float, float]:
@@ -1038,29 +1054,77 @@ def _centroid(geometry: dict) -> tuple[float, float] | None:
     return None
 
 
-def whg_fetch_entity_coords(entity_id: str, token: str
-                            ) -> tuple[float, float] | None:
-    """Fetch entity from WHG Entity API, return (lat, lon) or None."""
-    encoded = urllib.parse.quote(entity_id, safe="")
-    url = f"{WHG_ENTITY_URL}/{encoded}/api?token={token}"
+def _parse_centroid_str(centroid_str: str) -> tuple[float, float] | None:
+    """Parse WHG centroid string → (lat, lon).
+
+    WHG returns centroid as comma-separated 'lat, lng' string
+    (e.g. '52.374029999999955, 4.88969').
+    """
     try:
-        data = fetch_json(url)
-    except Exception:
-        return None
+        parts = centroid_str.split(",")
+        if len(parts) == 2:
+            lat = float(parts[0].strip())
+            lng = float(parts[1].strip())
+            if lat != 0 or lng != 0:
+                return (lat, lng)
+    except (ValueError, TypeError):
+        pass
+    # Fallback: try JSON object format
+    try:
+        obj = json.loads(centroid_str)
+        lat = float(obj.get("lat", 0))
+        lng = float(obj.get("lng", 0))
+        if lat != 0 or lng != 0:
+            return (lat, lng)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None
 
-    geom = data.get("geometry")
-    if not geom:
-        return None
-    return _centroid(geom)
+
+def _parse_geojson_str(geojson_str: str) -> tuple[float, float] | None:
+    """Parse WHG geometry_geojson string → centroid (lat, lon)."""
+    try:
+        geoms = json.loads(geojson_str)
+        if isinstance(geoms, list):
+            for geom in geoms:
+                result = _centroid(geom)
+                if result:
+                    return result
+        elif isinstance(geoms, dict):
+            return _centroid(geoms)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
 
 
-def phase_3b_whg(conn: sqlite3.Connection, token: str,
+def _extract_coords_from_props(props: dict) -> tuple[float, float] | None:
+    """Extract (lat, lon) from WHG extend response properties.
+
+    Tries centroid string first (simpler), falls back to GeoJSON geometry.
+    """
+    parsers = [
+        ("whg:geometry_centroid", _parse_centroid_str),
+        ("whg:geometry_geojson", _parse_geojson_str),
+    ]
+    for key, parser in parsers:
+        for v in props.get(key, []):
+            coord = parser(v.get("str", ""))
+            if coord:
+                return coord
+    return None
+
+
+def phase_3b_whg(conn: sqlite3.Connection,
                  dry_run: bool = False,
                  output_dir: str = "offline/geo") -> int:
     """
     Reconcile ungeocoded place names via the World Historical Gazetteer API.
     Targets places without external IDs that still lack coordinates
     (i.e. whatever Phase 3 didn't resolve).
+
+    Uses the WHG Reconciliation Service API v0.2 (auth-free):
+    - POST /reconcile with queries → fuzzy name matching
+    - POST /reconcile with extend → batch coordinate fetching
     """
     places = get_ungeocoded(conn, "no_external_used")
     if not places:
@@ -1076,11 +1140,11 @@ def phase_3b_whg(conn: sqlite3.Connection, token: str,
         return 0
 
     # ------------------------------------------------------------------
-    # Step 1: Batch reconciliation
+    # Step 1: Batch reconciliation (50 queries/batch, auth-free)
     # ------------------------------------------------------------------
     print("Phase 3b-1: Reconciling via WHG...", file=sys.stderr)
     all_matches: dict[str, list[dict]] = {}
-    batch_size = 25
+    batch_size = 50  # WHG's batch limit
 
     for i in range(0, len(candidates), batch_size):
         batch = candidates[i:i + batch_size]
@@ -1088,20 +1152,27 @@ def phase_3b_whg(conn: sqlite3.Connection, token: str,
         batch_map: dict[str, tuple[str, str]] = {}
         for j, (vid, name) in enumerate(batch):
             key = f"q{j}"
-            queries[key] = {"query": name}
+            queries[key] = {
+                "query": name,
+                "type": WHG_PLACE_TYPE,
+                "limit": 5,
+            }
             batch_map[key] = (vid, name)
 
         try:
-            resp = whg_reconcile_batch(queries, token)
+            resp = whg_reconcile_batch(queries)
             for key, data in resp.items():
                 if key in batch_map:
                     vid, _ = batch_map[key]
                     results = data.get("result", []) if isinstance(data, dict) else []
+                    # Filter out dummy responses
+                    results = [r for r in results
+                               if not r.get("id", "").startswith("dummy:")]
                     all_matches[vid] = results
         except Exception as e:
             print(f"  Batch {i // batch_size + 1} error: {e}", file=sys.stderr)
 
-        time.sleep(1.0)
+        time.sleep(0.5)
         done = min(i + batch_size, len(candidates))
         if done % 500 < batch_size or done == len(candidates):
             print(f"  ... {done}/{len(candidates)} reconciled", file=sys.stderr)
@@ -1111,31 +1182,44 @@ def phase_3b_whg(conn: sqlite3.Connection, token: str,
           file=sys.stderr)
 
     # ------------------------------------------------------------------
-    # Step 2: Fetch entity coordinates for top candidates
+    # Step 2: Batch-fetch coordinates via data extension (auth-free)
     # ------------------------------------------------------------------
     print("Phase 3b-2: Fetching entity coordinates...", file=sys.stderr)
 
     # Collect unique entity IDs from top-3 candidates per place
-    entity_ids: set[str] = set()
-    for results in all_matches.values():
-        for r in results[:3]:
-            eid = r.get("id", "")
-            if eid:
-                entity_ids.add(eid)
+    entity_ids_needed = {
+        r.get("id", "")
+        for results in all_matches.values()
+        for r in results[:3]
+    } - {""}  # exclude empty IDs
 
     entity_coords: dict[str, tuple[float, float]] = {}
+    extend_batch_size = 50  # keep batches manageable
 
-    for i, eid in enumerate(sorted(entity_ids)):
-        coords = whg_fetch_entity_coords(eid, token)
-        if coords:
-            entity_coords[eid] = coords
-        time.sleep(0.25)
-        if (i + 1) % 200 == 0:
-            print(f"  ... {i + 1}/{len(entity_ids)} entities fetched "
+    sorted_ids = sorted(entity_ids_needed)
+    for i in range(0, len(sorted_ids), extend_batch_size):
+        batch_ids = sorted_ids[i:i + extend_batch_size]
+        try:
+            resp = whg_extend_batch(
+                batch_ids,
+                ["whg:geometry_centroid", "whg:geometry_geojson"],
+            )
+            for eid, props in resp.get("rows", {}).items():
+                coord = _extract_coords_from_props(props)
+                if coord:
+                    entity_coords[eid] = coord
+        except Exception as e:
+            print(f"  Extend batch {i // extend_batch_size + 1} error: {e}",
+                  file=sys.stderr)
+
+        time.sleep(0.5)
+        if (i + extend_batch_size) % 500 < extend_batch_size:
+            print(f"  ... {min(i + extend_batch_size, len(sorted_ids))}"
+                  f"/{len(sorted_ids)} entities fetched "
                   f"({len(entity_coords)} with coords)", file=sys.stderr)
 
-    print(f"  {len(entity_coords)}/{len(entity_ids)} entities have coordinates",
-          file=sys.stderr)
+    print(f"  {len(entity_coords)}/{len(entity_ids_needed)} entities "
+          f"have coordinates", file=sys.stderr)
 
     # ------------------------------------------------------------------
     # Step 3: Score and classify
@@ -1245,7 +1329,8 @@ def phase_3b_whg(conn: sqlite3.Connection, token: str,
     # ------------------------------------------------------------------
     updates: dict[str, tuple[float, float, str]] = {}
     for vid, name, eid, lat, lon, score in accepted:
-        whg_uri = f"https://whgazetteer.org/place/{eid}"
+        # eid is like "place:1234567" — build WHG entity URL
+        whg_uri = f"https://whgazetteer.org/entity/{eid}/"
         updates[vid] = (lat, lon, whg_uri)
 
     updated = update_coords_and_ids(conn, updates, dry_run)
@@ -1514,9 +1599,6 @@ Examples:
     parser.add_argument("--geonames-user",
                         default=os.environ.get("GEONAMES_USERNAME", "demo"),
                         help="GeoNames API username (or set GEONAMES_USERNAME env var)")
-    parser.add_argument("--whg-token",
-                        default=os.environ.get("WHG_TOKEN", ""),
-                        help="WHG API token (or set WHG_TOKEN env var)")
     parser.add_argument("--skip-whg", action="store_true",
                         help="Skip Phase 3b (WHG reconciliation)")
     parser.add_argument("--apply-reviewed",
@@ -1588,19 +1670,11 @@ Examples:
         total_updated += phase_3_reconciliation(
             conn, args.dry_run, args.output_dir)
 
-    # Phase 3b: World Historical Gazetteer reconciliation
+    # Phase 3b: World Historical Gazetteer reconciliation (auth-free)
     if run_phase in (None, "3b") and not args.skip_whg:
-        if args.whg_token:
-            print(f"\n--- Phase 3b: WHG reconciliation ---", file=sys.stderr)
-            total_updated += phase_3b_whg(
-                conn, args.whg_token, args.dry_run, args.output_dir)
-        elif run_phase == "3b":
-            print("Phase 3b requires --whg-token or WHG_TOKEN env var",
-                  file=sys.stderr)
-            sys.exit(1)
-        else:
-            print(f"\n--- Phase 3b: Skipped (no WHG token) ---",
-                  file=sys.stderr)
+        print(f"\n--- Phase 3b: WHG reconciliation ---", file=sys.stderr)
+        total_updated += phase_3b_whg(
+            conn, args.dry_run, args.output_dir)
 
     # Phase 4: Validation
     if run_phase in (None, "4"):
