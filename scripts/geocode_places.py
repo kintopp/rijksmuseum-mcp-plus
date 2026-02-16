@@ -42,10 +42,10 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 _env_file = Path(__file__).resolve().parent.parent / ".env"
 if _env_file.exists():
-    for line in _env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, value = line.partition("=")
+    for raw_line in _env_file.read_text().splitlines():
+        stripped = raw_line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key, _, value = stripped.partition("=")
             os.environ.setdefault(key.strip(), value.strip())
 
 # ---------------------------------------------------------------------------
@@ -519,6 +519,45 @@ def extract_parenthetical(name: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
+def _parse_search_items(data: dict | None, lang: str) -> list[dict]:
+    """Extract candidate dicts from a Wikidata wbsearchentities response."""
+    if not data:
+        return []
+    return [
+        {
+            "qid": item["id"],
+            "label": item.get("label", ""),
+            "description": item.get("description", ""),
+            "match_lang": lang,
+        }
+        for item in data.get("search", [])
+    ]
+
+
+def _deduplicate_candidates(candidates: list[dict], limit: int = 5) -> list[dict]:
+    """Deduplicate candidates by QID, keeping first occurrence."""
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for c in candidates:
+        if c["qid"] not in seen:
+            seen.add(c["qid"])
+            unique.append(c)
+    return unique[:limit]
+
+
+def _build_search_url(name: str, lang: str) -> str:
+    """Build a Wikidata wbsearchentities URL."""
+    params = urllib.parse.urlencode({
+        "action": "wbsearchentities",
+        "search": name,
+        "language": lang,
+        "uselang": lang,
+        "limit": "5",
+        "format": "json",
+    })
+    return f"{WIKIDATA_API}?{params}"
+
+
 async def search_wikidata_entities(names: list[tuple[str, str]],
                                    concurrency: int = 3
                                    ) -> dict[str, list[dict]]:
@@ -542,19 +581,19 @@ async def search_wikidata_entities(names: list[tuple[str, str]],
     errors_429 = 0
 
     # Shared backoff state: when one request gets 429, all slow down
-    backoff_until = 0.0  # monotonic time until which we should wait
+    backoff_until = 0.0
 
     async def _get_with_retry(session: aiohttp.ClientSession,
                               url: str, max_retries: int = 4) -> dict | None:
         """GET with exponential backoff on 429/5xx."""
         nonlocal backoff_until, errors_429
+        loop = asyncio.get_running_loop()
+
         for attempt in range(max_retries + 1):
-            # Respect shared backoff
-            now = asyncio.get_event_loop().time()
+            now = loop.time()
             if backoff_until > now:
                 await asyncio.sleep(backoff_until - now)
 
-            # Small inter-request delay to stay under rate limit
             await asyncio.sleep(0.2)
 
             try:
@@ -562,7 +601,7 @@ async def search_wikidata_entities(names: list[tuple[str, str]],
                     if resp.status == 429:
                         errors_429 += 1
                         wait = min(2 ** attempt * 5, 60)
-                        backoff_until = asyncio.get_event_loop().time() + wait
+                        backoff_until = loop.time() + wait
                         if errors_429 <= 3:
                             print(f"  Rate limited (429), backing off {wait}s...",
                                   file=sys.stderr)
@@ -585,61 +624,21 @@ async def search_wikidata_entities(names: list[tuple[str, str]],
         candidates = []
 
         async with semaphore:
-            # Try Dutch first, then English
             for lang in ("nl", "en"):
-                params = {
-                    "action": "wbsearchentities",
-                    "search": name,
-                    "language": lang,
-                    "uselang": lang,
-                    "limit": "5",
-                    "format": "json",
-                }
-                url = f"{WIKIDATA_API}?{urllib.parse.urlencode(params)}"
+                url = _build_search_url(name, lang)
                 data = await _get_with_retry(session, url)
-                if data:
-                    for item in data.get("search", []):
-                        candidates.append({
-                            "qid": item["id"],
-                            "label": item.get("label", ""),
-                            "description": item.get("description", ""),
-                            "match_lang": lang,
-                        })
-
+                candidates.extend(_parse_search_items(data, lang))
                 if candidates:
-                    break  # Got results in this language, skip fallback
+                    break
 
-            # Also try bare name if parenthetical
+            # Try bare name if parenthetical and no results yet
             bare = strip_parenthetical(name)
             if bare and not candidates:
-                params = {
-                    "action": "wbsearchentities",
-                    "search": bare,
-                    "language": "nl",
-                    "uselang": "nl",
-                    "limit": "5",
-                    "format": "json",
-                }
-                url = f"{WIKIDATA_API}?{urllib.parse.urlencode(params)}"
+                url = _build_search_url(bare, "nl")
                 data = await _get_with_retry(session, url)
-                if data:
-                    for item in data.get("search", []):
-                        candidates.append({
-                            "qid": item["id"],
-                            "label": item.get("label", ""),
-                            "description": item.get("description", ""),
-                            "match_lang": "nl",
-                        })
+                candidates.extend(_parse_search_items(data, "nl"))
 
-        # Deduplicate by QID
-        seen_qids = set()
-        unique = []
-        for c in candidates:
-            if c["qid"] not in seen_qids:
-                seen_qids.add(c["qid"])
-                unique.append(c)
-
-        results[vocab_id] = unique[:5]
+        results[vocab_id] = _deduplicate_candidates(candidates)
 
         done += 1
         if done % 200 == 0:
@@ -667,23 +666,10 @@ def _search_wikidata_sync(names: list[tuple[str, str]]
         candidates = []
 
         for lang in ("nl", "en"):
-            params = urllib.parse.urlencode({
-                "action": "wbsearchentities",
-                "search": name,
-                "language": lang,
-                "uselang": lang,
-                "limit": "5",
-                "format": "json",
-            })
+            url = _build_search_url(name, lang)
             try:
-                data = fetch_json(f"{WIKIDATA_API}?{params}")
-                for item in data.get("search", []):
-                    candidates.append({
-                        "qid": item["id"],
-                        "label": item.get("label", ""),
-                        "description": item.get("description", ""),
-                        "match_lang": lang,
-                    })
+                data = fetch_json(url)
+                candidates.extend(_parse_search_items(data, lang))
             except Exception as e:
                 print(f"  Search error for '{name}' ({lang}): {e}",
                       file=sys.stderr)
@@ -691,15 +677,7 @@ def _search_wikidata_sync(names: list[tuple[str, str]]
             if candidates:
                 break
 
-        # Deduplicate
-        seen = set()
-        unique = []
-        for c in candidates:
-            if c["qid"] not in seen:
-                seen.add(c["qid"])
-                unique.append(c)
-
-        results[vocab_id] = unique[:5]
+        results[vocab_id] = _deduplicate_candidates(candidates)
         time.sleep(0.2)
 
         if (i + 1) % 200 == 0:
