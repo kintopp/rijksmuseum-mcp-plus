@@ -245,7 +245,6 @@ async function runStdio(): Promise<void> {
 
 async function runHttp(): Promise<void> {
   await initVocabularyDb();
-  vocabDb?.warmPageCache();
   initSharedClients();
   initUsageStats();
   const port = getHttpPort();
@@ -362,9 +361,13 @@ async function runHttp(): Promise<void> {
     console.error(`  MCP endpoint: POST /mcp`);
     console.error(`  Viewer:       GET  /viewer?iiif={id}&title={title}`);
     console.error(`  Health:       GET  /health`);
-    // Pre-warm caches in background after server is accepting connections
-    // Vocab first so common terms are cached before artwork resolution
-    warmVocabCache().then(() => warmTopArtworkVocab());
+    // Pre-warm caches in background after server is accepting connections.
+    // setTimeout yields to the event loop so /health can respond first,
+    // then warmPageCache (synchronous, ~10-80s) runs before async warming.
+    setTimeout(() => {
+      vocabDb?.warmPageCache();
+      warmVocabCache().then(() => warmTopArtworkVocab());
+    }, 0);
   });
 }
 
