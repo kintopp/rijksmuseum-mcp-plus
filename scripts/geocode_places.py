@@ -38,6 +38,17 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# Load .env from project root (no external dependency)
+# ---------------------------------------------------------------------------
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+if _env_file.exists():
+    for line in _env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip())
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -509,12 +520,14 @@ def extract_parenthetical(name: str) -> str | None:
 
 
 async def search_wikidata_entities(names: list[tuple[str, str]],
-                                   concurrency: int = 5
+                                   concurrency: int = 3
                                    ) -> dict[str, list[dict]]:
     """
     Search Wikidata for entity candidates matching place names.
     names: list of (vocab_id, place_name)
     Returns: {vocab_id: [candidate dicts with qid, label, description]}
+
+    Rate-limited: inter-request delay + exponential backoff on 429s.
     """
     try:
         import aiohttp
@@ -526,6 +539,45 @@ async def search_wikidata_entities(names: list[tuple[str, str]],
     results: dict[str, list[dict]] = {}
     semaphore = asyncio.Semaphore(concurrency)
     done = 0
+    errors_429 = 0
+
+    # Shared backoff state: when one request gets 429, all slow down
+    backoff_until = 0.0  # monotonic time until which we should wait
+
+    async def _get_with_retry(session: aiohttp.ClientSession,
+                              url: str, max_retries: int = 4) -> dict | None:
+        """GET with exponential backoff on 429/5xx."""
+        nonlocal backoff_until, errors_429
+        for attempt in range(max_retries + 1):
+            # Respect shared backoff
+            now = asyncio.get_event_loop().time()
+            if backoff_until > now:
+                await asyncio.sleep(backoff_until - now)
+
+            # Small inter-request delay to stay under rate limit
+            await asyncio.sleep(0.2)
+
+            try:
+                async with session.get(url) as resp:
+                    if resp.status == 429:
+                        errors_429 += 1
+                        wait = min(2 ** attempt * 5, 60)
+                        backoff_until = asyncio.get_event_loop().time() + wait
+                        if errors_429 <= 3:
+                            print(f"  Rate limited (429), backing off {wait}s...",
+                                  file=sys.stderr)
+                        await asyncio.sleep(wait)
+                        continue
+                    if resp.status >= 500:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    return await resp.json()
+            except Exception:
+                if attempt < max_retries:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return None
+        return None
 
     async def search_one(session: aiohttp.ClientSession,
                          vocab_id: str, name: str) -> None:
@@ -544,19 +596,15 @@ async def search_wikidata_entities(names: list[tuple[str, str]],
                     "format": "json",
                 }
                 url = f"{WIKIDATA_API}?{urllib.parse.urlencode(params)}"
-                try:
-                    async with session.get(url) as resp:
-                        data = await resp.json()
-                        for item in data.get("search", []):
-                            candidates.append({
-                                "qid": item["id"],
-                                "label": item.get("label", ""),
-                                "description": item.get("description", ""),
-                                "match_lang": lang,
-                            })
-                except Exception as e:
-                    print(f"  Search error for '{name}' ({lang}): {e}",
-                          file=sys.stderr)
+                data = await _get_with_retry(session, url)
+                if data:
+                    for item in data.get("search", []):
+                        candidates.append({
+                            "qid": item["id"],
+                            "label": item.get("label", ""),
+                            "description": item.get("description", ""),
+                            "match_lang": lang,
+                        })
 
                 if candidates:
                     break  # Got results in this language, skip fallback
@@ -573,18 +621,15 @@ async def search_wikidata_entities(names: list[tuple[str, str]],
                     "format": "json",
                 }
                 url = f"{WIKIDATA_API}?{urllib.parse.urlencode(params)}"
-                try:
-                    async with session.get(url) as resp:
-                        data = await resp.json()
-                        for item in data.get("search", []):
-                            candidates.append({
-                                "qid": item["id"],
-                                "label": item.get("label", ""),
-                                "description": item.get("description", ""),
-                                "match_lang": "nl",
-                            })
-                except Exception:
-                    pass
+                data = await _get_with_retry(session, url)
+                if data:
+                    for item in data.get("search", []):
+                        candidates.append({
+                            "qid": item["id"],
+                            "label": item.get("label", ""),
+                            "description": item.get("description", ""),
+                            "match_lang": "nl",
+                        })
 
         # Deduplicate by QID
         seen_qids = set()
@@ -597,7 +642,7 @@ async def search_wikidata_entities(names: list[tuple[str, str]],
         results[vocab_id] = unique[:5]
 
         done += 1
-        if done % 500 == 0:
+        if done % 200 == 0:
             print(f"  ... {done}/{len(names)} searched", file=sys.stderr)
 
     headers = {"User-Agent": USER_AGENT}
@@ -606,6 +651,9 @@ async def search_wikidata_entities(names: list[tuple[str, str]],
                                      connector=connector) as session:
         tasks = [search_one(session, vid, name) for vid, name in names]
         await asyncio.gather(*tasks)
+
+    if errors_429:
+        print(f"  Total 429 errors encountered: {errors_429}", file=sys.stderr)
 
     return results
 
@@ -1183,8 +1231,9 @@ Examples:
                         help="Run only specific phase (1a, 1b, 1c, 2, 3, 4)")
     parser.add_argument("--skip-geonames", action="store_true",
                         help="Skip Phase 1a (GeoNames API)")
-    parser.add_argument("--geonames-user", default="demo",
-                        help="GeoNames API username (register at geonames.org)")
+    parser.add_argument("--geonames-user",
+                        default=os.environ.get("GEONAMES_USERNAME", "demo"),
+                        help="GeoNames API username (or set GEONAMES_USERNAME env var)")
     parser.add_argument("--apply-reviewed",
                         help="Path to reviewed CSV with 'decision' column")
     parser.add_argument("--output-dir", default="offline/geo",
