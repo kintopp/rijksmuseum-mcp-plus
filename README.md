@@ -4,7 +4,9 @@ An AI-powered interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collec
 
 Built on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards, and the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP).
 
-> This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server. That version used the museum's REST API which is no longer supported. This is a ground-up rewrite using the museum's newer Linked Open Data infrastructure and adds features like an interactive inline image viewer.
+> This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server which used the museum's now unsupported REST API. 
+
+rijksmuseum-mcp+ is a ground-up rewrite based on the museum's new Linked Open Data infrastructure and adds new features like an interactive inline image viewer and the ability to search, filter, and retrieve many more kinds of metadata about artworks.
 
 ## Quick Start
 
@@ -15,22 +17,27 @@ Connect your MCP client to:
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-Recommended: [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). Both require a Pro or better [subscription](https://claude.com/pricing). For example, in claude.ai: Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
+Recommended MCP clients: [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). For example, in claude.ai: Settings → Connectors → Add custom connector → paste the URL above. Note that both require a Pro or better [subscription](https://claude.com/pricing). For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
 
-Rijksmuseum-mcp+ also works well with many open source MCP clients (such as [Jan.ai](https://jan.ai)) and CLI coding apps like OpenAI Codex. Moreover, these can also be used via API charges instead of a subscription. However, to date, only Claude Desktop and claude.ai support viewing inline images [directly in the chat](docs/swan.jpg). All other clients will automatically fall back to providing links to the Rijksmuseum detail page which however also includes options to zoom in/out and export the image.
+Rijksmuseum-mcp+ also works well with open source MCP clients (such as [Jan.ai](https://jan.ai)) and CLI coding apps like OpenAI Codex. These can be used via per token API charges instead of a monthly subscription. However, to date, only Claude Desktop and claude.ai support viewing inline images directly in the chat. 
 
 ### Example Queries
 
-“Show me a drawing by Gesina ter Borch”  
-“Find Pieter Saenredam’s paintings”  
-“Give me a list of the Rijksmuseum’s curated collections”  
-“Search for prints from the 1530s”  
-“Show me woodcuts by Hokusai”  
-“Find artworks depicting the Raid on the Medway”  
-“What paintings depict Amalia van Solms?”  
-“Show me works about the sense of smell”  
-“Search for winter landscapes from the 17th century”  
-“Find all works made in Haarlem with the mezzotint technique”
+"Show me a drawing by Gesina ter Borch"
+"Find Pieter Saenredam's paintings"
+"Give me a list of the Rijksmuseum's curated collections"
+"Show me woodcuts by Hokusai"
+"Find artworks depicting the Raid on the Medway"
+"What paintings depict Amalia van Solms?"
+"Show me works about the sense of smell"
+"Search for winter landscapes from the 17th century"
+"Find all works made in Haarlem with the mezzotint technique"
+"Find artworks with inscriptions mentioning 'fecit'"
+"Search for works inscribed with 'VOC'"
+"Which works have the Vereniging Rembrandt in their credit line?"
+"Find artworks whose provenance mentions Napoleon"
+"Show me prints made after paintings by other artists"
+"What objects were acquired as bequests?"
 
 ## Searchable metadata categories
 
@@ -53,7 +60,7 @@ These parameters query the Rijksmuseum Search API directly.
 
 #### Vocabulary database
 
-These parameters draw on a hosted vocabulary database (~2.6 GB SQLite) drawn from a separate set of Rijksmuseum data.
+These parameters are also searchable, but draw on a hosted vocabulary database (~2.6 GB SQLite) derived from a separate set of Rijksmuseum data.
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -64,13 +71,13 @@ These parameters draw on a hosted vocabulary database (~2.6 GB SQLite) drawn fro
 | `productionPlace` | Place where the work was made | May not match every `production[].place` value in artwork details |
 | `birthPlace` | Artist's place of birth | Search-only: not included in `get_artwork_details` output |
 | `deathPlace` | Artist's place of death | Search-only: not included in `get_artwork_details` output |
-| `profession` | Artist's profession (e.g. `painter`, `draughtsman`) | Search-only: not included in detail output; labels are bilingual (EN/NL) |
-| `collectionSet` | Curated collection set name (e.g. 'Rembrandt', 'Japanese') | Text search on set names. Use `list_curated_sets` to discover available sets |
-| `license` | Rights/license designation | Matches against rights URI. Common values: `publicdomain`, `zero` (CC0), `by` (CC BY) |
+| `profession` | Artist's profession (e.g. `painter`, `draughtsman`) | [600 terms](docs/vocabulary-professions.md). Search-only: not in detail output; bilingual (EN/NL) |
+| `collectionSet` | Curated collection set name (e.g. 'Rembrandt', 'Japanese') | [192 sets](docs/vocabulary-collection-sets.md). Also discoverable via `list_curated_sets` |
+| `license` | Rights/license designation | [3 values](docs/vocabulary-license.md): `publicdomain`, `zero` (CC0), `InC` (in copyright) |
 | `inscription` | Transcribed text on the object surface | FTS5 full-text search. Covers ~500K artworks |
 | `provenance` | Ownership history text | FTS5 full-text search. Covers ~48K artworks |
 | `creditLine` | Acquisition mode and acknowledgement | FTS5 full-text search. Covers ~358K artworks |
-| `productionRole` | Role in production (e.g. `printmaker`, `publisher`) | Vocabulary subquery on production role mappings |
+| `productionRole` | Role in production (e.g. `printmaker`, `publisher`) | [176 terms](docs/vocabulary-production-roles.md). Vocabulary subquery on production role mappings |
 | `minHeight` / `maxHeight` | Height range in centimetres | Numeric range filter on structured dimensions |
 | `minWidth` / `maxWidth` | Width range in centimetres | Numeric range filter on structured dimensions |
 
