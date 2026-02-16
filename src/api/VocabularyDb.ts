@@ -123,13 +123,13 @@ export class VocabularyDb {
       });
       // Haversine distance in km for geo proximity search
       this.db.function("haversine_km", (lat1: number, lon1: number, lat2: number, lon2: number) => {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const toRad = Math.PI / 180;
+        const dLat = (lat2 - lat1) * toRad;
+        const dLon = (lon2 - lon1) * toRad;
         const a = Math.sin(dLat / 2) ** 2 +
-          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
           Math.sin(dLon / 2) ** 2;
-        return R * 2 * Math.asin(Math.sqrt(a));
+        return 6371 * 2 * Math.asin(Math.sqrt(a));
       });
       const count = (this.db.prepare("SELECT COUNT(*) as n FROM artworks").get() as { n: number }).n;
 
@@ -218,7 +218,7 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
     const warnings: string[] = [];
-    let geoResult: { placeIds: number[]; refPlace: string; refLat: number; refLon: number } | null = null;
+    let geoResult: ReturnType<VocabularyDb["findNearbyPlaceIds"]> = null;
 
     // Handle nearPlace geo proximity filter
     if (params.nearPlace) {
@@ -238,12 +238,8 @@ export class VocabularyDb {
         geoResult = this.findNearbyPlaceIds(params.nearPlace, radiusKm);
 
         if (!geoResult || geoResult.placeIds.length === 0) {
-          return {
-            ...emptyResult([
-              ...(warnings.length > 0 ? warnings : []),
-              `Could not find geocoded place matching "${params.nearPlace}".`,
-            ]),
-          };
+          warnings.push(`Could not find geocoded place matching "${params.nearPlace}".`);
+          return emptyResult(warnings);
         }
 
         const placeholders = geoResult.placeIds.map(() => "?").join(", ");
@@ -493,45 +489,13 @@ export class VocabularyDb {
     radiusKm: number
   ): { placeIds: number[]; refPlace: string; refLat: number; refLon: number } | null {
     // Step 1: Resolve the place name to coordinates
-    let refLat: number | null = null;
-    let refLon: number | null = null;
-    let refPlace = "";
-
-    if (this.hasFts5) {
-      const vocabIds = this.findVocabIdsFts(placeName, " AND type = 'place'");
-      if (vocabIds.length > 0) {
-        const placeholders = vocabIds.map(() => "?").join(", ");
-        const row = this.db!.prepare(
-          `SELECT id, label_en, label_nl, lat, lon FROM vocabulary
-           WHERE id IN (${placeholders}) AND lat IS NOT NULL
-           LIMIT 1`
-        ).get(...vocabIds) as { id: string; label_en: string; label_nl: string; lat: number; lon: number } | undefined;
-        if (row) {
-          refLat = row.lat;
-          refLon = row.lon;
-          refPlace = row.label_en || row.label_nl || placeName;
-        }
-      }
-    } else {
-      // Fallback: LIKE search
-      const row = this.db!.prepare(
-        `SELECT id, label_en, label_nl, lat, lon FROM vocabulary
-         WHERE type = 'place' AND lat IS NOT NULL
-           AND (label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)
-         LIMIT 1`
-      ).get(`%${placeName}%`, `%${placeName}%`) as { id: string; label_en: string; label_nl: string; lat: number; lon: number } | undefined;
-      if (row) {
-        refLat = row.lat;
-        refLon = row.lon;
-        refPlace = row.label_en || row.label_nl || placeName;
-      }
-    }
-
-    if (refLat === null || refLon === null) return null;
+    const ref = this.resolvePlaceCoordinates(placeName);
+    if (!ref) return null;
 
     // Step 2: Bounding box pre-filter + Haversine
+    const toRad = Math.PI / 180;
     const latDelta = radiusKm / 111.0;
-    const lonDelta = radiusKm / (111.0 * Math.cos(refLat * Math.PI / 180));
+    const lonDelta = radiusKm / (111.0 * Math.cos(ref.lat * toRad));
 
     const rows = this.db!.prepare(
       `SELECT id FROM vocabulary
@@ -540,17 +504,48 @@ export class VocabularyDb {
          AND lon BETWEEN ? AND ?
          AND haversine_km(?, ?, lat, lon) <= ?`
     ).all(
-      refLat - latDelta, refLat + latDelta,
-      refLon - lonDelta, refLon + lonDelta,
-      refLat, refLon, radiusKm
+      ref.lat - latDelta, ref.lat + latDelta,
+      ref.lon - lonDelta, ref.lon + lonDelta,
+      ref.lat, ref.lon, radiusKm
     ) as { id: number }[];
 
     return {
       placeIds: rows.map((r) => r.id),
-      refPlace,
-      refLat,
-      refLon,
+      refPlace: ref.label,
+      refLat: ref.lat,
+      refLon: ref.lon,
     };
+  }
+
+  /** Resolve a place name to its label and coordinates. Returns null if not found. */
+  private resolvePlaceCoordinates(
+    placeName: string
+  ): { label: string; lat: number; lon: number } | null {
+    type PlaceRow = { label_en: string | null; label_nl: string | null; lat: number; lon: number };
+
+    let row: PlaceRow | undefined;
+
+    if (this.hasFts5) {
+      const vocabIds = this.findVocabIdsFts(placeName, " AND type = 'place'");
+      if (vocabIds.length > 0) {
+        const placeholders = vocabIds.map(() => "?").join(", ");
+        row = this.db!.prepare(
+          `SELECT label_en, label_nl, lat, lon FROM vocabulary
+           WHERE id IN (${placeholders}) AND lat IS NOT NULL
+           LIMIT 1`
+        ).get(...vocabIds) as PlaceRow | undefined;
+      }
+    } else {
+      row = this.db!.prepare(
+        `SELECT label_en, label_nl, lat, lon FROM vocabulary
+         WHERE type = 'place' AND lat IS NOT NULL
+           AND (label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)
+         LIMIT 1`
+      ).get(`%${placeName}%`, `%${placeName}%`) as PlaceRow | undefined;
+    }
+
+    if (!row) return null;
+    return { label: row.label_en || row.label_nl || placeName, lat: row.lat, lon: row.lon };
   }
 
   private resolveDbPath(): string | null {

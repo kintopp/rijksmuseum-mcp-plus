@@ -343,7 +343,6 @@ function registerTools(
                 .min(1)
                 .max(500)
                 .default(25)
-                .optional()
                 .describe(
                   "Radius in kilometers for nearPlace search (1-500, default 25)."
                 ),
