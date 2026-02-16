@@ -1170,9 +1170,8 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
         print(f"  Parsed {len(batch):,} geocoded places from CSV")
 
     for vocab_id, lat, lon, ext_id in batch:
-        # Check current record
         existing = conn.execute(
-            "SELECT type, lat, lon, external_id FROM vocabulary WHERE id = ?",
+            "SELECT type, external_id FROM vocabulary WHERE id = ?",
             (vocab_id,),
         ).fetchone()
 
@@ -1184,20 +1183,20 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
             skipped_not_place += 1
             continue
 
-        # Update lat/lon
-        conn.execute(
-            "UPDATE vocabulary SET lat = ?, lon = ? WHERE id = ?",
-            (lat, lon, vocab_id),
-        )
-        updated_coords += 1
-
-        # Update external_id if CSV has a better one
-        if ext_id and ext_id != existing[3]:
+        # Update coords, and external_id if the CSV provides a different one
+        should_update_ext = ext_id and ext_id != existing[1]
+        if should_update_ext:
             conn.execute(
-                "UPDATE vocabulary SET external_id = ? WHERE id = ?",
-                (ext_id, vocab_id),
+                "UPDATE vocabulary SET lat = ?, lon = ?, external_id = ? WHERE id = ?",
+                (lat, lon, ext_id, vocab_id),
             )
             updated_ext_id += 1
+        else:
+            conn.execute(
+                "UPDATE vocabulary SET lat = ?, lon = ? WHERE id = ?",
+                (lat, lon, vocab_id),
+            )
+        updated_coords += 1
 
     conn.commit()
     print(f"  Geocoding import complete:")

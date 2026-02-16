@@ -77,6 +77,15 @@ function escapeFts5(value: string): string {
   return `"${value.replace(/[*^():]/g, "").replace(/"/g, '""')}"`;
 }
 
+function emptyResult(warnings?: string[]): VocabSearchResult {
+  return {
+    totalResults: 0,
+    results: [],
+    source: "vocabulary",
+    ...(warnings && warnings.length > 0 && { warnings }),
+  };
+}
+
 // ─── VocabularyDb ────────────────────────────────────────────────────
 
 export class VocabularyDb {
@@ -170,7 +179,7 @@ export class VocabularyDb {
   /** Search artworks by vocabulary criteria. Multiple params are intersected (AND). */
   search(params: VocabSearchParams): VocabSearchResult {
     if (!this.db) {
-      return { totalResults: 0, results: [], source: "vocabulary" };
+      return emptyResult();
     }
 
     const conditions: string[] = [];
@@ -194,58 +203,21 @@ export class VocabularyDb {
 
       const typeClause = filter.vocabType ? ` AND type = '${filter.vocabType}'` : "";
 
-      // When FTS5 is available and the filter supports it, use token lookup (~500x faster).
-      // If FTS5 returns 0 results and normalized label columns exist, fall back to LIKE
-      // on space-stripped labels (handles compound word variants like "printmaker" vs "print maker").
       const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
 
       if (useFts) {
-        // Two-phase vocab ID lookup: FTS5 first, then LIKE fallback on normalized columns
-        const ftsPhrase = escapeFts5(String(value));
-        let vocabIds = this.db!.prepare(
-          `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
-        ).all(ftsPhrase) as { id: string }[];
-
-        // Fallback: if FTS5 found nothing and we have normalized label columns, try LIKE
-        if (vocabIds.length === 0 && this.hasNormLabels) {
-          const normValue = `%${String(value).toLowerCase().replace(/ /g, "")}%`;
-          vocabIds = this.db!.prepare(
-            `SELECT id FROM vocabulary WHERE (label_en_norm LIKE ? OR label_nl_norm LIKE ?)${typeClause}`
-          ).all(normValue, normValue) as { id: string }[];
-        }
-
+        const vocabIds = this.findVocabIdsFts(String(value), typeClause);
         if (vocabIds.length === 0) {
-          // No matching vocab terms — entire search will return 0 results
-          return { totalResults: 0, results: [], source: "vocabulary", ...(warnings.length > 0 && { warnings }) };
+          return emptyResult(warnings);
         }
-
-        // Feed vocab IDs into the artwork subquery via placeholders
         const placeholders = vocabIds.map(() => "?").join(", ");
         conditions.push(`a.object_number IN (
           SELECT m.object_number FROM mappings m
           WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
         )`);
-        bindings.push(...vocabIds.map((r) => r.id));
+        bindings.push(...vocabIds);
       } else {
-        // Non-FTS path: inline vocab subquery as before
-        let vocabWhere: string;
-        let matchBindings: unknown[];
-
-        switch (filter.matchMode) {
-          case "exact-notation":
-            vocabWhere = "notation = ?";
-            matchBindings = [value];
-            break;
-          case "like-word":
-            vocabWhere = "(regexp_word(?, label_en) OR regexp_word(?, label_nl))";
-            matchBindings = [value, value];
-            break;
-          default: // "like"
-            vocabWhere = "(label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)";
-            matchBindings = [`%${value}%`, `%${value}%`];
-            break;
-        }
-
+        const { where: vocabWhere, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
         conditions.push(`a.object_number IN (
           SELECT m.object_number FROM mappings m
           WHERE ${fieldClause} AND m.vocab_id IN (
@@ -302,7 +274,7 @@ export class VocabularyDb {
     }
 
     if (conditions.length === 0) {
-      return { totalResults: 0, results: [], source: "vocabulary", ...(warnings.length > 0 && { warnings }) };
+      return emptyResult(warnings);
     }
 
     const where = conditions.join(" AND ");
@@ -357,6 +329,42 @@ export class VocabularyDb {
       .get(code) as { id: string; label_en: string; label_nl: string } | undefined;
     if (!row) return null;
     return { id: row.id, labelEn: row.label_en || "", labelNl: row.label_nl || "" };
+  }
+
+  /**
+   * Find vocabulary IDs via FTS5, falling back to LIKE on normalized labels
+   * for compound word variants (e.g. "printmaker" vs "print maker").
+   */
+  private findVocabIdsFts(value: string, typeClause: string): string[] {
+    const ftsPhrase = escapeFts5(value);
+    const rows = this.db!.prepare(
+      `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
+    ).all(ftsPhrase) as { id: string }[];
+
+    if (rows.length > 0) return rows.map((r) => r.id);
+
+    // FTS5 found nothing — try LIKE on space-stripped normalized labels
+    if (this.hasNormLabels) {
+      const normValue = `%${value.toLowerCase().replace(/ /g, "")}%`;
+      const fallbackRows = this.db!.prepare(
+        `SELECT id FROM vocabulary WHERE (label_en_norm LIKE ? OR label_nl_norm LIKE ?)${typeClause}`
+      ).all(normValue, normValue) as { id: string }[];
+      return fallbackRows.map((r) => r.id);
+    }
+
+    return [];
+  }
+
+  /** Build vocab WHERE clause and bindings for the non-FTS path. */
+  private buildVocabMatch(matchMode: VocabFilter["matchMode"], value: unknown): { where: string; bindings: unknown[] } {
+    switch (matchMode) {
+      case "exact-notation":
+        return { where: "notation = ?", bindings: [value] };
+      case "like-word":
+        return { where: "(regexp_word(?, label_en) OR regexp_word(?, label_nl))", bindings: [value, value] };
+      default:
+        return { where: "(label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)", bindings: [`%${value}%`, `%${value}%`] };
+    }
   }
 
   private resolveDbPath(): string | null {
