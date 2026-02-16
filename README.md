@@ -53,7 +53,7 @@ These parameters query the Rijksmuseum Search API directly.
 
 #### Vocabulary database
 
-These parameters draw on a hosted vocabulary database (~1 GB SQLite) drawn from a separate set of Rijksmuseum data.
+These parameters draw on a hosted vocabulary database (~2.6 GB SQLite) drawn from a separate set of Rijksmuseum data.
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -67,28 +67,28 @@ These parameters draw on a hosted vocabulary database (~1 GB SQLite) drawn from 
 | `profession` | Artist's profession (e.g. `painter`, `draughtsman`) | Search-only: not included in detail output; labels are bilingual (EN/NL) |
 | `collectionSet` | Curated collection set name (e.g. 'Rembrandt', 'Japanese') | Text search on set names. Use `list_curated_sets` to discover available sets |
 | `license` | Rights/license designation | Matches against rights URI. Common values: `publicdomain`, `zero` (CC0), `by` (CC BY) |
+| `inscription` | Transcribed text on the object surface | FTS5 full-text search. Covers ~500K artworks |
+| `provenance` | Ownership history text | FTS5 full-text search. Covers ~48K artworks |
+| `creditLine` | Acquisition mode and acknowledgement | FTS5 full-text search. Covers ~358K artworks |
+| `productionRole` | Role in production (e.g. `printmaker`, `publisher`) | Vocabulary subquery on production role mappings |
+| `minHeight` / `maxHeight` | Height range in centimetres | Numeric range filter on structured dimensions |
+| `minWidth` / `maxWidth` | Width range in centimetres | Numeric range filter on structured dimensions |
 
 ### Non-searchable metadata categories
 
-These fields, also drawn from Rijksmuseum data, are returned when viewing an artwork’s details but cannot be used as search filters.
+These fields are returned when viewing an artwork's details but cannot be used as search filters.
 
-| Search Parameter | What it queries | Notes |
-|---|---|---|
-| — | Object number (`objectNumber`) | Lookup key for `get_artwork_details`, not a search filter |
-| — | Persistent identifier (`persistentId`) | Stable handle.net URI for citation |
-| — | External identifiers (`externalIds`) | |
-| — | Production details (`production`) | Creator name and place are searchable above; role and actor URI are not |
-| — | Curatorial narrative (`curatorialNarrative`) | Museum wall text in English and Dutch |
-| — | Dimension statement (`dimensionStatement`) | |
-| — | Structured dimensions (`dimensions`) | Numeric height, width, weight, depth with units |
-| — | Inscriptions (`inscriptions`) | Transcribed text from the object surface |
-| — | Provenance (`provenance`) | Ownership history |
-| — | Credit line (`creditLine`) | Acquisition mode and acknowledgement |
-| — | Current location (`location`) | Gallery and room within the museum |
-| — | Web page (`webPage`) | |
-| — | Related objects (`relatedObjects`) | Links to related artworks |
-
-Future releases of rijksmuseum-mcp+ will improve this situation.
+| Field | Notes |
+|---|---|
+| Object number (`objectNumber`) | Lookup key for `get_artwork_details`, not a search filter |
+| Persistent identifier (`persistentId`) | Stable handle.net URI for citation |
+| External identifiers (`externalIds`) | |
+| Production details (`production`) | Creator, place, and role are searchable above; actor URI is not |
+| Curatorial narrative (`curatorialNarrative`) | Museum wall text in English and Dutch |
+| Dimension statement (`dimensionStatement`) | Free-text; use `minHeight`/`maxHeight`/`minWidth`/`maxWidth` for numeric search |
+| Current location (`location`) | Gallery and room within the museum |
+| Web page (`webPage`) | |
+| Related objects (`relatedObjects`) | Links to related artworks |
 
 ## Example Research Scenarios
 
@@ -145,7 +145,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 ### Subject and Iconographic Search
 
-`search_artwork` includes ten database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` — drawn from a pre-built vocabulary database of 149,000 controlled terms mapped to 831,000 artworks via 7.3 million mappings. These enable searches by what is depicted, where it was made, and who made it — including biographical attributes of the artist.
+`search_artwork` includes sixteen database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `inscription`, `provenance`, `creditLine`, `productionRole`, and dimension ranges — drawn from a pre-built vocabulary database of 149,000 controlled terms mapped to 831,000 artworks via 12.8 million mappings. These enable searches by what is depicted, where it was made, who made it (including biographical attributes and production roles), what is written on it, and how large it is.
 
 #### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -216,22 +216,22 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 **Research question:** What textual information did Pieter Saenredam embed in his church interior paintings, and do the inscriptions serve documentary, devotional, or artistic purposes?
 
 **How the tools enable it:**
-- `search_artwork` with `creator: "Pieter Saenredam"` and `type: "painting"`
+- `search_artwork` with `inscription: "Saenredam"` to find all works with inscriptions mentioning the artist — or use `creator: "Pieter Saenredam"` and `type: "painting"` for his full oeuvre
 - `get_artwork_details` on each result — the inscriptions category captures text transcribed from the painting surface
 - Compare inscription content across works: dates, church names, biblical texts, artist signatures
 
-**Why it matters:** Saenredam's inscriptions are unusually rich — they often include the exact date he made the preliminary drawing and the date he completed the painting, sometimes years apart. The inscriptions metadata category surfaces this information for each artwork, though inscriptions cannot be used as a search filter across the collection.
+**Why it matters:** Saenredam's inscriptions are unusually rich — they often include the exact date he made the preliminary drawing and the date he completed the painting, sometimes years apart. The `inscription` filter enables full-text search across ~500,000 artworks with transcribed inscriptions, making this information discoverable collection-wide.
 
 #### 10. Dimensions as Evidence for Workshop Practice
 
 **Research question:** Were there standard panel sizes used in 17th-century Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?
 
 **How the tools enable it:**
-- `search_artwork` with `type: "painting"`, `material: "panel"`, `creationDate: "16*"`
-- `get_artwork_details` on a sample — structured dimensions give height and width in centimetres
-- Tabulate dimensions across dozens of works to look for recurring sizes
+- `search_artwork` with `type: "painting"`, `material: "panel"`, `creationDate: "16*"`, and dimension ranges (e.g. `minHeight: 40`, `maxHeight: 50`, `minWidth: 30`, `maxWidth: 40`) to find panels of a specific size cluster
+- Compare across size ranges to identify recurring dimensions that suggest standard panel formats
+- `get_artwork_details` on a sample for exact measurements, creator, and production context
 
-**Why it matters:** The Rijksmuseum's structured dimension data — as opposed to free-text descriptions — can corroborate (or challenge) what we know from guild records.
+**Why it matters:** The dimension filters make it possible to search by physical size directly, rather than retrieving all works and filtering manually. The Rijksmuseum's structured dimension data can corroborate (or challenge) what we know from guild records about panel maker standards.
 
 #### 11. Vocabulary Terms and External Authority Links
 
@@ -249,11 +249,11 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 **Research question:** How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, or state allocation, and when?
 
 **How the tools enable it:**
-- `search_artwork` with `creator: "Rembrandt"` and `type: "painting"`
-- `get_artwork_details` on each — the credit line records the acquisition mode and often the year
-- Cross-reference with provenance for the full chain
+- `search_artwork` with `creditLine: "purchase"` and `creator: "Rembrandt"` to find works acquired by purchase — repeat with `"bequest"`, `"gift"`, `"loan"`
+- `search_artwork` with `provenance: "Rembrandt"` for broader ownership-history search
+- `get_artwork_details` on each for full provenance chain and credit line context
 
-**Why it matters:** A museum's acquisition history is itself a subject of art historical study. The credit line field makes this systematically researchable.
+**Why it matters:** The `creditLine` and `provenance` filters enable full-text search across acquisition records (~358K credit lines, ~48K provenance entries), making collection history systematically researchable without examining each artwork individually.
 
 ---
 
@@ -504,14 +504,14 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
       "command": "node",
       "args": ["/absolute/path/to/rijksmuseum-mcp-plus/dist/index.js"],
       "env": {
-        "VOCAB_DB_URL": "https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.9/vocabulary.db.gz"
+        "VOCAB_DB_URL": "https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.10/vocabulary.db.gz"
       }
     }
   }
 }
 ```
 
-The server works without the vocabulary database, but [vocabulary-based search parameters](#vocabulary-database-parameters) won't be available. The `VOCAB_DB_URL` setting above enables automatic download (~444 MB compressed, ~1 GB uncompressed) on first start.
+The server works without the vocabulary database, but [vocabulary-based search parameters](#vocabulary-database) won't be available. The `VOCAB_DB_URL` setting above enables automatic download (~612 MB compressed, ~2.6 GB uncompressed) on first start.
 
 Restart your MCP client after updating the config.
 
@@ -538,7 +538,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Tool | Description |
 |---|---|
-| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` — enable subject, iconographic, and biographical search across 831,000 artworks. All filters can be freely combined for cross-field intersection queries. Vocabulary labels are bilingual (English and Dutch). |
+| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `inscription`, `provenance`, `creditLine`, `productionRole`, and dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`) — enable subject, iconographic, biographical, textual, and physical search across 831,000 artworks. All filters can be freely combined for cross-field intersection queries. |
 | `get_artwork_details` | [24 metadata categories](docs/metadata-categories.md) by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
 | `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
 | `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Returns viewer data (IIIF ID, dimensions, URLs) — no image content. For LLM image analysis, use the `analyse-artwork` prompt. |
@@ -552,9 +552,9 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Prompt / Resource | Description |
 |---|---|
-| `analyse-artwork` | Prompt: fetch high-resolution image and analyse visual content alongside full metadata |
-| `generate-artist-timeline` | Prompt: create a visual timeline of an artist's works |
-| `art://collection/popular` | Resource: a curated selection of notable paintings |
+| `analyse-artwork` | Prompt: fetch high-resolution image and analyse visual content alongside key metadata (12 fields) |
+| `generate-artist-timeline` | Prompt: create a visual timeline of an artist's works (max 25) |
+| `top-100-artworks` | Prompt: explore the Rijksmuseum's Top 100 masterpieces (~133 works from curated set 260213) |
 | `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF viewer (MCP Apps) |
 
 #### Architecture
@@ -596,7 +596,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 **Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
 
-**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms (Iconclass codes, depicted persons, depicted places, production places, birth/death places, professions) to 831,000 artworks via 7.3 million mappings. Built from OAI-PMH EDM records and Linked Art vocabulary resolution, it powers the `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, and `license` filters in `search_artwork`.
+**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms to 831,000 artworks via 12.8 million mappings. Built from OAI-PMH EDM records and Linked Art resolution (both vocabulary terms and full artwork records), it powers 16 search filters: vocabulary-backed filters (`subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `productionRole`), full-text search on artwork texts (`inscription`, `provenance`, `creditLine`), and numeric dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`). Includes 20,828 geocoded places with coordinates from Getty TGN, Wikidata, and GeoNames.
 
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
