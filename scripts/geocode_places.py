@@ -11,6 +11,7 @@ Phases:
   1c  Getty TGN → Wikidata — cross-reference TGN IDs via P1667
   2   Self-reference resolution — copy coords from target vocab entries
   3   Wikidata entity reconciliation — name search + SPARQL validation
+  3b  World Historical Gazetteer — reconcile remaining names via WHG API
   4   Validation — hemisphere checks, null island, lat/lon swap detection
 
 Usage:
@@ -56,6 +57,8 @@ WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 GEONAMES_API = "http://api.geonames.org/getJSON"
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 USER_AGENT = "rijksmuseum-mcp-geocoder/2.0 (https://github.com/kintopp/rijksmuseum-mcp-plus)"
+WHG_RECONCILE_URL = "https://whgazetteer.org/reconcile"
+WHG_ENTITY_URL = "https://whgazetteer.org/entity"
 
 # P31 allowlist for geographic entities (used in Phase 3 scoring)
 GEOGRAPHIC_TYPES = {
@@ -244,6 +247,23 @@ def update_coords_and_ids(conn: sqlite3.Connection,
         updated += cursor.rowcount
     conn.commit()
     return updated
+
+
+def filter_reconcilable(places: list[dict]) -> tuple[list[tuple[str, str]], int]:
+    """Filter out unknowns and very short names from place lists.
+
+    Returns (candidates, skipped_count) where candidates are (vocab_id, name) tuples.
+    Shared by Phase 3 and Phase 3b.
+    """
+    candidates: list[tuple[str, str]] = []
+    skipped = 0
+    for p in places:
+        name = p["name"] or ""
+        if not name or name.lower() in ("unknown", "onbekend", "?", "??") or len(name) < 2:
+            skipped += 1
+            continue
+        candidates.append((p["id"], name))
+    return candidates, skipped
 
 
 def get_coverage(conn: sqlite3.Connection) -> tuple[int, int]:
@@ -829,18 +849,7 @@ def phase_3_reconciliation(conn: sqlite3.Connection,
         print("Phase 3: No unreconciled places to process", file=sys.stderr)
         return 0
 
-    # Filter out "unknown" and very short names
-    candidates_input = []
-    skipped = 0
-    for p in places:
-        name = p["name"] or ""
-        if not name or name.lower() in ("unknown", "onbekend", "?", "??"):
-            skipped += 1
-            continue
-        if len(name) < 2:
-            skipped += 1
-            continue
-        candidates_input.append((p["id"], name))
+    candidates_input, skipped = filter_reconcilable(places)
 
     print(f"Phase 3: {len(candidates_input)} places to reconcile "
           f"({skipped} skipped)", file=sys.stderr)
@@ -969,18 +978,303 @@ def phase_3_reconciliation(conn: sqlite3.Connection,
 
 
 # ---------------------------------------------------------------------------
+# Phase 3b: World Historical Gazetteer reconciliation
+# ---------------------------------------------------------------------------
+
+def whg_reconcile_batch(queries: dict, token: str, retries: int = 3) -> dict:
+    """POST batch reconciliation queries to WHG. Returns {qN: {result: [...]}}."""
+    url = f"{WHG_RECONCILE_URL}?token={token}"
+    body = urllib.parse.urlencode({"queries": json.dumps(queries)}).encode()
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("User-Agent", USER_AGENT)
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            wait = 2 ** (attempt + 1)
+            print(f"  WHG reconcile retry in {wait}s: {e}", file=sys.stderr)
+            time.sleep(wait)
+    return {}
+
+
+def _mean_coord(points: list[list[float]]) -> tuple[float, float]:
+    """Average a list of GeoJSON [lon, lat] points into (lat, lon)."""
+    return (
+        sum(c[1] for c in points) / len(points),
+        sum(c[0] for c in points) / len(points),
+    )
+
+
+def _centroid(geometry: dict) -> tuple[float, float] | None:
+    """Extract centroid (lat, lon) from a GeoJSON geometry."""
+    gtype = geometry.get("type", "")
+    coords = geometry.get("coordinates")
+
+    if gtype == "Point" and coords:
+        return (coords[1], coords[0])  # GeoJSON is [lon, lat]
+
+    if gtype == "MultiPoint" and coords:
+        return _mean_coord(coords)
+
+    if gtype == "Polygon" and coords:
+        return _mean_coord(coords[0])  # outer ring
+
+    if gtype == "MultiPolygon" and coords:
+        all_points = [pt for poly in coords for pt in poly[0]]
+        if all_points:
+            return _mean_coord(all_points)
+
+    if gtype == "GeometryCollection":
+        for geom in geometry.get("geometries", []):
+            result = _centroid(geom)
+            if result:
+                return result
+
+    return None
+
+
+def whg_fetch_entity_coords(entity_id: str, token: str
+                            ) -> tuple[float, float] | None:
+    """Fetch entity from WHG Entity API, return (lat, lon) or None."""
+    encoded = urllib.parse.quote(entity_id, safe="")
+    url = f"{WHG_ENTITY_URL}/{encoded}/api?token={token}"
+    try:
+        data = fetch_json(url)
+    except Exception:
+        return None
+
+    geom = data.get("geometry")
+    if not geom:
+        return None
+    return _centroid(geom)
+
+
+def phase_3b_whg(conn: sqlite3.Connection, token: str,
+                 dry_run: bool = False,
+                 output_dir: str = "offline/geo") -> int:
+    """
+    Reconcile ungeocoded place names via the World Historical Gazetteer API.
+    Targets places without external IDs that still lack coordinates
+    (i.e. whatever Phase 3 didn't resolve).
+    """
+    places = get_ungeocoded(conn, "no_external_used")
+    if not places:
+        print("Phase 3b: No places to reconcile via WHG", file=sys.stderr)
+        return 0
+
+    candidates, skipped = filter_reconcilable(places)
+
+    print(f"Phase 3b: {len(candidates)} places to reconcile via WHG "
+          f"({skipped} skipped)", file=sys.stderr)
+
+    if dry_run:
+        return 0
+
+    # ------------------------------------------------------------------
+    # Step 1: Batch reconciliation
+    # ------------------------------------------------------------------
+    print("Phase 3b-1: Reconciling via WHG...", file=sys.stderr)
+    all_matches: dict[str, list[dict]] = {}
+    batch_size = 25
+
+    for i in range(0, len(candidates), batch_size):
+        batch = candidates[i:i + batch_size]
+        queries: dict[str, dict] = {}
+        batch_map: dict[str, tuple[str, str]] = {}
+        for j, (vid, name) in enumerate(batch):
+            key = f"q{j}"
+            queries[key] = {"query": name}
+            batch_map[key] = (vid, name)
+
+        try:
+            resp = whg_reconcile_batch(queries, token)
+            for key, data in resp.items():
+                if key in batch_map:
+                    vid, _ = batch_map[key]
+                    results = data.get("result", []) if isinstance(data, dict) else []
+                    all_matches[vid] = results
+        except Exception as e:
+            print(f"  Batch {i // batch_size + 1} error: {e}", file=sys.stderr)
+
+        time.sleep(1.0)
+        done = min(i + batch_size, len(candidates))
+        if done % 500 < batch_size or done == len(candidates):
+            print(f"  ... {done}/{len(candidates)} reconciled", file=sys.stderr)
+
+    with_matches = sum(1 for v in all_matches.values() if v)
+    print(f"  Found candidates for {with_matches}/{len(candidates)} places",
+          file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Step 2: Fetch entity coordinates for top candidates
+    # ------------------------------------------------------------------
+    print("Phase 3b-2: Fetching entity coordinates...", file=sys.stderr)
+
+    # Collect unique entity IDs from top-3 candidates per place
+    entity_ids: set[str] = set()
+    for results in all_matches.values():
+        for r in results[:3]:
+            eid = r.get("id", "")
+            if eid:
+                entity_ids.add(eid)
+
+    entity_coords: dict[str, tuple[float, float]] = {}
+
+    for i, eid in enumerate(sorted(entity_ids)):
+        coords = whg_fetch_entity_coords(eid, token)
+        if coords:
+            entity_coords[eid] = coords
+        time.sleep(0.25)
+        if (i + 1) % 200 == 0:
+            print(f"  ... {i + 1}/{len(entity_ids)} entities fetched "
+                  f"({len(entity_coords)} with coords)", file=sys.stderr)
+
+    print(f"  {len(entity_coords)}/{len(entity_ids)} entities have coordinates",
+          file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Step 3: Score and classify
+    # ------------------------------------------------------------------
+    print("Phase 3b-3: Scoring matches...", file=sys.stderr)
+    name_lookup = dict(candidates)
+
+    accepted: list[tuple] = []
+    review: list[tuple] = []
+    rejected: list[tuple] = []
+
+    for vid, results in all_matches.items():
+        name = name_lookup.get(vid, "")
+
+        if not results:
+            rejected.append((vid, name, "no_candidates"))
+            continue
+
+        scored: list[dict] = []
+        for r in results[:5]:
+            eid = r.get("id", "")
+            whg_name = r.get("name", "")
+            whg_score = float(r.get("score", 0))
+            whg_match = bool(r.get("match", False))
+            coords = entity_coords.get(eid)
+
+            sim = string_similarity(name, whg_name)
+            bare = strip_parenthetical(name)
+            if bare:
+                sim = max(sim, string_similarity(bare, whg_name))
+
+            # Composite: 50% WHG score, 30% name similarity, 20% has coords
+            composite = (whg_score * 0.50
+                         + sim * 0.30
+                         + (100 if coords else 0) * 0.20)
+
+            scored.append({
+                "entity_id": eid,
+                "name": whg_name,
+                "whg_score": whg_score,
+                "whg_match": whg_match,
+                "similarity": sim,
+                "composite": composite,
+                "lat": coords[0] if coords else None,
+                "lon": coords[1] if coords else None,
+            })
+
+        scored.sort(key=lambda x: x["composite"], reverse=True)
+        top = scored[0]
+        gap = top["composite"] - scored[1]["composite"] if len(scored) > 1 else 100
+        has_coords = top["lat"] is not None
+
+        if top["composite"] >= 80 and has_coords and (top["whg_match"] or gap >= 15):
+            accepted.append((vid, name, top["entity_id"],
+                             top["lat"], top["lon"], top["composite"]))
+        elif top["composite"] >= 50 and has_coords:
+            review.append((vid, name, scored))
+        else:
+            rejected.append((vid, name, f"low_score:{top['composite']:.0f}"))
+
+    print(f"Phase 3b-3: {len(accepted)} accepted, {len(review)} review, "
+          f"{len(rejected)} rejected", file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Step 4: Write output CSVs
+    # ------------------------------------------------------------------
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    with open(out / "whg_accepted.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["vocab_id", "name", "whg_entity_id", "lat", "lon", "score"])
+        for row in accepted:
+            w.writerow(row)
+    print(f"  Wrote {out / 'whg_accepted.csv'} ({len(accepted)} entries)",
+          file=sys.stderr)
+
+    with open(out / "whg_review.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["vocab_id", "name", "decision",
+                     "entity_1", "name_1", "score_1", "lat_1", "lon_1",
+                     "entity_2", "name_2", "score_2", "lat_2", "lon_2"])
+        for vid, name, scored in review:
+            row = [vid, name, ""]
+            for j in range(2):
+                if j < len(scored):
+                    s = scored[j]
+                    row.extend([s["entity_id"], s["name"],
+                                f"{s['composite']:.0f}",
+                                s["lat"], s["lon"]])
+                else:
+                    row.extend(["", "", "", "", ""])
+            w.writerow(row)
+    print(f"  Wrote {out / 'whg_review.csv'} ({len(review)} entries)",
+          file=sys.stderr)
+
+    with open(out / "whg_rejected.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["vocab_id", "name", "reason"])
+        for row in rejected:
+            w.writerow(row)
+    print(f"  Wrote {out / 'whg_rejected.csv'} ({len(rejected)} entries)",
+          file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Step 5: Apply accepted matches
+    # ------------------------------------------------------------------
+    updates: dict[str, tuple[float, float, str]] = {}
+    for vid, name, eid, lat, lon, score in accepted:
+        whg_uri = f"https://whgazetteer.org/place/{eid}"
+        updates[vid] = (lat, lon, whg_uri)
+
+    updated = update_coords_and_ids(conn, updates, dry_run)
+    print(f"Phase 3b-5: {updated} places updated with WHG matches",
+          file=sys.stderr)
+    return updated
+
+
+# ---------------------------------------------------------------------------
 # Phase 3 supplement: Apply reviewed matches
 # ---------------------------------------------------------------------------
 
 def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
                    dry_run: bool = False) -> int:
-    """Apply manually reviewed reconciliation results."""
+    """Apply manually reviewed reconciliation results.
+
+    Handles both Wikidata review CSVs (qid_1 column) and WHG review
+    CSVs (entity_1 column) -- the external_id is constructed accordingly.
+    """
     path = Path(csv_path)
     if not path.exists():
         print(f"Review CSV not found: {csv_path}", file=sys.stderr)
         return 0
 
     updates: dict[str, tuple[float, float, str]] = {}
+    ext_id_prefixes = {
+        "qid_1": "http://www.wikidata.org/entity/",
+        "entity_1": "https://whgazetteer.org/place/",
+    }
 
     with open(path, newline="") as f:
         reader = csv.DictReader(f)
@@ -989,15 +1283,20 @@ def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
             if decision not in ("y", "yes", "1", "accept"):
                 continue
 
-            vocab_id = row["vocab_id"]
-            qid = row.get("qid_1", "")
-            lat = row.get("lat_1")
-            lon = row.get("lon_1")
+            # Determine source: Wikidata (qid_1) or WHG (entity_1)
+            ext_id = ""
+            for col, prefix in ext_id_prefixes.items():
+                value = row.get(col, "")
+                if value:
+                    ext_id = prefix + value
+                    break
+            if not ext_id:
+                continue
 
-            if qid and lat and lon:
+            lat, lon = row.get("lat_1"), row.get("lon_1")
+            if lat and lon:
                 try:
-                    ext_id = f"http://www.wikidata.org/entity/{qid}"
-                    updates[vocab_id] = (float(lat), float(lon), ext_id)
+                    updates[row["vocab_id"]] = (float(lat), float(lon), ext_id)
                 except ValueError:
                     pass
 
@@ -1196,9 +1495,12 @@ Examples:
   python3 scripts/geocode_places.py --db data/vocabulary.db
   python3 scripts/geocode_places.py --db data/vocabulary.db --dry-run
   python3 scripts/geocode_places.py --db data/vocabulary.db --phase 3
+  python3 scripts/geocode_places.py --db data/vocabulary.db --phase 3b
   python3 scripts/geocode_places.py --db data/vocabulary.db --skip-geonames
   python3 scripts/geocode_places.py --db data/vocabulary.db \\
       --apply-reviewed offline/geo/reconciled_review.csv
+  python3 scripts/geocode_places.py --db data/vocabulary.db \\
+      --apply-reviewed offline/geo/whg_review.csv
         """,
     )
     parser.add_argument("--db", default="data/vocabulary.db",
@@ -1206,14 +1508,20 @@ Examples:
     parser.add_argument("--dry-run", action="store_true",
                         help="Show counts but don't modify DB")
     parser.add_argument("--phase", type=str,
-                        help="Run only specific phase (1a, 1b, 1c, 2, 3, 4)")
+                        help="Run only specific phase (1a, 1b, 1c, 2, 3, 3b, 4)")
     parser.add_argument("--skip-geonames", action="store_true",
                         help="Skip Phase 1a (GeoNames API)")
     parser.add_argument("--geonames-user",
                         default=os.environ.get("GEONAMES_USERNAME", "demo"),
                         help="GeoNames API username (or set GEONAMES_USERNAME env var)")
+    parser.add_argument("--whg-token",
+                        default=os.environ.get("WHG_TOKEN", ""),
+                        help="WHG API token (or set WHG_TOKEN env var)")
+    parser.add_argument("--skip-whg", action="store_true",
+                        help="Skip Phase 3b (WHG reconciliation)")
     parser.add_argument("--apply-reviewed",
-                        help="Path to reviewed CSV with 'decision' column")
+                        help="Path to reviewed CSV with 'decision' column "
+                             "(supports both Wikidata and WHG review formats)")
     parser.add_argument("--output-dir", default="offline/geo",
                         help="Output directory for CSVs and reports")
     args = parser.parse_args()
@@ -1279,6 +1587,20 @@ Examples:
               file=sys.stderr)
         total_updated += phase_3_reconciliation(
             conn, args.dry_run, args.output_dir)
+
+    # Phase 3b: World Historical Gazetteer reconciliation
+    if run_phase in (None, "3b") and not args.skip_whg:
+        if args.whg_token:
+            print(f"\n--- Phase 3b: WHG reconciliation ---", file=sys.stderr)
+            total_updated += phase_3b_whg(
+                conn, args.whg_token, args.dry_run, args.output_dir)
+        elif run_phase == "3b":
+            print("Phase 3b requires --whg-token or WHG_TOKEN env var",
+                  file=sys.stderr)
+            sys.exit(1)
+        else:
+            print(f"\n--- Phase 3b: Skipped (no WHG token) ---",
+                  file=sys.stderr)
 
     # Phase 4: Validation
     if run_phase in (None, "4"):
