@@ -1116,6 +1116,7 @@ def _extract_coords_from_props(props: dict) -> tuple[float, float] | None:
 
 def phase_3b_whg(conn: sqlite3.Connection,
                  dry_run: bool = False,
+                 csv_only: bool = False,
                  output_dir: str = "offline/geo") -> int:
     """
     Reconcile ungeocoded place names via the World Historical Gazetteer API.
@@ -1327,6 +1328,11 @@ def phase_3b_whg(conn: sqlite3.Connection,
     # ------------------------------------------------------------------
     # Step 5: Apply accepted matches
     # ------------------------------------------------------------------
+    if csv_only:
+        print(f"Phase 3b-5: Skipped (--csv-only). Review CSVs in {out}/",
+              file=sys.stderr)
+        return 0
+
     updates: dict[str, tuple[float, float, str]] = {}
     for vid, name, eid, lat, lon, score in accepted:
         # eid is like "place:1234567" — build WHG entity URL
@@ -1336,6 +1342,336 @@ def phase_3b_whg(conn: sqlite3.Connection,
     updated = update_coords_and_ids(conn, updates, dry_run)
     print(f"Phase 3b-5: {updated} places updated with WHG matches",
           file=sys.stderr)
+    return updated
+
+
+# ---------------------------------------------------------------------------
+# Phase 3c: WHG bridge — authority-failed places
+# ---------------------------------------------------------------------------
+
+# WHG link prefix → canonical URI prefix mapping
+WHG_LINK_PREFIXES: dict[str, str] = {
+    "wd:": "http://www.wikidata.org/entity/",
+    "gn:": "https://sws.geonames.org/",
+    "tgn:": "http://vocab.getty.edu/tgn/",
+    "viaf:": "https://viaf.org/viaf/",
+    "loc:": "http://id.loc.gov/authorities/names/",
+}
+
+
+def _parse_whg_links(lpf_str: str) -> dict[str, str]:
+    """Extract authority links from a WHG LPF feature JSON string.
+
+    Returns dict mapping authority prefix (wd, gn, tgn, viaf, loc) to full URI.
+    """
+    links: dict[str, str] = {}
+    try:
+        feat = json.loads(lpf_str) if isinstance(lpf_str, str) else lpf_str
+        for link in feat.get("properties", {}).get("links", []):
+            ident = link.get("identifier", "")
+            for prefix, uri_base in WHG_LINK_PREFIXES.items():
+                if ident.startswith(prefix):
+                    local_id = ident[len(prefix):]
+                    links[prefix.rstrip(":")] = uri_base + local_id
+                    break
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return links
+
+
+def _existing_authority(ext_id: str) -> tuple[str, str] | None:
+    """Identify the authority type and local ID from an existing external_id URI."""
+    checks = [
+        ("gn", "geonames.org/", extract_geonames_id),
+        ("tgn", "getty.edu/tgn/", extract_tgn_id),
+        ("wd", "wikidata.org/", extract_qid),
+    ]
+    for key, marker, extractor in checks:
+        if marker in (ext_id or ""):
+            local = extractor(ext_id)
+            if local:
+                return (key, local)
+    return None
+
+
+def phase_3c_whg_bridge(conn: sqlite3.Connection,
+                        dry_run: bool = False,
+                        csv_only: bool = False,
+                        output_dir: str = "offline/geo") -> int:
+    """Reconcile authority-failed places via WHG and harvest cross-references.
+
+    Targets places that have an authority ID (GeoNames, Getty TGN, Wikidata)
+    but whose authority couldn't provide coordinates. Uses WHG fuzzy name
+    matching to find coordinates AND extract cross-referenced authority links.
+    """
+    # Gather the 3 authority-failed categories
+    categories = ["geonames", "getty_tgn", "wikidata"]
+    all_places: list[dict] = []
+    for cat in categories:
+        places = get_ungeocoded(conn, cat)
+        print(f"  {cat}: {len(places)} ungeocoded", file=sys.stderr)
+        all_places.extend(places)
+
+    if not all_places:
+        print("Phase 3c: No authority-failed places to reconcile", file=sys.stderr)
+        return 0
+
+    candidates, skipped = filter_reconcilable(all_places)
+    print(f"Phase 3c: {len(candidates)} authority-failed places to reconcile "
+          f"({skipped} skipped)", file=sys.stderr)
+
+    if dry_run:
+        return 0
+
+    # ------------------------------------------------------------------
+    # Step 1: Batch reconciliation
+    # ------------------------------------------------------------------
+    print("Phase 3c-1: Reconciling via WHG...", file=sys.stderr)
+    all_matches: dict[str, list[dict]] = {}
+    batch_size = 50
+
+    for i in range(0, len(candidates), batch_size):
+        batch = candidates[i:i + batch_size]
+        queries: dict[str, dict] = {}
+        batch_map: dict[str, tuple[str, str]] = {}
+        for j, (vid, name) in enumerate(batch):
+            key = f"q{j}"
+            queries[key] = {
+                "query": name,
+                "type": WHG_PLACE_TYPE,
+                "limit": 5,
+            }
+            batch_map[key] = (vid, name)
+
+        try:
+            resp = whg_reconcile_batch(queries)
+            for key, data in resp.items():
+                if key in batch_map:
+                    vid, _ = batch_map[key]
+                    results = data.get("result", []) if isinstance(data, dict) else []
+                    results = [r for r in results
+                               if not r.get("id", "").startswith("dummy:")]
+                    all_matches[vid] = results
+        except Exception as e:
+            print(f"  Batch {i // batch_size + 1} error: {e}", file=sys.stderr)
+
+        time.sleep(0.5)
+        done = min(i + batch_size, len(candidates))
+        if done % 200 < batch_size or done == len(candidates):
+            print(f"  ... {done}/{len(candidates)} reconciled", file=sys.stderr)
+
+    with_matches = sum(1 for v in all_matches.values() if v)
+    print(f"  Found candidates for {with_matches}/{len(candidates)} places",
+          file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Step 2: Batch-fetch coordinates + LPF features (for authority links)
+    # ------------------------------------------------------------------
+    print("Phase 3c-2: Fetching coordinates + authority links...", file=sys.stderr)
+
+    entity_ids_needed = {
+        r.get("id", "")
+        for results in all_matches.values()
+        for r in results[:3]
+    } - {""}
+
+    entity_coords: dict[str, tuple[float, float]] = {}
+    entity_links: dict[str, dict[str, str]] = {}  # entity_id → {wd: uri, gn: uri, ...}
+    extend_batch_size = 50
+
+    sorted_ids = sorted(entity_ids_needed)
+    for i in range(0, len(sorted_ids), extend_batch_size):
+        batch_ids = sorted_ids[i:i + extend_batch_size]
+        try:
+            resp = whg_extend_batch(
+                batch_ids,
+                ["whg:geometry_centroid", "whg:geometry_geojson",
+                 "whg:lpf_feature"],
+            )
+            for eid, props in resp.get("rows", {}).items():
+                coord = _extract_coords_from_props(props)
+                if coord:
+                    entity_coords[eid] = coord
+                # Parse authority links from LPF feature
+                for feat_entry in props.get("whg:lpf_feature", []):
+                    links = _parse_whg_links(feat_entry.get("str", ""))
+                    if links:
+                        entity_links[eid] = links
+        except Exception as e:
+            print(f"  Extend batch {i // extend_batch_size + 1} error: {e}",
+                  file=sys.stderr)
+
+        time.sleep(0.5)
+        if (i + extend_batch_size) % 200 < extend_batch_size:
+            print(f"  ... {min(i + extend_batch_size, len(sorted_ids))}"
+                  f"/{len(sorted_ids)} entities fetched", file=sys.stderr)
+
+    print(f"  {len(entity_coords)}/{len(entity_ids_needed)} with coordinates, "
+          f"{len(entity_links)} with authority links", file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Step 3: Score, classify, and check authority cross-references
+    # ------------------------------------------------------------------
+    print("Phase 3c-3: Scoring matches...", file=sys.stderr)
+    name_lookup = dict(candidates)
+
+    # Build vocab_id → existing external_id lookup
+    ext_id_lookup: dict[str, str] = {}
+    for p in all_places:
+        ext_id_lookup[p["id"]] = p.get("external_id") or ""
+
+    accepted: list[dict] = []
+    review: list[dict] = []
+    rejected: list[tuple] = []
+
+    for vid, results in all_matches.items():
+        name = name_lookup.get(vid, "")
+
+        if not results:
+            rejected.append((vid, name, "no_candidates"))
+            continue
+
+        scored: list[dict] = []
+        for r in results[:5]:
+            eid = r.get("id", "")
+            whg_name = r.get("name", "")
+            whg_score = float(r.get("score", 0))
+            whg_match = bool(r.get("match", False))
+            coords = entity_coords.get(eid)
+            links = entity_links.get(eid, {})
+
+            sim = string_similarity(name, whg_name)
+            bare = strip_parenthetical(name)
+            if bare:
+                sim = max(sim, string_similarity(bare, whg_name))
+
+            # Check if WHG's authority links confirm the existing authority
+            existing = _existing_authority(ext_id_lookup.get(vid, ""))
+            authority_confirmed = False
+            if existing and links:
+                auth_type, auth_id = existing
+                whg_uri = links.get(auth_type, "")
+                if auth_id and auth_id in whg_uri:
+                    authority_confirmed = True
+
+            # Composite: 40% WHG score, 25% similarity, 20% coords, 15% authority match
+            composite = (whg_score * 0.40
+                         + sim * 0.25
+                         + (100 if coords else 0) * 0.20
+                         + (100 if authority_confirmed else 0) * 0.15)
+
+            scored.append({
+                "entity_id": eid,
+                "name": whg_name,
+                "whg_score": whg_score,
+                "whg_match": whg_match,
+                "similarity": sim,
+                "composite": composite,
+                "authority_confirmed": authority_confirmed,
+                "lat": coords[0] if coords else None,
+                "lon": coords[1] if coords else None,
+                "links": links,
+            })
+
+        scored.sort(key=lambda x: x["composite"], reverse=True)
+        top = scored[0]
+        gap = top["composite"] - scored[1]["composite"] if len(scored) > 1 else 100
+        has_coords = top["lat"] is not None
+
+        row = {
+            "vid": vid,
+            "name": name,
+            "existing_id": ext_id_lookup.get(vid, ""),
+            "top": top,
+            "scored": scored,
+        }
+
+        if top["composite"] >= 80 and has_coords and (top["whg_match"] or gap >= 15):
+            accepted.append(row)
+        elif top["composite"] >= 50 and has_coords:
+            review.append(row)
+        else:
+            rejected.append((vid, name, f"low_score:{top['composite']:.0f}"))
+
+    confirmed_count = sum(1 for r in accepted if r["top"]["authority_confirmed"])
+    print(f"Phase 3c-3: {len(accepted)} accepted ({confirmed_count} authority-confirmed), "
+          f"{len(review)} review, {len(rejected)} rejected", file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Step 4: Write output CSVs (with authority link columns)
+    # ------------------------------------------------------------------
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    link_cols = ["link_wd", "link_gn", "link_tgn", "link_viaf", "link_loc"]
+
+    with open(out / "whg_bridge_accepted.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["vocab_id", "name", "existing_id", "whg_entity_id",
+                     "lat", "lon", "score", "authority_confirmed"] + link_cols)
+        for row in accepted:
+            t = row["top"]
+            w.writerow([
+                row["vid"], row["name"], row["existing_id"],
+                t["entity_id"], t["lat"], t["lon"],
+                f"{t['composite']:.1f}", t["authority_confirmed"],
+            ] + [t["links"].get(k.replace("link_", ""), "") for k in link_cols])
+    print(f"  Wrote {out / 'whg_bridge_accepted.csv'} ({len(accepted)} entries)",
+          file=sys.stderr)
+
+    with open(out / "whg_bridge_review.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["vocab_id", "name", "existing_id", "decision",
+                     "entity_1", "name_1", "score_1", "lat_1", "lon_1",
+                     "confirmed_1"] + [c + "_1" for c in link_cols] +
+                    ["entity_2", "name_2", "score_2", "lat_2", "lon_2",
+                     "confirmed_2"] + [c + "_2" for c in link_cols])
+        for row in review:
+            csv_row = [row["vid"], row["name"], row["existing_id"], ""]
+            for j in range(2):
+                if j < len(row["scored"]):
+                    s = row["scored"][j]
+                    csv_row.extend([
+                        s["entity_id"], s["name"], f"{s['composite']:.0f}",
+                        s["lat"], s["lon"], s["authority_confirmed"],
+                    ] + [s["links"].get(k.replace("link_", ""), "") for k in link_cols])
+                else:
+                    csv_row.extend([""] * (6 + len(link_cols)))
+            w.writerow(csv_row)
+    print(f"  Wrote {out / 'whg_bridge_review.csv'} ({len(review)} entries)",
+          file=sys.stderr)
+
+    with open(out / "whg_bridge_rejected.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["vocab_id", "name", "reason"])
+        for row in rejected:
+            w.writerow(row)
+    print(f"  Wrote {out / 'whg_bridge_rejected.csv'} ({len(rejected)} entries)",
+          file=sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Step 5: Apply accepted matches
+    # ------------------------------------------------------------------
+    if csv_only:
+        print(f"Phase 3c-5: Skipped (--csv-only). Review CSVs in {out}/",
+              file=sys.stderr)
+        return 0
+
+    updates: dict[str, tuple[float, float, str]] = {}
+    for row in accepted:
+        t = row["top"]
+        # Prefer a discovered Wikidata/GeoNames/TGN link over a WHG URI
+        best_ext_id = ""
+        for pref in ("wd", "gn", "tgn"):
+            if pref in t["links"]:
+                best_ext_id = t["links"][pref]
+                break
+        if not best_ext_id:
+            best_ext_id = f"https://whgazetteer.org/entity/{t['entity_id']}/"
+        updates[row["vid"]] = (t["lat"], t["lon"], best_ext_id)
+
+    updated = update_coords_and_ids(conn, updates, dry_run)
+    print(f"Phase 3c-5: {updated} places updated", file=sys.stderr)
     return updated
 
 
@@ -1593,7 +1929,7 @@ Examples:
     parser.add_argument("--dry-run", action="store_true",
                         help="Show counts but don't modify DB")
     parser.add_argument("--phase", type=str,
-                        help="Run only specific phase (1a, 1b, 1c, 2, 3, 3b, 4)")
+                        help="Run only specific phase (1a, 1b, 1c, 2, 3, 3b, 3c, 4)")
     parser.add_argument("--skip-geonames", action="store_true",
                         help="Skip Phase 1a (GeoNames API)")
     parser.add_argument("--geonames-user",
@@ -1601,6 +1937,8 @@ Examples:
                         help="GeoNames API username (or set GEONAMES_USERNAME env var)")
     parser.add_argument("--skip-whg", action="store_true",
                         help="Skip Phase 3b (WHG reconciliation)")
+    parser.add_argument("--csv-only", action="store_true",
+                        help="Write output CSVs but don't apply matches to DB")
     parser.add_argument("--apply-reviewed",
                         help="Path to reviewed CSV with 'decision' column "
                              "(supports both Wikidata and WHG review formats)")
@@ -1674,7 +2012,14 @@ Examples:
     if run_phase in (None, "3b") and not args.skip_whg:
         print(f"\n--- Phase 3b: WHG reconciliation ---", file=sys.stderr)
         total_updated += phase_3b_whg(
-            conn, args.dry_run, args.output_dir)
+            conn, args.dry_run, args.csv_only, args.output_dir)
+
+    # Phase 3c: WHG bridge — authority-failed places
+    if run_phase in (None, "3c") and not args.skip_whg:
+        print(f"\n--- Phase 3c: WHG bridge (authority-failed) ---",
+              file=sys.stderr)
+        total_updated += phase_3c_whg_bridge(
+            conn, args.dry_run, args.csv_only, args.output_dir)
 
     # Phase 4: Validation
     if run_phase in (None, "4"):
