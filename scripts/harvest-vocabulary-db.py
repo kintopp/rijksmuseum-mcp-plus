@@ -1329,6 +1329,17 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     else:
         print("  Skipping artwork_texts_fts (no Tier 2 data yet)")
 
+    # Geo index for proximity search
+    geo_count = cur.execute(
+        "SELECT COUNT(*) FROM vocabulary WHERE lat IS NOT NULL"
+    ).fetchone()[0]
+    if geo_count > 0:
+        print(f"  Creating geo index on vocabulary(lat, lon) — {geo_count:,} geocoded places...")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_lat_lon ON vocabulary(lat, lon) WHERE lat IS NOT NULL")
+        conn.commit()
+    else:
+        print("  Skipping geo index (no geocoded places)")
+
     # Collection set stats
     set_mappings = cur.execute(
         "SELECT COUNT(*) FROM mappings WHERE field = 'collection_set'"

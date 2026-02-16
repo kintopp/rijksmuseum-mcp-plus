@@ -28,12 +28,23 @@ export interface VocabSearchParams {
   maxHeight?: number;
   minWidth?: number;
   maxWidth?: number;
+  // Geo proximity search (require geocoded vocabulary DB)
+  nearPlace?: string;
+  nearPlaceRadius?: number;
   maxResults?: number;
 }
 
 export interface VocabSearchResult {
   totalResults?: number;
-  results: { objectNumber: string; title: string; creator: string; url: string }[];
+  referencePlace?: string;
+  results: {
+    objectNumber: string;
+    title: string;
+    creator: string;
+    url: string;
+    nearestPlace?: string;
+    distance_km?: number;
+  }[];
   source: "vocabulary";
   warnings?: string[];
 }
@@ -94,6 +105,7 @@ export class VocabularyDb {
   private hasTextFts = false;
   private hasDimensions = false;
   private hasNormLabels = false;
+  private hasCoordinates = false;
 
   constructor() {
     const dbPath = this.resolveDbPath();
@@ -109,6 +121,16 @@ export class VocabularyDb {
         const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         return new RegExp(`\\b${escaped}\\b`, "i").test(value) ? 1 : 0;
       });
+      // Haversine distance in km for geo proximity search
+      this.db.function("haversine_km", (lat1: number, lon1: number, lat2: number, lon2: number) => {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.asin(Math.sqrt(a));
+      });
       const count = (this.db.prepare("SELECT COUNT(*) as n FROM artworks").get() as { n: number }).n;
 
       // Feature-detect optional DB capabilities (vary by DB version)
@@ -116,12 +138,23 @@ export class VocabularyDb {
       this.hasTextFts = this.tableExists("artwork_texts_fts");
       this.hasDimensions = this.columnExists("artworks", "height_cm");
       this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm");
+      this.hasCoordinates = this.columnExists("vocabulary", "lat") && this.hasGeocodedData();
+
+      // Ensure geo index exists (idempotent, fast if already present)
+      if (this.hasCoordinates) {
+        try {
+          this.db.exec("CREATE INDEX IF NOT EXISTS idx_vocab_lat_lon ON vocabulary(lat, lon) WHERE lat IS NOT NULL");
+        } catch {
+          // readonly DB or index already exists — fine either way
+        }
+      }
 
       const features = [
         this.hasFts5 && "vocabFTS5",
         this.hasTextFts && "textFTS5",
         this.hasDimensions && "dimensions",
         this.hasNormLabels && "normLabels",
+        this.hasCoordinates && "coordinates",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -185,6 +218,42 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
     const warnings: string[] = [];
+    let geoResult: { placeIds: number[]; refPlace: string; refLat: number; refLon: number } | null = null;
+
+    // Handle nearPlace geo proximity filter
+    if (params.nearPlace) {
+      if (!this.hasCoordinates) {
+        warnings.push("nearPlace requires a vocabulary DB with geocoded places. This filter was ignored.");
+      } else {
+        if (params.depictedPlace || params.productionPlace) {
+          warnings.push(
+            "nearPlace cannot be combined with depictedPlace/productionPlace. " +
+            "Using nearPlace; the other place filters were ignored."
+          );
+          delete params.depictedPlace;
+          delete params.productionPlace;
+        }
+
+        const radiusKm = Math.min(Math.max(params.nearPlaceRadius ?? 25, 1), 500);
+        geoResult = this.findNearbyPlaceIds(params.nearPlace, radiusKm);
+
+        if (!geoResult || geoResult.placeIds.length === 0) {
+          return {
+            ...emptyResult([
+              ...(warnings.length > 0 ? warnings : []),
+              `Could not find geocoded place matching "${params.nearPlace}".`,
+            ]),
+          };
+        }
+
+        const placeholders = geoResult.placeIds.map(() => "?").join(", ");
+        conditions.push(`a.object_number IN (
+          SELECT m.object_number FROM mappings m
+          WHERE m.field IN ('subject', 'spatial') AND m.vocab_id IN (${placeholders})
+        )`);
+        bindings.push(...geoResult.placeIds);
+      }
+    }
 
     for (const filter of VOCAB_FILTERS) {
       const value = params[filter.param];
@@ -293,14 +362,50 @@ export class VocabularyDb {
       creator_label: string;
     }[];
 
+    // When nearPlace is active, enrich results with nearest place + distance
+    let distanceMap: Map<string, { place: string; dist: number }> | undefined;
+    if (geoResult && rows.length > 0) {
+      const objNums = rows.map((r) => r.object_number);
+      const objPlaceholders = objNums.map(() => "?").join(", ");
+      const distRows = this.db.prepare(
+        `SELECT m.object_number, v.label_en, v.label_nl,
+                haversine_km(?, ?, v.lat, v.lon) AS dist
+         FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
+         WHERE m.object_number IN (${objPlaceholders})
+           AND m.field IN ('subject', 'spatial')
+           AND v.lat IS NOT NULL
+         ORDER BY dist`
+      ).all(geoResult.refLat, geoResult.refLon, ...objNums) as {
+        object_number: string;
+        label_en: string | null;
+        label_nl: string | null;
+        dist: number;
+      }[];
+
+      distanceMap = new Map();
+      for (const dr of distRows) {
+        if (!distanceMap.has(dr.object_number)) {
+          distanceMap.set(dr.object_number, {
+            place: dr.label_en || dr.label_nl || "",
+            dist: Math.round(dr.dist * 10) / 10,
+          });
+        }
+      }
+    }
+
     return {
       totalResults,
-      results: rows.map((r) => ({
-        objectNumber: r.object_number,
-        title: r.title || "",
-        creator: r.creator_label || "",
-        url: `https://www.rijksmuseum.nl/en/collection/${r.object_number}`,
-      })),
+      ...(geoResult && { referencePlace: `${geoResult.refPlace} (${geoResult.refLat.toFixed(4)}, ${geoResult.refLon.toFixed(4)})` }),
+      results: rows.map((r) => {
+        const d = distanceMap?.get(r.object_number);
+        return {
+          objectNumber: r.object_number,
+          title: r.title || "",
+          creator: r.creator_label || "",
+          url: `https://www.rijksmuseum.nl/en/collection/${r.object_number}`,
+          ...(d && { nearestPlace: d.place, distance_km: d.dist }),
+        };
+      }),
       source: "vocabulary",
       ...(warnings.length > 0 && { warnings }),
     };
@@ -365,6 +470,87 @@ export class VocabularyDb {
       default:
         return { where: "(label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)", bindings: [`%${value}%`, `%${value}%`] };
     }
+  }
+
+  /** Check if there's actual geocoded data (not just an empty lat column). */
+  private hasGeocodedData(): boolean {
+    try {
+      const row = this.db!.prepare(
+        "SELECT 1 FROM vocabulary WHERE lat IS NOT NULL LIMIT 1"
+      ).get();
+      return row !== undefined;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Resolve a place name to coordinates, then find all nearby place vocab IDs.
+   * Returns null if the place cannot be resolved or has no coordinates.
+   */
+  private findNearbyPlaceIds(
+    placeName: string,
+    radiusKm: number
+  ): { placeIds: number[]; refPlace: string; refLat: number; refLon: number } | null {
+    // Step 1: Resolve the place name to coordinates
+    let refLat: number | null = null;
+    let refLon: number | null = null;
+    let refPlace = "";
+
+    if (this.hasFts5) {
+      const vocabIds = this.findVocabIdsFts(placeName, " AND type = 'place'");
+      if (vocabIds.length > 0) {
+        const placeholders = vocabIds.map(() => "?").join(", ");
+        const row = this.db!.prepare(
+          `SELECT id, label_en, label_nl, lat, lon FROM vocabulary
+           WHERE id IN (${placeholders}) AND lat IS NOT NULL
+           LIMIT 1`
+        ).get(...vocabIds) as { id: string; label_en: string; label_nl: string; lat: number; lon: number } | undefined;
+        if (row) {
+          refLat = row.lat;
+          refLon = row.lon;
+          refPlace = row.label_en || row.label_nl || placeName;
+        }
+      }
+    } else {
+      // Fallback: LIKE search
+      const row = this.db!.prepare(
+        `SELECT id, label_en, label_nl, lat, lon FROM vocabulary
+         WHERE type = 'place' AND lat IS NOT NULL
+           AND (label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)
+         LIMIT 1`
+      ).get(`%${placeName}%`, `%${placeName}%`) as { id: string; label_en: string; label_nl: string; lat: number; lon: number } | undefined;
+      if (row) {
+        refLat = row.lat;
+        refLon = row.lon;
+        refPlace = row.label_en || row.label_nl || placeName;
+      }
+    }
+
+    if (refLat === null || refLon === null) return null;
+
+    // Step 2: Bounding box pre-filter + Haversine
+    const latDelta = radiusKm / 111.0;
+    const lonDelta = radiusKm / (111.0 * Math.cos(refLat * Math.PI / 180));
+
+    const rows = this.db!.prepare(
+      `SELECT id FROM vocabulary
+       WHERE type = 'place' AND lat IS NOT NULL
+         AND lat BETWEEN ? AND ?
+         AND lon BETWEEN ? AND ?
+         AND haversine_km(?, ?, lat, lon) <= ?`
+    ).all(
+      refLat - latDelta, refLat + latDelta,
+      refLon - lonDelta, refLon + lonDelta,
+      refLat, refLon, radiusKm
+    ) as { id: number }[];
+
+    return {
+      placeIds: rows.map((r) => r.id),
+      refPlace,
+      refLat,
+      refLon,
+    };
   }
 
   private resolveDbPath(): string | null {

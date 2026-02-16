@@ -112,6 +112,7 @@ function registerTools(
     // Tier 2 (vocabulary DB v1.0+)
     "inscription", "provenance", "creditLine", "productionRole",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
+    "nearPlace", "nearPlaceRadius",
   ] as const;
 
   server.registerTool(
@@ -143,7 +144,8 @@ function registerTools(
             "provenance (full-text search on ownership history), " +
             "creditLine (full-text search on credit/donor lines), " +
             "productionRole (search by production role, e.g. 'painter', 'printmaker'), " +
-            "minHeight/maxHeight/minWidth/maxWidth (dimension range filters in centimeters). " +
+            "minHeight/maxHeight/minWidth/maxWidth (dimension range filters in centimeters), " +
+            "nearPlace/nearPlaceRadius (geo proximity search — find artworks related to places near a named location, e.g. nearPlace='Leiden' nearPlaceRadius=10 for places within 10km of Leiden; default radius 25km). " +
             "Note: compact and pageToken do not apply to vocabulary-based searches."
           : ""),
       inputSchema: {
@@ -326,6 +328,24 @@ function registerTools(
                 .optional()
                 .describe(
                   "Maximum width in centimeters. Requires vocabulary DB v1.0+."
+                ),
+              nearPlace: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                  "Search for artworks related to places near a named location (e.g. 'Leiden'). " +
+                  "Searches both depicted and production places within the specified radius. " +
+                  "Requires vocabulary DB with geocoded places."
+                ),
+              nearPlaceRadius: z
+                .number()
+                .min(1)
+                .max(500)
+                .default(25)
+                .optional()
+                .describe(
+                  "Radius in kilometers for nearPlace search (1-500, default 25)."
                 ),
             }
           : {}),
