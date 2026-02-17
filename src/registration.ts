@@ -124,31 +124,14 @@ function registerTools(
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "At least one search filter is required. " +
-        "Available filters: query (searches titles), title, creator, aboutActor (depicted person), type, material, technique, creationDate, description, imageAvailable. " +
-        "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
-        "Use creationDate with wildcards for ranges (e.g. '16*' for 1600s, '164*' for 1640s)." +
+        "Use specific filters for best results — there is no general full-text search across all metadata fields." +
         (vocabAvailable
-          ? " Additional vocabulary-based filters: subject (text search on subject labels like Iconclass themes), " +
-            "iconclass (exact Iconclass notation code, e.g. '34B11' for dogs), " +
-            "depictedPerson (text search on depicted person names — more comprehensive than aboutActor), " +
-            "depictedPlace (text search on depicted place names), " +
-            "productionPlace (text search on production place names), " +
-            "birthPlace (search by artist's birth place), " +
-            "deathPlace (search by artist's death place), " +
-            "profession (search by artist's profession, e.g. 'painter', 'draughtsman'). " +
-            "Vocabulary labels are bilingual (English and Dutch); some terms only have Dutch labels, so try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
-            "Vocabulary filters can be freely combined with each other and with creator, type, material, and technique for cross-field queries " +
-            "(e.g. subject='dogs' + type='painting', or profession='painter' + birthPlace='Amsterdam'). " +
-            "collectionSet (text search on curated set names, e.g. 'Rembrandt', 'Japanese'), " +
-            "license (filter by rights URI: 'publicdomain', 'zero' for CC0, 'by' for CC BY). " +
-            "Tier 2 filters (when available): " +
-            "inscription (full-text search on inscription texts, e.g. 'Rembrandt f.' for signed works), " +
-            "provenance (full-text search on ownership history), " +
-            "creditLine (full-text search on credit/donor lines), " +
-            "productionRole (search by production role, e.g. 'painter', 'printmaker'), " +
-            "minHeight/maxHeight/minWidth/maxWidth (dimension range filters in centimeters), " +
-            "nearPlace/nearPlaceRadius (geo proximity search — find artworks related to places near a named location, e.g. nearPlace='Leiden' nearPlaceRadius=10 for places within 10km of Leiden; default radius 25km). " +
-            "Note: compact and pageToken do not apply to vocabulary-based searches."
+          ? " Vocabulary-based filters (subject, iconclass, depictedPerson, depictedPlace, productionPlace, " +
+            "birthPlace, deathPlace, profession, collectionSet, license, and Tier 2 filters) " +
+            "can be freely combined with each other and with creator, type, material, and technique. " +
+            "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
+            "(e.g. 'fotograaf' instead of 'photographer'). " +
+            "compact and pageToken do not apply to vocabulary-based searches."
           : ""),
       inputSchema: {
         query: z
