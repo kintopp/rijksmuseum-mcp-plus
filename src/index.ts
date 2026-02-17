@@ -320,6 +320,9 @@ async function runHttp(): Promise<void> {
       const newSessionId = transport.sessionId;
       if (newSessionId) {
         sessions.set(newSessionId, { server, transport, lastActivity: Date.now() });
+      } else {
+        // Non-initialize request on a new transport — clean up to prevent leak
+        transport.close?.();
       }
     } catch (err) {
       console.error("MCP endpoint error:", err);

@@ -10,6 +10,10 @@ const OPEN_COMMANDS: Record<string, [string, ...string[]]> = {
 
 export class SystemIntegration {
   static async openInBrowser(url: string): Promise<void> {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new Error(`Refusing to open non-HTTP URL: ${url}`);
+    }
     const [cmd, ...args] = OPEN_COMMANDS[process.platform] ?? ["xdg-open"];
     await execFileAsync(cmd, [...args, url]);
   }

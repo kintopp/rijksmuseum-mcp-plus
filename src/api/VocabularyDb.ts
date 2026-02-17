@@ -137,7 +137,8 @@ export class VocabularyDb {
       this.hasFts5 = this.tableExists("vocabulary_fts");
       this.hasTextFts = this.tableExists("artwork_texts_fts");
       this.hasDimensions = this.columnExists("artworks", "height_cm");
-      this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm");
+      this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm")
+        && this.columnExists("vocabulary", "label_nl_norm");
       this.hasCoordinates = this.columnExists("vocabulary", "lat") && this.hasGeocodedData();
 
       // Warn if geo index is missing (must be created during harvest, not at runtime — DB is read-only)
@@ -194,30 +195,33 @@ export class VocabularyDb {
       return emptyResult();
     }
 
+    // Work on a shallow copy so we never mutate the caller's object
+    const effective = { ...params };
+
     const conditions: string[] = [];
     const bindings: unknown[] = [];
     const warnings: string[] = [];
     let geoResult: ReturnType<VocabularyDb["findNearbyPlaceIds"]> = null;
 
     // Handle nearPlace geo proximity filter
-    if (params.nearPlace) {
+    if (effective.nearPlace) {
       if (!this.hasCoordinates) {
         warnings.push("nearPlace requires a vocabulary DB with geocoded places. This filter was ignored.");
       } else {
-        if (params.depictedPlace || params.productionPlace) {
+        if (effective.depictedPlace || effective.productionPlace) {
           warnings.push(
             "nearPlace cannot be combined with depictedPlace/productionPlace. " +
             "Using nearPlace; the other place filters were ignored."
           );
-          delete params.depictedPlace;
-          delete params.productionPlace;
+          delete effective.depictedPlace;
+          delete effective.productionPlace;
         }
 
-        const radiusKm = Math.min(Math.max(params.nearPlaceRadius ?? 25, 1), 500);
-        geoResult = this.findNearbyPlaceIds(params.nearPlace, radiusKm);
+        const radiusKm = Math.min(Math.max(effective.nearPlaceRadius ?? 25, 1), 500);
+        geoResult = this.findNearbyPlaceIds(effective.nearPlace, radiusKm);
 
         if (!geoResult || geoResult.placeIds.length === 0) {
-          warnings.push(`Could not find geocoded place matching "${params.nearPlace}".`);
+          warnings.push(`Could not find geocoded place matching "${effective.nearPlace}".`);
           return emptyResult(warnings);
         }
 
@@ -231,7 +235,7 @@ export class VocabularyDb {
     }
 
     for (const filter of VOCAB_FILTERS) {
-      const value = params[filter.param];
+      const value = effective[filter.param];
       if (value === undefined) continue;
 
       for (const f of filter.fields) {
@@ -241,16 +245,18 @@ export class VocabularyDb {
         throw new Error(`Invalid vocab type: ${filter.vocabType}`);
       }
 
+      const fieldPlaceholders = filter.fields.map(() => "?").join(", ");
       const fieldClause = filter.fields.length === 1
-        ? `m.field = '${filter.fields[0]}'`
-        : `m.field IN (${filter.fields.map((f) => `'${f}'`).join(", ")})`;
+        ? `m.field = ?`
+        : `m.field IN (${fieldPlaceholders})`;
 
-      const typeClause = filter.vocabType ? ` AND type = '${filter.vocabType}'` : "";
+      const typeClause = filter.vocabType ? ` AND type = ?` : "";
+      const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
 
       const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
 
       if (useFts) {
-        const vocabIds = this.findVocabIdsFts(String(value), typeClause);
+        const vocabIds = this.findVocabIdsFts(String(value), typeClause, typeBindings);
         if (vocabIds.length === 0) {
           return emptyResult(warnings);
         }
@@ -259,7 +265,7 @@ export class VocabularyDb {
           SELECT m.object_number FROM mappings m
           WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
         )`);
-        bindings.push(...vocabIds);
+        bindings.push(...filter.fields, ...vocabIds);
       } else {
         const { where: vocabWhere, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
         conditions.push(`a.object_number IN (
@@ -268,14 +274,14 @@ export class VocabularyDb {
             SELECT id FROM vocabulary WHERE ${vocabWhere}${typeClause}
           )
         )`);
-        bindings.push(...matchBindings);
+        bindings.push(...filter.fields, ...matchBindings, ...typeBindings);
       }
     }
 
     // Direct column filter: license matches against artworks.rights_uri
-    if (params.license) {
+    if (effective.license) {
       conditions.push("a.rights_uri LIKE ?");
-      bindings.push(`%${params.license}%`);
+      bindings.push(`%${effective.license}%`);
     }
 
     // Tier 2: Text FTS filters (inscription, provenance, creditLine)
@@ -284,12 +290,12 @@ export class VocabularyDb {
       ["provenance", "provenance_text"],
       ["creditLine", "credit_line"],
     ];
-    const requestedTextFilters = TEXT_FILTERS.filter(([param]) => typeof params[param] === "string");
+    const requestedTextFilters = TEXT_FILTERS.filter(([param]) => typeof effective[param] === "string");
     if (requestedTextFilters.length > 0) {
       if (this.hasTextFts) {
         for (const [param, column] of requestedTextFilters) {
           conditions.push(`a.rowid IN (SELECT rowid FROM artwork_texts_fts WHERE ${column} MATCH ?)`);
-          bindings.push(escapeFts5(params[param] as string));
+          bindings.push(escapeFts5(effective[param] as string));
         }
       } else {
         warnings.push(
@@ -305,12 +311,12 @@ export class VocabularyDb {
       ["minWidth", "a.width_cm", ">="],
       ["maxWidth", "a.width_cm", "<="],
     ];
-    const requestedDimFilters = DIM_FILTERS.filter(([param]) => params[param] != null);
+    const requestedDimFilters = DIM_FILTERS.filter(([param]) => effective[param] != null);
     if (requestedDimFilters.length > 0) {
       if (this.hasDimensions) {
         for (const [param, col, op] of requestedDimFilters) {
           conditions.push(`${col} ${op} ?`);
-          bindings.push(params[param]!);
+          bindings.push(effective[param]!);
         }
       } else {
         warnings.push("Dimension range filters require vocabulary DB v1.0+. These filters were ignored.");
@@ -322,7 +328,7 @@ export class VocabularyDb {
     }
 
     const where = conditions.join(" AND ");
-    const limit = Math.min(params.maxResults ?? 25, 25);
+    const limit = Math.min(effective.maxResults ?? 25, 25);
 
     // COUNT is expensive for cross-filter queries (multiple IN-subquery intersections
     // can scan tens of thousands of rows). Only compute it for single-filter queries.
@@ -415,11 +421,11 @@ export class VocabularyDb {
    * Find vocabulary IDs via FTS5, falling back to LIKE on normalized labels
    * for compound word variants (e.g. "printmaker" vs "print maker").
    */
-  private findVocabIdsFts(value: string, typeClause: string): string[] {
+  private findVocabIdsFts(value: string, typeClause: string, typeBindings: unknown[]): string[] {
     const ftsPhrase = escapeFts5(value);
     const rows = this.db!.prepare(
       `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
-    ).all(ftsPhrase) as { id: string }[];
+    ).all(ftsPhrase, ...typeBindings) as { id: string }[];
 
     if (rows.length > 0) return rows.map((r) => r.id);
 
@@ -428,7 +434,7 @@ export class VocabularyDb {
       const normValue = `%${value.toLowerCase().replace(/ /g, "")}%`;
       const fallbackRows = this.db!.prepare(
         `SELECT id FROM vocabulary WHERE (label_en_norm LIKE ? OR label_nl_norm LIKE ?)${typeClause}`
-      ).all(normValue, normValue) as { id: string }[];
+      ).all(normValue, normValue, ...typeBindings) as { id: string }[];
       return fallbackRows.map((r) => r.id);
     }
 
@@ -505,7 +511,7 @@ export class VocabularyDb {
     let row: PlaceRow | undefined;
 
     if (this.hasFts5) {
-      const vocabIds = this.findVocabIdsFts(placeName, " AND type = 'place'");
+      const vocabIds = this.findVocabIdsFts(placeName, " AND type = ?", ["place"]);
       if (vocabIds.length > 0) {
         const placeholders = vocabIds.map(() => "?").join(", ");
         row = this.db!.prepare(

@@ -834,7 +834,22 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
         };
       }
 
-      const base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width);
+      let base64: string;
+      try {
+        base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width);
+      } catch {
+        return {
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `Image could not be fetched for artwork ${args.objectNumber}. The IIIF server may be temporarily unavailable.`,
+              },
+            },
+          ],
+        };
+      }
 
       // Build concise metadata context for the LLM
       const labels = (items: { label: string }[]): string =>
@@ -937,10 +952,13 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
     },
     async () => {
       const records: unknown[] = [];
+      const MAX_PAGES = 5;
+      let pagesFollowed = 0;
       let result = await oai.listRecords({ set: "260213" });
       while (true) {
         records.push(...result.records);
-        if (!result.resumptionToken) break;
+        if (!result.resumptionToken || pagesFollowed >= MAX_PAGES) break;
+        pagesFollowed++;
         result = await oai.listRecords({ resumptionToken: result.resumptionToken });
       }
 

@@ -3,6 +3,9 @@
   "version": "0.9.0",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "main": "dist/index.js",
   "bin": {
     "rijksmuseum-mcp-plus": "./dist/index.js"
