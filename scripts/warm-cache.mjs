@@ -26,28 +26,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_URL = "https://rijksmuseum-mcp-plus-production.up.railway.app/mcp";
 const DEFAULT_FILE = resolve(__dirname, "warm-cache-prompts.tsv");
 
-// ---------------------------------------------------------------------------
-// CLI args
-// ---------------------------------------------------------------------------
-
 function parseArgs() {
   const args = process.argv.slice(2);
   const opts = { url: DEFAULT_URL, file: DEFAULT_FILE, concurrency: 1 };
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--url" && args[i + 1]) opts.url = args[++i];
-    else if (args[i] === "--file" && args[i + 1]) opts.file = resolve(args[++i]);
-    else if (args[i] === "--concurrency" && args[i + 1]) opts.concurrency = parseInt(args[++i], 10);
-    else if (args[i] === "--help" || args[i] === "-h") {
-      console.log("Usage: node scripts/warm-cache.mjs [--url URL] [--file PATH] [--concurrency N]");
-      process.exit(0);
+    switch (args[i]) {
+      case "--url":        opts.url = args[++i]; break;
+      case "--file":       opts.file = resolve(args[++i]); break;
+      case "--concurrency": opts.concurrency = parseInt(args[++i], 10); break;
+      case "--help":
+      case "-h":
+        console.log("Usage: node scripts/warm-cache.mjs [--url URL] [--file PATH] [--concurrency N]");
+        process.exit(0);
     }
   }
   return opts;
 }
-
-// ---------------------------------------------------------------------------
-// TSV parser
-// ---------------------------------------------------------------------------
 
 function parseTsv(filePath) {
   const lines = readFileSync(filePath, "utf-8").split("\n");
@@ -72,10 +66,6 @@ function parseTsv(filePath) {
   return prompts;
 }
 
-// ---------------------------------------------------------------------------
-// Runner
-// ---------------------------------------------------------------------------
-
 async function runCall(client, { name, args }, index, total) {
   const label = `[${String(index + 1).padStart(String(total).length)}/${total}] ${name}`;
   const argsShort = JSON.stringify(args);
@@ -83,17 +73,16 @@ async function runCall(client, { name, args }, index, total) {
   try {
     const result = await client.callTool({ name, arguments: args });
     const ms = (performance.now() - start).toFixed(0);
-    const isError = result.isError;
-    if (isError) {
+    if (result.isError) {
       const msg = result.content?.[0]?.text ?? "(no message)";
-      console.log(`${label}  ${ms}ms  ERROR  ${argsShort}  → ${msg.slice(0, 120)}`);
+      console.log(`${label}  ${ms}ms  ERROR  ${argsShort}  -> ${msg.slice(0, 120)}`);
       return false;
     }
     console.log(`${label}  ${ms}ms  OK  ${argsShort}`);
     return true;
   } catch (e) {
     const ms = (performance.now() - start).toFixed(0);
-    console.log(`${label}  ${ms}ms  FAIL  ${argsShort}  → ${e.message?.slice(0, 120)}`);
+    console.log(`${label}  ${ms}ms  FAIL  ${argsShort}  -> ${e.message?.slice(0, 120)}`);
     return false;
   }
 }
@@ -111,7 +100,6 @@ async function main() {
   console.log(`Loaded ${prompts.length} tool calls from ${opts.file}`);
   console.log(`Concurrency: ${opts.concurrency}\n`);
 
-  // Connect MCP client
   const transport = new StreamableHTTPClientTransport(new URL(opts.url));
   const client = new Client({ name: "warm-cache", version: "1.0.0" });
   await client.connect(transport);
@@ -121,36 +109,26 @@ async function main() {
   let successes = 0;
   let failures = 0;
 
-  if (opts.concurrency <= 1) {
-    // Sequential
-    for (let i = 0; i < prompts.length; i++) {
-      const ok = await runCall(client, prompts[i], i, prompts.length);
+  // Worker pool: each worker pulls the next task until all are done.
+  // With concurrency=1 this is equivalent to a sequential loop.
+  let nextIdx = 0;
+  async function worker() {
+    while (nextIdx < prompts.length) {
+      const idx = nextIdx++;
+      const ok = await runCall(client, prompts[idx], idx, prompts.length);
       ok ? successes++ : failures++;
     }
-  } else {
-    // Concurrent with bounded parallelism
-    let nextIdx = 0;
-    const runNext = async () => {
-      while (nextIdx < prompts.length) {
-        const idx = nextIdx++;
-        const ok = await runCall(client, prompts[idx], idx, prompts.length);
-        ok ? successes++ : failures++;
-      }
-    };
-    const workers = Array.from(
-      { length: Math.min(opts.concurrency, prompts.length) },
-      () => runNext()
-    );
-    await Promise.all(workers);
   }
+  const workerCount = Math.min(opts.concurrency, prompts.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
-  const totalMs = ((performance.now() - totalStart) / 1000).toFixed(1);
+  const totalSec = ((performance.now() - totalStart) / 1000).toFixed(1);
 
-  console.log(`\n─── Summary ───`);
+  console.log(`\n--- Summary ---`);
   console.log(`Total:     ${prompts.length} calls`);
   console.log(`Succeeded: ${successes}`);
   console.log(`Failed:    ${failures}`);
-  console.log(`Time:      ${totalMs}s`);
+  console.log(`Time:      ${totalSec}s`);
 
   await client.close();
   process.exit(failures > 0 ? 1 : 0);

@@ -16,7 +16,7 @@ search_artwork	{"deathPlace": "Amsterdam", "compact": true}
 search_artwork	{"profession": "draughtsman", "compact": true}
 search_artwork	{"collectionSet": "Rembrandt", "compact": true}
 search_artwork	{"collectionSet": "Japanese", "compact": true}
-# Requires v1.0 DB (rights_uri column) — will error on v0.9
+# Requires v1.0 DB (rights_uri column)
 search_artwork	{"license": "publicdomain", "type": "painting", "compact": true}
 
 # --- search_artwork: vocabulary filters (Tier 2) ---
