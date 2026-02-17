@@ -1,0 +1,78 @@
+# warm-cache-prompts.tsv — Tool calls for warming server caches
+# Format: tool_name<TAB>json_args
+# Lines starting with # are comments; blank lines are ignored.
+
+# --- search_artwork: vocabulary filters (Tier 1) ---
+search_artwork	{"subject": "vanitas", "compact": true}
+search_artwork	{"subject": "winter landscape", "type": "painting", "compact": true}
+search_artwork	{"iconclass": "34B11", "compact": true}
+search_artwork	{"depictedPerson": "Willem van Oranje", "compact": true}
+search_artwork	{"depictedPerson": "Amalia van Solms", "type": "painting", "compact": true}
+search_artwork	{"depictedPlace": "Amsterdam", "type": "drawing", "compact": true}
+search_artwork	{"productionPlace": "Delft", "type": "painting", "compact": true}
+search_artwork	{"productionPlace": "Japan", "compact": true}
+search_artwork	{"birthPlace": "Haarlem", "profession": "painter", "compact": true}
+search_artwork	{"deathPlace": "Amsterdam", "compact": true}
+search_artwork	{"profession": "draughtsman", "compact": true}
+search_artwork	{"collectionSet": "Rembrandt", "compact": true}
+search_artwork	{"collectionSet": "Japanese", "compact": true}
+# Requires v1.0 DB (rights_uri column) — will error on v0.9
+search_artwork	{"license": "publicdomain", "type": "painting", "compact": true}
+
+# --- search_artwork: vocabulary filters (Tier 2) ---
+search_artwork	{"inscription": "fecit", "compact": true}
+search_artwork	{"inscription": "VOC", "compact": true}
+search_artwork	{"provenance": "Napoleon", "compact": true}
+search_artwork	{"creditLine": "Vereniging Rembrandt", "compact": true}
+search_artwork	{"creditLine": "bequest", "compact": true}
+search_artwork	{"productionRole": "printmaker", "compact": true}
+search_artwork	{"productionRole": "publisher", "compact": true}
+search_artwork	{"minHeight": 200, "minWidth": 200, "type": "painting", "compact": true}
+search_artwork	{"maxHeight": 10, "maxWidth": 10, "compact": true}
+
+# --- search_artwork: Search API filters ---
+search_artwork	{"creator": "Rembrandt van Rijn", "type": "painting", "compact": true}
+search_artwork	{"creator": "Rembrandt van Rijn", "type": "print", "compact": true}
+search_artwork	{"creator": "Johannes Vermeer", "compact": true}
+search_artwork	{"creator": "Katsushika Hokusai", "compact": true}
+search_artwork	{"technique": "mezzotint", "productionPlace": "Haarlem", "compact": true}
+search_artwork	{"material": "ivory", "compact": true}
+search_artwork	{"creationDate": "164*", "type": "painting", "compact": true}
+search_artwork	{"description": "Raid on the Medway", "compact": true}
+
+# --- search_artwork: cross-filter (vocab + API) ---
+search_artwork	{"subject": "dogs", "type": "painting"}
+search_artwork	{"profession": "painter", "birthPlace": "Amsterdam"}
+
+# --- search_artwork: nearPlace geo queries ---
+search_artwork	{"nearPlace": "Leiden", "nearPlaceRadius": 10, "compact": true}
+
+# --- get_artwork_details: iconic works ---
+get_artwork_details	{"objectNumber": "SK-C-5"}
+get_artwork_details	{"objectNumber": "SK-A-1505"}
+get_artwork_details	{"objectNumber": "SK-A-2344"}
+get_artwork_details	{"objectNumber": "SK-A-3262"}
+get_artwork_details	{"objectNumber": "SK-A-4691"}
+get_artwork_details	{"objectNumber": "SK-A-1718"}
+
+# --- get_artwork_image: IIIF chain ---
+get_artwork_image	{"objectNumber": "SK-C-5"}
+get_artwork_image	{"objectNumber": "SK-A-2344"}
+
+# --- get_artist_timeline ---
+get_artist_timeline	{"artist": "Jacob van Ruisdael", "maxWorks": 10}
+get_artist_timeline	{"artist": "George Hendrik Breitner", "maxWorks": 10}
+get_artist_timeline	{"artist": "Jan Steen", "maxWorks": 10}
+
+# --- get_artwork_bibliography ---
+get_artwork_bibliography	{"objectNumber": "SK-A-4050"}
+
+# --- list_curated_sets ---
+list_curated_sets	{}
+list_curated_sets	{"query": "Rembrandt"}
+
+# --- browse_set ---
+browse_set	{"setSpec": "260213", "maxResults": 10}
+
+# --- get_recent_changes ---
+get_recent_changes	{"from": "2026-02-01", "maxResults": 5}
