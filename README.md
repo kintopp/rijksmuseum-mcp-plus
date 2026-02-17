@@ -86,7 +86,9 @@ Vocabulary-backed filters can be freely combined with each other (e.g. `depicted
 | Search Parameter | What it queries | Notes |
 |---|---|---|
 | `nearPlace` | Artworks related to places near a named location | Searches both depicted and production places within a radius of the named location (e.g. `nearPlace: "Leiden"`). Uses the Haversine formula against 20,828 geocoded places with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/). |
-| `nearPlaceRadius` | Search radius in kilometres | Default: 25 km, range: 1–500 km. Controls the geographic scope of `nearPlace` queries. |
+| `nearLat` | Latitude for coordinate-based proximity search | Use with `nearLon` as an alternative to `nearPlace` for searching near arbitrary locations (e.g. `nearLat: 52.37, nearLon: 4.89`). Range: -90 to 90. If both `nearLat`/`nearLon` and `nearPlace` are provided, coordinates take precedence. |
+| `nearLon` | Longitude for coordinate-based proximity search | Use with `nearLat`. Range: -180 to 180. |
+| `nearPlaceRadius` | Search radius in kilometres | Default: 25 km, range: 0.1–500 km. Controls the geographic scope of `nearPlace` and `nearLat`/`nearLon` queries. |
 
 ### Non-searchable metadata categories
 
