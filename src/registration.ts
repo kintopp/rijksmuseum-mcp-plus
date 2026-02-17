@@ -114,9 +114,8 @@ function registerTools(
     "minHeight", "maxHeight", "minWidth", "maxWidth",
     "nearPlace",
   ] as const;
-  // nearPlaceRadius is NOT in vocabParamKeys — it has a Zod .default(25)
-  // which would make hasVocabParam true for every query. It's only meaningful
-  // when nearPlace is present, and gets forwarded via the allVocabKeys spread.
+  // nearPlaceRadius excluded: its Zod .default(25) would trigger vocab routing
+  // on every query. Forwarded separately via allVocabKeys when nearPlace is set.
 
   server.registerTool(
     "search_artwork",
@@ -826,7 +825,8 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
       },
     },
     async (args) => {
-      const width = Math.min(Math.max(parseInt(args.imageWidth ?? "", 10) || 1200, 200), 2000);
+      const parsed = parseInt(args.imageWidth ?? "", 10) || 1200;
+      const width = Math.min(Math.max(parsed, 200), 2000);
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
 
       // Resolve image and full metadata in parallel
