@@ -140,13 +140,16 @@ export class VocabularyDb {
       this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm");
       this.hasCoordinates = this.columnExists("vocabulary", "lat") && this.hasGeocodedData();
 
-      // Ensure geo index exists (idempotent, fast if already present)
+      // Warn if geo index is missing (must be created during harvest, not at runtime — DB is read-only)
       if (this.hasCoordinates) {
         try {
-          this.db.exec("CREATE INDEX IF NOT EXISTS idx_vocab_lat_lon ON vocabulary(lat, lon) WHERE lat IS NOT NULL");
-        } catch {
-          // readonly DB or index already exists — fine either way
-        }
+          const hasGeoIdx = this.db.prepare(
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_vocab_lat_lon'"
+          ).get();
+          if (!hasGeoIdx) {
+            console.error("Warning: idx_vocab_lat_lon index missing — nearPlace queries may be slower. Re-run harvest Phase 3 to create it.");
+          }
+        } catch { /* ignore */ }
       }
 
       const features = [
