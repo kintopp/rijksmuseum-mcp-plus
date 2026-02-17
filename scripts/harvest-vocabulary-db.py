@@ -87,6 +87,7 @@ RM_HEIGHT = "https://id.rijksmuseum.nl/22011"
 RM_WIDTH = "https://id.rijksmuseum.nl/22012"
 HEIGHT_URIS = {AAT_HEIGHT, RM_HEIGHT}
 WIDTH_URIS = {AAT_WIDTH, RM_WIDTH}
+AAT_NARRATIVE = "http://vocab.getty.edu/aat/300048722"
 
 # ─── N-Triples parsing (same as pilot) ──────────────────────────────
 
@@ -189,6 +190,7 @@ CREATE TABLE IF NOT EXISTS artworks (
     credit_line      TEXT,
     height_cm        REAL,
     width_cm         REAL,
+    narrative_text   TEXT,
     tier2_done       INTEGER DEFAULT 0
 );
 
@@ -241,6 +243,7 @@ def create_or_open_db() -> sqlite3.Connection:
         ("credit_line", "TEXT"),
         ("height_cm", "REAL"),
         ("width_cm", "REAL"),
+        ("narrative_text", "TEXT"),
         ("tier2_done", "INTEGER DEFAULT 0"),
     ]
     for col_name, col_type in tier2_cols:
@@ -956,6 +959,50 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
     return roles, qualifiers
 
 
+def extract_narrative(data: dict) -> str | None:
+    """Extract curatorial narrative text from Linked Art subject_of.
+
+    Walks subject_of[] entries looking for part[] children classified as
+    AAT 300048722 (essay). Prefers EN, falls back to NL, then any language.
+    """
+    subject_of = data.get("subject_of")
+    if not isinstance(subject_of, list):
+        return None
+
+    narratives: dict[str, str] = {}  # keyed by lang URI
+
+    for entry in subject_of:
+        if not isinstance(entry, dict):
+            continue
+        # Determine language of this entry
+        lang_uri = None
+        for lang in entry.get("language", []):
+            lid = lang.get("id", "") if isinstance(lang, dict) else ""
+            if lid in (LANG_NL, LANG_EN):
+                lang_uri = lid
+                break
+            if lid and not lang_uri:
+                lang_uri = lid
+
+        # Walk parts looking for narrative classification
+        for part in entry.get("part", []):
+            if not isinstance(part, dict):
+                continue
+            if has_classification(part.get("classified_as"), AAT_NARRATIVE):
+                content = part.get("content", "")
+                if content and lang_uri and lang_uri not in narratives:
+                    narratives[lang_uri] = content
+
+    # Prefer EN → NL → first available (matches project convention)
+    if LANG_EN in narratives:
+        return narratives[LANG_EN]
+    if LANG_NL in narratives:
+        return narratives[LANG_NL]
+    if narratives:
+        return next(iter(narratives.values()))
+    return None
+
+
 def resolve_artwork(uri: str) -> dict | None:
     """Resolve a single artwork's Linked Art JSON-LD and extract Tier 2 fields."""
     req = urllib.request.Request(uri, headers={
@@ -995,12 +1042,16 @@ def resolve_artwork(uri: str) -> dict | None:
     # Production roles and attribution qualifiers
     roles, qualifiers = extract_production_parts(data)
 
+    # Curatorial narrative (museum wall text)
+    narrative_text = extract_narrative(data)
+
     return {
         "inscription_text": inscription_text,
         "provenance_text": provenance_text,
         "credit_line": credit_line,
         "height_cm": height_cm,
         "width_cm": width_cm,
+        "narrative_text": narrative_text,
         "roles": roles,
         "qualifiers": qualifiers,
     }
@@ -1032,6 +1083,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     with_provenance = 0
     with_credit = 0
     with_dimensions = 0
+    with_narrative = 0
     role_count = 0
     qualifier_count = 0
     t0 = time.time()
@@ -1043,6 +1095,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
             credit_line = ?,
             height_cm = ?,
             width_cm = ?,
+            narrative_text = ?,
             tier2_done = 1
         WHERE object_number = ?
     """
@@ -1090,6 +1143,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     with_credit += 1
                 if result["height_cm"] is not None or result["width_cm"] is not None:
                     with_dimensions += 1
+                if result["narrative_text"]:
+                    with_narrative += 1
 
                 conn.execute(TIER2_UPDATE_SQL, (
                     result["inscription_text"],
@@ -1097,6 +1152,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     result["credit_line"],
                     result["height_cm"],
                     result["width_cm"],
+                    result["narrative_text"],
                     obj_num,
                 ))
 
@@ -1130,6 +1186,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Provenance:   {with_provenance:,}")
     print(f"    Credit lines: {with_credit:,}")
     print(f"    Dimensions:   {with_dimensions:,}")
+    print(f"    Narratives:   {with_narrative:,}")
     print(f"    Prod. roles:  {role_count:,}")
     print(f"    Attr. quals:  {qualifier_count:,}")
 
@@ -1326,7 +1383,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         conn.execute("DROP TABLE IF EXISTS artwork_texts_fts")
         conn.execute("""
             CREATE VIRTUAL TABLE artwork_texts_fts USING fts5(
-                inscription_text, provenance_text, credit_line,
+                inscription_text, provenance_text, credit_line, narrative_text,
                 content='artworks', content_rowid='rowid',
                 tokenize='unicode61 remove_diacritics 2'
             )
@@ -1388,6 +1445,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
             ("inscription_text", "Inscriptions", "IS NOT NULL AND {col} != ''"),
             ("provenance_text",  "Provenance",   "IS NOT NULL AND {col} != ''"),
             ("credit_line",      "Credit lines", "IS NOT NULL AND {col} != ''"),
+            ("narrative_text",   "Narratives",   "IS NOT NULL AND {col} != ''"),
             ("height_cm",        "Height",       "IS NOT NULL"),
             ("width_cm",         "Width",        "IS NOT NULL"),
         ]

@@ -110,7 +110,7 @@ function registerTools(
     "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
     "birthPlace", "deathPlace", "profession", "collectionSet", "license",
     // Tier 2 (vocabulary DB v1.0+)
-    "inscription", "provenance", "creditLine", "productionRole",
+    "inscription", "provenance", "creditLine", "narrative", "productionRole",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
     "nearPlace",
   ] as const;
@@ -281,6 +281,14 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on credit/donor lines (e.g. 'Drucker' for Drucker-Fraser bequest). " +
+                  "Requires vocabulary DB v1.0+."
+                ),
+              narrative: z
+                .string()
+                .min(1)
+                .optional()
+                .describe(
+                  "Full-text search on curatorial narrative (museum wall text — interpretive, art-historical context). " +
                   "Requires vocabulary DB v1.0+."
                 ),
               productionRole: z
