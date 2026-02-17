@@ -126,6 +126,9 @@ LA_TYPE_MAP = {
 EXTERNAL_VOCAB = {
     "300078817": {"type": "classification", "label_en": "rectos", "label_nl": "rectozijden", "external_id": "http://vocab.getty.edu/aat/300078817"},
     "300010292": {"type": "classification", "label_en": "versos", "label_nl": "versozijden", "external_id": "http://vocab.getty.edu/aat/300010292"},
+    "300404450": {"type": "classification", "label_en": "primary", "label_nl": "primair", "external_id": "http://vocab.getty.edu/aat/300404450"},
+    "300404451": {"type": "classification", "label_en": "secondary", "label_nl": "secundair", "external_id": "http://vocab.getty.edu/aat/300404451"},
+    "300379012": {"type": "classification", "label_en": "undetermined", "label_nl": "onbepaald", "external_id": "http://vocab.getty.edu/aat/300379012"},
 }
 
 # ─── XML Namespaces ──────────────────────────────────────────────────
