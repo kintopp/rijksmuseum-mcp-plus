@@ -419,6 +419,32 @@ function registerTools(
     })
   );
 
+  // ── resolve_uri ────────────────────────────────────────────────
+
+  server.registerTool(
+    "resolve_uri",
+    {
+      title: "Resolve URI",
+      description:
+        "Resolve a Linked Art URI to full artwork details. " +
+        "Use this when you have a URI from relatedObjects or other tool output " +
+        "and want to learn what that object is. Returns the same enriched detail as get_artwork_details.",
+      inputSchema: {
+        uri: z
+          .string()
+          .url()
+          .describe(
+            "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
+          ),
+      },
+    },
+    withLogging("resolve_uri", async (args) => {
+      const object = await api.resolveObject(args.uri);
+      const detail = await api.toDetailEnriched(object, args.uri);
+      return jsonResponse(detail);
+    })
+  );
+
   // ── get_artwork_bibliography ───────────────────────────────────
 
   server.registerTool(
