@@ -1,23 +1,18 @@
 # rijksmuseum-mcp+
 
-An AI-powered interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, explore their history, view high-resolution images, and access scholarly references — all through natural conversation.
-
-Built on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards, and the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP).
+An AI-powered ([Model Context Protocol](https://modelcontextprotocol.io/)) interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, explore their history, view high-resolution images, and access scholarly references — all through natural conversation.
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server which used the museum's now unsupported REST API. 
 
-rijksmuseum-mcp+ is a ground-up rewrite based on the museum's new Linked Open Data infrastructure and adds new features like an interactive inline image viewer and the ability to work with many more kinds of metadata.
+rijksmuseum-mcp+ is a ground-up rewrite which draws on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards.
 
 ## Quick Start
 
-The easiest way to try rijksmuseum-mcp+ is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) and the hosted version of the MCP server:
-
+The easiest way to try rijksmuseum-mcp+ is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) and the hosted version of the MCP server. But note that both require a Pro or better [subscription](https://claude.com/pricing). 
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-In Claude Desktop and claude.ai: Settings → Connectors → Add custom connector → paste the URL above. But note that both require a Pro or better [subscription](https://claude.com/pricing). For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
-
-The rijksmuseum-mcp+ MCP server is also compatible with many open-source MCP clients, such as [Jan.ai](https://jan.ai) and can be used there with without an Anthropic subscription with a local LLM or an API key from a LLM provider. 
+Goto Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). The rijksmuseum-mcp+ MCP server is also compatible with many open-source MCP clients, such as [Jan.ai](https://jan.ai).
 
 ### Example Queries
 
@@ -40,7 +35,7 @@ The rijksmuseum-mcp+ MCP server is also compatible with many open-source MCP cli
 
 #### Rijksmuseum Search API
 
-These parameters query the [Rijksmuseum Search API](https://data.rijksmuseum.nl/) directly. The API uses [Linked Art](https://linked.art/) JSON-LD, with field classifications drawn from the [Getty Art & Architecture Thesaurus](https://www.getty.edu/research/tools/vocabularies/aat/) (AAT). Note that the Search API has no general full-text search — `query` and `title` both search the title field only, and unknown parameters are silently ignored (returning the full 837K+ collection).
+These parameters query the [Rijksmuseum Search API](https://data.rijksmuseum.nl/) directly. The API uses [Linked Art](https://linked.art/) JSON-LD, with field classifications drawn from the [Getty Art & Architecture Thesaurus](https://www.getty.edu/research/tools/vocabularies/aat/) (AAT). 
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -59,7 +54,7 @@ These parameters query the [Rijksmuseum Search API](https://data.rijksmuseum.nl/
 
 These parameters draw on a pre-built vocabulary database (~2.6 GB SQLite, [downloadable from releases](https://github.com/kintopp/rijksmuseum-mcp-plus/releases)) derived from OAI-PMH harvests and Linked Art resolution of the full Rijksmuseum collection. The database maps 149,000 controlled vocabulary terms to 831,000 artworks via 12.8 million mappings, enabling structured search by iconography, geography, biography, text content, and physical dimensions.
 
-Vocabulary-backed filters can be freely combined with each other (e.g. `depictedPerson` + `productionPlace` + `type`), but cannot be combined with `creationDate`, `description`, `query`, `title`, or `imageAvailable` in a single query. To filter vocabulary results by date, retrieve the results first and then check dates via `get_artwork_details`.
+Vocabulary-backed filters can be freely combined with each other (e.g. `depictedPerson` + `productionPlace` + `type`), but cannot (in this version) be combined with `creationDate`, `description`, `query`, `title`, or `imageAvailable` in a single query. To filter vocabulary results by date, retrieve the results first and then check dates via `get_artwork_details`.
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
