@@ -1,53 +1,102 @@
 # warm-cache-prompts.tsv — Tool calls for warming server caches
 # Format: tool_name<TAB>json_args
 # Lines starting with # are comments; blank lines are ignored.
+#
+# Notes:
+# - compact: true is omitted from vocabulary-routed calls (it has no effect there)
+# - Calls are ordered to maximise cache benefit: vocabulary searches first
+#   (warm SQLite page cache), then details/images (warm HTTP response cache)
 
 # --- search_artwork: vocabulary filters (Tier 1) ---
-search_artwork	{"subject": "vanitas", "compact": true}
-search_artwork	{"subject": "winter landscape", "type": "painting", "compact": true}
-search_artwork	{"iconclass": "34B11", "compact": true}
-search_artwork	{"depictedPerson": "Willem van Oranje", "compact": true}
-search_artwork	{"depictedPerson": "Amalia van Solms", "type": "painting", "compact": true}
-search_artwork	{"depictedPlace": "Amsterdam", "type": "drawing", "compact": true}
-search_artwork	{"productionPlace": "Delft", "type": "painting", "compact": true}
-search_artwork	{"productionPlace": "Japan", "compact": true}
-search_artwork	{"birthPlace": "Haarlem", "profession": "painter", "compact": true}
-search_artwork	{"deathPlace": "Amsterdam", "compact": true}
-search_artwork	{"profession": "draughtsman", "compact": true}
-search_artwork	{"collectionSet": "Rembrandt", "compact": true}
-search_artwork	{"collectionSet": "Japanese", "compact": true}
-# Requires v1.0 DB (rights_uri column)
-search_artwork	{"license": "publicdomain", "type": "painting", "compact": true}
+# Example queries
+search_artwork	{"creator": "Gesina ter Borch", "type": "drawing"}
+search_artwork	{"creator": "Pieter Jansz. Saenredam", "type": "painting"}
+search_artwork	{"creator": "Katsushika Hokusai", "technique": "woodcut"}
+search_artwork	{"depictedPerson": "Amalia van Solms", "type": "painting"}
+search_artwork	{"subject": "sense of smell"}
+search_artwork	{"productionPlace": "Haarlem", "technique": "mezzotint"}
+search_artwork	{"inscription": "fecit"}
+search_artwork	{"creditLine": "Vereniging Rembrandt"}
+search_artwork	{"provenance": "Napoleon"}
+search_artwork	{"productionRole": "after painting by"}
+search_artwork	{"creditLine": "bequest"}
 
-# --- search_artwork: vocabulary filters (Tier 2) ---
-search_artwork	{"inscription": "fecit", "compact": true}
-search_artwork	{"inscription": "VOC", "compact": true}
-search_artwork	{"provenance": "Napoleon", "compact": true}
-search_artwork	{"creditLine": "Vereniging Rembrandt", "compact": true}
-search_artwork	{"creditLine": "bequest", "compact": true}
-search_artwork	{"productionRole": "printmaker", "compact": true}
-search_artwork	{"productionRole": "publisher", "compact": true}
-search_artwork	{"minHeight": 200, "minWidth": 200, "type": "painting", "compact": true}
-search_artwork	{"maxHeight": 10, "maxWidth": 10, "compact": true}
-
-# --- search_artwork: Search API filters ---
+# Research scenario 1: Rembrandt across media
 search_artwork	{"creator": "Rembrandt van Rijn", "type": "painting", "compact": true}
 search_artwork	{"creator": "Rembrandt van Rijn", "type": "print", "compact": true}
+search_artwork	{"creator": "Rembrandt van Rijn", "type": "drawing", "compact": true}
+
+# Research scenario 2: non-European holdings
+search_artwork	{"productionPlace": "Japan", "type": "print"}
+search_artwork	{"productionPlace": "China"}
+search_artwork	{"productionPlace": "Java"}
+search_artwork	{"depictedPlace": "Japan"}
+
+# Research scenario 3: technique adoption (Search API — compact works here)
+search_artwork	{"type": "print", "technique": "engraving", "creationDate": "16*", "compact": true}
+search_artwork	{"type": "print", "technique": "etching", "creationDate": "16*", "compact": true}
+search_artwork	{"type": "print", "technique": "etching", "creationDate": "17*", "compact": true}
+search_artwork	{"type": "print", "technique": "mezzotint", "creationDate": "17*", "compact": true}
+
+# Research scenario 4: stadholder portraits
+search_artwork	{"depictedPerson": "Maurits", "type": "print"}
+search_artwork	{"depictedPerson": "Frederik Hendrik"}
+
+# Research scenario 5: printmaking cities (revised — no creationDate)
+search_artwork	{"productionPlace": "Haarlem", "type": "print"}
+search_artwork	{"productionPlace": "Amsterdam", "type": "print"}
+search_artwork	{"productionPlace": "Antwerp", "type": "print"}
+search_artwork	{"profession": "printmaker", "birthPlace": "Haarlem"}
+
+# Research scenario 6: vanitas across media (revised — no creationDate)
+search_artwork	{"subject": "vanitas", "type": "painting"}
+search_artwork	{"subject": "vanitas", "type": "print"}
+
+# Research scenario 7: colonial visual culture
+search_artwork	{"depictedPlace": "Batavia"}
+search_artwork	{"depictedPlace": "Java"}
+search_artwork	{"productionPlace": "Batavia"}
+
+# Research scenario 9: Saenredam inscriptions
+search_artwork	{"inscription": "Saenredam"}
+
+# Research scenario 10: panel dimensions (revised — no creationDate)
+search_artwork	{"type": "painting", "material": "panel", "minHeight": 40, "maxHeight": 50, "minWidth": 30, "maxWidth": 40}
+
+# Research scenario 12: Rembrandt acquisition history
+search_artwork	{"creditLine": "purchase", "creator": "Rembrandt"}
+
+# Research scenario 18: Leiden vs Haarlem painters
+search_artwork	{"birthPlace": "Leiden", "profession": "painter", "type": "painting"}
+search_artwork	{"birthPlace": "Haarlem", "profession": "painter", "type": "painting"}
+
+# Research scenario 24: Japanese prints (productionPlace:"Japan"+type:"print" already above)
+search_artwork	{"collectionSet": "Japanese"}
+
+# Other vocabulary filters
+search_artwork	{"subject": "winter landscape", "type": "painting"}
+search_artwork	{"iconclass": "34B11"}
+search_artwork	{"depictedPerson": "Willem van Oranje"}
+search_artwork	{"deathPlace": "Amsterdam"}
+search_artwork	{"collectionSet": "Rembrandt"}
+# Requires v1.0+ DB (rights_uri column) — will error on v0.9
+search_artwork	{"license": "publicdomain", "type": "painting"}
+search_artwork	{"minHeight": 200, "minWidth": 200, "type": "painting"}
+search_artwork	{"maxHeight": 10, "maxWidth": 10}
+search_artwork	{"inscription": "VOC"}
+search_artwork	{"productionRole": "printmaker"}
+search_artwork	{"productionRole": "publisher"}
+
+# Geo query
+search_artwork	{"nearPlace": "Leiden", "nearPlaceRadius": 10}
+
+# Search API filters
 search_artwork	{"creator": "Johannes Vermeer", "compact": true}
-search_artwork	{"creator": "Katsushika Hokusai", "compact": true}
-search_artwork	{"technique": "mezzotint", "productionPlace": "Haarlem", "compact": true}
 search_artwork	{"material": "ivory", "compact": true}
 search_artwork	{"creationDate": "164*", "type": "painting", "compact": true}
-search_artwork	{"description": "Raid on the Medway", "compact": true}
+search_artwork	{"description": "winter landscape", "creationDate": "17*", "compact": true}
 
-# --- search_artwork: cross-filter (vocab + API) ---
-search_artwork	{"subject": "dogs", "type": "painting"}
-search_artwork	{"profession": "painter", "birthPlace": "Amsterdam"}
-
-# --- search_artwork: nearPlace geo queries ---
-search_artwork	{"nearPlace": "Leiden", "nearPlaceRadius": 10, "compact": true}
-
-# --- get_artwork_details: iconic works ---
+# --- get_artwork_details: iconic works + batch-then-filter pattern ---
 get_artwork_details	{"objectNumber": "SK-C-5"}
 get_artwork_details	{"objectNumber": "SK-A-1505"}
 get_artwork_details	{"objectNumber": "SK-A-2344"}
@@ -70,6 +119,8 @@ get_artwork_bibliography	{"objectNumber": "SK-A-4050"}
 # --- list_curated_sets ---
 list_curated_sets	{}
 list_curated_sets	{"query": "Rembrandt"}
+list_curated_sets	{"query": "Japanese"}
+list_curated_sets	{"query": "maritime"}
 
 # --- browse_set ---
 browse_set	{"setSpec": "260213", "maxResults": 10}
