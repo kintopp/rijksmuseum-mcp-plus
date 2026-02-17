@@ -13,6 +13,7 @@ Phases:
   2.  Resolve unmatched vocabulary URIs via Linked Art API (multi-threaded)
   4.  Resolve all artwork Linked Art URIs for Tier 2 fields: inscriptions, provenance,
       credit lines, dimensions, production roles, attribution qualifiers (multi-threaded)
+  2b. Re-resolve vocabulary URIs introduced by Phase 4 (production roles, attribution qualifiers)
   3.  Post-processing: geocoding import, normalized labels, FTS5 indexes, validation stats (runs last)
 
 Usage:
@@ -97,10 +98,15 @@ NT_PATTERN = re.compile(
 BNODE_PATTERN = re.compile(
     r'^_:(\S+)\s+<([^>]+)>\s+(?:<([^>]+)>|"([^"]*)")\s*\.\s*$'
 )
+NT_LANG_PATTERN = re.compile(
+    r'^<([^>]+)>\s+<([^>]+)>\s+"([^"]*)"@(\w+)\s*\.\s*$'
+)
 
 P_LABEL = "http://www.cidoc-crm.org/cidoc-crm/P190_has_symbolic_content"
 P_LANGUAGE = "http://www.cidoc-crm.org/cidoc-crm/P72_has_language"
 P_EQUIVALENT = "https://linked.art/ns/terms/equivalent"
+SKOS_PREFLABEL = "http://www.w3.org/2004/02/skos/core#prefLabel"
+RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 P_BROADER = "http://www.w3.org/2004/02/skos/core#broader"
 P_HAS_TYPE = "http://www.cidoc-crm.org/cidoc-crm/P2_has_type"
 LANG_EN = "http://vocab.getty.edu/aat/300388277"
@@ -268,6 +274,8 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
     notation: str | None = None
     defined_by: str | None = None
     rdf_type: str | None = None
+    skos_label_en: str | None = None
+    skos_label_nl: str | None = None
 
     try:
         with open(filepath, "r", encoding="utf-8") as f:
@@ -314,6 +322,18 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
                 if obj_uri == "http://www.cidoc-crm.org/cidoc-crm/E42_Identifier":
                     bnodes[bnode_id]["is_identifier"] = True
 
+        # Match language-tagged literals (skos:prefLabel, rdfs:label)
+        m = NT_LANG_PATTERN.match(line)
+        if m and m.group(1) == entity_uri:
+            pred = m.group(2)
+            text = m.group(3)
+            lang_tag = m.group(4)
+            if pred in (SKOS_PREFLABEL, RDFS_LABEL) and text:
+                if lang_tag == "en" and not skos_label_en:
+                    skos_label_en = text
+                elif lang_tag == "nl" and not skos_label_nl:
+                    skos_label_nl = text
+
     label_en = None
     label_nl = None
 
@@ -329,6 +349,12 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
                 label_en = label
             elif lang == LANG_NL:
                 label_nl = label
+
+    # Fallback: use skos/rdfs labels if display-name labels weren't found
+    if not label_en:
+        label_en = skos_label_en
+    if not label_nl:
+        label_nl = skos_label_nl
 
     # Determine type from RDF type if we can
     vocab_type = default_type
@@ -1511,7 +1537,8 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
     print("\n--- Top 10 Subjects ---")
     rows = cur.execute("""
-        SELECT v.notation, v.label_en, v.label_nl, COUNT(DISTINCT m.object_number) as cnt
+        SELECT v.notation, v.label_en, v.label_nl, v.type,
+               COUNT(DISTINCT m.object_number) as cnt
         FROM mappings m
         JOIN vocabulary v ON m.vocab_id = v.id
         WHERE m.field = 'subject'
@@ -1519,9 +1546,10 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         ORDER BY cnt DESC
         LIMIT 10
     """).fetchall()
-    for notation, en, nl, cnt in rows:
+    for notation, en, nl, vtype, cnt in rows:
         label = en or nl or "?"
-        print(f"  {notation or '—':12s} {label:50s} {cnt:6,}")
+        code = notation if vtype == "classification" else "—"
+        print(f"  {code or '—':12s} {label:50s} {cnt:6,}")
 
 
 # ─── Main ────────────────────────────────────────────────────────────
@@ -1564,7 +1592,8 @@ def main():
 
     conn = create_or_open_db()
 
-    # Phase ordering: 0 → 0.5 → 1 → 2 → 4 → 3
+    # Phase ordering: 0 → 0.5 → 1 → 2 → 4 → 2b → 3
+    # Phase 2b re-resolves after Phase 4 (which introduces new vocab refs).
     # Phase 3 runs last because it builds FTS indexes and stats on all data.
 
     if args.start_phase <= 0 and not args.skip_dump:
@@ -1600,6 +1629,13 @@ def main():
         t0 = time.time()
         run_phase4(conn, threads=args.threads)
         print(f"  Phase 4 took {time.time() - t0:.1f}s")
+        print()
+
+    if args.start_phase <= 4:
+        print("=== Phase 2b: Resolving new vocabulary URIs from Phase 4 ===")
+        t0 = time.time()
+        run_phase2(conn)
+        print(f"  Phase 2b took {time.time() - t0:.1f}s")
         print()
 
     print("=== Phase 3: Validation & Post-processing ===")
