@@ -129,9 +129,10 @@ function registerTools(
           ? " Vocabulary-based filters (subject, iconclass, depictedPerson, depictedPlace, productionPlace, " +
             "birthPlace, deathPlace, profession, collectionSet, license, and Tier 2 filters) " +
             "can be freely combined with each other and with creator, type, material, and technique. " +
+            "Vocabulary filters cannot be combined with creationDate, description, query, title, or imageAvailable. " +
+            "To filter vocabulary results by date, fetch details on each result instead. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
-            "(e.g. 'fotograaf' instead of 'photographer'). " +
-            "compact and pageToken do not apply to vocabulary-based searches."
+            "(e.g. 'fotograaf' instead of 'photographer')."
           : ""),
       inputSchema: {
         query: z
@@ -370,7 +371,7 @@ function registerTools(
         const result = vocabDb.search(vocabArgs as any);
 
         // Warn about Search API-only filters that were silently dropped
-        const searchOnlyKeys = ["query", "title", "aboutActor", "creationDate", "description", "imageAvailable"] as const;
+        const searchOnlyKeys = ["query", "title", "aboutActor", "creationDate", "description", "imageAvailable", "compact", "pageToken"] as const;
         const droppedKeys = searchOnlyKeys.filter(k => argsRecord[k] !== undefined);
         if (droppedKeys.length > 0) {
           result.warnings = [
@@ -401,7 +402,8 @@ function registerTools(
         "Returns 24 metadata categories including titles, creator, date, description, curatorial narrative, " +
         "dimensions (text + structured), materials, object type, production details, provenance, " +
         "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
-        "Also reports the bibliography count — use get_artwork_bibliography for full citations.",
+        "Also reports the bibliography count — use get_artwork_bibliography for full citations. " +
+        "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",
       inputSchema: {
         objectNumber: z
           .string()
