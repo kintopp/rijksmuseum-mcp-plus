@@ -447,7 +447,8 @@ export class OaiPmhClient {
   private static firstText(fields: any[]): string | null {
     if (!fields || fields.length === 0) return null;
     const f = fields[0];
-    return typeof f === "string" ? f : f["#text"] ?? null;
+    if (typeof f === "string" || typeof f === "number") return String(f);
+    return f["#text"] ?? null;
   }
 
   // ── Creator parser ──────────────────────────────────────────

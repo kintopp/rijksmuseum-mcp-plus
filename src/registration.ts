@@ -112,8 +112,11 @@ function registerTools(
     // Tier 2 (vocabulary DB v1.0+)
     "inscription", "provenance", "creditLine", "productionRole",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
-    "nearPlace", "nearPlaceRadius",
+    "nearPlace",
   ] as const;
+  // nearPlaceRadius is NOT in vocabParamKeys — it has a Zod .default(25)
+  // which would make hasVocabParam true for every query. It's only meaningful
+  // when nearPlace is present, and gets forwarded via the allVocabKeys spread.
 
   server.registerTool(
     "search_artwork",
@@ -377,7 +380,7 @@ function registerTools(
 
       if (hasVocabParam && vocabDb) {
         const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
-        const allVocabKeys = [...vocabParamKeys, ...crossFilterKeys];
+        const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", ...crossFilterKeys];
         const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
         for (const k of allVocabKeys) {
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
@@ -823,7 +826,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
       },
     },
     async (args) => {
-      const width = parseInt(args.imageWidth ?? "", 10) || 1200;
+      const width = Math.min(Math.max(parseInt(args.imageWidth ?? "", 10) || 1200, 200), 2000);
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
 
       // Resolve image and full metadata in parallel
