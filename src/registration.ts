@@ -112,10 +112,10 @@ function registerTools(
     // Tier 2 (vocabulary DB v1.0+)
     "inscription", "provenance", "creditLine", "narrative", "productionRole",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
-    "nearPlace",
+    "nearPlace", "nearLat",
   ] as const;
-  // nearPlaceRadius excluded: its Zod .default(25) would trigger vocab routing
-  // on every query. Forwarded separately via allVocabKeys when nearPlace is set.
+  // nearPlaceRadius, nearLon excluded: their Zod defaults/pairing would trigger
+  // vocab routing on every query. Forwarded separately via allVocabKeys.
 
   server.registerTool(
     "search_artwork",
@@ -132,7 +132,8 @@ function registerTools(
             "Vocabulary filters cannot be combined with creationDate, description, query, title, or imageAvailable. " +
             "To filter vocabulary results by date, fetch details on each result instead. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
-            "(e.g. 'fotograaf' instead of 'photographer')."
+            "(e.g. 'fotograaf' instead of 'photographer'). " +
+            "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
           : ""),
       inputSchema: {
         query: z
@@ -332,13 +333,30 @@ function registerTools(
                   "Searches both depicted and production places within the specified radius. " +
                   "Requires vocabulary DB with geocoded places."
                 ),
+              nearLat: z
+                .number()
+                .min(-90)
+                .max(90)
+                .optional()
+                .describe(
+                  "Latitude for coordinate-based proximity search (-90 to 90). Use with nearLon. " +
+                  "Alternative to nearPlace for searching near arbitrary locations. Requires vocabulary DB with geocoded places."
+                ),
+              nearLon: z
+                .number()
+                .min(-180)
+                .max(180)
+                .optional()
+                .describe(
+                  "Longitude for coordinate-based proximity search (-180 to 180). Use with nearLat. Requires vocabulary DB with geocoded places."
+                ),
               nearPlaceRadius: z
                 .number()
-                .min(1)
+                .min(0.1)
                 .max(500)
                 .default(25)
                 .describe(
-                  "Radius in kilometers for nearPlace search (1-500, default 25)."
+                  "Radius in kilometers for nearPlace or nearLat/nearLon search (0.1-500, default 25)."
                 ),
             }
           : {}),
@@ -371,7 +389,7 @@ function registerTools(
 
       if (hasVocabParam && vocabDb) {
         const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
-        const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", ...crossFilterKeys];
+        const allVocabKeys = [...vocabParamKeys, "nearLon", "nearPlaceRadius", ...crossFilterKeys];
         const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
         for (const k of allVocabKeys) {
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];

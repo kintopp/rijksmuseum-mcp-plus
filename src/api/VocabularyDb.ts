@@ -31,6 +31,8 @@ export interface VocabSearchParams {
   maxWidth?: number;
   // Geo proximity search (require geocoded vocabulary DB)
   nearPlace?: string;
+  nearLat?: number;
+  nearLon?: number;
   nearPlaceRadius?: number;
   maxResults?: number;
 }
@@ -202,28 +204,64 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
     const warnings: string[] = [];
-    let geoResult: ReturnType<VocabularyDb["findNearbyPlaceIds"]> = null;
+    let geoResult: { placeIds: number[]; referencePlace: string; refLat: number; refLon: number } | null = null;
 
-    // Handle nearPlace geo proximity filter
-    if (effective.nearPlace) {
+    // Handle geo proximity filter: nearLat/nearLon (coordinates) or nearPlace (name)
+    const hasCoordPair = effective.nearLat != null && effective.nearLon != null;
+    const hasPartialCoord = (effective.nearLat != null) !== (effective.nearLon != null);
+
+    if (hasPartialCoord) {
+      warnings.push("Both nearLat and nearLon are required for coordinate search. The incomplete pair was ignored.");
+    }
+
+    if (hasCoordPair || effective.nearPlace) {
       if (!this.hasCoordinates) {
-        warnings.push("nearPlace requires a vocabulary DB with geocoded places. This filter was ignored.");
+        warnings.push("Proximity search requires a vocabulary DB with geocoded places. This filter was ignored.");
       } else {
         if (effective.depictedPlace || effective.productionPlace) {
           warnings.push(
-            "nearPlace cannot be combined with depictedPlace/productionPlace. " +
-            "Using nearPlace; the other place filters were ignored."
+            "Proximity search cannot be combined with depictedPlace/productionPlace. " +
+            "Using proximity search; the other place filters were ignored."
           );
           delete effective.depictedPlace;
           delete effective.productionPlace;
         }
 
-        const radiusKm = Math.min(Math.max(effective.nearPlaceRadius ?? 25, 1), 500);
-        geoResult = this.findNearbyPlaceIds(effective.nearPlace, radiusKm);
+        const radiusKm = Math.min(Math.max(effective.nearPlaceRadius ?? 25, 0.1), 500);
 
-        if (!geoResult || geoResult.placeIds.length === 0) {
-          warnings.push(`Could not find geocoded place matching "${effective.nearPlace}".`);
-          return emptyResult(warnings);
+        if (hasCoordPair) {
+          if (effective.nearPlace) {
+            warnings.push("Both nearLat/nearLon and nearPlace provided. Using coordinates; nearPlace was ignored.");
+          }
+          const lat = effective.nearLat!;
+          const lon = effective.nearLon!;
+          const placeIds = this.findPlaceIdsNearCoords(lat, lon, radiusKm);
+
+          if (placeIds.length === 0) {
+            warnings.push(`No geocoded places found within ${radiusKm}km of (${lat}, ${lon}).`);
+            return emptyResult(warnings);
+          }
+
+          geoResult = {
+            placeIds,
+            referencePlace: `(${lat}, ${lon})`,
+            refLat: lat,
+            refLon: lon,
+          };
+        } else {
+          const resolved = this.findNearbyPlaceIds(effective.nearPlace!, radiusKm);
+
+          if (!resolved || resolved.placeIds.length === 0) {
+            warnings.push(`Could not find geocoded place matching "${effective.nearPlace}".`);
+            return emptyResult(warnings);
+          }
+
+          geoResult = {
+            placeIds: resolved.placeIds,
+            referencePlace: `${resolved.refPlace} (${resolved.refLat.toFixed(4)}, ${resolved.refLon.toFixed(4)})`,
+            refLat: resolved.refLat,
+            refLon: resolved.refLon,
+          };
         }
 
         const placeholders = geoResult.placeIds.map(() => "?").join(", ");
@@ -378,7 +416,7 @@ export class VocabularyDb {
 
     return {
       totalResults,
-      ...(geoResult && { referencePlace: `${geoResult.refPlace} (${geoResult.refLat.toFixed(4)}, ${geoResult.refLon.toFixed(4)})` }),
+      ...(geoResult && { referencePlace: geoResult.referencePlace }),
       results: rows.map((r) => {
         const d = distanceMap?.get(r.object_number);
         return {
@@ -475,14 +513,18 @@ export class VocabularyDb {
     placeName: string,
     radiusKm: number
   ): { placeIds: number[]; refPlace: string; refLat: number; refLon: number } | null {
-    // Step 1: Resolve the place name to coordinates
     const ref = this.resolvePlaceCoordinates(placeName);
     if (!ref) return null;
 
-    // Step 2: Bounding box pre-filter + Haversine
+    const placeIds = this.findPlaceIdsNearCoords(ref.lat, ref.lon, radiusKm);
+    return { placeIds, refPlace: ref.label, refLat: ref.lat, refLon: ref.lon };
+  }
+
+  /** Find all place vocab IDs within radiusKm of the given coordinates (bounding box + Haversine). */
+  private findPlaceIdsNearCoords(lat: number, lon: number, radiusKm: number): number[] {
     const toRad = Math.PI / 180;
     const latDelta = radiusKm / 111.0;
-    const lonDelta = radiusKm / (111.0 * Math.cos(ref.lat * toRad));
+    const lonDelta = radiusKm / (111.0 * Math.cos(lat * toRad));
 
     const rows = this.db!.prepare(
       `SELECT id FROM vocabulary
@@ -491,17 +533,12 @@ export class VocabularyDb {
          AND lon BETWEEN ? AND ?
          AND haversine_km(?, ?, lat, lon) <= ?`
     ).all(
-      ref.lat - latDelta, ref.lat + latDelta,
-      ref.lon - lonDelta, ref.lon + lonDelta,
-      ref.lat, ref.lon, radiusKm
+      lat - latDelta, lat + latDelta,
+      lon - lonDelta, lon + lonDelta,
+      lat, lon, radiusKm
     ) as { id: number }[];
 
-    return {
-      placeIds: rows.map((r) => r.id),
-      refPlace: ref.label,
-      refLat: ref.lat,
-      refLon: ref.lon,
-    };
+    return rows.map((r) => r.id);
   }
 
   /** Resolve a place name to its label and coordinates. Returns null if not found. */
