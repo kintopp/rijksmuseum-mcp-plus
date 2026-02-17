@@ -92,7 +92,7 @@ These fields are returned when viewing an artwork's details but cannot be used a
 | Dimension statement (`dimensionStatement`) | Free-text; use `minHeight`/`maxHeight`/`minWidth`/`maxWidth` for numeric search |
 | Current location (`location`) | Gallery and room within the museum |
 | Web page (`webPage`) | |
-| Related objects (`relatedObjects`) | Links to related artworks |
+| Related objects (`relatedObjects`) | Links to related artworks; pass URIs to `resolve_uri` to identify them |
 
 ## Example Research Scenarios
 
@@ -549,6 +549,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | `open_in_browser` | Open any URL (artwork page, image, viewer) in the user's default browser. |
 | `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic selections). Optional name filter. Via OAI-PMH. |
 | `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, IIIF URLs, and iconographic subjects (Iconclass, depicted persons, places). Pagination via resumption token. |
+| `resolve_uri` | Resolve a Linked Art URI to full artwork details. Use when `get_artwork_details` returns `relatedObjects` with URIs — pass them directly to learn what the related object is. Returns the same enriched detail as `get_artwork_details`. |
 | `get_recent_changes` | Track additions and modifications by date range. Full EDM records (including subjects) or lightweight headers (`identifiersOnly`). Pagination via resumption token. |
 
 #### Prompts and Resources
