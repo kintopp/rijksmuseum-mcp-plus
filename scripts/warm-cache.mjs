@@ -13,6 +13,15 @@
  *   --url         https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
  *   --file        scripts/warm-cache-prompts.tsv
  *   --concurrency 1 (sequential)
+ *
+ * Examples:
+ *   node scripts/warm-cache.mjs                                  # production
+ *   node scripts/warm-cache.mjs --url http://localhost:3000/mcp  # local dev
+ *   node scripts/warm-cache.mjs --concurrency 4                  # parallel
+ *   node scripts/warm-cache.mjs --file my-prompts.tsv            # custom prompts
+ *
+ * The prompt file is tab-separated: tool_name<TAB>json_args
+ * Lines starting with # are comments; blank lines are ignored.
  */
 
 import { readFileSync } from "node:fs";
