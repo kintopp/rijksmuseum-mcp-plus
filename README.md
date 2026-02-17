@@ -12,7 +12,9 @@ The easiest way to try rijksmuseum-mcp+ is with [Claude Desktop](https://claude.
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-Goto Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). The rijksmuseum-mcp+ MCP server is also compatible with many open-source MCP clients, such as [Jan.ai](https://jan.ai).
+Goto Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
+
+The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients, such as [Jan.ai](https://jan.ai) which don't require a subscription.
 
 ### Example Queries
 
