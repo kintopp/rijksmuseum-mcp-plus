@@ -36,7 +36,7 @@ export const AAT = {
 export const AAT_UNIT_LABELS: Record<string, string> = {
   "http://vocab.getty.edu/aat/300379098": "cm",
   "http://vocab.getty.edu/aat/300379226": "kg",
-  "http://vocab.getty.edu/aat/300379099": "mm",
+  "http://vocab.getty.edu/aat/300379097": "mm",
   "http://vocab.getty.edu/aat/300379100": "m",
   "http://vocab.getty.edu/aat/300379225": "g",
 };
