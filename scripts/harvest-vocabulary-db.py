@@ -1631,7 +1631,6 @@ def main():
         print(f"  Phase 4 took {time.time() - t0:.1f}s")
         print()
 
-    if args.start_phase <= 4:
         print("=== Phase 2b: Resolving new vocabulary URIs from Phase 4 ===")
         t0 = time.time()
         run_phase2(conn)
