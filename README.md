@@ -6,38 +6,35 @@ Built on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/)
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server which used the museum's now unsupported REST API. 
 
-rijksmuseum-mcp+ is a ground-up rewrite based on the museum's new Linked Open Data infrastructure and adds new features like an interactive inline image viewer and the ability to search, filter, and retrieve many more kinds of metadata about artworks.
+rijksmuseum-mcp+ is a ground-up rewrite based on the museum's new Linked Open Data infrastructure and adds new features like an interactive inline image viewer and the ability to work with many more kinds of metadata.
 
 ## Quick Start
 
-The easiest way to try rijksmuseum-mcp+ is through the hosted version — no installation needed.
-
-Connect your MCP client to:
+The easiest way to try rijksmuseum-mcp+ is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) and the hosted version of the MCP server:
 
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-Recommended MCP clients: [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). For example, in claude.ai: Settings → Connectors → Add custom connector → paste the URL above. Note that both require a Pro or better [subscription](https://claude.com/pricing). For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
+In Claude Desktop and claude.ai: Settings → Connectors → Add custom connector → paste the URL above. But note that both require a Pro or better [subscription](https://claude.com/pricing). For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
 
-Rijksmuseum-mcp+ also works well with open source MCP clients (such as [Jan.ai](https://jan.ai)) and CLI coding apps like OpenAI Codex. These can be used via per token API charges instead of a monthly subscription. However, to date, only Claude Desktop and claude.ai support viewing inline images directly in the chat. 
+The rijksmuseum-mcp+ MCP server is also compatible with many open-source MCP clients, such as [Jan.ai](https://jan.ai) and can be used there with without an Anthropic subscription with a local LLM or an API key from a LLM provider. 
 
 ### Example Queries
 
-"Show me a drawing by Gesina ter Borch"
-"Find Pieter Saenredam's paintings"
-"Give me a list of the Rijksmuseum's curated collections"
-"Show me woodcuts by Hokusai"
-"Find artworks depicting the Raid on the Medway"
-"What paintings depict Amalia van Solms?"
-"Show me works about the sense of smell"
-"Search for winter landscapes from the 17th century"
-"Find all works made in Haarlem with the mezzotint technique"
-"Find artworks with inscriptions mentioning 'fecit'"
-"Search for works inscribed with 'VOC'"
-"Which works have the Vereniging Rembrandt in their credit line?"
-"Find artworks whose provenance mentions Napoleon"
-"Show me prints made after paintings by other artists"
-"What objects were acquired as bequests?"
+"Show me a drawing by Gesina ter Borch"  
+"Find Pieter Saenredam's paintings"  
+"Show me woodcuts by Hokusai"  
+"Find artworks depicting the Raid on the Medway"  
+"What paintings depict Amalia van Solms?"  
+"Search for winter landscapes from the 17th century"  
+"Give me a list of the Rijksmuseum's curated collections"  
+"Show me works about the sense of smell"  
+"Find all works made in Haarlem with the mezzotint technique"  
+"Find artworks with inscriptions mentioning 'fecit'"  
+"Which works have the Vereniging Rembrandt in their credit line?"  
+"Find artworks whose provenance mentions Napoleon"  
+"Show me prints made after paintings by other artists"  
+"What objects were acquired as bequests?"  
 
 ## Searchable metadata categories
 
@@ -165,29 +162,28 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **Why it matters:** The Orange-Nassau dynasty used visual media strategically, but the balance between painted portraits (diplomatic gifts, court display) and printed imagery (popular circulation, political pamphlets) shifted across generations. A depicted-person search makes this media strategy empirically visible.
 
-#### 5. Production Geography and the Migration of Printmaking
+#### 5. Production Geography and the Network of Printmaking Cities
 
-**Research question:** How did the centre of gravity of Dutch printmaking shift between Haarlem, Amsterdam, and other cities across the 16th and 17th centuries?
-
-**How the tools enable it:**
-- `search_artwork` with `type: "print"`, `productionPlace: "Haarlem"`, `creationDate: "15*"`, `compact: true` — repeat for `"16*"`
-- Compare with `productionPlace: "Amsterdam"` across the same date ranges
-- Extend to `"Leiden"`, `"Utrecht"`, `"Antwerp"` for the broader network
-- Use `get_artwork_details` on a sample to identify the key printmakers at each centre
-
-**Why it matters:** Haarlem was the dominant centre of printmaking in the late 16th century until Amsterdam overtook it in the 17th. Production-place queries across date ranges provide collection-level evidence for secondary centres whose role may have been overlooked.
-
-#### 6. Iconographic Traditions Across Media and Time
-
-**Research question:** How does the iconography of *vanitas* function differently in painting versus printmaking? Do their symbolic conventions appear with the same frequency and combination in both media?
+**Research question:** Which cities dominate the Rijksmuseum's printmaking holdings, and how do the principal printmakers differ between Haarlem, Amsterdam, Leiden, and Antwerp?
 
 **How the tools enable it:**
-- `search_artwork` with `subject: "vanitas"` to get all works tagged with vanitas-related Iconclass codes
-- Split by `type: "painting"` vs `type: "print"` to compare media
-- Add `creationDate: "16*"` and `"17*"` to track chronological patterns
-- Use `get_artwork_details` on a sample from each group to compare which specific vanitas motifs are present
+- `search_artwork` with `type: "print"`, `productionPlace: "Haarlem"` to get all Haarlem-produced prints — repeat for `"Amsterdam"`, `"Leiden"`, `"Antwerp"`
+- Compare total counts to map the relative weight of each centre in the collection
+- Use `get_artwork_details` on a sample from each city to identify the key printmakers and date ranges — production place and date are not searchable together, so details must be checked per work
+- Cross-reference with `profession: "printmaker"` and `birthPlace: "Haarlem"` to distinguish artists born in a city from those who merely worked there
 
-**Why it matters:** A subject-based search that crosses media boundaries enables systematic comparisons that would otherwise require extensive manual catalogue work.
+**Why it matters:** Haarlem was the dominant centre of printmaking in the late 16th century until Amsterdam overtook it in the 17th. Production-place queries reveal the relative weight of each city in the collection, and comparing the leading printmakers at each centre surfaces secondary figures whose role may have been overlooked.
+
+#### 6. Iconographic Traditions Across Media
+
+**Research question:** How does the iconography of *vanitas* function differently in painting versus printmaking? Do the same symbolic conventions — skulls, hourglasses, extinguished candles, musical instruments — appear with equal frequency in both media?
+
+**How the tools enable it:**
+- `search_artwork` with `subject: "vanitas"` and `type: "painting"` to get all vanitas paintings — repeat with `type: "print"` to compare
+- Use `get_artwork_details` on a sample from each group to compare which specific vanitas motifs appear, and to check dates for chronological patterns (subject and date are not searchable together)
+- Cross-reference with `creator` to identify whether certain artists specialised in vanitas imagery across media or confined it to one
+
+**Why it matters:** A subject-based search that crosses media boundaries enables systematic comparison of how a single iconographic tradition was adapted to different formats — the intimate painted still life versus the widely circulated print — without requiring extensive manual catalogue work.
 
 #### 7. Colonial Visual Culture: Representing the East Indies
 
@@ -231,12 +227,12 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 #### 10. Dimensions as Evidence for Workshop Practice
 
-**Research question:** Were there standard panel sizes used in 17th-century Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?
+**Research question:** Were there standard panel sizes used in Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?
 
 **How the tools enable it:**
-- `search_artwork` with `type: "painting"`, `material: "panel"`, `creationDate: "16*"`, and dimension ranges (e.g. `minHeight: 40`, `maxHeight: 50`, `minWidth: 30`, `maxWidth: 40`) to find panels of a specific size cluster
+- `search_artwork` with `type: "painting"`, `material: "panel"`, and dimension ranges (e.g. `minHeight: 40`, `maxHeight: 50`, `minWidth: 30`, `maxWidth: 40`) to find panels of a specific size cluster
 - Compare across size ranges to identify recurring dimensions that suggest standard panel formats
-- `get_artwork_details` on a sample for exact measurements, creator, and production context
+- `get_artwork_details` on results to check exact measurements, creator, date, and production context — dimension ranges and date are not searchable together, so dates must be verified per work
 
 **Why it matters:** The dimension filters make it possible to search by physical size directly, rather than retrieving all works and filtering manually. The Rijksmuseum's structured dimension data can corroborate (or challenge) what we know from guild records about panel maker standards.
 
