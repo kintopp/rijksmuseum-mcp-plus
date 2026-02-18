@@ -4,7 +4,7 @@ An AI-powered ([Model Context Protocol](https://modelcontextprotocol.io/)) (MCP)
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server which used the museum's now unsupported REST API. 
 
-rijksmuseum-mcp+ is a ground-up rewrite which draws on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards and also adds new features (such as an [![inline, interactive image viewer](docs/swan_sm.jpg)](docs/swan_lg.jpg)) made possible by recent enhancements to the MCP standard.
+rijksmuseum-mcp+ is a ground-up rewrite which draws on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards and also adds new features (such as an [inline, interactive image viewer](docs/swan_sm.jpg) made possible by recent enhancements to the MCP standard.
 
 ## Quick Start
 
