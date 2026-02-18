@@ -128,9 +128,8 @@ function registerTools(
         (vocabAvailable
           ? " Vocabulary-based filters (subject, iconclass, depictedPerson, depictedPlace, productionPlace, " +
             "birthPlace, deathPlace, profession, collectionSet, license, and Tier 2 filters) " +
-            "can be freely combined with each other and with creator, type, material, and technique. " +
-            "Vocabulary filters cannot be combined with creationDate, description, query, title, or imageAvailable. " +
-            "To filter vocabulary results by date, fetch details on each result instead. " +
+            "can be freely combined with each other and with creator, type, material, technique, creationDate, title, and query. " +
+            "Vocabulary filters cannot be combined with description or imageAvailable. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
@@ -173,7 +172,7 @@ function registerTools(
           .string()
           .optional()
           .describe(
-            "Filter by creation date. Exact year ('1642') or wildcard ('16*' for 1600s, '164*' for 1640s). Not supported in vocabulary-based searches."
+            "Filter by creation date. Exact year ('1642') or wildcard ('16*' for 1600s, '164*' for 1640s)."
           ),
         description: z
           .string()
@@ -389,20 +388,25 @@ function registerTools(
 
       if (hasVocabParam && vocabDb) {
         const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
-        const allVocabKeys = [...vocabParamKeys, "nearLon", "nearPlaceRadius", ...crossFilterKeys];
+        const hybridKeys = ["creationDate", "title"] as const;
+        const allVocabKeys = [...vocabParamKeys, "nearLon", "nearPlaceRadius", ...crossFilterKeys, ...hybridKeys];
         const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
         for (const k of allVocabKeys) {
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
         }
+        // Map query → title for vocab path (query searches by title on Search API too)
+        if (argsRecord["query"] && !vocabArgs["title"]) {
+          vocabArgs["title"] = argsRecord["query"];
+        }
         const result = vocabDb.search(vocabArgs as any);
 
         // Warn about Search API-only filters that were silently dropped
-        const searchOnlyKeys = ["query", "title", "aboutActor", "creationDate", "description", "imageAvailable", "compact", "pageToken"] as const;
+        const searchOnlyKeys = ["aboutActor", "description", "imageAvailable", "compact", "pageToken"] as const;
         const droppedKeys = searchOnlyKeys.filter(k => argsRecord[k] !== undefined);
         if (droppedKeys.length > 0) {
           result.warnings = [
-            `The following filters are not supported in vocabulary searches and were ignored: ${droppedKeys.join(", ")}. ` +
-            `Only creator, type, material, and technique can be combined with vocabulary filters.`
+            ...(result.warnings || []),
+            `The following filters are not supported in vocabulary searches and were ignored: ${droppedKeys.join(", ")}.`
           ];
         }
 

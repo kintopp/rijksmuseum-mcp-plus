@@ -29,6 +29,9 @@ export interface VocabSearchParams {
   maxHeight?: number;
   minWidth?: number;
   maxWidth?: number;
+  // Date and title filters (require vocabulary DB with date/title columns)
+  creationDate?: string;
+  title?: string;
   // Geo proximity search (require geocoded vocabulary DB)
   nearPlace?: string;
   nearLat?: number;
@@ -100,6 +103,45 @@ function emptyResult(warnings?: string[]): VocabSearchResult {
   };
 }
 
+/**
+ * Parse a creationDate wildcard string into an integer year range.
+ * - "1642"  → { earliest: 1642, latest: 1642 }
+ * - "164*"  → { earliest: 1640, latest: 1649 }
+ * - "16*"   → { earliest: 1600, latest: 1699 }
+ * - "-5*"   → { earliest: -5999, latest: -5000 } (BCE, 4-digit convention)
+ */
+function parseDateFilter(creationDate: string): { earliest: number; latest: number } | null {
+  const trimmed = creationDate.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.endsWith("*")) {
+    const prefix = trimmed.slice(0, -1);
+    if (!prefix || !/^-?\d+$/.test(prefix)) return null;
+    const isNegative = prefix.startsWith("-");
+    const magnitude = isNegative ? prefix.slice(1) : prefix;
+    if (!magnitude) return null;
+    const wildcardDigits = 4 - magnitude.length;
+    if (wildcardDigits <= 0) return null;
+    const multiplier = Math.pow(10, wildcardDigits);
+    const magNum = parseInt(magnitude, 10);
+    const posEarliest = magNum * multiplier;
+    const posLatest = posEarliest + multiplier - 1;
+    if (isNegative) {
+      // BCE: -5* covers -59 to -50 (algebraically: earliest is more negative)
+      return { earliest: -posLatest, latest: -posEarliest };
+    }
+    return { earliest: posEarliest, latest: posLatest };
+  }
+
+  // Exact year
+  if (/^-?\d+$/.test(trimmed)) {
+    const year = parseInt(trimmed, 10);
+    return { earliest: year, latest: year };
+  }
+
+  return null;
+}
+
 // ─── VocabularyDb ────────────────────────────────────────────────────
 
 export class VocabularyDb {
@@ -107,6 +149,7 @@ export class VocabularyDb {
   private hasFts5 = false;
   private hasTextFts = false;
   private hasDimensions = false;
+  private hasDates = false;
   private hasNormLabels = false;
   private hasCoordinates = false;
 
@@ -140,6 +183,7 @@ export class VocabularyDb {
       this.hasFts5 = this.tableExists("vocabulary_fts");
       this.hasTextFts = this.tableExists("artwork_texts_fts");
       this.hasDimensions = this.columnExists("artworks", "height_cm");
+      this.hasDates = this.columnExists("artworks", "date_earliest");
       this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm")
         && this.columnExists("vocabulary", "label_nl_norm");
       this.hasCoordinates = this.columnExists("vocabulary", "lat") && this.hasGeocodedData();
@@ -160,6 +204,7 @@ export class VocabularyDb {
         this.hasFts5 && "vocabFTS5",
         this.hasTextFts && "textFTS5",
         this.hasDimensions && "dimensions",
+        this.hasDates && "dates",
         this.hasNormLabels && "normLabels",
         this.hasCoordinates && "coordinates",
       ].filter(Boolean).join(", ");
@@ -329,6 +374,7 @@ export class VocabularyDb {
       ["provenance", "provenance_text"],
       ["creditLine", "credit_line"],
       ["narrative", "narrative_text"],
+      ["title", "title_all_text"],
     ];
     const requestedTextFilters = TEXT_FILTERS.filter(([param]) => typeof effective[param] === "string");
     if (requestedTextFilters.length > 0) {
@@ -360,6 +406,22 @@ export class VocabularyDb {
         }
       } else {
         warnings.push("Dimension range filters require vocabulary DB v1.0+. These filters were ignored.");
+      }
+    }
+
+    // Creation date range filter
+    if (effective.creationDate) {
+      if (this.hasDates) {
+        const range = parseDateFilter(effective.creationDate);
+        if (range) {
+          // Overlap test: artwork range [date_earliest, date_latest] overlaps query range [earliest, latest]
+          conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
+          bindings.push(range.earliest, range.latest);
+        } else {
+          warnings.push(`Could not parse creationDate "${effective.creationDate}". Expected a year ("1642") or wildcard ("164*", "16*").`);
+        }
+      } else {
+        warnings.push("Date filtering requires a vocabulary DB with date columns (re-run harvest Phase 4). This filter was ignored.");
       }
     }
 

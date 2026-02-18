@@ -197,6 +197,9 @@ CREATE TABLE IF NOT EXISTS artworks (
     height_cm        REAL,
     width_cm         REAL,
     narrative_text   TEXT,
+    date_earliest    INTEGER,
+    date_latest      INTEGER,
+    title_all_text   TEXT,
     tier2_done       INTEGER DEFAULT 0
 );
 
@@ -250,6 +253,9 @@ def create_or_open_db() -> sqlite3.Connection:
         ("height_cm", "REAL"),
         ("width_cm", "REAL"),
         ("narrative_text", "TEXT"),
+        ("date_earliest", "INTEGER"),
+        ("date_latest", "INTEGER"),
+        ("title_all_text", "TEXT"),
         ("tier2_done", "INTEGER DEFAULT 0"),
     ]
     for col_name, col_type in tier2_cols:
@@ -1071,6 +1077,41 @@ def resolve_artwork(uri: str) -> dict | None:
     # Curatorial narrative (museum wall text)
     narrative_text = extract_narrative(data)
 
+    # Date extraction from produced_by.timespan
+    date_earliest = None
+    date_latest = None
+    timespan = data.get("produced_by", {})
+    if isinstance(timespan, dict):
+        timespan = timespan.get("timespan", {})
+    if isinstance(timespan, dict):
+        for key, target in [("begin_of_the_begin", "earliest"), ("end_of_the_end", "latest")]:
+            val = timespan.get(key, "")
+            if val and isinstance(val, str) and len(val) >= 4:
+                try:
+                    # Handle negative years (BCE) and standard ISO dates
+                    year_str = val[:5] if val.startswith("-") else val[:4]
+                    year = int(year_str)
+                    if target == "earliest":
+                        date_earliest = year
+                    else:
+                        date_latest = year
+                except (ValueError, IndexError):
+                    pass
+    # If only one is present, use it for both (single-year works)
+    if date_earliest is not None and date_latest is None:
+        date_latest = date_earliest
+    elif date_latest is not None and date_earliest is None:
+        date_earliest = date_latest
+
+    # Title extraction: all Name entries from identified_by
+    title_parts = []
+    for entry in data.get("identified_by", []):
+        if isinstance(entry, dict) and entry.get("type") == "Name":
+            content = entry.get("content", "")
+            if content:
+                title_parts.append(content)
+    title_all_text = "\n".join(title_parts) if title_parts else None
+
     return {
         "inscription_text": inscription_text,
         "provenance_text": provenance_text,
@@ -1078,6 +1119,9 @@ def resolve_artwork(uri: str) -> dict | None:
         "height_cm": height_cm,
         "width_cm": width_cm,
         "narrative_text": narrative_text,
+        "date_earliest": date_earliest,
+        "date_latest": date_latest,
+        "title_all_text": title_all_text,
         "roles": roles,
         "qualifiers": qualifiers,
     }
@@ -1110,6 +1154,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     with_credit = 0
     with_dimensions = 0
     with_narrative = 0
+    with_dates = 0
+    with_titles = 0
     role_count = 0
     qualifier_count = 0
     t0 = time.time()
@@ -1122,6 +1168,9 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
             height_cm = ?,
             width_cm = ?,
             narrative_text = ?,
+            date_earliest = ?,
+            date_latest = ?,
+            title_all_text = ?,
             tier2_done = 1
         WHERE object_number = ?
     """
@@ -1171,6 +1220,10 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     with_dimensions += 1
                 if result["narrative_text"]:
                     with_narrative += 1
+                if result["date_earliest"] is not None:
+                    with_dates += 1
+                if result["title_all_text"]:
+                    with_titles += 1
 
                 conn.execute(TIER2_UPDATE_SQL, (
                     result["inscription_text"],
@@ -1179,6 +1232,9 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     result["height_cm"],
                     result["width_cm"],
                     result["narrative_text"],
+                    result["date_earliest"],
+                    result["date_latest"],
+                    result["title_all_text"],
                     obj_num,
                 ))
 
@@ -1213,6 +1269,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Credit lines: {with_credit:,}")
     print(f"    Dimensions:   {with_dimensions:,}")
     print(f"    Narratives:   {with_narrative:,}")
+    print(f"    Dates:        {with_dates:,}")
+    print(f"    All titles:   {with_titles:,}")
     print(f"    Prod. roles:  {role_count:,}")
     print(f"    Attr. quals:  {qualifier_count:,}")
 
@@ -1410,6 +1468,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         conn.execute("""
             CREATE VIRTUAL TABLE artwork_texts_fts USING fts5(
                 inscription_text, provenance_text, credit_line, narrative_text,
+                title_all_text,
                 content='artworks', content_rowid='rowid',
                 tokenize='unicode61 remove_diacritics 2'
             )
@@ -1472,6 +1531,8 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
             ("provenance_text",  "Provenance",   "IS NOT NULL AND {col} != ''"),
             ("credit_line",      "Credit lines", "IS NOT NULL AND {col} != ''"),
             ("narrative_text",   "Narratives",   "IS NOT NULL AND {col} != ''"),
+            ("date_earliest",    "Dates",        "IS NOT NULL"),
+            ("title_all_text",   "All titles",   "IS NOT NULL AND {col} != ''"),
             ("height_cm",        "Height",       "IS NOT NULL"),
             ("width_cm",         "Width",        "IS NOT NULL"),
         ]
