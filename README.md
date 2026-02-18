@@ -1,10 +1,10 @@
 # rijksmuseum-mcp+
 
-An AI-powered ([Model Context Protocol](https://modelcontextprotocol.io/)) (MCP) interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, explore their history, view high-resolution images, and access scholarly references — all through natural conversation.
+An AI-powered ([Model Context Protocol](https://www.anthropic.com/news/model-context-protocol)) (MCP) interface to the [Rijksmuseum](https://www.rijksmuseum.nl/) collection. Search artworks, explore their history, view high-resolution images, and access scholarly references — all through natural conversation.
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server which used the museum's now unsupported REST API. 
 
-rijksmuseum-mcp+ is a ground-up rewrite which draws on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards and also adds new features (such as an [inline, interactive image viewer](docs/swan_lg.jpg) made possible by recent enhancements to the MCP standard.
+rijksmuseum-mcp+ is a ground-up rewrite which draws on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards and also adds new features (such as an [inline, interactive image viewer](docs/swan_lg.jpg) made possible by [recent enhancements](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) to the MCP standard.
 
 ## Quick Start
 
@@ -12,7 +12,9 @@ The easiest way to try rijksmuseum-mcp+ is with [Claude Desktop](https://claude.
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-Goto Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). It is also compatible with many open-source clients, such as [Jan.ai](https://jan.ai) which don't require a paid subscription (either via an API key or with the use of a local model).
+Goto Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
+
+The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients, such as [Jan.ai](https://jan.ai) which don't require a paid subscription (either via an API key from a LLM provider or with the use of a local LLM).
 
 ### Example Queries
 
