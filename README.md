@@ -34,11 +34,13 @@ The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients
 "What objects were acquired as bequests?"  
 "Find artworks depicting places within 100m of the Oude Kerk in Amsterdam"
 
-## Searchable metadata categories
+## Search parameters
 
-#### Rijksmuseum Search API
+The `search_artwork` tool accepts up to 30 parameters, drawn from two backends. Parameters from the same backend can generally be combined freely; cross-backend combination has some restrictions, noted below.
 
-These parameters query the [Rijksmuseum Search API](https://data.rijksmuseum.nl/) directly. The API uses [Linked Art](https://linked.art/) JSON-LD, with field classifications drawn from the [Getty Art & Architecture Thesaurus](https://www.getty.edu/research/tools/vocabularies/aat/) (AAT). 
+### Direct search parameters
+
+These parameters query the [Rijksmuseum Search API](https://data.rijksmuseum.nl/) directly. They support free-text and wildcard matching but are **not combinable with vocabulary-backed parameters** — if any vocabulary-backed parameter is present, these are silently dropped (except `creator`, `type`, `material`, and `technique`, which work with both backends).
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -53,11 +55,9 @@ These parameters query the [Rijksmuseum Search API](https://data.rijksmuseum.nl/
 | `aboutActor` | Person depicted or referenced | ~1.3K artworks with actor references. Searches free-text references to persons. Less comprehensive than the vocabulary-backed `depictedPerson` filter (~217K artworks), which draws on controlled name authority records. Use `depictedPerson` when available. Cannot be combined with vocabulary-backed filters; silently dropped when any vocab filter is present. |
 | `imageAvailable` | Whether a digital image exists | Boolean filter (`true`/`false`). Useful for restricting results to artworks that can be examined via `get_artwork_image`. ~728K artworks have a digital image available. Cannot be combined with vocabulary-backed filters; silently dropped when any vocab filter is present. |
 
-#### Vocabulary database
+### Vocabulary-backed search parameters
 
-These parameters draw on a pre-built vocabulary database (~2.6 GB SQLite, [downloadable from releases](https://github.com/kintopp/rijksmuseum-mcp-plus/releases)) derived from OAI-PMH harvests and Linked Art resolution of the full Rijksmuseum collection. The database maps 149,000 controlled vocabulary terms to 832,000 artworks via 12.8 million mappings, enabling structured search by iconography, geography, biography, text content, and physical dimensions.
-
-Vocabulary-backed filters can be freely combined with each other (e.g. `depictedPerson` + `productionPlace` + `type`), and can also be combined with `creator`, `type`, `material`, and `technique`. They cannot (in this version) be combined with `creationDate`, `description`, `query`, `title`, `aboutActor`, or `imageAvailable` in a single query — these Search API-only parameters are silently dropped when any vocab filter is present. To filter vocabulary results by date, retrieve the results first and then check dates via `get_artwork_details`.
+These parameters search a pre-built vocabulary database ([downloadable from releases](https://github.com/kintopp/rijksmuseum-mcp-plus/releases)) that maps 149,000 controlled vocabulary terms to 832,000 artworks via 12.8 million mappings. They can be **freely combined with each other** (e.g. `depictedPerson` + `productionPlace` + `type`) and with `creator`, `type`, `material`, and `technique`. To filter results by date, retrieve the results first and check dates via `get_artwork_details`.
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -79,7 +79,9 @@ Vocabulary-backed filters can be freely combined with each other (e.g. `depicted
 | `minHeight` / `maxHeight` | Height range in centimetres | Numeric range filter on structured dimensions classified under [AAT 300055644](http://vocab.getty.edu/aat/300055644) (height). Values are in centimetres. Use to find objects of specific sizes — e.g. miniature portraits (`maxHeight: 15`), monumental paintings (`minHeight: 200`). |
 | `minWidth` / `maxWidth` | Width range in centimetres | Numeric range filter on structured dimensions classified under [AAT 300055647](http://vocab.getty.edu/aat/300055647) (width). Values are in centimetres. Combine with height for aspect ratio or standard format research — e.g. panel size clusters in Dutch workshop practice. |
 
-#### Geographic proximity search
+### Geographic proximity search
+
+These parameters find artworks related to places near a given location. They search across both depicted and production places using coordinates from 20,828 geocoded places. Can be combined with any vocabulary-backed parameter.
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -88,9 +90,9 @@ Vocabulary-backed filters can be freely combined with each other (e.g. `depicted
 | `nearLon` | Longitude for coordinate-based proximity search | Use with `nearLat`. Range: -180 to 180. |
 | `nearPlaceRadius` | Search radius in kilometres | Default: 25 km, range: 0.1–500 km. Controls the geographic scope of `nearPlace` and `nearLat`/`nearLon` queries. |
 
-### Metadata categories returned by `get_artwork_details`
+### Artwork detail fields
 
-These 24 metadata categories are returned by `get_artwork_details`. Many — including `titles`, `objectTypes`, `materials`, `subjects`, `inscriptions`, `provenance`, `creditLine`, `curatorialNarrative`, `license`, `collectionSets`, and `production` — have corresponding search filters documented in the sections above; the notes column indicates which. Fields without a corresponding filter are accessible only through `get_artwork_details`.
+`get_artwork_details` returns 24 metadata categories for a single artwork. Where a field has a corresponding search parameter, the notes column cross-references it. Fields without a cross-reference are only accessible by retrieving the artwork directly.
 
 | Field | What it contains | Notes |
 |---|---|---|
@@ -536,7 +538,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-The server works without the vocabulary database, but [vocabulary-based search parameters](#vocabulary-database) won't be available. The `VOCAB_DB_URL` setting above enables automatic download (~612 MB compressed, ~2.6 GB uncompressed) on first start.
+The server works without the vocabulary database, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters) won't be available. The `VOCAB_DB_URL` setting above enables automatic download (~612 MB compressed, ~2.6 GB uncompressed) on first start.
 
 Restart your MCP client after updating the config.
 
