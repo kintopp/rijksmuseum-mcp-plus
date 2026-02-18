@@ -1,6 +1,6 @@
 # Depicted Place Vocabulary
 
-656 distinct depicted places across 460,801 mappings. The `#` column shows the number of artworks depicting each place.
+20,689 distinct depicted places across 309,356 mappings. The `#` column shows the number of artworks depicting each place. The table below lists a representative subset; the full set is searchable via the vocabulary database.
 
 **Usage:** `search_artwork` with `depictedPlace: "Amsterdam"`, `depictedPlace: "Batavia"`, etc. Places are drawn from controlled name authority records; 20,828 are geocoded with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/).
 

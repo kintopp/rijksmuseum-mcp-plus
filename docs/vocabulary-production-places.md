@@ -1,6 +1,6 @@
 # Production Place Vocabulary
 
-419 distinct production places across 365,547 mappings. The `#` column shows the number of artworks produced in each place.
+9,002 distinct production places across 484,996 mappings. The `#` column shows the number of artworks produced in each place. The table below lists a representative subset; the full set is searchable via the vocabulary database.
 
 **Usage:** `search_artwork` with `productionPlace: "Amsterdam"`, `productionPlace: "Delft"`, etc. Places are drawn from controlled name authority records; 20,828 are geocoded with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/).
 

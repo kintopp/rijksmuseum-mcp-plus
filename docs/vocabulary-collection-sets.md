@@ -1,6 +1,6 @@
 # Collection Set Vocabulary
 
-192 curated sets across 2,803,951 set memberships. Use `list_curated_sets` to discover sets interactively.
+192 curated sets across 2,804,118 set memberships. Use `list_curated_sets` to discover sets interactively.
 
 | Set | Artworks | Set | Artworks |
 |---|---|---|---|

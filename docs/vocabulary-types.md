@@ -1,6 +1,6 @@
 # Object Type Vocabulary
 
-629 distinct object types across 790,997 mappings. The `#` column shows the number of artworks linked to each type.
+4,385 distinct object types across 1,206,933 mappings. The `#` column shows the number of artworks linked to each type. The table below lists a representative subset; the full set is searchable via the vocabulary database.
 
 **Usage:** `search_artwork` with `type: "painting"`, `type: "print"`, `type: "drawing"`, etc. Terms resolve to [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) equivalents where available.
 

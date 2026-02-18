@@ -1,6 +1,6 @@
 # Technique Vocabulary
 
-229 distinct techniques across 754,216 mappings. The `#` column shows the number of artworks linked to each technique.
+964 distinct techniques across 1,071,299 mappings. The `#` column shows the number of artworks linked to each technique. The table below lists a representative subset; the full set is searchable via the vocabulary database.
 
 **Usage:** `search_artwork` with `technique: "etching"`, `technique: "engraving"`, etc. Terms resolve to [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) equivalents where available.
 

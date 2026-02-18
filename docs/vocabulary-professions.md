@@ -1,6 +1,6 @@
 # Profession Vocabulary
 
-600 distinct professions across 456,660 mappings. Labels are bilingual (English and Dutch). The `#` column shows the number of artworks linked to each profession.
+600 distinct professions across 456,696 mappings. Labels are bilingual (English and Dutch). The `#` column shows the number of artworks linked to each profession.
 
 | Profession | # | Profession | # | Profession | # |
 |---|---|---|---|---|---|
