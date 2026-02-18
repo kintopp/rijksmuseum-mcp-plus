@@ -122,7 +122,7 @@ function parseDateFilter(creationDate: string): { earliest: number; latest: numb
     if (!magnitude) return null;
     const wildcardDigits = 4 - magnitude.length;
     if (wildcardDigits <= 0) return null;
-    const multiplier = Math.pow(10, wildcardDigits);
+    const multiplier = 10 ** wildcardDigits;
     const magNum = parseInt(magnitude, 10);
     const posEarliest = magNum * multiplier;
     const posLatest = posEarliest + multiplier - 1;

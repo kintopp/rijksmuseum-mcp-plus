@@ -1080,9 +1080,8 @@ def resolve_artwork(uri: str) -> dict | None:
     # Date extraction from produced_by.timespan
     date_earliest = None
     date_latest = None
-    timespan = data.get("produced_by", {})
-    if isinstance(timespan, dict):
-        timespan = timespan.get("timespan", {})
+    produced_by = data.get("produced_by", {})
+    timespan = produced_by.get("timespan", {}) if isinstance(produced_by, dict) else {}
     if isinstance(timespan, dict):
         for key, target in [("begin_of_the_begin", "earliest"), ("end_of_the_end", "latest")]:
             val = timespan.get(key, "")

@@ -117,6 +117,11 @@ function registerTools(
   // nearPlaceRadius, nearLon excluded: their Zod defaults/pairing would trigger
   // vocab routing on every query. Forwarded separately via allVocabKeys.
 
+  // Keys that cross both paths: forwarded to vocab DB when a vocab param triggers routing
+  const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
+  const hybridKeys = ["creationDate", "title"] as const;
+  const allVocabKeys = [...vocabParamKeys, "nearLon", "nearPlaceRadius", ...crossFilterKeys, ...hybridKeys];
+
   server.registerTool(
     "search_artwork",
     {
@@ -387,9 +392,6 @@ function registerTools(
       );
 
       if (hasVocabParam && vocabDb) {
-        const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
-        const hybridKeys = ["creationDate", "title"] as const;
-        const allVocabKeys = [...vocabParamKeys, "nearLon", "nearPlaceRadius", ...crossFilterKeys, ...hybridKeys];
         const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
         for (const k of allVocabKeys) {
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
