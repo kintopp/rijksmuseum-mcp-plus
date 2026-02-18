@@ -32,6 +32,7 @@ The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients
 "Find artworks whose provenance mentions Napoleon"  
 "Show me prints made after paintings by other artists"  
 "What objects were acquired as bequests?"  
+"Find artworks depicting places within 100m of the Oude Kerk in Amsterdam"
 
 ## Searchable metadata categories
 
