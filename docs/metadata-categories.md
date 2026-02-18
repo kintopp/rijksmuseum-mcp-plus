@@ -12,7 +12,7 @@ The subject annotations listed under [Iconography](#iconography) (Iconclass code
 
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
-| 1 | **Title variants** | `titles` | All known titles with language (`en`, `nl`, `other`) and qualifier (`brief`, `full`, `other`). The brief English title is the primary display title. |
+| 1 | **Title variants** | `titles` | All known titles with language (`en` or `nl` — the collection is strictly bilingual) and qualifier (`brief`, `full`, or `former`). The brief English title is the primary display title. |
 | 2 | **Object number** | `objectNumber` | The museum's inventory number (e.g. `SK-C-5` for The Night Watch). This is the primary identifier used across all tools. |
 | 3 | **Persistent identifier** | `persistentId` | Stable handle.net URI for long-term citation (e.g. `http://hdl.handle.net/10934/RM0001.COLLECT.5216`). |
 | 4 | **External identifiers** | `externalIds` | All identifiers attached to the object, mapped as `{ value: classificationUri }`. Includes the object number and any other cataloguing identifiers. |
@@ -30,7 +30,7 @@ The subject annotations listed under [Iconography](#iconography) (Iconclass code
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
 | 8 | **Description** | `description` | General descriptive statement about the artwork, classified under AAT "description" (300435452). |
-| 9 | **Curatorial narrative** | `curatorialNarrative` | Museum wall text / interpretive narrative, provided in both English (`.en`) and Dutch (`.nl`) where available. Extracted from `subject_of` parts classified as AAT "description" (300048722). |
+| 9 | **Curatorial narrative** | `curatorialNarrative` | Museum wall text / interpretive narrative, provided in both English (`.en`) and Dutch (`.nl`) where available. Extracted from `subject_of` parts classified as AAT "narrative" (300048722) — distinct from the general description (300435452) above. |
 
 ## Physical Characteristics
 
