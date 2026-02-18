@@ -20,15 +20,12 @@ The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients
 
 "Show me a drawing by Gesina ter Borch"  
 "Find Pieter Saenredam's paintings"  
-"Show me woodcuts by Hokusai"  
 "Find artworks depicting the Raid on the Medway"  
 "What paintings depict Amalia van Solms?"  
 "Search for winter landscapes from the 17th century"  
 "Give me a list of the Rijksmuseum's curated collections"  
-"Show me works about the sense of smell"  
 "Find all works made in Haarlem with the mezzotint technique"  
 "Find artworks with inscriptions mentioning 'fecit'"  
-"Which works have the Vereniging Rembrandt in their credit line?"  
 "Find artworks whose provenance mentions Napoleon"  
 "Show me prints made after paintings by other artists"  
 "What objects were acquired as bequests?"  
@@ -36,19 +33,19 @@ The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients
 
 ## Search parameters
 
-The `search_artwork` tool accepts up to 30 parameters, drawn from two backends. Parameters from the same backend can generally be combined freely; cross-backend combination has some restrictions, noted below.
+The `search_artwork` tool accepts up to 30 parameters, drawn from two backends: the online [Rijksmuseum Search API](https://data.rijksmuseum.nl/) and a large set of [vocabulary data](https://data.rijksmuseum.nl/docs/data-dumps/) available as downloadable files. Parameters from the same backend can generally be combined freely; cross-backend combination has some restrictions, noted below.
 
 ### Direct search parameters
 
-These parameters query the [Rijksmuseum Search API](https://data.rijksmuseum.nl/) directly. They support free-text and wildcard matching but are **not combinable with vocabulary-backed parameters** — if any vocabulary-backed parameter is present, these are silently dropped (except `creator`, `type`, `material`, and `technique`, which work with both backends).
+These parameters query the Rijksmuseum Search API directly. They support free-text and wildcard matching but are **not combinable with vocabulary-backed parameters** — if any vocabulary-backed parameter is present, these are silently dropped (except `creator`, `type`, `material`, and `technique`, which work with both backends).
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
 | `query` | Artwork title | ~837K artworks. Maps to the Search API's `title` parameter. Functionally identical to the `title` filter below — both perform the same bag-of-words token match on brief titles. Provided as a convenience alias for exploratory queries where the user thinks of it as a general search term. Cannot be combined with vocabulary-backed filters; silently dropped when any vocab filter is present. |
-| `title` | Artwork title | ~826K artworks with titles. Same Search API `title` parameter as `query` above. Takes precedence when both are supplied. Matches against brief titles classified as [AAT 300417207](http://vocab.getty.edu/aat/300417207). Note: the Search API only indexes brief titles — full, former, and other title variants are not searched. Cannot be combined with vocabulary-backed filters; silently dropped when any vocab filter is present. |
-| `creator` | Artist or maker name | ~510K artworks, ~21K unique names. Matches against the `produced_by.part[].carried_out_by` field. Use the museum's canonical name form (e.g. "Rembrandt van Rijn", not "Rembrandt Harmensz. van Rijn"). Variant historical spellings may not match — the LLM can help resolve these. Can also be combined with vocabulary-backed filters as a cross-filter. |
-| `creationDate` | Year or date range of creation | ~628K artworks with dates (3000 BCE–2025). Supports wildcards: `1642` (exact year), `164*` (1640–1649), `16*` (1600–1699). Matches the `produced_by.timespan` field. Cannot be combined with vocabulary-backed filters in a single query; use `get_artwork_details` to verify dates on vocab search results. |
-| `description` | Free-text description of the artwork | ~292K artworks with descriptions. Matches the `referred_to_by` field classified as [AAT 300435452](http://vocab.getty.edu/aat/300435452) (description). Cannot be combined with vocabulary-backed filters. |
+| `title` | Artwork title. Matches against brief titles classified as [AAT 300417207](http://vocab.getty.edu/aat/300417207) | ~826K artworks with titles. Same Search API `title` parameter as `query` above. Takes precedence when both are supplied. Note: the Search API only indexes brief titles — full, former, and other title variants are not searched. Cannot be combined with vocabulary-backed filters; silently dropped when any vocab filter is present. |
+| `creator` | Artist or maker name. Matches against the `produced_by.part[].carried_out_by` field. | ~510K artworks, ~21K unique names. Use the museum's canonical name form (e.g. "Rembrandt van Rijn", not "Rembrandt Harmensz. van Rijn"). Variant historical spellings may not match — the LLM can help resolve these. Can also be combined with vocabulary-backed filters as a cross-filter. |
+| `creationDate` | Year or date range of creation. Matches the `produced_by.timespan` field. | ~628K artworks with dates (3000 BCE–2025). Supports wildcards: `1642` (exact year), `164*` (1640–1649), `16*` (1600–1699). Cannot be combined with vocabulary-backed filters in a single query; use `get_artwork_details` to verify dates on vocab search results. |
+| `description` | Free-text description of the artwork. Matches the `referred_to_by` field classified as [AAT 300435452](http://vocab.getty.edu/aat/300435452) (description). | ~292K artworks with descriptions. Cannot be combined with vocabulary-backed filters. |
 | `type` | Object type | 4,385 terms. Values follow Rijksmuseum vocabulary terms (e.g. `painting`, `print`, `drawing`, `photograph`, `sculpture`). Terms resolve to [AAT](https://www.getty.edu/research/tools/vocabularies/aat/) equivalents — e.g. "painting" → [AAT 300033618](http://vocab.getty.edu/aat/300033618). Can be combined with vocabulary-backed filters as a cross-filter. |
 | `material` | Material or support | [725 terms](docs/vocabulary-materials.md). Values follow Rijksmuseum vocabulary terms (e.g. `canvas`, `paper`, `panel`, `oil paint`, `copper`). Terms resolve to AAT equivalents — e.g. "oil paint" → [AAT 300015050](http://vocab.getty.edu/aat/300015050). Can be combined with vocabulary-backed filters as a cross-filter. |
 | `technique` | Artistic technique | [964 terms](docs/vocabulary-techniques.md). Values follow Rijksmuseum vocabulary terms (e.g. `oil painting`, `etching`, `engraving`, `mezzotint`, `woodcut`). Terms resolve to AAT equivalents — e.g. "etching" → [AAT 300053241](http://vocab.getty.edu/aat/300053241). Can be combined with vocabulary-backed filters as a cross-filter. |
@@ -57,7 +54,7 @@ These parameters query the [Rijksmuseum Search API](https://data.rijksmuseum.nl/
 
 ### Vocabulary-backed search parameters
 
-These parameters search a pre-built vocabulary database ([downloadable from releases](https://github.com/kintopp/rijksmuseum-mcp-plus/releases)) that maps 149,000 controlled vocabulary terms to 832,000 artworks via 12.8 million mappings. They can be **freely combined with each other** (e.g. `depictedPerson` + `productionPlace` + `type`) and with `creator`, `type`, `material`, and `technique`. To filter results by date, retrieve the results first and check dates via `get_artwork_details`.
+These parameters search Linked Open Data vocabulary dataset that maps 149,000 controlled vocabulary terms to 832,000 artworks via 12.8 million mappings. These parameters can be **freely combined with each other** (e.g. `depictedPerson` + `productionPlace` + `type`) and with `creator`, `type`, `material`, and `technique`. To filter results by date, retrieve the results first and check dates via `get_artwork_details`.
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
