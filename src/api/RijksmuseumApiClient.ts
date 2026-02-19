@@ -71,12 +71,12 @@ export class RijksmuseumApiClient {
   private static readonly IIIF_BASE = "https://iiif.micr.io";
   private static readonly WEB_BASE = "https://www.rijksmuseum.nl/en/collection";
 
-  private static readonly TTL_OBJECT = 5 * 60_000;  // 5 min
+  private static readonly TTL_OBJECT = 30 * 60_000;  // 30 min
   private static readonly TTL_VOCAB = 60 * 60_000;   // 1 hour
-  private static readonly TTL_IMAGE = 60 * 60_000;   // 1 hour
+  private static readonly TTL_IMAGE = 30 * 60_000;   // 30 min
 
   constructor(cache?: ResponseCache) {
-    this.cache = cache ?? new ResponseCache(500, RijksmuseumApiClient.TTL_OBJECT);
+    this.cache = cache ?? new ResponseCache(1000, RijksmuseumApiClient.TTL_OBJECT);
     this.http = axios.create({
       headers: { Accept: "application/ld+json" },
       timeout: 15_000,
