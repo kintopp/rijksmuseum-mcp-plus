@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   registerAppTool,
   registerAppResource,
+  getUiCapability,
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
@@ -94,6 +95,15 @@ export function registerAll(
   registerResources(server);
   registerAppViewerResource(server);
   registerPrompts(server, apiClient, oaiClient);
+
+  // Log whether the connected client supports MCP Apps (SHOULD-level capability negotiation)
+  server.server.oninitialized = () => {
+    const clientCaps = server.server.getClientCapabilities();
+    const uiCap = getUiCapability(clientCaps);
+    if (uiCap) {
+      console.error(`[mcp] Client supports MCP Apps (mimeTypes: ${uiCap.mimeTypes?.join(', ') ?? 'none'})`);
+    }
+  };
 }
 
 // ─── Tools ──────────────────────────────────────────────────────────
@@ -869,6 +879,7 @@ function registerAppViewerResource(server: McpServer): void {
               permissions: {
                 clipboardWrite: {},
               },
+              prefersBorder: false,
             },
           },
         },

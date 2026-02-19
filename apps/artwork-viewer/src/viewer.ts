@@ -44,10 +44,11 @@ let currentRotation = 0;
 let isFlipped = false;
 let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 let visibilityObserver: IntersectionObserver | null = null;
+let currentDisplayMode: 'inline' | 'fullscreen' | 'pip' = 'inline';
 
 const app = new App(
   { name: 'Rijksmuseum Artwork Viewer', version: '1.0.0' },
-  { tools: { listChanged: false } },
+  { tools: { listChanged: false }, availableDisplayModes: ['inline', 'fullscreen'] },
   { autoResize: true }
 );
 
@@ -120,6 +121,10 @@ function applyHostContext(
     const { top, right, bottom, left } = params.safeAreaInsets;
     document.body.style.padding = `${top}px ${right}px ${bottom}px ${left}px`;
   }
+  if (params.displayMode) {
+    currentDisplayMode = params.displayMode;
+    updateFullscreenButton();
+  }
 }
 
 app.onhostcontextchanged = applyHostContext;
@@ -161,22 +166,30 @@ function resetView(): void {
   viewer.viewport.goHome();
 }
 
-function toggleFullscreen(): void {
-  const container = document.querySelector('.main');
-  if (!container) return;
-
-  if (document.fullscreenElement) {
-    document.exitFullscreen();
-  } else {
-    container.requestFullscreen();
+async function toggleFullscreen(): Promise<void> {
+  const target = currentDisplayMode === 'fullscreen' ? 'inline' : 'fullscreen';
+  try {
+    const result = await app.requestDisplayMode({ mode: target });
+    currentDisplayMode = result.mode;
+    updateFullscreenButton();
+  } catch {
+    // Host doesn't support display mode changes — try browser fullscreen as fallback
+    const container = document.querySelector('.main');
+    if (!container) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      container.requestFullscreen().catch(() => {});
+    }
   }
 }
 
 function updateFullscreenButton(): void {
   const btn = document.getElementById('fullscreen');
   if (btn) {
-    btn.textContent = document.fullscreenElement ? '⊠' : '⊞';
-    btn.title = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+    const isFs = currentDisplayMode === 'fullscreen' || !!document.fullscreenElement;
+    btn.textContent = isFs ? '⊠' : '⊞';
+    btn.title = isFs ? 'Exit Fullscreen' : 'Fullscreen';
   }
 }
 
@@ -213,7 +226,7 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="reset-view" title="Reset View">Reset</button>
           <button id="rotate-left" title="Rotate Left">&#8634;</button>
           <button id="rotate-right" title="Rotate Right">&#8635;</button>
-          <button id="flip-h" title="Flip Horizontal">&#8660;</button>
+          <button id="fullscreen" title="Fullscreen">&#8862;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
           <div class="shortcuts-content">
@@ -225,7 +238,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
               <div class="shortcut-row"><kbd>R</kbd><span>Rotate right</span></div>
               <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
-              <div class="shortcut-row"><kbd>&#8679;F</kbd><span>Flip horizontal</span></div>
+              <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
@@ -337,7 +350,7 @@ function attachEventListeners(): void {
   document.getElementById('reset-view')?.addEventListener('click', resetView);
   document.getElementById('rotate-left')?.addEventListener('click', () => rotateBy(-90));
   document.getElementById('rotate-right')?.addEventListener('click', () => rotateBy(90));
-  document.getElementById('flip-h')?.addEventListener('click', toggleFlip);
+  document.getElementById('fullscreen')?.addEventListener('click', toggleFullscreen);
 
   // Shortcuts overlay
   const shortcutsOverlay = document.getElementById('shortcuts-overlay');
@@ -380,6 +393,7 @@ function attachEventListeners(): void {
         toggleFullscreen();
         break;
       case 'F':
+      case 'h':
         toggleFlip();
         break;
     }
