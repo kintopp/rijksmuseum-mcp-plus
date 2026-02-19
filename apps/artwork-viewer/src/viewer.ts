@@ -33,6 +33,7 @@ interface ArtworkImageData {
   creator: string;
   date: string;
   license: string | null;
+  physicalDimensions: string | null;
   collectionUrl: string;
 }
 
@@ -218,6 +219,7 @@ function renderViewer(data: ArtworkImageData): void {
           <div class="shortcuts-content">
             <div class="shortcuts-header">Keyboard Shortcuts</div>
             <div class="shortcuts-list">
+              <div class="shortcut-row"><kbd>&#8679;&uarr;</kbd> / <kbd>&#8679;&darr;</kbd><span>Zoom in / out</span></div>
               <div class="shortcut-row"><kbd>+</kbd> / <kbd>&minus;</kbd><span>Zoom in / out</span></div>
               <div class="shortcut-row"><kbd>0</kbd><span>Reset view</span></div>
               <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
@@ -236,7 +238,7 @@ function renderViewer(data: ArtworkImageData): void {
           const lic = formatLicense(data.license);
           return lic ? `<a href="${sanitizeUrl(lic.url)}" target="_blank" rel="noopener">${escapeHtml(lic.label)}</a>` : '';
         })()}</span>
-        <span class="dimensions">${data.width} &times; ${data.height} px</span>
+        <span class="dimensions">${data.physicalDimensions ? escapeHtml(capitalize(data.physicalDimensions)) : ''}</span>
       </div>
     </div>
   `;
@@ -267,8 +269,9 @@ function initializeViewer(iiifInfoUrl: string): void {
   viewer = OpenSeadragon({
     element: container,
     prefixUrl:
-      'https://cdn.jsdelivr.net/npm/openseadragon@4.1.1/build/openseadragon/images/',
+      'https://cdn.jsdelivr.net/npm/openseadragon@6/build/openseadragon/images/',
     tileSources: iiifInfoUrl,
+    crossOriginPolicy: 'Anonymous' as const,
     showNavigationControl: false,
     showNavigator: true,
     navigatorPosition: 'BOTTOM_RIGHT',
@@ -360,6 +363,18 @@ function attachEventListeners(): void {
       case 'Escape':
         shortcutsOverlay?.classList.add('hidden');
         break;
+      case 'ArrowUp':
+        if (e.shiftKey) {
+          e.preventDefault();
+          viewer?.viewport.zoomBy(1.5);
+        }
+        break;
+      case 'ArrowDown':
+        if (e.shiftKey) {
+          e.preventDefault();
+          viewer?.viewport.zoomBy(1 / 1.5);
+        }
+        break;
       case 'r':
       case 'R':
         rotateBy(e.shiftKey ? -90 : 90);
@@ -448,6 +463,10 @@ function formatLicense(uri: string | null): { label: string; url: string } | nul
   return { label: 'License', url: uri };
 }
 
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function sanitizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -475,6 +494,7 @@ function loadDevMock(): void {
     creator: 'Rembrandt van Rijn',
     date: '1642',
     license: 'http://creativecommons.org/publicdomain/zero/1.0/',
+    physicalDimensions: 'height 379.5 cm x width 453.5 cm x weight 337 kg x weight 170 kg',
     collectionUrl: 'https://www.rijksmuseum.nl/en/collection/SK-C-5',
   };
   currentData = mockData;

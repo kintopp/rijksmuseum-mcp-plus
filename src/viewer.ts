@@ -41,11 +41,12 @@ export function getViewerHtml(iiifId: string, title: string = "Artwork"): string
   </div>
   <div id="viewer"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/openseadragon@4/build/openseadragon/openseadragon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/openseadragon@6/build/openseadragon/openseadragon.min.js"></script>
   <script>
     OpenSeadragon({
       id: "viewer",
       tileSources: "https://iiif.micr.io/${iiifId}/info.json",
+      crossOriginPolicy: "Anonymous",
       showNavigator: true,
       navigatorPosition: "BOTTOM_RIGHT",
       navigatorSizeRatio: 0.15,
@@ -57,7 +58,7 @@ export function getViewerHtml(iiifId: string, title: string = "Artwork"): string
       animationTime: 0.5,
       springStiffness: 10,
       maxZoomPixelRatio: 3,
-      prefixUrl: "https://cdn.jsdelivr.net/npm/openseadragon@4/build/openseadragon/images/",
+      prefixUrl: "https://cdn.jsdelivr.net/npm/openseadragon@6/build/openseadragon/images/",
     });
   </script>
 </body>

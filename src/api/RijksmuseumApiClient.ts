@@ -445,6 +445,11 @@ export class RijksmuseumApiClient {
     return null;
   }
 
+  /** Extract human-readable dimension statement (e.g. "height 379.5 cm x width 453.5 cm") */
+  static parseDimensionStatement(obj: LinkedArtObject): string | null {
+    return RijksmuseumApiClient.findStatement(obj.referred_to_by, AAT.DIMENSION_STATEMENT);
+  }
+
   /** Extract structured numeric dimensions (value + unit + label) */
   static parseDimensions(obj: LinkedArtObject): StructuredDimension[] {
     return (obj.dimension ?? [])
