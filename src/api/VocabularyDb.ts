@@ -101,6 +101,17 @@ function escapeFts5(value: string): string {
   return `"${value.replace(/[*^():]/g, "").replace(/"/g, '""')}"`;
 }
 
+/** Haversine distance in km between two lat/lon points. */
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * toRad;
+  const dLon = (lon2 - lon1) * toRad;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+    Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(a));
+}
+
 function emptyResult(warnings?: string[]): VocabSearchResult {
   return {
     totalResults: 0,
@@ -175,15 +186,7 @@ export class VocabularyDb {
         return new RegExp(`\\b${escaped}\\b`, "i").test(value) ? 1 : 0;
       });
       // Haversine distance in km for geo proximity search
-      this.db.function("haversine_km", (lat1: number, lon1: number, lat2: number, lon2: number) => {
-        const toRad = Math.PI / 180;
-        const dLat = (lat2 - lat1) * toRad;
-        const dLon = (lon2 - lon1) * toRad;
-        const a = Math.sin(dLat / 2) ** 2 +
-          Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
-          Math.sin(dLon / 2) ** 2;
-        return 6371 * 2 * Math.asin(Math.sqrt(a));
-      });
+      this.db.function("haversine_km", haversineKm);
       const count = (this.db.prepare("SELECT COUNT(*) as n FROM artworks").get() as { n: number }).n;
 
       // Feature-detect optional DB capabilities (vary by DB version)
@@ -361,15 +364,16 @@ export class VocabularyDb {
                 .map((c) => ({
                   id: c.id,
                   label: c.label_en || c.label_nl || "",
-                  dist: this.haversineDist(resolved.contextLat!, resolved.contextLon!, c.lat!, c.lon!),
+                  dist: haversineKm(resolved.contextLat!, resolved.contextLon!, c.lat!, c.lon!),
                 }))
                 .sort((a, b) => a.dist - b.dist);
               filteredIds = ranked.length > 0 ? ranked.filter((r) => r.dist <= 100).map((r) => r.id) : [];
               // If nothing within 100km, take closest
               if (filteredIds.length === 0 && ranked.length > 0) filteredIds = [ranked[0].id];
+              const geocodedCount = ranked.length;
               warnings.push(
                 `${filter.param}:"${value}" → No exact match. Interpreted as "${resolved.namePart}" near "${resolved.contextPart}" — ` +
-                `filtered to ${filteredIds.length} of ${resolved.candidates.length} matching place${resolved.candidates.length > 1 ? "s" : ""}.`
+                `filtered to ${filteredIds.length} of ${geocodedCount} geocoded place${geocodedCount > 1 ? "s" : ""}.`
               );
             } else {
               filteredIds = resolved.candidates.map((c) => c.id);
@@ -676,6 +680,7 @@ export class VocabularyDb {
         row = this.db!.prepare(
           `SELECT label_en, label_nl, lat, lon FROM vocabulary
            WHERE id IN (${placeholders}) AND lat IS NOT NULL
+           ORDER BY LENGTH(COALESCE(label_en, label_nl, ''))
            LIMIT 1`
         ).get(...vocabIds) as PlaceRow | undefined;
       }
@@ -705,7 +710,7 @@ export class VocabularyDb {
         .filter((c): c is typeof c & { lat: number; lon: number } => c.lat != null && c.lon != null)
         .map((c) => ({
           ...c,
-          dist: this.haversineDist(resolved.contextLat!, resolved.contextLon!, c.lat, c.lon),
+          dist: haversineKm(resolved.contextLat!, resolved.contextLon!, c.lat, c.lon),
         }))
         .sort((a, b) => a.dist - b.dist);
 
@@ -755,8 +760,8 @@ export class VocabularyDb {
   } | null {
     type CandidateRow = { id: string; label_en: string | null; label_nl: string | null; lat: number | null; lon: number | null };
 
-    let namePart: string;
-    let contextPart: string;
+    let namePart = "";
+    let contextPart = "";
     let candidates: CandidateRow[] = [];
 
     // Strategy 1: comma-split
@@ -767,9 +772,12 @@ export class VocabularyDb {
       if (namePart) {
         candidates = this.findPlaceCandidates(namePart);
       }
-    } else {
-      // Strategy 2: progressive right-token dropping
-      const tokens = input.trim().split(/\s+/);
+    }
+
+    // Strategy 2: progressive right-token dropping (also used as fallback when comma-split yields 0)
+    if (candidates.length === 0) {
+      const normalized = input.replace(/,/g, " ").trim();
+      const tokens = normalized.split(/\s+/);
       if (tokens.length < 2) return null; // single word — nothing to split
 
       namePart = "";
@@ -825,11 +833,12 @@ export class VocabularyDb {
       ).all(...vocabIds) as Row[];
     }
 
-    // Non-FTS fallback
+    // Non-FTS fallback (capped to avoid huge IN-lists from short generic terms)
     return this.db!.prepare(
       `SELECT id, label_en, label_nl, lat, lon FROM vocabulary
        WHERE type = 'place'
-         AND (label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)`
+         AND (label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)
+       LIMIT 200`
     ).all(`%${name}%`, `%${name}%`) as Row[];
   }
 
@@ -876,16 +885,6 @@ export class VocabularyDb {
     return null;
   }
 
-  /** Haversine distance in km between two lat/lon points. */
-  private haversineDist(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const toRad = Math.PI / 180;
-    const dLat = (lat2 - lat1) * toRad;
-    const dLon = (lon2 - lon1) * toRad;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
-      Math.sin(dLon / 2) ** 2;
-    return 6371 * 2 * Math.asin(Math.sqrt(a));
-  }
 
   private resolveDbPath(): string | null {
     // 1. Explicit env var
