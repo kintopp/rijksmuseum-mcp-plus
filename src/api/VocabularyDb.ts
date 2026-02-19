@@ -60,7 +60,11 @@ export interface VocabSearchResult {
 // in a mapping subquery.  `fields` restricts m.field, `vocabType`
 // restricts v.type, and `matchMode` controls exact vs LIKE matching.
 
-const ALLOWED_FIELDS = new Set(["subject", "spatial", "material", "technique", "type", "creator", "birth_place", "death_place", "profession", "collection_set", "production_role", "attribution_qualifier"]);
+const ALLOWED_FIELDS = new Set([
+  "subject", "spatial", "material", "technique", "type", "creator",
+  "birth_place", "death_place", "profession", "collection_set",
+  "production_role", "attribution_qualifier",
+]);
 const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
 const DEFAULT_MAX_RESULTS = 25;

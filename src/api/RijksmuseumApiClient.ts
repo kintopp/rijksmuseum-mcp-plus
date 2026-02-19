@@ -70,6 +70,7 @@ export class RijksmuseumApiClient {
     "https://data.rijksmuseum.nl/search/collection";
   private static readonly IIIF_BASE = "https://iiif.micr.io";
   private static readonly WEB_BASE = "https://www.rijksmuseum.nl/en/collection";
+  private static readonly DEFAULT_MAX_RESULTS = 25;
 
   private static readonly TTL_OBJECT = 30 * 60_000;  // 30 min
   private static readonly TTL_VOCAB = 60 * 60_000;   // 1 hour
@@ -991,7 +992,7 @@ export class RijksmuseumApiClient {
   }> {
     const searchResponse = await this.search(params);
     const totalResults = searchResponse.partOf?.totalItems ?? searchResponse.orderedItems.length;
-    const maxResults = params.maxResults ?? 25;
+    const maxResults = params.maxResults ?? RijksmuseumApiClient.DEFAULT_MAX_RESULTS;
 
     // Take only up to maxResults items
     const items = searchResponse.orderedItems.slice(0, maxResults);

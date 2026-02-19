@@ -1483,39 +1483,40 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     else:
         print("  Skipping artwork_texts_fts (no Tier 2 data yet)")
 
-    # Dimension indexes for minHeight/maxHeight/minWidth/maxWidth range filters
-    dim_count = cur.execute(
-        "SELECT COUNT(*) FROM artworks WHERE height_cm IS NOT NULL OR width_cm IS NOT NULL"
-    ).fetchone()[0]
-    if dim_count > 0:
-        print(f"  Creating dimension indexes on artworks — {dim_count:,} artworks with dimensions...")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_height ON artworks(height_cm) WHERE height_cm IS NOT NULL")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_width ON artworks(width_cm) WHERE width_cm IS NOT NULL")
-        conn.commit()
-    else:
-        print("  Skipping dimension indexes (no dimension data)")
-
-    # Date range covering index for creationDate filter
-    date_count = cur.execute(
-        "SELECT COUNT(*) FROM artworks WHERE date_earliest IS NOT NULL"
-    ).fetchone()[0]
-    if date_count > 0:
-        print(f"  Creating date range index on artworks — {date_count:,} artworks with dates...")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_date_range ON artworks(date_earliest, date_latest) WHERE date_earliest IS NOT NULL")
-        conn.commit()
-    else:
-        print("  Skipping date range index (no date data)")
-
-    # Geo index for proximity search
-    geo_count = cur.execute(
-        "SELECT COUNT(*) FROM vocabulary WHERE lat IS NOT NULL"
-    ).fetchone()[0]
-    if geo_count > 0:
-        print(f"  Creating geo index on vocabulary(lat, lon) — {geo_count:,} geocoded places...")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_vocab_lat_lon ON vocabulary(lat, lon) WHERE lat IS NOT NULL")
-        conn.commit()
-    else:
-        print("  Skipping geo index (no geocoded places)")
+    # Conditional indexes: only create when relevant data exists
+    conditional_indexes = [
+        (
+            "SELECT COUNT(*) FROM artworks WHERE height_cm IS NOT NULL OR width_cm IS NOT NULL",
+            "dimension indexes",
+            [
+                "CREATE INDEX IF NOT EXISTS idx_artworks_height ON artworks(height_cm) WHERE height_cm IS NOT NULL",
+                "CREATE INDEX IF NOT EXISTS idx_artworks_width ON artworks(width_cm) WHERE width_cm IS NOT NULL",
+            ],
+        ),
+        (
+            "SELECT COUNT(*) FROM artworks WHERE date_earliest IS NOT NULL",
+            "date range index",
+            [
+                "CREATE INDEX IF NOT EXISTS idx_artworks_date_range ON artworks(date_earliest, date_latest) WHERE date_earliest IS NOT NULL",
+            ],
+        ),
+        (
+            "SELECT COUNT(*) FROM vocabulary WHERE lat IS NOT NULL",
+            "geo index",
+            [
+                "CREATE INDEX IF NOT EXISTS idx_vocab_lat_lon ON vocabulary(lat, lon) WHERE lat IS NOT NULL",
+            ],
+        ),
+    ]
+    for count_sql, label, index_sqls in conditional_indexes:
+        count = cur.execute(count_sql).fetchone()[0]
+        if count > 0:
+            print(f"  Creating {label} — {count:,} qualifying rows...")
+            for sql in index_sqls:
+                conn.execute(sql)
+            conn.commit()
+        else:
+            print(f"  Skipping {label} (no qualifying data)")
 
     # Collection set stats
     set_mappings = cur.execute(
@@ -1552,19 +1553,23 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         print(f"\n--- Tier 2 Coverage (of {has_tier2:,} resolved) ---")
 
         # Text and dimension column coverage
-        col_stats = [
-            ("inscription_text", "Inscriptions", "IS NOT NULL AND {col} != ''"),
-            ("provenance_text",  "Provenance",   "IS NOT NULL AND {col} != ''"),
-            ("credit_line",      "Credit lines", "IS NOT NULL AND {col} != ''"),
-            ("narrative_text",   "Narratives",   "IS NOT NULL AND {col} != ''"),
-            ("date_earliest",    "Dates",        "IS NOT NULL"),
-            ("title_all_text",   "All titles",   "IS NOT NULL AND {col} != ''"),
-            ("height_cm",        "Height",       "IS NOT NULL"),
-            ("width_cm",         "Width",        "IS NOT NULL"),
+        text_cols = [
+            ("inscription_text", "Inscriptions"),
+            ("provenance_text",  "Provenance"),
+            ("credit_line",      "Credit lines"),
+            ("narrative_text",   "Narratives"),
+            ("title_all_text",   "All titles"),
         ]
-        for col, label, where_tpl in col_stats:
-            where = where_tpl.format(col=col)
-            cnt = cur.execute(f"SELECT COUNT(*) FROM artworks WHERE {col} {where}").fetchone()[0]
+        non_null_cols = [
+            ("date_earliest",    "Dates"),
+            ("height_cm",        "Height"),
+            ("width_cm",         "Width"),
+        ]
+        for col, label in text_cols:
+            cnt = cur.execute(f"SELECT COUNT(*) FROM artworks WHERE {col} IS NOT NULL AND {col} != ''").fetchone()[0]
+            print(f"  {label:20s} {cnt:8,} artworks")
+        for col, label in non_null_cols:
+            cnt = cur.execute(f"SELECT COUNT(*) FROM artworks WHERE {col} IS NOT NULL").fetchone()[0]
             print(f"  {label:20s} {cnt:8,} artworks")
 
         # Mapping field coverage

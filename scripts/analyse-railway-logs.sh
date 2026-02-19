@@ -46,9 +46,10 @@ DEPLOYMENTS=$(railway deployments --json 2>/dev/null | jq -r ".[0:$DEPLOY_LIMIT]
 DEPLOY_COUNT=$(echo "$DEPLOYMENTS" | wc -l | tr -d ' ')
 echo "Found $DEPLOY_COUNT deployments." >&2
 
-# Collect all log lines
+# Collect all log lines into temp files (cleaned up on exit)
 ALL_LOGS=$(mktemp)
-trap "rm -f $ALL_LOGS" EXIT
+TOOL_LOGS=$(mktemp)
+trap "rm -f $ALL_LOGS $TOOL_LOGS" EXIT
 
 for id in $DEPLOYMENTS; do
   echo "  Fetching logs for $id..." >&2
@@ -64,8 +65,6 @@ if [[ -n "$RAW_FILE" ]]; then
 fi
 
 # Filter to tool call lines only (have "tool" key)
-TOOL_LOGS=$(mktemp)
-trap "rm -f $ALL_LOGS $TOOL_LOGS" EXIT
 jq -c 'select(.tool)' "$ALL_LOGS" > "$TOOL_LOGS" 2>/dev/null || true
 TOOL_COUNT=$(wc -l < "$TOOL_LOGS" | tr -d ' ')
 
