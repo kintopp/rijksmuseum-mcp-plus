@@ -236,7 +236,7 @@ function renderViewer(data: ArtworkImageData): void {
       <div class="footer">
         <span class="license">${(() => {
           const lic = formatLicense(data.license);
-          return lic ? `<a href="${sanitizeUrl(lic.url)}" target="_blank" rel="noopener">${escapeHtml(lic.label)}</a>` : '';
+          return lic ? `<a href="${sanitizeUrl(lic.url)}" data-external-url="${sanitizeUrl(lic.url)}">${escapeHtml(lic.label)}</a>` : '';
         })()}</span>
         <span class="dimensions">${data.physicalDimensions ? escapeHtml(capitalize(data.physicalDimensions)) : ''}</span>
       </div>
@@ -300,7 +300,7 @@ function initializeViewer(iiifInfoUrl: string): void {
 
 function attachEventListeners(): void {
   // External links via app.openLink() for sandboxed iframe
-  document.querySelectorAll('.external-links a').forEach((link) => {
+  document.querySelectorAll('a[data-external-url]').forEach((link) => {
     link.addEventListener('click', async (e) => {
       e.preventDefault();
       const url = (link as HTMLAnchorElement).dataset.externalUrl;
