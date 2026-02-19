@@ -4,17 +4,17 @@ An AI-powered ([Model Context Protocol](https://www.anthropic.com/news/model-con
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server which used the museum's now unsupported REST API. 
 
-rijksmuseum-mcp+ is a ground-up rewrite which draws on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards and also adds new features (such as an [inline, interactive image viewer](docs/swan_sm.jpg)) made possible by [recent enhancements](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) to the MCP standard.
+rijksmuseum-mcp+ is based on the Rijksmuseum's [Linked Open Data APIs](https://data.rijksmuseum.nl/), the [Linked Art](https://linked.art/) and [Europeana Data Model](https://pro.europeana.eu/page/edm-documentation) (EDM) standards and also adds a few new features (such as an [inline, interactive image viewer](docs/swan_sm.jpg)) made possible by [recent enhancements](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) to the MCP standard.
 
 ## Quick Start
 
-The currently easiest way to try rijksmuseum-mcp+ is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) and the hosted version of the MCP server. But note that both require a Pro or better [subscription](https://claude.com/pricing). 
+The easiest way to try rijksmuseum-mcp+ is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) and the hosted version of the MCP server using the URL below. But note that both currently require a Pro or better [subscription](https://claude.com/pricing) from Anthropic. 
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
 Goto Settings → Connectors → Add custom connector → paste the URL above. For more details, see Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded). 
 
-The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients, such as [Jan.ai](https://jan.ai) which don't require a paid subscription (either via an API key from a LLM provider or with the use of a local LLM).
+The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients, such as [Jan.ai](https://jan.ai) which don't require a paid subscription (instead use an API key from a LLM provider or try it out with a local LLM). 
 
 ### Example Queries
 
@@ -33,11 +33,11 @@ The rijksmuseum-mcp+ MCP server is also compatible with many open-source clients
 
 ## Search parameters
 
-The `search_artwork` tool accepts up to 30 parameters, drawn from two backends: the online [Rijksmuseum Search API](https://data.rijksmuseum.nl/) and a large set of [vocabulary data](https://data.rijksmuseum.nl/docs/data-dumps/) available as downloadable files. Parameters from the same backend can generally be combined freely; cross-backend combination has some restrictions, noted below.
+The `search_artwork` tool accepts up to 30 parameters, drawn from two backends: the online [Rijksmuseum Search API](https://data.rijksmuseum.nl/) and a large set of [vocabulary data](https://data.rijksmuseum.nl/docs/data-dumps/) made available by the Rijksmuseum as downloads. Parameters from either backend can generally be combined freely; combination across both backends generally have some restrictions, noted below.
 
 ### Direct search parameters
 
-These parameters query the Rijksmuseum Search API directly. They support free-text and wildcard matching but are **not combinable with vocabulary-backed parameters** — if any vocabulary-backed parameter is present, these are silently dropped (except `creator`, `type`, `material`, and `technique`, which work with both backends).
+These parameters query the Rijksmuseum Search API directly. They support free-text and wildcard matching and can be combined with each other but are _not_ combinable with vocabulary-backed parameters except for `creator`, `type`, `material`, and `technique`, which work with both backends. <to be added - what about combinations with the geographic parameters?>
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -54,7 +54,7 @@ These parameters query the Rijksmuseum Search API directly. They support free-te
 
 ### Vocabulary-backed search parameters
 
-These parameters search Linked Open Data vocabulary dataset that maps 149,000 controlled vocabulary terms to 831,000 artworks via 12.8 million mappings. These parameters can be _freely combined with each other_ (e.g. `depictedPerson` + `productionPlace` + `type`) and with `creator`, `type`, `material`, and `technique`. _<to be added - what parameters cannot be combined>_
+These parameters search a Linked Open Data vocabulary dataset that maps 149,000 controlled vocabulary terms to 831,000 artworks via 12.8 million mappings. These parameters can be freely combined with each other (e.g. `depictedPerson` + `productionPlace` + `type`) and with `creator`, `type`, `material`, and `technique`. <to be added - what parameters cannot be combined with the Rijksmuseum API and/or the geographic parameters>
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -78,7 +78,7 @@ These parameters search Linked Open Data vocabulary dataset that maps 149,000 co
 
 ### Geographic proximity search
 
-These parameters find artworks related to places near a given location. They search across both depicted and production places using coordinates from 20,828 geocoded places. Can be combined with any vocabulary-backed parameter.
+These parameters find artworks related to places near a given location. They search across both depicted and production places using coordinates from 20,828 geocoded places. Can be combined with any vocabulary-backed parameter. <to be added - with which Rijksmuseum API paramaters they can be combined>
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -89,7 +89,7 @@ These parameters find artworks related to places near a given location. They sea
 
 ### Artwork detail fields
 
-`get_artwork_details` returns 24 metadata categories for a single artwork. _<to be added - what parameters are now searchable>_
+`get_artwork_details` returns 24 metadata categories for a single artwork. <to be added - what parameters are now searchable and with what othe parameters can they be combined?; see in particular title, curatorialNarrative and others added in the last few harvests>
 
 | Field | What it contains | Notes |
 |---|---|---|
