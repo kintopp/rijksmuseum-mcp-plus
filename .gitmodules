@@ -1,0 +1,3 @@
+[submodule "offline"]
+	path = offline
+	url = https://github.com/kintopp/rijksmuseum-mcp-plus-offline.git
