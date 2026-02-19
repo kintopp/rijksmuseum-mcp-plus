@@ -905,7 +905,9 @@ def find_statements(referred_to_by: list | None, aat_uri: str) -> list[str]:
             continue
         if has_classification(stmt.get("classified_as"), aat_uri):
             content = stmt.get("content", "")
-            if content:
+            if isinstance(content, list):
+                texts.extend(s for s in content if isinstance(s, str))
+            elif content:
                 texts.append(content)
     return texts
 
@@ -1107,7 +1109,9 @@ def resolve_artwork(uri: str) -> dict | None:
     for entry in data.get("identified_by", []):
         if isinstance(entry, dict) and entry.get("type") == "Name":
             content = entry.get("content", "")
-            if content:
+            if isinstance(content, list):
+                title_parts.extend(s for s in content if isinstance(s, str))
+            elif content:
                 title_parts.append(content)
     title_all_text = "\n".join(title_parts) if title_parts else None
 
