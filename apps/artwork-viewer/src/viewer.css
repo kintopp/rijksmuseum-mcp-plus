@@ -141,9 +141,28 @@ html, body {
   white-space: nowrap;
 }
 
-/* Click-to-copy */
+/* Click-to-copy with custom tooltip */
 .copyable {
   cursor: pointer;
+  position: relative;
+}
+
+.copyable[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.25rem 0.5rem;
+  background: rgba(0, 0, 0, 0.85);
+  color: #e5e5e5;
+  font-size: 0.75rem;
+  font-weight: 400;
+  white-space: nowrap;
+  border-radius: var(--border-radius-sm);
+  pointer-events: none;
+  z-index: 30;
+  margin-bottom: 4px;
 }
 
 .external-links {

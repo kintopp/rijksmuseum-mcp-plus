@@ -192,15 +192,15 @@ function renderViewer(data: ArtworkImageData): void {
     <div class="main">
       <header class="header">
         <div class="header-title-row">
-          <h1 class="copyable" data-copy="${escapeHtml(data.title)}" title="Click to copy">${escapeHtml(data.title)}</h1>
+          <h1 class="copyable" data-copy="${escapeHtml(data.title)}" data-tooltip="Click to copy">${escapeHtml(data.title)}</h1>
           <div class="external-links">
             <a href="${collectionUrl}" data-external-url="${collectionUrl}">Rijksmuseum</a>
           </div>
         </div>
         <div class="metadata">
-          <span class="copyable" data-copy="${escapeHtml(data.creator)}" title="Click to copy">${escapeHtml(data.creator)}</span>
+          <span class="copyable" data-copy="${escapeHtml(data.creator)}" data-tooltip="Click to copy">${escapeHtml(data.creator)}</span>
           <span>${escapeHtml(data.date)}</span>
-          <span class="copyable" data-copy="${escapeHtml(data.objectNumber)}" title="Click to copy">${escapeHtml(data.objectNumber)}</span>
+          <span class="copyable" data-copy="${escapeHtml(data.objectNumber)}" data-tooltip="Click to copy">${escapeHtml(data.objectNumber)}</span>
         </div>
       </header>
 
@@ -321,8 +321,8 @@ function attachEventListeners(): void {
       const text = htmlEl.dataset.copy;
       if (!text) return;
       if (await copyToClipboard(text)) {
-        htmlEl.title = 'Copied!';
-        setTimeout(() => { htmlEl.title = 'Click to copy'; }, 1500);
+        htmlEl.dataset.tooltip = 'Copied!';
+        setTimeout(() => { htmlEl.dataset.tooltip = 'Click to copy'; }, 1500);
       }
     });
   });
