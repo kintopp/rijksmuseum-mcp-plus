@@ -866,6 +866,9 @@ function registerAppViewerResource(server: McpServer): void {
                   "https://iiif.micr.io",
                 ],
               },
+              permissions: {
+                clipboardWrite: {},
+              },
             },
           },
         },
