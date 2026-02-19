@@ -19,6 +19,10 @@ const __dirname = path.dirname(__filename);
 
 const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
+/** Shared limits for maxResults / maxWorks across search_artwork and get_artist_timeline. */
+const RESULTS_DEFAULT = 25;
+const RESULTS_MAX = 100;
+
 function jsonResponse(data: unknown): { content: [{ type: "text"; text: string }] } {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
@@ -368,9 +372,9 @@ function registerTools(
           .number()
           .int()
           .min(1)
-          .max(25)
-          .default(10)
-          .describe("Maximum results to return (1-25, default 10)"),
+          .max(RESULTS_MAX)
+          .default(RESULTS_DEFAULT)
+          .describe(`Maximum results to return (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT})`),
         compact: z
           .boolean()
           .default(false)
@@ -579,9 +583,9 @@ function registerTools(
           .number()
           .int()
           .min(1)
-          .max(25)
-          .default(10)
-          .describe("Maximum works to include (1-25, default 10)"),
+          .max(RESULTS_MAX)
+          .default(RESULTS_DEFAULT)
+          .describe(`Maximum works to include (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT})`),
       },
     },
     withLogging("get_artist_timeline", async (args) => {
@@ -967,13 +971,13 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
       title: "Artist Timeline",
       description:
         "Generate a chronological timeline of an artist's works in the collection. " +
-        "Note: limited to 25 works maximum — for prolific artists this is a small sample.",
+        `Note: limited to ${RESULTS_MAX} works maximum — for prolific artists this is a small sample.`,
       argsSchema: {
         artist: z.string().describe("Name of the artist"),
         maxWorks: z
           .string()
           .optional()
-          .describe("Maximum number of works to include (1-25, default: 10)"),
+          .describe(`Maximum number of works to include (1-${RESULTS_MAX}, default: ${RESULTS_DEFAULT})`),
       },
     },
     async (args) => ({
@@ -987,7 +991,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
               `${args.maxWorks ? ` (limited to ${args.maxWorks} works)` : ""}.\n\n` +
               `Use the get_artist_timeline tool with artist="${args.artist}"` +
               `${args.maxWorks ? ` and maxWorks=${args.maxWorks}` : ""} to get the data.\n\n` +
-              `Note: the tool returns at most 25 works. For prolific artists, this is a small sample of their collection.\n\n` +
+              `Note: the tool returns at most ${RESULTS_MAX} works. For prolific artists, this is a small sample of their collection.\n\n` +
               `For each work, include:\n` +
               `- Year of creation\n` +
               `- Title of the work\n` +

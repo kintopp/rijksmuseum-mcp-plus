@@ -367,7 +367,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 **Research question:** Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?
 
 **How the tools enable it:**
-- `get_artist_timeline` with `artist: "Jacob van Ruisdael"` and `maxWorks: 25`
+- `get_artist_timeline` with `artist: "Jacob van Ruisdael"`
 - `get_artwork_details` on each work — read description, title, and `production[].place` to identify subject matter and where each work was made
 - Map subject type and production place against date: do the dune landscapes cluster in the early years and the waterfalls in the later ones?
 
@@ -379,7 +379,7 @@ The `search_artwork` tool combines filters — creator, type, material, techniqu
 
 **How the tools enable it:**
 - `search_artwork` with `profession: "painter"` and `creator: "Breitner"` to confirm his multi-profession classification
-- `get_artist_timeline` with `artist: "George Hendrik Breitner"` and `maxWorks: 25`
+- `get_artist_timeline` with `artist: "George Hendrik Breitner"`
 - `get_artwork_details` on each work to extract medium and technique
 - Plot medium against date: do drawings cluster in the early years, paintings in the middle, photographs at the end — or is the practice mixed throughout?
 
@@ -578,7 +578,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | Prompt / Resource | Description |
 |---|---|
 | `analyse-artwork` | Prompt: fetch high-resolution image and analyse visual content alongside key metadata (12 fields) |
-| `generate-artist-timeline` | Prompt: create a visual timeline of an artist's works (max 25) |
+| `generate-artist-timeline` | Prompt: create a visual timeline of an artist's works (max 100) |
 | `top-100-artworks` | Prompt: explore the Rijksmuseum's Top 100 masterpieces (~133 works from curated set 260213) |
 | `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF viewer (MCP Apps) |
 

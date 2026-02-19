@@ -63,6 +63,9 @@ export interface VocabSearchResult {
 const ALLOWED_FIELDS = new Set(["subject", "spatial", "material", "technique", "type", "creator", "birth_place", "death_place", "profession", "collection_set", "production_role", "attribution_qualifier"]);
 const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
+const DEFAULT_MAX_RESULTS = 25;
+const MAX_RESULTS_CAP = 100;
+
 interface VocabFilter {
   param: keyof VocabSearchParams;
   fields: string[];
@@ -430,7 +433,7 @@ export class VocabularyDb {
     }
 
     const where = conditions.join(" AND ");
-    const limit = Math.min(effective.maxResults ?? 25, 25);
+    const limit = Math.min(effective.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP);
 
     // COUNT is expensive for cross-filter queries (multiple IN-subquery intersections
     // can scan tens of thousands of rows). Only compute it for single-filter queries.

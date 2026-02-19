@@ -991,7 +991,7 @@ export class RijksmuseumApiClient {
   }> {
     const searchResponse = await this.search(params);
     const totalResults = searchResponse.partOf?.totalItems ?? searchResponse.orderedItems.length;
-    const maxResults = params.maxResults ?? 10;
+    const maxResults = params.maxResults ?? 25;
 
     // Take only up to maxResults items
     const items = searchResponse.orderedItems.slice(0, maxResults);
