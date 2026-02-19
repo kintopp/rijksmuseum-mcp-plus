@@ -32,6 +32,7 @@ interface ArtworkImageData {
   title: string;
   creator: string;
   date: string;
+  license: string | null;
   collectionUrl: string;
 }
 
@@ -159,6 +160,25 @@ function resetView(): void {
   viewer.viewport.goHome();
 }
 
+function toggleFullscreen(): void {
+  const container = document.querySelector('.main');
+  if (!container) return;
+
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    container.requestFullscreen();
+  }
+}
+
+function updateFullscreenButton(): void {
+  const btn = document.getElementById('fullscreen');
+  if (btn) {
+    btn.textContent = document.fullscreenElement ? '⊠' : '⊞';
+    btn.title = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+  }
+}
+
 // ── Rendering ───────────────────────────────────────────────────────
 
 function renderViewer(data: ArtworkImageData): void {
@@ -171,15 +191,15 @@ function renderViewer(data: ArtworkImageData): void {
     <div class="main">
       <header class="header">
         <div class="header-title-row">
-          <h1>${escapeHtml(data.title)}</h1>
+          <h1 class="copyable" data-copy="${escapeHtml(data.title)}" title="Click to copy">${escapeHtml(data.title)}</h1>
           <div class="external-links">
             <a href="${collectionUrl}" data-external-url="${collectionUrl}">Rijksmuseum</a>
           </div>
         </div>
         <div class="metadata">
-          <span>${escapeHtml(data.creator)}</span>
+          <span class="copyable" data-copy="${escapeHtml(data.creator)}" title="Click to copy">${escapeHtml(data.creator)}</span>
           <span>${escapeHtml(data.date)}</span>
-          <span>${escapeHtml(data.objectNumber)}</span>
+          <span class="copyable" data-copy="${escapeHtml(data.objectNumber)}" title="Click to copy">${escapeHtml(data.objectNumber)}</span>
         </div>
       </header>
 
@@ -190,10 +210,8 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="zoom-in" title="Zoom In">+</button>
           <button id="zoom-out" title="Zoom Out">&minus;</button>
           <button id="reset-view" title="Reset View">Reset</button>
-          <span class="control-separator"></span>
           <button id="rotate-left" title="Rotate Left">&#8634;</button>
           <button id="rotate-right" title="Rotate Right">&#8635;</button>
-          <span class="control-separator"></span>
           <button id="flip-h" title="Flip Horizontal">&#8660;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
@@ -205,7 +223,8 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
               <div class="shortcut-row"><kbd>R</kbd><span>Rotate right</span></div>
               <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
-              <div class="shortcut-row"><kbd>F</kbd><span>Flip horizontal</span></div>
+              <div class="shortcut-row"><kbd>&#8679;F</kbd><span>Flip horizontal</span></div>
+              <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
           </div>
@@ -213,7 +232,10 @@ function renderViewer(data: ArtworkImageData): void {
       </div>
 
       <div class="footer">
-        <span>${escapeHtml(data.objectNumber)}</span>
+        <span class="license">${(() => {
+          const lic = formatLicense(data.license);
+          return lic ? `<a href="${sanitizeUrl(lic.url)}" target="_blank" rel="noopener">${escapeHtml(lic.label)}</a>` : '';
+        })()}</span>
         <span class="dimensions">${data.width} &times; ${data.height} px</span>
       </div>
     </div>
@@ -289,6 +311,22 @@ function attachEventListeners(): void {
     });
   });
 
+  // Click-to-copy on metadata fields
+  document.querySelectorAll('.copyable').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const htmlEl = el as HTMLElement;
+      const text = htmlEl.dataset.copy;
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        htmlEl.title = 'Copied!';
+        setTimeout(() => { htmlEl.title = 'Click to copy'; }, 1500);
+      } catch {
+        // Clipboard API may fail in some contexts
+      }
+    });
+  });
+
   // Zoom/rotate controls
   document
     .getElementById('zoom-in')
@@ -327,6 +365,8 @@ function attachEventListeners(): void {
         rotateBy(e.shiftKey ? -90 : 90);
         break;
       case 'f':
+        toggleFullscreen();
+        break;
       case 'F':
         toggleFlip();
         break;
@@ -396,6 +436,18 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+function formatLicense(uri: string | null): { label: string; url: string } | null {
+  if (!uri) return null;
+  const lower = uri.toLowerCase();
+  if (lower.includes('publicdomain/zero'))
+    return { label: 'CC0 1.0', url: uri };
+  if (lower.includes('publicdomain'))
+    return { label: 'Public Domain Mark 1.0', url: uri };
+  if (lower.includes('inc'))
+    return { label: 'In Copyright', url: uri };
+  return { label: 'License', url: uri };
+}
+
 function sanitizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -408,19 +460,45 @@ function sanitizeUrl(url: string): string {
   return '#';
 }
 
+// ── Dev mode mock ───────────────────────────────────────────────────
+
+function loadDevMock(): void {
+  console.info('[dev] No MCP host — loading mock artwork');
+  const mockData: ArtworkImageData = {
+    iiifId: 'PJEZO',
+    iiifInfoUrl: 'https://iiif.micr.io/PJEZO/info.json',
+    thumbnailUrl: '',
+    width: 14645,
+    height: 12158,
+    objectNumber: 'SK-C-5',
+    title: 'The Night Watch',
+    creator: 'Rembrandt van Rijn',
+    date: '1642',
+    license: 'http://creativecommons.org/publicdomain/zero/1.0/',
+    collectionUrl: 'https://www.rijksmuseum.nl/en/collection/SK-C-5',
+  };
+  currentData = mockData;
+  renderViewer(mockData);
+}
+
 // ── Connect ─────────────────────────────────────────────────────────
 
-(async () => {
-  try {
-    await app.connect();
-    app.sendLog({ level: 'info', data: 'Connected to MCP host' });
+if (import.meta.env.DEV && window === window.parent) {
+  // Not inside an iframe → standalone browser preview, skip MCP connect entirely
+  loadDevMock();
+} else {
+  (async () => {
+    try {
+      await app.connect();
+      app.sendLog({ level: 'info', data: 'Connected to MCP host' });
 
-    const context = app.getHostContext();
-    if (context) {
-      applyHostContext(context);
+      const context = app.getHostContext();
+      if (context) {
+        applyHostContext(context);
+      }
+    } catch (error) {
+      console.error('Failed to connect:', error);
+      showError('Connection failed', 'Could not connect to the MCP host');
     }
-  } catch (error) {
-    console.error('Failed to connect:', error);
-    showError('Connection failed', 'Could not connect to the MCP host');
-  }
-})();
+  })();
+}

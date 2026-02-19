@@ -14,7 +14,8 @@
     "build": "npm run build:ui && tsc",
     "build:ui": "vite build -c apps/artwork-viewer/vite.config.ts",
     "start": "node dist/index.js",
-    "serve": "node dist/index.js --http"
+    "serve": "node dist/index.js --http",
+    "dev:viewer": "vite dev -c apps/artwork-viewer/vite.config.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.0.1",

@@ -572,6 +572,7 @@ function registerTools(
         title,
         creator: RijksmuseumApiClient.parseCreator(object),
         date: RijksmuseumApiClient.parseDate(object),
+        license: RijksmuseumApiClient.parseLicense(object),
         collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
       };
 

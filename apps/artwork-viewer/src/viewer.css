@@ -141,6 +141,11 @@ html, body {
   white-space: nowrap;
 }
 
+/* Click-to-copy */
+.copyable {
+  cursor: pointer;
+}
+
 .external-links {
   display: flex;
   gap: 0.5rem;
@@ -150,16 +155,18 @@ html, body {
 .external-links a {
   color: var(--color-text-primary);
   text-decoration: none;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.6rem;
   border-radius: var(--border-radius-sm);
   background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-primary);
   font-size: 0.8rem;
-  transition: background 0.2s;
+  transition: background 0.2s, border-color 0.2s;
   white-space: nowrap;
 }
 
 .external-links a:hover {
   background: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
   color: white;
 }
 
@@ -240,6 +247,15 @@ html, body {
   flex-shrink: 0;
   border-top: 1px solid var(--color-border-primary);
   font-size: 0.8rem;
+}
+
+.footer .license a {
+  color: var(--color-text-tertiary);
+  text-decoration: none;
+}
+
+.footer .license a:hover {
+  color: var(--color-text-primary);
 }
 
 .footer .dimensions {
@@ -340,6 +356,12 @@ html, body {
 
 .shortcut-row span {
   color: #b0b0b0;
+}
+
+/* Fullscreen */
+.main:fullscreen {
+  height: 100vh;
+  border-radius: 0;
 }
 
 /* Responsive */
