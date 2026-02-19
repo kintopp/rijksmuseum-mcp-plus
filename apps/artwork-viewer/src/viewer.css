@@ -251,6 +251,11 @@ html, body {
   font-size: 0.8rem;
 }
 
+.footer .license {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .footer .license a {
   color: var(--color-text-tertiary);
   text-decoration: none;

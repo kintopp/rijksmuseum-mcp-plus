@@ -320,12 +320,9 @@ function attachEventListeners(): void {
       const htmlEl = el as HTMLElement;
       const text = htmlEl.dataset.copy;
       if (!text) return;
-      try {
-        await navigator.clipboard.writeText(text);
+      if (await copyToClipboard(text)) {
         htmlEl.title = 'Copied!';
         setTimeout(() => { htmlEl.title = 'Click to copy'; }, 1500);
-      } catch {
-        // Clipboard API may fail in some contexts
       }
     });
   });
@@ -465,6 +462,26 @@ function formatLicense(uri: string | null): { label: string; url: string } | nul
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  // Try modern Clipboard API first
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch { /* blocked in sandboxed iframe */ }
+  // Fallback: hidden textarea + execCommand
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
 }
 
 function sanitizeUrl(url: string): string {
