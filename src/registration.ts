@@ -549,7 +549,8 @@ function registerTools(
       const objectNumber = RijksmuseumApiClient.parseObjectNumber(object);
 
       if (httpPort) {
-        imageInfo.viewerUrl = `http://localhost:${httpPort}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
+        const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
+        imageInfo.viewerUrl = `${baseUrl}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
       const { thumbnailUrl, ...imageData } = imageInfo;
