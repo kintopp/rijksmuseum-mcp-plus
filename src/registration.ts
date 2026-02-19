@@ -423,6 +423,18 @@ function registerTools(
       const result = args.compact
         ? await api.searchCompact(args)
         : await api.searchAndResolve(args);
+
+      // Hint when creator search returns 0 — the API is accent-sensitive
+      if (result.totalResults === 0 && args.creator) {
+        return jsonResponse({
+          ...result,
+          warnings: [
+            "No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
+            "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling.",
+          ],
+        });
+      }
+
       return jsonResponse(result);
     })
   );
@@ -599,11 +611,20 @@ function registerTools(
         .map(({ date, ...rest }) => ({ year: date, ...rest }))
         .sort((a, b) => (parseInt(a.year, 10) || 0) - (parseInt(b.year, 10) || 0));
 
-      return jsonResponse({
+      const response: Record<string, unknown> = {
         artist: args.artist,
         totalWorksInCollection: result.totalResults,
         timeline,
-      });
+      };
+
+      if (result.totalResults === 0) {
+        response.warnings = [
+          "No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
+          "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling.",
+        ];
+      }
+
+      return jsonResponse(response);
     })
   );
 
