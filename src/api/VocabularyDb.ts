@@ -96,6 +96,15 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "productionRole",fields: ["production_role"],        matchMode: "like",                               ftsUpgrade: true },
 ];
 
+/** Row shape returned by place-candidate queries (findPlaceCandidates, resolveMultiWordPlace). */
+type PlaceCandidateRow = {
+  id: string;
+  label_en: string | null;
+  label_nl: string | null;
+  lat: number | null;
+  lon: number | null;
+};
+
 /** Escape a value for safe FTS5 phrase matching: strip operators, escape quotes. */
 function escapeFts5(value: string): string {
   return `"${value.replace(/[*^():]/g, "").replace(/"/g, '""')}"`;
@@ -110,6 +119,59 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
     Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
     Math.sin(dLon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(a));
+}
+
+/** Pluralize a count: `pluralize(3, "place") → "3 places"`. */
+function pluralize(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : (noun.endsWith("ch") || noun.endsWith("s") ? "es" : "s")}`;
+}
+
+/**
+ * Rank place candidates by distance to a reference point, keeping only those
+ * within `radiusKm`. If none are within radius, the closest candidate is kept.
+ * Returns IDs of the surviving candidates.
+ */
+function rankByProximity(
+  candidates: PlaceCandidateRow[],
+  refLat: number,
+  refLon: number,
+  radiusKm: number = 100,
+): { ids: string[]; geocodedCount: number } {
+  const ranked = candidates
+    .filter((c) => c.lat != null && c.lon != null)
+    .map((c) => ({
+      id: c.id,
+      dist: haversineKm(refLat, refLon, c.lat!, c.lon!),
+    }))
+    .sort((a, b) => a.dist - b.dist);
+
+  if (ranked.length === 0) return { ids: [], geocodedCount: 0 };
+
+  const withinRadius = ranked.filter((r) => r.dist <= radiusKm).map((r) => r.id);
+  const ids = withinRadius.length > 0 ? withinRadius : [ranked[0].id];
+  return { ids, geocodedCount: ranked.length };
+}
+
+/**
+ * Build a warning message for multi-word place interpretation.
+ * Three variants: geo-filtered (with context coords), unresolved context, no context.
+ */
+function buildMultiWordPlaceWarning(
+  prefix: string,
+  namePart: string,
+  contextPart: string,
+  candidateCount: number,
+  geo?: { filteredCount: number; geocodedCount: number },
+): string {
+  const base = `${prefix} → No exact match. Interpreted as "${namePart}"`;
+
+  if (geo) {
+    return `${base} near "${contextPart}" — filtered to ${geo.filteredCount} of ${pluralize(geo.geocodedCount, "geocoded place")}.`;
+  }
+  if (contextPart) {
+    return `${base} (could not resolve context "${contextPart}"). ${pluralize(candidateCount, "ambiguous match")}.`;
+  }
+  return `${base}. ${pluralize(candidateCount, "match")}.`;
 }
 
 function emptyResult(warnings?: string[]): VocabSearchResult {
@@ -356,40 +418,26 @@ export class VocabularyDb {
         if (vocabIds.length === 0 && filter.vocabType === "place") {
           const resolved = this.resolveMultiWordPlace(String(value));
           if (resolved && resolved.candidates.length > 0) {
-            let filteredIds: string[];
-            if (resolved.contextLat != null && resolved.contextLon != null && resolved.candidates.length > 1) {
-              // Geo-disambiguate: sort by distance, keep only those within 100km of context
-              const ranked = resolved.candidates
-                .filter((c) => c.lat != null)
-                .map((c) => ({
-                  id: c.id,
-                  label: c.label_en || c.label_nl || "",
-                  dist: haversineKm(resolved.contextLat!, resolved.contextLon!, c.lat!, c.lon!),
-                }))
-                .sort((a, b) => a.dist - b.dist);
-              filteredIds = ranked.length > 0 ? ranked.filter((r) => r.dist <= 100).map((r) => r.id) : [];
-              // If nothing within 100km, take closest
-              if (filteredIds.length === 0 && ranked.length > 0) filteredIds = [ranked[0].id];
-              const geocodedCount = ranked.length;
-              warnings.push(
-                `${filter.param}:"${value}" → No exact match. Interpreted as "${resolved.namePart}" near "${resolved.contextPart}" — ` +
-                `filtered to ${filteredIds.length} of ${geocodedCount} geocoded place${geocodedCount > 1 ? "s" : ""}.`
+            const hasContext = resolved.contextLat != null && resolved.contextLon != null;
+            const prefix = `${filter.param}:"${value}"`;
+
+            if (hasContext && resolved.candidates.length > 1) {
+              const { ids, geocodedCount } = rankByProximity(
+                resolved.candidates, resolved.contextLat!, resolved.contextLon!,
               );
+              vocabIds = ids;
+              warnings.push(buildMultiWordPlaceWarning(
+                prefix, resolved.namePart, resolved.contextPart,
+                resolved.candidates.length,
+                { filteredCount: ids.length, geocodedCount },
+              ));
             } else {
-              filteredIds = resolved.candidates.map((c) => c.id);
-              if (resolved.contextPart) {
-                warnings.push(
-                  `${filter.param}:"${value}" → No exact match. Interpreted as "${resolved.namePart}" ` +
-                  `(could not resolve context "${resolved.contextPart}"). ${filteredIds.length} ambiguous match${filteredIds.length > 1 ? "es" : ""}.`
-                );
-              } else {
-                warnings.push(
-                  `${filter.param}:"${value}" → No exact match. Interpreted as "${resolved.namePart}". ` +
-                  `${filteredIds.length} match${filteredIds.length > 1 ? "es" : ""}.`
-                );
-              }
+              vocabIds = resolved.candidates.map((c) => c.id);
+              warnings.push(buildMultiWordPlaceWarning(
+                prefix, resolved.namePart, resolved.contextPart,
+                vocabIds.length,
+              ));
             }
-            vocabIds = filteredIds;
           }
         }
 
@@ -701,42 +749,37 @@ export class VocabularyDb {
     const resolved = this.resolveMultiWordPlace(placeName);
     if (!resolved || resolved.candidates.length === 0) return null;
 
-    // Pick best candidate: if context provided coords, pick nearest; otherwise first with coords
-    type GeoCandidate = { label_en: string | null; label_nl: string | null; lat: number; lon: number };
-    let best: GeoCandidate | undefined;
-    if (resolved.contextLat != null && resolved.contextLon != null) {
-      // Sort by distance to context
-      const ranked = resolved.candidates
-        .filter((c): c is typeof c & { lat: number; lon: number } => c.lat != null && c.lon != null)
-        .map((c) => ({
-          ...c,
-          dist: haversineKm(resolved.contextLat!, resolved.contextLon!, c.lat, c.lon),
-        }))
-        .sort((a, b) => a.dist - b.dist);
+    const hasContext = resolved.contextLat != null && resolved.contextLon != null;
+    const prefix = `nearPlace:"${placeName}"`;
 
-      best = ranked[0];
+    // Pick best candidate: if context provided coords, pick nearest; otherwise first with coords
+    let best: PlaceCandidateRow & { lat: number; lon: number } | undefined;
+    if (hasContext) {
+      const { ids } = rankByProximity(resolved.candidates, resolved.contextLat!, resolved.contextLon!);
+      // ids[0] is the closest — find its full candidate record
+      const bestId = ids[0];
+      best = bestId != null
+        ? resolved.candidates.find(
+            (c): c is PlaceCandidateRow & { lat: number; lon: number } => c.id === bestId,
+          )
+        : undefined;
       if (best && warnings) {
         const label = best.label_en || best.label_nl || "";
         warnings.push(
-          `nearPlace:"${placeName}" → Interpreted as "${resolved.namePart}" near "${resolved.contextPart}" ` +
+          `${prefix} → Interpreted as "${resolved.namePart}" near "${resolved.contextPart}" ` +
           `(${resolved.contextLat!.toFixed(4)}, ${resolved.contextLon!.toFixed(4)}). ` +
-          `Matched "${label}" (${resolved.candidates.length} candidate${resolved.candidates.length > 1 ? "s" : ""}).`
+          `Matched "${label}" (${pluralize(resolved.candidates.length, "candidate")}).`
         );
       }
     } else {
       best = resolved.candidates.find(
-        (c): c is typeof c & { lat: number; lon: number } => c.lat != null && c.lon != null
+        (c): c is PlaceCandidateRow & { lat: number; lon: number } => c.lat != null && c.lon != null,
       );
-      if (best && warnings && resolved.contextPart) {
-        warnings.push(
-          `nearPlace:"${placeName}" → Interpreted as "${resolved.namePart}" (could not resolve context "${resolved.contextPart}"). ` +
-          `${resolved.candidates.length} ambiguous match${resolved.candidates.length > 1 ? "es" : ""}.`
-        );
-      } else if (best && warnings) {
-        warnings.push(
-          `nearPlace:"${placeName}" → Interpreted as "${resolved.namePart}". ` +
-          `${resolved.candidates.length} match${resolved.candidates.length > 1 ? "es" : ""}.`
-        );
+      if (best && warnings) {
+        warnings.push(buildMultiWordPlaceWarning(
+          prefix, resolved.namePart, resolved.contextPart,
+          resolved.candidates.length,
+        ));
       }
     }
 
@@ -754,15 +797,13 @@ export class VocabularyDb {
   private resolveMultiWordPlace(input: string): {
     namePart: string;
     contextPart: string;
-    candidates: { id: string; label_en: string | null; label_nl: string | null; lat: number | null; lon: number | null }[];
+    candidates: PlaceCandidateRow[];
     contextLat?: number;
     contextLon?: number;
   } | null {
-    type CandidateRow = { id: string; label_en: string | null; label_nl: string | null; lat: number | null; lon: number | null };
-
     let namePart = "";
     let contextPart = "";
-    let candidates: CandidateRow[] = [];
+    let candidates: PlaceCandidateRow[] = [];
 
     // Strategy 1: comma-split
     const commaIdx = input.indexOf(",");
@@ -819,18 +860,14 @@ export class VocabularyDb {
    * Find place vocabulary entries matching a name via FTS phrase match.
    * Returns all matches (not just first), with coordinates where available.
    */
-  private findPlaceCandidates(
-    name: string
-  ): { id: string; label_en: string | null; label_nl: string | null; lat: number | null; lon: number | null }[] {
-    type Row = { id: string; label_en: string | null; label_nl: string | null; lat: number | null; lon: number | null };
-
+  private findPlaceCandidates(name: string): PlaceCandidateRow[] {
     if (this.hasFts5) {
       const vocabIds = this.findVocabIdsFts(name, " AND type = ?", ["place"]);
       if (vocabIds.length === 0) return [];
       const placeholders = vocabIds.map(() => "?").join(", ");
       return this.db!.prepare(
         `SELECT id, label_en, label_nl, lat, lon FROM vocabulary WHERE id IN (${placeholders})`
-      ).all(...vocabIds) as Row[];
+      ).all(...vocabIds) as PlaceCandidateRow[];
     }
 
     // Non-FTS fallback (capped to avoid huge IN-lists from short generic terms)
@@ -839,7 +876,7 @@ export class VocabularyDb {
        WHERE type = 'place'
          AND (label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)
        LIMIT 200`
-    ).all(`%${name}%`, `%${name}%`) as Row[];
+    ).all(`%${name}%`, `%${name}%`) as PlaceCandidateRow[];
   }
 
   /**
@@ -848,43 +885,35 @@ export class VocabularyDb {
    * "Le Touquet-Paris-Plage" matching "Paris".
    */
   private resolveContextCoordinates(context: string): { lat: number; lon: number } | null {
-    type CoordRow = { label_en: string | null; label_nl: string | null; lat: number; lon: number };
+    type CoordRow = { lat: number; lon: number };
 
     // Step 1: exact label match (case-insensitive)
     const exact = this.db!.prepare(
-      `SELECT label_en, label_nl, lat, lon FROM vocabulary
+      `SELECT lat, lon FROM vocabulary
        WHERE type = 'place' AND lat IS NOT NULL
          AND (label_en = ? COLLATE NOCASE OR label_nl = ? COLLATE NOCASE)
        LIMIT 1`
     ).get(context, context) as CoordRow | undefined;
 
-    if (exact) return { lat: exact.lat, lon: exact.lon };
+    if (exact) return exact;
 
     // Step 2: FTS phrase match, prefer shortest label (avoids "Le Touquet-Paris-Plage" for "Paris")
     if (this.hasFts5) {
       const vocabIds = this.findVocabIdsFts(context, " AND type = ?", ["place"]);
       if (vocabIds.length > 0) {
         const placeholders = vocabIds.map(() => "?").join(", ");
-        const rows = this.db!.prepare(
-          `SELECT label_en, label_nl, lat, lon FROM vocabulary
-           WHERE id IN (${placeholders}) AND lat IS NOT NULL`
-        ).all(...vocabIds) as CoordRow[];
-
-        if (rows.length > 0) {
-          // Sort by label length (prefer shorter/more exact matches)
-          rows.sort((a, b) => {
-            const lenA = (a.label_en || a.label_nl || "").length;
-            const lenB = (b.label_en || b.label_nl || "").length;
-            return lenA - lenB;
-          });
-          return { lat: rows[0].lat, lon: rows[0].lon };
-        }
+        const row = this.db!.prepare(
+          `SELECT lat, lon FROM vocabulary
+           WHERE id IN (${placeholders}) AND lat IS NOT NULL
+           ORDER BY LENGTH(COALESCE(label_en, label_nl, ''))
+           LIMIT 1`
+        ).get(...vocabIds) as CoordRow | undefined;
+        if (row) return row;
       }
     }
 
     return null;
   }
-
 
   private resolveDbPath(): string | null {
     // 1. Explicit env var
