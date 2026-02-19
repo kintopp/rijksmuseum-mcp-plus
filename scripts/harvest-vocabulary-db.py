@@ -1483,6 +1483,29 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     else:
         print("  Skipping artwork_texts_fts (no Tier 2 data yet)")
 
+    # Dimension indexes for minHeight/maxHeight/minWidth/maxWidth range filters
+    dim_count = cur.execute(
+        "SELECT COUNT(*) FROM artworks WHERE height_cm IS NOT NULL OR width_cm IS NOT NULL"
+    ).fetchone()[0]
+    if dim_count > 0:
+        print(f"  Creating dimension indexes on artworks — {dim_count:,} artworks with dimensions...")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_height ON artworks(height_cm) WHERE height_cm IS NOT NULL")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_width ON artworks(width_cm) WHERE width_cm IS NOT NULL")
+        conn.commit()
+    else:
+        print("  Skipping dimension indexes (no dimension data)")
+
+    # Date range covering index for creationDate filter
+    date_count = cur.execute(
+        "SELECT COUNT(*) FROM artworks WHERE date_earliest IS NOT NULL"
+    ).fetchone()[0]
+    if date_count > 0:
+        print(f"  Creating date range index on artworks — {date_count:,} artworks with dates...")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_date_range ON artworks(date_earliest, date_latest) WHERE date_earliest IS NOT NULL")
+        conn.commit()
+    else:
+        print("  Skipping date range index (no date data)")
+
     # Geo index for proximity search
     geo_count = cur.execute(
         "SELECT COUNT(*) FROM vocabulary WHERE lat IS NOT NULL"
