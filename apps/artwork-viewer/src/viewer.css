@@ -165,6 +165,14 @@ html, body {
   margin-bottom: 4px;
 }
 
+/* Header tooltips display below — no room above the title */
+.header [data-tooltip]:hover::after {
+  bottom: auto;
+  top: 100%;
+  margin-bottom: 0;
+  margin-top: 4px;
+}
+
 .external-links {
   display: flex;
   gap: 0.5rem;
