@@ -143,7 +143,7 @@ function registerTools(
             "(e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
           : ""),
-      inputSchema: {
+      inputSchema: z.object({
         query: z
           .string()
           .optional()
@@ -385,7 +385,7 @@ function registerTools(
           .string()
           .optional()
           .describe("Pagination token from a previous search result. Only applies to Search API queries, not vocabulary-based searches."),
-      },
+      }).strict(),
     },
     withLogging("search_artwork", async (args) => {
       const argsRecord = args as Record<string, unknown>;
@@ -440,13 +440,13 @@ function registerTools(
         "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
         "Also reports the bibliography count — use get_artwork_bibliography for full citations. " +
         "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",
-      inputSchema: {
+      inputSchema: z.object({
         objectNumber: z
           .string()
           .describe(
             "The object number of the artwork (e.g. 'SK-C-5', 'SK-A-3262')"
           ),
-      },
+      }).strict(),
     },
     withLogging("get_artwork_details", async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
@@ -465,14 +465,14 @@ function registerTools(
         "Resolve a Linked Art URI to full artwork details. " +
         "Use this when you have a URI from relatedObjects or other tool output " +
         "and want to learn what that object is. Returns the same enriched detail as get_artwork_details.",
-      inputSchema: {
+      inputSchema: z.object({
         uri: z
           .string()
           .url()
           .describe(
             "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
           ),
-      },
+      }).strict(),
     },
     withLogging("resolve_uri", async (args) => {
       const object = await api.resolveObject(args.uri);
@@ -491,7 +491,7 @@ function registerTools(
         "Get bibliography and scholarly references for an artwork. " +
         "By default returns a summary (total count + first 5 citations). " +
         "Set full=true to retrieve all citations (can be 100+ entries for major works — consider the context window).",
-      inputSchema: {
+      inputSchema: z.object({
         objectNumber: z
           .string()
           .describe(
@@ -503,7 +503,7 @@ function registerTools(
           .describe(
             "If true, returns ALL bibliography entries (may be 100+). Default: first 5 entries with total count."
           ),
-      },
+      }).strict(),
     },
     withLogging("get_artwork_bibliography", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
@@ -525,11 +525,11 @@ function registerTools(
         "Get IIIF image information for an artwork, including deep-zoom viewing. " +
         "In supported clients, shows an interactive inline IIIF viewer with zoom/pan/rotate. " +
         "Not all artworks have images available.",
-      inputSchema: {
+      inputSchema: z.object({
         objectNumber: z
           .string()
           .describe("The object number of the artwork (e.g. 'SK-C-5')"),
-      },
+      }).strict() as z.ZodTypeAny,
       _meta: {
         ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
       },
@@ -576,7 +576,7 @@ function registerTools(
       description:
         "Generate a chronological timeline of an artist's works in the Rijksmuseum collection. " +
         "Searches by creator name, resolves each result, and sorts by creation date.",
-      inputSchema: {
+      inputSchema: z.object({
         artist: z
           .string()
           .describe("Artist name, e.g. 'Rembrandt van Rijn', 'Johannes Vermeer'"),
@@ -587,7 +587,7 @@ function registerTools(
           .max(RESULTS_MAX)
           .default(RESULTS_DEFAULT)
           .describe(`Maximum works to include (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT})`),
-      },
+      }).strict(),
     },
     withLogging("get_artist_timeline", async (args) => {
       const result = await api.searchAndResolve({
@@ -615,12 +615,12 @@ function registerTools(
       title: "Open in Browser",
       description:
         "Open a URL in the user's default web browser. Useful for opening artwork pages, IIIF images, or the deep-zoom viewer.",
-      inputSchema: {
+      inputSchema: z.object({
         url: z
           .string()
           .url()
           .describe("The URL to open in the browser"),
-      },
+      }).strict(),
     },
     withLogging("open_in_browser", async (args) => {
       try {
@@ -657,14 +657,14 @@ function registerTools(
         "List curated collection sets from the Rijksmuseum (exhibitions, scholarly groupings, thematic collections). " +
         "Returns set identifiers that can be used with browse_set to explore their contents. " +
         "Optionally filter by name substring.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z
           .string()
           .optional()
           .describe(
             "Filter sets by name (case-insensitive substring match). E.g. 'painting', 'Rembrandt', 'Japanese'"
           ),
-      },
+      }).strict(),
     },
     withLogging("list_curated_sets", async (args) => {
       const allSets = await oai.listSets();
@@ -692,7 +692,7 @@ function registerTools(
         "image URLs, and IIIF service URLs. Each record includes an objectNumber that can be used with " +
         "get_artwork_details, get_artwork_image, or get_artwork_bibliography for full Linked Art data. " +
         "Supports pagination via resumptionToken.",
-      inputSchema: {
+      inputSchema: z.object({
         setSpec: z
           .string()
           .describe(
@@ -711,7 +711,7 @@ function registerTools(
           .describe(
             "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
           ),
-      },
+      }).strict(),
     },
     withLogging("browse_set", async (args) => {
       const result = args.resumptionToken
@@ -733,7 +733,7 @@ function registerTools(
         "Returns records changed within a date range. Use identifiersOnly=true for a lightweight " +
         "listing (headers only, no full metadata). Each record includes an objectNumber for use with " +
         "get_artwork_details, get_artwork_image, or get_artwork_bibliography.",
-      inputSchema: {
+      inputSchema: z.object({
         from: z
           .string()
           .describe(
@@ -768,7 +768,7 @@ function registerTools(
           .describe(
             "Pagination token from a previous get_recent_changes result. When provided, all other filters are ignored."
           ),
-      },
+      }).strict(),
     },
     withLogging("get_recent_changes", async (args) => {
       const opts = {
