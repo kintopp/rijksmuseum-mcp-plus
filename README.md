@@ -93,25 +93,25 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Tool | Description |
 |---|---|
-| `search_artwork` | Search by query, title, creator, depicted person (`aboutActor`), type, material, technique, date, or description. Filter by image availability. At least one filter required. Supports wildcard date ranges (`16*` for 1600s) and compact mode for fast counts. Returns up to 25 results by default (max 100 via `maxResults`). Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `inscription`, `provenance`, `creditLine`, `narrative`, `productionRole`, and dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`) — enable subject, iconographic, biographical, textual, and physical search across 831,000 artworks. All filters can be freely combined for cross-field intersection queries. |
-| `get_artwork_details` | [24 metadata categories](docs/metadata-categories.md) by object number (e.g. `SK-C-5`): titles, creator, date, curatorial narrative, materials, object type, production details, structured dimensions, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
-| `get_artwork_bibliography` | Scholarly references for an artwork. Summary (first 5) or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
-| `get_artwork_image` | IIIF image info + interactive inline deep-zoom viewer via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Returns viewer data (IIIF ID, dimensions, URLs) — no image content. For LLM image analysis, use the `analyse-artwork` prompt. |
-| `get_artist_timeline` | Chronological timeline of an artist's works in the collection. |
+| `search_artwork` | Search the Rijksmuseum collection. At least one search filter is required. Use specific filters for best results — there is no general full-text search across all metadata fields. Supports query, title, creator, depicted person (`aboutActor`), type, material, technique, date (wildcard ranges like `16*`), description, and image availability. Compact mode for fast counts. Pagination via `pageToken`. Returns up to 25 results by default (max 100 via `maxResults`). Vocabulary-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `inscription`, `provenance`, `creditLine`, `narrative`, `productionRole`, dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`), and geo proximity (`nearPlace`, `nearLat`/`nearLon`, `nearPlaceRadius`) — enable subject, iconographic, biographical, textual, physical, and geographic search across 831,000 artworks. Vocabulary filters can be freely combined with each other and with creator, type, material, technique, creationDate, title, and query. Vocabulary filters cannot be combined with description or imageAvailable. Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results. |
+| `get_artwork_details` | [24 metadata categories](docs/metadata-categories.md) by object number (e.g. `SK-C-5`): titles, creator, date, description, curatorial narrative, dimensions (text + structured), materials, object type, production details, provenance, credit line, inscriptions, iconographic subjects (Iconclass codes, depicted persons, depicted places), license, related objects, collection sets, persistent IDs, and more. Also reports the bibliography count — use `get_artwork_bibliography` for full citations. The `relatedObjects` field contains Linked Art URIs — use `resolve_uri` to get full details of related works. Vocabulary terms are resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. Useful on vocabulary search results to check dates, dimensions, or other fields not available in the search response. |
+| `get_artwork_bibliography` | Scholarly references for an artwork by its objectNumber (from `search_artwork`, `browse_set`, `get_recent_changes`, or `get_artwork_details`). Summary (first 5 + total count) by default, or full (100+ for major works — consider the context window). Resolves publication records with ISBNs and WorldCat links. |
+| `get_artwork_image` | The primary way to examine artwork details up close — interactive deep-zoom viewer (zoom, pan, rotate) via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). Not all artworks have images available. Does not support downloading or cropping; do not construct IIIF image URLs manually. For LLM image analysis, use the `analyse-artwork` prompt instead. |
+| `get_artist_timeline` | Chronological timeline of an artist's works in the collection. Searches by creator name, resolves each result, and sorts by creation date. Each work includes an objectNumber for use with `get_artwork_details` or `get_artwork_image`. Creator names are accent-sensitive (e.g. 'Eugène Brands' not 'Eugene Brands'). |
 | `open_in_browser` | Open any URL (artwork page, image, viewer) in the user's default browser. |
-| `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic selections). Optional name filter. Via OAI-PMH. |
-| `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, IIIF URLs, and iconographic subjects (Iconclass, depicted persons, places). Pagination via resumption token. |
-| `resolve_uri` | Resolve a Linked Art URI to full artwork details. Use when `get_artwork_details` returns `relatedObjects` with URIs — pass them directly to learn what the related object is. Returns the same enriched detail as `get_artwork_details`. |
-| `get_recent_changes` | Track additions and modifications by date range. Full EDM records (including subjects) or lightweight headers (`identifiersOnly`). Pagination via resumption token. |
+| `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic collections). Returns set identifiers that can be used with `browse_set` to explore their contents. Optional name filter. Via OAI-PMH. |
+| `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, IIIF URLs, and iconographic subjects (Iconclass, depicted persons, places). Each record includes an objectNumber for use with `get_artwork_details`, `get_artwork_image`, or `get_artwork_bibliography`. Pagination via resumption token. |
+| `resolve_uri` | Resolve a Linked Art URI to full artwork details. Use when you have a URI from `relatedObjects` or other tool output and want to learn what that object is. Returns the same enriched detail as `get_artwork_details`. |
+| `get_recent_changes` | Track additions and modifications by date range. Full EDM records (including subjects) or lightweight headers (`identifiersOnly`). Each record includes an objectNumber for use with `get_artwork_details`, `get_artwork_image`, or `get_artwork_bibliography`. Pagination via resumption token. |
 
 #### Prompts and Resources
 
 | Prompt / Resource | Description |
 |---|---|
-| `analyse-artwork` | Prompt: fetch high-resolution image and analyse visual content alongside key metadata (12 fields) |
-| `generate-artist-timeline` | Prompt: create a visual timeline of an artist's works (max 100) |
-| `top-100-artworks` | Prompt: explore the Rijksmuseum's Top 100 masterpieces (~133 works from curated set 260213) |
-| `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF viewer (MCP Apps) |
+| `analyse-artwork` | Prompt: fetch a high-resolution image of an artwork and analyse its visual content alongside 12 metadata fields (title, creator, date, technique, dimensions, materials, curatorial narrative, inscriptions, depicted persons, depicted places, iconographic subjects, production place). Returns the image directly so the model can ground its analysis in what it sees. |
+| `generate-artist-timeline` | Prompt: generate a chronological timeline of an artist's works in the collection. Default 25 works, max 100 — for prolific artists this is a small sample. |
+| `top-100-artworks` | Prompt: the Rijksmuseum's official Top 100 masterpieces (curated set 260213). Fetches the full list with titles, creators, dates, types, and object numbers for further exploration. |
+| `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF deep-zoom viewer for Rijksmuseum artworks (MCP Apps) |
 
 #### Architecture
 
@@ -124,7 +124,7 @@ src/
   api/
     RijksmuseumApiClient.ts   — Linked Art API client, vocabulary resolver, bibliography, IIIF image chain
     OaiPmhClient.ts           — OAI-PMH client (curated sets, EDM records, change tracking)
-    VocabularyDb.ts           — SQLite vocabulary database for subject and iconographic search
+    VocabularyDb.ts           — SQLite vocabulary database (vocab term, full-text, dimension, date, and geo proximity search)
   utils/
     ResponseCache.ts          — LRU+TTL response cache
     UsageStats.ts             — Tool call aggregation and periodic flush
@@ -132,7 +132,7 @@ src/
 apps/
   artwork-viewer/             — MCP Apps inline IIIF viewer (Vite + OpenSeadragon)
 data/
-  vocabulary.db               — Vocabulary database (built from OAI-PMH harvest, not in git)
+  vocabulary.db               — Vocabulary database (built from OAI-PMH + Linked Art harvest, not in git)
 ```
 
 #### Data Sources
@@ -144,7 +144,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 | Search API | `https://data.rijksmuseum.nl/search/collection` | Field-based search (title, creator, depicted person, type, material, technique, date, description, image availability), returns Linked Art URIs |
 | Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata, vocabulary terms, and bibliography as JSON-LD |
 | IIIF Image API | `https://iiif.micr.io/{id}/info.json` | High-resolution image tiles |
-| OAI-PMH | `https://data.rijksmuseum.nl/oai` | Curated sets, EDM metadata records, date-based change tracking. 192 sets, 836K+ records. |
+| OAI-PMH | `https://data.rijksmuseum.nl/oai` | Curated sets, EDM metadata records, date-based change tracking. 192 sets, 831K+ records. |
 
 **Image discovery chain (4 HTTP hops):** Object `.shows` > VisualItem `.digitally_shown_by` > DigitalObject `.access_point` > IIIF info.json
 
@@ -152,7 +152,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 **Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
 
-**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms to 831,000 artworks via 12.8 million mappings. Built from OAI-PMH EDM records and Linked Art resolution (both vocabulary terms and full artwork records), it powers 17 search filters: vocabulary-backed filters (`subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `productionRole`), full-text search on artwork texts (`inscription`, `provenance`, `creditLine`, `narrative`), and numeric dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`). Includes 20,828 geocoded places with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/).
+**Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms to 831,000 artworks via 12.8 million mappings. Built from OAI-PMH EDM records and Linked Art resolution (both vocabulary terms and full artwork records), it powers vocabulary-backed filters (`subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `productionRole`), cross-filters (`material`, `technique`, `type`, `creator`), full-text search on artwork texts (`inscription`, `provenance`, `creditLine`, `narrative`, `title`), date range filtering (`creationDate`), numeric dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`), and geo proximity search (`nearPlace`, `nearLat`/`nearLon`, `nearPlaceRadius`). Includes 20,828 geocoded places with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/). Place name queries support fuzzy matching with geo-disambiguation for ambiguous names.
 
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
@@ -162,6 +162,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 |---|---|---|
 | `PORT` | HTTP server port (presence triggers HTTP mode) | `3000` |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
+| `PUBLIC_URL` | Base URL for viewer links in HTTP mode (e.g. `https://example.up.railway.app`) | `http://localhost:$PORT` |
 | `VOCAB_DB_PATH` | Path to vocabulary SQLite database | `data/vocabulary.db` |
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
 | `USAGE_STATS_PATH` | Path to usage stats JSON file | `data/usage-stats.json` |

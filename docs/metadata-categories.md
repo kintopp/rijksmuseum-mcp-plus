@@ -4,7 +4,7 @@ The `get_artwork_details` tool returns **24 metadata categories** plus a bibliog
 
 All categories are returned together in a single response.
 
-Several of these categories have corresponding search parameters in `search_artwork`, allowing collection-wide discovery: titles (via `title`/`query`), curatorial narrative (via `narrative`), inscriptions (via `inscription`), provenance (via `provenance`), credit line (via `creditLine`), dimensions (via `minHeight`/`maxHeight`/`minWidth`/`maxWidth`), license (via `license`), collection sets (via `collectionSet`), and subjects (via `subject`, `iconclass`, `depictedPerson`, `depictedPlace`). Production details are searchable via `creator`, `productionPlace`, and `productionRole`.
+Several of these categories have corresponding search parameters in `search_artwork`, allowing collection-wide discovery: titles (via `title`/`query`), date (via `creationDate`), description (via `description`), curatorial narrative (via `narrative`), inscriptions (via `inscription`), provenance (via `provenance`), credit line (via `creditLine`), dimensions (via `minHeight`/`maxHeight`/`minWidth`/`maxWidth`), license (via `license`), collection sets (via `collectionSet`), and subjects (via `subject`, `iconclass`, `depictedPerson`, `depictedPlace`). Production details are searchable via `creator`, `productionPlace`, and `productionRole`.
 
 ---
 
@@ -12,7 +12,7 @@ Several of these categories have corresponding search parameters in `search_artw
 
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
-| 1 | **Title variants** | `titles` | All known titles with language (`en` or `nl` — the collection is strictly bilingual) and qualifier (`brief`, `full`, or `former`). The brief English title is the primary display title. |
+| 1 | **Title variants** | `titles` | All known titles with language (`en`, `nl`, or `other`) and qualifier (`brief`, `full`, or `other` — former titles and other variants are classified as `other`). The collection is strictly bilingual (EN + NL). The brief English title is the primary display title. |
 | 2 | **Object number** | `objectNumber` | The museum's inventory number (e.g. `SK-C-5` for The Night Watch). This is the primary identifier used across all tools. |
 | 3 | **Persistent identifier** | `persistentId` | Stable handle.net URI for long-term citation (e.g. `http://hdl.handle.net/10934/RM0001.COLLECT.5216`). |
 | 4 | **External identifiers** | `externalIds` | All identifiers attached to the object, mapped as `{ value: classificationUri }`. Includes the object number and any other cataloguing identifiers. |
