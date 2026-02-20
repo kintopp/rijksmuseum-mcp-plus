@@ -180,7 +180,7 @@ See the Rijksmuseum's [information and data policy](https://data.rijksmuseum.nl/
 
 ### Authors
 
-Conceived by [Arno Bosse](https://orcid.org/0000-0003-3681-1289) — [RISE (University of Basel)](https://rise.unibas.ch/) and created with Claude Code by [Anthropic](https://www.anthropic.com/).
+[Arno Bosse](https://orcid.org/0000-0003-3681-1289) — [RISE, University of Basel](https://rise.unibas.ch/) with Claude Code [Anthropic](https://www.anthropic.com/).
 
 ### License
 
