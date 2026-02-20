@@ -49,7 +49,7 @@ function createLogger(stats?: UsageStats) {
         const error = err instanceof Error ? err.message : String(err);
         console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
         stats?.record(toolName, ms, false);
-        throw err;
+        return { content: [{ type: "text" as const, text: `Error in ${toolName}: ${error}` }], isError: true } as R;
       }
     };
   };
