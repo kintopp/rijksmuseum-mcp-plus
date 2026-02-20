@@ -143,10 +143,13 @@ function registerTools(
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "At least one search filter is required. " +
-        "Use specific filters for best results — there is no general full-text search across all metadata fields." +
+        "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
+        "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
+        "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
         (vocabAvailable
           ? " Vocabulary-based filters (subject, iconclass, depictedPerson, depictedPlace, productionPlace, " +
-            "birthPlace, deathPlace, profession, collectionSet, license, and Tier 2 filters) " +
+            "birthPlace, deathPlace, profession, collectionSet, license, inscription, provenance, creditLine, " +
+            "narrative, productionRole, and dimension filters) " +
             "can be freely combined with each other and with creator, type, material, technique, creationDate, title, and query. " +
             "Vocabulary filters cannot be combined with description or imageAvailable. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
@@ -158,12 +161,12 @@ function registerTools(
           .string()
           .optional()
           .describe(
-            "General search term — searches by title. For more targeted results, use the specific field parameters instead (title, creator, description, etc.)"
+            "General search term — searches by title (equivalent to the title parameter). For more targeted results, use the specific field parameters instead (creator, description, subject, etc.)"
           ),
         title: z
           .string()
           .optional()
-          .describe("Search by artwork title"),
+          .describe("Search by artwork title. When combined with vocabulary filters, matches against all title variants (brief, full, former) — broader than the Search API, which indexes brief titles only."),
         creator: z
           .string()
           .optional()
@@ -232,14 +235,18 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "Search for artworks depicting a specific place by name (e.g. 'Amsterdam'). Requires vocabulary DB."
+                  "Search for artworks depicting a specific place by name (e.g. 'Amsterdam'). " +
+                  "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Oude Kerk Amsterdam'). " +
+                  "Requires vocabulary DB."
                 ),
               productionPlace: z
                 .string()
                 .min(1)
                 .optional()
                 .describe(
-                  "Search for artworks produced in a specific place (e.g. 'Delft'). Requires vocabulary DB."
+                  "Search for artworks produced in a specific place (e.g. 'Delft'). " +
+                  "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Paleis van Justitie Den Haag'). " +
+                  "Requires vocabulary DB."
                 ),
               birthPlace: z
                 .string()
@@ -348,6 +355,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Search for artworks related to places near a named location (e.g. 'Leiden'). " +
+                  "Supports multi-word place names with geo-disambiguation (e.g. 'Oude Kerk Amsterdam' resolves to the Oude Kerk in Amsterdam). " +
                   "Searches both depicted and production places within the specified radius. " +
                   "Requires vocabulary DB with geocoded places."
                 ),
@@ -461,6 +469,7 @@ function registerTools(
         "dimensions (text + structured), materials, object type, production details, provenance, " +
         "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
         "Also reports the bibliography count — use get_artwork_bibliography for full citations. " +
+        "The relatedObjects field contains Linked Art URIs — use resolve_uri to get full details of related works. " +
         "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",
       inputSchema: z.object({
         objectNumber: z
@@ -510,7 +519,8 @@ function registerTools(
     {
       title: "Get Artwork Bibliography",
       description:
-        "Get bibliography and scholarly references for an artwork. " +
+        "Get bibliography and scholarly references for an artwork by its objectNumber " +
+        "(from search_artwork, browse_set, get_recent_changes, or get_artwork_details). " +
         "By default returns a summary (total count + first 5 citations). " +
         "Set full=true to retrieve all citations (can be 100+ entries for major works — consider the context window).",
       inputSchema: z.object({
@@ -599,7 +609,9 @@ function registerTools(
       title: "Get Artist Timeline",
       description:
         "Generate a chronological timeline of an artist's works in the Rijksmuseum collection. " +
-        "Searches by creator name, resolves each result, and sorts by creation date.",
+        "Searches by creator name, resolves each result, and sorts by creation date. " +
+        "Each work includes an objectNumber for use with get_artwork_details or get_artwork_image. " +
+        "Creator names are accent-sensitive (e.g. 'Eugène Brands' not 'Eugene Brands').",
       inputSchema: z.object({
         artist: z
           .string()
