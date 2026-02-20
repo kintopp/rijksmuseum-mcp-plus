@@ -235,6 +235,7 @@ export interface ArtworkSummary {
   title: string;
   creator: string;
   date: string;
+  type?: string;
   url: string;
 }
 

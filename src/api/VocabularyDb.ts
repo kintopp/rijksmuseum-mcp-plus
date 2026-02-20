@@ -47,6 +47,7 @@ export interface VocabSearchResult {
     objectNumber: string;
     title: string;
     creator: string;
+    type?: string;
     url: string;
     nearestPlace?: string;
     distance_km?: number;
@@ -576,15 +577,35 @@ export class VocabularyDb {
       }
     }
 
+    // Enrich results with object type from mappings
+    let typeMap: Map<string, string> | undefined;
+    if (rows.length > 0) {
+      const objNums = rows.map((r) => r.object_number);
+      const objPlaceholders = objNums.map(() => "?").join(", ");
+      const typeRows = this.db.prepare(
+        `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+         FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
+         WHERE m.object_number IN (${objPlaceholders}) AND m.field = 'type'`
+      ).all(...objNums) as { object_number: string; label: string }[];
+      typeMap = new Map();
+      for (const tr of typeRows) {
+        if (tr.label && !typeMap.has(tr.object_number)) {
+          typeMap.set(tr.object_number, tr.label);
+        }
+      }
+    }
+
     return {
       totalResults,
       ...(geoResult && { referencePlace: geoResult.referencePlace }),
       results: rows.map((r) => {
         const d = distanceMap?.get(r.object_number);
+        const t = typeMap?.get(r.object_number);
         return {
           objectNumber: r.object_number,
           title: r.title || "",
           creator: r.creator_label || "",
+          ...(t && { type: t }),
           url: `https://www.rijksmuseum.nl/en/collection/${r.object_number}`,
           ...(d && { nearestPlace: d.place, distance_km: d.dist }),
         };

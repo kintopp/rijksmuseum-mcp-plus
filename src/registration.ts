@@ -31,12 +31,38 @@ function jsonResponse(data: unknown): ToolResponse {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
-/** Return both structured content (for apps/typed clients) and text content (for LLMs). */
-function structuredResponse(data: object, textContent?: string): StructuredToolResponse {
+/** Return both structured content (for apps/typed clients) and text content (for LLMs).
+ *  Set STRUCTURED_CONTENT=false to omit structuredContent (workaround for client bugs). */
+const EMIT_STRUCTURED = process.env.STRUCTURED_CONTENT !== "false";
+
+function structuredResponse(data: object, textContent?: string): ToolResponse | StructuredToolResponse {
+  const text = textContent ?? JSON.stringify(data, null, 2);
+  if (!EMIT_STRUCTURED) {
+    return { content: [{ type: "text", text }] };
+  }
   return {
-    content: [{ type: "text", text: textContent ?? JSON.stringify(data, null, 2) }],
+    content: [{ type: "text", text }],
     structuredContent: data as Record<string, unknown>,
   };
+}
+
+/** Format a search result as a compact one-liner for LLM content. */
+function formatSearchLine(r: { objectNumber: string; title: string; creator: string; date?: string; type?: string; nearestPlace?: string; distance_km?: number }, i: number): string {
+  let line = `${i + 1}. ${r.objectNumber}`;
+  if (r.type) line += ` | ${r.type}`;
+  if (r.date) line += ` | ${r.date}`;
+  line += ` | "${r.title}"`;
+  if (r.creator) line += ` — ${r.creator}`;
+  if (r.nearestPlace) line += ` [${r.nearestPlace}, ${r.distance_km?.toFixed(1)}km]`;
+  return line;
+}
+
+/** Format a timeline entry as a compact one-liner for LLM content. */
+function formatTimelineLine(t: { year: string; objectNumber: string; title: string; type?: string }, i: number): string {
+  let line = `${i + 1}. ${t.year}  ${t.objectNumber}`;
+  if (t.type) line += ` | ${t.type}`;
+  line += `  "${t.title}"`;
+  return line;
 }
 
 /** Create a logging wrapper that records timing to stderr and optional UsageStats. */
@@ -73,7 +99,7 @@ function paginatedResponse(
   totalLabel: string,
   toolName: string,
   extra?: Record<string, unknown>
-): StructuredToolResponse {
+): ToolResponse | StructuredToolResponse {
   const records = result.records.slice(0, maxResults);
 
   const data: Record<string, unknown> = {
@@ -134,6 +160,7 @@ const SearchResultOutput = {
     title: z.string(),
     creator: z.string(),
     date: z.string().optional(),
+    type: z.string().optional(),
     url: z.string(),
     nearestPlace: z.string().optional(),
     distance_km: z.number().optional(),
@@ -217,6 +244,7 @@ const TimelineOutput = {
     title: z.string(),
     creator: z.string(),
     year: z.string(),
+    type: z.string().optional(),
     url: z.string(),
   })),
   warnings: z.array(z.string()).optional(),
@@ -589,10 +617,11 @@ function registerTools(
           ];
         }
 
-        const summary = `${result.results.length} results` +
+        const header = `${result.results.length} results` +
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
           ` (vocabulary search)`;
-        return structuredResponse(result, summary);
+        const lines = result.results.map((r, i) => formatSearchLine(r, i));
+        return structuredResponse(result, [header, ...lines].join("\n"));
       }
 
       // Default: use Search API
@@ -612,10 +641,11 @@ function registerTools(
         return structuredResponse(withWarnings, "0 results");
       }
 
-      const summary = `${result.totalResults} results` +
+      const header = `${result.totalResults} results` +
         (args.creator ? ` for creator "${args.creator}"` : '') +
         (result.nextPageToken ? ` (page token: ${result.nextPageToken})` : '');
-      return structuredResponse(result, summary);
+      const lines = ("results" in result ? result.results : []).map((r, i) => formatSearchLine(r, i));
+      return structuredResponse(result, [header, ...lines].join("\n"));
     })
   );
 
@@ -818,10 +848,11 @@ function registerTools(
 
       const years = timeline.map(t => parseYear(t.year)).filter(y => y > 0);
       const rangeStr = years.length > 0 ? `, ${years[0]}–${years[years.length - 1]}` : '';
-      const summary = `${timeline.length} works by ${args.artist}` +
+      const header = `${timeline.length} works by ${args.artist}` +
         (result.totalResults > 0 ? ` (${result.totalResults} total in collection)` : '') +
         rangeStr;
-      return structuredResponse(response, summary);
+      const lines = timeline.map((t, i) => formatTimelineLine(t, i));
+      return structuredResponse(response, [header, ...lines].join("\n"));
     })
   );
 
