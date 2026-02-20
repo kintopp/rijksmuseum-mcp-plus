@@ -144,6 +144,9 @@ function registerTools(
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "At least one search filter is required. " +
         "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
+        "For concept or thematic searches, start with subject; " +
+        "use narrative for curatorial interpretation or description for cataloguer notes. " +
+        "These search different text corpora and can return complementary results. " +
         "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
         "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
         (vocabAvailable
@@ -199,7 +202,7 @@ function registerTools(
         description: z
           .string()
           .optional()
-          .describe("Search in artwork descriptions (e.g. subject matter, depicted scenes). Not supported in vocabulary-based searches."),
+          .describe("Search in artwork descriptions (~292K artworks). Broader coverage but less structured than subject. Not supported in vocabulary-based searches."),
         imageAvailable: z
           .boolean()
           .optional()
@@ -214,14 +217,15 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "Search by subject matter (Iconclass themes, depicted scenes). Uses word-boundary matching (e.g. 'cat' matches 'cat' but not 'Catharijnekerk'). For plural/variant forms, search separately or use iconclass for precise animal/theme codes. Requires vocabulary DB."
+                  "Best starting point for concept or thematic searches. " +
+                  "Searches by subject matter (Iconclass themes, depicted scenes). Uses word-boundary matching (e.g. 'cat' matches 'cat' but not 'Catharijnekerk'). For plural/variant forms, search separately or use iconclass for precise codes. Requires vocabulary DB."
                 ),
               iconclass: z
                 .string()
                 .min(1)
                 .optional()
                 .describe(
-                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). Requires vocabulary DB."
+                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use when you know the notation. Requires vocabulary DB."
                 ),
               depictedPerson: z
                 .string()
@@ -290,8 +294,8 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "Full-text search on inscription texts (e.g. 'Rembrandt f.' for signed works, Latin phrases). " +
-                  "Requires vocabulary DB v1.0+."
+                  "Full-text search on inscription texts (~500K artworks — signatures, mottoes, dates on the object surface, not conceptual content). " +
+                  "E.g. 'Rembrandt f.' for signed works, Latin phrases. Requires vocabulary DB v1.0+."
                 ),
               provenance: z
                 .string()
@@ -315,7 +319,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on curatorial narrative (museum wall text — interpretive, art-historical context). " +
-                  "Requires vocabulary DB v1.0+."
+                  "Smaller corpus (~14K artworks) but richest interpretive content. Requires vocabulary DB v1.0+."
                 ),
               productionRole: z
                 .string()
@@ -556,7 +560,8 @@ function registerTools(
       description:
         "Get IIIF image information for an artwork, including deep-zoom viewing. " +
         "In supported clients, shows an interactive inline IIIF viewer with zoom/pan/rotate. " +
-        "Not all artworks have images available.",
+        "Not all artworks have images available. " +
+        "This tool provides viewing metadata and an interactive viewer — it does not support downloading images or cropping specific regions. Do not construct IIIF image URLs manually.",
       inputSchema: z.object({
         objectNumber: z
           .string()
