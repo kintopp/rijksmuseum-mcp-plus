@@ -238,13 +238,21 @@ const ImageInfoOutput = {
   error: z.string().optional(),
 };
 
-const PaginatedOutput = {
-  totalInSet: z.number().int().optional(),
-  totalChanges: z.number().int().optional(),
+const PaginatedBase = {
   returnedCount: z.number().int(),
   records: z.array(z.record(z.unknown())),
   resumptionToken: z.string().optional(),
   hint: z.string().optional(),
+};
+
+const BrowseSetOutput = {
+  ...PaginatedBase,
+  totalInSet: z.number().int().optional(),
+};
+
+const RecentChangesOutput = {
+  ...PaginatedBase,
+  totalChanges: z.number().int().optional(),
   identifiersOnly: z.boolean().optional(),
 };
 
@@ -730,10 +738,10 @@ function registerTools(
       const imageInfo = await api.getImageInfo(object);
 
       if (!imageInfo) {
-        return structuredResponse({
+        return jsonResponse({
           objectNumber: args.objectNumber,
           error: "No image available for this artwork",
-        } as Record<string, unknown>);
+        });
       }
 
       const title = RijksmuseumApiClient.parseTitle(object);
@@ -808,9 +816,11 @@ function registerTools(
         ];
       }
 
+      const years = timeline.map(t => parseInt(t.year, 10)).filter(y => !isNaN(y));
+      const rangeStr = years.length > 0 ? `, ${years[0]}–${years[years.length - 1]}` : '';
       const summary = `${timeline.length} works by ${args.artist}` +
         (result.totalResults > 0 ? ` (${result.totalResults} total in collection)` : '') +
-        (timeline.length > 0 ? `, ${timeline[0].year}–${timeline[timeline.length - 1].year}` : '');
+        rangeStr;
       return structuredResponse(response, summary);
     })
   );
@@ -920,7 +930,7 @@ function registerTools(
             "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
           ),
       }).strict(),
-      outputSchema: PaginatedOutput,
+      outputSchema: BrowseSetOutput,
     },
     withLogging("browse_set", async (args) => {
       const result = args.resumptionToken
@@ -978,7 +988,7 @@ function registerTools(
             "Pagination token from a previous get_recent_changes result. When provided, all other filters are ignored."
           ),
       }).strict(),
-      outputSchema: PaginatedOutput,
+      outputSchema: RecentChangesOutput,
     },
     withLogging("get_recent_changes", async (args) => {
       const opts = {
