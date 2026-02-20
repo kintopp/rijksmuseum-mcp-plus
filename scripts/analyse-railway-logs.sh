@@ -39,10 +39,10 @@ for cmd in railway jq; do
 done
 
 echo "Linking service..." >&2
-railway link-service rijksmuseum-mcp-plus 2>/dev/null || true
+railway link -s rijksmuseum-mcp-plus 2>/dev/null || true
 
 echo "Fetching deployment list (limit $DEPLOY_LIMIT)..." >&2
-DEPLOYMENTS=$(railway deployments --json 2>/dev/null | jq -r ".[0:$DEPLOY_LIMIT][] | .id")
+DEPLOYMENTS=$(railway deployment list --json --limit "$DEPLOY_LIMIT" 2>/dev/null | jq -r '.[] | .id')
 DEPLOY_COUNT=$(echo "$DEPLOYMENTS" | wc -l | tr -d ' ')
 echo "Found $DEPLOY_COUNT deployments." >&2
 
@@ -53,7 +53,7 @@ trap "rm -f $ALL_LOGS $TOOL_LOGS" EXIT
 
 for id in $DEPLOYMENTS; do
   echo "  Fetching logs for $id..." >&2
-  railway logs --deployment "$id" --json -n "$LINES" 2>/dev/null >> "$ALL_LOGS" || true
+  railway logs "$id" --json -n "$LINES" 2>/dev/null >> "$ALL_LOGS" || true
 done
 
 TOTAL_LINES=$(wc -l < "$ALL_LOGS" | tr -d ' ')
