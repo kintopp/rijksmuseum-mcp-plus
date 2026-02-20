@@ -586,7 +586,7 @@ function registerTools(
           .optional()
           .describe("Pagination token from a previous search result. Only applies to Search API queries, not vocabulary-based searches."),
       }).strict(),
-      outputSchema: SearchResultOutput,
+      ...(EMIT_STRUCTURED && { outputSchema: SearchResultOutput }),
     },
     withLogging("search_artwork", async (args) => {
       const argsRecord = args as Record<string, unknown>;
@@ -678,7 +678,7 @@ function registerTools(
             "The object number of the artwork (e.g. 'SK-C-5', 'SK-A-3262')"
           ),
       }).strict(),
-      outputSchema: ArtworkDetailOutput,
+      ...(EMIT_STRUCTURED && { outputSchema: ArtworkDetailOutput }),
     },
     withLogging("get_artwork_details", async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
@@ -737,7 +737,7 @@ function registerTools(
             "If true, returns ALL bibliography entries (may be 100+). Default: first 5 entries with total count."
           ),
       }).strict(),
-      outputSchema: BibliographyOutput,
+      ...(EMIT_STRUCTURED && { outputSchema: BibliographyOutput }),
     },
     withLogging("get_artwork_bibliography", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
@@ -766,7 +766,7 @@ function registerTools(
           .string()
           .describe("The object number of the artwork (e.g. 'SK-C-5')"),
       }).strict() as z.ZodTypeAny,
-      outputSchema: ImageInfoOutput,
+      ...(EMIT_STRUCTURED && { outputSchema: ImageInfoOutput }),
       _meta: {
         ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
       },
@@ -829,7 +829,7 @@ function registerTools(
           .default(RESULTS_DEFAULT)
           .describe(`Maximum works to include (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT})`),
       }).strict(),
-      outputSchema: TimelineOutput,
+      ...(EMIT_STRUCTURED && { outputSchema: TimelineOutput }),
     },
     withLogging("get_artist_timeline", async (args) => {
       const result = await api.searchAndResolve({
@@ -969,7 +969,7 @@ function registerTools(
             "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
           ),
       }).strict(),
-      outputSchema: BrowseSetOutput,
+      ...(EMIT_STRUCTURED && { outputSchema: BrowseSetOutput }),
     },
     withLogging("browse_set", async (args) => {
       const result = args.resumptionToken
@@ -1027,7 +1027,7 @@ function registerTools(
             "Pagination token from a previous get_recent_changes result. When provided, all other filters are ignored."
           ),
       }).strict(),
-      outputSchema: RecentChangesOutput,
+      ...(EMIT_STRUCTURED && { outputSchema: RecentChangesOutput }),
     },
     withLogging("get_recent_changes", async (args) => {
       const opts = {
