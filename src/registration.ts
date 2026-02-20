@@ -24,18 +24,18 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 100;
 
-function jsonResponse(data: unknown): { content: [{ type: "text"; text: string }] } {
+type ToolResponse = { content: [{ type: "text"; text: string }] };
+type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
+
+function jsonResponse(data: unknown): ToolResponse {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
 /** Return both structured content (for apps/typed clients) and text content (for LLMs). */
-function structuredResponse(
-  data: Record<string, unknown>,
-  textContent?: string
-): { content: [{ type: "text"; text: string }]; structuredContent: Record<string, unknown> } {
+function structuredResponse(data: object, textContent?: string): StructuredToolResponse {
   return {
     content: [{ type: "text", text: textContent ?? JSON.stringify(data, null, 2) }],
-    structuredContent: data,
+    structuredContent: data as Record<string, unknown>,
   };
 }
 
@@ -73,7 +73,7 @@ function paginatedResponse(
   totalLabel: string,
   toolName: string,
   extra?: Record<string, unknown>
-): { content: [{ type: "text"; text: string }]; structuredContent: Record<string, unknown> } {
+): StructuredToolResponse {
   const records = result.records.slice(0, maxResults);
 
   const data: Record<string, unknown> = {
@@ -592,7 +592,7 @@ function registerTools(
         const summary = `${result.results.length} results` +
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
           ` (vocabulary search)`;
-        return structuredResponse(result as unknown as Record<string, unknown>, summary);
+        return structuredResponse(result, summary);
       }
 
       // Default: use Search API
@@ -609,13 +609,13 @@ function registerTools(
             "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling.",
           ],
         };
-        return structuredResponse(withWarnings as Record<string, unknown>, "0 results");
+        return structuredResponse(withWarnings, "0 results");
       }
 
       const summary = `${result.totalResults} results` +
         (args.creator ? ` for creator "${args.creator}"` : '') +
         (result.nextPageToken ? ` (page token: ${result.nextPageToken})` : '');
-      return structuredResponse(result as Record<string, unknown>, summary);
+      return structuredResponse(result, summary);
     })
   );
 
@@ -645,7 +645,7 @@ function registerTools(
     withLogging("get_artwork_details", async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
       const detail = await api.toDetailEnriched(object, uri);
-      return structuredResponse(detail as unknown as Record<string, unknown>);
+      return structuredResponse(detail);
     })
   );
 
@@ -706,7 +706,7 @@ function registerTools(
       const result = await api.getBibliography(object, {
         limit: args.full ? 0 : 5,
       });
-      return structuredResponse(result as unknown as Record<string, unknown>);
+      return structuredResponse(result);
     })
   );
 
@@ -764,7 +764,7 @@ function registerTools(
         collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
       };
 
-      return structuredResponse(viewerData as Record<string, unknown>);
+      return structuredResponse(viewerData);
     })
   );
 
@@ -799,24 +799,24 @@ function registerTools(
         maxResults: args.maxWorks,
       });
 
+      const parseYear = (s: string): number => parseInt(s, 10) || 0;
       const timeline = result.results
         .map(({ date, ...rest }) => ({ year: date, ...rest }))
-        .sort((a, b) => (parseInt(a.year, 10) || 0) - (parseInt(b.year, 10) || 0));
+        .sort((a, b) => parseYear(a.year) - parseYear(b.year));
 
-      const response: Record<string, unknown> = {
+      const warnings = result.totalResults === 0
+        ? ["No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
+           "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling."]
+        : undefined;
+
+      const response = {
         artist: args.artist,
         totalWorksInCollection: result.totalResults,
         timeline,
+        ...(warnings ? { warnings } : {}),
       };
 
-      if (result.totalResults === 0) {
-        response.warnings = [
-          "No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
-          "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling.",
-        ];
-      }
-
-      const years = timeline.map(t => parseInt(t.year, 10)).filter(y => !isNaN(y));
+      const years = timeline.map(t => parseYear(t.year)).filter(y => y > 0);
       const rangeStr = years.length > 0 ? `, ${years[0]}–${years[years.length - 1]}` : '';
       const summary = `${timeline.length} works by ${args.artist}` +
         (result.totalResults > 0 ? ` (${result.totalResults} total in collection)` : '') +
