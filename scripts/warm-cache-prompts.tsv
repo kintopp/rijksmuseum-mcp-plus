@@ -2,128 +2,136 @@
 # Format: tool_name<TAB>json_args
 # Lines starting with # are comments; blank lines are ignored.
 #
+# Derived from the Example Queries and 26 Research Scenarios in README.md.
 # Notes:
 # - compact: true is omitted from vocabulary-routed calls (it has no effect there)
-# - Calls are ordered to maximise cache benefit: vocabulary searches first
-#   (warm SQLite page cache), then details/images (warm HTTP response cache)
+# - Calls are ordered: vocabulary searches first (warm SQLite page cache),
+#   then HTTP-bound tools (warm response cache)
+# - Where an Example Query duplicates a Scenario call, it appears once under Example Queries
 
-# --- search_artwork: vocabulary filters (Tier 1) ---
-# Example queries
+# ===================================================================
+# Example Queries
+# ===================================================================
 search_artwork	{"creator": "Gesina ter Borch", "type": "drawing"}
 search_artwork	{"creator": "Pieter Jansz. Saenredam", "type": "painting"}
-search_artwork	{"creator": "Katsushika Hokusai", "technique": "woodcut"}
+search_artwork	{"subject": "Raid on the Medway"}
 search_artwork	{"depictedPerson": "Amalia van Solms", "type": "painting"}
-search_artwork	{"subject": "sense of smell"}
+search_artwork	{"subject": "winter landscape", "creationDate": "17*"}
 search_artwork	{"productionPlace": "Haarlem", "technique": "mezzotint"}
 search_artwork	{"inscription": "fecit"}
-search_artwork	{"creditLine": "Vereniging Rembrandt"}
 search_artwork	{"provenance": "Napoleon"}
 search_artwork	{"productionRole": "after painting by"}
 search_artwork	{"creditLine": "bequest"}
+search_artwork	{"nearPlace": "Oude Kerk Amsterdam", "nearPlaceRadius": 0.1}
+list_curated_sets	{}
 
-# Research scenario 1: Rembrandt across media
+# ===================================================================
+# Research Scenarios 1–26
+# ===================================================================
+
+# 1. Mapping an Artist's Output Across Media
 search_artwork	{"creator": "Rembrandt van Rijn", "type": "painting", "compact": true}
 search_artwork	{"creator": "Rembrandt van Rijn", "type": "print", "compact": true}
 search_artwork	{"creator": "Rembrandt van Rijn", "type": "drawing", "compact": true}
 
-# Research scenario 2: non-European holdings
-search_artwork	{"productionPlace": "Japan", "type": "print"}
+# 2. Material Culture Beyond the Canon
+search_artwork	{"productionPlace": "Japan"}
 search_artwork	{"productionPlace": "China"}
 search_artwork	{"productionPlace": "Java"}
+search_artwork	{"productionPlace": "India"}
 search_artwork	{"depictedPlace": "Japan"}
 
-# Research scenario 3: technique adoption (Search API — compact works here)
-search_artwork	{"type": "print", "technique": "engraving", "creationDate": "16*", "compact": true}
+# 3. Tracking the Adoption of Artistic Techniques
+search_artwork	{"type": "print", "technique": "engraving", "creationDate": "15*", "compact": true}
 search_artwork	{"type": "print", "technique": "etching", "creationDate": "16*", "compact": true}
 search_artwork	{"type": "print", "technique": "etching", "creationDate": "17*", "compact": true}
 search_artwork	{"type": "print", "technique": "mezzotint", "creationDate": "17*", "compact": true}
 
-# Research scenario 4: stadholder portraits
-search_artwork	{"depictedPerson": "Maurits", "type": "print"}
+# 4. Mapping the Visual Rhetoric of the Stadholders
+search_artwork	{"depictedPerson": "Maurits"}
 search_artwork	{"depictedPerson": "Frederik Hendrik"}
+search_artwork	{"depictedPerson": "Willem III"}
 
-# Research scenario 5: printmaking cities (revised — no creationDate)
+# 5. Production Geography and the Network of Printmaking Cities
 search_artwork	{"productionPlace": "Haarlem", "type": "print"}
 search_artwork	{"productionPlace": "Amsterdam", "type": "print"}
+search_artwork	{"productionPlace": "Leiden", "type": "print"}
 search_artwork	{"productionPlace": "Antwerp", "type": "print"}
 search_artwork	{"profession": "printmaker", "birthPlace": "Haarlem"}
 
-# Research scenario 6: vanitas across media (revised — no creationDate)
+# 6. Iconographic Traditions Across Media
 search_artwork	{"subject": "vanitas", "type": "painting"}
 search_artwork	{"subject": "vanitas", "type": "print"}
 
-# Research scenario 7: colonial visual culture
-search_artwork	{"depictedPlace": "Batavia"}
-search_artwork	{"depictedPlace": "Java"}
-search_artwork	{"productionPlace": "Batavia"}
-
-# Research scenario 9: Saenredam inscriptions
+# 7. Reading Inscriptions as Primary Sources (Saenredam painting search in Example Queries)
 search_artwork	{"inscription": "Saenredam"}
 
-# Research scenario 10: panel dimensions (revised — no creationDate)
+# 8. Dimensions as Evidence for Workshop Practice
 search_artwork	{"type": "painting", "material": "panel", "minHeight": 40, "maxHeight": 50, "minWidth": 30, "maxWidth": 40}
 
-# Research scenario 12: Rembrandt acquisition history
+# 9. Credit Lines and Acquisition Context
 search_artwork	{"creditLine": "purchase", "creator": "Rembrandt"}
+search_artwork	{"creditLine": "bequest", "creator": "Rembrandt"}
+search_artwork	{"provenance": "Rembrandt"}
 
-# Research scenario 18: Leiden vs Haarlem painters
+# 10. Measuring Scholarly Attention
+search_artwork	{"creator": "Johannes Vermeer", "type": "painting"}
+
+# 11. Building a Literature Review
+get_artwork_bibliography	{"objectNumber": "SK-A-4", "full": false}
+
+# 12. Iconographic Depth and Scholarly Attention
+search_artwork	{"iconclass": "73D82"}
+search_artwork	{"iconclass": "73A52"}
+search_artwork	{"iconclass": "73D24"}
+
+# 13. Technical Art History at the Brushstroke Level
+get_artwork_details	{"objectNumber": "SK-C-5"}
+get_artwork_image	{"objectNumber": "SK-C-5"}
+
+# 14. Comparative Detail Analysis Across Works
 search_artwork	{"birthPlace": "Leiden", "profession": "painter", "type": "painting"}
 search_artwork	{"birthPlace": "Haarlem", "profession": "painter", "type": "painting"}
 
-# Research scenario 24: Japanese prints (productionPlace:"Japan"+type:"print" already above)
-search_artwork	{"collectionSet": "Japanese"}
+# 15. Reproductive Prints and Their Painted Sources
+search_artwork	{"productionRole": "after painting by", "creator": "Rembrandt"}
 
-# Other vocabulary filters
-search_artwork	{"subject": "winter landscape", "type": "painting"}
-search_artwork	{"iconclass": "34B11"}
-search_artwork	{"depictedPerson": "Willem van Oranje"}
-search_artwork	{"deathPlace": "Amsterdam"}
-search_artwork	{"collectionSet": "Rembrandt"}
-# Requires v1.0+ DB (rights_uri column) — will error on v0.9
-search_artwork	{"license": "publicdomain", "type": "painting"}
-search_artwork	{"minHeight": 200, "minWidth": 200, "type": "painting"}
-search_artwork	{"maxHeight": 10, "maxWidth": 10}
-search_artwork	{"inscription": "VOC"}
-search_artwork	{"productionRole": "printmaker"}
-search_artwork	{"productionRole": "publisher"}
-
-# Geo query
-search_artwork	{"nearPlace": "Leiden", "nearPlaceRadius": 10}
-
-# Search API filters
-search_artwork	{"creator": "Johannes Vermeer", "compact": true}
-search_artwork	{"material": "ivory", "compact": true}
-search_artwork	{"creationDate": "164*", "type": "painting", "compact": true}
-search_artwork	{"description": "winter landscape", "creationDate": "17*", "compact": true}
-
-# --- get_artwork_details: iconic works + batch-then-filter pattern ---
-get_artwork_details	{"objectNumber": "SK-C-5"}
-get_artwork_details	{"objectNumber": "SK-A-1505"}
-get_artwork_details	{"objectNumber": "SK-A-2344"}
-get_artwork_details	{"objectNumber": "SK-A-3262"}
-get_artwork_details	{"objectNumber": "SK-A-4691"}
-get_artwork_details	{"objectNumber": "SK-A-1718"}
-
-# --- get_artwork_image: IIIF chain ---
-get_artwork_image	{"objectNumber": "SK-C-5"}
-get_artwork_image	{"objectNumber": "SK-A-2344"}
-
-# --- get_artist_timeline ---
+# 16. Tracing Career Evolution Through Subject and Place
 get_artist_timeline	{"artist": "Jacob van Ruisdael", "maxWorks": 10}
+
+# 17. Medium Shifts Within a Career
 get_artist_timeline	{"artist": "George Hendrik Breitner", "maxWorks": 10}
+
+# 18. Comparing Parallel Careers
 get_artist_timeline	{"artist": "Jan Steen", "maxWorks": 10}
+get_artist_timeline	{"artist": "Gabriël Metsu", "maxWorks": 10}
 
-# --- get_artwork_bibliography ---
-get_artwork_bibliography	{"objectNumber": "SK-A-4050"}
-
-# --- list_curated_sets ---
-list_curated_sets	{}
+# 19. Reconstructing Past Exhibitions
 list_curated_sets	{"query": "Rembrandt"}
-list_curated_sets	{"query": "Japanese"}
-list_curated_sets	{"query": "maritime"}
-
-# --- browse_set ---
 browse_set	{"setSpec": "260213", "maxResults": 10}
 
-# --- get_recent_changes ---
+# 20. Finding Thematic Connections Curators Have Already Made
+list_curated_sets	{"query": "maritime"}
+list_curated_sets	{"query": "VOC"}
+
+# 21. Assessing Collection Depth for Grant Applications (Japan print search covered by Scenario 2/5)
+list_curated_sets	{"query": "Japanese"}
+
+# 22. Tracking New Acquisitions in a Research Area
 get_recent_changes	{"from": "2026-02-01", "maxResults": 5}
+
+# 23. Monitoring Catalogue Activity in a Research Area
+list_curated_sets	{"query": "Asian"}
+
+# 24. Multilingual Access to a Dutch Collection
+search_artwork	{"depictedPlace": "Deshima"}
+
+# 25. Cross-Referencing Art Historical Knowledge
+search_artwork	{"creator": "Gerard van Honthorst"}
+search_artwork	{"creator": "Dirck van Baburen"}
+search_artwork	{"creator": "Hendrick ter Brugghen"}
+
+# 26. Geographic Research Without Knowing the Map
+search_artwork	{"nearPlace": "Haarlem", "nearPlaceRadius": 15, "creationDate": "16*"}
+search_artwork	{"narrative": "dune"}
+search_artwork	{"narrative": "bleaching"}
