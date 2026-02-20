@@ -558,10 +558,11 @@ function registerTools(
     {
       title: "Get Artwork Image",
       description:
-        "Get IIIF image information for an artwork, including deep-zoom viewing. " +
-        "In supported clients, shows an interactive inline IIIF viewer with zoom/pan/rotate. " +
+        "View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate). " +
+        "This is the primary way to examine artwork details up close — " +
+        "prefer this over linking users to external pages for image viewing. " +
         "Not all artworks have images available. " +
-        "This tool provides viewing metadata and an interactive viewer — it does not support downloading images or cropping specific regions. Do not construct IIIF image URLs manually.",
+        "Does not support downloading images or cropping specific regions. Do not construct IIIF image URLs manually.",
       inputSchema: z.object({
         objectNumber: z
           .string()
