@@ -629,6 +629,14 @@ function registerTools(
         ? await api.searchCompact(args)
         : await api.searchAndResolve(args);
 
+      // Enrich resolved results with object type from vocab DB (free batch lookup)
+      if (!args.compact && "results" in result && vocabDb) {
+        const typeMap = vocabDb.lookupTypes(result.results.map(r => r.objectNumber));
+        for (const r of result.results) {
+          if (!r.type) r.type = typeMap.get(r.objectNumber);
+        }
+      }
+
       // Hint when creator search returns 0 — the API is accent-sensitive
       if (result.totalResults === 0 && args.creator) {
         const withWarnings = {
