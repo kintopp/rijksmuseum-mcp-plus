@@ -16,7 +16,6 @@ Output:
 import argparse
 import json
 import os
-import glob
 import sqlite3
 import subprocess
 import time

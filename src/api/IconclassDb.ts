@@ -37,6 +37,14 @@ function escapeFts5(value: string): string | null {
   return `"${cleaned}"`;
 }
 
+/** Build a deduplicated language fallback list: requested → en → nl. */
+function langFallbacks(lang: string): string[] {
+  const langs = [lang];
+  if (lang !== "en") langs.push("en");
+  if (lang !== "nl") langs.push("nl");
+  return langs;
+}
+
 // ─── IconclassDb ─────────────────────────────────────────────────────
 
 export class IconclassDb {
@@ -131,7 +139,7 @@ export class IconclassDb {
     const textHits = this.stmtTextFts.all(ftsPhrase) as { notation: string; rijks_count: number }[];
     const kwHits = this.stmtKwFts.all(ftsPhrase) as { notation: string; rijks_count: number }[];
 
-    // Deduplicate and collect counts in one pass
+    // Deduplicate (rijks_count is identical for a notation from either source)
     const countMap = new Map<string, number>();
     for (const r of textHits) countMap.set(r.notation, r.rijks_count);
     for (const r of kwHits) {
@@ -207,38 +215,26 @@ export class IconclassDb {
     };
   }
 
-  /** Get text label for a notation in preferred language (requested → en → nl → any). */
+  /** Get text label for a notation in preferred language (requested -> en -> nl -> any). */
   private getText(notation: string, lang: string): string | null {
     if (!this.db) return null;
 
-    // Try requested language
-    const row = this.stmtGetText.get(notation, lang) as { text: string } | undefined;
-    if (row) return row.text;
-
-    // Fallback: en → nl → any
-    for (const fallback of ["en", "nl"]) {
-      if (fallback === lang) continue;
-      const fb = this.stmtGetText.get(notation, fallback) as { text: string } | undefined;
-      if (fb) return fb.text;
+    for (const l of langFallbacks(lang)) {
+      const row = this.stmtGetText.get(notation, l) as { text: string } | undefined;
+      if (row) return row.text;
     }
 
-    // Any language
+    // Final fallback: any language
     const any = this.stmtGetTextAny.get(notation) as { text: string } | undefined;
     return any?.text ?? null;
   }
 
-  /** Get keywords for a notation in preferred language. */
+  /** Get keywords for a notation in preferred language (requested -> en -> nl). */
   private getKeywords(notation: string, lang: string): string[] {
     if (!this.db) return [];
 
-    // Try requested language
-    let rows = this.stmtGetKeywords.all(notation, lang) as { keyword: string }[];
-    if (rows.length > 0) return rows.map((r) => r.keyword);
-
-    // Fallback: en → nl
-    for (const fallback of ["en", "nl"]) {
-      if (fallback === lang) continue;
-      rows = this.stmtGetKeywords.all(notation, fallback) as { keyword: string }[];
+    for (const l of langFallbacks(lang)) {
+      const rows = this.stmtGetKeywords.all(notation, l) as { keyword: string }[];
       if (rows.length > 0) return rows.map((r) => r.keyword);
     }
 

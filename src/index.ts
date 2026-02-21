@@ -60,32 +60,60 @@ function getHttpPort(): number {
   return parseInt(process.env.PORT ?? "3000", 10);
 }
 
-// ─── Vocabulary DB download (runs once per volume lifetime) ─────────
+// ─── Database download helpers (run once per volume lifetime) ────────
 
-function resolveDbPath(): string {
-  return process.env.VOCAB_DB_PATH || path.join(process.cwd(), "data", "vocabulary.db");
+interface DbSpec {
+  name: string;
+  pathEnvVar: string;
+  urlEnvVar: string;
+  defaultFile: string;
+  /** SQL query that must succeed for the DB to be considered valid. */
+  validationQuery: string;
 }
 
-async function ensureVocabularyDb(): Promise<void> {
-  const dbPath = resolveDbPath();
+const VOCAB_DB_SPEC: DbSpec = {
+  name: "Vocabulary",
+  pathEnvVar: "VOCAB_DB_PATH",
+  urlEnvVar: "VOCAB_DB_URL",
+  defaultFile: "vocabulary.db",
+  validationQuery: "SELECT 1 FROM vocab_term_counts LIMIT 1",
+};
+
+const ICONCLASS_DB_SPEC: DbSpec = {
+  name: "Iconclass",
+  pathEnvVar: "ICONCLASS_DB_PATH",
+  urlEnvVar: "ICONCLASS_DB_URL",
+  defaultFile: "iconclass.db",
+  validationQuery: "SELECT 1 FROM notations LIMIT 1",
+};
+
+function resolveDbPathForSpec(spec: DbSpec): string {
+  return process.env[spec.pathEnvVar] || path.join(process.cwd(), "data", spec.defaultFile);
+}
+
+/**
+ * Ensure a SQLite database exists and passes validation.
+ * Downloads from the URL env var if missing or invalid.
+ */
+async function ensureDb(spec: DbSpec): Promise<void> {
+  const dbPath = resolveDbPathForSpec(spec);
+
   if (fs.existsSync(dbPath)) {
-    // Check if DB has required vocab_term_counts table; if not, re-download
     try {
       const { default: Database } = await import("better-sqlite3");
       const db = new Database(dbPath, { readonly: true });
-      db.prepare("SELECT 1 FROM vocab_term_counts LIMIT 1").get();
+      db.prepare(spec.validationQuery).get();
       db.close();
-      return; // DB is up to date
+      return;
     } catch {
-      console.error("Vocabulary DB outdated (missing vocab_term_counts) — will re-download");
-      // Don't delete yet — keep the old DB as fallback until download succeeds
+      console.error(`${spec.name} DB invalid or outdated — will re-download`);
     }
   }
 
-  const url = process.env.VOCAB_DB_URL;
+  const url = process.env[spec.urlEnvVar];
   if (!url) return;
 
-  console.error("Downloading vocabulary DB...");
+  console.error(`Downloading ${spec.name} DB...`);
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -106,83 +134,28 @@ async function ensureVocabularyDb(): Promise<void> {
     }
 
     fs.renameSync(tmpPath, dbPath);
-    console.error(`Vocabulary DB ready: ${dbPath}`);
+    console.error(`${spec.name} DB ready: ${dbPath}`);
   } catch (err) {
-    console.error(`Failed to download vocabulary DB: ${err instanceof Error ? err.message : err}`);
+    console.error(`Failed to download ${spec.name} DB: ${err instanceof Error ? err.message : err}`);
     if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
   } finally {
     clearTimeout(downloadTimer);
   }
 }
 
-// ─── Shared vocabulary database (one read-only instance) ────────────
+// ─── Shared database instances (one read-only instance each) ─────────
 
 let vocabDb: VocabularyDb | null = null;
 
 async function initVocabularyDb(): Promise<void> {
-  await ensureVocabularyDb();
+  await ensureDb(VOCAB_DB_SPEC);
   vocabDb = new VocabularyDb();
 }
-
-// ─── Iconclass DB download (runs once per volume lifetime) ──────────
-
-function resolveIconclassDbPath(): string {
-  return process.env.ICONCLASS_DB_PATH || path.join(process.cwd(), "data", "iconclass.db");
-}
-
-async function ensureIconclassDb(): Promise<void> {
-  const dbPath = resolveIconclassDbPath();
-  if (fs.existsSync(dbPath)) {
-    try {
-      const { default: Database } = await import("better-sqlite3");
-      const db = new Database(dbPath, { readonly: true });
-      db.prepare("SELECT 1 FROM notations LIMIT 1").get();
-      db.close();
-      return;
-    } catch {
-      console.error("Iconclass DB invalid — will re-download");
-    }
-  }
-
-  const url = process.env.ICONCLASS_DB_URL;
-  if (!url) return;
-
-  console.error("Downloading Iconclass DB...");
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-  const tmpPath = dbPath + ".tmp";
-  const controller = new AbortController();
-  const downloadTimer = setTimeout(() => controller.abort(), 300_000);
-  try {
-    const res = await fetch(url, { redirect: "follow", signal: controller.signal });
-    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-
-    const dest = fs.createWriteStream(tmpPath);
-    const isGzip = url.endsWith(".gz") || res.headers.get("content-type")?.includes("gzip");
-
-    if (isGzip) {
-      await pipeline(res.body, createGunzip(), dest);
-    } else {
-      await pipeline(res.body, dest);
-    }
-
-    fs.renameSync(tmpPath, dbPath);
-    console.error(`Iconclass DB ready: ${dbPath}`);
-  } catch (err) {
-    console.error(`Failed to download Iconclass DB: ${err instanceof Error ? err.message : err}`);
-    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-  } finally {
-    clearTimeout(downloadTimer);
-  }
-}
-
-// ─── Shared Iconclass database (one read-only instance) ─────────────
 
 let iconclassDb: IconclassDb | null = null;
 
 async function initIconclassDb(): Promise<void> {
-  await ensureIconclassDb();
+  await ensureDb(ICONCLASS_DB_SPEC);
   iconclassDb = new IconclassDb();
 }
 

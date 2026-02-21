@@ -32,6 +32,10 @@ function jsonResponse(data: unknown): ToolResponse {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
+function errorResponse(message: string): ToolResponse & { isError: true } {
+  return { content: [{ type: "text", text: message }], isError: true };
+}
+
 /** Return both structured content (for apps/typed clients) and text content (for LLMs).
  *  Set STRUCTURED_CONTENT=false to omit structuredContent (workaround for client bugs). */
 const EMIT_STRUCTURED = process.env.STRUCTURED_CONTENT !== "false";
@@ -1115,24 +1119,16 @@ function registerTools(
         ...(EMIT_STRUCTURED && { outputSchema: LookupIconclassOutput }),
       },
       withLogging("lookup_iconclass", async (args) => {
-        const hasQuery = args.query !== undefined;
-        const hasNotation = args.notation !== undefined;
-
-        if (!hasQuery && !hasNotation) {
-          return {
-            content: [{ type: "text" as const, text: "Either query or notation is required." }],
-            isError: true,
-          };
+        if (args.query === undefined && args.notation === undefined) {
+          return errorResponse("Either query or notation is required.");
         }
-        if (hasQuery && hasNotation) {
-          return {
-            content: [{ type: "text" as const, text: "Provide either query or notation, not both." }],
-            isError: true,
-          };
+        if (args.query !== undefined && args.notation !== undefined) {
+          return errorResponse("Provide either query or notation, not both.");
         }
 
-        if (hasQuery) {
-          const result = iconclassDb!.search(args.query!, args.maxResults, args.lang);
+        // Search mode
+        if (args.query !== undefined) {
+          const result = iconclassDb!.search(args.query, args.maxResults, args.lang);
 
           const header = `${result.results.length} of ${result.totalResults} Iconclass matches for "${args.query}"`;
           const lines = result.results.map((e, i) => {
@@ -1146,24 +1142,22 @@ function registerTools(
         // Browse mode
         const result = iconclassDb!.browse(args.notation!, args.lang);
         if (!result) {
-          return {
-            content: [{ type: "text" as const, text: `Notation "${args.notation}" not found in Iconclass.` }],
-            isError: true,
-          };
+          return errorResponse(`Notation "${args.notation}" not found in Iconclass.`);
         }
 
-        const pathStr = result.entry.path.length > 0
-          ? result.entry.path.map((p) => `${p.notation} "${p.text}"`).join(" > ") + " > "
+        const { entry, subtree } = result;
+        const pathStr = entry.path.length > 0
+          ? entry.path.map((p) => `${p.notation} "${p.text}"`).join(" > ") + " > "
           : "";
-        const header = `${pathStr}${result.entry.notation} "${result.entry.text}" (${result.entry.rijksCount} artworks)`;
-        const childLines = result.subtree.map((c) =>
-          `  ${c.notation} (${c.rijksCount}) "${c.text}"`
-        );
+        const header = `${pathStr}${entry.notation} "${entry.text}" (${entry.rijksCount} artworks)`;
         const sections = [header];
-        if (result.entry.keywords.length > 0) {
-          sections.push(`Keywords: ${result.entry.keywords.join(", ")}`);
+        if (entry.keywords.length > 0) {
+          sections.push(`Keywords: ${entry.keywords.join(", ")}`);
         }
-        if (childLines.length > 0) {
+        if (subtree.length > 0) {
+          const childLines = subtree.map((c) =>
+            `  ${c.notation} (${c.rijksCount}) "${c.text}"`
+          );
           sections.push(`Children (${childLines.length}):`, ...childLines);
         }
         return structuredResponse(result, sections.join("\n"));
