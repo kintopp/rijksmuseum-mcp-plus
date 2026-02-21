@@ -424,7 +424,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Best starting point for concept or thematic searches. " +
-                  "Searches by subject matter (Iconclass themes, depicted scenes). Uses word-boundary matching (e.g. 'cat' matches 'cat' but not 'Catharijnekerk'). For plural/variant forms, search separately or use iconclass for precise codes. Requires vocabulary DB."
+                  "Searches by subject matter (Iconclass themes, depicted scenes). Exact word matching, no stemming (e.g. 'cat' matches 'cat' but not 'Catharijnekerk' or 'cats'). For variant forms, search separately or use iconclass for precise codes. Requires vocabulary DB."
                 ),
               iconclass: z
                 .string()
@@ -501,7 +501,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on inscription texts (~500K artworks — signatures, mottoes, dates on the object surface, not conceptual content). " +
-                  "E.g. 'Rembrandt f.' for signed works, Latin phrases. Requires vocabulary DB v1.0+."
+                  "Exact word matching, no stemming. E.g. 'Rembrandt f.' for signed works, Latin phrases. Requires vocabulary DB v1.0+."
                 ),
               provenance: z
                 .string()
@@ -509,7 +509,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on provenance/ownership history (e.g. 'Six' for the Six collection). " +
-                  "Requires vocabulary DB v1.0+."
+                  "Exact word matching, no stemming. Requires vocabulary DB v1.0+."
                 ),
               creditLine: z
                 .string()
@@ -517,7 +517,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on credit/donor lines (e.g. 'Drucker' for Drucker-Fraser bequest). " +
-                  "Requires vocabulary DB v1.0+."
+                  "Exact word matching, no stemming. Requires vocabulary DB v1.0+."
                 ),
               narrative: z
                 .string()
@@ -525,7 +525,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on curatorial narrative (museum wall text — interpretive, art-historical context). " +
-                  "Smaller corpus (~14K artworks) but richest interpretive content. Requires vocabulary DB v1.0+."
+                  "Exact word matching, no stemming. Smaller corpus (~14K artworks) but richest interpretive content. Requires vocabulary DB v1.0+."
                 ),
               productionRole: z
                 .string()
@@ -1085,7 +1085,7 @@ function registerTools(
         title: "Lookup Iconclass",
         description:
           "Search or browse the Iconclass classification system — a universal vocabulary for art subject matter (~40K notations across 13 languages). " +
-          "Use this to discover Iconclass notation codes by concept (e.g. 'smell', 'crucifixion', 'Schmerzensmann'), " +
+          "Use this to discover Iconclass notation codes by concept (e.g. 'smell', 'crucifixion', 'Löwe'), " +
           "then pass the notation to search_artwork's iconclass parameter for precise results. " +
           "Artwork counts (rijksCount) are pre-computed and approximate; use search_artwork with the notation code for current results. " +
           "Provide either query (text search) or notation (browse subtree), not both.",
@@ -1095,6 +1095,7 @@ function registerTools(
             .optional()
             .describe(
               "Text search across Iconclass labels and keywords in all 13 languages. " +
+              "Exact word matching (no stemming): 'crucifixion' won't match 'crucified' — try word variants if needed. " +
               "Returns matching notations ranked by Rijksmuseum artwork count."
             ),
           notation: z
