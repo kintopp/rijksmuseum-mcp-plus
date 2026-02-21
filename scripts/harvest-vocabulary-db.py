@@ -418,7 +418,7 @@ def extract_dump(tar_name: str) -> Path | None:
         return extract_dir  # Already extracted
     extract_dir.mkdir(parents=True, exist_ok=True)
     with tarfile.open(tar_path, "r:gz") as tf:
-        tf.extractall(extract_dir)
+        tf.extractall(extract_dir, filter="data")
     return extract_dir
 
 
