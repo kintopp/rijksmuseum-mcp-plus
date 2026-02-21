@@ -47,6 +47,8 @@ export interface VocabSearchResult {
     objectNumber: string;
     title: string;
     creator: string;
+    date?: string;
+    type?: string;
     url: string;
     nearestPlace?: string;
     distance_km?: number;
@@ -289,6 +291,22 @@ export class VocabularyDb {
 
   get available(): boolean {
     return this.db !== null;
+  }
+
+  /** Batch-lookup object types from the mappings table. Returns objectNumber → label map. */
+  lookupTypes(objectNumbers: string[]): Map<string, string> {
+    const map = new Map<string, string>();
+    if (!this.db || objectNumbers.length === 0) return map;
+    const placeholders = objectNumbers.map(() => "?").join(", ");
+    const rows = this.db.prepare(
+      `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+       FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
+       WHERE m.object_number IN (${placeholders}) AND m.field = 'type'`
+    ).all(...objectNumbers) as { object_number: string; label: string }[];
+    for (const r of rows) {
+      if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
+    }
+    return map;
   }
 
   private tableExists(name: string): boolean {
@@ -538,11 +556,13 @@ export class VocabularyDb {
       ? (this.db.prepare(`SELECT COUNT(*) as n FROM artworks a WHERE ${where}`).get(...bindings) as { n: number }).n
       : undefined;
 
-    const sql = `SELECT a.object_number, a.title, a.creator_label FROM artworks a WHERE ${where} LIMIT ?`;
+    const sql = `SELECT a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest FROM artworks a WHERE ${where} LIMIT ?`;
     const rows = this.db.prepare(sql).all(...bindings, limit) as {
       object_number: string;
       title: string;
       creator_label: string;
+      date_earliest: number | null;
+      date_latest: number | null;
     }[];
 
     // When nearPlace is active, enrich results with nearest place + distance
@@ -576,15 +596,25 @@ export class VocabularyDb {
       }
     }
 
+    // Enrich results with object type from mappings
+    const typeMap = this.lookupTypes(rows.map((r) => r.object_number));
+
     return {
       totalResults,
       ...(geoResult && { referencePlace: geoResult.referencePlace }),
       results: rows.map((r) => {
         const d = distanceMap?.get(r.object_number);
+        const t = typeMap?.get(r.object_number);
+        const date = r.date_earliest != null
+          ? r.date_earliest === r.date_latest ? String(r.date_earliest)
+            : `${r.date_earliest}–${r.date_latest}`
+          : undefined;
         return {
           objectNumber: r.object_number,
           title: r.title || "",
           creator: r.creator_label || "",
+          ...(date && { date }),
+          ...(t && { type: t }),
           url: `https://www.rijksmuseum.nl/en/collection/${r.object_number}`,
           ...(d && { nearestPlace: d.place, distance_km: d.dist }),
         };

@@ -24,8 +24,45 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 100;
 
-function jsonResponse(data: unknown): { content: [{ type: "text"; text: string }] } {
+type ToolResponse = { content: [{ type: "text"; text: string }] };
+type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
+
+function jsonResponse(data: unknown): ToolResponse {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+}
+
+/** Return both structured content (for apps/typed clients) and text content (for LLMs).
+ *  Set STRUCTURED_CONTENT=false to omit structuredContent (workaround for client bugs). */
+const EMIT_STRUCTURED = process.env.STRUCTURED_CONTENT !== "false";
+
+function structuredResponse(data: object, textContent?: string): ToolResponse | StructuredToolResponse {
+  const text = textContent ?? JSON.stringify(data, null, 2);
+  if (!EMIT_STRUCTURED) {
+    return { content: [{ type: "text", text }] };
+  }
+  return {
+    content: [{ type: "text", text }],
+    structuredContent: data as Record<string, unknown>,
+  };
+}
+
+/** Format a search result as a compact one-liner for LLM content. */
+function formatSearchLine(r: { objectNumber: string; title: string; creator: string; date?: string; type?: string; nearestPlace?: string; distance_km?: number }, i: number): string {
+  let line = `${i + 1}. ${r.objectNumber}`;
+  if (r.type) line += ` | ${r.type}`;
+  if (r.date) line += ` | ${r.date}`;
+  line += ` | "${r.title}"`;
+  if (r.creator) line += ` — ${r.creator}`;
+  if (r.nearestPlace) line += ` [${r.nearestPlace}, ${r.distance_km?.toFixed(1)}km]`;
+  return line;
+}
+
+/** Format a timeline entry as a compact one-liner for LLM content. */
+function formatTimelineLine(t: { year: string; objectNumber: string; title: string; type?: string }, i: number): string {
+  let line = `${i + 1}. ${t.year}  ${t.objectNumber}`;
+  if (t.type) line += ` | ${t.type}`;
+  line += `  "${t.title}"`;
+  return line;
 }
 
 /** Create a logging wrapper that records timing to stderr and optional UsageStats. */
@@ -62,10 +99,10 @@ function paginatedResponse(
   totalLabel: string,
   toolName: string,
   extra?: Record<string, unknown>
-): { content: [{ type: "text"; text: string }] } {
+): ToolResponse | StructuredToolResponse {
   const records = result.records.slice(0, maxResults);
 
-  return jsonResponse({
+  const data: Record<string, unknown> = {
     ...(result.completeListSize != null ? { [totalLabel]: result.completeListSize } : {}),
     returnedCount: records.length,
     ...extra,
@@ -76,7 +113,8 @@ function paginatedResponse(
           hint: `Pass this resumptionToken to ${toolName} to get the next page.`,
         }
       : {}),
-  });
+  };
+  return structuredResponse(data);
 }
 
 /**
@@ -105,6 +143,146 @@ export function registerAll(
     }
   };
 }
+
+// ─── Output Schemas (Zod raw shapes for outputSchema) ───────────────
+
+const ResolvedTermShape = z.object({
+  id: z.string(),
+  label: z.string(),
+  equivalents: z.record(z.string()).optional(),
+});
+
+const SearchResultOutput = {
+  totalResults: z.number().int().nullable().optional()
+    .describe("Total matching artworks. Null/absent for complex cross-filter queries."),
+  results: z.array(z.object({
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    date: z.string().optional(),
+    type: z.string().optional(),
+    url: z.string(),
+    nearestPlace: z.string().optional(),
+    distance_km: z.number().optional(),
+  })).optional().describe("Artwork summaries. Absent when compact=true."),
+  ids: z.array(z.string()).optional().describe("Artwork URIs (compact mode only)."),
+  source: z.enum(["search_api", "vocabulary"]).optional(),
+  referencePlace: z.string().optional(),
+  nextPageToken: z.string().optional(),
+  warnings: z.array(z.string()).optional(),
+};
+
+const ArtworkDetailOutput = {
+  // ArtworkSummary base
+  id: z.string(),
+  objectNumber: z.string(),
+  title: z.string(),
+  creator: z.string(),
+  date: z.string(),
+  url: z.string(),
+  // ArtworkDetail fields
+  description: z.string().nullable(),
+  techniqueStatement: z.string().nullable(),
+  dimensionStatement: z.string().nullable(),
+  provenance: z.string().nullable(),
+  creditLine: z.string().nullable(),
+  inscriptions: z.array(z.string()),
+  location: z.string().nullable(),
+  collectionSets: z.array(z.string()),
+  externalIds: z.record(z.string()),
+  // Enriched Group A
+  titles: z.array(z.object({
+    title: z.string(),
+    language: z.enum(["en", "nl", "other"]),
+    qualifier: z.enum(["brief", "full", "other"]),
+  })),
+  curatorialNarrative: z.object({ en: z.string().nullable(), nl: z.string().nullable() }),
+  license: z.string().nullable(),
+  webPage: z.string().nullable(),
+  dimensions: z.array(z.object({
+    type: z.string(), value: z.union([z.number(), z.string()]), unit: z.string(), note: z.string().nullable(),
+  })),
+  relatedObjects: z.array(z.object({
+    relationship: z.string(), objectUri: z.string(),
+  })),
+  persistentId: z.string().nullable(),
+  // Enriched Group B
+  objectTypes: z.array(ResolvedTermShape),
+  materials: z.array(ResolvedTermShape),
+  production: z.array(z.object({
+    name: z.string(), role: z.string().nullable(), place: z.string().nullable(), actorUri: z.string(),
+  })),
+  collectionSetLabels: z.array(ResolvedTermShape),
+  // Enriched Group C
+  subjects: z.object({
+    iconclass: z.array(ResolvedTermShape),
+    depictedPersons: z.array(ResolvedTermShape),
+    depictedPlaces: z.array(ResolvedTermShape),
+  }),
+  bibliographyCount: z.number().int(),
+};
+
+const BibliographyOutput = {
+  objectNumber: z.string(),
+  total: z.number().int(),
+  entries: z.array(z.object({
+    sequence: z.number().int().nullable(),
+    citation: z.string(),
+    publicationUri: z.string().optional(),
+    pages: z.string().optional(),
+    isbn: z.union([z.string(), z.array(z.string())]).optional(),
+    worldcatUri: z.string().optional(),
+    libraryUrl: z.string().optional(),
+  })),
+};
+
+const TimelineOutput = {
+  artist: z.string(),
+  totalWorksInCollection: z.number().int(),
+  timeline: z.array(z.object({
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    year: z.string(),
+    type: z.string().optional(),
+    url: z.string(),
+  })),
+  warnings: z.array(z.string()).optional(),
+};
+
+const ImageInfoOutput = {
+  objectNumber: z.string(),
+  title: z.string(),
+  creator: z.string().nullable(),
+  date: z.string().nullable(),
+  iiifId: z.string(),
+  iiifInfoUrl: z.string(),
+  width: z.number().int(),
+  height: z.number().int(),
+  license: z.string().nullable(),
+  physicalDimensions: z.string().nullable(),
+  collectionUrl: z.string(),
+  viewerUrl: z.string().optional(),
+  error: z.string().optional(),
+};
+
+const PaginatedBase = {
+  returnedCount: z.number().int(),
+  records: z.array(z.record(z.unknown())),
+  resumptionToken: z.string().optional(),
+  hint: z.string().optional(),
+};
+
+const BrowseSetOutput = {
+  ...PaginatedBase,
+  totalInSet: z.number().int().optional(),
+};
+
+const RecentChangesOutput = {
+  ...PaginatedBase,
+  totalChanges: z.number().int().optional(),
+  identifiersOnly: z.boolean().optional(),
+};
 
 // ─── Tools ──────────────────────────────────────────────────────────
 
@@ -408,6 +586,7 @@ function registerTools(
           .optional()
           .describe("Pagination token from a previous search result. Only applies to Search API queries, not vocabulary-based searches."),
       }).strict(),
+      ...(EMIT_STRUCTURED && { outputSchema: SearchResultOutput }),
     },
     withLogging("search_artwork", async (args) => {
       const argsRecord = args as Record<string, unknown>;
@@ -438,7 +617,11 @@ function registerTools(
           ];
         }
 
-        return jsonResponse(result);
+        const header = `${result.results.length} results` +
+          (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
+          ` (vocabulary search)`;
+        const lines = result.results.map((r, i) => formatSearchLine(r, i));
+        return structuredResponse(result, [header, ...lines].join("\n"));
       }
 
       // Default: use Search API
@@ -446,18 +629,31 @@ function registerTools(
         ? await api.searchCompact(args)
         : await api.searchAndResolve(args);
 
+      // Enrich resolved results with object type from vocab DB (free batch lookup)
+      if (!args.compact && "results" in result && vocabDb) {
+        const typeMap = vocabDb.lookupTypes(result.results.map(r => r.objectNumber));
+        for (const r of result.results) {
+          if (!r.type) r.type = typeMap.get(r.objectNumber);
+        }
+      }
+
       // Hint when creator search returns 0 — the API is accent-sensitive
       if (result.totalResults === 0 && args.creator) {
-        return jsonResponse({
+        const withWarnings = {
           ...result,
           warnings: [
             "No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
             "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling.",
           ],
-        });
+        };
+        return structuredResponse(withWarnings, "0 results");
       }
 
-      return jsonResponse(result);
+      const header = `${result.totalResults} results` +
+        (args.creator ? ` for creator "${args.creator}"` : '') +
+        (result.nextPageToken ? ` (page token: ${result.nextPageToken})` : '');
+      const lines = ("results" in result ? result.results : []).map((r, i) => formatSearchLine(r, i));
+      return structuredResponse(result, [header, ...lines].join("\n"));
     })
   );
 
@@ -482,11 +678,12 @@ function registerTools(
             "The object number of the artwork (e.g. 'SK-C-5', 'SK-A-3262')"
           ),
       }).strict(),
+      ...(EMIT_STRUCTURED && { outputSchema: ArtworkDetailOutput }),
     },
     withLogging("get_artwork_details", async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
       const detail = await api.toDetailEnriched(object, uri);
-      return jsonResponse(detail);
+      return structuredResponse(detail);
     })
   );
 
@@ -540,13 +737,14 @@ function registerTools(
             "If true, returns ALL bibliography entries (may be 100+). Default: first 5 entries with total count."
           ),
       }).strict(),
+      ...(EMIT_STRUCTURED && { outputSchema: BibliographyOutput }),
     },
     withLogging("get_artwork_bibliography", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
       const result = await api.getBibliography(object, {
         limit: args.full ? 0 : 5,
       });
-      return jsonResponse(result);
+      return structuredResponse(result);
     })
   );
 
@@ -568,6 +766,7 @@ function registerTools(
           .string()
           .describe("The object number of the artwork (e.g. 'SK-C-5')"),
       }).strict() as z.ZodTypeAny,
+      ...(EMIT_STRUCTURED && { outputSchema: ImageInfoOutput }),
       _meta: {
         ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
       },
@@ -603,7 +802,7 @@ function registerTools(
         collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
       };
 
-      return jsonResponse(viewerData);
+      return structuredResponse(viewerData);
     })
   );
 
@@ -630,6 +829,7 @@ function registerTools(
           .default(RESULTS_DEFAULT)
           .describe(`Maximum works to include (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT})`),
       }).strict(),
+      ...(EMIT_STRUCTURED && { outputSchema: TimelineOutput }),
     },
     withLogging("get_artist_timeline", async (args) => {
       const result = await api.searchAndResolve({
@@ -637,24 +837,30 @@ function registerTools(
         maxResults: args.maxWorks,
       });
 
+      const parseYear = (s: string): number => parseInt(s, 10) || 0;
       const timeline = result.results
         .map(({ date, ...rest }) => ({ year: date, ...rest }))
-        .sort((a, b) => (parseInt(a.year, 10) || 0) - (parseInt(b.year, 10) || 0));
+        .sort((a, b) => parseYear(a.year) - parseYear(b.year));
 
-      const response: Record<string, unknown> = {
+      const warnings = result.totalResults === 0
+        ? ["No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
+           "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling."]
+        : undefined;
+
+      const response = {
         artist: args.artist,
         totalWorksInCollection: result.totalResults,
         timeline,
+        ...(warnings ? { warnings } : {}),
       };
 
-      if (result.totalResults === 0) {
-        response.warnings = [
-          "No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
-          "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling.",
-        ];
-      }
-
-      return jsonResponse(response);
+      const years = timeline.map(t => parseYear(t.year)).filter(y => y > 0);
+      const rangeStr = years.length > 0 ? `, ${years[0]}–${years[years.length - 1]}` : '';
+      const header = `${timeline.length} works by ${args.artist}` +
+        (result.totalResults > 0 ? ` (${result.totalResults} total in collection)` : '') +
+        rangeStr;
+      const lines = timeline.map((t, i) => formatTimelineLine(t, i));
+      return structuredResponse(response, [header, ...lines].join("\n"));
     })
   );
 
@@ -763,6 +969,7 @@ function registerTools(
             "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
           ),
       }).strict(),
+      ...(EMIT_STRUCTURED && { outputSchema: BrowseSetOutput }),
     },
     withLogging("browse_set", async (args) => {
       const result = args.resumptionToken
@@ -820,6 +1027,7 @@ function registerTools(
             "Pagination token from a previous get_recent_changes result. When provided, all other filters are ignored."
           ),
       }).strict(),
+      ...(EMIT_STRUCTURED && { outputSchema: RecentChangesOutput }),
     },
     withLogging("get_recent_changes", async (args) => {
       const opts = {

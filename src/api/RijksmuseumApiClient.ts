@@ -496,12 +496,16 @@ export class RijksmuseumApiClient {
 
   static toSummary(obj: LinkedArtObject, uri: string): ArtworkSummary {
     const objectNumber = RijksmuseumApiClient.parseObjectNumber(obj);
+    const typeLabel = (obj.classified_as ?? [])
+      .map((c) => (typeof c === "string" ? undefined : c._label))
+      .find(Boolean);
     return {
       id: uri,
       objectNumber,
       title: RijksmuseumApiClient.parseTitle(obj),
       creator: RijksmuseumApiClient.parseCreator(obj),
       date: RijksmuseumApiClient.parseDate(obj),
+      ...(typeLabel && { type: typeLabel }),
       url: objectNumber
         ? `${RijksmuseumApiClient.WEB_BASE}/${objectNumber}`
         : uri,
