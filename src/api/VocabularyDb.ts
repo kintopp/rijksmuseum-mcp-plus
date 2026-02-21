@@ -232,6 +232,13 @@ export class VocabularyDb {
   private hasRightsLookup = false;
   private fieldIdMap = new Map<string, number>();
 
+  /** Look up a field_id by name, throwing if missing. */
+  private requireFieldId(name: string): number {
+    const id = this.fieldIdMap.get(name);
+    if (id === undefined) throw new Error(`field_lookup missing entry for "${name}"`);
+    return id;
+  }
+
   constructor() {
     const dbPath = resolveDbPath("VOCAB_DB_PATH", "vocabulary.db");
     if (!dbPath) {
@@ -310,7 +317,7 @@ export class VocabularyDb {
       const placeholders = chunk.map(() => "?").join(", ");
 
       if (this.hasIntMappings) {
-        const typeFieldId = this.fieldIdMap.get("type");
+        const typeFieldId = this.requireFieldId("type");
         const rows = this.db.prepare(
           `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
            FROM mappings m
@@ -597,8 +604,8 @@ export class VocabularyDb {
 
       let distRows: { object_number: string; label_en: string | null; label_nl: string | null; dist: number }[];
       if (this.hasIntMappings) {
-        const subjectId = this.fieldIdMap.get("subject");
-        const spatialId = this.fieldIdMap.get("spatial");
+        const subjectId = this.requireFieldId("subject");
+        const spatialId = this.requireFieldId("spatial");
         distRows = this.db.prepare(
           `SELECT a.object_number, v.label_en, v.label_nl,
                   haversine_km(?, ?, v.lat, v.lon) AS dist
@@ -754,7 +761,7 @@ export class VocabularyDb {
     if (this.hasIntMappings) {
       const rowids = this.vocabIdsToRowids(vocabTextIds);
       if (rowids.length === 0) return { condition: "0", bindings: [] };
-      const fieldIds = fields.map((f) => this.fieldIdMap.get(f)!);
+      const fieldIds = fields.map((f) => this.requireFieldId(f));
       const fieldClause = fieldIds.length === 1
         ? `m.field_id = ?`
         : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
@@ -791,7 +798,7 @@ export class VocabularyDb {
     vocabBindings: unknown[],
   ): { condition: string; bindings: unknown[] } {
     if (this.hasIntMappings) {
-      const fieldIds = fields.map((f) => this.fieldIdMap.get(f)!);
+      const fieldIds = fields.map((f) => this.requireFieldId(f));
       const fieldClause = fieldIds.length === 1
         ? `m.field_id = ?`
         : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
