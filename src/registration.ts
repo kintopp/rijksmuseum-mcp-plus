@@ -13,6 +13,7 @@ import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
+import { TOP_100_SET } from "./types.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
 
@@ -32,8 +33,10 @@ function jsonResponse(data: unknown): ToolResponse {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
 
-function errorResponse(message: string): ToolResponse & { isError: true } {
-  return { content: [{ type: "text", text: message }], isError: true };
+function errorResponse(message: string) {
+  const base = { content: [{ type: "text" as const, text: message }], isError: true as const };
+  if (!EMIT_STRUCTURED) return base;
+  return { ...base, structuredContent: { error: message } as Record<string, unknown> };
 }
 
 /** Return both structured content (for apps/typed clients) and text content (for LLMs).
@@ -49,6 +52,11 @@ function structuredResponse(data: object, textContent?: string): ToolResponse | 
     content: [{ type: "text", text }],
     structuredContent: data as Record<string, unknown>,
   };
+}
+
+/** Conditionally attach an outputSchema when structured content is enabled. */
+function withOutputSchema<T>(schema: T): { outputSchema: T } | Record<never, never> {
+  return EMIT_STRUCTURED ? { outputSchema: schema } : {};
 }
 
 /** Format a search result as a compact one-liner for LLM content. */
@@ -91,7 +99,9 @@ function createLogger(stats?: UsageStats) {
         const error = err instanceof Error ? err.message : String(err);
         console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
         stats?.record(toolName, ms, false);
-        return { content: [{ type: "text" as const, text: `Error in ${toolName}: ${error}` }], isError: true } as R;
+        const errResult: Record<string, unknown> = { content: [{ type: "text" as const, text: `Error in ${toolName}: ${error}` }], isError: true };
+        if (EMIT_STRUCTURED) errResult.structuredContent = { error };
+        return errResult as R;
       }
     };
   };
@@ -176,6 +186,7 @@ const SearchResultOutput = {
   referencePlace: z.string().optional(),
   nextPageToken: z.string().optional(),
   warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
 };
 
 const ArtworkDetailOutput = {
@@ -226,6 +237,7 @@ const ArtworkDetailOutput = {
     depictedPlaces: z.array(ResolvedTermShape),
   }),
   bibliographyCount: z.number().int(),
+  error: z.string().optional(),
 };
 
 const BibliographyOutput = {
@@ -240,6 +252,7 @@ const BibliographyOutput = {
     worldcatUri: z.string().optional(),
     libraryUrl: z.string().optional(),
   })),
+  error: z.string().optional(),
 };
 
 const TimelineOutput = {
@@ -254,20 +267,21 @@ const TimelineOutput = {
     url: z.string(),
   })),
   warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
 };
 
 const ImageInfoOutput = {
   objectNumber: z.string(),
-  title: z.string(),
-  creator: z.string().nullable(),
-  date: z.string().nullable(),
-  iiifId: z.string(),
-  iiifInfoUrl: z.string(),
-  width: z.number().int(),
-  height: z.number().int(),
-  license: z.string().nullable(),
-  physicalDimensions: z.string().nullable(),
-  collectionUrl: z.string(),
+  title: z.string().optional(),
+  creator: z.string().nullable().optional(),
+  date: z.string().nullable().optional(),
+  iiifId: z.string().optional(),
+  iiifInfoUrl: z.string().optional(),
+  width: z.number().int().optional(),
+  height: z.number().int().optional(),
+  license: z.string().nullable().optional(),
+  physicalDimensions: z.string().nullable().optional(),
+  collectionUrl: z.string().optional(),
   viewerUrl: z.string().optional(),
   error: z.string().optional(),
 };
@@ -277,6 +291,7 @@ const PaginatedBase = {
   records: z.array(z.record(z.unknown())),
   resumptionToken: z.string().optional(),
   hint: z.string().optional(),
+  error: z.string().optional(),
 };
 
 const BrowseSetOutput = {
@@ -309,6 +324,7 @@ const LookupIconclassOutput = {
   results: z.array(IconclassEntryShape).optional(),
   countsAsOf: z.string().nullable().optional()
     .describe("Date when rijksCount values were computed (ISO 8601)."),
+  error: z.string().optional(),
 };
 
 // ─── Tools ──────────────────────────────────────────────────────────
@@ -614,7 +630,7 @@ function registerTools(
           .optional()
           .describe("Pagination token from a previous search result. Only applies to Search API queries, not vocabulary-based searches."),
       }).strict(),
-      ...(EMIT_STRUCTURED && { outputSchema: SearchResultOutput }),
+      ...withOutputSchema(SearchResultOutput),
     },
     withLogging("search_artwork", async (args) => {
       const argsRecord = args as Record<string, unknown>;
@@ -706,7 +722,7 @@ function registerTools(
             "The object number of the artwork (e.g. 'SK-C-5', 'SK-A-3262')"
           ),
       }).strict(),
-      ...(EMIT_STRUCTURED && { outputSchema: ArtworkDetailOutput }),
+      ...withOutputSchema(ArtworkDetailOutput),
     },
     withLogging("get_artwork_details", async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
@@ -765,7 +781,7 @@ function registerTools(
             "If true, returns ALL bibliography entries (may be 100+). Default: first 5 entries with total count."
           ),
       }).strict(),
-      ...(EMIT_STRUCTURED && { outputSchema: BibliographyOutput }),
+      ...withOutputSchema(BibliographyOutput),
     },
     withLogging("get_artwork_bibliography", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
@@ -794,7 +810,7 @@ function registerTools(
           .string()
           .describe("The object number of the artwork (e.g. 'SK-C-5')"),
       }).strict() as z.ZodTypeAny,
-      ...(EMIT_STRUCTURED && { outputSchema: ImageInfoOutput }),
+      ...withOutputSchema(ImageInfoOutput),
       _meta: {
         ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
       },
@@ -804,10 +820,10 @@ function registerTools(
       const imageInfo = await api.getImageInfo(object);
 
       if (!imageInfo) {
-        return jsonResponse({
+        return structuredResponse({
           objectNumber: args.objectNumber,
           error: "No image available for this artwork",
-        });
+        }, "No image available for this artwork");
       }
 
       const title = RijksmuseumApiClient.parseTitle(object);
@@ -857,7 +873,7 @@ function registerTools(
           .default(RESULTS_DEFAULT)
           .describe(`Maximum works to include (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT})`),
       }).strict(),
-      ...(EMIT_STRUCTURED && { outputSchema: TimelineOutput }),
+      ...withOutputSchema(TimelineOutput),
     },
     withLogging("get_artist_timeline", async (args) => {
       const result = await api.searchAndResolve({
@@ -997,7 +1013,7 @@ function registerTools(
             "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
           ),
       }).strict(),
-      ...(EMIT_STRUCTURED && { outputSchema: BrowseSetOutput }),
+      ...withOutputSchema(BrowseSetOutput),
     },
     withLogging("browse_set", async (args) => {
       const result = args.resumptionToken
@@ -1055,7 +1071,7 @@ function registerTools(
             "Pagination token from a previous get_recent_changes result. When provided, all other filters are ignored."
           ),
       }).strict(),
-      ...(EMIT_STRUCTURED && { outputSchema: RecentChangesOutput }),
+      ...withOutputSchema(RecentChangesOutput),
     },
     withLogging("get_recent_changes", async (args) => {
       const opts = {
@@ -1079,6 +1095,7 @@ function registerTools(
   // initIconclassDb() completes before createServer() in both stdio and HTTP boot paths.
 
   if (iconclassDb?.available) {
+    const db = iconclassDb; // narrowed to non-null for the closure
     server.registerTool(
       "lookup_iconclass",
       {
@@ -1117,7 +1134,7 @@ function registerTools(
             .default(RESULTS_DEFAULT)
             .describe(`Maximum results for search mode (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}).`),
         }).strict(),
-        ...(EMIT_STRUCTURED && { outputSchema: LookupIconclassOutput }),
+        ...withOutputSchema(LookupIconclassOutput),
       },
       withLogging("lookup_iconclass", async (args) => {
         if (args.query === undefined && args.notation === undefined) {
@@ -1129,7 +1146,7 @@ function registerTools(
 
         // Search mode
         if (args.query !== undefined) {
-          const result = iconclassDb!.search(args.query, args.maxResults, args.lang);
+          const result = db.search(args.query, args.maxResults, args.lang);
 
           const header = `${result.results.length} of ${result.totalResults} Iconclass matches for "${args.query}"`;
           const lines = result.results.map((e, i) => {
@@ -1141,7 +1158,7 @@ function registerTools(
         }
 
         // Browse mode
-        const result = iconclassDb!.browse(args.notation!, args.lang);
+        const result = db.browse(args.notation!, args.lang);
         if (!result) {
           return errorResponse(`Notation "${args.notation}" not found in Iconclass.`);
         }
@@ -1400,7 +1417,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
       const records: unknown[] = [];
       const MAX_PAGES = 5;
       let pagesFollowed = 0;
-      let result = await oai.listRecords({ set: "260213" });
+      let result = await oai.listRecords({ set: TOP_100_SET });
       while (true) {
         records.push(...result.records);
         if (!result.resumptionToken || pagesFollowed >= MAX_PAGES) break;

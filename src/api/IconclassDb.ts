@@ -1,6 +1,5 @@
 import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
-import path from "node:path";
-import fs from "node:fs";
+import { escapeFts5, resolveDbPath } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -30,13 +29,6 @@ export interface IconclassBrowseResult {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/** Escape a value for safe FTS5 phrase matching. Returns null if input is empty after stripping. */
-function escapeFts5(value: string): string | null {
-  const cleaned = value.replace(/[*^():{}[\]\\-]/g, "").replace(/"/g, '""').trim();
-  if (!cleaned) return null;
-  return `"${cleaned}"`;
-}
-
 /** Build a deduplicated language fallback list: requested → en → nl. */
 function langFallbacks(lang: string): string[] {
   const langs = [lang];
@@ -58,9 +50,10 @@ export class IconclassDb {
   private stmtGetText!: Statement;
   private stmtGetTextAny!: Statement;
   private stmtGetKeywords!: Statement;
+  private stmtGetKeywordsAny!: Statement;
 
   constructor() {
-    const dbPath = this.resolveDbPath();
+    const dbPath = resolveDbPath("ICONCLASS_DB_PATH", "iconclass.db");
     if (!dbPath) {
       console.error("Iconclass DB not found — lookup_iconclass disabled");
       return;
@@ -103,6 +96,9 @@ export class IconclassDb {
       );
       this.stmtGetKeywords = this.db.prepare(
         "SELECT keyword FROM keywords WHERE notation = ? AND lang = ?"
+      );
+      this.stmtGetKeywordsAny = this.db.prepare(
+        "SELECT keyword FROM keywords WHERE notation = ? LIMIT 20"
       );
 
       console.error(`Iconclass DB loaded: ${dbPath} (${count.toLocaleString()} notations)`);
@@ -229,7 +225,7 @@ export class IconclassDb {
     return any?.text ?? null;
   }
 
-  /** Get keywords for a notation in preferred language (requested -> en -> nl). */
+  /** Get keywords for a notation in preferred language (requested -> en -> nl -> any). */
   private getKeywords(notation: string, lang: string): string[] {
     if (!this.db) return [];
 
@@ -238,16 +234,9 @@ export class IconclassDb {
       if (rows.length > 0) return rows.map((r) => r.keyword);
     }
 
-    return [];
+    // Final fallback: any language
+    const any = this.stmtGetKeywordsAny.all(notation) as { keyword: string }[];
+    return any.map((r) => r.keyword);
   }
 
-  private resolveDbPath(): string | null {
-    const envPath = process.env.ICONCLASS_DB_PATH;
-    if (envPath && fs.existsSync(envPath)) return envPath;
-
-    const defaultPath = path.join(process.cwd(), "data", "iconclass.db");
-    if (fs.existsSync(defaultPath)) return defaultPath;
-
-    return null;
-  }
 }

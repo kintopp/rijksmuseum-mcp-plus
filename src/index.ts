@@ -19,6 +19,7 @@ import { VocabularyDb } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
+import { TOP_100_SET } from "./types.js";
 import { registerAll } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 
@@ -146,15 +147,11 @@ async function ensureDb(spec: DbSpec): Promise<void> {
 // ─── Shared database instances (one read-only instance each) ─────────
 
 let vocabDb: VocabularyDb | null = null;
-
-async function initVocabularyDb(): Promise<void> {
-  await ensureDb(VOCAB_DB_SPEC);
-  vocabDb = new VocabularyDb();
-}
-
 let iconclassDb: IconclassDb | null = null;
 
-async function initIconclassDb(): Promise<void> {
+async function initDatabases(): Promise<void> {
+  await ensureDb(VOCAB_DB_SPEC);
+  vocabDb = new VocabularyDb();
   await ensureDb(ICONCLASS_DB_SPEC);
   iconclassDb = new IconclassDb();
 }
@@ -192,9 +189,6 @@ async function warmVocabCache(): Promise<void> {
   const ms = Math.round(performance.now() - start);
   console.error(`Vocab cache pre-warmed: ${resolved}/${uris.length} terms in ${ms}ms`);
 }
-
-/** The museum's "Top 100" curated set — their highlight selection. */
-const TOP_100_SET = "260213";
 
 /**
  * Pre-warm vocabulary terms referenced by the museum's Top 100 artworks.
@@ -265,8 +259,7 @@ function createServer(httpPort?: number): McpServer {
 // ─── Stdio mode ──────────────────────────────────────────────────────
 
 async function runStdio(): Promise<void> {
-  await initVocabularyDb();
-  await initIconclassDb();
+  await initDatabases();
   initSharedClients();
   initUsageStats();
   const server = createServer();
@@ -280,8 +273,7 @@ async function runStdio(): Promise<void> {
 // ─── HTTP mode ───────────────────────────────────────────────────────
 
 async function runHttp(): Promise<void> {
-  await initVocabularyDb();
-  await initIconclassDb();
+  await initDatabases();
   initSharedClients();
   initUsageStats();
   const port = getHttpPort();
