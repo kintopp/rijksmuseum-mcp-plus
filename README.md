@@ -61,14 +61,15 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
       "command": "node",
       "args": ["/absolute/path/to/rijksmuseum-mcp-plus/dist/index.js"],
       "env": {
-        "VOCAB_DB_URL": "https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.12/vocabulary.db.gz"
+        "VOCAB_DB_URL": "https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.12/vocabulary.db.gz",
+        "ICONCLASS_DB_URL": "https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.13/iconclass.db.gz"
       }
     }
   }
 }
 ```
 
-The server works without the vocabulary database, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters) won't be available. The `VOCAB_DB_URL` setting above enables automatic download (~664 MB compressed, ~2.8 GB uncompressed) on first start.
+The server works without the vocabulary database, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters) won't be available. The `VOCAB_DB_URL` setting above enables automatic download (~664 MB compressed, ~2.8 GB uncompressed) on first start. The `ICONCLASS_DB_URL` enables the `lookup_iconclass` tool for discovering iconographic classification codes (~40 MB compressed, ~97 MB uncompressed).
 
 Restart your MCP client after updating the config.
 
@@ -107,6 +108,8 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | `get_recent_changes` | Track additions and modifications by date range. Full EDM records (including subjects) or lightweight headers (`identifiersOnly`). Each record includes an objectNumber for use with `get_artwork_details`, `get_artwork_image`, or `get_artwork_bibliography`. Pagination via resumption token. |
 | `lookup_iconclass` | Search or browse the Iconclass classification system (~40K notations, 13 languages). Discover notation codes by concept (e.g. 'smell' → `31A33`), then use with `search_artwork`'s `iconclass` parameter for precise subject searches. Browse mode shows hierarchy and children. |
 
+**Structured output:** 8 of 11 tools return typed structured data (`structuredContent`) alongside the text summary. MCP clients that support `outputSchema` ([spec](https://modelcontextprotocol.io/specification/2025-11-25)) receive machine-readable results for richer UI rendering. Clients that don't support it simply use the text content. Set `STRUCTURED_CONTENT=false` to disable if your client has compatibility issues.
+
 #### Prompts and Resources
 
 | Prompt / Resource | Description |
@@ -128,6 +131,7 @@ src/
     RijksmuseumApiClient.ts   — Linked Art API client, vocabulary resolver, bibliography, IIIF image chain
     OaiPmhClient.ts           — OAI-PMH client (curated sets, EDM records, change tracking)
     VocabularyDb.ts           — SQLite vocabulary database (vocab term, full-text, dimension, date, and geo proximity search)
+    IconclassDb.ts            — Iconclass notation search/browse (SQLite)
   utils/
     ResponseCache.ts          — LRU+TTL response cache
     UsageStats.ts             — Tool call aggregation and periodic flush
@@ -136,6 +140,7 @@ apps/
   artwork-viewer/             — MCP Apps inline IIIF viewer (Vite + OpenSeadragon)
 data/
   vocabulary.db               — Vocabulary database (built from OAI-PMH + Linked Art harvest, not in git)
+  iconclass.db                — Iconclass database (built from CC0 dump, not in git)
 ```
 
 #### Data Sources
@@ -148,6 +153,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 | Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata, vocabulary terms, and bibliography as JSON-LD |
 | IIIF Image API | `https://iiif.micr.io/{id}/info.json` | High-resolution image tiles |
 | OAI-PMH | `https://data.rijksmuseum.nl/oai` | Curated sets, EDM metadata records, date-based change tracking. 192 sets, 831K+ records. |
+| Iconclass (CC0) | `https://iconclass.org/` | ~40K iconographic classification notations with labels in 13 languages and keywords. Powers `lookup_iconclass`. |
 
 **Image discovery chain (4 HTTP hops):** Object `.shows` > VisualItem `.digitally_shown_by` > DigitalObject `.access_point` > IIIF info.json
 
@@ -156,6 +162,8 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 **Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
 
 **Vocabulary database:** A pre-built SQLite database maps 149,000 controlled vocabulary terms to 831,000 artworks via 12.8 million mappings. Built from OAI-PMH EDM records and Linked Art resolution (both vocabulary terms and full artwork records), it powers vocabulary-backed filters (`subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `productionRole`), cross-filters (`material`, `technique`, `type`, `creator`), full-text search on artwork texts (`inscription`, `provenance`, `creditLine`, `narrative`, `title`), date range filtering (`creationDate`), numeric dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`), and geo proximity search (`nearPlace`, `nearLat`/`nearLon`, `nearPlaceRadius`). Includes 20,828 geocoded places with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/). Place name queries support fuzzy matching with geo-disambiguation for ambiguous names.
+
+**Iconclass database:** A separate SQLite database contains 40,675 Iconclass notations with 279,000 texts in 13 languages and 780,000 keywords. Each notation includes a pre-computed count of matching Rijksmuseum artworks (cross-referenced from the vocabulary database). Powers the `lookup_iconclass` tool for concept search and hierarchy browsing.
 
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
@@ -168,6 +176,9 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 | `PUBLIC_URL` | Base URL for viewer links in HTTP mode (e.g. `https://example.up.railway.app`) | `http://localhost:$PORT` |
 | `VOCAB_DB_PATH` | Path to vocabulary SQLite database | `data/vocabulary.db` |
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
+| `ICONCLASS_DB_PATH` | Path to Iconclass SQLite database | `data/iconclass.db` |
+| `ICONCLASS_DB_URL` | URL to download Iconclass DB on first start; gzip supported | *(none)* |
+| `STRUCTURED_CONTENT` | Set to `"false"` to disable structured output (workaround for clients with `outputSchema` bugs) | *(enabled)* |
 | `USAGE_STATS_PATH` | Path to usage stats JSON file | `data/usage-stats.json` |
 
 ---
