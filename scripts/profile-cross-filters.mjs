@@ -6,11 +6,14 @@
  * and reports timing, intermediate cardinalities, and EXPLAIN QUERY PLAN output.
  *
  * Usage:
- *   node scripts/profile-cross-filters.mjs [--db PATH] [--output PATH]
+ *   node scripts/profile-cross-filters.mjs [--db PATH] [--output PATH] [--mmap SIZE] [--no-warmup] [--label TEXT]
  *
- * Defaults:
- *   --db      data/vocabulary.db
- *   --output  offline/explorations/cross-filter-profiling.md
+ * Options:
+ *   --db         data/vocabulary.db
+ *   --output     offline/explorations/cross-filter-profiling.md
+ *   --mmap SIZE  Set PRAGMA mmap_size (bytes). e.g. 3221225472 for 3GB
+ *   --no-warmup  Skip the initial warm-up query (for true cold-start measurement)
+ *   --label TEXT  Label for this run (printed in header)
  */
 
 import Database from "better-sqlite3";
@@ -28,10 +31,16 @@ function parseArgs() {
   const opts = {
     db: resolve(PROJECT_ROOT, "data/vocabulary.db"),
     output: resolve(PROJECT_ROOT, "offline/explorations/cross-filter-profiling.md"),
+    mmap: null,     // null = don't set; number = PRAGMA mmap_size value in bytes
+    warmup: true,   // run warm-up query before profiling
+    label: null,    // optional run label
   };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--db" && args[i + 1]) opts.db = resolve(args[++i]);
     if (args[i] === "--output" && args[i + 1]) opts.output = resolve(args[++i]);
+    if (args[i] === "--mmap" && args[i + 1]) opts.mmap = parseInt(args[++i], 10);
+    if (args[i] === "--no-warmup") opts.warmup = false;
+    if (args[i] === "--label" && args[i + 1]) opts.label = args[++i];
   }
   return opts;
 }
@@ -120,7 +129,7 @@ const QUERIES = [
 // ─── Profiler ────────────────────────────────────────────────────────
 
 class CrossFilterProfiler {
-  constructor(dbPath) {
+  constructor(dbPath, { mmap = null } = {}) {
     if (!existsSync(dbPath)) {
       throw new Error(`DB not found: ${dbPath}`);
     }
@@ -128,10 +137,15 @@ class CrossFilterProfiler {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("cache_size = -256000"); // 256MB cache — match production-like conditions
 
+    if (mmap != null) {
+      const result = this.db.pragma(`mmap_size = ${mmap}`);
+      console.log(`PRAGMA mmap_size = ${mmap} (${(mmap / 1024 / 1024 / 1024).toFixed(1)} GB) → ${JSON.stringify(result)}`);
+    }
+
     // Check capabilities
     this.hasFts5 = this._tableExists("vocabulary_fts");
     this.hasTextFts = this._tableExists("artwork_texts_fts");
-    console.log(`DB opened: FTS5=${this.hasFts5}, TextFTS=${this.hasTextFts}`);
+    console.log(`DB opened: FTS5=${this.hasFts5}, TextFTS=${this.hasTextFts}, mmap=${mmap ?? "off"}`);
 
     // Log DB stats
     const artworkCount = this.db.prepare("SELECT COUNT(*) as n FROM artworks").get().n;
@@ -432,16 +446,22 @@ function generateReport(results) {
 const opts = parseArgs();
 console.log("Cross-Filter Vocab Query Profiler");
 console.log("=================================");
+if (opts.label) console.log(`Label: ${opts.label}`);
 console.log(`DB: ${opts.db}`);
 console.log(`Output: ${opts.output}`);
+console.log(`mmap: ${opts.mmap != null ? `${opts.mmap} (${(opts.mmap / 1024 / 1024 / 1024).toFixed(1)} GB)` : "off"}`);
+console.log(`Warm-up: ${opts.warmup ? "yes" : "no"}`);
 console.log("");
 
-const profiler = new CrossFilterProfiler(opts.db);
+const profiler = new CrossFilterProfiler(opts.db, { mmap: opts.mmap });
 
-// Warm up SQLite page cache with a throwaway query
-console.log("Warming SQLite page cache...");
-profiler.db.prepare("SELECT COUNT(*) FROM mappings WHERE field = 'subject'").get();
-console.log("");
+if (opts.warmup) {
+  console.log("Warming SQLite page cache...");
+  profiler.db.prepare("SELECT COUNT(*) FROM mappings WHERE field = 'subject'").get();
+  console.log("");
+} else {
+  console.log("Skipping warm-up query (--no-warmup).\n");
+}
 
 console.log("Profiling queries...");
 const results = [];
