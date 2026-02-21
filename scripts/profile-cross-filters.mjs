@@ -145,7 +145,13 @@ class CrossFilterProfiler {
     // Check capabilities
     this.hasFts5 = this._tableExists("vocabulary_fts");
     this.hasTextFts = this._tableExists("artwork_texts_fts");
-    console.log(`DB opened: FTS5=${this.hasFts5}, TextFTS=${this.hasTextFts}, mmap=${mmap ?? "off"}`);
+    this.hasIntMappings = this._tableExists("field_lookup") && this._columnExists("artworks", "art_id");
+    this.fieldIdMap = new Map();
+    if (this.hasIntMappings) {
+      const fieldRows = this.db.prepare("SELECT id, name FROM field_lookup").all();
+      for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
+    }
+    console.log(`DB opened: FTS5=${this.hasFts5}, TextFTS=${this.hasTextFts}, intMappings=${this.hasIntMappings}, mmap=${mmap ?? "off"}`);
 
     // Log DB stats
     const artworkCount = this.db.prepare("SELECT COUNT(*) as n FROM artworks").get().n;
@@ -157,6 +163,32 @@ class CrossFilterProfiler {
   _tableExists(name) {
     const row = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
     return row !== undefined;
+  }
+
+  _columnExists(table, column) {
+    try {
+      this.db.prepare(`SELECT ${column} FROM ${table} LIMIT 1`).get();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Convert text vocab IDs to integer vocab_int_id values.
+   */
+  _vocabIdsToRowids(textIds) {
+    const CHUNK = 500;
+    const result = [];
+    for (let i = 0; i < textIds.length; i += CHUNK) {
+      const chunk = textIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = this.db.prepare(
+        `SELECT vocab_int_id FROM vocabulary WHERE id IN (${placeholders})`
+      ).all(...chunk);
+      for (const r of rows) result.push(r.vocab_int_id);
+    }
+    return result;
   }
 
   /**
@@ -197,19 +229,34 @@ class CrossFilterProfiler {
   }
 
   /**
-   * Count distinct object_numbers for a single vocab-based subquery.
+   * Count distinct artworks for a single vocab-based subquery.
    */
   subqueryCardinality(filterName, vocabIds) {
     const filter = VOCAB_FILTERS[filterName];
     const placeholders = vocabIds.map(() => "?").join(", ");
-    const fieldClause = filter.fields.length === 1
-      ? "m.field = ?"
-      : `m.field IN (${filter.fields.map(() => "?").join(", ")})`;
 
     const start = performance.now();
-    const row = this.db.prepare(
-      `SELECT COUNT(DISTINCT m.object_number) as n FROM mappings m WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})`
-    ).get(...filter.fields, ...vocabIds);
+    let row;
+
+    if (this.hasIntMappings) {
+      const rowids = this._vocabIdsToRowids(vocabIds);
+      if (rowids.length === 0) return { count: 0, timeMs: performance.now() - start };
+      const fieldIds = filter.fields.map(f => this.fieldIdMap.get(f));
+      const fieldClause = fieldIds.length === 1
+        ? "m.field_id = ?"
+        : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
+      const rPlaceholders = rowids.map(() => "?").join(", ");
+      row = this.db.prepare(
+        `SELECT COUNT(DISTINCT m.artwork_id) as n FROM mappings m WHERE ${fieldClause} AND m.vocab_rowid IN (${rPlaceholders})`
+      ).get(...fieldIds, ...rowids);
+    } else {
+      const fieldClause = filter.fields.length === 1
+        ? "m.field = ?"
+        : `m.field IN (${filter.fields.map(() => "?").join(", ")})`;
+      row = this.db.prepare(
+        `SELECT COUNT(DISTINCT m.object_number) as n FROM mappings m WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})`
+      ).get(...filter.fields, ...vocabIds);
+    }
     return { count: row.n, timeMs: performance.now() - start };
   }
 
@@ -265,16 +312,32 @@ class CrossFilterProfiler {
       const { count, timeMs: cardMs } = this.subqueryCardinality(name, ids);
       subqueryDetails.push({ name, value, vocabIds: ids.length, cardinality: count, resolveMs, cardMs });
 
-      const placeholders = ids.map(() => "?").join(", ");
-      const fieldClause = filter.fields.length === 1
-        ? "m.field = ?"
-        : `m.field IN (${filter.fields.map(() => "?").join(", ")})`;
-
-      conditions.push(`a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
-      )`);
-      bindings.push(...filter.fields, ...ids);
+      if (this.hasIntMappings) {
+        const rowids = this._vocabIdsToRowids(ids);
+        if (rowids.length === 0) {
+          return { resultCount: 0, timeMs: 0, sql: "(empty — 0 rowids)", bindings: [], subqueryDetails };
+        }
+        const fieldIds = filter.fields.map(f => this.fieldIdMap.get(f));
+        const fieldClause = fieldIds.length === 1
+          ? "m.field_id = ?"
+          : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
+        const rPlaceholders = rowids.map(() => "?").join(", ");
+        conditions.push(`a.art_id IN (
+          SELECT m.artwork_id FROM mappings m
+          WHERE ${fieldClause} AND m.vocab_rowid IN (${rPlaceholders})
+        )`);
+        bindings.push(...fieldIds, ...rowids);
+      } else {
+        const placeholders = ids.map(() => "?").join(", ");
+        const fieldClause = filter.fields.length === 1
+          ? "m.field = ?"
+          : `m.field IN (${filter.fields.map(() => "?").join(", ")})`;
+        conditions.push(`a.object_number IN (
+          SELECT m.object_number FROM mappings m
+          WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
+        )`);
+        bindings.push(...filter.fields, ...ids);
+      }
     }
 
     // Text FTS filters
@@ -457,7 +520,12 @@ const profiler = new CrossFilterProfiler(opts.db, { mmap: opts.mmap });
 
 if (opts.warmup) {
   console.log("Warming SQLite page cache...");
-  profiler.db.prepare("SELECT COUNT(*) FROM mappings WHERE field = 'subject'").get();
+  if (profiler.hasIntMappings) {
+    const subjectId = profiler.fieldIdMap.get("subject");
+    profiler.db.prepare("SELECT COUNT(*) FROM mappings WHERE field_id = ?").get(subjectId);
+  } else {
+    profiler.db.prepare("SELECT COUNT(*) FROM mappings WHERE field = 'subject'").get();
+  }
   console.log("");
 } else {
   console.log("Skipping warm-up query (--no-warmup).\n");

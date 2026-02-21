@@ -228,6 +228,9 @@ export class VocabularyDb {
   private hasDates = false;
   private hasNormLabels = false;
   private hasCoordinates = false;
+  private hasIntMappings = false;
+  private hasRightsLookup = false;
+  private fieldIdMap = new Map<string, number>();
 
   constructor() {
     const dbPath = resolveDbPath("VOCAB_DB_PATH", "vocabulary.db");
@@ -256,6 +259,12 @@ export class VocabularyDb {
       this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm")
         && this.columnExists("vocabulary", "label_nl_norm");
       this.hasCoordinates = this.columnExists("vocabulary", "lat") && this.hasGeocodedData();
+      this.hasIntMappings = this.tableExists("field_lookup") && this.columnExists("artworks", "art_id");
+      if (this.hasIntMappings) {
+        const fieldRows = this.db.prepare("SELECT id, name FROM field_lookup").all() as { id: number; name: string }[];
+        for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
+      }
+      this.hasRightsLookup = this.tableExists("rights_lookup");
 
       // Warn if geo index is missing (must be created during harvest, not at runtime — DB is read-only)
       if (this.hasCoordinates) {
@@ -276,6 +285,7 @@ export class VocabularyDb {
         this.hasDates && "dates",
         this.hasNormLabels && "normLabels",
         this.hasCoordinates && "coordinates",
+        this.hasIntMappings && "intMappings",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -298,13 +308,28 @@ export class VocabularyDb {
     for (let i = 0; i < objectNumbers.length; i += CHUNK) {
       const chunk = objectNumbers.slice(i, i + CHUNK);
       const placeholders = chunk.map(() => "?").join(", ");
-      const rows = this.db.prepare(
-        `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
-         FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
-         WHERE m.object_number IN (${placeholders}) AND m.field = 'type'`
-      ).all(...chunk) as { object_number: string; label: string }[];
-      for (const r of rows) {
-        if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
+
+      if (this.hasIntMappings) {
+        const typeFieldId = this.fieldIdMap.get("type");
+        const rows = this.db.prepare(
+          `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+           FROM mappings m
+           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+           JOIN artworks a ON m.artwork_id = a.art_id
+           WHERE a.object_number IN (${placeholders}) AND m.field_id = ?`
+        ).all(...chunk, typeFieldId) as { object_number: string; label: string }[];
+        for (const r of rows) {
+          if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
+        }
+      } else {
+        const rows = this.db.prepare(
+          `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+           FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
+           WHERE m.object_number IN (${placeholders}) AND m.field = 'type'`
+        ).all(...chunk) as { object_number: string; label: string }[];
+        for (const r of rows) {
+          if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
+        }
       }
     }
     return map;
@@ -400,12 +425,12 @@ export class VocabularyDb {
           };
         }
 
-        const placeholders = geoResult.placeIds.map(() => "?").join(", ");
-        conditions.push(`a.object_number IN (
-          SELECT m.object_number FROM mappings m
-          WHERE m.field IN ('subject', 'spatial') AND m.vocab_id IN (${placeholders})
-        )`);
-        bindings.push(...geoResult.placeIds);
+        const geoFilter = this.mappingFilterDirect(
+          ["subject", "spatial"],
+          geoResult.placeIds.map(String),
+        );
+        conditions.push(geoFilter.condition);
+        bindings.push(...geoFilter.bindings);
       }
     }
 
@@ -419,11 +444,6 @@ export class VocabularyDb {
       if (filter.vocabType && !ALLOWED_VOCAB_TYPES.has(filter.vocabType)) {
         throw new Error(`Invalid vocab type: ${filter.vocabType}`);
       }
-
-      const fieldPlaceholders = filter.fields.map(() => "?").join(", ");
-      const fieldClause = filter.fields.length === 1
-        ? `m.field = ?`
-        : `m.field IN (${fieldPlaceholders})`;
 
       const typeClause = filter.vocabType ? ` AND type = ?` : "";
       const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
@@ -463,27 +483,28 @@ export class VocabularyDb {
         if (vocabIds.length === 0) {
           return emptyResult(warnings);
         }
-        const placeholders = vocabIds.map(() => "?").join(", ");
-        conditions.push(`a.object_number IN (
-          SELECT m.object_number FROM mappings m
-          WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
-        )`);
-        bindings.push(...filter.fields, ...vocabIds);
+        const ftsFilter = this.mappingFilterDirect(filter.fields, vocabIds);
+        conditions.push(ftsFilter.condition);
+        bindings.push(...ftsFilter.bindings);
       } else {
         const { where: vocabWhere, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
-        conditions.push(`a.object_number IN (
-          SELECT m.object_number FROM mappings m
-          WHERE ${fieldClause} AND m.vocab_id IN (
-            SELECT id FROM vocabulary WHERE ${vocabWhere}${typeClause}
-          )
-        )`);
-        bindings.push(...filter.fields, ...matchBindings, ...typeBindings);
+        const nonFtsFilter = this.mappingFilterSubquery(
+          filter.fields,
+          `${vocabWhere}${typeClause}`,
+          [...matchBindings, ...typeBindings],
+        );
+        conditions.push(nonFtsFilter.condition);
+        bindings.push(...nonFtsFilter.bindings);
       }
     }
 
-    // Direct column filter: license matches against artworks.rights_uri
+    // Direct column filter: license matches against artworks.rights_uri (or rights_lookup)
     if (effective.license) {
-      conditions.push("a.rights_uri LIKE ?");
+      if (this.hasRightsLookup) {
+        conditions.push("a.rights_id IN (SELECT id FROM rights_lookup WHERE uri LIKE ?)");
+      } else {
+        conditions.push("a.rights_uri LIKE ?");
+      }
       bindings.push(`%${effective.license}%`);
     }
 
@@ -573,20 +594,33 @@ export class VocabularyDb {
     if (geoResult && rows.length > 0) {
       const objNums = rows.map((r) => r.object_number);
       const objPlaceholders = objNums.map(() => "?").join(", ");
-      const distRows = this.db.prepare(
-        `SELECT m.object_number, v.label_en, v.label_nl,
-                haversine_km(?, ?, v.lat, v.lon) AS dist
-         FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
-         WHERE m.object_number IN (${objPlaceholders})
-           AND m.field IN ('subject', 'spatial')
-           AND v.lat IS NOT NULL
-         ORDER BY dist`
-      ).all(geoResult.refLat, geoResult.refLon, ...objNums) as {
-        object_number: string;
-        label_en: string | null;
-        label_nl: string | null;
-        dist: number;
-      }[];
+
+      let distRows: { object_number: string; label_en: string | null; label_nl: string | null; dist: number }[];
+      if (this.hasIntMappings) {
+        const subjectId = this.fieldIdMap.get("subject");
+        const spatialId = this.fieldIdMap.get("spatial");
+        distRows = this.db.prepare(
+          `SELECT a.object_number, v.label_en, v.label_nl,
+                  haversine_km(?, ?, v.lat, v.lon) AS dist
+           FROM mappings m
+           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+           JOIN artworks a ON m.artwork_id = a.art_id
+           WHERE a.object_number IN (${objPlaceholders})
+             AND m.field_id IN (?, ?)
+             AND v.lat IS NOT NULL
+           ORDER BY dist`
+        ).all(geoResult.refLat, geoResult.refLon, ...objNums, subjectId, spatialId) as typeof distRows;
+      } else {
+        distRows = this.db.prepare(
+          `SELECT m.object_number, v.label_en, v.label_nl,
+                  haversine_km(?, ?, v.lat, v.lon) AS dist
+           FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
+           WHERE m.object_number IN (${objPlaceholders})
+             AND m.field IN ('subject', 'spatial')
+             AND v.lat IS NOT NULL
+           ORDER BY dist`
+        ).all(geoResult.refLat, geoResult.refLon, ...objNums) as typeof distRows;
+      }
 
       distanceMap = new Map();
       for (const dr of distRows) {
@@ -689,6 +723,101 @@ export class VocabularyDb {
       default:
         return { where: "(label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)", bindings: [`%${value}%`, `%${value}%`] };
     }
+  }
+
+  /**
+   * Convert text vocab IDs to integer `vocab_int_id` values.
+   * Chunks at 500 to stay within SQLite's variable limit.
+   */
+  private vocabIdsToRowids(textIds: string[]): number[] {
+    const CHUNK = 500;
+    const result: number[] = [];
+    for (let i = 0; i < textIds.length; i += CHUNK) {
+      const chunk = textIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = this.db!.prepare(
+        `SELECT vocab_int_id FROM vocabulary WHERE id IN (${placeholders})`
+      ).all(...chunk) as { vocab_int_id: number }[];
+      for (const r of rows) result.push(r.vocab_int_id);
+    }
+    return result;
+  }
+
+  /**
+   * Build a mapping filter for the FTS/geo paths where vocab IDs are already resolved.
+   * Returns SQL condition + bindings for use in a WHERE clause on `artworks a`.
+   */
+  private mappingFilterDirect(
+    fields: string[],
+    vocabTextIds: string[],
+  ): { condition: string; bindings: unknown[] } {
+    if (this.hasIntMappings) {
+      const rowids = this.vocabIdsToRowids(vocabTextIds);
+      if (rowids.length === 0) return { condition: "0", bindings: [] };
+      const fieldIds = fields.map((f) => this.fieldIdMap.get(f)!);
+      const fieldClause = fieldIds.length === 1
+        ? `m.field_id = ?`
+        : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
+      const placeholders = rowids.map(() => "?").join(", ");
+      return {
+        condition: `a.art_id IN (
+          SELECT m.artwork_id FROM mappings m
+          WHERE ${fieldClause} AND m.vocab_rowid IN (${placeholders})
+        )`,
+        bindings: [...fieldIds, ...rowids],
+      };
+    }
+    // Old text path
+    const fieldClause = fields.length === 1
+      ? `m.field = ?`
+      : `m.field IN (${fields.map(() => "?").join(", ")})`;
+    const placeholders = vocabTextIds.map(() => "?").join(", ");
+    return {
+      condition: `a.object_number IN (
+        SELECT m.object_number FROM mappings m
+        WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
+      )`,
+      bindings: [...fields, ...vocabTextIds],
+    };
+  }
+
+  /**
+   * Build a mapping filter for the non-FTS path with a vocabulary subquery.
+   * Returns SQL condition + bindings for use in a WHERE clause on `artworks a`.
+   */
+  private mappingFilterSubquery(
+    fields: string[],
+    vocabWhere: string,
+    vocabBindings: unknown[],
+  ): { condition: string; bindings: unknown[] } {
+    if (this.hasIntMappings) {
+      const fieldIds = fields.map((f) => this.fieldIdMap.get(f)!);
+      const fieldClause = fieldIds.length === 1
+        ? `m.field_id = ?`
+        : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
+      return {
+        condition: `a.art_id IN (
+          SELECT m.artwork_id FROM mappings m
+          WHERE ${fieldClause} AND m.vocab_rowid IN (
+            SELECT vocab_int_id FROM vocabulary WHERE ${vocabWhere}
+          )
+        )`,
+        bindings: [...fieldIds, ...vocabBindings],
+      };
+    }
+    // Old text path
+    const fieldClause = fields.length === 1
+      ? `m.field = ?`
+      : `m.field IN (${fields.map(() => "?").join(", ")})`;
+    return {
+      condition: `a.object_number IN (
+        SELECT m.object_number FROM mappings m
+        WHERE ${fieldClause} AND m.vocab_id IN (
+          SELECT id FROM vocabulary WHERE ${vocabWhere}
+        )
+      )`,
+      bindings: [...fields, ...vocabBindings],
+    };
   }
 
   /** Check if there's actual geocoded data (not just an empty lat column). */
