@@ -369,9 +369,12 @@ function registerTools(
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "At least one search filter is required. " +
         "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
-        "For concept or thematic searches, start with subject; " +
-        "use narrative for curatorial interpretation or description for cataloguer notes. " +
-        "These search different text corpora and can return complementary results. " +
+        "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), " +
+        "ALWAYS start with subject — it searches 831K artworks tagged with structured Iconclass vocabulary " +
+        "and has by far the highest recall for conceptual queries. " +
+        "Use description for cataloguer observations not captured in structured vocabulary (e.g. compositional details, " +
+        "specific motifs noted by specialists); use narrative for curatorial interpretation and art-historical context. " +
+        "These three fields search different text corpora and can return complementary results. " +
         "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
         "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
         (vocabAvailable
@@ -427,7 +430,12 @@ function registerTools(
         description: z
           .string()
           .optional()
-          .describe("Search in artwork descriptions (~292K artworks). Broader coverage but less structured than subject. Not supported in vocabulary-based searches."),
+          .describe(
+            "Search in cataloguer descriptions (~292K artworks). Best for specific observations not in structured vocabulary — " +
+            "compositional details, motifs, physical condition notes, attribution remarks. " +
+            "Literal text matching; for broad concept searches, use subject instead (much higher recall). " +
+            "Not supported in vocabulary-based searches."
+          ),
         imageAvailable: z
           .boolean()
           .optional()
@@ -442,8 +450,10 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "Best starting point for concept or thematic searches. " +
-                  "Searches by subject matter (Iconclass themes, depicted scenes). Exact word matching, no stemming (e.g. 'cat' matches 'cat' but not 'Catharijnekerk' or 'cats'). For variant forms, search separately or use iconclass for precise codes. Requires vocabulary DB."
+                  "PRIMARY parameter for concept or thematic searches — use this first, before description or narrative. " +
+                  "Searches 831K artworks by subject matter (Iconclass themes, depicted scenes). " +
+                  "Exact word matching, no stemming (e.g. 'cat' matches 'cat' but not 'cats'). " +
+                  "For variant forms, search separately or use iconclass for precise codes. Requires vocabulary DB."
                 ),
               iconclass: z
                 .string()
@@ -543,8 +553,10 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "Full-text search on curatorial narrative (museum wall text — interpretive, art-historical context). " +
-                  "Exact word matching, no stemming. Smaller corpus (~14K artworks) but richest interpretive content. Requires vocabulary DB v1.0+."
+                  "Full-text search on curatorial narrative (~14K artworks with museum wall text). " +
+                  "Best for art-historical interpretation, exhibition context, and scholarly commentary — " +
+                  "content written by curators that goes beyond what structured vocabulary captures. " +
+                  "Exact word matching, no stemming. For broad concept searches, start with subject instead. Requires vocabulary DB v1.0+."
                 ),
               productionRole: z
                 .string()
