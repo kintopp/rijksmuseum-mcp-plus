@@ -239,6 +239,23 @@ export class VocabularyDb {
     return id;
   }
 
+  /**
+   * Build a SQL field filter clause with bindings for either integer or text mappings.
+   * Returns e.g. `m.field_id = ?` or `m.field_id IN (?, ?)` for int path,
+   * or `m.field = ?` / `m.field IN (?, ?)` for text path.
+   */
+  private buildFieldClause(fields: string[]): { clause: string; bindings: (string | number)[] } {
+    if (this.hasIntMappings) {
+      const fieldIds = fields.map((f) => this.requireFieldId(f));
+      return fieldIds.length === 1
+        ? { clause: "m.field_id = ?", bindings: fieldIds }
+        : { clause: `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`, bindings: fieldIds };
+    }
+    return fields.length === 1
+      ? { clause: "m.field = ?", bindings: fields }
+      : { clause: `m.field IN (${fields.map(() => "?").join(", ")})`, bindings: fields };
+  }
+
   constructor() {
     const dbPath = resolveDbPath("VOCAB_DB_PATH", "vocabulary.db");
     if (!dbPath) {
@@ -311,32 +328,26 @@ export class VocabularyDb {
     const map = new Map<string, string>();
     if (!this.db || objectNumbers.length === 0) return map;
 
+    const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(["type"]);
     const CHUNK = 500;
+
     for (let i = 0; i < objectNumbers.length; i += CHUNK) {
       const chunk = objectNumbers.slice(i, i + CHUNK);
       const placeholders = chunk.map(() => "?").join(", ");
 
-      if (this.hasIntMappings) {
-        const typeFieldId = this.requireFieldId("type");
-        const rows = this.db.prepare(
-          `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+      const sql = this.hasIntMappings
+        ? `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
            FROM mappings m
            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
            JOIN artworks a ON m.artwork_id = a.art_id
-           WHERE a.object_number IN (${placeholders}) AND m.field_id = ?`
-        ).all(...chunk, typeFieldId) as { object_number: string; label: string }[];
-        for (const r of rows) {
-          if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
-        }
-      } else {
-        const rows = this.db.prepare(
-          `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+           WHERE a.object_number IN (${placeholders}) AND ${fieldClause}`
+        : `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
            FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
-           WHERE m.object_number IN (${placeholders}) AND m.field = 'type'`
-        ).all(...chunk) as { object_number: string; label: string }[];
-        for (const r of rows) {
-          if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
-        }
+           WHERE m.object_number IN (${placeholders}) AND ${fieldClause}`;
+
+      const rows = this.db.prepare(sql).all(...chunk, ...fieldBindings) as { object_number: string; label: string }[];
+      for (const r of rows) {
+        if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
       }
     }
     return map;
@@ -601,33 +612,27 @@ export class VocabularyDb {
     if (geoResult && rows.length > 0) {
       const objNums = rows.map((r) => r.object_number);
       const objPlaceholders = objNums.map(() => "?").join(", ");
+      const { clause: geoFieldClause, bindings: geoFieldBindings } = this.buildFieldClause(["subject", "spatial"]);
 
-      let distRows: { object_number: string; label_en: string | null; label_nl: string | null; dist: number }[];
-      if (this.hasIntMappings) {
-        const subjectId = this.requireFieldId("subject");
-        const spatialId = this.requireFieldId("spatial");
-        distRows = this.db.prepare(
-          `SELECT a.object_number, v.label_en, v.label_nl,
+      const distSql = this.hasIntMappings
+        ? `SELECT a.object_number, v.label_en, v.label_nl,
                   haversine_km(?, ?, v.lat, v.lon) AS dist
            FROM mappings m
            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
            JOIN artworks a ON m.artwork_id = a.art_id
            WHERE a.object_number IN (${objPlaceholders})
-             AND m.field_id IN (?, ?)
-             AND v.lat IS NOT NULL
+             AND ${geoFieldClause} AND v.lat IS NOT NULL
            ORDER BY dist`
-        ).all(geoResult.refLat, geoResult.refLon, ...objNums, subjectId, spatialId) as typeof distRows;
-      } else {
-        distRows = this.db.prepare(
-          `SELECT m.object_number, v.label_en, v.label_nl,
+        : `SELECT m.object_number, v.label_en, v.label_nl,
                   haversine_km(?, ?, v.lat, v.lon) AS dist
            FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
            WHERE m.object_number IN (${objPlaceholders})
-             AND m.field IN ('subject', 'spatial')
-             AND v.lat IS NOT NULL
-           ORDER BY dist`
-        ).all(geoResult.refLat, geoResult.refLon, ...objNums) as typeof distRows;
-      }
+             AND ${geoFieldClause} AND v.lat IS NOT NULL
+           ORDER BY dist`;
+
+      const distRows = this.db.prepare(distSql).all(
+        geoResult.refLat, geoResult.refLon, ...objNums, ...geoFieldBindings,
+      ) as { object_number: string; label_en: string | null; label_nl: string | null; dist: number }[];
 
       distanceMap = new Map();
       for (const dr of distRows) {
@@ -758,33 +763,28 @@ export class VocabularyDb {
     fields: string[],
     vocabTextIds: string[],
   ): { condition: string; bindings: unknown[] } {
+    const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(fields);
+
     if (this.hasIntMappings) {
       const rowids = this.vocabIdsToRowids(vocabTextIds);
       if (rowids.length === 0) return { condition: "0", bindings: [] };
-      const fieldIds = fields.map((f) => this.requireFieldId(f));
-      const fieldClause = fieldIds.length === 1
-        ? `m.field_id = ?`
-        : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
       const placeholders = rowids.map(() => "?").join(", ");
       return {
         condition: `a.art_id IN (
           SELECT m.artwork_id FROM mappings m
           WHERE ${fieldClause} AND m.vocab_rowid IN (${placeholders})
         )`,
-        bindings: [...fieldIds, ...rowids],
+        bindings: [...fieldBindings, ...rowids],
       };
     }
-    // Old text path
-    const fieldClause = fields.length === 1
-      ? `m.field = ?`
-      : `m.field IN (${fields.map(() => "?").join(", ")})`;
+
     const placeholders = vocabTextIds.map(() => "?").join(", ");
     return {
       condition: `a.object_number IN (
         SELECT m.object_number FROM mappings m
         WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
       )`,
-      bindings: [...fields, ...vocabTextIds],
+      bindings: [...fieldBindings, ...vocabTextIds],
     };
   }
 
@@ -797,33 +797,22 @@ export class VocabularyDb {
     vocabWhere: string,
     vocabBindings: unknown[],
   ): { condition: string; bindings: unknown[] } {
-    if (this.hasIntMappings) {
-      const fieldIds = fields.map((f) => this.requireFieldId(f));
-      const fieldClause = fieldIds.length === 1
-        ? `m.field_id = ?`
-        : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
-      return {
-        condition: `a.art_id IN (
-          SELECT m.artwork_id FROM mappings m
-          WHERE ${fieldClause} AND m.vocab_rowid IN (
-            SELECT vocab_int_id FROM vocabulary WHERE ${vocabWhere}
-          )
-        )`,
-        bindings: [...fieldIds, ...vocabBindings],
-      };
-    }
-    // Old text path
-    const fieldClause = fields.length === 1
-      ? `m.field = ?`
-      : `m.field IN (${fields.map(() => "?").join(", ")})`;
+    const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(fields);
+    const [artworkCol, vocabIdCol] = this.hasIntMappings
+      ? ["a.art_id", "vocab_int_id"]
+      : ["a.object_number", "id"];
+    const [mappingArtCol, mappingVocabCol] = this.hasIntMappings
+      ? ["m.artwork_id", "m.vocab_rowid"]
+      : ["m.object_number", "m.vocab_id"];
+
     return {
-      condition: `a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        WHERE ${fieldClause} AND m.vocab_id IN (
-          SELECT id FROM vocabulary WHERE ${vocabWhere}
+      condition: `${artworkCol} IN (
+        SELECT ${mappingArtCol} FROM mappings m
+        WHERE ${fieldClause} AND ${mappingVocabCol} IN (
+          SELECT ${vocabIdCol} FROM vocabulary WHERE ${vocabWhere}
         )
       )`,
-      bindings: [...fields, ...vocabBindings],
+      bindings: [...fieldBindings, ...vocabBindings],
     };
   }
 

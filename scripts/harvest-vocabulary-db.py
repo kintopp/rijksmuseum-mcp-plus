@@ -227,6 +227,11 @@ VOCAB_INSERT_SQL = (
 )
 
 
+def get_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """Return the set of column names for a given table."""
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
 def create_or_open_db() -> sqlite3.Connection:
     """Create or open the SQLite database, migrating schema if needed."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -237,14 +242,14 @@ def create_or_open_db() -> sqlite3.Connection:
     conn.executescript(SCHEMA_SQL)
 
     # Migrate existing DBs: add normalized label columns if missing
-    vocab_cols = {row[1] for row in conn.execute("PRAGMA table_info(vocabulary)").fetchall()}
+    vocab_cols = get_columns(conn, "vocabulary")
     for col_name, col_type in [("label_en_norm", "TEXT"), ("label_nl_norm", "TEXT")]:
         if col_name not in vocab_cols:
             conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} {col_type}")
             print(f"  Migrated: added vocabulary.{col_name}")
 
     # Migrate existing DBs: add Tier 2 columns if missing
-    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(artworks)").fetchall()}
+    existing_cols = get_columns(conn, "artworks")
     tier2_cols = [
         ("linked_art_uri", "TEXT"),
         ("inscription_text", "TEXT"),
@@ -1370,26 +1375,22 @@ def normalize_mappings(conn: sqlite3.Connection):
     (artwork_id, vocab_rowid, field_id) in a WITHOUT ROWID clustered B-tree.
     Idempotent: skips if already normalized.
     """
-    cur = conn.cursor()
-
     # Guard: skip if already normalized
-    mappings_cols = {row[1] for row in cur.execute("PRAGMA table_info(mappings)").fetchall()}
-    if "artwork_id" in mappings_cols:
+    if "artwork_id" in get_columns(conn, "mappings"):
         print("  Mappings already integer-encoded, skipping.")
         return
 
     t0 = time.time()
+    cur = conn.cursor()
 
     # Step 1: Add stable integer IDs to parent tables (survive VACUUM)
     print("  Adding stable integer IDs to artworks and vocabulary...")
-    art_cols = {row[1] for row in cur.execute("PRAGMA table_info(artworks)").fetchall()}
-    if "art_id" not in art_cols:
+    if "art_id" not in get_columns(conn, "artworks"):
         conn.execute("ALTER TABLE artworks ADD COLUMN art_id INTEGER")
         conn.execute("UPDATE artworks SET art_id = rowid")
         conn.execute("CREATE UNIQUE INDEX idx_artworks_art_id ON artworks(art_id)")
 
-    vocab_cols = {row[1] for row in cur.execute("PRAGMA table_info(vocabulary)").fetchall()}
-    if "vocab_int_id" not in vocab_cols:
+    if "vocab_int_id" not in get_columns(conn, "vocabulary"):
         conn.execute("ALTER TABLE vocabulary ADD COLUMN vocab_int_id INTEGER")
         conn.execute("UPDATE vocabulary SET vocab_int_id = rowid")
         conn.execute("CREATE UNIQUE INDEX idx_vocab_int_id ON vocabulary(vocab_int_id)")
@@ -1458,11 +1459,8 @@ def normalize_rights(conn: sqlite3.Connection):
     Creates a rights_lookup table (3-4 rows) and replaces the TEXT rights_uri
     column with an INTEGER rights_id FK. Idempotent: skips if already normalized.
     """
-    cur = conn.cursor()
-
     # Guard: skip if already normalized
-    art_cols = {row[1] for row in cur.execute("PRAGMA table_info(artworks)").fetchall()}
-    if "rights_id" in art_cols:
+    if "rights_id" in get_columns(conn, "artworks"):
         print("  Rights already normalized, skipping.")
         return
 
@@ -1475,7 +1473,7 @@ def normalize_rights(conn: sqlite3.Connection):
         SELECT DISTINCT rights_uri FROM artworks
         WHERE rights_uri IS NOT NULL AND rights_uri != ''
     """)
-    rights_count = cur.execute("SELECT COUNT(*) FROM rights_lookup").fetchone()[0]
+    rights_count = conn.execute("SELECT COUNT(*) FROM rights_lookup").fetchone()[0]
     print(f"    {rights_count} distinct rights URIs")
 
     conn.execute("ALTER TABLE artworks ADD COLUMN rights_id INTEGER")

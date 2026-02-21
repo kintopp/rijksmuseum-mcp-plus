@@ -175,6 +175,21 @@ class CrossFilterProfiler {
   }
 
   /**
+   * Build a SQL field filter clause for either integer or text mappings.
+   */
+  _buildFieldClause(fields) {
+    if (this.hasIntMappings) {
+      const fieldIds = fields.map(f => this.fieldIdMap.get(f));
+      return fieldIds.length === 1
+        ? { clause: "m.field_id = ?", bindings: fieldIds }
+        : { clause: `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`, bindings: fieldIds };
+    }
+    return fields.length === 1
+      ? { clause: "m.field = ?", bindings: fields }
+      : { clause: `m.field IN (${fields.map(() => "?").join(", ")})`, bindings: fields };
+  }
+
+  /**
    * Convert text vocab IDs to integer vocab_int_id values.
    */
   _vocabIdsToRowids(textIds) {
@@ -233,7 +248,7 @@ class CrossFilterProfiler {
    */
   subqueryCardinality(filterName, vocabIds) {
     const filter = VOCAB_FILTERS[filterName];
-    const placeholders = vocabIds.map(() => "?").join(", ");
+    const { clause: fieldClause, bindings: fieldBindings } = this._buildFieldClause(filter.fields);
 
     const start = performance.now();
     let row;
@@ -241,21 +256,15 @@ class CrossFilterProfiler {
     if (this.hasIntMappings) {
       const rowids = this._vocabIdsToRowids(vocabIds);
       if (rowids.length === 0) return { count: 0, timeMs: performance.now() - start };
-      const fieldIds = filter.fields.map(f => this.fieldIdMap.get(f));
-      const fieldClause = fieldIds.length === 1
-        ? "m.field_id = ?"
-        : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
       const rPlaceholders = rowids.map(() => "?").join(", ");
       row = this.db.prepare(
         `SELECT COUNT(DISTINCT m.artwork_id) as n FROM mappings m WHERE ${fieldClause} AND m.vocab_rowid IN (${rPlaceholders})`
-      ).get(...fieldIds, ...rowids);
+      ).get(...fieldBindings, ...rowids);
     } else {
-      const fieldClause = filter.fields.length === 1
-        ? "m.field = ?"
-        : `m.field IN (${filter.fields.map(() => "?").join(", ")})`;
+      const placeholders = vocabIds.map(() => "?").join(", ");
       row = this.db.prepare(
         `SELECT COUNT(DISTINCT m.object_number) as n FROM mappings m WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})`
-      ).get(...filter.fields, ...vocabIds);
+      ).get(...fieldBindings, ...vocabIds);
     }
     return { count: row.n, timeMs: performance.now() - start };
   }
@@ -312,31 +321,26 @@ class CrossFilterProfiler {
       const { count, timeMs: cardMs } = this.subqueryCardinality(name, ids);
       subqueryDetails.push({ name, value, vocabIds: ids.length, cardinality: count, resolveMs, cardMs });
 
+      const { clause: fieldClause, bindings: fieldBindings } = this._buildFieldClause(filter.fields);
+
       if (this.hasIntMappings) {
         const rowids = this._vocabIdsToRowids(ids);
         if (rowids.length === 0) {
           return { resultCount: 0, timeMs: 0, sql: "(empty — 0 rowids)", bindings: [], subqueryDetails };
         }
-        const fieldIds = filter.fields.map(f => this.fieldIdMap.get(f));
-        const fieldClause = fieldIds.length === 1
-          ? "m.field_id = ?"
-          : `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`;
         const rPlaceholders = rowids.map(() => "?").join(", ");
         conditions.push(`a.art_id IN (
           SELECT m.artwork_id FROM mappings m
           WHERE ${fieldClause} AND m.vocab_rowid IN (${rPlaceholders})
         )`);
-        bindings.push(...fieldIds, ...rowids);
+        bindings.push(...fieldBindings, ...rowids);
       } else {
         const placeholders = ids.map(() => "?").join(", ");
-        const fieldClause = filter.fields.length === 1
-          ? "m.field = ?"
-          : `m.field IN (${filter.fields.map(() => "?").join(", ")})`;
         conditions.push(`a.object_number IN (
           SELECT m.object_number FROM mappings m
           WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
         )`);
-        bindings.push(...filter.fields, ...ids);
+        bindings.push(...fieldBindings, ...ids);
       }
     }
 
