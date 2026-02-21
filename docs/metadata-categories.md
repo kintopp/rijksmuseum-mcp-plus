@@ -4,7 +4,7 @@ The `get_artwork_details` tool returns **24 metadata categories** plus a bibliog
 
 All categories are returned together in a single response.
 
-Several of these categories have corresponding search parameters in `search_artwork`, allowing collection-wide discovery: titles (via `title`/`query`), date (via `creationDate`), description (via `description`), curatorial narrative (via `narrative`), inscriptions (via `inscription`), provenance (via `provenance`), credit line (via `creditLine`), dimensions (via `minHeight`/`maxHeight`/`minWidth`/`maxWidth`), license (via `license`), collection sets (via `collectionSet`), and subjects (via `subject`, `iconclass`, `depictedPerson`, `depictedPlace`). Production details are searchable via `creator`, `productionPlace`, and `productionRole`.
+Several of these categories have corresponding search parameters in `search_artwork`, allowing collection-wide discovery: titles (via `title`/`query`), date (via `creationDate`), description (via `description`), curatorial narrative (via `curatorialNarrative`), inscriptions (via `inscription`), provenance (via `provenance`), credit line (via `creditLine`), dimensions (via `minHeight`/`maxHeight`/`minWidth`/`maxWidth`), license (via `license`), collection sets (via `collectionSet`), and subjects (via `subject`, `iconclass`, `depictedPerson`, `depictedPlace`). Production details are searchable via `creator`, `productionPlace`, and `productionRole`.
 
 ---
 

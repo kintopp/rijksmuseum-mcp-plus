@@ -350,7 +350,7 @@ function registerTools(
     "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
     "birthPlace", "deathPlace", "profession", "collectionSet", "license",
     // Tier 2 (vocabulary DB v1.0+)
-    "inscription", "provenance", "creditLine", "narrative", "productionRole",
+    "inscription", "provenance", "creditLine", "curatorialNarrative", "productionRole",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
     "nearPlace", "nearLat",
   ] as const;
@@ -374,14 +374,14 @@ function registerTools(
         "ALWAYS start with subject — it searches 831K artworks tagged with structured Iconclass vocabulary " +
         "and has by far the highest recall for conceptual queries. " +
         "Use description for cataloguer observations not captured in structured vocabulary (e.g. compositional details, " +
-        "specific motifs noted by specialists); use narrative for curatorial interpretation and art-historical context. " +
+        "specific motifs noted by specialists); use curatorialNarrative for curatorial interpretation and art-historical context. " +
         "These three fields search different text corpora and can return complementary results. " +
         "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
         "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
         (vocabAvailable
           ? " Vocabulary-based filters (subject, iconclass, depictedPerson, depictedPlace, productionPlace, " +
             "birthPlace, deathPlace, profession, collectionSet, license, inscription, provenance, creditLine, " +
-            "narrative, productionRole, and dimension filters) " +
+            "curatorialNarrative, productionRole, and dimension filters) " +
             "can be freely combined with each other and with creator, type, material, technique, creationDate, title, and query. " +
             "Vocabulary filters cannot be combined with description or imageAvailable. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
@@ -451,7 +451,7 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "PRIMARY parameter for concept or thematic searches — use this first, before description or narrative. " +
+                  "PRIMARY parameter for concept or thematic searches — use this first, before description or curatorialNarrative. " +
                   "Searches 831K artworks by subject matter (Iconclass themes, depicted scenes). " +
                   "Exact word matching, no stemming (e.g. 'cat' matches 'cat' but not 'cats'). " +
                   "For variant forms, search separately or use iconclass for precise codes. Requires vocabulary DB."
@@ -549,7 +549,7 @@ function registerTools(
                   "Full-text search on credit/donor lines (e.g. 'Drucker' for Drucker-Fraser bequest). " +
                   "Exact word matching, no stemming. Requires vocabulary DB v1.0+."
                 ),
-              narrative: z
+              curatorialNarrative: z
                 .string()
                 .min(1)
                 .optional()

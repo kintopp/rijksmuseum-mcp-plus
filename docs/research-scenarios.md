@@ -53,7 +53,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 ### Subject and Iconographic Search
 
-`search_artwork` includes seventeen database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `inscription`, `provenance`, `creditLine`, `narrative`, `productionRole`, height ranges, and width ranges — drawn from a pre-built vocabulary database of 149,000 controlled terms mapped to 831,000 artworks via 12.8 million mappings. These enable searches by what is depicted, where it was made, who made it (including biographical attributes and production roles), what is written on it, what the museum says about it, and how large it is.
+`search_artwork` includes seventeen database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `productionRole`, height ranges, and width ranges — drawn from a pre-built vocabulary database of 149,000 controlled terms mapped to 831,000 artworks via 12.8 million mappings. These enable searches by what is depicted, where it was made, who made it (including biographical attributes and production roles), what is written on it, what the museum says about it, and how large it is.
 
 #### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -349,7 +349,7 @@ Because the MCP tools are used through a large language model, the LLM's own kno
 **How the LLM enables it:**
 - The LLM recognises this as a geographic proximity query and uses `nearPlace: "Haarlem"` with `nearPlaceRadius: 15` (roughly walking distance) to find artworks connected to the Haarlem area
 - It combines this with `creationDate: "16*"` to restrict to the 17th century
-- It then uses `narrative` to search curatorial wall texts for "dune", "bleaching", or "Haarlemmermeer" to find works the museum has specifically contextualised in terms of the local landscape
-- The LLM synthesises the geographic and narrative results, explaining which villages and landscape features appear in the collection
+- It then uses `curatorialNarrative` to search curatorial wall texts for "dune", "bleaching", or "Haarlemmermeer" to find works the museum has specifically contextualised in terms of the local landscape
+- The LLM synthesises the geographic and curatorial narrative results, explaining which villages and landscape features appear in the collection
 
-**Why it matters:** The researcher doesn't need to know which specific villages fall within 15 km of Haarlem — the LLM and the geocoded place vocabulary handle that. The `narrative` search adds a curatorial dimension: it surfaces works where the museum itself has written about the landscape context, connecting the geographic data with art historical interpretation. This combination of proximity search and curatorial text search is something no conventional museum interface offers.
+**Why it matters:** The researcher doesn't need to know which specific villages fall within 15 km of Haarlem — the LLM and the geocoded place vocabulary handle that. The `curatorialNarrative` search adds a curatorial dimension: it surfaces works where the museum itself has written about the landscape context, connecting the geographic data with art historical interpretation. This combination of proximity search and curatorial text search is something no conventional museum interface offers.

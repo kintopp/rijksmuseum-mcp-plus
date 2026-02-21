@@ -22,7 +22,7 @@ export interface VocabSearchParams {
   inscription?: string;
   provenance?: string;
   creditLine?: string;
-  narrative?: string;
+  curatorialNarrative?: string;
   productionRole?: string;
   minHeight?: number;
   maxHeight?: number;
@@ -526,12 +526,12 @@ export class VocabularyDb {
       bindings.push(`%${effective.license}%`);
     }
 
-    // Tier 2: Text FTS filters (inscription, provenance, creditLine, narrative)
+    // Tier 2: Text FTS filters (inscription, provenance, creditLine, curatorialNarrative)
     const TEXT_FILTERS: [keyof VocabSearchParams, string][] = [
       ["inscription", "inscription_text"],
       ["provenance", "provenance_text"],
       ["creditLine", "credit_line"],
-      ["narrative", "narrative_text"],
+      ["curatorialNarrative", "narrative_text"],
       ["title", "title_all_text"],
     ];
     const requestedTextFilters = TEXT_FILTERS.filter(([param]) => typeof effective[param] === "string");
