@@ -285,6 +285,7 @@ const ImageInfoOutput = {
   license: z.string().nullable().optional(),
   physicalDimensions: z.string().nullable().optional(),
   collectionUrl: z.string().optional(),
+  iiifInfoUrl: z.string().optional(),
   viewerUrl: z.string().optional(),
   error: z.string().optional(),
 };
@@ -853,7 +854,7 @@ function registerTools(
         imageInfo.viewerUrl = `${baseUrl}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
-      const { thumbnailUrl, iiifId, iiifInfoUrl, fullUrl, ...imageData } = imageInfo;
+      const { thumbnailUrl, iiifId, fullUrl, ...imageData } = imageInfo;
       const viewerData = {
         ...imageData,
         objectNumber,
