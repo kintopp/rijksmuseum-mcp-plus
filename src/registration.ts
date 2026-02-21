@@ -1071,6 +1071,8 @@ function registerTools(
   );
 
   // ── lookup_iconclass ────────────────────────────────────────────
+  // Guarded: tool only registered when iconclassDb is loaded. This is safe because
+  // initIconclassDb() completes before createServer() in both stdio and HTTP boot paths.
 
   if (iconclassDb?.available) {
     server.registerTool(

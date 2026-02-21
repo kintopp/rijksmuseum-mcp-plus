@@ -51,6 +51,7 @@ def parse_notations(notations_path: str) -> dict[str, dict]:
                 current = {"notation": value, "children": [], "refs": []}
             elif tag == "C" and current:
                 current["children"].append(value)
+                current["_last_tag"] = "C"
             elif tag == ";" and current:
                 # Continuation of children or refs (same as previous tag)
                 # In notations.txt, ; after C means more children, ; after R means more refs
@@ -249,6 +250,9 @@ def build(data_dir: str, vocab_db_path: str, output_path: str):
             text TEXT
         )
     """)
+    # Filter out orphan rows referencing notations not in the parsed entries
+    valid_notations = set(entries.keys())
+    text_rows = [(n, l, t) for n, l, t in text_rows if n in valid_notations]
     conn.executemany("INSERT INTO texts VALUES (?, ?, ?)", text_rows)
     conn.execute("CREATE INDEX idx_texts_not ON texts(notation)")
     conn.commit()
@@ -278,6 +282,7 @@ def build(data_dir: str, vocab_db_path: str, output_path: str):
             keyword TEXT
         )
     """)
+    kw_rows = [(n, l, k) for n, l, k in kw_rows if n in valid_notations]
     conn.executemany("INSERT INTO keywords VALUES (?, ?, ?)", kw_rows)
     conn.execute("CREATE INDEX idx_kw_not ON keywords(notation)")
     conn.commit()

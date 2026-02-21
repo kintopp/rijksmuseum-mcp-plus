@@ -1,4 +1,4 @@
-import Database, { type Database as DatabaseType } from "better-sqlite3";
+import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -30,9 +30,11 @@ export interface IconclassBrowseResult {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/** Escape a value for safe FTS5 phrase matching. */
-function escapeFts5(value: string): string {
-  return `"${value.replace(/[*^():]/g, "").replace(/"/g, '""')}"`;
+/** Escape a value for safe FTS5 phrase matching. Returns null if input is empty after stripping. */
+function escapeFts5(value: string): string | null {
+  const cleaned = value.replace(/[*^():{}[\]\\-]/g, "").replace(/"/g, '""').trim();
+  if (!cleaned) return null;
+  return `"${cleaned}"`;
 }
 
 // ─── IconclassDb ─────────────────────────────────────────────────────
@@ -40,6 +42,14 @@ function escapeFts5(value: string): string {
 export class IconclassDb {
   private db: DatabaseType | null = null;
   private _countsAsOf: string | null = null;
+
+  // Cached prepared statements (initialized after db opens)
+  private stmtTextFts!: Statement;
+  private stmtKwFts!: Statement;
+  private stmtGetNotation!: Statement;
+  private stmtGetText!: Statement;
+  private stmtGetTextAny!: Statement;
+  private stmtGetKeywords!: Statement;
 
   constructor() {
     const dbPath = this.resolveDbPath();
@@ -61,6 +71,32 @@ export class IconclassDb {
         }
       } catch { /* version_info table may not exist */ }
 
+      // Cache all prepared statements
+      this.stmtTextFts = this.db.prepare(
+        `SELECT DISTINCT t.notation, n.rijks_count
+         FROM texts t
+         JOIN notations n ON t.notation = n.notation
+         WHERE t.rowid IN (SELECT rowid FROM texts_fts WHERE texts_fts MATCH ?)`
+      );
+      this.stmtKwFts = this.db.prepare(
+        `SELECT DISTINCT k.notation, n.rijks_count
+         FROM keywords k
+         JOIN notations n ON k.notation = n.notation
+         WHERE k.rowid IN (SELECT rowid FROM keywords_fts WHERE keywords_fts MATCH ?)`
+      );
+      this.stmtGetNotation = this.db.prepare(
+        "SELECT notation, path, children, refs, rijks_count FROM notations WHERE notation = ?"
+      );
+      this.stmtGetText = this.db.prepare(
+        "SELECT text FROM texts WHERE notation = ? AND lang = ? LIMIT 1"
+      );
+      this.stmtGetTextAny = this.db.prepare(
+        "SELECT text FROM texts WHERE notation = ? LIMIT 1"
+      );
+      this.stmtGetKeywords = this.db.prepare(
+        "SELECT keyword FROM keywords WHERE notation = ? AND lang = ?"
+      );
+
       console.error(`Iconclass DB loaded: ${dbPath} (${count.toLocaleString()} notations)`);
     } catch (err) {
       console.error(`Failed to open Iconclass DB: ${err instanceof Error ? err.message : err}`);
@@ -78,7 +114,8 @@ export class IconclassDb {
 
   /**
    * Search Iconclass notations by text query.
-   * FTS5 UNION across texts + keywords, deduplicated, ordered by rijks_count DESC.
+   * FTS5 UNION across texts + keywords (with JOIN for rijks_count),
+   * deduplicated, ordered by rijks_count DESC.
    */
   search(query: string, maxResults: number = 25, lang: string = "en"): IconclassSearchResult {
     if (!this.db) {
@@ -86,43 +123,29 @@ export class IconclassDb {
     }
 
     const ftsPhrase = escapeFts5(query);
-
-    // Find matching notations from texts and keywords FTS indexes
-    const textHits = this.db.prepare(
-      `SELECT DISTINCT t.notation FROM texts t
-       WHERE t.rowid IN (SELECT rowid FROM texts_fts WHERE texts_fts MATCH ?)`
-    ).all(ftsPhrase) as { notation: string }[];
-
-    const kwHits = this.db.prepare(
-      `SELECT DISTINCT k.notation FROM keywords k
-       WHERE k.rowid IN (SELECT rowid FROM keywords_fts WHERE keywords_fts MATCH ?)`
-    ).all(ftsPhrase) as { notation: string }[];
-
-    // Deduplicate
-    const notationSet = new Set<string>();
-    for (const r of textHits) notationSet.add(r.notation);
-    for (const r of kwHits) notationSet.add(r.notation);
-
-    if (notationSet.size === 0) {
+    if (!ftsPhrase) {
       return { query, totalResults: 0, results: [], countsAsOf: this._countsAsOf };
     }
 
-    // Get rijks_count for sorting
-    const notations = [...notationSet];
-    const placeholders = notations.map(() => "?").join(", ");
-    const countRows = this.db.prepare(
-      `SELECT notation, rijks_count FROM notations WHERE notation IN (${placeholders})`
-    ).all(...notations) as { notation: string; rijks_count: number }[];
+    // Find matching notations from texts and keywords FTS indexes (with rijks_count via JOIN)
+    const textHits = this.stmtTextFts.all(ftsPhrase) as { notation: string; rijks_count: number }[];
+    const kwHits = this.stmtKwFts.all(ftsPhrase) as { notation: string; rijks_count: number }[];
 
+    // Deduplicate and collect counts in one pass
     const countMap = new Map<string, number>();
-    for (const r of countRows) countMap.set(r.notation, r.rijks_count);
+    for (const r of textHits) countMap.set(r.notation, r.rijks_count);
+    for (const r of kwHits) {
+      if (!countMap.has(r.notation)) countMap.set(r.notation, r.rijks_count);
+    }
+
+    if (countMap.size === 0) {
+      return { query, totalResults: 0, results: [], countsAsOf: this._countsAsOf };
+    }
 
     // Sort by rijks_count DESC, then notation ASC
-    const sorted = notations.sort((a, b) => {
-      const ca = countMap.get(a) ?? 0;
-      const cb = countMap.get(b) ?? 0;
-      if (cb !== ca) return cb - ca;
-      return a.localeCompare(b);
+    const sorted = [...countMap.entries()].sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return a[0].localeCompare(b[0]);
     });
 
     const totalResults = sorted.length;
@@ -130,7 +153,7 @@ export class IconclassDb {
 
     // Resolve full entries
     const results = limited
-      .map((n) => this.resolveEntry(n, lang))
+      .map(([n]) => this.resolveEntry(n, lang))
       .filter((e): e is IconclassEntry => e !== null);
 
     return { query, totalResults, results, countsAsOf: this._countsAsOf };
@@ -157,9 +180,7 @@ export class IconclassDb {
   private resolveEntry(notation: string, lang: string): IconclassEntry | null {
     if (!this.db) return null;
 
-    const row = this.db.prepare(
-      "SELECT notation, path, children, refs, rijks_count FROM notations WHERE notation = ?"
-    ).get(notation) as {
+    const row = this.stmtGetNotation.get(notation) as {
       notation: string; path: string; children: string; refs: string; rijks_count: number;
     } | undefined;
 
@@ -191,24 +212,18 @@ export class IconclassDb {
     if (!this.db) return null;
 
     // Try requested language
-    const row = this.db.prepare(
-      "SELECT text FROM texts WHERE notation = ? AND lang = ? LIMIT 1"
-    ).get(notation, lang) as { text: string } | undefined;
+    const row = this.stmtGetText.get(notation, lang) as { text: string } | undefined;
     if (row) return row.text;
 
     // Fallback: en → nl → any
     for (const fallback of ["en", "nl"]) {
       if (fallback === lang) continue;
-      const fb = this.db.prepare(
-        "SELECT text FROM texts WHERE notation = ? AND lang = ? LIMIT 1"
-      ).get(notation, fallback) as { text: string } | undefined;
+      const fb = this.stmtGetText.get(notation, fallback) as { text: string } | undefined;
       if (fb) return fb.text;
     }
 
     // Any language
-    const any = this.db.prepare(
-      "SELECT text FROM texts WHERE notation = ? LIMIT 1"
-    ).get(notation) as { text: string } | undefined;
+    const any = this.stmtGetTextAny.get(notation) as { text: string } | undefined;
     return any?.text ?? null;
   }
 
@@ -217,18 +232,13 @@ export class IconclassDb {
     if (!this.db) return [];
 
     // Try requested language
-    let rows = this.db.prepare(
-      "SELECT keyword FROM keywords WHERE notation = ? AND lang = ?"
-    ).all(notation, lang) as { keyword: string }[];
-
+    let rows = this.stmtGetKeywords.all(notation, lang) as { keyword: string }[];
     if (rows.length > 0) return rows.map((r) => r.keyword);
 
     // Fallback: en → nl
     for (const fallback of ["en", "nl"]) {
       if (fallback === lang) continue;
-      rows = this.db.prepare(
-        "SELECT keyword FROM keywords WHERE notation = ? AND lang = ?"
-      ).all(notation, fallback) as { keyword: string }[];
+      rows = this.stmtGetKeywords.all(notation, fallback) as { keyword: string }[];
       if (rows.length > 0) return rows.map((r) => r.keyword);
     }
 
