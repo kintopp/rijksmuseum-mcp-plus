@@ -1,6 +1,5 @@
 import Database, { type Database as DatabaseType } from "better-sqlite3";
-import path from "node:path";
-import fs from "node:fs";
+import { escapeFts5, resolveDbPath } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -106,11 +105,6 @@ type PlaceCandidateRow = {
   lat: number | null;
   lon: number | null;
 };
-
-/** Escape a value for safe FTS5 phrase matching: strip operators, escape quotes. */
-function escapeFts5(value: string): string {
-  return `"${value.replace(/[*^():]/g, "").replace(/"/g, '""')}"`;
-}
 
 /** Haversine distance in km between two lat/lon points. */
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -236,7 +230,7 @@ export class VocabularyDb {
   private hasCoordinates = false;
 
   constructor() {
-    const dbPath = this.resolveDbPath();
+    const dbPath = resolveDbPath("VOCAB_DB_PATH", "vocabulary.db");
     if (!dbPath) {
       console.error("Vocabulary DB not found — vocabulary search disabled");
       return;
@@ -293,18 +287,24 @@ export class VocabularyDb {
     return this.db !== null;
   }
 
-  /** Batch-lookup object types from the mappings table. Returns objectNumber → label map. */
+  /** Batch-lookup object types from the mappings table. Returns objectNumber → label map.
+   *  Processes in chunks of 500 to stay within SQLite's 999-variable limit. */
   lookupTypes(objectNumbers: string[]): Map<string, string> {
     const map = new Map<string, string>();
     if (!this.db || objectNumbers.length === 0) return map;
-    const placeholders = objectNumbers.map(() => "?").join(", ");
-    const rows = this.db.prepare(
-      `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
-       FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
-       WHERE m.object_number IN (${placeholders}) AND m.field = 'type'`
-    ).all(...objectNumbers) as { object_number: string; label: string }[];
-    for (const r of rows) {
-      if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
+
+    const CHUNK = 500;
+    for (let i = 0; i < objectNumbers.length; i += CHUNK) {
+      const chunk = objectNumbers.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = this.db.prepare(
+        `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+         FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
+         WHERE m.object_number IN (${placeholders}) AND m.field = 'type'`
+      ).all(...chunk) as { object_number: string; label: string }[];
+      for (const r of rows) {
+        if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
+      }
     }
     return map;
   }
@@ -498,8 +498,10 @@ export class VocabularyDb {
     if (requestedTextFilters.length > 0) {
       if (this.hasTextFts) {
         for (const [param, column] of requestedTextFilters) {
+          const ftsPhrase = escapeFts5(effective[param] as string);
+          if (!ftsPhrase) continue; // skip empty-after-stripping queries
           conditions.push(`a.rowid IN (SELECT rowid FROM artwork_texts_fts WHERE ${column} MATCH ?)`);
-          bindings.push(escapeFts5(effective[param] as string));
+          bindings.push(ftsPhrase);
         }
       } else {
         warnings.push(
@@ -655,6 +657,7 @@ export class VocabularyDb {
    */
   private findVocabIdsFts(value: string, typeClause: string, typeBindings: unknown[]): string[] {
     const ftsPhrase = escapeFts5(value);
+    if (!ftsPhrase) return [];
     const rows = this.db!.prepare(
       `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
     ).all(ftsPhrase, ...typeBindings) as { id: string }[];
@@ -945,15 +948,4 @@ export class VocabularyDb {
     return null;
   }
 
-  private resolveDbPath(): string | null {
-    // 1. Explicit env var
-    const envPath = process.env.VOCAB_DB_PATH;
-    if (envPath && fs.existsSync(envPath)) return envPath;
-
-    // 2. Default ./data/vocabulary.db
-    const defaultPath = path.join(process.cwd(), "data", "vocabulary.db");
-    if (fs.existsSync(defaultPath)) return defaultPath;
-
-    return null;
-  }
 }

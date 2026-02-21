@@ -30,6 +30,8 @@ The rijksmuseum-mcp+ MCP server is also compatible with most open-source LLM cli
 "Show me prints made after paintings by other artists"  
 "What objects were acquired as bequests?"  
 "Find artworks depicting places within 100m of the Oude Kerk in Amsterdam"
+"What Iconclass codes relate to 'smell'?"
+"Browse the Iconclass hierarchy for notation 73D73 (Man of Sorrows)"
 
 _to be added: goals (technical and [research](docs/research-scenarios.md)), how it works, how to [search](docs/search-parameters.md)_
 
@@ -50,7 +52,7 @@ npm install
 npm run build
 ```
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows). If you already have other MCP servers configured, use [MCP Config Generator](https://mcp-conf-gen.pages.dev) to merge this entry into your existing file:
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows).
 
 ```json
 {
@@ -103,6 +105,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, IIIF URLs, and iconographic subjects (Iconclass, depicted persons, places). Each record includes an objectNumber for use with `get_artwork_details`, `get_artwork_image`, or `get_artwork_bibliography`. Pagination via resumption token. |
 | `resolve_uri` | Resolve a Linked Art URI to full artwork details. Use when you have a URI from `relatedObjects` or other tool output and want to learn what that object is. Returns the same enriched detail as `get_artwork_details`. |
 | `get_recent_changes` | Track additions and modifications by date range. Full EDM records (including subjects) or lightweight headers (`identifiersOnly`). Each record includes an objectNumber for use with `get_artwork_details`, `get_artwork_image`, or `get_artwork_bibliography`. Pagination via resumption token. |
+| `lookup_iconclass` | Search or browse the Iconclass classification system (~40K notations, 13 languages). Discover notation codes by concept (e.g. 'smell' → `31A33`), then use with `search_artwork`'s `iconclass` parameter for precise subject searches. Browse mode shows hierarchy and children. |
 
 #### Prompts and Resources
 

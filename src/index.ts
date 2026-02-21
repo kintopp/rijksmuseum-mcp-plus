@@ -16,8 +16,10 @@ import { createGunzip } from "node:zlib";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
+import { IconclassDb } from "./api/IconclassDb.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
+import { TOP_100_SET } from "./types.js";
 import { registerAll } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 
@@ -59,32 +61,60 @@ function getHttpPort(): number {
   return parseInt(process.env.PORT ?? "3000", 10);
 }
 
-// ─── Vocabulary DB download (runs once per volume lifetime) ─────────
+// ─── Database download helpers (run once per volume lifetime) ────────
 
-function resolveDbPath(): string {
-  return process.env.VOCAB_DB_PATH || path.join(process.cwd(), "data", "vocabulary.db");
+interface DbSpec {
+  name: string;
+  pathEnvVar: string;
+  urlEnvVar: string;
+  defaultFile: string;
+  /** SQL query that must succeed for the DB to be considered valid. */
+  validationQuery: string;
 }
 
-async function ensureVocabularyDb(): Promise<void> {
-  const dbPath = resolveDbPath();
+const VOCAB_DB_SPEC: DbSpec = {
+  name: "Vocabulary",
+  pathEnvVar: "VOCAB_DB_PATH",
+  urlEnvVar: "VOCAB_DB_URL",
+  defaultFile: "vocabulary.db",
+  validationQuery: "SELECT 1 FROM vocab_term_counts LIMIT 1",
+};
+
+const ICONCLASS_DB_SPEC: DbSpec = {
+  name: "Iconclass",
+  pathEnvVar: "ICONCLASS_DB_PATH",
+  urlEnvVar: "ICONCLASS_DB_URL",
+  defaultFile: "iconclass.db",
+  validationQuery: "SELECT 1 FROM notations LIMIT 1",
+};
+
+function resolveDbPathForSpec(spec: DbSpec): string {
+  return process.env[spec.pathEnvVar] || path.join(process.cwd(), "data", spec.defaultFile);
+}
+
+/**
+ * Ensure a SQLite database exists and passes validation.
+ * Downloads from the URL env var if missing or invalid.
+ */
+async function ensureDb(spec: DbSpec): Promise<void> {
+  const dbPath = resolveDbPathForSpec(spec);
+
   if (fs.existsSync(dbPath)) {
-    // Check if DB has required vocab_term_counts table; if not, re-download
     try {
       const { default: Database } = await import("better-sqlite3");
       const db = new Database(dbPath, { readonly: true });
-      db.prepare("SELECT 1 FROM vocab_term_counts LIMIT 1").get();
+      db.prepare(spec.validationQuery).get();
       db.close();
-      return; // DB is up to date
+      return;
     } catch {
-      console.error("Vocabulary DB outdated (missing vocab_term_counts) — will re-download");
-      // Don't delete yet — keep the old DB as fallback until download succeeds
+      console.error(`${spec.name} DB invalid or outdated — will re-download`);
     }
   }
 
-  const url = process.env.VOCAB_DB_URL;
+  const url = process.env[spec.urlEnvVar];
   if (!url) return;
 
-  console.error("Downloading vocabulary DB...");
+  console.error(`Downloading ${spec.name} DB...`);
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -105,22 +135,25 @@ async function ensureVocabularyDb(): Promise<void> {
     }
 
     fs.renameSync(tmpPath, dbPath);
-    console.error(`Vocabulary DB ready: ${dbPath}`);
+    console.error(`${spec.name} DB ready: ${dbPath}`);
   } catch (err) {
-    console.error(`Failed to download vocabulary DB: ${err instanceof Error ? err.message : err}`);
+    console.error(`Failed to download ${spec.name} DB: ${err instanceof Error ? err.message : err}`);
     if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
   } finally {
     clearTimeout(downloadTimer);
   }
 }
 
-// ─── Shared vocabulary database (one read-only instance) ────────────
+// ─── Shared database instances (one read-only instance each) ─────────
 
 let vocabDb: VocabularyDb | null = null;
+let iconclassDb: IconclassDb | null = null;
 
-async function initVocabularyDb(): Promise<void> {
-  await ensureVocabularyDb();
+async function initDatabases(): Promise<void> {
+  await ensureDb(VOCAB_DB_SPEC);
   vocabDb = new VocabularyDb();
+  await ensureDb(ICONCLASS_DB_SPEC);
+  iconclassDb = new IconclassDb();
 }
 
 // ─── Shared client instances (one per process) ──────────────────────
@@ -156,9 +189,6 @@ async function warmVocabCache(): Promise<void> {
   const ms = Math.round(performance.now() - start);
   console.error(`Vocab cache pre-warmed: ${resolved}/${uris.length} terms in ${ms}ms`);
 }
-
-/** The museum's "Top 100" curated set — their highlight selection. */
-const TOP_100_SET = "260213";
 
 /**
  * Pre-warm vocabulary terms referenced by the museum's Top 100 artworks.
@@ -222,14 +252,14 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, httpPort, usageStats);
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, iconclassDb, httpPort, usageStats);
   return server;
 }
 
 // ─── Stdio mode ──────────────────────────────────────────────────────
 
 async function runStdio(): Promise<void> {
-  await initVocabularyDb();
+  await initDatabases();
   initSharedClients();
   initUsageStats();
   const server = createServer();
@@ -243,7 +273,7 @@ async function runStdio(): Promise<void> {
 // ─── HTTP mode ───────────────────────────────────────────────────────
 
 async function runHttp(): Promise<void> {
-  await initVocabularyDb();
+  await initDatabases();
   initSharedClients();
   initUsageStats();
   const port = getHttpPort();

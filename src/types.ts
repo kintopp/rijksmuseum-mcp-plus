@@ -1,3 +1,6 @@
+/** The museum's "Top 100" curated OAI-PMH set identifier. */
+export const TOP_100_SET = "260213";
+
 // ─── Getty AAT Classification URIs ──────────────────────────────────
 // Used throughout Linked Art JSON-LD to classify content types
 
