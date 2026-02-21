@@ -227,6 +227,11 @@ VOCAB_INSERT_SQL = (
 )
 
 
+def get_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """Return the set of column names for a given table."""
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
 def create_or_open_db() -> sqlite3.Connection:
     """Create or open the SQLite database, migrating schema if needed."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -237,14 +242,14 @@ def create_or_open_db() -> sqlite3.Connection:
     conn.executescript(SCHEMA_SQL)
 
     # Migrate existing DBs: add normalized label columns if missing
-    vocab_cols = {row[1] for row in conn.execute("PRAGMA table_info(vocabulary)").fetchall()}
+    vocab_cols = get_columns(conn, "vocabulary")
     for col_name, col_type in [("label_en_norm", "TEXT"), ("label_nl_norm", "TEXT")]:
         if col_name not in vocab_cols:
             conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} {col_type}")
             print(f"  Migrated: added vocabulary.{col_name}")
 
     # Migrate existing DBs: add Tier 2 columns if missing
-    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(artworks)").fetchall()}
+    existing_cols = get_columns(conn, "artworks")
     tier2_cols = [
         ("linked_art_uri", "TEXT"),
         ("inscription_text", "TEXT"),
@@ -1361,6 +1366,133 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
         print(f"    Skipped (not a place): {skipped_not_place:,}")
 
 
+# ─── Normalization (integer-encoding) ─────────────────────────────────
+
+def normalize_mappings(conn: sqlite3.Connection):
+    """Integer-encode the mappings table for ~1.2 GB space savings.
+
+    Replaces TEXT columns (object_number, vocab_id, field) with INTEGER FKs
+    (artwork_id, vocab_rowid, field_id) in a WITHOUT ROWID clustered B-tree.
+    Idempotent: skips if already normalized.
+    """
+    # Guard: skip if already normalized
+    if "artwork_id" in get_columns(conn, "mappings"):
+        print("  Mappings already integer-encoded, skipping.")
+        return
+
+    t0 = time.time()
+    cur = conn.cursor()
+
+    # Step 1: Add stable integer IDs to parent tables (survive VACUUM)
+    print("  Adding stable integer IDs to artworks and vocabulary...")
+    if "art_id" not in get_columns(conn, "artworks"):
+        conn.execute("ALTER TABLE artworks ADD COLUMN art_id INTEGER")
+        conn.execute("UPDATE artworks SET art_id = rowid")
+        conn.execute("CREATE UNIQUE INDEX idx_artworks_art_id ON artworks(art_id)")
+
+    if "vocab_int_id" not in get_columns(conn, "vocabulary"):
+        conn.execute("ALTER TABLE vocabulary ADD COLUMN vocab_int_id INTEGER")
+        conn.execute("UPDATE vocabulary SET vocab_int_id = rowid")
+        conn.execute("CREATE UNIQUE INDEX idx_vocab_int_id ON vocabulary(vocab_int_id)")
+    conn.commit()
+
+    # Step 2: Create field_lookup table
+    print("  Creating field_lookup table...")
+    conn.execute("DROP TABLE IF EXISTS field_lookup")
+    conn.execute("CREATE TABLE field_lookup (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)")
+    conn.execute("INSERT INTO field_lookup (name) SELECT DISTINCT field FROM mappings ORDER BY field")
+    field_count = cur.execute("SELECT COUNT(*) FROM field_lookup").fetchone()[0]
+    print(f"    {field_count} distinct fields")
+    conn.commit()
+
+    # Step 3: Create and populate integer-encoded mappings table
+    #   WITHOUT ROWID stores the composite INTEGER PK as a clustered B-tree,
+    #   avoiding separate rowid allocation and saving ~50% vs regular table.
+    print("  Building integer-encoded mappings table (this may take a few minutes)...")
+    conn.execute("DROP TABLE IF EXISTS mappings_int")
+    conn.execute("""
+        CREATE TABLE mappings_int (
+            artwork_id  INTEGER NOT NULL,
+            vocab_rowid INTEGER NOT NULL,
+            field_id    INTEGER NOT NULL,
+            PRIMARY KEY (artwork_id, vocab_rowid, field_id)
+        ) WITHOUT ROWID
+    """)
+    conn.execute("""
+        INSERT INTO mappings_int (artwork_id, vocab_rowid, field_id)
+        SELECT a.art_id, v.vocab_int_id, f.id
+        FROM mappings m
+        JOIN artworks a ON m.object_number = a.object_number
+        JOIN vocabulary v ON m.vocab_id = v.id
+        JOIN field_lookup f ON m.field = f.name
+    """)
+    new_count = cur.execute("SELECT COUNT(*) FROM mappings_int").fetchone()[0]
+    old_count = cur.execute("SELECT COUNT(*) FROM mappings").fetchone()[0]
+    print(f"    Migrated {new_count:,} of {old_count:,} mappings")
+    if new_count < old_count:
+        print(f"    Note: {old_count - new_count:,} orphaned mappings dropped (vocab_id not in vocabulary)")
+    conn.commit()
+
+    # Step 4: Swap tables (rename-then-drop is crash-safe: if killed after
+    # the first rename, both tables survive and the idempotency guard recovers)
+    print("  Swapping tables...")
+    conn.execute("ALTER TABLE mappings RENAME TO mappings_old")
+    conn.execute("ALTER TABLE mappings_int RENAME TO mappings")
+    conn.commit()
+    conn.execute("DROP TABLE mappings_old")
+    conn.commit()
+
+    # Step 5: Recreate secondary indexes
+    print("  Creating secondary indexes...")
+    conn.execute("CREATE INDEX idx_mappings_field_vocab   ON mappings(field_id, vocab_rowid)")
+    conn.execute("CREATE INDEX idx_mappings_field_artwork ON mappings(field_id, artwork_id)")
+    conn.execute("CREATE INDEX idx_mappings_vocab         ON mappings(vocab_rowid)")
+    conn.commit()
+
+    elapsed = time.time() - t0
+    print(f"  Integer-encoding complete in {elapsed:.1f}s")
+
+
+def normalize_rights(conn: sqlite3.Connection):
+    """Normalize artworks.rights_uri to integer FK via rights_lookup table.
+
+    Creates a rights_lookup table (3-4 rows) and replaces the TEXT rights_uri
+    column with an INTEGER rights_id FK. Idempotent: skips if already normalized.
+    """
+    # Guard: skip if already normalized
+    if "rights_id" in get_columns(conn, "artworks"):
+        print("  Rights already normalized, skipping.")
+        return
+
+    print("  Normalizing rights_uri to integer FK...")
+
+    conn.execute("DROP TABLE IF EXISTS rights_lookup")
+    conn.execute("CREATE TABLE rights_lookup (id INTEGER PRIMARY KEY, uri TEXT NOT NULL UNIQUE)")
+    conn.execute("""
+        INSERT INTO rights_lookup (uri)
+        SELECT DISTINCT rights_uri FROM artworks
+        WHERE rights_uri IS NOT NULL AND rights_uri != ''
+    """)
+    rights_count = conn.execute("SELECT COUNT(*) FROM rights_lookup").fetchone()[0]
+    print(f"    {rights_count} distinct rights URIs")
+
+    conn.execute("ALTER TABLE artworks ADD COLUMN rights_id INTEGER")
+    conn.execute("""
+        UPDATE artworks SET rights_id = (
+            SELECT r.id FROM rights_lookup r WHERE r.uri = artworks.rights_uri
+        )
+    """)
+    conn.commit()
+
+    # Drop the old TEXT column (SQLite >= 3.35.0)
+    try:
+        conn.execute("ALTER TABLE artworks DROP COLUMN rights_uri")
+        conn.commit()
+        print("    Dropped rights_uri column")
+    except Exception:
+        print("    Note: Could not drop rights_uri (SQLite < 3.35.0), column retained")
+
+
 # ─── Phase 3: Validation ─────────────────────────────────────────────
 
 def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
@@ -1373,6 +1505,15 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         import_geocoding(conn, geo_csv)
         print()
 
+    # ── Integer-encode mappings & normalize rights for ~1.2 GB savings ──
+    print("\n--- Mappings Normalization ---")
+    normalize_mappings(conn)
+    normalize_rights(conn)
+
+    # Drop harvest-only index (only useful during Phase 4 to find unresolved artworks)
+    conn.execute("DROP INDEX IF EXISTS idx_artworks_tier2")
+    conn.commit()
+
     print("\n" + "=" * 60)
     print("DATABASE STATISTICS")
     print("=" * 60)
@@ -1384,9 +1525,9 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     print("\n--- Vocabulary by Type ---")
     rows = cur.execute("""
         SELECT v.type, COUNT(*) as vocab_cnt,
-               COUNT(DISTINCT m.object_number) as artwork_cnt
+               COUNT(DISTINCT m.artwork_id) as artwork_cnt
         FROM vocabulary v
-        LEFT JOIN mappings m ON m.vocab_id = v.id
+        LEFT JOIN mappings m ON m.vocab_rowid = v.vocab_int_id
         GROUP BY v.type
         ORDER BY artwork_cnt DESC
     """).fetchall()
@@ -1395,37 +1536,34 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
     print("\n--- Mappings by Field ---")
     rows = cur.execute("""
-        SELECT field, COUNT(*) as cnt, COUNT(DISTINCT object_number) as artworks
-        FROM mappings
-        GROUP BY field
+        SELECT f.name as field, COUNT(*) as cnt, COUNT(DISTINCT m.artwork_id) as artworks
+        FROM mappings m
+        JOIN field_lookup f ON m.field_id = f.id
+        GROUP BY m.field_id
         ORDER BY cnt DESC
     """).fetchall()
     for field, cnt, artworks in rows:
         print(f"  {field:20s} {cnt:10,} mappings    {artworks:8,} artworks")
 
     print("\n--- Vocabulary Coverage ---")
-    total_vocab_ids = cur.execute("SELECT COUNT(DISTINCT vocab_id) FROM mappings").fetchone()[0]
-    matched = cur.execute("""
-        SELECT COUNT(DISTINCT m.vocab_id)
-        FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-    """).fetchone()[0]
+    total_vocab_ids = cur.execute("SELECT COUNT(DISTINCT vocab_rowid) FROM mappings").fetchone()[0]
+    # After integer-encoding, all vocab_rowids are valid (orphans dropped during JOIN migration)
     print(f"  Distinct vocab IDs referenced: {total_vocab_ids:,}")
-    print(f"  Matched to vocabulary table:   {matched:,}")
-    print(f"  Still unmatched:               {total_vocab_ids - matched:,}")
+    print(f"  All matched (orphans dropped during integer-encoding)")
 
     # ── Post-processing: vocab_term_counts, FTS5, collection_set/rights stats ──
 
     print("\n--- Post-processing ---")
 
-    # Create vocab_term_counts table (reproducible, was previously ad-hoc)
+    # Create vocab_term_counts table (preserves text vocab_id for topTermUris())
     print("  Building vocab_term_counts...")
     conn.execute("DROP TABLE IF EXISTS vocab_term_counts")
     conn.execute("""
         CREATE TABLE vocab_term_counts AS
-        SELECT vocab_id, COUNT(*) as cnt
-        FROM mappings
-        GROUP BY vocab_id
+        SELECT v.id AS vocab_id, COUNT(*) AS cnt
+        FROM mappings m
+        JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+        GROUP BY m.vocab_rowid
     """)
     conn.execute("CREATE INDEX idx_vtc_cnt ON vocab_term_counts(cnt DESC)")
     vtc_count = cur.execute("SELECT COUNT(*) FROM vocab_term_counts").fetchone()[0]
@@ -1519,30 +1657,36 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
             print(f"  Skipping {label} (no qualifying data)")
 
     # Collection set stats
-    set_mappings = cur.execute(
-        "SELECT COUNT(*) FROM mappings WHERE field = 'collection_set'"
-    ).fetchone()[0]
-    distinct_sets = cur.execute(
-        "SELECT COUNT(DISTINCT vocab_id) FROM mappings WHERE field = 'collection_set'"
-    ).fetchone()[0]
-    print(f"    collection_set mappings: {set_mappings:,} ({distinct_sets:,} distinct sets)")
+    set_field_id = cur.execute(
+        "SELECT id FROM field_lookup WHERE name = 'collection_set'"
+    ).fetchone()
+    if set_field_id:
+        set_mappings = cur.execute(
+            "SELECT COUNT(*) FROM mappings WHERE field_id = ?", (set_field_id[0],)
+        ).fetchone()[0]
+        distinct_sets = cur.execute(
+            "SELECT COUNT(DISTINCT vocab_rowid) FROM mappings WHERE field_id = ?", (set_field_id[0],)
+        ).fetchone()[0]
+        print(f"    collection_set mappings: {set_mappings:,} ({distinct_sets:,} distinct sets)")
+    else:
+        print(f"    collection_set mappings: 0 (no collection_set field)")
 
-    # Rights URI coverage
+    # Rights coverage (via rights_lookup after normalization)
     rights_total = cur.execute(
-        "SELECT COUNT(*) FROM artworks WHERE rights_uri IS NOT NULL AND rights_uri != ''"
+        "SELECT COUNT(*) FROM artworks WHERE rights_id IS NOT NULL"
     ).fetchone()[0]
     rights_distinct = cur.execute(
-        "SELECT COUNT(DISTINCT rights_uri) FROM artworks WHERE rights_uri IS NOT NULL AND rights_uri != ''"
+        "SELECT COUNT(DISTINCT rights_id) FROM artworks WHERE rights_id IS NOT NULL"
     ).fetchone()[0]
-    print(f"    rights_uri coverage: {rights_total:,} artworks ({rights_distinct:,} distinct URIs)")
+    print(f"    rights coverage: {rights_total:,} artworks ({rights_distinct:,} distinct URIs)")
 
     # Show distinct rights URIs
     print("\n--- Rights URIs ---")
     rows = cur.execute("""
-        SELECT rights_uri, COUNT(*) as cnt
-        FROM artworks
-        WHERE rights_uri IS NOT NULL AND rights_uri != ''
-        GROUP BY rights_uri
+        SELECT r.uri, COUNT(*) as cnt
+        FROM artworks a
+        JOIN rights_lookup r ON a.rights_id = r.id
+        GROUP BY a.rights_id
         ORDER BY cnt DESC
     """).fetchall()
     for uri, cnt in rows:
@@ -1574,12 +1718,16 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
         # Mapping field coverage
         for field, label in [("production_role", "Prod. roles"), ("attribution_qualifier", "Attr. qualifiers")]:
-            cnt = cur.execute(
-                "SELECT COUNT(*) FROM mappings WHERE field = ?", (field,)
-            ).fetchone()[0]
-            artworks = cur.execute(
-                "SELECT COUNT(DISTINCT object_number) FROM mappings WHERE field = ?", (field,)
-            ).fetchone()[0]
+            fid = cur.execute("SELECT id FROM field_lookup WHERE name = ?", (field,)).fetchone()
+            if fid:
+                cnt = cur.execute(
+                    "SELECT COUNT(*) FROM mappings WHERE field_id = ?", (fid[0],)
+                ).fetchone()[0]
+                artworks = cur.execute(
+                    "SELECT COUNT(DISTINCT artwork_id) FROM mappings WHERE field_id = ?", (fid[0],)
+                ).fetchone()[0]
+            else:
+                cnt, artworks = 0, 0
             print(f"  {label:20s} {cnt:8,} mappings ({artworks:,} artworks)")
 
         tier2_pending = cur.execute(
@@ -1592,56 +1740,69 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
     # Dogs (Iconclass 34B11)
     count = cur.execute("""
-        SELECT COUNT(DISTINCT m.object_number)
+        SELECT COUNT(DISTINCT m.artwork_id)
         FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
+        JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
         WHERE v.notation = '34B11'
     """).fetchone()[0]
     print(f"  Iconclass 34B11 (dog): {count:,} artworks")
 
     # Crucifixion
     count = cur.execute("""
-        SELECT COUNT(DISTINCT m.object_number)
+        SELECT COUNT(DISTINCT m.artwork_id)
         FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
+        JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
         WHERE v.label_en LIKE '%crucifixion%'
     """).fetchone()[0]
     print(f"  Subject 'crucifixion': {count:,} artworks")
 
     # Rembrandt as depicted person
-    count = cur.execute("""
-        SELECT COUNT(DISTINCT m.object_number)
-        FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'subject' AND v.type = 'person'
-          AND v.label_en LIKE '%Rembrandt%'
-    """).fetchone()[0]
+    subject_fid = cur.execute("SELECT id FROM field_lookup WHERE name = 'subject'").fetchone()
+    if subject_fid:
+        count = cur.execute("""
+            SELECT COUNT(DISTINCT m.artwork_id)
+            FROM mappings m
+            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+            WHERE m.field_id = ? AND v.type = 'person'
+              AND v.label_en LIKE '%Rembrandt%'
+        """, (subject_fid[0],)).fetchone()[0]
+    else:
+        count = 0
     print(f"  Depicted person 'Rembrandt': {count:,} artworks")
 
     # Amsterdam
     count = cur.execute("""
-        SELECT COUNT(DISTINCT m.object_number)
+        SELECT COUNT(DISTINCT m.artwork_id)
         FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
+        JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
         WHERE v.type = 'place' AND v.label_en LIKE '%Amsterdam%'
     """).fetchone()[0]
     print(f"  Place 'Amsterdam': {count:,} artworks")
 
     print("\n--- Top 10 Subjects ---")
-    rows = cur.execute("""
-        SELECT v.notation, v.label_en, v.label_nl, v.type,
-               COUNT(DISTINCT m.object_number) as cnt
-        FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'subject'
-        GROUP BY m.vocab_id
-        ORDER BY cnt DESC
-        LIMIT 10
-    """).fetchall()
+    if subject_fid:
+        rows = cur.execute("""
+            SELECT v.notation, v.label_en, v.label_nl, v.type,
+                   COUNT(DISTINCT m.artwork_id) as cnt
+            FROM mappings m
+            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+            WHERE m.field_id = ?
+            GROUP BY m.vocab_rowid
+            ORDER BY cnt DESC
+            LIMIT 10
+        """, (subject_fid[0],)).fetchall()
+    else:
+        rows = []
     for notation, en, nl, vtype, cnt in rows:
         label = en or nl or "?"
         code = notation if vtype == "classification" else "—"
         print(f"  {code or '—':12s} {label:50s} {cnt:6,}")
+
+    # Final VACUUM to reclaim space from dropped tables/columns
+    print("\n--- VACUUM ---")
+    t0 = time.time()
+    conn.execute("VACUUM")
+    print(f"  VACUUM complete in {time.time() - t0:.1f}s")
 
 
 # ─── Main ────────────────────────────────────────────────────────────
