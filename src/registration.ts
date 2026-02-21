@@ -99,8 +99,11 @@ function createLogger(stats?: UsageStats) {
         const error = err instanceof Error ? err.message : String(err);
         console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
         stats?.record(toolName, ms, false);
-        const errResult: Record<string, unknown> = { content: [{ type: "text" as const, text: `Error in ${toolName}: ${error}` }], isError: true };
-        if (EMIT_STRUCTURED) errResult.structuredContent = { error };
+        const errResult: Record<string, unknown> = {
+          content: [{ type: "text" as const, text: `Error in ${toolName}: ${error}` }],
+          isError: true,
+          ...(EMIT_STRUCTURED && { structuredContent: { error } }),
+        };
         return errResult as R;
       }
     };

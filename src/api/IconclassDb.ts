@@ -122,14 +122,14 @@ export class IconclassDb {
    * deduplicated, ordered by rijks_count DESC.
    */
   search(query: string, maxResults: number = 25, lang: string = "en"): IconclassSearchResult {
-    if (!this.db) {
-      return { query, totalResults: 0, results: [], countsAsOf: this._countsAsOf };
-    }
+    const emptyResult = (): IconclassSearchResult => ({
+      query, totalResults: 0, results: [], countsAsOf: this._countsAsOf,
+    });
+
+    if (!this.db) return emptyResult();
 
     const ftsPhrase = escapeFts5(query);
-    if (!ftsPhrase) {
-      return { query, totalResults: 0, results: [], countsAsOf: this._countsAsOf };
-    }
+    if (!ftsPhrase) return emptyResult();
 
     // Find matching notations from texts and keywords FTS indexes (with rijks_count via JOIN)
     const textHits = this.stmtTextFts.all(ftsPhrase) as { notation: string; rijks_count: number }[];
@@ -142,9 +142,7 @@ export class IconclassDb {
       if (!countMap.has(r.notation)) countMap.set(r.notation, r.rijks_count);
     }
 
-    if (countMap.size === 0) {
-      return { query, totalResults: 0, results: [], countsAsOf: this._countsAsOf };
-    }
+    if (countMap.size === 0) return emptyResult();
 
     // Sort by rijks_count DESC, then notation ASC
     const sorted = [...countMap.entries()].sort((a, b) => {

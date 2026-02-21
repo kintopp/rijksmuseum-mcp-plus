@@ -607,10 +607,12 @@ export class VocabularyDb {
       results: rows.map((r) => {
         const d = distanceMap?.get(r.object_number);
         const t = typeMap?.get(r.object_number);
-        const date = r.date_earliest != null
-          ? r.date_earliest === r.date_latest ? String(r.date_earliest)
-            : `${r.date_earliest}–${r.date_latest}`
-          : undefined;
+        let date: string | undefined;
+        if (r.date_earliest != null) {
+          date = r.date_earliest === r.date_latest
+            ? String(r.date_earliest)
+            : `${r.date_earliest}–${r.date_latest}`;
+        }
         return {
           objectNumber: r.object_number,
           title: r.title || "",
