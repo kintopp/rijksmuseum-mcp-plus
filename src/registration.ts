@@ -652,8 +652,11 @@ function registerTools(
         const result = vocabDb.search(vocabArgs as any);
 
         // Warn about Search API-only filters that were silently dropped
-        const searchOnlyKeys = ["aboutActor", "description", "imageAvailable", "compact", "pageToken"] as const;
-        const droppedKeys = searchOnlyKeys.filter(k => argsRecord[k] !== undefined);
+        const searchOnlyKeys = ["aboutActor", "description", "imageAvailable", "pageToken"] as const;
+        const droppedKeys = [
+          ...searchOnlyKeys.filter(k => argsRecord[k] !== undefined),
+          ...(argsRecord["compact"] === true ? ["compact"] : []),
+        ];
         if (droppedKeys.length > 0) {
           result.warnings = [
             ...(result.warnings || []),
