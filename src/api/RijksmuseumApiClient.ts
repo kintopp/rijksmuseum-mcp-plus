@@ -1041,10 +1041,12 @@ export class RijksmuseumApiClient {
   }> {
     const searchResponse = await this.search(params);
     const totalResults = searchResponse.partOf?.totalItems ?? searchResponse.orderedItems.length;
+    const maxResults = params.maxResults ?? RijksmuseumApiClient.DEFAULT_MAX_RESULTS;
+    const items = searchResponse.orderedItems.slice(0, maxResults);
 
     return {
       totalResults,
-      ids: searchResponse.orderedItems.map((i) => i.id),
+      ids: items.map((i) => i.id),
       nextPageToken: extractPageToken(searchResponse.next),
     };
   }
