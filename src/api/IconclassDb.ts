@@ -95,7 +95,7 @@ export class IconclassDb {
         "SELECT text FROM texts WHERE notation = ? LIMIT 1"
       );
       this.stmtGetKeywords = this.db.prepare(
-        "SELECT keyword FROM keywords WHERE notation = ? AND lang = ?"
+        "SELECT keyword FROM keywords WHERE notation = ? AND lang = ? LIMIT 20"
       );
       this.stmtGetKeywordsAny = this.db.prepare(
         "SELECT keyword FROM keywords WHERE notation = ? LIMIT 20"
