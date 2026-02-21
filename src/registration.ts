@@ -277,9 +277,6 @@ const ImageInfoOutput = {
   title: z.string().optional(),
   creator: z.string().nullable().optional(),
   date: z.string().nullable().optional(),
-  iiifId: z.string().optional(),
-  iiifInfoUrl: z.string().optional(),
-  fullUrl: z.string().optional().describe("Full-size JPEG URL."),
   width: z.number().int().optional(),
   height: z.number().int().optional(),
   license: z.string().nullable().optional(),
@@ -807,7 +804,8 @@ function registerTools(
         "This is the primary way to examine artwork details up close — " +
         "prefer this over linking users to external pages for image viewing. " +
         "Not all artworks have images available. " +
-        "Does not support downloading images or cropping specific regions. Do not construct IIIF image URLs manually.",
+        "Downloadable images are available from the artwork's collection page on rijksmuseum.nl. " +
+        "Do not construct IIIF image URLs manually.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -837,7 +835,7 @@ function registerTools(
         imageInfo.viewerUrl = `${baseUrl}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
-      const { thumbnailUrl, ...imageData } = imageInfo;
+      const { thumbnailUrl, iiifId, iiifInfoUrl, fullUrl, ...imageData } = imageInfo;
       const viewerData = {
         ...imageData,
         objectNumber,
