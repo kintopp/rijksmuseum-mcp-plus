@@ -172,6 +172,7 @@ const SearchResultOutput = {
   totalResults: z.number().int().nullable().optional()
     .describe("Total matching artworks. Null/absent for complex cross-filter queries."),
   results: z.array(z.object({
+    id: z.string().optional().describe("Linked Art URI (present for Search API results, absent for vocabulary results)."),
     objectNumber: z.string(),
     title: z.string(),
     creator: z.string(),
@@ -259,6 +260,7 @@ const TimelineOutput = {
   artist: z.string(),
   totalWorksInCollection: z.number().int(),
   timeline: z.array(z.object({
+    id: z.string().describe("Linked Art URI."),
     objectNumber: z.string(),
     title: z.string(),
     creator: z.string(),
@@ -277,6 +279,7 @@ const ImageInfoOutput = {
   date: z.string().nullable().optional(),
   iiifId: z.string().optional(),
   iiifInfoUrl: z.string().optional(),
+  fullUrl: z.string().optional().describe("Full-size JPEG URL."),
   width: z.number().int().optional(),
   height: z.number().int().optional(),
   license: z.string().nullable().optional(),
