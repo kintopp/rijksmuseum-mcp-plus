@@ -89,7 +89,7 @@ const ICONCLASS_DB_SPEC: DbSpec = {
 };
 
 function resolveDbPathForSpec(spec: DbSpec): string {
-  return process.env[spec.pathEnvVar] || path.join(process.cwd(), "data", spec.defaultFile);
+  return process.env[spec.pathEnvVar] || path.join(__dirname, "..", "data", spec.defaultFile);
 }
 
 /**

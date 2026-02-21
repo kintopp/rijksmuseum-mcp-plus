@@ -1,5 +1,9 @@
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
+/** Project root: two levels up from dist/utils/db.js (or src/utils/db.ts). */
+export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /** Escape a value for safe FTS5 phrase matching. Returns null if input is empty after stripping.
  *  Strips FTS5 operators and bracket characters; preserves hyphens (safe inside quoted phrases). */
@@ -15,7 +19,7 @@ export function resolveDbPath(envVarName: string, defaultFilename: string): stri
   const envPath = process.env[envVarName];
   if (envPath && fs.existsSync(envPath)) return envPath;
 
-  const defaultPath = path.join(process.cwd(), "data", defaultFilename);
+  const defaultPath = path.join(PROJECT_ROOT, "data", defaultFilename);
   if (fs.existsSync(defaultPath)) return defaultPath;
 
   return null;

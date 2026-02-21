@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { PROJECT_ROOT } from "./db.js";
 
 interface ToolStats {
   calls: number;
@@ -30,7 +31,7 @@ export class UsageStats {
     this.filePath =
       filePath ??
       process.env.USAGE_STATS_PATH ??
-      path.join(process.cwd(), "data", "usage-stats.json");
+      path.join(PROJECT_ROOT, "data", "usage-stats.json");
 
     this.data = this.load();
 
