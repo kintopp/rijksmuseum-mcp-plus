@@ -135,3 +135,9 @@ search_artwork	{"creator": "Hendrick ter Brugghen"}
 search_artwork	{"nearPlace": "Haarlem", "nearPlaceRadius": 15, "creationDate": "16*"}
 search_artwork	{"narrative": "dune"}
 search_artwork	{"narrative": "bleaching"}
+
+# 27. Iconclass Concept Discovery
+lookup_iconclass	{"query": "smell"}
+lookup_iconclass	{"query": "crucifixion"}
+lookup_iconclass	{"notation": "34B11"}
+lookup_iconclass	{"query": "Schmerzensmann"}

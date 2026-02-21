@@ -16,6 +16,7 @@ import { createGunzip } from "node:zlib";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
+import { IconclassDb } from "./api/IconclassDb.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { registerAll } from "./registration.js";
@@ -123,6 +124,68 @@ async function initVocabularyDb(): Promise<void> {
   vocabDb = new VocabularyDb();
 }
 
+// ─── Iconclass DB download (runs once per volume lifetime) ──────────
+
+function resolveIconclassDbPath(): string {
+  return process.env.ICONCLASS_DB_PATH || path.join(process.cwd(), "data", "iconclass.db");
+}
+
+async function ensureIconclassDb(): Promise<void> {
+  const dbPath = resolveIconclassDbPath();
+  if (fs.existsSync(dbPath)) {
+    try {
+      const { default: Database } = await import("better-sqlite3");
+      const db = new Database(dbPath, { readonly: true });
+      db.prepare("SELECT 1 FROM notations LIMIT 1").get();
+      db.close();
+      return;
+    } catch {
+      console.error("Iconclass DB invalid — will re-download");
+    }
+  }
+
+  const url = process.env.ICONCLASS_DB_URL;
+  if (!url) return;
+
+  console.error("Downloading Iconclass DB...");
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const tmpPath = dbPath + ".tmp";
+  const controller = new AbortController();
+  const downloadTimer = setTimeout(() => controller.abort(), 300_000);
+  try {
+    const res = await fetch(url, { redirect: "follow", signal: controller.signal });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+
+    const dest = fs.createWriteStream(tmpPath);
+    const isGzip = url.endsWith(".gz") || res.headers.get("content-type")?.includes("gzip");
+
+    if (isGzip) {
+      await pipeline(res.body, createGunzip(), dest);
+    } else {
+      await pipeline(res.body, dest);
+    }
+
+    fs.renameSync(tmpPath, dbPath);
+    console.error(`Iconclass DB ready: ${dbPath}`);
+  } catch (err) {
+    console.error(`Failed to download Iconclass DB: ${err instanceof Error ? err.message : err}`);
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  } finally {
+    clearTimeout(downloadTimer);
+  }
+}
+
+// ─── Shared Iconclass database (one read-only instance) ─────────────
+
+let iconclassDb: IconclassDb | null = null;
+
+async function initIconclassDb(): Promise<void> {
+  await ensureIconclassDb();
+  iconclassDb = new IconclassDb();
+}
+
 // ─── Shared client instances (one per process) ──────────────────────
 
 let sharedApiClient: RijksmuseumApiClient;
@@ -222,7 +285,7 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, httpPort, usageStats);
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, iconclassDb, httpPort, usageStats);
   return server;
 }
 
@@ -230,6 +293,7 @@ function createServer(httpPort?: number): McpServer {
 
 async function runStdio(): Promise<void> {
   await initVocabularyDb();
+  await initIconclassDb();
   initSharedClients();
   initUsageStats();
   const server = createServer();
@@ -244,6 +308,7 @@ async function runStdio(): Promise<void> {
 
 async function runHttp(): Promise<void> {
   await initVocabularyDb();
+  await initIconclassDb();
   initSharedClients();
   initUsageStats();
   const port = getHttpPort();

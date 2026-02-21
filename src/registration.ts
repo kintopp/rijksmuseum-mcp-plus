@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
+import { IconclassDb } from "./api/IconclassDb.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
 
@@ -126,10 +127,11 @@ export function registerAll(
   apiClient: RijksmuseumApiClient,
   oaiClient: OaiPmhClient,
   vocabDb: VocabularyDb | null,
+  iconclassDb: IconclassDb | null,
   httpPort?: number,
   stats?: UsageStats
 ): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, httpPort, createLogger(stats));
+  registerTools(server, apiClient, oaiClient, vocabDb, iconclassDb, httpPort, createLogger(stats));
   registerResources(server);
   registerAppViewerResource(server);
   registerPrompts(server, apiClient, oaiClient);
@@ -284,6 +286,27 @@ const RecentChangesOutput = {
   identifiersOnly: z.boolean().optional(),
 };
 
+const IconclassEntryShape = z.object({
+  notation: z.string(),
+  text: z.string(),
+  path: z.array(z.object({ notation: z.string(), text: z.string() })),
+  children: z.array(z.string()),
+  refs: z.array(z.string()),
+  rijksCount: z.number().int(),
+  keywords: z.array(z.string()),
+});
+
+const LookupIconclassOutput = {
+  query: z.string().optional(),
+  totalResults: z.number().int().optional(),
+  notation: z.string().optional(),
+  entry: IconclassEntryShape.optional(),
+  subtree: z.array(IconclassEntryShape).optional(),
+  results: z.array(IconclassEntryShape).optional(),
+  countsAsOf: z.string().nullable().optional()
+    .describe("Date when rijksCount values were computed (ISO 8601)."),
+};
+
 // ─── Tools ──────────────────────────────────────────────────────────
 
 function registerTools(
@@ -291,6 +314,7 @@ function registerTools(
   api: RijksmuseumApiClient,
   oai: OaiPmhClient,
   vocabDb: VocabularyDb | null,
+  iconclassDb: IconclassDb | null,
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>
 ): void {
@@ -403,7 +427,7 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use when you know the notation. Requires vocabulary DB."
+                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use lookup_iconclass to discover codes by concept. Requires vocabulary DB."
                 ),
               depictedPerson: z
                 .string()
@@ -1045,6 +1069,105 @@ function registerTools(
       return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra);
     })
   );
+
+  // ── lookup_iconclass ────────────────────────────────────────────
+
+  if (iconclassDb?.available) {
+    server.registerTool(
+      "lookup_iconclass",
+      {
+        title: "Lookup Iconclass",
+        description:
+          "Search or browse the Iconclass classification system — a universal vocabulary for art subject matter (~40K notations across 13 languages). " +
+          "Use this to discover Iconclass notation codes by concept (e.g. 'smell', 'crucifixion', 'Schmerzensmann'), " +
+          "then pass the notation to search_artwork's iconclass parameter for precise results. " +
+          "Artwork counts (rijksCount) are pre-computed and approximate; use search_artwork with the notation code for current results. " +
+          "Provide either query (text search) or notation (browse subtree), not both.",
+        inputSchema: z.object({
+          query: z
+            .string()
+            .optional()
+            .describe(
+              "Text search across Iconclass labels and keywords in all 13 languages. " +
+              "Returns matching notations ranked by Rijksmuseum artwork count."
+            ),
+          notation: z
+            .string()
+            .optional()
+            .describe(
+              "Browse a specific Iconclass notation (e.g. '31A33' for smell). " +
+              "Returns the entry with its hierarchy and direct children."
+            ),
+          lang: z
+            .string()
+            .default("en")
+            .describe("Preferred language for labels (default: 'en'). Available: en, nl, de, fr, it, es, pt, fi, cz, hu, pl, jp, zh."),
+          maxResults: z
+            .number()
+            .int()
+            .min(1)
+            .max(RESULTS_MAX)
+            .default(RESULTS_DEFAULT)
+            .describe(`Maximum results for search mode (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}).`),
+        }).strict(),
+        ...(EMIT_STRUCTURED && { outputSchema: LookupIconclassOutput }),
+      },
+      withLogging("lookup_iconclass", async (args) => {
+        const hasQuery = args.query !== undefined;
+        const hasNotation = args.notation !== undefined;
+
+        if (!hasQuery && !hasNotation) {
+          return {
+            content: [{ type: "text" as const, text: "Either query or notation is required." }],
+            isError: true,
+          };
+        }
+        if (hasQuery && hasNotation) {
+          return {
+            content: [{ type: "text" as const, text: "Provide either query or notation, not both." }],
+            isError: true,
+          };
+        }
+
+        if (hasQuery) {
+          const result = iconclassDb!.search(args.query!, args.maxResults, args.lang);
+
+          const header = `${result.results.length} of ${result.totalResults} Iconclass matches for "${args.query}"`;
+          const lines = result.results.map((e, i) => {
+            let line = `${i + 1}. ${e.notation} (${e.rijksCount} artworks) "${e.text}"`;
+            if (e.path.length > 0) line += ` [${e.path.map((p) => p.notation).join(" > ")}]`;
+            return line;
+          });
+          return structuredResponse(result, [header, ...lines].join("\n"));
+        }
+
+        // Browse mode
+        const result = iconclassDb!.browse(args.notation!, args.lang);
+        if (!result) {
+          return {
+            content: [{ type: "text" as const, text: `Notation "${args.notation}" not found in Iconclass.` }],
+            isError: true,
+          };
+        }
+
+        const pathStr = result.entry.path.length > 0
+          ? result.entry.path.map((p) => `${p.notation} "${p.text}"`).join(" > ") + " > "
+          : "";
+        const header = `${pathStr}${result.entry.notation} "${result.entry.text}" (${result.entry.rijksCount} artworks)`;
+        const childLines = result.subtree.map((c) =>
+          `  ${c.notation} (${c.rijksCount}) "${c.text}"`
+        );
+        const sections = [header];
+        if (result.entry.keywords.length > 0) {
+          sections.push(`Keywords: ${result.entry.keywords.join(", ")}`);
+        }
+        if (childLines.length > 0) {
+          sections.push(`Children (${childLines.length}):`, ...childLines);
+        }
+        return structuredResponse(result, sections.join("\n"));
+      })
+    );
+  }
 }
 
 // ─── Resources ──────────────────────────────────────────────────────
