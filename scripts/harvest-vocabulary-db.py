@@ -89,6 +89,7 @@ RM_WIDTH = "https://id.rijksmuseum.nl/22012"
 HEIGHT_URIS = {AAT_HEIGHT, RM_HEIGHT}
 WIDTH_URIS = {AAT_WIDTH, RM_WIDTH}
 AAT_NARRATIVE = "http://vocab.getty.edu/aat/300048722"
+AAT_DESCRIPTION = "http://vocab.getty.edu/aat/300435452"
 
 # ─── N-Triples parsing (same as pilot) ──────────────────────────────
 
@@ -203,6 +204,7 @@ CREATE TABLE IF NOT EXISTS artworks (
     inscription_text TEXT,
     provenance_text  TEXT,
     credit_line      TEXT,
+    description_text TEXT,
     height_cm        REAL,
     width_cm         REAL,
     narrative_text   TEXT,
@@ -288,6 +290,7 @@ def create_or_open_db() -> sqlite3.Connection:
         ("inscription_text", "TEXT"),
         ("provenance_text", "TEXT"),
         ("credit_line", "TEXT"),
+        ("description_text", "TEXT"),
         ("height_cm", "REAL"),
         ("width_cm", "REAL"),
         ("narrative_text", "TEXT"),
@@ -1160,6 +1163,7 @@ def resolve_artwork(uri: str) -> dict | None:
     inscription_text = join_statements(AAT_INSCRIPTIONS)
     provenance_text = join_statements(AAT_PROVENANCE)
     credit_line = join_statements(AAT_CREDIT_LINE)
+    description_text = join_statements(AAT_DESCRIPTION)
 
     # Structured dimensions
     dimensions = data.get("dimension", [])
@@ -1212,6 +1216,7 @@ def resolve_artwork(uri: str) -> dict | None:
         "inscription_text": inscription_text,
         "provenance_text": provenance_text,
         "credit_line": credit_line,
+        "description_text": description_text,
         "height_cm": height_cm,
         "width_cm": width_cm,
         "narrative_text": narrative_text,
@@ -1262,6 +1267,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     with_inscription = 0
     with_provenance = 0
     with_credit = 0
+    with_description = 0
     with_dimensions = 0
     with_narrative = 0
     with_dates = 0
@@ -1275,6 +1281,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
             inscription_text = ?,
             provenance_text = ?,
             credit_line = ?,
+            description_text = ?,
             height_cm = ?,
             width_cm = ?,
             narrative_text = ?,
@@ -1326,6 +1333,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     with_provenance += 1
                 if result["credit_line"]:
                     with_credit += 1
+                if result["description_text"]:
+                    with_description += 1
                 if result["height_cm"] is not None or result["width_cm"] is not None:
                     with_dimensions += 1
                 if result["narrative_text"]:
@@ -1339,6 +1348,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     result["inscription_text"],
                     result["provenance_text"],
                     result["credit_line"],
+                    result["description_text"],
                     result["height_cm"],
                     result["width_cm"],
                     result["narrative_text"],
@@ -1374,6 +1384,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Inscriptions: {with_inscription:,}")
     print(f"    Provenance:   {with_provenance:,}")
     print(f"    Credit lines: {with_credit:,}")
+    print(f"    Descriptions: {with_description:,}")
     print(f"    Dimensions:   {with_dimensions:,}")
     print(f"    Narratives:   {with_narrative:,}")
     print(f"    Dates:        {with_dates:,}")
@@ -1728,7 +1739,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         conn.execute("DROP TABLE IF EXISTS artwork_texts_fts")
         conn.execute("""
             CREATE VIRTUAL TABLE artwork_texts_fts USING fts5(
-                inscription_text, provenance_text, credit_line, narrative_text,
+                inscription_text, provenance_text, credit_line, description_text, narrative_text,
                 title_all_text,
                 content='artworks', content_rowid='rowid',
                 tokenize='unicode61 remove_diacritics 2'
@@ -1821,6 +1832,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
             ("inscription_text", "Inscriptions"),
             ("provenance_text",  "Provenance"),
             ("credit_line",      "Credit lines"),
+            ("description_text", "Descriptions"),
             ("narrative_text",   "Narratives"),
             ("title_all_text",   "All titles"),
         ]
