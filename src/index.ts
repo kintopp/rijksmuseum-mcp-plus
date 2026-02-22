@@ -314,6 +314,23 @@ async function runHttp(): Promise<void> {
 
         const session = sessions.get(sessionId)!;
         session.lastActivity = Date.now();
+
+        // SSE keepalive: send ping comments every 25s to prevent proxy idle
+        // timeout (Railway kills idle connections after ~100s). SSE comments
+        // (lines starting with ':') are ignored by MCP clients.
+        if (req.method === "GET") {
+          const keepalive = setInterval(() => {
+            if (!res.writableEnded) {
+              res.write(": ping\n\n");
+              session.lastActivity = Date.now();
+            } else {
+              clearInterval(keepalive);
+            }
+          }, 25_000);
+          keepalive.unref();
+          res.on("close", () => clearInterval(keepalive));
+        }
+
         await session.transport.handleRequest(req, res);
 
         if (req.method === "DELETE") {
