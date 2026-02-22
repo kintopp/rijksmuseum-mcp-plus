@@ -303,6 +303,7 @@ async function runHttp(): Promise<void> {
 
   // Reject GET/DELETE/etc. — stateless mode has no SSE streams or sessions
   app.all("/mcp", (_req: express.Request, res: express.Response) => {
+    res.setHeader("Allow", "POST");
     res.status(405).json({ error: "Method not allowed — this server is stateless (POST only)" });
   });
 
