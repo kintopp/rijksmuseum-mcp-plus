@@ -837,9 +837,7 @@ function registerTools(
     {
       title: "Get Artwork Image",
       description:
-        "View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate). " +
-        "This is the primary way to examine artwork details up close — " +
-        "prefer this over linking users to external pages for image viewing. " +
+        "View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate, flip). " +
         "Not all artworks have images available. " +
         "Downloadable images are available from the artwork's collection page on rijksmuseum.nl. " +
         "Do not construct IIIF image URLs manually.",
