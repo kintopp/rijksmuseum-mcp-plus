@@ -350,7 +350,7 @@ function registerTools(
     "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
     "birthPlace", "deathPlace", "profession", "collectionSet", "license",
     // Tier 2 (vocabulary DB v1.0+)
-    "inscription", "provenance", "creditLine", "curatorialNarrative", "productionRole",
+    "description", "inscription", "provenance", "creditLine", "curatorialNarrative", "productionRole",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
     "nearPlace", "nearLat",
     "title",
@@ -374,17 +374,17 @@ function registerTools(
         "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), " +
         "ALWAYS start with subject — it searches 831K artworks tagged with structured Iconclass vocabulary " +
         "and has by far the highest recall for conceptual queries. " +
-        "Use description for cataloguer observations not captured in structured vocabulary (e.g. compositional details, " +
-        "specific motifs noted by specialists); use curatorialNarrative for curatorial interpretation and art-historical context. " +
+        "Use description for cataloguer observations (e.g. compositional details, specific motifs noted by specialists); " +
+        "use curatorialNarrative for curatorial interpretation and art-historical context. " +
         "These three fields search different text corpora and can return complementary results. " +
         "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
         "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
         (vocabAvailable
           ? " Vocabulary-based filters (subject, iconclass, depictedPerson, depictedPlace, productionPlace, " +
-            "birthPlace, deathPlace, profession, collectionSet, license, inscription, provenance, creditLine, " +
+            "birthPlace, deathPlace, profession, collectionSet, license, description, inscription, provenance, creditLine, " +
             "curatorialNarrative, productionRole, and dimension filters) " +
             "can be freely combined with each other and with creator, type, material, technique, creationDate, and query. " +
-            "Vocabulary filters cannot be combined with description or imageAvailable. " +
+            "Vocabulary filters cannot be combined with imageAvailable. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
@@ -433,10 +433,9 @@ function registerTools(
           .string()
           .optional()
           .describe(
-            "Search in cataloguer descriptions (~292K artworks). Best for specific observations not in structured vocabulary — " +
-            "compositional details, motifs, physical condition notes, attribution remarks. " +
-            "Literal text matching; for broad concept searches, use subject instead (much higher recall). " +
-            "Not supported in vocabulary-based searches."
+            "Full-text search on artwork descriptions (~510K artworks, 61% coverage). " +
+            "Cataloguer observations including compositional details, motifs, physical condition, and attribution remarks. " +
+            "Exact word matching, no stemming."
           ),
         imageAvailable: z
           .boolean()
@@ -659,7 +658,7 @@ function registerTools(
 
       // Reject incompatible parameter combinations before routing (#27)
       if (hasVocabParam) {
-        const incompatible = (["description", "imageAvailable", "aboutActor"] as const).filter(
+        const incompatible = (["imageAvailable", "aboutActor"] as const).filter(
           k => argsRecord[k] !== undefined
         );
         if (incompatible.length > 0) {
@@ -1358,6 +1357,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
         ["Title", detail.title],
         ["Creator", detail.creator],
         ["Date", detail.date || undefined],
+        ["Description", detail.description ?? undefined],
         ["Technique", detail.techniqueStatement ?? undefined],
         ["Dimensions", detail.dimensionStatement ?? undefined],
         ["Materials", labels(detail.materials) || undefined],

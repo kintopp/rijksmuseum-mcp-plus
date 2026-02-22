@@ -19,6 +19,7 @@ export interface VocabSearchParams {
   collectionSet?: string;
   license?: string;
   // Tier 2 fields (require vocabulary DB v1.0+)
+  description?: string;
   inscription?: string;
   provenance?: string;
   creditLine?: string;
@@ -534,6 +535,7 @@ export class VocabularyDb {
 
     // Tier 2: Text FTS filters (inscription, provenance, creditLine, curatorialNarrative)
     const TEXT_FILTERS: [keyof VocabSearchParams, string][] = [
+      ["description", "description_text"],
       ["inscription", "inscription_text"],
       ["provenance", "provenance_text"],
       ["creditLine", "credit_line"],
