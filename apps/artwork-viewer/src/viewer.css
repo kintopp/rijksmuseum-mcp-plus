@@ -7,14 +7,14 @@
 
 :root {
   --color-background-primary: #fafafa;
-  --color-background-secondary: #f0f0f0;
-  --color-background-tertiary: #e0e0e0;
+  --color-background-secondary: #e8e7e3;
+  --color-background-tertiary: #f5f4f1;
 
   --color-text-primary: #333;
   --color-text-secondary: #666;
   --color-text-tertiary: #999;
 
-  --color-border-primary: #ddd;
+  --color-border-primary: #ccc;
   --color-border-secondary: #ccc;
 
   --color-accent-primary: #c13832;
