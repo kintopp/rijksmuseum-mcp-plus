@@ -353,13 +353,14 @@ function registerTools(
     "inscription", "provenance", "creditLine", "curatorialNarrative", "productionRole",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
     "nearPlace", "nearLat",
+    "title",
   ] as const;
   // nearPlaceRadius, nearLon excluded: their Zod defaults/pairing would trigger
   // vocab routing on every query. Forwarded separately via allVocabKeys.
 
   // Keys that cross both paths: forwarded to vocab DB when a vocab param triggers routing
   const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
-  const hybridKeys = ["creationDate", "title"] as const;
+  const hybridKeys = ["creationDate"] as const;
   const allVocabKeys = [...vocabParamKeys, "nearLon", "nearPlaceRadius", ...crossFilterKeys, ...hybridKeys];
 
   server.registerTool(
@@ -382,7 +383,7 @@ function registerTools(
           ? " Vocabulary-based filters (subject, iconclass, depictedPerson, depictedPlace, productionPlace, " +
             "birthPlace, deathPlace, profession, collectionSet, license, inscription, provenance, creditLine, " +
             "curatorialNarrative, productionRole, and dimension filters) " +
-            "can be freely combined with each other and with creator, type, material, technique, creationDate, title, and query. " +
+            "can be freely combined with each other and with creator, type, material, technique, creationDate, and query. " +
             "Vocabulary filters cannot be combined with description or imageAvailable. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
@@ -398,7 +399,7 @@ function registerTools(
         title: z
           .string()
           .optional()
-          .describe("Search by artwork title. When combined with vocabulary filters, matches against all title variants (brief, full, former) — broader than the Search API, which indexes brief titles only."),
+          .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Requires vocabulary DB. For quick title lookups via the Search API (brief titles only), use the query parameter instead."),
         creator: z
           .string()
           .optional()
@@ -658,14 +659,19 @@ function registerTools(
 
       // Reject incompatible parameter combinations before routing (#27)
       if (hasVocabParam) {
-        const incompatible = (["description", "imageAvailable"] as const).filter(
+        const incompatible = (["description", "imageAvailable", "aboutActor"] as const).filter(
           k => argsRecord[k] !== undefined
         );
         if (incompatible.length > 0) {
           const vocabPresent = vocabParamKeys.filter(k => argsRecord[k] !== undefined);
+          const hasAboutActor = incompatible.includes("aboutActor");
+          const suggestion = hasAboutActor
+            ? " Tip: use query instead of title to combine with aboutActor (query stays on the Search API path)."
+            : "";
           return errorResponse(
             `${incompatible.join(", ")} cannot be combined with vocabulary filters (${vocabPresent.join(", ")}). ` +
-            `Use them separately: ${incompatible.join("/")} route through the Search API, while vocabulary filters use a different search path.`
+            `Use them separately: ${incompatible.join("/")} route through the Search API, while vocabulary filters use a different search path.` +
+            suggestion
           );
         }
       }
@@ -683,7 +689,7 @@ function registerTools(
 
         // Warn about Search API-only filters that were silently dropped
         // (description and imageAvailable are rejected upfront in the incompatibility check above)
-        const searchOnlyKeys = ["aboutActor", "pageToken"] as const;
+        const searchOnlyKeys = ["pageToken"] as const;
         const droppedKeys = [
           ...searchOnlyKeys.filter(k => argsRecord[k] !== undefined),
           ...(argsRecord["compact"] === true ? ["compact"] : []),
