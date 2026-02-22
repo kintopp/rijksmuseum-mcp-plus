@@ -230,6 +230,7 @@ export class VocabularyDb {
   private hasCoordinates = false;
   private hasIntMappings = false;
   private hasRightsLookup = false;
+  private hasPersonNames = false;
   private fieldIdMap = new Map<string, number>();
 
   /** Look up a field_id by name, throwing if missing. */
@@ -289,6 +290,7 @@ export class VocabularyDb {
         for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
       }
       this.hasRightsLookup = this.tableExists("rights_lookup");
+      this.hasPersonNames = this.tableExists("person_names_fts");
 
       // Warn if geo index is missing (must be created during harvest, not at runtime — DB is read-only)
       if (this.hasCoordinates) {
@@ -310,6 +312,7 @@ export class VocabularyDb {
         this.hasNormLabels && "normLabels",
         this.hasCoordinates && "coordinates",
         this.hasIntMappings && "intMappings",
+        this.hasPersonNames && "personNames",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -469,7 +472,10 @@ export class VocabularyDb {
       const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
 
       if (useFts) {
-        let vocabIds = this.findVocabIdsFts(String(value), typeClause, typeBindings);
+        // Person name matching: use person_names_fts (two-tier) when available
+        let vocabIds = filter.vocabType === "person" && this.hasPersonNames
+          ? this.findPersonIdsFts(String(value))
+          : this.findVocabIdsFts(String(value), typeClause, typeBindings);
 
         // Multi-word place fallback: split "Oude Kerk Amsterdam" → "Oude Kerk" near "Amsterdam"
         if (vocabIds.length === 0 && filter.vocabType === "place") {
@@ -723,6 +729,55 @@ export class VocabularyDb {
     }
 
     return [];
+  }
+
+  /** Stop words for person name token-AND fallback (common name prepositions). */
+  private static readonly PERSON_STOP_WORDS = new Set([
+    "van", "von", "de", "di", "du", "of", "zu",
+    "het", "the", "la", "le", "el", "den", "der", "ten", "ter",
+  ]);
+
+  /**
+   * Find person vocab IDs via the person_names_fts table (two-tier).
+   * Tier 1: Exact phrase match across all name variants.
+   * Tier 2: Token AND fallback (stripping name prepositions) if Tier 1 returns 0.
+   */
+  private findPersonIdsFts(value: string): string[] {
+    // Tier 1: phrase match
+    const ftsPhrase = escapeFts5(value);
+    if (!ftsPhrase) return [];
+
+    const rows = this.db!.prepare(
+      `SELECT DISTINCT pn.person_id AS id
+       FROM person_names pn
+       WHERE pn.rowid IN (
+         SELECT rowid FROM person_names_fts WHERE person_names_fts MATCH ?
+       )`
+    ).all(ftsPhrase) as { id: string }[];
+
+    if (rows.length > 0) return rows.map((r) => r.id);
+
+    // Tier 2: token AND with stop-word removal
+    const tokens = value
+      .split(/\s+/)
+      .filter((t) => t.length > 0 && !VocabularyDb.PERSON_STOP_WORDS.has(t.toLowerCase()));
+    if (tokens.length === 0) return [];
+
+    const ftsTokens = tokens
+      .map((t) => escapeFts5(t))
+      .filter((x): x is string => x !== null);
+    if (ftsTokens.length === 0) return [];
+
+    const ftsQuery = ftsTokens.join(" AND ");
+    const fallbackRows = this.db!.prepare(
+      `SELECT DISTINCT pn.person_id AS id
+       FROM person_names pn
+       WHERE pn.rowid IN (
+         SELECT rowid FROM person_names_fts WHERE person_names_fts MATCH ?
+       )`
+    ).all(ftsQuery) as { id: string }[];
+
+    return fallbackRows.map((r) => r.id);
   }
 
   /** Build vocab WHERE clause and bindings for the non-FTS path. */

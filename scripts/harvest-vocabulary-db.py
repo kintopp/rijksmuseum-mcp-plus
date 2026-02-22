@@ -112,6 +112,15 @@ P_HAS_TYPE = "http://www.cidoc-crm.org/cidoc-crm/P2_has_type"
 LANG_EN = "http://vocab.getty.edu/aat/300388277"
 LANG_NL = "http://vocab.getty.edu/aat/300388256"
 AAT_DISPLAY_NAME = "http://vocab.getty.edu/aat/300404670"
+AAT_PREFERRED_NAME = "http://vocab.getty.edu/aat/300404671"
+AAT_INVERTED_NAME = "http://vocab.getty.edu/aat/300404672"
+
+# AAT name classification URI suffix → label (for person_names table)
+AAT_NAME_CLASSIFICATION = {
+    "300404670": "display",
+    "300404671": "preferred",
+    "300404672": "inverted",
+}
 
 # Linked Art type → vocabulary type
 LA_TYPE_MAP = {
@@ -218,6 +227,15 @@ CREATE INDEX IF NOT EXISTS idx_vocab_label_nl ON vocabulary(label_nl COLLATE NOC
 CREATE INDEX IF NOT EXISTS idx_vocab_notation ON vocabulary(notation);
 CREATE INDEX IF NOT EXISTS idx_vocab_type ON vocabulary(type);
 CREATE INDEX IF NOT EXISTS idx_artworks_tier2 ON artworks(tier2_done);
+
+CREATE TABLE IF NOT EXISTS person_names (
+    person_id       TEXT NOT NULL REFERENCES vocabulary(id),
+    name            TEXT NOT NULL,
+    lang            TEXT,
+    classification  TEXT,
+    UNIQUE(person_id, name, lang)
+);
+CREATE INDEX IF NOT EXISTS idx_person_names_id ON person_names(person_id);
 """
 
 VOCAB_INSERT_SQL = (
@@ -778,9 +796,11 @@ def resolve_uri(entity_id: str) -> dict | None:
 
     label_en = None
     label_nl = None
+    name_variants = []  # All name variants for persons
+    seen_names = set()  # Deduplicate (content, lang) pairs
     for name in data.get("identified_by", []):
         content = name.get("content", "")
-        if not content:
+        if not content or not isinstance(content, str):
             continue
         langs = name.get("language", [])
         lang_ids = [l.get("id", "") for l in langs] if langs else []
@@ -790,6 +810,34 @@ def resolve_uri(entity_id: str) -> dict | None:
             label_nl = label_nl or content
         elif not label_en and not label_nl:
             label_en = content
+
+        # Collect all name variants for persons (only Name entries, not Identifiers)
+        if vocab_type == "person" and name.get("type") == "Name":
+            lang = None
+            if LANG_EN in lang_ids:
+                lang = "en"
+            elif LANG_NL in lang_ids:
+                lang = "nl"
+
+            classification = None
+            for c in name.get("classified_as", []):
+                cid = c.get("id", "")
+                for suffix, clabel in AAT_NAME_CLASSIFICATION.items():
+                    if cid.endswith(suffix):
+                        classification = clabel
+                        break
+                if classification:
+                    break
+
+            key = (content, lang)
+            if key not in seen_names:
+                seen_names.add(key)
+                name_variants.append({
+                    "person_id": entity_id,
+                    "name": content,
+                    "lang": lang,
+                    "classification": classification,
+                })
 
     external_id = None
     for eq in data.get("equivalent", []):
@@ -823,6 +871,7 @@ def resolve_uri(entity_id: str) -> dict | None:
         "notation": notation,
         "lat": lat,
         "lon": lon,
+        "name_variants": name_variants,
     }
 
 
@@ -843,24 +892,39 @@ def run_phase2(conn: sqlite3.Connection):
 
     print(f"  Resolving {len(unmatched):,} unmatched vocabulary URIs ({DEFAULT_THREADS} threads)...")
 
+    PERSON_NAMES_INSERT = (
+        "INSERT OR IGNORE INTO person_names (person_id, name, lang, classification) "
+        "VALUES (:person_id, :name, :lang, :classification)"
+    )
+
     resolved = 0
     failed = 0
+    person_names_count = 0
     t0 = time.time()
 
     with ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as pool:
         futures = {pool.submit(resolve_uri, eid): eid for eid in unmatched}
         batch = []
+        name_batch = []
 
         for i, future in enumerate(as_completed(futures), 1):
             result = future.result()
             if result:
                 batch.append(result)
+                # Collect person name variants
+                variants = result.get("name_variants", [])
+                if variants:
+                    name_batch.extend(variants)
+                    person_names_count += len(variants)
                 resolved += 1
             else:
                 failed += 1
 
             if len(batch) >= 200:
                 conn.executemany(VOCAB_INSERT_SQL, batch)
+                if name_batch:
+                    conn.executemany(PERSON_NAMES_INSERT, name_batch)
+                    name_batch = []
                 conn.commit()
                 batch = []
 
@@ -876,10 +940,14 @@ def run_phase2(conn: sqlite3.Connection):
 
     if batch:
         conn.executemany(VOCAB_INSERT_SQL, batch)
-        conn.commit()
+    if name_batch:
+        conn.executemany(PERSON_NAMES_INSERT, name_batch)
+    conn.commit()
 
     elapsed = time.time() - t0
     print(f"  Resolution complete: {resolved:,} resolved, {failed:,} failed, {elapsed:.0f}s")
+    if person_names_count:
+        print(f"  Person name variants collected: {person_names_count:,}")
 
 
 # ─── Phase 4: Linked Art Resolution (Tier 2) ─────────────────────────
@@ -1584,6 +1652,27 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     fts_count = cur.execute("SELECT COUNT(*) FROM vocabulary_fts").fetchone()[0]
     print(f"    vocabulary_fts: {fts_count:,} rows")
     conn.commit()
+
+    # Build FTS5 index on person name variants (if person_names table has data)
+    pn_count = cur.execute(
+        "SELECT COUNT(*) FROM person_names"
+    ).fetchone()[0]
+    if pn_count > 0:
+        print("  Building FTS5 index on person name variants...")
+        conn.execute("DROP TABLE IF EXISTS person_names_fts")
+        conn.execute("""
+            CREATE VIRTUAL TABLE person_names_fts USING fts5(
+                name,
+                content='person_names', content_rowid='rowid',
+                tokenize='unicode61 remove_diacritics 2'
+            )
+        """)
+        conn.execute("INSERT INTO person_names_fts(person_names_fts) VALUES('rebuild')")
+        pnf_count = cur.execute("SELECT COUNT(*) FROM person_names_fts").fetchone()[0]
+        print(f"    person_names_fts: {pnf_count:,} rows")
+        conn.commit()
+    else:
+        print("  Skipping person_names_fts (no person name data yet)")
 
     # Populate normalized label columns (space-stripped lowercase for LIKE fallback)
     print("  Populating normalized label columns...")
