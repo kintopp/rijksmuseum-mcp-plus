@@ -734,7 +734,7 @@ export class VocabularyDb {
   /** Stop words for person name token-AND fallback (common name prepositions). */
   private static readonly PERSON_STOP_WORDS = new Set([
     "van", "von", "de", "di", "du", "of", "zu",
-    "het", "the", "la", "le", "el", "den", "der", "ten", "ter",
+    "het", "the", "la", "le", "el", "den", "der", "ten", "ter", "della",
   ]);
 
   /**
