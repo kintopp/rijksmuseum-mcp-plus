@@ -219,9 +219,6 @@ CREATE TABLE IF NOT EXISTS mappings (
     PRIMARY KEY (object_number, vocab_id, field)
 );
 
-CREATE INDEX IF NOT EXISTS idx_mappings_field_vocab ON mappings(field, vocab_id);
-CREATE INDEX IF NOT EXISTS idx_mappings_field_object ON mappings(field, object_number);
-CREATE INDEX IF NOT EXISTS idx_mappings_vocab ON mappings(vocab_id);
 CREATE INDEX IF NOT EXISTS idx_vocab_label_en ON vocabulary(label_en COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_vocab_label_nl ON vocabulary(label_nl COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_vocab_notation ON vocabulary(notation);
@@ -258,6 +255,24 @@ def create_or_open_db() -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA cache_size=-64000")  # 64 MB cache
     conn.executescript(SCHEMA_SQL)
+
+    # Create mappings indexes appropriate for the current schema.
+    # Integer-encoded DBs (post-normalize_mappings) have field_id/artwork_id/vocab_rowid;
+    # text DBs (fresh harvest, pre-Phase 3) have field/object_number/vocab_id.
+    mapping_cols = get_columns(conn, "mappings")
+    if "field_id" in mapping_cols:
+        # Integer-encoded schema — indexes are created by normalize_mappings() in Phase 3.
+        # Create them here too for idempotency (IF NOT EXISTS avoids duplicates).
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mappings_field_vocab   ON mappings(field_id, vocab_rowid)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mappings_field_artwork ON mappings(field_id, artwork_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mappings_vocab         ON mappings(vocab_rowid)")
+        # Drop stub index left over from v0.15 harvest workaround (duplicate of idx_mappings_field_artwork)
+        conn.execute("DROP INDEX IF EXISTS idx_mappings_field_object")
+    else:
+        # Text schema — original indexes for Phase 1/2/4 queries
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mappings_field_vocab  ON mappings(field, vocab_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mappings_field_object ON mappings(field, object_number)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mappings_vocab        ON mappings(vocab_id)")
 
     # Migrate existing DBs: add normalized label columns if missing
     vocab_cols = get_columns(conn, "vocabulary")
@@ -879,12 +894,17 @@ def run_phase2(conn: sqlite3.Connection):
     """Phase 2: Resolve all unmapped vocabulary URIs."""
     cur = conn.cursor()
 
-    unmatched = [row[0] for row in cur.execute("""
-        SELECT DISTINCT m.vocab_id
-        FROM mappings m
-        LEFT JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE v.id IS NULL
-    """).fetchall()]
+    # Integer-encoded DBs have vocab_rowid (always a valid FK) — nothing to resolve
+    if "vocab_rowid" in get_columns(conn, "mappings"):
+        print("  Integer-encoded schema: all vocab references are valid FKs, nothing to resolve.")
+        unmatched = []
+    else:
+        unmatched = [row[0] for row in cur.execute("""
+            SELECT DISTINCT m.vocab_id
+            FROM mappings m
+            LEFT JOIN vocabulary v ON m.vocab_id = v.id
+            WHERE v.id IS NULL
+        """).fetchall()]
 
     if not unmatched:
         print("  No unmatched vocabulary URIs to resolve.")
@@ -1221,6 +1241,20 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     total = len(pending)
     print(f"  Resolving {total:,} artworks for Tier 2 fields ({threads} threads)...")
 
+    # Detect schema for mappings inserts (production roles + attribution qualifiers)
+    int_mappings = "field_id" in get_columns(conn, "mappings")
+    if int_mappings:
+        MAPPING_INSERT_SQL = """
+            INSERT OR IGNORE INTO mappings (artwork_id, vocab_rowid, field_id)
+            SELECT a.art_id, v.vocab_int_id, f.id
+            FROM artworks a, vocabulary v, field_lookup f
+            WHERE a.object_number = ? AND v.id = ? AND f.name = ?
+        """
+    else:
+        MAPPING_INSERT_SQL = (
+            "INSERT OR IGNORE INTO mappings (object_number, vocab_id, field) VALUES (?, ?, ?)"
+        )
+
     processed = 0
     succeeded = 0
     failed = 0
@@ -1316,10 +1350,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
 
                 # Insert production role and attribution qualifier mappings
                 for vocab_id, field in result["roles"] + result["qualifiers"]:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO mappings (object_number, vocab_id, field) VALUES (?, ?, ?)",
-                        (obj_num, vocab_id, field),
-                    )
+                    conn.execute(MAPPING_INSERT_SQL, (obj_num, vocab_id, field))
                 role_count += len(result["roles"])
                 qualifier_count += len(result["qualifiers"])
 
