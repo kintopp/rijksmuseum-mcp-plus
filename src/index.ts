@@ -4,8 +4,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
 import cors from "cors";
-import crypto from "node:crypto";
-
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -44,12 +42,6 @@ function getGitCommit(): string {
 const GIT_COMMIT = getGitCommit();
 
 // ─── Types ───────────────────────────────────────────────────────────
-
-type SessionData = {
-  server: McpServer;
-  transport: StreamableHTTPServerTransport;
-  lastActivity: number;
-};
 
 // ─── Determine transport mode ────────────────────────────────────────
 
@@ -287,118 +279,31 @@ async function runHttp(): Promise<void> {
   );
   app.use(express.json());
 
-  // Track active sessions (with last-activity timestamp for TTL cleanup)
-  const MAX_SESSIONS = 100;
-  const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+  // ── MCP endpoint (stateless — no sessions, no SSE streams) ─────
+  //
+  // Each POST creates a fresh transport+server, processes the request,
+  // and responds. No long-lived connections to time out (#41).
 
-  const sessions = new Map<string, SessionData>();
-
-  // Periodically purge stale sessions
-  const cleanupInterval = setInterval(() => {
-    purgeStaleSessionsFrom(sessions, SESSION_TTL_MS);
-  }, 60_000);
-  cleanupInterval.unref(); // Don't prevent process exit
-
-  // ── MCP endpoint ────────────────────────────────────────────────
-
-  // Log all /mcp requests for transport debugging (#41)
-  app.all("/mcp", (req: express.Request, _res: express.Response, next: express.NextFunction) => {
-    const sid = req.headers["mcp-session-id"] as string | undefined;
-    console.error(JSON.stringify({
-      mcp: req.method,
-      sid: sid ? sid.slice(0, 8) + "…" : null,
-      known: sid ? sessions.has(sid) : null,
-      sessions: sessions.size,
-    }));
-    next();
-  });
-
-  app.all("/mcp", async (req: express.Request, res: express.Response) => {
+  app.post("/mcp", async (req: express.Request, res: express.Response) => {
     try {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
-      // Handle GET (SSE stream) or DELETE (close session)
-      if (req.method === "GET" || req.method === "DELETE") {
-        if (!sessionId || !sessions.has(sessionId)) {
-          res.status(400).json({ error: "Invalid or missing session ID" });
-          return;
-        }
-
-        const session = sessions.get(sessionId)!;
-        session.lastActivity = Date.now();
-
-        // SSE keepalive: send ping comments every 25s to prevent proxy idle
-        // timeout (Railway kills idle connections after ~100s). SSE comments
-        // (lines starting with ':') are ignored by MCP clients.
-        if (req.method === "GET") {
-          const sid = sessionId!.slice(0, 8);
-          let pingCount = 0;
-          const keepalive = setInterval(() => {
-            if (!res.writableEnded) {
-              res.write(": ping\n\n");
-              session.lastActivity = Date.now();
-              pingCount++;
-              if (pingCount <= 3 || pingCount % 10 === 0) {
-                console.error(JSON.stringify({ sse: "ping", sid: sid + "…", n: pingCount }));
-              }
-            } else {
-              clearInterval(keepalive);
-              console.error(JSON.stringify({ sse: "ended", sid: sid + "…", pings: pingCount }));
-            }
-          }, 25_000);
-          keepalive.unref();
-          res.on("close", () => {
-            clearInterval(keepalive);
-            console.error(JSON.stringify({ sse: "close", sid: sid + "…", pings: pingCount }));
-          });
-        }
-
-        await session.transport.handleRequest(req, res);
-
-        if (req.method === "DELETE") {
-          sessions.delete(sessionId);
-        }
-        return;
-      }
-
-      // POST to existing session
-      if (sessionId && sessions.has(sessionId)) {
-        const session = sessions.get(sessionId)!;
-        session.lastActivity = Date.now();
-        await session.transport.handleRequest(req, res, req.body);
-        return;
-      }
-
-      // POST to create new session — enforce limit
-      if (sessions.size >= MAX_SESSIONS) {
-        res.status(503).json({ error: "Too many active sessions" });
-        return;
-      }
-
       const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
+        sessionIdGenerator: undefined,
       });
-
       const server = createServer(port);
-      registerCleanup(transport, sessions);
-
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
-
-      // Store session after handleRequest (sessionId is assigned during initialize)
-      const newSessionId = transport.sessionId;
-      if (newSessionId) {
-        sessions.set(newSessionId, { server, transport, lastActivity: Date.now() });
-      } else {
-        // Non-initialize request on a new transport — clean up to prevent leak
-        transport.close?.();
-      }
+      await transport.close();
     } catch (err) {
       console.error("MCP endpoint error:", err);
       if (!res.headersSent) {
         res.status(500).json({ error: "Internal server error" });
       }
     }
+  });
+
+  // Reject GET/DELETE/etc. — stateless mode has no SSE streams or sessions
+  app.all("/mcp", (_req: express.Request, res: express.Response) => {
+    res.status(405).json({ error: "Method not allowed — this server is stateless (POST only)" });
   });
 
   // ── Viewer endpoint ─────────────────────────────────────────────
@@ -437,27 +342,6 @@ async function runHttp(): Promise<void> {
   });
 }
 
-function purgeStaleSessionsFrom(sessions: Map<string, SessionData>, ttlMs: number): void {
-  const now = Date.now();
-  for (const [sid, session] of sessions) {
-    if (now - session.lastActivity > ttlMs) {
-      session.transport.close?.();
-      sessions.delete(sid);
-    }
-  }
-}
-
-function registerCleanup(
-  transport: StreamableHTTPServerTransport,
-  sessions: Map<string, SessionData>
-): void {
-  transport.onclose = () => {
-    const sid = transport.sessionId;
-    if (sid) {
-      sessions.delete(sid);
-    }
-  };
-}
 
 // ─── Graceful shutdown ───────────────────────────────────────────────
 
