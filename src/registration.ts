@@ -656,6 +656,20 @@ function registerTools(
         (k) => argsRecord[k] !== undefined
       );
 
+      // Reject incompatible parameter combinations before routing (#27)
+      if (hasVocabParam) {
+        const incompatible = (["description", "imageAvailable"] as const).filter(
+          k => argsRecord[k] !== undefined
+        );
+        if (incompatible.length > 0) {
+          const vocabPresent = vocabParamKeys.filter(k => argsRecord[k] !== undefined);
+          return errorResponse(
+            `${incompatible.join(", ")} cannot be combined with vocabulary filters (${vocabPresent.join(", ")}). ` +
+            `Use them separately: ${incompatible.join("/")} route through the Search API, while vocabulary filters use a different search path.`
+          );
+        }
+      }
+
       if (hasVocabParam && vocabDb) {
         const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
         for (const k of allVocabKeys) {
@@ -668,7 +682,8 @@ function registerTools(
         const result = vocabDb.search(vocabArgs as any);
 
         // Warn about Search API-only filters that were silently dropped
-        const searchOnlyKeys = ["aboutActor", "description", "imageAvailable", "pageToken"] as const;
+        // (description and imageAvailable are rejected upfront in the incompatibility check above)
+        const searchOnlyKeys = ["aboutActor", "pageToken"] as const;
         const droppedKeys = [
           ...searchOnlyKeys.filter(k => argsRecord[k] !== undefined),
           ...(argsRecord["compact"] === true ? ["compact"] : []),
