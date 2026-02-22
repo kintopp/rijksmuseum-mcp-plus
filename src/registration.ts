@@ -953,7 +953,7 @@ function registerTools(
     {
       title: "Open in Browser",
       description:
-        "Open a URL in the user's default web browser. Useful for opening artwork pages, IIIF images, or the deep-zoom viewer.",
+        "Open a URL in the user's default web browser. Useful for opening an artwork's Rijksmuseum collection page, where a high-resolution image can be downloaded.",
       inputSchema: z.object({
         url: z
           .string()
