@@ -331,16 +331,26 @@ async function runHttp(): Promise<void> {
         // timeout (Railway kills idle connections after ~100s). SSE comments
         // (lines starting with ':') are ignored by MCP clients.
         if (req.method === "GET") {
+          const sid = sessionId!.slice(0, 8);
+          let pingCount = 0;
           const keepalive = setInterval(() => {
             if (!res.writableEnded) {
               res.write(": ping\n\n");
               session.lastActivity = Date.now();
+              pingCount++;
+              if (pingCount <= 3 || pingCount % 10 === 0) {
+                console.error(JSON.stringify({ sse: "ping", sid: sid + "…", n: pingCount }));
+              }
             } else {
               clearInterval(keepalive);
+              console.error(JSON.stringify({ sse: "ended", sid: sid + "…", pings: pingCount }));
             }
           }, 25_000);
           keepalive.unref();
-          res.on("close", () => clearInterval(keepalive));
+          res.on("close", () => {
+            clearInterval(keepalive);
+            console.error(JSON.stringify({ sse: "close", sid: sid + "…", pings: pingCount }));
+          });
         }
 
         await session.transport.handleRequest(req, res);
