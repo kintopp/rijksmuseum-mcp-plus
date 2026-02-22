@@ -39,8 +39,9 @@ class StubClientsStore implements OAuthRegisteredClientsStore {
 
 // ─── Stub provider ───────────────────────────────────────────────────
 
-/** Map auth-code → PKCE code_challenge (needed by the SDK's PKCE check). */
-const pendingCodes = new Map<string, string>();
+/** Auth-code → PKCE code_challenge with TTL (needed by the SDK's PKCE check). */
+const CODE_TTL_MS = 600_000; // 10 minutes (RFC 6749 recommends short-lived codes)
+const pendingCodes = new Map<string, { challenge: string; expiresAt: number }>();
 
 export class StubOAuthProvider implements OAuthServerProvider {
   readonly clientsStore = new StubClientsStore();
@@ -50,9 +51,15 @@ export class StubOAuthProvider implements OAuthServerProvider {
     params: AuthorizationParams,
     res: Response,
   ): Promise<void> {
+    // Prune expired codes
+    const now = Date.now();
+    for (const [k, v] of pendingCodes) {
+      if (v.expiresAt < now) pendingCodes.delete(k);
+    }
+
     // Issue a code immediately — no login page needed.
     const code = randomUUID();
-    pendingCodes.set(code, params.codeChallenge);
+    pendingCodes.set(code, { challenge: params.codeChallenge, expiresAt: now + CODE_TTL_MS });
 
     const target = new URL(params.redirectUri);
     target.searchParams.set("code", code);
@@ -64,9 +71,12 @@ export class StubOAuthProvider implements OAuthServerProvider {
     _client: OAuthClientInformationFull,
     authorizationCode: string,
   ): Promise<string> {
-    const challenge = pendingCodes.get(authorizationCode);
-    if (!challenge) throw new Error("Unknown authorization code");
-    return challenge;
+    const entry = pendingCodes.get(authorizationCode);
+    if (!entry || entry.expiresAt < Date.now()) {
+      pendingCodes.delete(authorizationCode);
+      throw new Error("Unknown or expired authorization code");
+    }
+    return entry.challenge;
   }
 
   async exchangeAuthorizationCode(
