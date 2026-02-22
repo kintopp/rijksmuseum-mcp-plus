@@ -301,6 +301,18 @@ async function runHttp(): Promise<void> {
 
   // ── MCP endpoint ────────────────────────────────────────────────
 
+  // Log all /mcp requests for transport debugging (#41)
+  app.all("/mcp", (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    const sid = req.headers["mcp-session-id"] as string | undefined;
+    console.error(JSON.stringify({
+      mcp: req.method,
+      sid: sid ? sid.slice(0, 8) + "…" : null,
+      known: sid ? sessions.has(sid) : null,
+      sessions: sessions.size,
+    }));
+    next();
+  });
+
   app.all("/mcp", async (req: express.Request, res: express.Response) => {
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
