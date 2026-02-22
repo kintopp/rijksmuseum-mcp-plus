@@ -409,7 +409,7 @@ function registerTools(
           .optional()
           .describe(
             "Search for artworks depicting or about a person (not the creator). E.g. 'Willem van Oranje'. " +
-            "Uses the Search API. Prefer depictedPerson (vocabulary-based) when available, as it covers more records."
+            "Uses the Search API. Cannot be combined with vocabulary filters."
           ),
         type: z
           .string()
@@ -895,8 +895,7 @@ function registerTools(
       description:
         "Generate a chronological timeline of an artist's works in the Rijksmuseum collection. " +
         "Searches by creator name, resolves each result, and sorts by creation date. " +
-        "Each work includes an objectNumber for use with get_artwork_details or get_artwork_image. " +
-        "Creator names are accent-sensitive (e.g. 'Eugène Brands' not 'Eugene Brands').",
+        "Each work includes an objectNumber for use with get_artwork_details or get_artwork_image.",
       inputSchema: z.object({
         artist: z
           .string()
