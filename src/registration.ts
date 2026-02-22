@@ -1297,9 +1297,10 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
     {
       title: "Analyse Artwork",
       description:
-        "Fetch a high-resolution image of an artwork and analyse its visual content alongside key metadata " +
-        "(title, creator, date, technique, dimensions, materials, curatorial narrative, inscriptions, subjects, and production place). " +
-        "Returns the image directly so the model can ground its analysis in what it sees.",
+        "Visually analyse an artwork: retrieves its high-resolution image together with key metadata " +
+        "(title, creator, date, description, technique, dimensions, materials, curatorial narrative, inscriptions, " +
+        "depicted persons, depicted places, iconographic subjects, and production place). " +
+        "The image is returned directly so the model can ground its analysis in what it sees.",
       argsSchema: {
         objectNumber: z
           .string()

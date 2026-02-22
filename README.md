@@ -112,7 +112,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Prompt / Resource | Description |
 |---|---|
-| `analyse-artwork` | Prompt: fetch a high-resolution image of an artwork and analyse its visual content alongside 12 metadata fields (title, creator, date, technique, dimensions, materials, curatorial narrative, inscriptions, depicted persons, depicted places, iconographic subjects, production place). Returns the image directly so the model can ground its analysis in what it sees. |
+| `analyse-artwork` | Visually analyse an artwork: retrieves its high-resolution image together with 13 metadata fields (title, creator, date, description, technique, dimensions, materials, curatorial narrative, inscriptions, depicted persons, depicted places, iconographic subjects, production place). The image is returned directly so the model can ground its analysis in what it sees. |
 | `generate-artist-timeline` | Prompt: generate a chronological timeline of an artist's works in the collection. Default 25 works, max 100 — for prolific artists this is a small sample. |
 | `top-100-artworks` | Prompt: the Rijksmuseum's official Top 100 masterpieces (curated set 260213). Fetches the full list with titles, creators, dates, types, and object numbers for further exploration. |
 | `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF deep-zoom viewer for Rijksmuseum artworks (MCP Apps) |
