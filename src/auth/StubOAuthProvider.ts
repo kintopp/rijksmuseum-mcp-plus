@@ -43,6 +43,15 @@ class StubClientsStore implements OAuthRegisteredClientsStore {
 const CODE_TTL_MS = 600_000; // 10 minutes (RFC 6749 recommends short-lived codes)
 const pendingCodes = new Map<string, { challenge: string; expiresAt: number }>();
 
+function issueTokens(): OAuthTokens {
+  return {
+    access_token: randomUUID(),
+    token_type: "bearer",
+    expires_in: 86400,
+    refresh_token: randomUUID(),
+  };
+}
+
 export class StubOAuthProvider implements OAuthServerProvider {
   readonly clientsStore = new StubClientsStore();
 
@@ -84,21 +93,11 @@ export class StubOAuthProvider implements OAuthServerProvider {
     authorizationCode: string,
   ): Promise<OAuthTokens> {
     pendingCodes.delete(authorizationCode);
-    return {
-      access_token: randomUUID(),
-      token_type: "bearer",
-      expires_in: 86400,
-      refresh_token: randomUUID(),
-    };
+    return issueTokens();
   }
 
   async exchangeRefreshToken(): Promise<OAuthTokens> {
-    return {
-      access_token: randomUUID(),
-      token_type: "bearer",
-      expires_in: 86400,
-      refresh_token: randomUUID(),
-    };
+    return issueTokens();
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {

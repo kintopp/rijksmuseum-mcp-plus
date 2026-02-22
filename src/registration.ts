@@ -687,13 +687,10 @@ function registerTools(
         }
         const result = vocabDb.search(vocabArgs as any);
 
-        // Warn about Search API-only filters that were silently dropped
-        // (description and imageAvailable are rejected upfront in the incompatibility check above)
-        const searchOnlyKeys = ["pageToken"] as const;
-        const droppedKeys = [
-          ...searchOnlyKeys.filter(k => argsRecord[k] !== undefined),
-          ...(argsRecord["compact"] === true ? ["compact"] : []),
-        ];
+        // Warn about Search API-only filters silently dropped on the vocab path
+        const droppedKeys = (["pageToken", "compact"] as const).filter(
+          k => argsRecord[k] !== undefined && argsRecord[k] !== false
+        );
         if (droppedKeys.length > 0) {
           result.warnings = [
             ...(result.warnings || []),
