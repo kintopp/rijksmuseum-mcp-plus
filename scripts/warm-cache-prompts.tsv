@@ -133,11 +133,17 @@ search_artwork	{"creator": "Hendrick ter Brugghen"}
 
 # 26. Geographic Research Without Knowing the Map
 search_artwork	{"nearPlace": "Haarlem", "nearPlaceRadius": 15, "creationDate": "16*"}
-search_artwork	{"narrative": "dune"}
-search_artwork	{"narrative": "bleaching"}
+search_artwork	{"curatorialNarrative": "dune"}
+search_artwork	{"curatorialNarrative": "bleaching"}
 
 # 27. Iconclass Concept Discovery
 lookup_iconclass	{"query": "smell"}
 lookup_iconclass	{"query": "crucifixion"}
 lookup_iconclass	{"notation": "34B11"}
 lookup_iconclass	{"query": "Schmerzensmann"}
+
+# 28. Semantic Search
+semantic_search	{"query": "vanitas symbolism and mortality"}
+semantic_search	{"query": "winter landscape with ice skating"}
+semantic_search	{"query": "loneliness and isolation"}
+semantic_search	{"query": "naval battle at sea", "type": "painting"}
