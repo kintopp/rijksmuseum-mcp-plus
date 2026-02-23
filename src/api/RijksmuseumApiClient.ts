@@ -585,7 +585,7 @@ export class RijksmuseumApiClient {
           (n: any) => getLangId(n.language) === AAT.LANG_NL
         );
         const label =
-          extractContent(enName?.content) || extractContent(nlName?.content) || data._label ?? uri.split("/").pop() ?? uri;
+          extractContent(enName?.content) || extractContent(nlName?.content) || (data._label ?? uri.split("/").pop() ?? uri);
 
         // Extract external equivalents (AAT, Wikidata, Iconclass)
         const equivalents: Record<string, string> = {};
