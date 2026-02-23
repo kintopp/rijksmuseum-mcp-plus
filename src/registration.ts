@@ -1354,7 +1354,7 @@ function registerTools(
 
         const groundedLines = results.slice(0, GROUNDING_COUNT).map((r, i) => {
           const oneLiner = formatSearchLine(r, i) + `  [${r.similarityScore.toFixed(2)}]`;
-          const sourceText = truncateWords(r.sourceText, SOURCE_TEXT_WORD_CAP);
+          const sourceText = r.sourceText; // already truncated in results.map()
           return sourceText ? `${oneLiner}\n   ${sourceText}` : oneLiner;
         });
 
@@ -1374,7 +1374,7 @@ function registerTools(
           results,
           ...(warnings.length > 0 && { warnings }),
         };
-        if (warnings.length) textParts.push("\n⚠ " + warnings.join("\n⚠ "));
+        if (warnings.length) textParts.push("\n[WARNING] " + warnings.join("\n[WARNING] "));
         return structuredResponse(data, textParts.join("\n"));
       })
     );

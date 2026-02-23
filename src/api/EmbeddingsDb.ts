@@ -33,10 +33,10 @@ export class EmbeddingsDb {
   private dimensions = 0;
   private artworkCount = 0;
 
-  // Cached prepared statements
-  private stmtQuantize!: Statement;
-  private stmtKnn!: Statement;
-  private stmtArtwork!: Statement;
+  // Cached prepared statements (null until constructor succeeds)
+  private stmtQuantize: Statement | null = null;
+  private stmtKnn: Statement | null = null;
+  private stmtArtwork: Statement | null = null;
   private stmtFilteredKnn = new Map<number, Statement>(); // keyed by chunk size
 
   constructor() {
@@ -84,23 +84,24 @@ export class EmbeddingsDb {
     }
   }
 
-  get available(): boolean { return this.db !== null; }
+  get available(): boolean { return this.db !== null && this.stmtQuantize !== null; }
 
   /**
    * Pure KNN search — no metadata filters.
    * Uses vec0 virtual table for best performance (2-3x faster than regular table).
    */
   search(queryEmbedding: Float32Array, k: number): SemanticSearchResult[] {
-    if (!this.db) return [];
+    if (!this.db || !this.stmtQuantize || !this.stmtKnn || !this.stmtArtwork) return [];
 
-    const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
+    const { stmtQuantize, stmtKnn, stmtArtwork } = this;
+    const quantized = stmtQuantize.get(queryEmbedding) as { v: Buffer };
 
     // KNN scan via vec0
-    const rows = this.stmtKnn.all(quantized.v, Math.min(k, 4096)) as { artwork_id: number; distance: number }[];
+    const rows = stmtKnn.all(quantized.v, Math.min(k, 4096)) as { artwork_id: number; distance: number }[];
 
     // Resolve artwork details
     return rows.map(row => {
-      const artwork = this.stmtArtwork.get(row.artwork_id) as { art_id: number; object_number: string; source_text: string | null } | undefined;
+      const artwork = stmtArtwork.get(row.artwork_id) as { art_id: number; object_number: string; source_text: string | null } | undefined;
       if (!artwork) return null;
       return {
         artId: artwork.art_id,
@@ -117,7 +118,7 @@ export class EmbeddingsDb {
    * Best when filter is selective (returns <50K candidates from 831K total).
    */
   searchFiltered(queryEmbedding: Float32Array, candidateArtIds: number[], k: number): FilteredSearchResponse {
-    if (!this.db || candidateArtIds.length === 0) return { results: [] };
+    if (!this.db || !this.stmtQuantize || candidateArtIds.length === 0) return { results: [] };
 
     const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
 

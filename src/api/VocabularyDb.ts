@@ -700,7 +700,7 @@ export class VocabularyDb {
    * Returns null if the DB lacks integer mappings (text-schema backward compat).
    */
   filterArtIds(params: Pick<VocabSearchParams, "type" | "material" | "technique" | "creator" | "creationDate">): number[] | null {
-    if (!this.db) return null;
+    if (!this.db) return null; // DB not open — unreachable when guarded by `available`, but safe for external callers
     if (!this.hasIntMappings) return null; // text-schema DB — caller should fall back to pure KNN
 
     const conditions: string[] = [];
