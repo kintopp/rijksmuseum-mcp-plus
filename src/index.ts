@@ -297,7 +297,15 @@ function createServer(httpPort?: number): McpServer {
 
         "Descriptions (Dutch, cataloguer-written) cover 61% of artworks. " +
         "Curatorial narratives (English, interpretive wall text) cover ~14K works. " +
-        "Both are searchable but use exact word matching — no stemming.",
+        "Both are searchable but use exact word matching — no stemming.\n\n" +
+
+        "For concept and theme searches where exact vocabulary terms are unknown, use semantic_search — " +
+        "it ranks artworks by embedding similarity to a free-text query. " +
+        "Use search_artwork when the query names a specific artist, place, date, material, or Iconclass term. " +
+        "Use semantic_search when the concept cannot be expressed as a subject tag or notation " +
+        "(atmosphere, emotion, composition, art-historical interpretation), or when search_artwork returned zero results. " +
+        "If semantic results skew toward works on paper, follow up with search_artwork(type: 'painting', subject: ...). " +
+        "Do not use technique: 'painting' to filter to paintings — use type: 'painting' instead.",
     }
   );
 

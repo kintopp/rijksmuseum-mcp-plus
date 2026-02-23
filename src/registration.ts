@@ -1247,21 +1247,30 @@ function registerTools(
   // ── semantic_search ──────────────────────────────────────────────
 
   if (embeddingsDb?.available && embeddingModel?.available) {
-    const GROUNDING_COUNT = 10;
-
     server.registerTool(
       "semantic_search",
       {
         title: "Semantic Artwork Search",
         description:
           "Find artworks by meaning, concept, or theme using natural language. " +
-          "Returns top results ranked by semantic similarity with source text for grounding — " +
-          "use this to explain why results are relevant or to flag false positives. " +
-          "Best for: concepts/themes ('vanitas symbolism'), cross-language queries, " +
-          "or when search_artwork returned 0 results. " +
-          "Not for queries expressible as structured metadata (specific artists, dates, places, materials) — " +
-          "use search_artwork for those. Filters (type, material, technique, creationDate, creator) " +
-          "narrow candidates before semantic ranking.",
+          "Returns results ranked by semantic similarity with source text for grounding — " +
+          "use this to explain why results are relevant or to flag false positives.\n\n" +
+          "Best for: concepts or themes that cannot be expressed as structured metadata — " +
+          "atmospheric qualities ('vanitas symbolism', 'sense of loneliness'), compositional descriptions " +
+          "('artist gazing directly at the viewer'), art-historical concepts ('cultural exchange under VOC trade'), " +
+          "or cross-language queries. Results are most reliable when the Rijksmuseum's curatorial narrative texts " +
+          "discuss the relevant concept explicitly; purely emotional or stylistic concepts (e.g. chiaroscuro, " +
+          "desolation) may yield lower precision because catalogue descriptions often do not use that language.\n\n" +
+          "Not for: queries expressible as structured metadata (specific artists, dates, places, materials) — " +
+          "use search_artwork for those.\n\n" +
+          "Filter notes: Use type: 'painting' to restrict to the paintings collection. " +
+          "Do NOT use technique: 'painting' for this purpose — it matches painted decoration on any object type " +
+          "(ceramics, textiles, frames) and will return unexpected results. " +
+          "Paintings are often underrepresented relative to works on paper in semantic results due to denser " +
+          "subject tagging on prints and drawings. If results skew toward works on paper, follow up with " +
+          "search_artwork(type: 'painting', subject: ...) or search_artwork(type: 'painting', creator: ...).\n\n" +
+          "Multilingual: queries in Dutch, German, French and other languages are supported but may benefit " +
+          "from a wider result window or English reformulation if canonical works are missing.",
         inputSchema: z.object({
           query: z.string().describe("Natural language concept query (e.g. 'winter landscape with ice skating')"),
           type: z.string().optional().describe("Filter by object type (e.g. 'painting', 'print')"),
@@ -1323,10 +1332,10 @@ function registerTools(
         const objectNumbers = candidates.map(c => c.objectNumber);
         const typeMap = vocabDb?.available ? vocabDb.lookupTypes(objectNumbers) : new Map<string, string>();
 
-        // 4. Reconstruct source text for top results (grounding context)
-        const groundingArtIds = candidates.slice(0, GROUNDING_COUNT).map(c => c.artId);
+        // 4. Reconstruct source text for all results (grounding context)
+        const allArtIds = candidates.map(c => c.artId);
         const sourceTextMap = vocabDb?.available
-          ? vocabDb.reconstructSourceText(groundingArtIds)
+          ? vocabDb.reconstructSourceText(allArtIds)
           : new Map<number, string>();
 
         const results = candidates.map((c, i) => {
@@ -1354,29 +1363,23 @@ function registerTools(
             ...(date && { date }),
             ...(typeMap.has(c.objectNumber) && { type: typeMap.get(c.objectNumber) }),
             similarityScore: similarity,
-            sourceText: i < GROUNDING_COUNT ? sourceTextMap.get(c.artId) : undefined,
+            sourceText: sourceTextMap.get(c.artId),
             url: `https://www.rijksmuseum.nl/en/collection/${c.objectNumber}`,
           };
         });
 
-        // 5. Build two-tier text channel
+        // 5. Build text channel
         const mode = filtersApplied ? "semantic+filtered" : "semantic";
-        const header = `${Math.min(GROUNDING_COUNT, results.length)} semantic matches for "${args.query}" ` +
-          `(${results.length} results, ${mode} mode)`;
+        const header = `${results.length} semantic matches for "${args.query}" (${mode} mode)`;
 
-        const groundedLines = results.slice(0, GROUNDING_COUNT).map((r, i) => {
+        const resultLines = results.map((r, i) => {
           const oneLiner = formatSearchLine(r, i) + `  [${r.similarityScore.toFixed(2)}]`;
           const sourceText = r.sourceText;
           return sourceText ? `${oneLiner}\n   ${sourceText}` : oneLiner;
         });
 
-        const compactLines = results.slice(GROUNDING_COUNT).map((r, i) =>
-          formatSearchLine(r, i + GROUNDING_COUNT) + `  [${r.similarityScore.toFixed(2)}]`
-        );
-
         const textParts = [header];
-        if (groundedLines.length) textParts.push("\n── Top results with context ──\n" + groundedLines.join("\n\n"));
-        if (compactLines.length) textParts.push("\n── More results ──\n" + compactLines.join("\n"));
+        if (resultLines.length) textParts.push("\n" + resultLines.join("\n\n"));
 
         // 6. Return dual-channel response
         const data = {
