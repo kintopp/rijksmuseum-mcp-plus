@@ -66,7 +66,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-The vocabulary and Iconclass databases are downloaded automatically on first start (~398 MB + ~40 MB compressed). The server works without them, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters) and `lookup_iconclass` won't be available. `STRUCTURED_CONTENT=false` disables structured output, which is needed for Claude Desktop compatibility.
+The vocabulary, Iconclass, and embeddings databases are downloaded automatically on first start (~398 MB + ~40 MB + ~389 MB compressed). The server works without them, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters), `lookup_iconclass`, and `semantic_search` won't be available. The embedding model (~80 MB) is also downloaded on first use. `STRUCTURED_CONTENT=false` disables structured output, which is needed for Claude Desktop compatibility.
 
 Restart your MCP client after updating the config.
 
@@ -83,7 +83,7 @@ HTTP mode activates automatically when `PORT` is set or `--http` is passed.
 
 | Endpoint | Description |
 |---|---|
-| `POST /mcp` | MCP protocol (Streamable HTTP with SSE) |
+| `POST /mcp` | MCP protocol (stateless Streamable HTTP) |
 | `GET /viewer?iiif={id}&title={title}` | OpenSeadragon IIIF deep-zoom viewer |
 | `GET /health` | Health check |
 
@@ -104,14 +104,15 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 | `resolve_uri` | Resolve a Linked Art URI to full artwork details. Use when you have a URI from `relatedObjects` or other tool output and want to learn what that object is. Returns the same enriched detail as `get_artwork_details`. |
 | `get_recent_changes` | Track additions and modifications by date range. Full EDM records (including subjects) or lightweight headers (`identifiersOnly`). Each record includes an objectNumber for use with `get_artwork_details`, `get_artwork_image`, or `get_artwork_bibliography`. Pagination via resumption token. |
 | `lookup_iconclass` | Search or browse the Iconclass classification system (~40K notations, 13 languages). Discover notation codes by concept (e.g. 'smell' → `31A33`), then use with `search_artwork`'s `iconclass` parameter for precise subject searches. Browse mode shows hierarchy and children. |
+| `semantic_search` | Find artworks by meaning, concept, or theme using natural language. Returns up to 25 results ranked by semantic similarity with reconstructed source text for grounding. Best for concepts that cannot be expressed as structured metadata — atmospheric qualities, compositional descriptions, art-historical interpretation, or cross-language queries. Filters: `type`, `material`, `technique`, `creationDate`, `creator`. Requires embeddings database and embedding model. |
 
-**Structured output:** 8 of 11 tools return typed structured data (`structuredContent`) alongside the text summary. MCP clients that support `outputSchema` ([spec](https://modelcontextprotocol.io/specification/2025-11-25)) receive machine-readable results for richer UI rendering. Clients that don't support it simply use the text content. Set `STRUCTURED_CONTENT=false` to disable if your client has compatibility issues.
+**Structured output:** 9 of 12 tools return typed structured data (`structuredContent`) alongside the text summary. MCP clients that support `outputSchema` ([spec](https://modelcontextprotocol.io/specification/2025-11-25)) receive machine-readable results for richer UI rendering. Clients that don't support it simply use the text content. Set `STRUCTURED_CONTENT=false` to disable if your client has compatibility issues.
 
 #### Prompts and Resources
 
 | Prompt / Resource | Description |
 |---|---|
-| `analyse-artwork` | Visually analyse an artwork: retrieves its high-resolution image together with 13 metadata fields (title, creator, date, description, technique, dimensions, materials, curatorial narrative, inscriptions, depicted persons, depicted places, iconographic subjects, production place). The image is returned directly so the model can ground its analysis in what it sees. |
+| `analyse-artwork` | Share an artwork image with the AI so it can see and discuss it. The image is fetched server-side (via IIIF) and returned as base64 directly in the conversation. Use `get_artwork_details` for full metadata if needed. |
 | `generate-artist-timeline` | Prompt: generate a chronological timeline of an artist's works in the collection. Default 25 works, max 100 — for prolific artists this is a small sample. |
 | `top-100-artworks` | Prompt: the Rijksmuseum's official Top 100 masterpieces (curated set 260213). Fetches the full list with titles, creators, dates, types, and object numbers for further exploration. |
 | `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF deep-zoom viewer for Rijksmuseum artworks (MCP Apps) |
@@ -129,7 +130,10 @@ src/
     OaiPmhClient.ts           — OAI-PMH client (curated sets, EDM records, change tracking)
     VocabularyDb.ts           — SQLite vocabulary database (vocab term, full-text, dimension, date, and geo proximity search)
     IconclassDb.ts            — Iconclass notation search/browse (SQLite)
+    EmbeddingsDb.ts           — sqlite-vec vector search (pure KNN + filtered KNN)
+    EmbeddingModel.ts         — HuggingFace Transformers embedding model (ONNX/WASM)
   utils/
+    db.ts                     — Shared path resolution (PROJECT_ROOT, import.meta.url)
     ResponseCache.ts          — LRU+TTL response cache
     UsageStats.ts             — Tool call aggregation and periodic flush
     SystemIntegration.ts      — Cross-platform browser opening
@@ -138,6 +142,7 @@ apps/
 data/
   vocabulary.db               — Vocabulary database (built from OAI-PMH + Linked Art harvest, not in git)
   iconclass.db                — Iconclass database (built from CC0 dump, not in git)
+  embeddings.db               — Artwork embeddings (831K int8 vectors, not in git)
 ```
 
 #### Data Sources
@@ -162,6 +167,8 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 **Iconclass database:** A separate SQLite database contains 40,675 Iconclass notations with 279,000 texts in 13 languages and 780,000 keywords. Each notation includes a pre-computed count of matching Rijksmuseum artworks (cross-referenced from the vocabulary database). Powers the `lookup_iconclass` tool for concept search and hierarchy browsing.
 
+**Embeddings database:** A pre-built SQLite database contains 831,667 int8-quantized embeddings (384 dimensions) generated by [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small) from composite artwork text (title, creator, subjects, curatorial narrative, inscriptions, description). Vector search uses [sqlite-vec](https://github.com/asg017/sqlite-vec) with dual paths: vec0 virtual table for pure KNN, and `vec_distance_cosine()` on a regular table for filtered KNN (pre-filtered by type, material, technique, date, or creator via the vocabulary database). Source text is not stored in the embeddings DB — it is reconstructed from the vocabulary database at query time, matching the original embedding generation format.
+
 **Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
 #### Configuration
@@ -175,6 +182,10 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
 | `ICONCLASS_DB_PATH` | Path to Iconclass SQLite database | `data/iconclass.db` |
 | `ICONCLASS_DB_URL` | URL to download Iconclass DB on first start; gzip supported | *(none)* |
+| `EMBEDDINGS_DB_PATH` | Path to embeddings SQLite database | `data/embeddings.db` |
+| `EMBEDDINGS_DB_URL` | URL to download embeddings DB on first start; gzip supported | *(none)* |
+| `EMBEDDING_MODEL_ID` | HuggingFace model ID for query embedding | `Xenova/multilingual-e5-small` |
+| `HF_HOME` | HuggingFace cache directory (useful for persistent volumes in deployment) | *(system default)* |
 | `STRUCTURED_CONTENT` | Set to `"false"` to disable structured output (workaround for clients with `outputSchema` bugs) | *(enabled)* |
 | `USAGE_STATS_PATH` | Path to usage stats JSON file | `data/usage-stats.json` |
 
