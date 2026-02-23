@@ -329,7 +329,7 @@ def validate(output_path: str, model):
 
         rows = conn.execute(
             """
-            SELECT ae.object_number, ae.source_text,
+            SELECT ae.object_number,
                    vec_distance_cosine(vec_int8(ae.embedding), vec_int8(?)) as distance
             FROM artwork_embeddings ae
             ORDER BY distance
@@ -350,14 +350,12 @@ def validate(output_path: str, model):
         ).fetchall()
 
         print(f'\n  Query: "{query}"')
-        for obj_num, source_text, dist in rows:
+        for obj_num, dist in rows:
             similarity = 1 - dist
-            snippet = (source_text or "")[:80].replace("\n", " ")
-            print(f"    [{similarity:.3f}] {obj_num}: {snippet}...")
+            print(f"    [{similarity:.3f}] {obj_num}")
 
         # Cross-check: vec0 top-1 should match brute-force top-1
         if rows and vec_rows and rows[0][0] != str(vec_rows[0][0]):
-            # Resolve vec0 artwork_id → object_number for comparison
             vec_top = conn.execute(
                 "SELECT object_number FROM artwork_embeddings WHERE art_id = ?",
                 (vec_rows[0][0],),
