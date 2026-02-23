@@ -61,7 +61,7 @@ export interface LanguageRef {
 export interface IdentifiedBy {
   type: "Name" | "Identifier";
   id?: string;
-  content: string;
+  content: string | string[];
   classified_as?: (LinkedArtRef | string)[];
   identified_by?: IdentifiedBy[];
   language?: LanguageRef[];
@@ -69,7 +69,7 @@ export interface IdentifiedBy {
 
 export interface ReferredToBy {
   type: "LinguisticObject";
-  content: string;
+  content: string | string[];
   classified_as?: (LinkedArtRef | string)[];
   language?: LanguageRef[];
 }
@@ -107,7 +107,7 @@ export interface DimensionEntry {
   type: "Dimension";
   classified_as?: LinkedArtRef[];
   referred_to_by?: ReferredToBy[];
-  value?: number;
+  value?: number | string;
   unit?: LinkedArtRef;
 }
 
@@ -264,7 +264,7 @@ export interface TitleVariant {
 
 export interface StructuredDimension {
   type: string;
-  value: number;
+  value: number | string;
   unit: string;
   note: string | null;
 }

@@ -13,6 +13,8 @@ import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
+import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
+import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { TOP_100_SET } from "./types.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
@@ -145,10 +147,12 @@ export function registerAll(
   oaiClient: OaiPmhClient,
   vocabDb: VocabularyDb | null,
   iconclassDb: IconclassDb | null,
+  embeddingsDb: EmbeddingsDb | null,
+  embeddingModel: EmbeddingModel | null,
   httpPort?: number,
   stats?: UsageStats
 ): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, iconclassDb, httpPort, createLogger(stats));
+  registerTools(server, apiClient, oaiClient, vocabDb, iconclassDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats));
   registerResources(server);
   registerAppViewerResource(server);
   registerPrompts(server, apiClient, oaiClient);
@@ -331,6 +335,25 @@ const LookupIconclassOutput = {
   error: z.string().optional(),
 };
 
+const SemanticSearchOutput = {
+  searchMode: z.enum(["semantic", "semantic+filtered"]),
+  query: z.string(),
+  returnedCount: z.number().int(),
+  results: z.array(z.object({
+    rank: z.number().int(),
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    date: z.string().optional(),
+    type: z.string().optional(),
+    similarityScore: z.number(),
+    sourceText: z.string().optional(),
+    url: z.string(),
+  })),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+};
+
 // ─── Tools ──────────────────────────────────────────────────────────
 
 function registerTools(
@@ -339,6 +362,8 @@ function registerTools(
   oai: OaiPmhClient,
   vocabDb: VocabularyDb | null,
   iconclassDb: IconclassDb | null,
+  embeddingsDb: EmbeddingsDb | null,
+  embeddingModel: EmbeddingModel | null,
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>
 ): void {
@@ -384,7 +409,7 @@ function registerTools(
             "birthPlace, deathPlace, profession, collectionSet, license, description, inscription, provenance, creditLine, " +
             "curatorialNarrative, productionRole, and dimension filters) " +
             "can be freely combined with each other and with creator, type, material, technique, creationDate, and query. " +
-            "Vocabulary filters cannot be combined with imageAvailable. " +
+            "Vocabulary filters cannot be combined with imageAvailable or aboutActor. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
@@ -839,7 +864,9 @@ function registerTools(
         "View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate, flip). " +
         "Not all artworks have images available. " +
         "Downloadable images are available from the artwork's collection page on rijksmuseum.nl. " +
-        "Do not construct IIIF image URLs manually.",
+        "Do not construct IIIF image URLs manually. " +
+        "Note: this tool returns metadata and a viewer link, not the image bytes themselves. " +
+        "IIIF image URLs cannot be fetched via web_fetch or curl — do not attempt to download the image.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1216,6 +1243,157 @@ function registerTools(
       })
     );
   }
+
+  // ── semantic_search ──────────────────────────────────────────────
+
+  if (embeddingsDb?.available && embeddingModel?.available) {
+    const GROUNDING_COUNT = 5;
+    const SOURCE_TEXT_WORD_CAP = 150;
+
+    server.registerTool(
+      "semantic_search",
+      {
+        title: "Semantic Artwork Search",
+        description:
+          "Find artworks by meaning, concept, or theme using natural language. " +
+          "Returns top results ranked by semantic similarity with source text for grounding — " +
+          "use this to explain why results are relevant or to flag false positives. " +
+          "Best for: concepts/themes ('vanitas symbolism'), cross-language queries, " +
+          "or when search_artwork returned 0 results. " +
+          "Not for queries expressible as structured metadata (specific artists, dates, places, materials) — " +
+          "use search_artwork for those. Filters (type, material, technique, creationDate, creator) " +
+          "narrow candidates before semantic ranking.",
+        inputSchema: z.object({
+          query: z.string().describe("Natural language concept query (e.g. 'winter landscape with ice skating')"),
+          type: z.string().optional().describe("Filter by object type (e.g. 'painting', 'print')"),
+          material: z.string().optional().describe("Filter by material (e.g. 'canvas', 'paper')"),
+          technique: z.string().optional().describe("Filter by technique (e.g. 'etching', 'oil painting')"),
+          creationDate: z.string().optional().describe("Filter by date — exact year ('1642') or wildcard ('16*')"),
+          creator: z.string().optional().describe("Filter by artist name"),
+          maxResults: z.number().int().min(1).max(100).default(25).optional()
+            .describe("Number of results to return (default 25)"),
+        }).strict(),
+        ...withOutputSchema(SemanticSearchOutput),
+      },
+      withLogging("semantic_search", async (args) => {
+        const maxResults = args.maxResults ?? RESULTS_DEFAULT;
+
+        // 1. Embed query text
+        const queryVec = await embeddingModel!.embed(args.query);
+
+        // 2. Choose search path based on filters
+        const hasFilters = args.type || args.material || args.technique || args.creationDate || args.creator;
+        let candidates: SemanticSearchResult[];
+        let filtersApplied = false;
+        const warnings: string[] = [];
+
+        if (hasFilters && vocabDb?.available) {
+          // FILTERED PATH: pre-filter via vocab DB, then distance-rank
+          const candidateArtIds = vocabDb.filterArtIds({
+            type: args.type,
+            material: args.material,
+            technique: args.technique,
+            creationDate: args.creationDate,
+            creator: args.creator,
+          });
+          if (candidateArtIds === null) {
+            // DB lacks integer mappings (text-schema) — fall back to pure KNN
+            candidates = embeddingsDb!.search(queryVec, maxResults);
+            warnings.push("Metadata filters ignored: vocabulary DB does not support filtered search. Results ranked by semantic similarity only.");
+          } else if (candidateArtIds.length === 0) {
+            return structuredResponse(
+              { searchMode: "semantic+filtered", query: args.query, returnedCount: 0, results: [],
+                warnings: ["No artworks match the specified filters."] },
+              `0 semantic matches for "${args.query}" (no filter matches)`
+            );
+          } else {
+            const filtered = embeddingsDb!.searchFiltered(queryVec, candidateArtIds, maxResults);
+            candidates = filtered.results;
+            filtersApplied = true;
+            if (filtered.warning) warnings.push(filtered.warning);
+          }
+        } else {
+          // PURE KNN PATH: vec0 virtual table
+          candidates = embeddingsDb!.search(queryVec, maxResults);
+          if (hasFilters) {
+            warnings.push("Metadata filters ignored: vocabulary DB is not available. Results ranked by semantic similarity only.");
+          }
+        }
+
+        // 3. Batch-resolve metadata from vocab DB (single query, not per-result)
+        const objectNumbers = candidates.map(c => c.objectNumber);
+        const typeMap = vocabDb?.available ? vocabDb.lookupTypes(objectNumbers) : new Map<string, string>();
+
+        const results = candidates.map((c, i) => {
+          const similarity = Math.round((1 - c.distance) * 1000) / 1000;
+
+          let title = "", creator = "", date: string | undefined;
+          if (vocabDb?.available) {
+            const info = vocabDb.lookupArtwork(c.objectNumber);
+            if (info) {
+              title = info.title || "";
+              creator = info.creator || "";
+              if (info.dateEarliest != null) {
+                date = info.dateEarliest === info.dateLatest
+                  ? String(info.dateEarliest)
+                  : `${info.dateEarliest}–${info.dateLatest}`;
+              }
+            }
+          }
+
+          return {
+            rank: i + 1,
+            objectNumber: c.objectNumber,
+            title,
+            creator,
+            ...(date && { date }),
+            ...(typeMap.has(c.objectNumber) && { type: typeMap.get(c.objectNumber) }),
+            similarityScore: similarity,
+            sourceText: truncateWords(c.sourceText ?? undefined, SOURCE_TEXT_WORD_CAP) || undefined,
+            url: `https://www.rijksmuseum.nl/en/collection/${c.objectNumber}`,
+          };
+        });
+
+        // 4. Build two-tier text channel
+        const mode = filtersApplied ? "semantic+filtered" : "semantic";
+        const header = `${Math.min(GROUNDING_COUNT, results.length)} semantic matches for "${args.query}" ` +
+          `(${results.length} results, ${mode} mode)`;
+
+        const groundedLines = results.slice(0, GROUNDING_COUNT).map((r, i) => {
+          const oneLiner = formatSearchLine(r, i) + `  [${r.similarityScore.toFixed(2)}]`;
+          const sourceText = r.sourceText; // already truncated in results.map()
+          return sourceText ? `${oneLiner}\n   ${sourceText}` : oneLiner;
+        });
+
+        const compactLines = results.slice(GROUNDING_COUNT).map((r, i) =>
+          formatSearchLine(r, i + GROUNDING_COUNT) + `  [${r.similarityScore.toFixed(2)}]`
+        );
+
+        const textParts = [header];
+        if (groundedLines.length) textParts.push("\n── Top results with context ──\n" + groundedLines.join("\n\n"));
+        if (compactLines.length) textParts.push("\n── More results ──\n" + compactLines.join("\n"));
+
+        // 5. Return dual-channel response
+        const data = {
+          searchMode: mode,
+          query: args.query,
+          returnedCount: results.length,
+          results,
+          ...(warnings.length > 0 && { warnings }),
+        };
+        if (warnings.length) textParts.push("\n[WARNING] " + warnings.join("\n[WARNING] "));
+        return structuredResponse(data, textParts.join("\n"));
+      })
+    );
+  }
+}
+
+/** Truncate text to maxWords, appending "…" if truncated. */
+function truncateWords(text: string | undefined, maxWords: number): string {
+  if (!text) return "";
+  const words = text.split(/\s+/);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(" ") + "…";
 }
 
 // ─── Resources ──────────────────────────────────────────────────────
@@ -1291,12 +1469,11 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
   server.registerPrompt(
     "analyse-artwork",
     {
-      title: "Analyse Artwork",
+      title: "Share Artwork with AI",
       description:
-        "Visually analyse an artwork: retrieves its high-resolution image together with key metadata " +
-        "(title, creator, date, description, technique, dimensions, materials, curatorial narrative, inscriptions, " +
-        "depicted persons, depicted places, iconographic subjects, and production place). " +
-        "The image is returned directly so the model can ground its analysis in what it sees.",
+        "Share an artwork image with the AI so it can see and discuss it. " +
+        "The image is fetched server-side (via IIIF) and returned as base64 directly in the conversation. " +
+        "Use get_artwork_details for full metadata if needed.",
       argsSchema: {
         objectNumber: z
           .string()
@@ -1304,19 +1481,14 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
         imageWidth: z
           .string()
           .optional()
-          .describe("Image width in pixels (default: 1200)"),
+          .describe("Image width in pixels (default: 1200, max: 2000)"),
       },
     },
     async (args) => {
       const parsed = parseInt(args.imageWidth ?? "", 10) || 1200;
       const width = Math.min(Math.max(parsed, 200), 2000);
-      const { uri, object } = await api.findByObjectNumber(args.objectNumber);
-
-      // Resolve image and full metadata in parallel
-      const [imageInfo, detail] = await Promise.all([
-        api.getImageInfo(object, width),
-        api.toDetailEnriched(object, uri),
-      ]);
+      const { object } = await api.findByObjectNumber(args.objectNumber);
+      const imageInfo = await api.getImageInfo(object, width);
 
       if (!imageInfo) {
         return {
@@ -1349,28 +1521,10 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
         };
       }
 
-      // Build concise metadata context for the LLM
-      const labels = (items: { label: string }[]): string =>
-        items.map((i) => i.label).join(", ");
-
-      const metaEntries: [string, string | undefined][] = [
-        ["Title", detail.title],
-        ["Creator", detail.creator],
-        ["Date", detail.date || undefined],
-        ["Description", detail.description ?? undefined],
-        ["Technique", detail.techniqueStatement ?? undefined],
-        ["Dimensions", detail.dimensionStatement ?? undefined],
-        ["Materials", labels(detail.materials) || undefined],
-        ["Curatorial narrative", detail.curatorialNarrative?.en ?? undefined],
-        ["Inscriptions", detail.inscriptions.join(" | ") || undefined],
-        ["Depicted persons", labels(detail.subjects.depictedPersons) || undefined],
-        ["Depicted places", labels(detail.subjects.depictedPlaces) || undefined],
-        ["Iconographic subjects", labels(detail.subjects.iconclass) || undefined],
-        ["Production place", detail.production.map((p) => p.place).filter(Boolean).join(", ") || undefined],
-      ];
-      const meta = metaEntries
-        .filter((entry): entry is [string, string] => entry[1] !== undefined)
-        .map(([label, value]) => `${label}: ${value}`);
+      const title = RijksmuseumApiClient.parseTitle(object);
+      const creator = RijksmuseumApiClient.parseCreator(object);
+      const date = RijksmuseumApiClient.parseDate(object);
+      const caption = `"${title}" by ${creator}${date ? ` (${date})` : ""} — ${args.objectNumber}`;
 
       return {
         messages: [
@@ -1387,14 +1541,15 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
             content: {
               type: "text",
               text:
-                `Examine the composition, colours, figures, setting, technique, and any notable details ` +
-                `of "${detail.title}" by ${detail.creator} (${args.objectNumber}).\n\n` +
-                `Artwork metadata:\n${meta.join("\n")}\n\n` +
-                `Provide a detailed analysis covering:\n` +
-                `- Visual composition and artistic technique\n` +
-                `- Historical and cultural context\n` +
-                `- Significance within the artist's body of work\n` +
-                `- Notable details or symbolism`,
+                `${caption}\n` +
+                `Image: ${imageInfo.width}×${imageInfo.height}px (shown at ${width}px wide)\n\n` +
+                `The image is now in context. You could:\n` +
+                `- Describe what you see — composition, colours, figures, setting\n` +
+                `- Read any visible text, inscriptions, or signatures\n` +
+                `- Identify artistic technique, style, or period\n` +
+                `- Compare with other artworks in the conversation\n\n` +
+                `Use get_artwork_details(objectNumber: "${args.objectNumber}") for full metadata ` +
+                `(description, materials, provenance, curatorial narrative, etc.).`,
             },
           },
         ],

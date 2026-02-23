@@ -43,6 +43,12 @@ function getLangId(langs: { id: string }[] | undefined): string | undefined {
   return langs?.[0]?.id;
 }
 
+/** Normalize content that may be a string or array (~34 artworks return arrays) */
+function extractContent(content: string | string[] | undefined): string {
+  if (content == null) return "";
+  return Array.isArray(content) ? content.join("; ") : content;
+}
+
 /** Extract IIIF identifier from a full IIIF URL */
 function extractIiifId(url: string): string | null {
   const match = url.match(/iiif\.micr\.io\/([^/]+)/);
@@ -227,13 +233,13 @@ export class RijksmuseumApiClient {
         hasClassification(n.classified_as, AAT.BRIEF_TEXT) &&
         getLangId(n.language) === AAT.LANG_EN
     );
-    if (enBrief) return enBrief.content;
+    if (enBrief) return extractContent(enBrief.content);
 
     // Fallback: any English name
     const enName = names.find(
       (n) => getLangId(n.language) === AAT.LANG_EN
     );
-    if (enName) return enName.content;
+    if (enName) return extractContent(enName.content);
 
     // Fallback: Dutch brief title
     const nlBrief = names.find(
@@ -241,10 +247,10 @@ export class RijksmuseumApiClient {
         hasClassification(n.classified_as, AAT.BRIEF_TEXT) &&
         getLangId(n.language) === AAT.LANG_NL
     );
-    if (nlBrief) return nlBrief.content;
+    if (nlBrief) return extractContent(nlBrief.content);
 
     // Fallback: first name
-    return names[0]?.content ?? "Untitled";
+    return extractContent(names[0]?.content) || "Untitled";
   }
 
   /** Extract object number from identified_by */
@@ -254,7 +260,7 @@ export class RijksmuseumApiClient {
         i.type === "Identifier" &&
         hasClassification(i.classified_as, AAT.OBJECT_NUMBER)
     );
-    return identifier?.content ?? "";
+    return extractContent(identifier?.content) || "";
   }
 
   /** Extract creator name from produced_by.referred_to_by (English creator statement) */
@@ -266,7 +272,7 @@ export class RijksmuseumApiClient {
         hasClassification(s.classified_as, AAT.CREATOR_DESCRIPTION) &&
         getLangId(s.language) === AAT.LANG_EN
     );
-    if (enCreator) return enCreator.content;
+    if (enCreator) return extractContent(enCreator.content);
 
     // Fallback: English creator statement (300435416 has longer form like "painter: Rembrandt van Rijn, Amsterdam")
     const enStatement = statements.find(
@@ -274,7 +280,7 @@ export class RijksmuseumApiClient {
         hasClassification(s.classified_as, AAT.CREATOR_STATEMENT) &&
         getLangId(s.language) === AAT.LANG_EN
     );
-    if (enStatement) return enStatement.content;
+    if (enStatement) return extractContent(enStatement.content);
 
     // Fallback: any creator statement
     const anyCreator = statements.find(
@@ -282,7 +288,7 @@ export class RijksmuseumApiClient {
         hasClassification(s.classified_as, AAT.CREATOR_DESCRIPTION) ||
         hasClassification(s.classified_as, AAT.CREATOR_STATEMENT)
     );
-    return anyCreator?.content ?? "Unknown";
+    return extractContent(anyCreator?.content) || "Unknown";
   }
 
   /** Extract creation date from produced_by.timespan */
@@ -294,11 +300,11 @@ export class RijksmuseumApiClient {
     const enDate = timespan.identified_by?.find(
       (i) => getLangId(i.language) === AAT.LANG_EN
     );
-    if (enDate) return enDate.content;
+    if (enDate) return extractContent(enDate.content);
 
     // Fallback: any date label
     const anyDate = timespan.identified_by?.[0];
-    if (anyDate) return anyDate.content;
+    if (anyDate) return extractContent(anyDate.content);
 
     // Fallback: extract year from begin_of_the_begin
     if (timespan.begin_of_the_begin) {
@@ -323,9 +329,9 @@ export class RijksmuseumApiClient {
     const en = matching.find(
       (s) => getLangId(s.language) === AAT.LANG_EN
     );
-    if (en) return en.content;
+    if (en) return extractContent(en.content);
 
-    return matching[0]?.content ?? null;
+    return extractContent(matching[0]?.content) || null;
   }
 
   /** Find all referred_to_by statements matching a given AAT classification (English preferred) */
@@ -342,8 +348,8 @@ export class RijksmuseumApiClient {
     const enItems = matching.filter(
       (s) => getLangId(s.language) === AAT.LANG_EN
     );
-    if (enItems.length > 0) return enItems.map((s) => s.content);
-    return matching.map((s) => s.content);
+    if (enItems.length > 0) return enItems.map((s) => extractContent(s.content));
+    return matching.map((s) => extractContent(s.content));
   }
 
   /** Parse location from current_location */
@@ -355,12 +361,12 @@ export class RijksmuseumApiClient {
     const parts: string[] = [];
     for (const id of loc.identified_by) {
       if (id.content) {
-        parts.push(id.content);
+        parts.push(extractContent(id.content));
       } else if ((id as any).part) {
         const rawParts = (id as any).part;
         const partArray = Array.isArray(rawParts) ? rawParts : [rawParts];
         for (const p of partArray) {
-          if (p?.content) parts.push(p.content);
+          if (p?.content) parts.push(extractContent(p.content));
         }
       }
     }
@@ -386,7 +392,7 @@ export class RijksmuseumApiClient {
         if (isBrief) qualifier = "brief";
         else if (hasClassification(n.classified_as, AAT.FULL_TITLE)) qualifier = "full";
 
-        return { title: n.content, language, qualifier };
+        return { title: extractContent(n.content), language, qualifier };
       });
   }
 
@@ -458,7 +464,7 @@ export class RijksmuseumApiClient {
         const unitUri = d.unit?.id ?? d.unit?._label ?? "";
         const unit = AAT_UNIT_LABELS[unitUri] ?? unitUri;
         const typeUri = d.classified_as?.[0]?.id ?? "";
-        const note = d.referred_to_by?.[0]?.content ?? null;
+        const note = d.referred_to_by?.[0]?.content != null ? extractContent(d.referred_to_by[0].content) : null;
         return { type: typeUri, value: d.value!, unit, note };
       });
   }
@@ -474,7 +480,7 @@ export class RijksmuseumApiClient {
       const enLabel = labels.find(
         (l) => getLangId(l.language) === AAT.LANG_EN
       );
-      const label = enLabel?.content ?? labels[0]?.content ?? "related";
+      const label = extractContent(enLabel?.content) || extractContent(labels[0]?.content) || "related";
       seen.set(uri, { relationship: label, objectUri: uri });
     }
     return [...seen.values()];
@@ -550,7 +556,7 @@ export class RijksmuseumApiClient {
           .map((i) => {
             const cls = i.classified_as?.[0];
             const classUri = cls && typeof cls !== "string" ? cls.id ?? "" : "";
-            return [i.content, classUri];
+            return [extractContent(i.content), classUri];
           })
       ),
     };
@@ -579,7 +585,7 @@ export class RijksmuseumApiClient {
           (n: any) => getLangId(n.language) === AAT.LANG_NL
         );
         const label =
-          enName?.content ?? nlName?.content ?? data._label ?? uri.split("/").pop() ?? uri;
+          extractContent(enName?.content) || extractContent(nlName?.content) || (data._label ?? uri.split("/").pop() ?? uri);
 
         // Extract external equivalents (AAT, Wikidata, Iconclass)
         const equivalents: Record<string, string> = {};
@@ -884,7 +890,7 @@ export class RijksmuseumApiClient {
           )
         )
         ?.content;
-      const sequence = seq ? parseInt(seq, 10) : null;
+      const sequence = seq ? parseInt(extractContent(seq), 10) : null;
 
       if (!assigned) {
         return { type: "B" as const, sequence, citationString: "" };
@@ -897,7 +903,7 @@ export class RijksmuseumApiClient {
           "http://vocab.getty.edu/aat/300311705"
         )
       );
-      const citationString = citId?.content ?? citId?.part?.[0]?.content;
+      const citationString = extractContent(citId?.content) || extractContent(citId?.part?.[0]?.content);
 
       // Type A: has part_of (publication reference)
       if (assigned.part_of?.[0]?.id) {
@@ -909,10 +915,11 @@ export class RijksmuseumApiClient {
             )
           )
           ?.part?.[0]?.content;
+        const pagesStr = pages != null ? extractContent(pages) : undefined;
         return {
           type: "A" as const,
           sequence,
-          pages,
+          pages: pagesStr,
           resolveUri: assigned.part_of[0].id,
         };
       }

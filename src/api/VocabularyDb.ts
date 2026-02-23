@@ -1,4 +1,4 @@
-import Database, { type Database as DatabaseType } from "better-sqlite3";
+import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
 import { escapeFts5, resolveDbPath } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -233,6 +233,8 @@ export class VocabularyDb {
   private hasRightsLookup = false;
   private hasPersonNames = false;
   private fieldIdMap = new Map<string, number>();
+  private stmtLookupArtwork: Statement | null = null;
+  private stmtFilterArtIds = new Map<string, Statement>();
 
   /** Look up a field_id by name, throwing if missing. */
   private requireFieldId(name: string): number {
@@ -305,6 +307,11 @@ export class VocabularyDb {
         } catch { /* ignore */ }
       }
 
+      // Cache frequently-used prepared statements
+      this.stmtLookupArtwork = this.db.prepare(
+        "SELECT title, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
+      );
+
       const features = [
         this.hasFts5 && "vocabFTS5",
         this.hasTextFts && "textFTS5",
@@ -355,6 +362,14 @@ export class VocabularyDb {
       }
     }
     return map;
+  }
+
+  /** Look up basic metadata for a single artwork by object number. */
+  lookupArtwork(objectNumber: string): { title: string; creator: string; dateEarliest: number | null; dateLatest: number | null } | null {
+    if (!this.db || !this.stmtLookupArtwork) return null;
+    const row = this.stmtLookupArtwork.get(objectNumber) as { title: string; creator_label: string; date_earliest: number | null; date_latest: number | null } | undefined;
+    if (!row) return null;
+    return { title: row.title || "", creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
   }
 
   private tableExists(name: string): boolean {
@@ -681,6 +696,69 @@ export class VocabularyDb {
       source: "vocabulary",
       ...(warnings.length > 0 && { warnings }),
     };
+  }
+
+  /**
+   * Return art_ids matching metadata filters, for use as candidates in semantic search.
+   * Supports a subset of VocabSearchParams (the structured filters, not text search).
+   * Returns up to 50,000 art_ids — beyond that, pure KNN + post-filter is faster.
+   * Returns null if the DB lacks integer mappings (text-schema backward compat).
+   */
+  filterArtIds(params: Pick<VocabSearchParams, "type" | "material" | "technique" | "creator" | "creationDate">): number[] | null {
+    if (!this.db) return null; // DB not open — unreachable when guarded by `available`, but safe for external callers
+    if (!this.hasIntMappings) return null; // text-schema DB — caller should fall back to pure KNN
+
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+
+    // Vocab mapping filters (type, material, technique, creator)
+    const FILTER_MAP: { param: keyof typeof params; fields: string[] }[] = [
+      { param: "type", fields: ["type"] },
+      { param: "material", fields: ["material"] },
+      { param: "technique", fields: ["technique"] },
+      { param: "creator", fields: ["creator"] },
+    ];
+
+    for (const { param, fields } of FILTER_MAP) {
+      const value = params[param];
+      if (value === undefined) continue;
+
+      if (this.hasFts5) {
+        const vocabIds = this.findVocabIdsFts(String(value), "", []);
+        if (vocabIds.length === 0) return [];
+        const filter = this.mappingFilterDirect(fields, vocabIds);
+        conditions.push(filter.condition);
+        bindings.push(...filter.bindings);
+      } else {
+        const filter = this.mappingFilterSubquery(
+          fields,
+          `(label_en LIKE ? OR label_nl LIKE ?)`,
+          [`%${value}%`, `%${value}%`],
+        );
+        conditions.push(filter.condition);
+        bindings.push(...filter.bindings);
+      }
+    }
+
+    // Creation date range
+    if (params.creationDate && this.hasDates) {
+      const range = parseDateFilter(params.creationDate);
+      if (range) {
+        conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
+        bindings.push(range.earliest, range.latest);
+      }
+    }
+
+    if (conditions.length === 0) return [];
+
+    const sql = `SELECT a.art_id FROM artworks a WHERE ${conditions.join(" AND ")} LIMIT 50000`;
+    let stmt = this.stmtFilterArtIds.get(sql);
+    if (!stmt) {
+      stmt = this.db.prepare(sql);
+      this.stmtFilterArtIds.set(sql, stmt);
+    }
+    const rows = stmt.all(...bindings) as { art_id: number }[];
+    return rows.map(r => r.art_id);
   }
 
   /** Return the URIs of the N most frequently referenced vocabulary terms. */
