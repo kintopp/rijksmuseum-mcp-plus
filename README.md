@@ -18,18 +18,16 @@ The rijksmuseum-mcp+ MCP server is also compatible with most open-source LLM cli
 
 ### Example Queries
 
-"Show me a drawing by Gesina ter Borch"  
-"Find Pieter Saenredam's paintings"  
-"Find artworks depicting the Raid on the Medway"  
-"What paintings depict Amalia van Solms?"  
-"Search for winter landscapes from the 17th century"  
-"Give me a list of the Rijksmuseum's curated collections"  
-"Find artworks with inscriptions mentioning 'fecit'"  
-"Find artworks whose provenance mentions Napoleon"  
-"Show me prints made after paintings by other artists"  
-"Find artworks depicting places within 100m of the Oude Kerk in Amsterdam"
-"What Iconclass codes relate to 'smell'?"
-"Browse the Iconclass hierarchy for notation 73D73 (Man of Sorrows)"
+"What artworks evoke vanitas and mortality?"  
+"Show me artworks depicting places near the Oude Kerk in Amsterdam"  
+"What Iconclass codes relate to 'smell'?"  
+"Which artworks have a provenance linked to Napoleon?"  
+"Are there prints made after paintings by other artists?"  
+"I'm looking for artworks with inscriptions mentioning 'fecit'"  
+"Show me paintings by artists born in Leiden"  
+"What artworks depict the Crucifixion?"  
+"Which paintings are wider than 300 centimeters?"  
+"Do any artworks have a credit line mentioning Drucker?"
 
 _to be added: goals (technical and [research](docs/research-scenarios.md)), how it works, how to [search](docs/search-parameters.md)_
 
