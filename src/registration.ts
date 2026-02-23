@@ -409,7 +409,7 @@ function registerTools(
             "birthPlace, deathPlace, profession, collectionSet, license, description, inscription, provenance, creditLine, " +
             "curatorialNarrative, productionRole, and dimension filters) " +
             "can be freely combined with each other and with creator, type, material, technique, creationDate, and query. " +
-            "Vocabulary filters cannot be combined with imageAvailable. " +
+            "Vocabulary filters cannot be combined with imageAvailable or aboutActor. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
@@ -864,7 +864,9 @@ function registerTools(
         "View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate, flip). " +
         "Not all artworks have images available. " +
         "Downloadable images are available from the artwork's collection page on rijksmuseum.nl. " +
-        "Do not construct IIIF image URLs manually.",
+        "Do not construct IIIF image URLs manually. " +
+        "Note: this tool returns metadata and a viewer link, not the image bytes themselves. " +
+        "IIIF image URLs cannot be fetched via web_fetch or curl — do not attempt to download the image.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1467,12 +1469,11 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
   server.registerPrompt(
     "analyse-artwork",
     {
-      title: "Analyse Artwork",
+      title: "Share Artwork with AI",
       description:
-        "Visually analyse an artwork: retrieves its high-resolution image together with key metadata " +
-        "(title, creator, date, description, technique, dimensions, materials, curatorial narrative, inscriptions, " +
-        "depicted persons, depicted places, iconographic subjects, and production place). " +
-        "The image is returned directly so the model can ground its analysis in what it sees.",
+        "Share an artwork image with the AI so it can see and discuss it. " +
+        "The image is fetched server-side (via IIIF) and returned as base64 directly in the conversation. " +
+        "Use get_artwork_details for full metadata if needed.",
       argsSchema: {
         objectNumber: z
           .string()
@@ -1480,19 +1481,14 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
         imageWidth: z
           .string()
           .optional()
-          .describe("Image width in pixels (default: 1200)"),
+          .describe("Image width in pixels (default: 1200, max: 2000)"),
       },
     },
     async (args) => {
       const parsed = parseInt(args.imageWidth ?? "", 10) || 1200;
       const width = Math.min(Math.max(parsed, 200), 2000);
-      const { uri, object } = await api.findByObjectNumber(args.objectNumber);
-
-      // Resolve image and full metadata in parallel
-      const [imageInfo, detail] = await Promise.all([
-        api.getImageInfo(object, width),
-        api.toDetailEnriched(object, uri),
-      ]);
+      const { object } = await api.findByObjectNumber(args.objectNumber);
+      const imageInfo = await api.getImageInfo(object, width);
 
       if (!imageInfo) {
         return {
@@ -1525,28 +1521,10 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
         };
       }
 
-      // Build concise metadata context for the LLM
-      const labels = (items: { label: string }[]): string =>
-        items.map((i) => i.label).join(", ");
-
-      const metaEntries: [string, string | undefined][] = [
-        ["Title", detail.title],
-        ["Creator", detail.creator],
-        ["Date", detail.date || undefined],
-        ["Description", detail.description ?? undefined],
-        ["Technique", detail.techniqueStatement ?? undefined],
-        ["Dimensions", detail.dimensionStatement ?? undefined],
-        ["Materials", labels(detail.materials) || undefined],
-        ["Curatorial narrative", detail.curatorialNarrative?.en ?? undefined],
-        ["Inscriptions", detail.inscriptions.join(" | ") || undefined],
-        ["Depicted persons", labels(detail.subjects.depictedPersons) || undefined],
-        ["Depicted places", labels(detail.subjects.depictedPlaces) || undefined],
-        ["Iconographic subjects", labels(detail.subjects.iconclass) || undefined],
-        ["Production place", detail.production.map((p) => p.place).filter(Boolean).join(", ") || undefined],
-      ];
-      const meta = metaEntries
-        .filter((entry): entry is [string, string] => entry[1] !== undefined)
-        .map(([label, value]) => `${label}: ${value}`);
+      const title = RijksmuseumApiClient.parseTitle(object);
+      const creator = RijksmuseumApiClient.parseCreator(object);
+      const date = RijksmuseumApiClient.parseDate(object);
+      const caption = `"${title}" by ${creator}${date ? ` (${date})` : ""} — ${args.objectNumber}`;
 
       return {
         messages: [
@@ -1563,14 +1541,15 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
             content: {
               type: "text",
               text:
-                `Examine the composition, colours, figures, setting, technique, and any notable details ` +
-                `of "${detail.title}" by ${detail.creator} (${args.objectNumber}).\n\n` +
-                `Artwork metadata:\n${meta.join("\n")}\n\n` +
-                `Provide a detailed analysis covering:\n` +
-                `- Visual composition and artistic technique\n` +
-                `- Historical and cultural context\n` +
-                `- Significance within the artist's body of work\n` +
-                `- Notable details or symbolism`,
+                `${caption}\n` +
+                `Image: ${imageInfo.width}×${imageInfo.height}px (shown at ${width}px wide)\n\n` +
+                `The image is now in context. You could:\n` +
+                `- Describe what you see — composition, colours, figures, setting\n` +
+                `- Read any visible text, inscriptions, or signatures\n` +
+                `- Identify artistic technique, style, or period\n` +
+                `- Compare with other artworks in the conversation\n\n` +
+                `Use get_artwork_details(objectNumber: "${args.objectNumber}") for full metadata ` +
+                `(description, materials, provenance, curatorial narrative, etc.).`,
             },
           },
         ],

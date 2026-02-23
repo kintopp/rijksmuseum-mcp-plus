@@ -272,9 +272,32 @@ function createServer(httpPort?: number): McpServer {
     {
       capabilities: { tools: {}, resources: {}, prompts: {} },
       instructions:
-        "Rijksmuseum MCP server — search the collection, get artwork details, " +
-        "view high-resolution IIIF images, and explore artist timelines. " +
-        "No API key required.",
+        "Rijksmuseum collection explorer — circa 830,000 artworks from antiquity to the present day " +
+        "spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.\n\n" +
+
+        "Search combines two backends: a title-based Search API and a vocabulary database with structured filters " +
+        "(subject, material, technique, creator, depicted persons/places, Iconclass notation, dates, dimensions, and more). " +
+        "Vocabulary filters combine freely with each other; imageAvailable and aboutActor use a separate search path " +
+        "and cannot be mixed with them. Results are returned in cataloguing order, not ranked by relevance. " +
+        "Use search_artwork for discovery, get_artwork_details for full metadata on a specific work.\n\n" +
+
+        "Images are served via IIIF deep-zoom. For this purpose, get_artwork_image opens an interactive viewer — " +
+        "it does not return the image bytes. To get the actual image into the conversation for visual analysis, " +
+        "use the analyse-artwork prompt, which fetches it server-side as base64.\n\n" +
+
+        "Person names are matched against 210K name variants (76K persons) using phrase matching with fallback " +
+        "to token intersection — partial names and historical variants often work.\n\n" +
+
+        "Place searches support proximity (nearPlace), depicted places, and production places. " +
+        "64% of places are geocoded. Multi-word queries like 'Oude Kerk Amsterdam' are resolved " +
+        "via progressive token splitting with geo-disambiguation.\n\n" +
+
+        "Iconclass covers 40,675 subject notations. Use lookup_iconclass to find notation codes by concept, " +
+        "then pass them to search_artwork for precise iconographic filtering.\n\n" +
+
+        "Descriptions (Dutch, cataloguer-written) cover 61% of artworks. " +
+        "Curatorial narratives (English, interpretive wall text) cover ~14K works. " +
+        "Both are searchable but use exact word matching — no stemming.",
     }
   );
 
