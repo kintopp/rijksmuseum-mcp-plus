@@ -52,7 +52,10 @@ export class EmbeddingModel {
       normalize: true,
     });
 
-    // output.data is a TypedArray (Float32Array or similar)
+    // dtype: "q8" quantizes internal ONNX weights, but the pipeline dequantizes
+    // before pooling/normalization — output.data is always Float32Array.
+    // EmbeddingsDb.stmtQuantize also normalizes at search time via
+    // vec_normalize(), so vectors are double-normalized (harmless for unit vectors).
     return new Float32Array(output.data);
   }
 }

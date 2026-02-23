@@ -18,7 +18,7 @@
     "dev:viewer": "vite dev -c apps/artwork-viewer/vite.config.ts"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers": "3.8.1",
     "@modelcontextprotocol/ext-apps": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "axios": "^1.7.9",

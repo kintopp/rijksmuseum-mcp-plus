@@ -697,9 +697,11 @@ export class VocabularyDb {
    * Return art_ids matching metadata filters, for use as candidates in semantic search.
    * Supports a subset of VocabSearchParams (the structured filters, not text search).
    * Returns up to 50,000 art_ids — beyond that, pure KNN + post-filter is faster.
+   * Returns null if the DB lacks integer mappings (text-schema backward compat).
    */
-  filterArtIds(params: Pick<VocabSearchParams, "type" | "material" | "technique" | "creator" | "creationDate">): number[] {
-    if (!this.db || !this.hasIntMappings) return [];
+  filterArtIds(params: Pick<VocabSearchParams, "type" | "material" | "technique" | "creator" | "creationDate">): number[] | null {
+    if (!this.db) return null;
+    if (!this.hasIntMappings) return null; // text-schema DB — caller should fall back to pure KNN
 
     const conditions: string[] = [];
     const bindings: unknown[] = [];

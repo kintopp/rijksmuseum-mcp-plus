@@ -13,6 +13,11 @@ export interface SemanticSearchResult {
   distance: number;
 }
 
+export interface FilteredSearchResponse {
+  results: SemanticSearchResult[];
+  warning?: string;
+}
+
 // ─── EmbeddingsDb ────────────────────────────────────────────────────
 
 /**
@@ -32,6 +37,7 @@ export class EmbeddingsDb {
   private stmtQuantize!: Statement;
   private stmtKnn!: Statement;
   private stmtArtwork!: Statement;
+  private stmtFilteredKnn = new Map<number, Statement>(); // keyed by chunk size
 
   constructor() {
     const dbPath = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db");
@@ -110,8 +116,8 @@ export class EmbeddingsDb {
    * Uses regular table + vec_distance_cosine() per sqlite-vec maintainer recommendation.
    * Best when filter is selective (returns <50K candidates from 831K total).
    */
-  searchFiltered(queryEmbedding: Float32Array, candidateArtIds: number[], k: number): SemanticSearchResult[] {
-    if (!this.db || candidateArtIds.length === 0) return [];
+  searchFiltered(queryEmbedding: Float32Array, candidateArtIds: number[], k: number): FilteredSearchResponse {
+    if (!this.db || candidateArtIds.length === 0) return { results: [] };
 
     const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
 
@@ -120,18 +126,36 @@ export class EmbeddingsDb {
     if (candidateArtIds.length > 50000) {
       const allResults = this.search(queryEmbedding, Math.min(k * 10, 4096));
       const idSet = new Set(candidateArtIds);
-      return allResults.filter(r => idSet.has(r.artId)).slice(0, k);
+      const filtered = allResults.filter(r => idSet.has(r.artId)).slice(0, k);
+      const warning = filtered.length < k
+        ? `Filter matched ${candidateArtIds.length.toLocaleString()} artworks (too many for precise ranking). Results are approximate — consider adding more filters to narrow the search.`
+        : undefined;
+      return { results: filtered, warning };
     }
 
     // Build parameterized IN list — batch in chunks to avoid SQLite variable limit.
-    // Dynamic SQL required here: chunk size varies, so statements cannot be cached.
+    // Statements cached by chunk size (only 2 shapes: full 999 and remainder).
     const CHUNK_SIZE = 999; // SQLite max variables per statement
     const allResults: SemanticSearchResult[] = [];
 
     for (let i = 0; i < candidateArtIds.length; i += CHUNK_SIZE) {
       const chunk = candidateArtIds.slice(i, i + CHUNK_SIZE);
-      const placeholders = chunk.map(() => "?").join(",");
-      const stmt = this.db.prepare(`
+      const stmt = this.getFilteredKnnStmt(chunk.length);
+      const rows = stmt.all(quantized.v, ...chunk) as SemanticSearchResult[];
+      allResults.push(...rows);
+    }
+
+    // Sort all chunks by distance and take top k
+    allResults.sort((a, b) => a.distance - b.distance);
+    return { results: allResults.slice(0, k) };
+  }
+
+  /** Get or create a cached prepared statement for filtered KNN with a given chunk size. */
+  private getFilteredKnnStmt(chunkSize: number): Statement {
+    let stmt = this.stmtFilteredKnn.get(chunkSize);
+    if (!stmt) {
+      const placeholders = Array(chunkSize).fill("?").join(",");
+      stmt = this.db!.prepare(`
         SELECT
           art_id AS artId,
           object_number AS objectNumber,
@@ -141,13 +165,8 @@ export class EmbeddingsDb {
         WHERE art_id IN (${placeholders})
         ORDER BY distance
       `);
-
-      const rows = stmt.all(quantized.v, ...chunk) as SemanticSearchResult[];
-      allResults.push(...rows);
+      this.stmtFilteredKnn.set(chunkSize, stmt);
     }
-
-    // Sort all chunks by distance and take top k
-    allResults.sort((a, b) => a.distance - b.distance);
-    return allResults.slice(0, k);
+    return stmt;
   }
 }

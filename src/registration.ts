@@ -1282,6 +1282,7 @@ function registerTools(
         // 2. Choose search path based on filters
         const hasFilters = args.type || args.material || args.technique || args.creationDate || args.creator;
         let candidates: SemanticSearchResult[];
+        const warnings: string[] = [];
 
         if (hasFilters && vocabDb?.available) {
           // FILTERED PATH: pre-filter via vocab DB, then distance-rank
@@ -1292,14 +1293,21 @@ function registerTools(
             creationDate: args.creationDate,
             creator: args.creator,
           });
-          if (candidateArtIds.length === 0) {
+          if (candidateArtIds === null) {
+            // DB lacks integer mappings (text-schema) — fall back to pure KNN
+            candidates = embeddingsDb!.search(queryVec, maxResults);
+            warnings.push("Metadata filters ignored: vocabulary DB does not support filtered search. Results ranked by semantic similarity only.");
+          } else if (candidateArtIds.length === 0) {
             return structuredResponse(
               { searchMode: "semantic+filtered", query: args.query, returnedCount: 0, results: [],
                 warnings: ["No artworks match the specified filters."] },
               `0 semantic matches for "${args.query}" (no filter matches)`
             );
+          } else {
+            const filtered = embeddingsDb!.searchFiltered(queryVec, candidateArtIds, maxResults);
+            candidates = filtered.results;
+            if (filtered.warning) warnings.push(filtered.warning);
           }
-          candidates = embeddingsDb!.searchFiltered(queryVec, candidateArtIds, maxResults);
         } else {
           // PURE KNN PATH: vec0 virtual table
           candidates = embeddingsDb!.search(queryVec, maxResults);
@@ -1334,7 +1342,7 @@ function registerTools(
             ...(date && { date }),
             ...(typeMap.has(c.objectNumber) && { type: typeMap.get(c.objectNumber) }),
             similarityScore: similarity,
-            sourceText: c.sourceText || undefined,
+            sourceText: truncateWords(c.sourceText ?? undefined, SOURCE_TEXT_WORD_CAP) || undefined,
             url: `https://www.rijksmuseum.nl/en/collection/${c.objectNumber}`,
           };
         });
@@ -1364,7 +1372,9 @@ function registerTools(
           query: args.query,
           returnedCount: results.length,
           results,
+          ...(warnings.length > 0 && { warnings }),
         };
+        if (warnings.length) textParts.push("\n⚠ " + warnings.join("\n⚠ "));
         return structuredResponse(data, textParts.join("\n"));
       })
     );
