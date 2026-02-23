@@ -21,7 +21,7 @@ export class EmbeddingModel {
    *
    * @param modelId - HuggingFace model ID or local path
    */
-  async init(modelId: string = "intfloat/multilingual-e5-small"): Promise<void> {
+  async init(modelId: string = "Xenova/multilingual-e5-small"): Promise<void> {
     this._modelId = modelId;
     try {
       const { pipeline } = await import("@huggingface/transformers");

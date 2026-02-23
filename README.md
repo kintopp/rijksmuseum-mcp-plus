@@ -59,15 +59,14 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
       "command": "node",
       "args": ["/absolute/path/to/rijksmuseum-mcp-plus/dist/index.js"],
       "env": {
-        "VOCAB_DB_URL": "https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.12/vocabulary.db.gz",
-        "ICONCLASS_DB_URL": "https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.13/iconclass.db.gz"
+        "STRUCTURED_CONTENT": "false"
       }
     }
   }
 }
 ```
 
-The server works without the vocabulary database, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters) won't be available. The `VOCAB_DB_URL` setting above enables automatic download (~664 MB compressed, ~2.8 GB uncompressed) on first start. The `ICONCLASS_DB_URL` enables the `lookup_iconclass` tool for discovering iconographic classification codes (~40 MB compressed, ~97 MB uncompressed).
+The vocabulary and Iconclass databases are downloaded automatically on first start (~398 MB + ~40 MB compressed). The server works without them, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters) and `lookup_iconclass` won't be available. `STRUCTURED_CONTENT=false` disables structured output, which is needed for Claude Desktop compatibility.
 
 Restart your MCP client after updating the config.
 

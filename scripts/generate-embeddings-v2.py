@@ -35,16 +35,6 @@ DEFAULT_MODEL = "intfloat/multilingual-e5-small"
 DIMENSIONS = 384
 COMMIT_BATCH = 5000
 
-# Field label → dict key for composite text (order = truncation priority)
-COMPOSITE_FIELDS = [
-    ("Title", "title_all_text"),
-    ("Creator", "creator_label"),
-    ("Subjects", "subjects"),
-    ("Narrative", "narrative_text"),
-    ("Inscriptions", "inscription_text"),
-    ("Description", "description_text"),
-]
-
 
 def open_vec_db(path: str) -> sqlite3.Connection:
     """Open a SQLite connection with the sqlite-vec extension loaded."""
@@ -60,8 +50,12 @@ def open_vec_db(path: str) -> sqlite3.Connection:
 # ─── Phase 1: Build composite text ───────────────────────────────────
 
 
-def load_artworks(vocab_db: str) -> list[dict]:
-    """Load all artworks from vocab DB with text fields for embedding."""
+def load_artworks(vocab_db: str) -> list[tuple[int, str, str]]:
+    """Load artworks and build composite text in one pass.
+
+    Returns list of (art_id, object_number, composite_text) tuples.
+    Raw text fields are discarded after compositing to minimize memory.
+    """
     conn = sqlite3.connect(vocab_db)
     conn.row_factory = sqlite3.Row
 
@@ -108,49 +102,32 @@ def load_artworks(vocab_db: str) -> list[dict]:
     for row in subject_rows:
         key = row[0]
         subject_map.setdefault(key, []).append(row[1])
+    del subject_rows  # free ~50 MB
     print(f"    {len(subject_map):,} artworks with subject labels")
 
-    conn.close()
-
-    # Build artwork dicts with composite text
+    # Build (art_id, object_number, composite_text) tuples — discard raw fields
+    print("  Building composite texts...")
     artworks = []
     for row in rows:
         art_id = row["art_id"]
         obj_num = row["object_number"]
-
-        # Get subjects for this artwork
         subjects = subject_map.get(art_id, []) if has_int else subject_map.get(obj_num, [])
 
-        artworks.append({
-            "art_id": art_id,
-            "object_number": obj_num,
-            "title_all_text": row["title_all_text"],
-            "creator_label": row["creator_label"],
-            "subjects": subjects,
-            "narrative_text": row["narrative_text"],
-            "inscription_text": row["inscription_text"],
-            "description_text": row["description_text"],
-        })
+        # Build composite text inline (field order = truncation priority)
+        fields = [
+            ("Title", row["title_all_text"]),
+            ("Creator", row["creator_label"]),
+            ("Subjects", ", ".join(subjects) if subjects else None),
+            ("Narrative", row["narrative_text"]),
+            ("Inscriptions", row["inscription_text"]),
+            ("Description", row["description_text"]),
+        ]
+        text = " ".join(f"[{label}] {val}" for label, val in fields if val)
+        artworks.append((art_id, obj_num, text))
 
+    del rows, subject_map  # free raw data
+    conn.close()
     return artworks
-
-
-def build_composite_text(artwork: dict) -> str:
-    """Build composite text for embedding.
-
-    Field order (defined by COMPOSITE_FIELDS) reflects truncation priority —
-    multilingual-e5-small has a 512-token window and silently truncates from
-    the end. Most semantically rich fields first, most expendable last.
-    """
-    parts = []
-    for label, key in COMPOSITE_FIELDS:
-        value = artwork[key]
-        if not value:
-            continue
-        if isinstance(value, list):
-            value = ", ".join(value)
-        parts.append(f"[{label}] {value}")
-    return " ".join(parts)
 
 
 # ─── Phase 2+3: Stream embed → quantize → write ─────────────────────
@@ -179,8 +156,7 @@ def _flush_batch(conn, regular_rows, vec_rows):
 
 def embed_and_write(
     model,
-    artworks: list[dict],
-    composite_texts: list[str],
+    artworks: list[tuple[int, str, str]],
     output_path: str,
     model_name: str,
     batch_size: int,
@@ -188,6 +164,7 @@ def embed_and_write(
 ) -> int:
     """Stream: embed a batch → quantize → write to DB. Repeat.
 
+    artworks: list of (art_id, object_number, composite_text) tuples.
     Returns number of newly inserted embeddings.
     """
     conn = open_vec_db(output_path)
@@ -251,9 +228,10 @@ def embed_and_write(
         # Collect texts for this batch (skip already-embedded in resume mode)
         indices_to_embed = []
         for i in range(batch_start, batch_end):
-            if artworks[i]["art_id"] in existing_ids:
+            art_id, _, text = artworks[i]
+            if art_id in existing_ids:
                 skipped += 1
-            elif not composite_texts[i]:
+            elif not text:
                 skipped += 1
             else:
                 indices_to_embed.append(i)
@@ -262,7 +240,7 @@ def embed_and_write(
             continue
 
         # Embed only the non-skipped texts
-        batch_texts = [f"passage: {composite_texts[i]}" for i in indices_to_embed]
+        batch_texts = [f"passage: {artworks[i][2]}" for i in indices_to_embed]
         embs_f32 = model.encode(batch_texts, normalize_embeddings=True, show_progress_bar=False)
 
         # Quantize inline
@@ -271,15 +249,14 @@ def embed_and_write(
 
         # Build row tuples
         for j, idx in enumerate(indices_to_embed):
-            artwork = artworks[idx]
-            text = composite_texts[idx]
+            art_id, obj_num, text = artworks[idx]
             emb_blob = embs_int8[j].tobytes()
             source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
             batch_rows_regular.append(
-                (artwork["art_id"], artwork["object_number"], emb_blob, text, source_hash)
+                (art_id, obj_num, emb_blob, text, source_hash)
             )
-            batch_rows_vec.append((artwork["art_id"], emb_blob))
+            batch_rows_vec.append((art_id, emb_blob))
             inserted += 1
 
         # Flush when we've accumulated enough rows
@@ -352,7 +329,7 @@ def validate(output_path: str, model):
 
         rows = conn.execute(
             """
-            SELECT ae.object_number, ae.source_text,
+            SELECT ae.object_number,
                    vec_distance_cosine(vec_int8(ae.embedding), vec_int8(?)) as distance
             FROM artwork_embeddings ae
             ORDER BY distance
@@ -373,14 +350,12 @@ def validate(output_path: str, model):
         ).fetchall()
 
         print(f'\n  Query: "{query}"')
-        for obj_num, source_text, dist in rows:
+        for obj_num, dist in rows:
             similarity = 1 - dist
-            snippet = (source_text or "")[:80].replace("\n", " ")
-            print(f"    [{similarity:.3f}] {obj_num}: {snippet}...")
+            print(f"    [{similarity:.3f}] {obj_num}")
 
         # Cross-check: vec0 top-1 should match brute-force top-1
         if rows and vec_rows and rows[0][0] != str(vec_rows[0][0]):
-            # Resolve vec0 artwork_id → object_number for comparison
             vec_top = conn.execute(
                 "SELECT object_number FROM artwork_embeddings WHERE art_id = ?",
                 (vec_rows[0][0],),
@@ -476,18 +451,17 @@ def main():
     if args.limit > 0:
         artworks = artworks[: args.limit]
         print(f"  --limit {args.limit}: using first {len(artworks)} artworks")
-    composite_texts = [build_composite_text(a) for a in artworks]
 
     # Stats
-    non_empty = sum(1 for t in composite_texts if t)
-    avg_len = sum(len(t) for t in composite_texts) / max(len(composite_texts), 1)
+    non_empty = sum(1 for _, _, t in artworks if t)
+    avg_len = sum(len(t) for _, _, t in artworks) / max(len(artworks), 1)
     print(f"  {len(artworks):,} artworks, {non_empty:,} with text")
     print(f"  Average composite text length: {avg_len:.0f} chars")
 
     # ── Phase 2+3: Stream embed → write ───────────────────────────────
     print(f"\nPhase 2+3: Streaming embed → quantize → write ({args.batch_size} batch size)...")
     inserted = embed_and_write(
-        model, artworks, composite_texts, args.output, args.model,
+        model, artworks, args.output, args.model,
         args.batch_size, args.resume,
     )
 

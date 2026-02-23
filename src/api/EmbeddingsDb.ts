@@ -9,7 +9,6 @@ const require = createRequire(import.meta.url);
 export interface SemanticSearchResult {
   artId: number;
   objectNumber: string;
-  sourceText: string | null;
   distance: number;
 }
 
@@ -65,16 +64,17 @@ export class EmbeddingsDb {
         "SELECT vec_quantize_int8(vec_normalize(?), 'unit') as v"
       );
 
-      // Pure KNN path (vec0) — use explicit artwork_id column, not rowid
+      // Pure KNN path (vec0) — vec_int8() wrapper required so sqlite-vec
+      // interprets the BLOB as int8 (default assumption is float32)
       this.stmtKnn = this.db.prepare(`
         SELECT artwork_id, distance FROM vec_artworks
-        WHERE embedding MATCH ? AND k = ?
+        WHERE embedding MATCH vec_int8(?) AND k = ?
         ORDER BY distance
       `);
 
       // Artwork detail lookup by art_id
       this.stmtArtwork = this.db.prepare(
-        "SELECT art_id, object_number, source_text FROM artwork_embeddings WHERE art_id = ?"
+        "SELECT art_id, object_number FROM artwork_embeddings WHERE art_id = ?"
       );
 
       console.error(`Embeddings DB: ${this.artworkCount.toLocaleString()} vectors (${this.dimensions}d)`);
@@ -101,12 +101,11 @@ export class EmbeddingsDb {
 
     // Resolve artwork details
     return rows.map(row => {
-      const artwork = stmtArtwork.get(row.artwork_id) as { art_id: number; object_number: string; source_text: string | null } | undefined;
+      const artwork = stmtArtwork.get(row.artwork_id) as { art_id: number; object_number: string } | undefined;
       if (!artwork) return null;
       return {
         artId: artwork.art_id,
         objectNumber: artwork.object_number,
-        sourceText: artwork.source_text,
         distance: row.distance,
       };
     }).filter((r): r is SemanticSearchResult => r !== null);
@@ -160,8 +159,7 @@ export class EmbeddingsDb {
         SELECT
           art_id AS artId,
           object_number AS objectNumber,
-          source_text AS sourceText,
-          vec_distance_cosine(embedding, ?) AS distance
+          vec_distance_cosine(vec_int8(embedding), vec_int8(?)) AS distance
         FROM artwork_embeddings
         WHERE art_id IN (${placeholders})
         ORDER BY distance
