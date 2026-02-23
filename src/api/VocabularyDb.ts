@@ -372,6 +372,77 @@ export class VocabularyDb {
     return { title: row.title || "", creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
   }
 
+  /**
+   * Reconstruct the composite source text that was embedded, in the same format
+   * as generate-embeddings-v2.py. Used to provide grounding context for semantic
+   * search results without storing source_text in the embeddings DB.
+   *
+   * Requires integer-encoded mappings (v0.13+). Returns empty map for text-schema DBs.
+   */
+  reconstructSourceText(artIds: number[]): Map<number, string> {
+    const result = new Map<number, string>();
+    if (!this.db || !this.hasIntMappings || artIds.length === 0) return result;
+
+    const CHUNK = 500;
+    const subjectFieldId = this.fieldIdMap.get("subject");
+    if (subjectFieldId === undefined) return result;
+
+    for (let i = 0; i < artIds.length; i += CHUNK) {
+      const chunk = artIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+
+      // Query 1: artwork fields
+      const artRows = this.db.prepare(
+        `SELECT art_id, title_all_text, creator_label, narrative_text, inscription_text, description_text
+         FROM artworks WHERE art_id IN (${placeholders})`
+      ).all(...chunk) as {
+        art_id: number;
+        title_all_text: string | null;
+        creator_label: string | null;
+        narrative_text: string | null;
+        inscription_text: string | null;
+        description_text: string | null;
+      }[];
+
+      // Query 2: subject labels per artwork
+      const subjectRows = this.db.prepare(
+        `SELECT m.artwork_id, COALESCE(v.label_en, v.label_nl) AS label
+         FROM mappings m
+         JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+         WHERE m.field_id = ? AND m.artwork_id IN (${placeholders})`
+      ).all(subjectFieldId, ...chunk) as { artwork_id: number; label: string | null }[];
+
+      // Group subject labels by artwork_id
+      const subjectMap = new Map<number, string[]>();
+      for (const sr of subjectRows) {
+        if (!sr.label) continue;
+        let labels = subjectMap.get(sr.artwork_id);
+        if (!labels) { labels = []; subjectMap.set(sr.artwork_id, labels); }
+        labels.push(sr.label);
+      }
+
+      // Assemble composite text in same format as embedding generation
+      for (const row of artRows) {
+        const subjects = subjectMap.get(row.art_id);
+        const fields: [string, string | null | undefined][] = [
+          ["Title", row.title_all_text],
+          ["Creator", row.creator_label],
+          ["Subjects", subjects ? subjects.join(", ") : null],
+          ["Narrative", row.narrative_text],
+          ["Inscriptions", row.inscription_text],
+          ["Description", row.description_text],
+        ];
+        const text = fields
+          .filter(([, v]) => v)
+          .map(([l, v]) => `[${l}] ${v}`)
+          .join(" ");
+        if (text) result.set(row.art_id, text);
+      }
+    }
+
+    return result;
+  }
+
   private tableExists(name: string): boolean {
     try {
       this.db!.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();

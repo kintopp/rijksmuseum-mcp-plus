@@ -164,7 +164,7 @@ async function initDatabases(): Promise<void> {
   embeddingsDb = new EmbeddingsDb();
   if (embeddingsDb.available) {
     embeddingModel = new EmbeddingModel();
-    const modelId = process.env.EMBEDDING_MODEL_ID ?? "intfloat/multilingual-e5-small";
+    const modelId = process.env.EMBEDDING_MODEL_ID ?? "Xenova/multilingual-e5-small";
     await embeddingModel.init(modelId);
   }
 }

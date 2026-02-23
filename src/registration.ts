@@ -1247,8 +1247,7 @@ function registerTools(
   // ── semantic_search ──────────────────────────────────────────────
 
   if (embeddingsDb?.available && embeddingModel?.available) {
-    const GROUNDING_COUNT = 5;
-    const SOURCE_TEXT_WORD_CAP = 150;
+    const GROUNDING_COUNT = 10;
 
     server.registerTool(
       "semantic_search",
@@ -1324,6 +1323,12 @@ function registerTools(
         const objectNumbers = candidates.map(c => c.objectNumber);
         const typeMap = vocabDb?.available ? vocabDb.lookupTypes(objectNumbers) : new Map<string, string>();
 
+        // 4. Reconstruct source text for top results (grounding context)
+        const groundingArtIds = candidates.slice(0, GROUNDING_COUNT).map(c => c.artId);
+        const sourceTextMap = vocabDb?.available
+          ? vocabDb.reconstructSourceText(groundingArtIds)
+          : new Map<number, string>();
+
         const results = candidates.map((c, i) => {
           const similarity = Math.round((1 - c.distance) * 1000) / 1000;
 
@@ -1349,19 +1354,19 @@ function registerTools(
             ...(date && { date }),
             ...(typeMap.has(c.objectNumber) && { type: typeMap.get(c.objectNumber) }),
             similarityScore: similarity,
-            sourceText: truncateWords(c.sourceText ?? undefined, SOURCE_TEXT_WORD_CAP) || undefined,
+            sourceText: i < GROUNDING_COUNT ? sourceTextMap.get(c.artId) : undefined,
             url: `https://www.rijksmuseum.nl/en/collection/${c.objectNumber}`,
           };
         });
 
-        // 4. Build two-tier text channel
+        // 5. Build two-tier text channel
         const mode = filtersApplied ? "semantic+filtered" : "semantic";
         const header = `${Math.min(GROUNDING_COUNT, results.length)} semantic matches for "${args.query}" ` +
           `(${results.length} results, ${mode} mode)`;
 
         const groundedLines = results.slice(0, GROUNDING_COUNT).map((r, i) => {
           const oneLiner = formatSearchLine(r, i) + `  [${r.similarityScore.toFixed(2)}]`;
-          const sourceText = r.sourceText; // already truncated in results.map()
+          const sourceText = r.sourceText;
           return sourceText ? `${oneLiner}\n   ${sourceText}` : oneLiner;
         });
 
@@ -1373,7 +1378,7 @@ function registerTools(
         if (groundedLines.length) textParts.push("\n── Top results with context ──\n" + groundedLines.join("\n\n"));
         if (compactLines.length) textParts.push("\n── More results ──\n" + compactLines.join("\n"));
 
-        // 5. Return dual-channel response
+        // 6. Return dual-channel response
         const data = {
           searchMode: mode,
           query: args.query,
@@ -1386,14 +1391,6 @@ function registerTools(
       })
     );
   }
-}
-
-/** Truncate text to maxWords, appending "…" if truncated. */
-function truncateWords(text: string | undefined, maxWords: number): string {
-  if (!text) return "";
-  const words = text.split(/\s+/);
-  if (words.length <= maxWords) return text;
-  return words.slice(0, maxWords).join(" ") + "…";
 }
 
 // ─── Resources ──────────────────────────────────────────────────────
