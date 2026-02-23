@@ -304,7 +304,9 @@ function createServer(httpPort?: number): McpServer {
         "Use search_artwork when the query names a specific artist, place, date, material, or Iconclass term. " +
         "Use semantic_search when the concept cannot be expressed as a subject tag or notation " +
         "(atmosphere, emotion, composition, art-historical interpretation), or when search_artwork returned zero results. " +
-        "If semantic results skew toward works on paper, follow up with search_artwork(type: 'painting', subject: ...). " +
+        "For queries where paintings are the expected result type, always combine semantic_search with " +
+        "a follow-up search_artwork(type: 'painting', subject: ...) or search_artwork(type: 'painting', creator: ...) — " +
+        "paintings are underrepresented in semantic results and the absence of key works is not visible in the output. " +
         "Do not use technique: 'painting' to filter to paintings — use type: 'painting' instead.",
     }
   );

@@ -402,6 +402,9 @@ function registerTools(
         "Use description for cataloguer observations (e.g. compositional details, specific motifs noted by specialists); " +
         "use curatorialNarrative for curatorial interpretation and art-historical context. " +
         "These three fields search different text corpora and can return complementary results. " +
+        "For broader concept or theme discovery beyond structured vocabulary, use semantic_search — " +
+        "but note that paintings are underrepresented there, so combine it with " +
+        "search_artwork(type: 'painting', subject/creator: ...) for painting queries. " +
         "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
         "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
         (vocabAvailable
@@ -1265,10 +1268,12 @@ function registerTools(
           "use search_artwork for those.\n\n" +
           "Filter notes: Use type: 'painting' to restrict to the paintings collection. " +
           "Do NOT use technique: 'painting' for this purpose — it matches painted decoration on any object type " +
-          "(ceramics, textiles, frames) and will return unexpected results. " +
-          "Paintings are often underrepresented relative to works on paper in semantic results due to denser " +
-          "subject tagging on prints and drawings. If results skew toward works on paper, follow up with " +
-          "search_artwork(type: 'painting', subject: ...) or search_artwork(type: 'painting', creator: ...).\n\n" +
+          "(ceramics, textiles, frames) and will return unexpected results.\n\n" +
+          "Painting queries — two-step pattern: Paintings are systematically underrepresented in semantic results " +
+          "because prints and drawings have denser subject tagging. For queries where paintings are the expected " +
+          "result type, ALWAYS combine semantic_search with a follow-up search_artwork(type: 'painting', subject: ...) " +
+          "or search_artwork(type: 'painting', creator: ...) call — do not wait to observe skew, as the absence " +
+          "of key works is not visible in the returned results.\n\n" +
           "Multilingual: queries in Dutch, German, French and other languages are supported but may benefit " +
           "from a wider result window or English reformulation if canonical works are missing.",
         inputSchema: z.object({
