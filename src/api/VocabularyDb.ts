@@ -357,6 +357,16 @@ export class VocabularyDb {
     return map;
   }
 
+  /** Look up basic metadata for a single artwork by object number. */
+  lookupArtwork(objectNumber: string): { title: string; creator: string; dateEarliest: number | null; dateLatest: number | null } | null {
+    if (!this.db) return null;
+    const row = this.db.prepare(
+      "SELECT title, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
+    ).get(objectNumber) as { title: string; creator_label: string; date_earliest: number | null; date_latest: number | null } | undefined;
+    if (!row) return null;
+    return { title: row.title || "", creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
+  }
+
   private tableExists(name: string): boolean {
     try {
       this.db!.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();
@@ -681,6 +691,62 @@ export class VocabularyDb {
       source: "vocabulary",
       ...(warnings.length > 0 && { warnings }),
     };
+  }
+
+  /**
+   * Return art_ids matching metadata filters, for use as candidates in semantic search.
+   * Supports a subset of VocabSearchParams (the structured filters, not text search).
+   * Returns up to 50,000 art_ids — beyond that, pure KNN + post-filter is faster.
+   */
+  filterArtIds(params: Pick<VocabSearchParams, "type" | "material" | "technique" | "creator" | "creationDate">): number[] {
+    if (!this.db || !this.hasIntMappings) return [];
+
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+
+    // Vocab mapping filters (type, material, technique, creator)
+    const FILTER_MAP: { param: keyof typeof params; fields: string[] }[] = [
+      { param: "type", fields: ["type"] },
+      { param: "material", fields: ["material"] },
+      { param: "technique", fields: ["technique"] },
+      { param: "creator", fields: ["creator"] },
+    ];
+
+    for (const { param, fields } of FILTER_MAP) {
+      const value = params[param];
+      if (value === undefined) continue;
+
+      if (this.hasFts5) {
+        const vocabIds = this.findVocabIdsFts(String(value), "", []);
+        if (vocabIds.length === 0) return [];
+        const filter = this.mappingFilterDirect(fields, vocabIds);
+        conditions.push(filter.condition);
+        bindings.push(...filter.bindings);
+      } else {
+        const filter = this.mappingFilterSubquery(
+          fields,
+          `(label_en LIKE ? OR label_nl LIKE ?)`,
+          [`%${value}%`, `%${value}%`],
+        );
+        conditions.push(filter.condition);
+        bindings.push(...filter.bindings);
+      }
+    }
+
+    // Creation date range
+    if (params.creationDate && this.hasDates) {
+      const range = parseDateFilter(params.creationDate);
+      if (range) {
+        conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
+        bindings.push(range.earliest, range.latest);
+      }
+    }
+
+    if (conditions.length === 0) return [];
+
+    const sql = `SELECT a.art_id FROM artworks a WHERE ${conditions.join(" AND ")} LIMIT 50000`;
+    const rows = this.db.prepare(sql).all(...bindings) as { art_id: number }[];
+    return rows.map(r => r.art_id);
   }
 
   /** Return the URIs of the N most frequently referenced vocabulary terms. */

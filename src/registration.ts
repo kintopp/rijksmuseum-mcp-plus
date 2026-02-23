@@ -13,6 +13,8 @@ import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
+import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
+import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { TOP_100_SET } from "./types.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
@@ -145,10 +147,12 @@ export function registerAll(
   oaiClient: OaiPmhClient,
   vocabDb: VocabularyDb | null,
   iconclassDb: IconclassDb | null,
+  embeddingsDb: EmbeddingsDb | null,
+  embeddingModel: EmbeddingModel | null,
   httpPort?: number,
   stats?: UsageStats
 ): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, iconclassDb, httpPort, createLogger(stats));
+  registerTools(server, apiClient, oaiClient, vocabDb, iconclassDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats));
   registerResources(server);
   registerAppViewerResource(server);
   registerPrompts(server, apiClient, oaiClient);
@@ -331,6 +335,25 @@ const LookupIconclassOutput = {
   error: z.string().optional(),
 };
 
+const SemanticSearchOutput = {
+  searchMode: z.enum(["semantic", "semantic+filtered"]),
+  query: z.string(),
+  returnedCount: z.number().int(),
+  results: z.array(z.object({
+    rank: z.number().int(),
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    date: z.string().optional(),
+    type: z.string().optional(),
+    similarityScore: z.number(),
+    sourceText: z.string().optional(),
+    url: z.string(),
+  })),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+};
+
 // ─── Tools ──────────────────────────────────────────────────────────
 
 function registerTools(
@@ -339,6 +362,8 @@ function registerTools(
   oai: OaiPmhClient,
   vocabDb: VocabularyDb | null,
   iconclassDb: IconclassDb | null,
+  embeddingsDb: EmbeddingsDb | null,
+  embeddingModel: EmbeddingModel | null,
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>
 ): void {
@@ -1216,6 +1241,142 @@ function registerTools(
       })
     );
   }
+
+  // ── semantic_search ──────────────────────────────────────────────
+
+  if (embeddingsDb?.available && embeddingModel?.available) {
+    const GROUNDING_COUNT = 5;
+    const SOURCE_TEXT_WORD_CAP = 150;
+
+    server.registerTool(
+      "semantic_search",
+      {
+        title: "Semantic Artwork Search",
+        description:
+          "Find artworks by meaning, concept, or theme using natural language. " +
+          "Returns top results ranked by semantic similarity with source text for grounding — " +
+          "use this to explain why results are relevant or to flag false positives. " +
+          "Best for: concepts/themes ('vanitas symbolism'), cross-language queries, " +
+          "or when search_artwork returned 0 results. " +
+          "Not for queries expressible as structured metadata (specific artists, dates, places, materials) — " +
+          "use search_artwork for those. Filters (type, material, technique, creationDate, creator) " +
+          "narrow candidates before semantic ranking.",
+        inputSchema: z.object({
+          query: z.string().describe("Natural language concept query (e.g. 'winter landscape with ice skating')"),
+          type: z.string().optional().describe("Filter by object type (e.g. 'painting', 'print')"),
+          material: z.string().optional().describe("Filter by material (e.g. 'canvas', 'paper')"),
+          technique: z.string().optional().describe("Filter by technique (e.g. 'etching', 'oil painting')"),
+          creationDate: z.string().optional().describe("Filter by date — exact year ('1642') or wildcard ('16*')"),
+          creator: z.string().optional().describe("Filter by artist name"),
+          maxResults: z.number().int().min(1).max(100).default(25).optional()
+            .describe("Number of results to return (default 25)"),
+        }).strict(),
+        ...withOutputSchema(SemanticSearchOutput),
+      },
+      withLogging("semantic_search", async (args) => {
+        const maxResults = args.maxResults ?? RESULTS_DEFAULT;
+
+        // 1. Embed query text
+        const queryVec = await embeddingModel!.embed(args.query);
+
+        // 2. Choose search path based on filters
+        const hasFilters = args.type || args.material || args.technique || args.creationDate || args.creator;
+        let candidates: SemanticSearchResult[];
+
+        if (hasFilters && vocabDb?.available) {
+          // FILTERED PATH: pre-filter via vocab DB, then distance-rank
+          const candidateArtIds = vocabDb.filterArtIds({
+            type: args.type,
+            material: args.material,
+            technique: args.technique,
+            creationDate: args.creationDate,
+            creator: args.creator,
+          });
+          if (candidateArtIds.length === 0) {
+            return structuredResponse(
+              { searchMode: "semantic+filtered", query: args.query, returnedCount: 0, results: [],
+                warnings: ["No artworks match the specified filters."] },
+              `0 semantic matches for "${args.query}" (no filter matches)`
+            );
+          }
+          candidates = embeddingsDb!.searchFiltered(queryVec, candidateArtIds, maxResults);
+        } else {
+          // PURE KNN PATH: vec0 virtual table
+          candidates = embeddingsDb!.search(queryVec, maxResults);
+        }
+
+        // 3. Resolve each to artwork summary via vocab DB
+        const results = candidates.map((c, i) => {
+          const similarity = Math.round((1 - c.distance) * 1000) / 1000;
+
+          // Look up basic metadata from vocab DB if available
+          let title = "", creator = "", date: string | undefined, type: string | undefined;
+          if (vocabDb?.available) {
+            const info = vocabDb.lookupArtwork(c.objectNumber);
+            if (info) {
+              title = info.title || "";
+              creator = info.creator || "";
+              if (info.dateEarliest != null) {
+                date = info.dateEarliest === info.dateLatest
+                  ? String(info.dateEarliest)
+                  : `${info.dateEarliest}–${info.dateLatest}`;
+              }
+            }
+            const typeMap = vocabDb.lookupTypes([c.objectNumber]);
+            type = typeMap.get(c.objectNumber);
+          }
+
+          return {
+            rank: i + 1,
+            objectNumber: c.objectNumber,
+            title,
+            creator,
+            ...(date && { date }),
+            ...(type && { type }),
+            similarityScore: similarity,
+            sourceText: c.sourceText || undefined,
+            url: `https://www.rijksmuseum.nl/en/collection/${c.objectNumber}`,
+          };
+        });
+
+        // 4. Build two-tier text channel
+        const mode = hasFilters ? "semantic+filtered" : "semantic";
+        const header = `${Math.min(GROUNDING_COUNT, results.length)} semantic matches for "${args.query}" ` +
+          `(${results.length} results, ${mode} mode)`;
+
+        const groundedLines = results.slice(0, GROUNDING_COUNT).map((r, i) => {
+          const oneLiner = formatSearchLine(r, i) + `  [${r.similarityScore.toFixed(2)}]`;
+          const sourceText = truncateWords(r.sourceText, SOURCE_TEXT_WORD_CAP);
+          return sourceText ? `${oneLiner}\n   ${sourceText}` : oneLiner;
+        });
+
+        const compactLines = results.slice(GROUNDING_COUNT).map((r, i) =>
+          formatSearchLine(r, i + GROUNDING_COUNT) + `  [${r.similarityScore.toFixed(2)}]`
+        );
+
+        const textParts = [header];
+        if (groundedLines.length) textParts.push("\n── Top results with context ──\n" + groundedLines.join("\n\n"));
+        if (compactLines.length) textParts.push("\n── More results ──\n" + compactLines.join("\n"));
+
+        // 5. Return dual-channel response
+        const data = {
+          searchMode: mode,
+          query: args.query,
+          returnedCount: results.length,
+          results,
+        };
+        return structuredResponse(data, textParts.join("\n"));
+      })
+    );
+  }
+}
+
+/** Truncate text to maxWords, appending "…" if truncated. */
+function truncateWords(text: string | undefined, maxWords: number): string {
+  if (!text) return "";
+  const words = text.split(/\s+/);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(" ") + "…";
 }
 
 // ─── Resources ──────────────────────────────────────────────────────

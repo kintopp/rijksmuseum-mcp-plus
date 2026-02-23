@@ -16,6 +16,8 @@ import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
+import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
+import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { TOP_100_SET } from "./types.js";
@@ -82,6 +84,14 @@ const ICONCLASS_DB_SPEC: DbSpec = {
   validationQuery: "SELECT 1 FROM notations LIMIT 1",
 };
 
+const EMBEDDINGS_DB_SPEC: DbSpec = {
+  name: "Embeddings",
+  pathEnvVar: "EMBEDDINGS_DB_PATH",
+  urlEnvVar: "EMBEDDINGS_DB_URL",
+  defaultFile: "embeddings.db",
+  validationQuery: "SELECT 1 FROM artwork_embeddings LIMIT 1",
+};
+
 function resolveDbPathForSpec(spec: DbSpec): string {
   return process.env[spec.pathEnvVar] || path.join(__dirname, "..", "data", spec.defaultFile);
 }
@@ -142,12 +152,21 @@ async function ensureDb(spec: DbSpec): Promise<void> {
 
 let vocabDb: VocabularyDb | null = null;
 let iconclassDb: IconclassDb | null = null;
+let embeddingsDb: EmbeddingsDb | null = null;
+let embeddingModel: EmbeddingModel | null = null;
 
 async function initDatabases(): Promise<void> {
   await ensureDb(VOCAB_DB_SPEC);
   vocabDb = new VocabularyDb();
   await ensureDb(ICONCLASS_DB_SPEC);
   iconclassDb = new IconclassDb();
+  await ensureDb(EMBEDDINGS_DB_SPEC);
+  embeddingsDb = new EmbeddingsDb();
+  if (embeddingsDb.available) {
+    embeddingModel = new EmbeddingModel();
+    const modelId = process.env.EMBEDDING_MODEL_ID ?? "intfloat/multilingual-e5-small";
+    await embeddingModel.init(modelId);
+  }
 }
 
 // ─── Shared client instances (one per process) ──────────────────────
@@ -246,7 +265,7 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, iconclassDb, httpPort, usageStats);
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, iconclassDb, embeddingsDb, embeddingModel, httpPort, usageStats);
   return server;
 }
 
