@@ -1311,6 +1311,9 @@ function registerTools(
         } else {
           // PURE KNN PATH: vec0 virtual table
           candidates = embeddingsDb!.search(queryVec, maxResults);
+          if (hasFilters) {
+            warnings.push("Metadata filters ignored: vocabulary DB is not available. Results ranked by semantic similarity only.");
+          }
         }
 
         // 3. Batch-resolve metadata from vocab DB (single query, not per-result)

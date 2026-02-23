@@ -1,4 +1,4 @@
-import Database, { type Database as DatabaseType } from "better-sqlite3";
+import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
 import { escapeFts5, resolveDbPath } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -233,6 +233,8 @@ export class VocabularyDb {
   private hasRightsLookup = false;
   private hasPersonNames = false;
   private fieldIdMap = new Map<string, number>();
+  private stmtLookupArtwork: Statement | null = null;
+  private stmtFilterArtIds = new Map<string, Statement>();
 
   /** Look up a field_id by name, throwing if missing. */
   private requireFieldId(name: string): number {
@@ -305,6 +307,11 @@ export class VocabularyDb {
         } catch { /* ignore */ }
       }
 
+      // Cache frequently-used prepared statements
+      this.stmtLookupArtwork = this.db.prepare(
+        "SELECT title, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
+      );
+
       const features = [
         this.hasFts5 && "vocabFTS5",
         this.hasTextFts && "textFTS5",
@@ -359,10 +366,8 @@ export class VocabularyDb {
 
   /** Look up basic metadata for a single artwork by object number. */
   lookupArtwork(objectNumber: string): { title: string; creator: string; dateEarliest: number | null; dateLatest: number | null } | null {
-    if (!this.db) return null;
-    const row = this.db.prepare(
-      "SELECT title, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
-    ).get(objectNumber) as { title: string; creator_label: string; date_earliest: number | null; date_latest: number | null } | undefined;
+    if (!this.db || !this.stmtLookupArtwork) return null;
+    const row = this.stmtLookupArtwork.get(objectNumber) as { title: string; creator_label: string; date_earliest: number | null; date_latest: number | null } | undefined;
     if (!row) return null;
     return { title: row.title || "", creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
   }
@@ -747,7 +752,12 @@ export class VocabularyDb {
     if (conditions.length === 0) return [];
 
     const sql = `SELECT a.art_id FROM artworks a WHERE ${conditions.join(" AND ")} LIMIT 50000`;
-    const rows = this.db.prepare(sql).all(...bindings) as { art_id: number }[];
+    let stmt = this.stmtFilterArtIds.get(sql);
+    if (!stmt) {
+      stmt = this.db.prepare(sql);
+      this.stmtFilterArtIds.set(sql, stmt);
+    }
+    const rows = stmt.all(...bindings) as { art_id: number }[];
     return rows.map(r => r.art_id);
   }
 
