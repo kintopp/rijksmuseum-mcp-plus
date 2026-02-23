@@ -1,6 +1,6 @@
 # Production Role Vocabulary
 
-176 distinct production roles across 1,356,737 mappings. Labels are bilingual (English and Dutch).
+178 distinct production roles across 1,356,739 mappings. Labels are bilingual (English and Dutch).
 
 | Role | # | Role | # | Role | # |
 |---|---|---|---|---|---|

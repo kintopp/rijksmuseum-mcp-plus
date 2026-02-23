@@ -13,8 +13,8 @@ These parameters query the Rijksmuseum Search API directly. They support free-te
 | `creator` | Artist or maker name. | ~510K artworks, ~21K unique names. Uses the museum's canonical name form (e.g. "Rembrandt van Rijn", not "Rembrandt Harmensz. van Rijn"). As a result, variant historical spellings may not match. Can also be combined with vocabulary-backed filters as a cross-filter. |
 | `creationDate` | Year or date range of creation. | ~628K artworks with dates (3000 BCE–2025). Supports wildcards: `1642` (exact year), `164*` (1640–1649), `16*` (1600–1699). Can be combined with vocabulary-backed filters. Wildcard date ranges work on both the Search API and the vocabulary database. |
 | `type` | Object type.   | 4,385 terms. Values follow Rijksmuseum vocabulary terms (e.g. `painting`, `print`, `drawing`, `photograph`, `sculpture`). Can be combined with vocabulary-backed filters as a cross-filter. |
-| `material` | Material or support.   | [725 terms](docs/vocabulary-materials.md). Values follow Rijksmuseum vocabulary terms (e.g. `canvas`, `paper`, `panel`, `oil paint`, `copper`). Can be combined with vocabulary-backed filters as a cross-filter. |
-| `technique` | Artistic technique. | [964 terms](docs/vocabulary-techniques.md). Values follow Rijksmuseum vocabulary terms (e.g. `oil painting`, `etching`, `engraving`, `mezzotint`, `woodcut`). Can be combined with vocabulary-backed filters as a cross-filter. |
+| `material` | Material or support.   | [734 terms](docs/vocabulary-materials.md). Values follow Rijksmuseum vocabulary terms (e.g. `canvas`, `paper`, `panel`, `oil paint`, `copper`). Can be combined with vocabulary-backed filters as a cross-filter. |
+| `technique` | Artistic technique. | [967 terms](docs/vocabulary-techniques.md). Values follow Rijksmuseum vocabulary terms (e.g. `oil painting`, `etching`, `engraving`, `mezzotint`, `woodcut`). Can be combined with vocabulary-backed filters as a cross-filter. |
 | `aboutActor` | Person depicted or referenced | ~1.3K artworks with actor references. Searches free-text references to persons via the Search API. Broader name-variant tolerance than `depictedPerson` — catches cases where the authority form differs. Cannot be combined with vocabulary-backed filters. |
 | `imageAvailable` | Whether a digital image exists | Either `true` or `false`. Useful for restricting results to artworks that can be shown with the inline, interactive viewer. ~728K artworks have a digital image available. Cannot be combined with vocabulary-backed filters; silently dropped when any vocab filter is present. |
 
@@ -39,7 +39,7 @@ These parameters search a Linked Open Data [vocabulary dataset](https://data.rij
 | `provenance` | Ownership history text. | Full-text search across ~48K artworks with recorded provenance. Covers auction records, dealer transactions, collection transfers, and restitution notes. Examples: `Napoleon`, `Six`, `Rothschild`, `Goudstikker`. Coverage is weighted toward paintings and major works. |
 | `creditLine` | Acquisition mode and acknowledgement.   | Full-text search across ~358K artworks with credit lines. Records how the museum acquired the work — purchase, bequest, gift, loan, state allocation. Examples: `purchase`, `bequest`, `Vereniging Rembrandt`, `Drucker`. |
 | `curatorialNarrative` | Curatorial narrative (museum wall text).  | Full-text search across ~14K artworks with curatorial narratives. Harvested from the Linked Art `subject_of` field — distinct from `description`, which queries a different, broader text. These are interpretive, art-historical texts written by museum curators — equivalent to the wall labels in the galleries. |
-| `productionRole` | Role in production | [176 terms](docs/vocabulary-production-roles.md), bilingual. Specifies the role an actor played in creating the work — distinct from `profession` (what the person *was*) vs. production role (what they *did* for this specific work). Key terms: `print maker` (382K mappings), `publisher` (185K), `printer` (67K), `after painting by` (46K), `after design by` (60K).  |
+| `productionRole` | Role in production | [178 terms](docs/vocabulary-production-roles.md), bilingual. Specifies the role an actor played in creating the work — distinct from `profession` (what the person *was*) vs. production role (what they *did* for this specific work). Key terms: `print maker` (382K mappings), `publisher` (185K), `printer` (67K), `after painting by` (46K), `after design by` (60K).  |
 | `minHeight` / `maxHeight` | Height range in centimetres. | Numeric range filter on structured dimensions. Values are in centimetres. |
 | `minWidth` / `maxWidth` | Width range in centimetres. | Numeric range filter on structured dimensions. Values are in centimetres. |
 
@@ -55,6 +55,10 @@ N.B. The latitude/longitude coordinates were derived from the authority file IDs
 | `nearLat` | Latitude for coordinate-based proximity search | Use with `nearLon` as an alternative to `nearPlace` for searching near arbitrary locations (e.g. `nearLat: 52.37, nearLon: 4.89`). Range: -90 to 90. If both `nearLat`/`nearLon` and `nearPlace` are provided, coordinates take precedence. |
 | `nearLon` | Longitude for coordinate-based proximity search | Use with `nearLat`. Range: -180 to 180. |
 | `nearPlaceRadius` | Search radius in kilometres | Default: 25 km, range: 0.1–500 km. Controls the geographic scope of `nearPlace` and `nearLat`/`nearLon` queries. |
+
+### Semantic search
+
+For concepts that cannot be expressed as structured vocabulary terms (atmosphere, emotion, composition, art-historical interpretation), use the `semantic_search` tool instead. It accepts free-text queries and ranks artworks by embedding similarity. Its filters (`type`, `material`, `technique`, `creationDate`, `creator`) are a subset of those listed here. Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly; purely emotional or stylistic concepts may yield lower precision. Multilingual queries are supported. See [Semantic Search](semantic-search.md) for full documentation.
 
 ### Artwork detail fields
 

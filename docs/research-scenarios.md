@@ -8,7 +8,7 @@
 - [Artist Timelines](#artist-timelines)
 - [Curated Sets](#curated-sets)
 - [Collection Changes](#collection-changes)
-- [The LLM fills in the gaps](#the-llm-fills-in-the-gaps)
+- [Semantic Search](#semantic-search)
 
 ### Searching the Collection
 
@@ -53,7 +53,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 ### Subject and Iconographic Search
 
-`search_artwork` includes seventeen database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `productionRole`, height ranges, and width ranges — drawn from a pre-built vocabulary database of 149,000 controlled terms mapped to 831,000 artworks via 12.8 million mappings. These enable searches by what is depicted, where it was made, who made it (including biographical attributes and production roles), what is written on it, what the museum says about it, and how large it is.
+`search_artwork` includes twenty database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `productionRole`, height ranges, and width ranges — drawn from a pre-built vocabulary database of 149,000 controlled terms mapped to 831,000 artworks via 12.8 million mappings. These enable searches by what is depicted, where it was made, who made it (including biographical attributes and production roles), what is written on it, what the museum says about it, and how large it is.
 
 #### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -86,14 +86,15 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 - `search_artwork` with `subject: "vanitas"` and `type: "painting"` to get all vanitas paintings — repeat with `type: "print"` to compare
 - Combine `subject` with `creationDate` wildcards (e.g. `16*`, `17*`) to examine chronological patterns directly
 - Cross-reference with `creator` to identify whether certain artists specialised in vanitas imagery across media or confined it to one
+- For a broader net: `semantic_search` with `query: "vanitas symbolism and mortality"` can surface works that engage with vanitas *themes* — transience, decay, the futility of worldly pursuits — even when they are not tagged with the Iconclass `vanitas` label
 
-**Why it matters:** A subject-based search that crosses media boundaries enables systematic comparison of how a single iconographic tradition was adapted to different formats — the intimate painted still life versus the widely circulated print — without requiring extensive manual catalogue work.
+**Why it matters:** A subject-based search that crosses media boundaries enables systematic comparison of how a single iconographic tradition was adapted to different formats — the intimate painted still life versus the widely circulated print — without requiring extensive manual catalogue work. Semantic search extends the reach beyond formally tagged works to those where curators have described vanitas themes in narrative texts.
 
 ---
 
 ### Artwork Details and Metadata
 
-`get_artwork_details` returns [24 metadata categories](docs/metadata-categories.md) per artwork — far more than a typical museum search interface exposes. This depth enables object-level research that would otherwise require on-site catalogue consultation.
+`get_artwork_details` returns [24 metadata categories](metadata-categories.md) per artwork — far more than a typical museum search interface exposes. This depth enables object-level research that would otherwise require on-site catalogue consultation.
 
 #### 7. Reading Inscriptions as Primary Sources
 
@@ -234,7 +235,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 - `get_artwork_details` on each work to extract medium and technique
 - Plot medium against date: do drawings cluster in the early years, paintings in the middle, photographs at the end — or is the practice mixed throughout?
 
-**Why it matters:** An artist classified under multiple professions may have practised them simultaneously or sequentially. The timeline reveals which, and whether any transition aligns with documented biographical events. 
+**Why it matters:** An artist classified under multiple professions may have practised them simultaneously or sequentially. The timeline reveals which, and whether any transition aligns with documented biographical events.
 
 #### 18. Comparing Parallel Careers
 
@@ -316,40 +317,42 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 ---
 
-### The LLM fills in the gaps
+### Semantic Search
 
-Because the MCP tools are used through a large language model, the LLM's own knowledge can act as a bridge between the researcher's question and the API's formal parameters.
+`semantic_search` finds artworks by meaning, concept, or theme using natural language — ranking all 831,000 artworks by embedding similarity to a free-text query. Unlike the structured filters above, semantic search works with concepts that cannot be expressed as vocabulary terms, Iconclass notations, or keyword matches. It is most effective when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly. For full technical details, see [Semantic Search](semantic-search.md).
 
-#### 24. Multilingual Access to a Dutch Collection
+#### 24. Discovering Thematic Connections Beyond Formal Cataloguing
 
-**Research question:** A Japanese scholar studying *Rangaku* (Dutch learning in Edo-period Japan) wants to find VOC-related objects and materials about the Dutch trading post at Dejima. 
+**Research question:** Which artworks in the Rijksmuseum engage with the theme of cultural exchange between Europe and Asia — not just objects *from* Asia or *depicting* Asia, but works where the mixing of cultures is the subject?
 
-**How the LLM enables it:**
-- The researcher asks in English: "Find objects related to the Dutch trading post at Dejima"
-- The LLM knows that Dejima is romanised from 出島, that the Dutch called it "Deshima," and that the Rijksmuseum catalogues it under various Dutch spellings
-- It searches with the appropriate terms and explains the results in the researcher's language
+**How the tools enable it:**
+- `semantic_search` with `query: "cultural exchange between East and West"` — returns artworks ranked by how closely their catalogued text relates to this concept
+- Review the source text for each result to understand *why* it was retrieved — e.g. a painting of the Castle of Batavia may rank highly because its curatorial narrative describes the mixing of ethnic groups under VOC trade
+- Follow up with `get_artwork_details` on the most relevant results for full metadata
+- Compare with `search_artwork` using `depictedPlace: "Batavia"` or `productionPlace: "Japan"` to see what the structured filters find — the overlap reveals which works are discoverable both ways, and which are only reachable through semantic search
 
-**Why it matters:** The Rijksmuseum's metadata is partially in Dutch, with varying degrees of English translation. A LLM doesn't just translate — it can often handle variant spellings, historical place names, and terminological differences between languages.
+**Why it matters:** "Cultural exchange" is not a vocabulary term, an Iconclass notation, or a keyword in any structured field. It is an interpretive concept that exists in curatorial narratives and descriptive texts. Semantic search is the only path to these works — and the source text grounding explains the connection, rather than leaving the researcher to guess why a result appeared.
 
-#### 25. Cross-Referencing Art Historical Knowledge
+#### 25. Atmospheric and Emotional Concepts in Art
 
-**Research question:** Show me works by the Utrecht Caravaggisti in the Rijksmuseum — I don't know which specific artists that includes.
+**Research question:** Can we find artworks in the Rijksmuseum that evoke a sense of solitude or isolation — a single figure in an empty landscape, a lone ship on a vast sea, an abandoned building?
 
-**How the LLM enables it:**
-- The student asks: "Show me works by the Utrecht Caravaggisti"
-- The LLM identifies the relevant artists (Honthorst, Baburen, Ter Brugghen, van Bijlert) from its training knowledge
-- It runs multiple `search_artwork` queries and synthesises the results
+**How the tools enable it:**
+- `semantic_search` with `query: "loneliness and isolation in a vast empty space"`
+- The model matches against embedded descriptions, narratives, and subject tags — a farmhouse described as standing alone in flat terrain, a ship on an empty horizon, a solitary figure in a landscape
+- Filter with `type: "painting"` to focus on paintings if the initial results skew toward works on paper (a known bias — prints and drawings have denser subject tagging)
+- Use the source text to assess whether the "loneliness" is in the curatorial interpretation or inferred from sparse descriptions — this distinction matters for research rigour
 
-**Why it matters:** Art historical categories like "Utrecht Caravaggisti" are not search terms in the museum's metadata — they are scholarly constructs that group artists by style, period, and geography. The LLM can bridge from the category to the individual names, enabling conceptual searches that no fielded search interface supports.
+**Why it matters:** Emotional and atmospheric qualities are not catalogued as metadata. No Iconclass code maps to "loneliness." The `description` and `curatorialNarrative` text filters require exact word matches and won't find synonyms or related concepts. Semantic search bridges this gap — imperfectly, since it depends on what curators have written, but it is often the only available path. The source text grounding makes this limitation transparent.
 
-#### 26. Geographic Research Without Knowing the Map
+#### 26. Cross-Language Conceptual Search
 
-**Research question:** I'm studying how the landscape around Haarlem was depicted in the 17th century — not just the city itself but the dunes, bleaching fields, and villages within walking distance. What does the Rijksmuseum hold?
+**Research question:** A German art historian researching Blumenstillleben (flower still lifes) wants to find relevant works in the Rijksmuseum's predominantly Dutch-catalogued collection without needing to know the Dutch terminology.
 
-**How the LLM enables it:**
-- The LLM recognises this as a geographic proximity query and uses `nearPlace: "Haarlem"` with `nearPlaceRadius: 15` (roughly walking distance) to find artworks connected to the Haarlem area
-- It combines this with `creationDate: "16*"` to restrict to the 17th century
-- It then uses `curatorialNarrative` to search curatorial wall texts for "dune", "bleaching", or "Haarlemmermeer" to find works the museum has specifically contextualised in terms of the local landscape
-- The LLM synthesises the geographic and curatorial narrative results, explaining which villages and landscape features appear in the collection
+**How the tools enable it:**
+- `semantic_search` with `query: "Blumenstrauß in einer Vase"` — the multilingual embedding model handles the German query against Dutch and English catalogue text
+- Review results for canonical flower still lifes — Rachel Ruysch, Jan van Huysum, Ambrosius Bosschaert
+- If expected canonical works are missing, reformulate in English: `"bouquet of flowers in a vase"` — English queries tend to have slightly higher precision against the bilingual catalogue
+- Combine with `search_artwork` using `subject: "flowers"` and `type: "painting"` to verify completeness — the structured search catches works tagged with the Iconclass term but missed by the embedding model, and vice versa
 
-**Why it matters:** The researcher doesn't need to know which specific villages fall within 15 km of Haarlem — the LLM and the geocoded place vocabulary handle that. The `curatorialNarrative` search adds a curatorial dimension: it surfaces works where the museum itself has written about the landscape context, connecting the geographic data with art historical interpretation. This combination of proximity search and curatorial text search is something no conventional museum interface offers.
+**Why it matters:** The Rijksmuseum's catalogue is predominantly Dutch, with English translations for major works only. The multilingual embedding model allows researchers to query in their own language without knowing the Dutch vocabulary — though with a precision trade-off. The recommended workflow — semantic search first, then structured verification — combines the reach of embeddings with the precision of controlled vocabulary.
