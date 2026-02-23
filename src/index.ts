@@ -182,16 +182,6 @@ const UNRESOLVABLE_IDS = new Set([
 ]);
 
 /** Pre-warm the top 200 vocabulary terms by frequency in the collection. */
-// Structural/administrative AAT terms the Rijksmuseum resolver doesn't serve (404).
-// Excluded from pre-warming to avoid wasted HTTP requests on every startup.
-const UNRESOLVABLE_IDS = new Set([
-  "300404450", // primary
-  "300379012", // undetermined
-  "300404451", // secondary
-  "300078817", // rectos
-  "300010292", // versos
-]);
-
 async function warmVocabCache(): Promise<void> {
   if (!vocabDb?.available) return;
 
