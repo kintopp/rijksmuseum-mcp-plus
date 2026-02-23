@@ -29,6 +29,7 @@ export class EmbeddingsDb {
   private artworkCount = 0;
 
   // Cached prepared statements
+  private stmtQuantize!: Statement;
   private stmtKnn!: Statement;
   private stmtArtwork!: Statement;
 
@@ -53,9 +54,14 @@ export class EmbeddingsDb {
       this.dimensions = parseInt(metaMap.dimensions ?? "384", 10);
       this.artworkCount = parseInt(metaMap.artwork_count ?? "0", 10);
 
-      // Cache prepared statements — pure KNN path (vec0)
+      // Cache prepared statements
+      this.stmtQuantize = this.db.prepare(
+        "SELECT vec_quantize_int8(vec_normalize(?), 'unit') as v"
+      );
+
+      // Pure KNN path (vec0) — use explicit artwork_id column, not rowid
       this.stmtKnn = this.db.prepare(`
-        SELECT rowid, distance FROM vec_artworks
+        SELECT artwork_id, distance FROM vec_artworks
         WHERE embedding MATCH ? AND k = ?
         ORDER BY distance
       `);
@@ -81,17 +87,14 @@ export class EmbeddingsDb {
   search(queryEmbedding: Float32Array, k: number): SemanticSearchResult[] {
     if (!this.db) return [];
 
-    // Quantize query to int8 (must match stored format)
-    const quantized = this.db.prepare(
-      "SELECT vec_quantize_int8(vec_normalize(?), 'unit') as v"
-    ).get(queryEmbedding) as { v: Buffer };
+    const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
 
     // KNN scan via vec0
-    const rows = this.stmtKnn.all(quantized.v, Math.min(k, 4096)) as { rowid: number; distance: number }[];
+    const rows = this.stmtKnn.all(quantized.v, Math.min(k, 4096)) as { artwork_id: number; distance: number }[];
 
     // Resolve artwork details
     return rows.map(row => {
-      const artwork = this.stmtArtwork.get(row.rowid) as { art_id: number; object_number: string; source_text: string | null } | undefined;
+      const artwork = this.stmtArtwork.get(row.artwork_id) as { art_id: number; object_number: string; source_text: string | null } | undefined;
       if (!artwork) return null;
       return {
         artId: artwork.art_id,
@@ -110,10 +113,7 @@ export class EmbeddingsDb {
   searchFiltered(queryEmbedding: Float32Array, candidateArtIds: number[], k: number): SemanticSearchResult[] {
     if (!this.db || candidateArtIds.length === 0) return [];
 
-    // Quantize query to int8
-    const quantized = this.db.prepare(
-      "SELECT vec_quantize_int8(vec_normalize(?), 'unit') as v"
-    ).get(queryEmbedding) as { v: Buffer };
+    const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
 
     // For very large candidate sets (>50K), fall back to pure KNN + post-filter
     // since iterating 50K+ rows with vec_distance_cosine is slower than full scan
@@ -123,7 +123,8 @@ export class EmbeddingsDb {
       return allResults.filter(r => idSet.has(r.artId)).slice(0, k);
     }
 
-    // Build parameterized IN list — batch in chunks to avoid SQLite variable limit
+    // Build parameterized IN list — batch in chunks to avoid SQLite variable limit.
+    // Dynamic SQL required here: chunk size varies, so statements cannot be cached.
     const CHUNK_SIZE = 999; // SQLite max variables per statement
     const allResults: SemanticSearchResult[] = [];
 

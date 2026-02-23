@@ -1305,12 +1305,14 @@ function registerTools(
           candidates = embeddingsDb!.search(queryVec, maxResults);
         }
 
-        // 3. Resolve each to artwork summary via vocab DB
+        // 3. Batch-resolve metadata from vocab DB (single query, not per-result)
+        const objectNumbers = candidates.map(c => c.objectNumber);
+        const typeMap = vocabDb?.available ? vocabDb.lookupTypes(objectNumbers) : new Map<string, string>();
+
         const results = candidates.map((c, i) => {
           const similarity = Math.round((1 - c.distance) * 1000) / 1000;
 
-          // Look up basic metadata from vocab DB if available
-          let title = "", creator = "", date: string | undefined, type: string | undefined;
+          let title = "", creator = "", date: string | undefined;
           if (vocabDb?.available) {
             const info = vocabDb.lookupArtwork(c.objectNumber);
             if (info) {
@@ -1322,8 +1324,6 @@ function registerTools(
                   : `${info.dateEarliest}–${info.dateLatest}`;
               }
             }
-            const typeMap = vocabDb.lookupTypes([c.objectNumber]);
-            type = typeMap.get(c.objectNumber);
           }
 
           return {
@@ -1332,7 +1332,7 @@ function registerTools(
             title,
             creator,
             ...(date && { date }),
-            ...(type && { type }),
+            ...(typeMap.has(c.objectNumber) && { type: typeMap.get(c.objectNumber) }),
             similarityScore: similarity,
             sourceText: c.sourceText || undefined,
             url: `https://www.rijksmuseum.nl/en/collection/${c.objectNumber}`,
