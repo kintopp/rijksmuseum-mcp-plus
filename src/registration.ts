@@ -1282,6 +1282,7 @@ function registerTools(
         // 2. Choose search path based on filters
         const hasFilters = args.type || args.material || args.technique || args.creationDate || args.creator;
         let candidates: SemanticSearchResult[];
+        let filtersApplied = false;
         const warnings: string[] = [];
 
         if (hasFilters && vocabDb?.available) {
@@ -1306,6 +1307,7 @@ function registerTools(
           } else {
             const filtered = embeddingsDb!.searchFiltered(queryVec, candidateArtIds, maxResults);
             candidates = filtered.results;
+            filtersApplied = true;
             if (filtered.warning) warnings.push(filtered.warning);
           }
         } else {
@@ -1351,7 +1353,7 @@ function registerTools(
         });
 
         // 4. Build two-tier text channel
-        const mode = hasFilters ? "semantic+filtered" : "semantic";
+        const mode = filtersApplied ? "semantic+filtered" : "semantic";
         const header = `${Math.min(GROUNDING_COUNT, results.length)} semantic matches for "${args.query}" ` +
           `(${results.length} results, ${mode} mode)`;
 

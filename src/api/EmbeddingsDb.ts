@@ -155,7 +155,7 @@ export class EmbeddingsDb {
   private getFilteredKnnStmt(chunkSize: number): Statement {
     let stmt = this.stmtFilteredKnn.get(chunkSize);
     if (!stmt) {
-      const placeholders = Array(chunkSize).fill("?").join(",");
+      const placeholders = Array.from({ length: chunkSize }, () => "?").join(", ");
       stmt = this.db!.prepare(`
         SELECT
           art_id AS artId,
