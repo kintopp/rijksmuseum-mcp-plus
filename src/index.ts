@@ -172,10 +172,22 @@ function initUsageStats(): void {
 // ─── Pre-warm caches ─────────────────────────────────────────────────
 
 /** Pre-warm the top 200 vocabulary terms by frequency in the collection. */
+// Structural/administrative AAT terms the Rijksmuseum resolver doesn't serve (404).
+// Excluded from pre-warming to avoid wasted HTTP requests on every startup.
+const UNRESOLVABLE_IDS = new Set([
+  "300404450", // primary
+  "300379012", // undetermined
+  "300404451", // secondary
+  "300078817", // rectos
+  "300010292", // versos
+]);
+
 async function warmVocabCache(): Promise<void> {
   if (!vocabDb?.available) return;
 
-  const uris = vocabDb.topTermUris(200);
+  const uris = vocabDb.topTermUris(200).filter(
+    (uri) => !UNRESOLVABLE_IDS.has(uri.split("/").pop()!)
+  );
   if (uris.length === 0) return;
 
   const start = performance.now();

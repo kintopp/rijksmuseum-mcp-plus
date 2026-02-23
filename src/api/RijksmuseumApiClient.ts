@@ -1056,6 +1056,14 @@ export class RijksmuseumApiClient {
     const results = await Promise.allSettled(
       uris.map((uri) => this.resolveVocabTerm(uri))
     );
+    // Log failed URIs for diagnostics
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === "rejected") {
+        const reason = (results[i] as PromiseRejectedResult).reason;
+        const msg = reason instanceof Error ? reason.message : String(reason);
+        console.error(`  pre-warm failed: ${uris[i]} — ${msg}`);
+      }
+    }
     return results.filter((r) => r.status === "fulfilled").length;
   }
 
