@@ -271,6 +271,7 @@ html = f"""<!DOCTYPE html>
   }}
   #controls button:hover {{ background: #f0f0f0; }}
   #controls .info {{ color: #666; font-size: 13px; margin-left: auto; }}
+  kbd {{ background: #eee; padding: 1px 5px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; }}
   #plot {{ width: 100vw; height: calc(100vh - 48px); }}
 
   /* Cluster detail panel */
@@ -324,11 +325,11 @@ html = f"""<!DOCTYPE html>
 <body>
 
 <div id="controls">
-  <button onclick="toggleLabels()">Toggle Labels</button>
-  <button onclick="showAllClusters()">Show All</button>
-  <button onclick="hideNoise()">Hide Noise</button>
-  <button onclick="resetZoom()">Reset Zoom</button>
-  <button onclick="toggleHelp()">Shortcuts <kbd>?</kbd></button>
+  <button onclick="toggleLabels()"><kbd>L</kbd> Labels</button>
+  <button onclick="toggleNoise()"><kbd>N</kbd> Noise</button>
+  <button onclick="showAllClusters()"><kbd>A</kbd> All</button>
+  <button onclick="resetZoom()"><kbd>0</kbd> Reset</button>
+  <button onclick="toggleHelp()"><kbd>?</kbd> Shortcuts</button>
   <span class="info">Click point → Rijksmuseum · Double-click legend → isolate · <kbd>?</kbd> for all shortcuts</span>
 </div>
 
@@ -396,20 +397,19 @@ document.getElementById('plot').on('plotly_click', function(data) {{
   }}
 }});
 
+// Save annotations before Plotly mutates the layout object
+const savedAnnotations = JSON.parse(JSON.stringify(layout.annotations || []));
+
 function toggleLabels() {{
   labelsVisible = !labelsVisible;
-  const update = {{ 'annotations': labelsVisible ? layout.annotations : [] }};
-  Plotly.relayout('plot', update);
+  Plotly.relayout('plot', {{ 'annotations': labelsVisible ? JSON.parse(JSON.stringify(savedAnnotations)) : [] }});
+  showToast(labelsVisible ? 'Labels shown' : 'Labels hidden');
 }}
 
 function showAllClusters() {{
   const visibility = traces.map(() => true);
   Plotly.restyle('plot', {{ visible: visibility }});
-}}
-
-function hideNoise() {{
-  if (NOISE_TRACE_IDX < 0) return;
-  Plotly.restyle('plot', {{ visible: 'legendonly' }}, [NOISE_TRACE_IDX]);
+  showToast('All clusters shown');
 }}
 
 function resetZoom() {{
@@ -417,6 +417,7 @@ function resetZoom() {{
     'xaxis.autorange': true,
     'yaxis.autorange': true,
   }});
+  showToast('Fit all');
 }}
 
 function closePanel() {{
@@ -491,54 +492,46 @@ function toggleNoise() {{
   showToast(noiseVisible ? 'Noise shown' : 'Noise hidden');
 }}
 
-// ── Keyboard handler ──────────────────────────────
-document.addEventListener('keydown', function(e) {{
-  // Skip if user is typing in an input
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+// ── Keyboard handler (capture phase — fires before Plotly) ──
+window.addEventListener('keydown', function(e) {{
+  // Allow normal typing in inputs
+  var tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  // Don't intercept Cmd/Ctrl combinations (browser shortcuts)
+  if (e.metaKey || e.ctrlKey) return;
 
-  const shift = e.shiftKey;
-  const panStep = shift ? 0.3 : 0.1;
+  var shift = e.shiftKey;
+  var step = shift ? 0.3 : 0.1;
+  var handled = true;
 
   switch(e.key) {{
-    // Zoom
-    case '+': case '=':
-      e.preventDefault(); zoomBy(0.6); break;
-    case '-': case '_':
-      e.preventDefault(); zoomBy(1.5); break;
-    case '0':
-      e.preventDefault(); zoomToLevel(1); break;
-    case '1':
-      e.preventDefault(); zoomToLevel(2); break;
-    case '2':
-      e.preventDefault(); zoomToLevel(4); break;
-    case '3':
-      e.preventDefault(); zoomToLevel(8); break;
-
-    // Pan
-    case 'ArrowLeft':
-      e.preventDefault(); panBy(-panStep, 0); break;
-    case 'ArrowRight':
-      e.preventDefault(); panBy(panStep, 0); break;
-    case 'ArrowUp':
-      e.preventDefault(); panBy(0, panStep); break;
-    case 'ArrowDown':
-      e.preventDefault(); panBy(0, -panStep); break;
-
-    // Display toggles
-    case 'l': case 'L':
-      toggleLabels(); showToast(labelsVisible ? 'Labels shown' : 'Labels hidden'); break;
-    case 'n': case 'N':
-      toggleNoise(); break;
-    case 'a': case 'A':
-      showAllClusters(); showToast('All clusters shown'); break;
-    case '?': case 'h': case 'H':
-      toggleHelp(); break;
+    case '+': case '=': zoomBy(0.6); break;
+    case '-': case '_': zoomBy(1.5); break;
+    case '0': zoomToLevel(1); break;
+    case '1': zoomToLevel(2); break;
+    case '2': zoomToLevel(4); break;
+    case '3': zoomToLevel(8); break;
+    case 'ArrowLeft':  panBy(-step, 0); break;
+    case 'ArrowRight': panBy(step, 0); break;
+    case 'ArrowUp':    panBy(0, step); break;
+    case 'ArrowDown':  panBy(0, -step); break;
+    case 'l': case 'L': toggleLabels(); break;
+    case 'n': case 'N': toggleNoise(); break;
+    case 'a': case 'A': showAllClusters(); break;
+    case '?': case 'h': case 'H': toggleHelp(); break;
     case 'Escape':
       document.getElementById('help-overlay').classList.remove('visible');
       closePanel();
       break;
+    default:
+      handled = false;
   }}
-}});
+
+  if (handled) {{
+    e.preventDefault();
+    e.stopPropagation();
+  }}
+}}, true);  // ← capture phase: fires BEFORE Plotly's handlers
 </script>
 </body>
 </html>"""
