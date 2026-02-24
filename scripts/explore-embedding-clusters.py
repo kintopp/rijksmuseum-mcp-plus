@@ -68,14 +68,14 @@ if has_int:
     field_map = dict(vdb.execute("SELECT name, id FROM field_lookup").fetchall())
 
     # Object type (field: object_type)
-    type_field_id = field_map.get("object_type")
+    type_field_id = field_map.get("type")
     creator_field_id = field_map.get("creator")
     subject_field_id = field_map.get("subject")
     material_field_id = field_map.get("material")
     technique_field_id = field_map.get("technique")
 
     # Guard: warn about missing field IDs (None → SQL NULL → silent empty results)
-    for name, fid in [("object_type", type_field_id), ("creator", creator_field_id),
+    for name, fid in [("type", type_field_id), ("creator", creator_field_id),
                       ("subject", subject_field_id), ("material", material_field_id),
                       ("technique", technique_field_id)]:
         if fid is None:
@@ -90,32 +90,35 @@ if has_int:
 
     # Batch query in chunks to stay within SQLITE_LIMIT_VARIABLE_NUMBER
     print("  Querying mappings...")
-    BATCH = 990 - len(field_ids)  # leave room for field ID params
-    field_ph = ",".join("?" * len(field_ids))
-    for batch_start in range(0, len(art_ids), BATCH):
-        batch_ids = art_ids[batch_start:batch_start + BATCH]
-        ph = ",".join("?" * len(batch_ids))
-        query = f"""
-            SELECT m.artwork_id, m.field_id, COALESCE(v.label_en, v.label_nl)
-            FROM mappings m
-            JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-            WHERE m.artwork_id IN ({ph})
-              AND m.field_id IN ({field_ph})
-        """
-        params = batch_ids + field_ids
-        for art_id, field_id, label in vdb.execute(query, params):
-            if art_id not in meta:
-                continue
-            if field_id == type_field_id:
-                meta[art_id]["types"].append(label)
-            elif field_id == creator_field_id:
-                meta[art_id]["creators"].append(label)
-            elif field_id == subject_field_id:
-                meta[art_id]["subjects"].append(label)
-            elif field_id == material_field_id:
-                meta[art_id]["materials"].append(label)
-            elif field_id == technique_field_id:
-                meta[art_id]["techniques"].append(label)
+    if not field_ids:
+        print("  WARNING: no valid field IDs — skipping metadata query")
+    else:
+        BATCH = 990 - len(field_ids)  # leave room for field ID params
+        field_ph = ",".join("?" * len(field_ids))
+        for batch_start in range(0, len(art_ids), BATCH):
+            batch_ids = art_ids[batch_start:batch_start + BATCH]
+            ph = ",".join("?" * len(batch_ids))
+            query = f"""
+                SELECT m.artwork_id, m.field_id, COALESCE(v.label_en, v.label_nl)
+                FROM mappings m
+                JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+                WHERE m.artwork_id IN ({ph})
+                  AND m.field_id IN ({field_ph})
+            """
+            params = batch_ids + field_ids
+            for art_id, field_id, label in vdb.execute(query, params):
+                if art_id not in meta:
+                    continue
+                if field_id == type_field_id:
+                    meta[art_id]["types"].append(label)
+                elif field_id == creator_field_id:
+                    meta[art_id]["creators"].append(label)
+                elif field_id == subject_field_id:
+                    meta[art_id]["subjects"].append(label)
+                elif field_id == material_field_id:
+                    meta[art_id]["materials"].append(label)
+                elif field_id == technique_field_id:
+                    meta[art_id]["techniques"].append(label)
 
     print(f"  Got metadata for {len(meta):,} artworks")
 else:

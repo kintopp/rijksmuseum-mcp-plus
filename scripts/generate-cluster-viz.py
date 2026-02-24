@@ -39,14 +39,14 @@ if not has_int:
 
 field_map = dict(vdb.execute("SELECT name, id FROM field_lookup").fetchall())
 
-type_fid = field_map.get("object_type")
+type_fid = field_map.get("type")
 creator_fid = field_map.get("creator")
 subject_fid = field_map.get("subject")
 material_fid = field_map.get("material")
 technique_fid = field_map.get("technique")
 
 # Guard: warn about missing field IDs
-for name, fid in [("object_type", type_fid), ("creator", creator_fid),
+for name, fid in [("type", type_fid), ("creator", creator_fid),
                   ("subject", subject_fid), ("material", material_fid),
                   ("technique", technique_fid)]:
     if fid is None:
@@ -72,32 +72,35 @@ for batch_start in range(0, len(id_list), BATCH):
 meta = {int(aid): {"types": [], "creators": [], "subjects": [], "materials": [], "techniques": []}
         for aid in art_ids}
 
-field_ph = ",".join("?" * len(field_ids))
-MBATCH = BATCH - len(field_ids)
-for batch_start in range(0, len(id_list), MBATCH):
-    batch = id_list[batch_start:batch_start + MBATCH]
-    ph = ",".join("?" * len(batch))
-    query = f"""
-        SELECT m.artwork_id, m.field_id, COALESCE(v.label_en, v.label_nl)
-        FROM mappings m
-        JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-        WHERE m.artwork_id IN ({ph})
-          AND m.field_id IN ({field_ph})
-    """
-    params = batch + field_ids
-    for art_id, field_id, label in vdb.execute(query, params):
-        if art_id not in meta:
-            continue
-        if field_id == type_fid:
-            meta[art_id]["types"].append(label)
-        elif field_id == creator_fid:
-            meta[art_id]["creators"].append(label)
-        elif field_id == subject_fid:
-            meta[art_id]["subjects"].append(label)
-        elif field_id == material_fid:
-            meta[art_id]["materials"].append(label)
-        elif field_id == technique_fid:
-            meta[art_id]["techniques"].append(label)
+if not field_ids:
+    print("  WARNING: no valid field IDs — skipping vocab metadata query")
+else:
+    field_ph = ",".join("?" * len(field_ids))
+    MBATCH = BATCH - len(field_ids)
+    for batch_start in range(0, len(id_list), MBATCH):
+        batch = id_list[batch_start:batch_start + MBATCH]
+        ph = ",".join("?" * len(batch))
+        query = f"""
+            SELECT m.artwork_id, m.field_id, COALESCE(v.label_en, v.label_nl)
+            FROM mappings m
+            JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+            WHERE m.artwork_id IN ({ph})
+              AND m.field_id IN ({field_ph})
+        """
+        params = batch + field_ids
+        for art_id, field_id, label in vdb.execute(query, params):
+            if art_id not in meta:
+                continue
+            if field_id == type_fid:
+                meta[art_id]["types"].append(label)
+            elif field_id == creator_fid:
+                meta[art_id]["creators"].append(label)
+            elif field_id == subject_fid:
+                meta[art_id]["subjects"].append(label)
+            elif field_id == material_fid:
+                meta[art_id]["materials"].append(label)
+            elif field_id == technique_fid:
+                meta[art_id]["techniques"].append(label)
 
 vdb.close()
 print(f"Fetched metadata for {len(meta):,} artworks")
@@ -243,9 +246,10 @@ layout = {
 
 # ── Pre-compute data extent (exclude noise for tighter fit) ──────
 non_noise = labels != -1
+extent_coords = coords[non_noise] if non_noise.any() else coords
 data_extent = {
-    "xMin": float(coords[non_noise, 0].min()), "xMax": float(coords[non_noise, 0].max()),
-    "yMin": float(coords[non_noise, 1].min()), "yMax": float(coords[non_noise, 1].max()),
+    "xMin": float(extent_coords[:, 0].min()), "xMax": float(extent_coords[:, 0].max()),
+    "yMin": float(extent_coords[:, 1].min()), "yMax": float(extent_coords[:, 1].max()),
 }
 
 # ── Write HTML ──────────────────────────────────────────

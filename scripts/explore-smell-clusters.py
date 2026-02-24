@@ -254,14 +254,14 @@ print("\nFetching metadata...")
 vdb = sqlite3.connect(str(VOCAB_DB))
 field_map = dict(vdb.execute("SELECT name, id FROM field_lookup").fetchall())
 
-type_fid = field_map.get("object_type")
+type_fid = field_map.get("type")
 creator_fid = field_map.get("creator")
 subject_fid = field_map.get("subject")
 material_fid = field_map.get("material")
 technique_fid = field_map.get("technique")
 
 # Guard: warn about missing field IDs
-for name, fid_val in [("object_type", type_fid), ("creator", creator_fid),
+for name, fid_val in [("type", type_fid), ("creator", creator_fid),
                       ("subject", subject_fid), ("material", material_fid),
                       ("technique", technique_fid)]:
     if fid_val is None:
@@ -287,27 +287,30 @@ for batch_start in range(0, len(id_list), BATCH):
 meta = {int(aid): {"types": [], "creators": [], "subjects": [], "materials": [], "techniques": []}
         for aid in art_ids}
 
-field_ph = ",".join("?" * len(field_ids))
-MBATCH = BATCH - len(field_ids)
-for batch_start in range(0, len(id_list), MBATCH):
-    batch = id_list[batch_start:batch_start + MBATCH]
-    ph = ",".join("?" * len(batch))
-    query = f"""
-        SELECT m.artwork_id, m.field_id, COALESCE(v.label_en, v.label_nl)
-        FROM mappings m
-        JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-        WHERE m.artwork_id IN ({ph})
-          AND m.field_id IN ({field_ph})
-    """
-    params = batch + field_ids
-    for aid, fid, label in vdb.execute(query, params):
-        if aid not in meta:
-            continue
-        if fid == type_fid: meta[aid]["types"].append(label)
-        elif fid == creator_fid: meta[aid]["creators"].append(label)
-        elif fid == subject_fid: meta[aid]["subjects"].append(label)
-        elif fid == material_fid: meta[aid]["materials"].append(label)
-        elif fid == technique_fid: meta[aid]["techniques"].append(label)
+if not field_ids:
+    print("  WARNING: no valid field IDs — skipping vocab metadata query")
+else:
+    field_ph = ",".join("?" * len(field_ids))
+    MBATCH = BATCH - len(field_ids)
+    for batch_start in range(0, len(id_list), MBATCH):
+        batch = id_list[batch_start:batch_start + MBATCH]
+        ph = ",".join("?" * len(batch))
+        query = f"""
+            SELECT m.artwork_id, m.field_id, COALESCE(v.label_en, v.label_nl)
+            FROM mappings m
+            JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+            WHERE m.artwork_id IN ({ph})
+              AND m.field_id IN ({field_ph})
+        """
+        params = batch + field_ids
+        for aid, fid, label in vdb.execute(query, params):
+            if aid not in meta:
+                continue
+            if fid == type_fid: meta[aid]["types"].append(label)
+            elif fid == creator_fid: meta[aid]["creators"].append(label)
+            elif fid == subject_fid: meta[aid]["subjects"].append(label)
+            elif fid == material_fid: meta[aid]["materials"].append(label)
+            elif fid == technique_fid: meta[aid]["techniques"].append(label)
 
 vdb.close()
 
@@ -615,8 +618,14 @@ for zone, zone_label in [("core", "SMELL CORE"), ("associated", "ASSOCIATED"), (
         trace_idx += 1
 
 # Pre-compute data extent for zoom (exclude noise — it's hidden by default)
-all_x = np.concatenate([coords_2d[labels == cid, 0] for cid in sorted(set(labels)) if cid != -1])
-all_y = np.concatenate([coords_2d[labels == cid, 1] for cid in sorted(set(labels)) if cid != -1])
+non_noise_cids = [cid for cid in sorted(set(labels)) if cid != -1]
+if non_noise_cids:
+    all_x = np.concatenate([coords_2d[labels == cid, 0] for cid in non_noise_cids])
+    all_y = np.concatenate([coords_2d[labels == cid, 1] for cid in non_noise_cids])
+else:
+    # Fallback: all points are noise
+    all_x = coords_2d[:, 0]
+    all_y = coords_2d[:, 1]
 data_extent = {
     "xMin": float(np.min(all_x)), "xMax": float(np.max(all_x)),
     "yMin": float(np.min(all_y)), "yMax": float(np.max(all_y)),
@@ -843,7 +852,7 @@ Plotly.newPlot('plot', traces, layout, config);
       const dimmed = !traceVisible[item.traceIdx] ? ' dimmed' : '';
       html += '<div class="legend-item' + dimmed + '" data-trace="' + item.traceIdx + '" data-cid="' + item.cid + '">'
         + '<span class="legend-swatch" style="background:' + item.color + '"></span>'
-        + '<span class="legend-label" title="' + item.label + '">' + item.label + '</span>'
+        + '<span class="legend-label" title="' + esc(item.label) + '">' + esc(item.label) + '</span>'
         + '<span class="legend-count">' + item.size + '</span>'
         + '</div>';
     }}
