@@ -1,5 +1,8 @@
 import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
+import { createRequire } from "node:module";
 import { escapeFts5, resolveDbPath } from "../utils/db.js";
+
+const require = createRequire(import.meta.url);
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -27,6 +30,13 @@ export interface IconclassBrowseResult {
   countsAsOf: string | null;
 }
 
+export interface IconclassSemanticResult {
+  query: string;
+  totalResults: number;
+  results: (IconclassEntry & { distance: number })[];
+  countsAsOf: string | null;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 /** Build a deduplicated language fallback list: requested → en → nl. */
@@ -42,6 +52,7 @@ function langFallbacks(lang: string): string[] {
 export class IconclassDb {
   private db: DatabaseType | null = null;
   private _countsAsOf: string | null = null;
+  private _hasEmbeddings = false;
 
   // Cached prepared statements (initialized after db opens)
   private stmtTextFts!: Statement;
@@ -51,6 +62,11 @@ export class IconclassDb {
   private stmtGetTextAny!: Statement;
   private stmtGetKeywords!: Statement;
   private stmtGetKeywordsAny!: Statement;
+
+  // Embedding search statements (null when embeddings not available)
+  private stmtQuantize: Statement | null = null;
+  private stmtKnn: Statement | null = null;
+  private stmtFilteredKnn: Statement | null = null;
 
   constructor() {
     const dbPath = resolveDbPath("ICONCLASS_DB_PATH", "iconclass.db");
@@ -72,6 +88,45 @@ export class IconclassDb {
           this._countsAsOf = row.value.slice(0, 10);
         }
       } catch { /* version_info table may not exist */ }
+
+      // Detect and load embeddings (sqlite-vec extension required).
+      // Note: iconclass embeddings are always 384d (e5-small native). The shared
+      // EmbeddingModel must output 384d queries — this holds when artwork embeddings
+      // also use e5-small (384d). If artwork embeddings switch to a different model
+      // with MRL truncation (e.g. EmbeddingGemma 768→256d), a separate query path
+      // for iconclass will be needed.
+      try {
+        this.db.prepare("SELECT 1 FROM iconclass_embeddings LIMIT 1").get();
+        // Embeddings table exists — load sqlite-vec extension
+        const sqliteVec = require("sqlite-vec");
+        sqliteVec.load(this.db);
+
+        // Cache embedding search statements
+        this.stmtQuantize = this.db.prepare(
+          "SELECT vec_quantize_int8(vec_normalize(?), 'unit') as v"
+        );
+        this.stmtKnn = this.db.prepare(`
+          SELECT notation, distance FROM vec_iconclass
+          WHERE embedding MATCH vec_int8(?) AND k = ?
+          ORDER BY distance
+        `);
+        this.stmtFilteredKnn = this.db.prepare(`
+          SELECT ie.notation,
+                 vec_distance_cosine(vec_int8(ie.embedding), vec_int8(?)) as distance
+          FROM iconclass_embeddings ie
+          JOIN notations n ON ie.notation = n.notation
+          WHERE n.rijks_count > 0
+          ORDER BY distance LIMIT ?
+        `);
+
+        // Only set flag after all statements are successfully prepared
+        this._hasEmbeddings = true;
+
+        const embCount = (this.db.prepare("SELECT COUNT(*) as n FROM iconclass_embeddings").get() as { n: number }).n;
+        console.error(`  Iconclass embeddings: ${embCount.toLocaleString()} vectors`);
+      } catch {
+        // No embeddings table or sqlite-vec not available — semantic search disabled
+      }
 
       // Cache all prepared statements
       this.stmtTextFts = this.db.prepare(
@@ -111,6 +166,10 @@ export class IconclassDb {
 
   get available(): boolean {
     return this.db !== null;
+  }
+
+  get embeddingsAvailable(): boolean {
+    return this._hasEmbeddings;
   }
 
   get countsAsOf(): string | null {
@@ -177,6 +236,50 @@ export class IconclassDb {
       .filter((e): e is IconclassEntry => e !== null);
 
     return { notation, entry, subtree, countsAsOf: this._countsAsOf };
+  }
+
+  /**
+   * Semantic search over Iconclass embeddings.
+   * Dual-path: vec0 KNN for unfiltered, regular table + JOIN for onlyWithArtworks.
+   */
+  semanticSearch(
+    queryEmbedding: Float32Array,
+    k: number,
+    lang: string = "en",
+    onlyWithArtworks: boolean = false,
+  ): IconclassSemanticResult | null {
+    if (!this.db || !this._hasEmbeddings || !this.stmtQuantize) return null;
+
+    // Quantize query vector to int8 (same as EmbeddingsDb pattern)
+    const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
+
+    let rows: { notation: string; distance: number }[];
+
+    if (onlyWithArtworks && this.stmtFilteredKnn) {
+      // Filtered path: brute-force over regular table with rijks_count > 0 JOIN
+      rows = this.stmtFilteredKnn.all(quantized.v, k) as { notation: string; distance: number }[];
+    } else if (this.stmtKnn) {
+      // Pure KNN path via vec0
+      rows = this.stmtKnn.all(quantized.v, Math.min(k, 4096)) as { notation: string; distance: number }[];
+    } else {
+      return null;
+    }
+
+    // Resolve each notation to a full entry + distance
+    const results = rows
+      .map((row) => {
+        const entry = this.resolveEntry(row.notation, lang);
+        if (!entry) return null;
+        return { ...entry, distance: row.distance };
+      })
+      .filter((e): e is IconclassEntry & { distance: number } => e !== null);
+
+    return {
+      query: "", // caller sets this
+      totalResults: results.length,
+      results,
+      countsAsOf: this._countsAsOf,
+    };
   }
 
   /** Resolve a notation to a full IconclassEntry. */

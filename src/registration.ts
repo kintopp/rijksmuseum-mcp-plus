@@ -329,7 +329,7 @@ const LookupIconclassOutput = {
   notation: z.string().optional(),
   entry: IconclassEntryShape.optional(),
   subtree: z.array(IconclassEntryShape).optional(),
-  results: z.array(IconclassEntryShape).optional(),
+  results: z.array(IconclassEntryShape.extend({ distance: z.number().optional() })).optional(),
   countsAsOf: z.string().nullable().optional()
     .describe("Date when rijksCount values were computed (ISO 8601)."),
   error: z.string().optional(),
@@ -1157,9 +1157,12 @@ function registerTools(
   // ── lookup_iconclass ────────────────────────────────────────────
   // Guarded: tool only registered when iconclassDb is loaded. This is safe because
   // initIconclassDb() completes before createServer() in both stdio and HTTP boot paths.
+  // Semantic search path is only available when both embeddingModel and iconclass embeddings
+  // are present — the tool gracefully degrades to FTS-only when they aren't.
 
   if (iconclassDb?.available) {
     const db = iconclassDb; // narrowed to non-null for the closure
+    const semanticAvailable = db.embeddingsAvailable && embeddingModel?.available;
     server.registerTool(
       "lookup_iconclass",
       {
@@ -1168,8 +1171,12 @@ function registerTools(
           "Search or browse the Iconclass classification system — a universal vocabulary for art subject matter (~40K notations across 13 languages). " +
           "Use this to discover Iconclass notation codes by concept (e.g. 'smell', 'crucifixion', 'Löwe'), " +
           "then pass the notation to search_artwork's iconclass parameter for precise results. " +
-          "Artwork counts (rijksCount) are pre-computed and approximate; use search_artwork with the notation code for current results. " +
-          "Provide either query (text search) or notation (browse subtree), not both.",
+          "Artwork counts (rijksCount) are pre-computed and approximate; use search_artwork with the notation code for current results.\n\n" +
+          "Three modes (provide exactly one of query, notation, or semanticQuery):\n" +
+          "• query — FTS5 keyword search (exact word match, no stemming)\n" +
+          "• notation — browse a specific notation and its children\n" +
+          "• semanticQuery — find notations by meaning/concept (e.g. 'domestic animals' finds dogs, cats, horses)" +
+          (semanticAvailable ? "" : " [currently unavailable — embeddings not loaded]"),
         inputSchema: z.object({
           query: z
             .string()
@@ -1186,6 +1193,21 @@ function registerTools(
               "Browse a specific Iconclass notation (e.g. '31A33' for smell). " +
               "Returns the entry with its hierarchy and direct children."
             ),
+          semanticQuery: z
+            .string()
+            .optional()
+            .describe(
+              "Semantic concept search across Iconclass — finds notations by meaning rather than exact words. " +
+              "Use when keyword search fails or for broad conceptual queries (e.g. 'domestic animals', 'religious suffering')."
+            ),
+          onlyWithArtworks: z
+            .boolean()
+            .default(false)
+            .optional()
+            .describe(
+              "Only return notations that have artworks in the Rijksmuseum collection (rijks_count > 0). " +
+              "Only applies to semanticQuery mode."
+            ),
           lang: z
             .string()
             .default("en")
@@ -1201,14 +1223,42 @@ function registerTools(
         ...withOutputSchema(LookupIconclassOutput),
       },
       withLogging("lookup_iconclass", async (args) => {
-        if (args.query === undefined && args.notation === undefined) {
-          return errorResponse("Either query or notation is required.");
+        const modes = [args.query, args.notation, args.semanticQuery].filter(v => v !== undefined);
+        if (modes.length === 0) {
+          return errorResponse("Provide exactly one of: query, notation, or semanticQuery.");
         }
-        if (args.query !== undefined && args.notation !== undefined) {
-          return errorResponse("Provide either query or notation, not both.");
+        if (modes.length > 1) {
+          return errorResponse("Provide exactly one of: query, notation, or semanticQuery — not multiple.");
         }
 
-        // Search mode
+        // Semantic search mode
+        if (args.semanticQuery !== undefined) {
+          if (!embeddingModel?.available || !db.embeddingsAvailable) {
+            return errorResponse(
+              "Semantic search requires Iconclass embeddings and an embedding model (not available in current deployment). " +
+              "Use query (keyword search) or notation (browse) instead."
+            );
+          }
+
+          const queryVec = await embeddingModel.embed(args.semanticQuery);
+          const result = db.semanticSearch(queryVec, args.maxResults, args.lang, args.onlyWithArtworks ?? false);
+          if (!result) {
+            return errorResponse("Semantic search failed — embeddings may be corrupted.");
+          }
+          result.query = args.semanticQuery;
+
+          const suffix = args.onlyWithArtworks ? " (with artworks only)" : "";
+          const header = `${result.results.length} semantic Iconclass matches for "${args.semanticQuery}"${suffix}`;
+          const lines = result.results.map((e, i) => {
+            const similarity = Math.round((1 - e.distance) * 1000) / 1000;
+            let line = `${i + 1}. [${similarity}] ${e.notation} (${e.rijksCount} artworks) "${e.text}"`;
+            if (e.path.length > 0) line += ` [${e.path.map((p) => p.notation).join(" > ")}]`;
+            return line;
+          });
+          return structuredResponse(result, [header, ...lines].join("\n"));
+        }
+
+        // FTS search mode
         if (args.query !== undefined) {
           const result = db.search(args.query, args.maxResults, args.lang);
 
