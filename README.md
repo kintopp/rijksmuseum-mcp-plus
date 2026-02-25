@@ -4,13 +4,13 @@
 
 Note: This README is an **incomplete draft**.
 
-**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artworks through natural conversation with an AI assistant. To do this, it creates a [bridge](https://www.anthropic.com/news/model-context-protocol) between the chat environment and the museum's extensive holdings of [open-access, curated and interconnected metadata](https://data.rijksmuseum.nl). 
+**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artworks through natural conversation with an AI assistant. To do this, it creates a [bridge](https://www.anthropic.com/news/model-context-protocol) between the chat environment and the museum's [curated and interconnected open-access metadata](https://data.rijksmuseum.nl). 
 
-Survey artworks by [artist, material, technique, date, depicted person or place, or iconographic subject] and combine this with research on the [curatorial wall texts, provenance histories, inscriptions, or iconclass categories]. Besides various kinds of structural queries, you can also search the collection metadata [semantically], see artworks inline in your chat session in an [interactive image viewer], and carry out [geospatial searches]. 
+Explore artworks by [artist, material, technique, date, depicted person or place, or iconographic subject] and combine these queries with research on the [curatorial wall texts, provenance histories, inscriptions, or iconclass categories]. Besides structural queries, you can also search the collection metadata [semantically], see artworks inline in your chat session in an [interactive image viewer], and carry out [geospatial searches]. 
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
-**rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks. I am particularly interested in exploring the [technical] and [research] possibilities and challenges posed by interlinking (un)structured data, agentic LLMs, and human users for art historical research. If you're interested in collaborating on these questions, please [get in touch].
+**rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks. I am particularly interested in exploring the [technical] and [research] possibilities and challenges posed by interlinking (un)structured data, agentic LLMs, and human users for art historical research. If you're interested in collaborating on these questions, please [get in touch]!
 
 ## Quick Start
 
