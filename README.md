@@ -2,17 +2,15 @@
 
 ### Overview
 
-Note: This README is currently still an **incomplete draft**.
+Note: This README is an **incomplete draft**.
 
 **rijksmuseum-mcp+** lets you explore the Rijksmuseum's artworks through natural conversation with an AI assistant. To do this, it creates a [bridge](https://www.anthropic.com/news/model-context-protocol) between the chat environment and the museum's extensive holdings of [open-access, curated and interconnected metadata](https://data.rijksmuseum.nl). 
 
-You can survey artworks by [artist, material, technique, date, depicted person or place, or iconographic subject] and combine this with research on the [curatorial wall texts, provenance histories, inscriptions, or iconclass categories]. Besides various kinds of structural queries, you can also search the collection metadata [semantically], see artworks inline in your chat session in an [interactive image viewer], and carry out [geospatial searches]. 
-
-In all this, the AI assistant acts as a guide for a researcher: it converts natural language questions into the right combination of tools and parameters for thse queries, handles variant name spellings and historical terminology, translates between languages, and is able to bring its own background art-historical knowledge to bear to contextualise the results. Finally, because these metadata are made available to the AI system and passed on to you in structured form, it's often possible to use these as a starting point for follow-up tasks like as [visualizations] or quantitative evaluations.
+Survey artworks by [artist, material, technique, date, depicted person or place, or iconographic subject] and combine this with research on the [curatorial wall texts, provenance histories, inscriptions, or iconclass categories]. Besides various kinds of structural queries, you can also search the collection metadata [semantically], see artworks inline in your chat session in an [interactive image viewer], and carry out [geospatial searches]. 
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
-**rijksmuseum-mcp+** was developed by the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) team at the University of Basel and builds on ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks. In addition, I am particularly interested in exploring the [technical] and [research] possibilities and challenges posed by interlinking and mediating (un)structured data, agentic LLMs, and human users for art historical research. If you're interested in collaborating with us on some of these questions, please [get in touch].
+**rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks. I am particularly interested in exploring the [technical] and [research] possibilities and challenges posed by interlinking (un)structured data, agentic LLMs, and human users for art historical research. If you're interested in collaborating on these questions, please [get in touch].
 
 ## Quick Start
 
@@ -43,11 +41,7 @@ After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to y
 "Show me sculptures in the collection by artists born in Leiden"  
 "What was the first work that entered the museum's collection?"  
 
-### Tips and Caveats
-
-to be added
-
-
+Note: This README is an **incomplete draft**.
 
 ### Authors
 
