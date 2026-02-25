@@ -85,6 +85,7 @@ export class EmbeddingsDb {
   }
 
   get available(): boolean { return this.db !== null && this.stmtQuantize !== null; }
+  get vectorDimensions(): number { return this.dimensions; }
 
   /**
    * Pure KNN search — no metadata filters.
