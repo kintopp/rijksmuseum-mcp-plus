@@ -377,16 +377,16 @@ function registerTools(
     // Tier 2 (vocabulary DB v1.0+)
     "description", "inscription", "provenance", "creditLine", "curatorialNarrative", "productionRole",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
-    "nearPlace", "nearLat",
+    "nearPlace", "nearLat", "nearLon",
     "title",
   ] as const;
-  // nearPlaceRadius, nearLon excluded: their Zod defaults/pairing would trigger
+  // nearPlaceRadius excluded: its Zod default (25) would trigger
   // vocab routing on every query. Forwarded separately via allVocabKeys.
 
   // Keys that cross both paths: forwarded to vocab DB when a vocab param triggers routing
   const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
   const hybridKeys = ["creationDate"] as const;
-  const allVocabKeys = [...vocabParamKeys, "nearLon", "nearPlaceRadius", ...crossFilterKeys, ...hybridKeys];
+  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", ...crossFilterKeys, ...hybridKeys];
 
   server.registerTool(
     "search_artwork",
@@ -685,9 +685,10 @@ function registerTools(
       );
 
       // Reject incompatible parameter combinations before routing (#27)
+      // imageAvailable: false is a no-op — only true triggers the Search API image filter
       if (hasVocabParam) {
         const incompatible = (["imageAvailable", "aboutActor"] as const).filter(
-          k => argsRecord[k] !== undefined
+          k => k === "imageAvailable" ? argsRecord[k] === true : argsRecord[k] !== undefined
         );
         if (incompatible.length > 0) {
           const vocabPresent = vocabParamKeys.filter(k => argsRecord[k] !== undefined);

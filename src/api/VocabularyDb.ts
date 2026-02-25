@@ -812,7 +812,8 @@ export class VocabularyDb {
     }
 
     // Creation date range
-    if (params.creationDate && this.hasDates) {
+    if (params.creationDate) {
+      if (!this.hasDates) return null; // DB lacks date columns — caller should fall back to pure KNN
       const range = parseDateFilter(params.creationDate);
       if (range) {
         conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");

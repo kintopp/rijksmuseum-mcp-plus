@@ -63,13 +63,17 @@ export class UsageStats {
   flush(): void {
     if (!this.dirty) return;
 
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    try {
+      const dir = path.dirname(this.filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    const tmp = this.filePath + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
-    fs.renameSync(tmp, this.filePath);
-    this.dirty = false;
+      const tmp = this.filePath + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+      fs.renameSync(tmp, this.filePath);
+      this.dirty = false;
+    } catch (err) {
+      console.error("[UsageStats] flush failed:", err);
+    }
   }
 
   /** Return current stats snapshot (for potential /health enrichment). */

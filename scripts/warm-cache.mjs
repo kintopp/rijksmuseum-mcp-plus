@@ -42,7 +42,7 @@ function parseArgs() {
     switch (args[i]) {
       case "--url":        opts.url = args[++i]; break;
       case "--file":       opts.file = resolve(args[++i]); break;
-      case "--concurrency": opts.concurrency = parseInt(args[++i], 10); break;
+      case "--concurrency": opts.concurrency = Math.max(1, parseInt(args[++i], 10) || 1); break;
       case "--help":
       case "-h":
         console.log("Usage: node scripts/warm-cache.mjs [--url URL] [--file PATH] [--concurrency N]");

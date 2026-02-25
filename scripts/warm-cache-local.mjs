@@ -53,7 +53,7 @@ function parseArgs() {
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case "--file":        opts.file = resolve(args[++i]); break;
-      case "--concurrency": opts.concurrency = parseInt(args[++i], 10); break;
+      case "--concurrency": opts.concurrency = Math.max(1, parseInt(args[++i], 10) || 1); break;
       case "--validate":    opts.validate = true; break;
       case "--help":
       case "-h":
