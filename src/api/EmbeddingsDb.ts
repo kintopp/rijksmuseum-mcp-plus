@@ -53,8 +53,8 @@ export class EmbeddingsDb {
       const sqliteVec = require("sqlite-vec");
       sqliteVec.load(this.db);
 
-      // Read metadata
-      const meta = this.db.prepare("SELECT key, value FROM metadata").all() as { key: string; value: string }[];
+      // Read version info
+      const meta = this.db.prepare("SELECT key, value FROM version_info").all() as { key: string; value: string }[];
       const metaMap = Object.fromEntries(meta.map(r => [r.key, r.value]));
       this.dimensions = parseInt(metaMap.dimensions ?? "384", 10);
       this.artworkCount = parseInt(metaMap.artwork_count ?? "0", 10);
