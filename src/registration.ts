@@ -101,10 +101,12 @@ function createLogger(stats?: UsageStats) {
         const error = err instanceof Error ? err.message : String(err);
         console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
         stats?.record(toolName, ms, false);
+        // Do NOT emit structuredContent here — a bare { error } fails SDK
+        // validation against any outputSchema with required fields (-32602).
+        // Tools that need schema-conformant errors handle them internally.
         const errResult: Record<string, unknown> = {
           content: [{ type: "text" as const, text: `Error in ${toolName}: ${error}` }],
           isError: true,
-          ...(EMIT_STRUCTURED && { structuredContent: { error } }),
         };
         return errResult as R;
       }
