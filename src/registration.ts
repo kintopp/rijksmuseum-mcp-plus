@@ -1661,6 +1661,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
       title: "Artist Timeline",
       description:
         "Generate a chronological timeline of an artist's works in the collection. " +
+        "Click on the artist's name in the image viewer to copy it. " +
         `Note: limited to ${RESULTS_MAX} works maximum — for prolific artists this is a small sample.`,
       argsSchema: {
         artist: z.string().describe("Name of the artist"),
