@@ -504,7 +504,9 @@ function registerTools(
                   "PRIMARY parameter for concept or thematic searches — use this first, before description or curatorialNarrative. " +
                   "Searches 831K artworks by subject matter (Iconclass themes, depicted scenes). " +
                   "Exact word matching, no stemming (e.g. 'cat' matches 'cat' but not 'cats'). " +
-                  "For variant forms, search separately or use iconclass for precise codes. Requires vocabulary DB."
+                  "For variant forms, search separately or use iconclass for precise codes. " +
+                  "Also covers historical events using Dutch labels (e.g. 'Tweede Wereldoorlog', 'Tachtigjarige Oorlog'). " +
+                  "Requires vocabulary DB."
                 ),
               iconclass: z
                 .string()
@@ -1587,7 +1589,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
 
       let base64: string;
       try {
-        base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width);
+        base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width, imageInfo.width, imageInfo.height);
       } catch {
         return {
           messages: [

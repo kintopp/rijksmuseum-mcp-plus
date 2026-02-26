@@ -195,10 +195,16 @@ export class RijksmuseumApiClient {
         RijksmuseumApiClient.TTL_IMAGE
       );
 
+      // Constrain the longest edge: w, for landscape; ,h for portrait
+      // (iiif.micr.io's !w,h best-fit syntax is broken — forces exact w×h)
+      const sizeParam = info.width >= info.height
+        ? `${thumbnailWidth},`
+        : `,${thumbnailWidth}`;
+
       return {
         iiifId,
         iiifInfoUrl,
-        thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/!${thumbnailWidth},${thumbnailWidth}/0/default.jpg`,
+        thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`,
         fullUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/max/0/default.jpg`,
         width: info.width,
         height: info.height,
@@ -209,12 +215,17 @@ export class RijksmuseumApiClient {
     }
   }
 
-  /** Download a small IIIF thumbnail and return as base64 data URI */
+  /** Download a IIIF thumbnail (longest edge ≤ maxEdge) and return as base64 */
   async fetchThumbnailBase64(
     iiifId: string,
-    width: number = 800
+    maxEdge: number = 800,
+    nativeWidth?: number,
+    nativeHeight?: number,
   ): Promise<string> {
-    const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/!${width},${width}/0/default.jpg`;
+    // Constrain the longest edge; fall back to width-only if dimensions unknown
+    const portrait = nativeHeight != null && nativeWidth != null && nativeHeight > nativeWidth;
+    const sizeParam = portrait ? `,${maxEdge}` : `${maxEdge},`;
+    const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`;
     const { data } = await this.http.get(url, {
       responseType: "arraybuffer",
     });
