@@ -354,6 +354,24 @@ const SemanticSearchOutput = {
   error: z.string().optional(),
 };
 
+const OpenInBrowserOutput = {
+  opened: z.boolean(),
+  url: z.string(),
+  error: z.string().optional(),
+};
+
+const CuratedSetsOutput = {
+  totalSets: z.number().int(),
+  filteredFrom: z.number().int().optional(),
+  query: z.string().optional(),
+  sets: z.array(z.object({
+    setSpec: z.string(),
+    name: z.string(),
+    lodUri: z.string(),
+  })),
+  error: z.string().optional(),
+};
+
 // ─── Tools ──────────────────────────────────────────────────────────
 
 function registerTools(
@@ -814,11 +832,12 @@ function registerTools(
             "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
           ),
       }).strict(),
+      ...withOutputSchema(ArtworkDetailOutput),
     },
     withLogging("resolve_uri", async (args) => {
       const object = await api.resolveObject(args.uri);
       const detail = await api.toDetailEnriched(object, args.uri);
-      return jsonResponse(detail);
+      return structuredResponse(detail);
     })
   );
 
@@ -987,28 +1006,21 @@ function registerTools(
           .url()
           .describe("The URL to open in the browser"),
       }).strict(),
+      ...withOutputSchema(OpenInBrowserOutput),
     },
     withLogging("open_in_browser", async (args) => {
       try {
         await SystemIntegration.openInBrowser(args.url);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Opened in browser: ${args.url}`,
-            },
-          ],
-        };
+        return structuredResponse(
+          { opened: true, url: args.url },
+          `Opened in browser: ${args.url}`
+        );
       } catch (err) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to open browser: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-          isError: true,
-        };
+        const message = `Failed to open browser: ${err instanceof Error ? err.message : String(err)}`;
+        return structuredResponse(
+          { opened: false, url: args.url, error: message },
+          message
+        );
       }
     })
   );
@@ -1031,6 +1043,7 @@ function registerTools(
             "Filter sets by name (case-insensitive substring match). E.g. 'painting', 'Rembrandt', 'Japanese'"
           ),
       }).strict(),
+      ...withOutputSchema(CuratedSetsOutput),
     },
     withLogging("list_curated_sets", async (args) => {
       const allSets = await oai.listSets();
@@ -1039,7 +1052,7 @@ function registerTools(
         ? allSets.filter((s) => s.name.toLowerCase().includes(q))
         : allSets;
 
-      return jsonResponse({
+      return structuredResponse({
         totalSets: sets.length,
         ...(q ? { filteredFrom: allSets.length, query: args.query } : {}),
         sets,
