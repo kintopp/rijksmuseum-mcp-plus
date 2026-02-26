@@ -15,7 +15,6 @@ import { VocabularyDb } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
-import { TOP_100_SET } from "./types.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
 
@@ -157,7 +156,7 @@ export function registerAll(
   registerTools(server, apiClient, oaiClient, vocabDb, iconclassDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats));
   registerResources(server);
   registerAppViewerResource(server);
-  registerPrompts(server, apiClient, oaiClient);
+  registerPrompts(server, apiClient);
 
   // Log whether the connected client supports MCP Apps (SHOULD-level capability negotiation)
   server.server.oninitialized = () => {
@@ -1548,15 +1547,13 @@ function registerAppViewerResource(server: McpServer): void {
 
 // ─── Prompts ────────────────────────────────────────────────────────
 
-function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiPmhClient): void {
+function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
   server.registerPrompt(
     "analyse-artwork",
     {
       title: "Share Artwork with AI",
       description:
-        "Share an artwork image with the AI so it can see and discuss it. " +
-        "The image is fetched server-side (via IIIF) and returned as base64 directly in the conversation. " +
-        "Use get_artwork_details for full metadata if needed.",
+        "Share an artwork image with the AI assistant so that it can see and analyse it.",
       argsSchema: {
         objectNumber: z
           .string()
@@ -1678,53 +1675,4 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient, oai: OaiP
     })
   );
 
-  server.registerPrompt(
-    "top-100-artworks",
-    {
-      title: "Top 100 Artworks",
-      description:
-        "The Rijksmuseum's official Top 100 masterpieces. Fetches the full curated list " +
-        "with titles, creators, dates, types, and object numbers for further exploration.",
-      argsSchema: {},
-    },
-    async () => {
-      const records: unknown[] = [];
-      const MAX_PAGES = 5;
-      let pagesFollowed = 0;
-      let result = await oai.listRecords({ set: TOP_100_SET });
-      while (true) {
-        records.push(...result.records);
-        if (!result.resumptionToken || pagesFollowed >= MAX_PAGES) break;
-        pagesFollowed++;
-        result = await oai.listRecords({ resumptionToken: result.resumptionToken });
-      }
-
-      const listing = JSON.stringify(
-        { totalArtworks: records.length, artworks: records },
-        null,
-        2
-      );
-
-      return {
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text:
-                `Here is the Rijksmuseum's official Top 100 masterpieces collection (${records.length} works):\n\n` +
-                `${listing}\n\n` +
-                `Each artwork includes an objectNumber that can be used with get_artwork_details, ` +
-                `get_artwork_image, or get_artwork_bibliography for deeper exploration.\n\n` +
-                `Help the user explore this collection. You can:\n` +
-                `- Summarise the highlights and themes\n` +
-                `- Group works by artist, period, type, or subject\n` +
-                `- Recommend specific works based on the user's interests\n` +
-                `- Use the tools above to dive deeper into any individual artwork`,
-            },
-          },
-        ],
-      };
-    }
-  );
 }

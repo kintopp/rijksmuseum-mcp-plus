@@ -6,21 +6,21 @@ Note: This README is an **incomplete draft**.
 
 **rijksmuseum-mcp+** lets you explore the Rijksmuseum's artworks through natural conversation with an AI assistant. To accomplish this, it creates a [bridge](https://www.anthropic.com/news/model-context-protocol) between the chat environment and the museum's own [curated, open-access metadata](https://data.rijksmuseum.nl). 
 
-Explore artworks by [artist, material, technique, date, depicted person or place, or iconographic subject] and combine these queries with research on the [curatorial wall texts, provenance histories, inscriptions, or iconclass categories]. Besides structural queries such as these, you can also search the collection metadata [semantically], see and zoom in on artworks [inside your chat session] in an [interactive image viewer], carry out [geospatial searches], and send the assistant an image to analyse in conjunction with its curated metadata. 
+Explore artworks by [artist, material, technique, date, depicted person or place, or iconographic subject] and combine these queries with research on the [curatorial wall texts, provenance histories, inscriptions, or iconclass categories]. Besides structural queries such as these, you can also search the collection metadata [semantically], see and zoom in on artworks [inside your chat session], carry out [geospatial searches], and ask the AI assistant to [analyse an image] in conjunction with its curated metadata. 
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
-**rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks. I am particularly interested in exploring the [technical] and [research] possibilities and challenges posed by interlinking (un)structured data, agentic LLMs, and human users for art historical research. If you're interested in collaborating on these questions, please [get in touch](mailto:rise@unibas.ch).
+**rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks. I am particularly interested in exploring the [technical] and [research] possibilities and challenges posed by interlinking (un)structured data, agentic LLMs, and human users for art historical research. If you are interested in collaborating on these questions, please [get in touch](mailto:rise@unibas.ch).
 
 ## Quick Start
 
-The easiest way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Claude using the URL below. Note that this  currently requires a paid [subscription](https://claude.com/pricing) from Anthropic. 
+The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Claude using the URL below. This currently requires a paid ('Pro') [subscription](https://claude.com/pricing) from Anthropic. 
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-Goto Settings → Connectors → Add custom connector → Name it whatever you like and paste the URL above into the 'Remote MCP Server URL' field. Once it's been added, configure the connector's permissions (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded) for more details. 
+Goto Settings → Connectors → Add custom connector → Name it whatever you like and paste the URL shown above into the 'Remote MCP Server URL' field. Once the connector has been configured, set the permission for the individual tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded) for more details. 
 
-Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it is already compatible with many other browser based chatbots including those whose large language models (LLMs) can be used without a paid subscription. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example. It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/). Unfortunately, at present, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers. Google has announced MCP support for Gemini but has not indicated when this will be ready.
+Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it is also compatible with many other browser based chatbots including those whose large language models (LLMs) can be used without a paid subscription. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example. It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/). Unfortunately, at present, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers. Google has also announced MCP support for Gemini but has not indicated when this will be ready.
 
 For these reasons, [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) will continue to be the best choice for most users due to its excellent support of the underlying MCP standard and its tight integration with Anthropic's large language models. For best results, I recommend using rijksmuseum-mcp+ with an Anthropic 'Pro' subscription and the current [Claude Sonnet] model with 'extended thinking' turned on. 
 
@@ -28,21 +28,20 @@ rijksmuseum-mcp+ can also be run as a local MCP server with local copies of its 
 
 ### Sample Questions
 
-After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, you can ask it questions about the Rijksmuseum's collections in natural language. For example:
+After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system (aka MCP client), you can ask it questions about the Rijksmuseum's collections in natural language. For example:
 
 "What artworks evoke vanitas and mortality?"  
 "Show me artworks depicting places near the Oude Kerk in Amsterdam"  
 "What works have the iconclass code for fabulous animals?"  
 "Which artworks have a provenance linked to Napoleon?"  
 "What are the 'top ten' works in the Rijksmuseum?"  
-"Are there any prints made after paintings by other artists?"  
 "I'm looking for artworks with inscriptions mentioning 'luctor et emergo'"  
 "Show me sculptures in the collection by artists born in Leiden"  
 "Which paintings are wider than 3 meters?"
 
-rijksmuseum-mcp+ can query all of the metadata categories listed on the Rijksmuseum's own [collection search](https://data.rijksmuseum.nl/docs/search) and extends this with several additional features.  
+With the exception of information on recent exhibitions, the rijksmuseum-mcp+ can query the same metadata categories listed on the Rijksmuseum's [collection search](https://data.rijksmuseum.nl/docs/search) page and then extend this with several unique features.  
 
-### Features
+### Unique Features
 
 to be added
 
@@ -79,6 +78,10 @@ The AI assistant handles search strategy automatically — choosing the right to
 **Not all artworks have images.** Coverage is good for major works but incomplete for the full collection. The assistant will report when an image is unavailable.
 
 Note: This README is an **incomplete draft**.
+
+### Roadmap
+
+to be added
 
 ### Authors
 
