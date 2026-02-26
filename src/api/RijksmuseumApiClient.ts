@@ -223,8 +223,8 @@ export class RijksmuseumApiClient {
     nativeHeight?: number,
   ): Promise<string> {
     // Constrain the longest edge; fall back to width-only if dimensions unknown
-    const portrait = nativeHeight != null && nativeWidth != null && nativeHeight > nativeWidth;
-    const sizeParam = portrait ? `,${maxEdge}` : `${maxEdge},`;
+    const landscape = nativeWidth == null || nativeHeight == null || nativeWidth >= nativeHeight;
+    const sizeParam = landscape ? `${maxEdge},` : `,${maxEdge}`;
     const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`;
     const { data } = await this.http.get(url, {
       responseType: "arraybuffer",
