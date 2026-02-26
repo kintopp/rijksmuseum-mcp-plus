@@ -1567,7 +1567,24 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
     async (args) => {
       const parsed = parseInt(args.imageWidth ?? "", 10) || 1200;
       const width = Math.min(Math.max(parsed, 200), 2000);
-      const { object } = await api.findByObjectNumber(args.objectNumber);
+
+      let object: Awaited<ReturnType<typeof api.findByObjectNumber>>["object"];
+      try {
+        ({ object } = await api.findByObjectNumber(args.objectNumber));
+      } catch {
+        return {
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `Artwork ${args.objectNumber} could not be found.`,
+              },
+            },
+          ],
+        };
+      }
+
       const imageInfo = await api.getImageInfo(object, width);
 
       if (!imageInfo) {
