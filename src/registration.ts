@@ -1553,24 +1553,25 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
     {
       title: "Share Artwork with AI",
       description:
-        "Share an artwork image with the AI assistant so that it can see and analyse it.",
+        "Share an image of an artwork with the AI assistant so that it can see and analyse it. You can click on the object number in the image viewer to copy it.",
       argsSchema: {
-        objectNumber: z
+        "Object Number": z
           .string()
           .describe("The object number of the artwork (e.g. 'SK-C-5')"),
-        imageWidth: z
+        "Image Size": z
           .string()
           .optional()
-          .describe("Image width in pixels (default: 1200, max: 2000)"),
+          .describe("Longest edge in pixels (default: 1200, max: 2000)"),
       },
     },
     async (args) => {
-      const parsed = parseInt(args.imageWidth ?? "", 10) || 1200;
+      const objectNumber = args["Object Number"];
+      const parsed = parseInt(args["Image Size"] ?? "", 10) || 1200;
       const width = Math.min(Math.max(parsed, 200), 2000);
 
       let object: Awaited<ReturnType<typeof api.findByObjectNumber>>["object"];
       try {
-        ({ object } = await api.findByObjectNumber(args.objectNumber));
+        ({ object } = await api.findByObjectNumber(objectNumber));
       } catch {
         return {
           messages: [
@@ -1578,7 +1579,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
               role: "user",
               content: {
                 type: "text",
-                text: `Artwork ${args.objectNumber} could not be found.`,
+                text: `Artwork ${objectNumber} could not be found.`,
               },
             },
           ],
@@ -1594,7 +1595,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
               role: "user",
               content: {
                 type: "text",
-                text: `No image is available for artwork ${args.objectNumber}.`,
+                text: `No image is available for artwork ${objectNumber}.`,
               },
             },
           ],
@@ -1611,7 +1612,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
               role: "user",
               content: {
                 type: "text",
-                text: `Image could not be fetched for artwork ${args.objectNumber}. The IIIF server may be temporarily unavailable.`,
+                text: `Image could not be fetched for artwork ${objectNumber}. The IIIF server may be temporarily unavailable.`,
               },
             },
           ],
@@ -1621,7 +1622,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
       const title = RijksmuseumApiClient.parseTitle(object);
       const creator = RijksmuseumApiClient.parseCreator(object);
       const date = RijksmuseumApiClient.parseDate(object);
-      const caption = `"${title}" by ${creator}${date ? ` (${date})` : ""} — ${args.objectNumber}`;
+      const caption = `"${title}" by ${creator}${date ? ` (${date})` : ""} — ${objectNumber}`;
 
       return {
         messages: [
@@ -1645,7 +1646,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
                 `- Read any visible text, inscriptions, or signatures\n` +
                 `- Identify artistic technique, style, or period\n` +
                 `- Compare with other artworks in the conversation\n\n` +
-                `Use get_artwork_details(objectNumber: "${args.objectNumber}") for full metadata ` +
+                `Use get_artwork_details(objectNumber: "${objectNumber}") for full metadata ` +
                 `(description, materials, provenance, curatorial narrative, etc.).`,
             },
           },

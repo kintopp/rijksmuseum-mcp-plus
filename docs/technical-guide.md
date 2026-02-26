@@ -75,7 +75,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 | Prompt / Resource | Description |
 |---|---|
-| `analyse-artwork` | Share an artwork image with the AI so it can see and discuss it. The image is fetched server-side (via IIIF) and returned as base64 directly in the conversation. Use `get_artwork_details` for full metadata if needed. |
+| `analyse-artwork` | Share an image of an artwork with the AI assistant so that it can see and analyse it. The image is fetched server-side (via IIIF) and returned as base64 directly in the conversation. Use `get_artwork_details` for full metadata if needed. |
 | `generate-artist-timeline` | Prompt: generate a chronological timeline of an artist's works in the collection. Default 25 works, max 100 — for prolific artists this is a small sample. |
 | `ui://rijksmuseum/artwork-viewer.html` | Resource: interactive IIIF deep-zoom viewer for Rijksmuseum artworks (MCP Apps) |
 
