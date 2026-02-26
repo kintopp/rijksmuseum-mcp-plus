@@ -414,6 +414,8 @@ function registerTools(
       title: "Search Artwork",
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
+        "Results are in cataloguing order, not ranked by relevance or importance — " +
+        "for relevance-ranked results, use semantic_search instead. " +
         "At least one search filter is required. " +
         "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
         "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), " +
@@ -750,8 +752,11 @@ function registerTools(
         const header = `${result.results.length} results` +
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
           ` (vocabulary search)`;
+        const truncationNote = result.totalResults != null && result.totalResults > result.results.length
+          ? "\nNote: results are in catalogue order, not ranked by relevance. Add filters to narrow the set, or use semantic_search for concept-ranked results."
+          : "";
         const lines = result.results.map((r, i) => formatSearchLine(r, i));
-        return structuredResponse(result, [header, ...lines].join("\n"));
+        return structuredResponse(result, [header, ...lines].join("\n") + truncationNote);
       }
 
       // Default: use Search API
@@ -779,11 +784,15 @@ function registerTools(
         return structuredResponse(withWarnings, "0 results");
       }
 
+      const resultCount = "results" in result ? result.results.length : (result.ids?.length ?? 0);
       const header = `${result.totalResults} results` +
         (args.creator ? ` for creator "${args.creator}"` : '') +
         (result.nextPageToken ? ` (page token: ${result.nextPageToken})` : '');
+      const truncationNote = result.totalResults > resultCount && resultCount > 0
+        ? "\nNote: results are not ranked by relevance. Use nextPageToken to see more, add filters to narrow, or use semantic_search for concept-ranked results."
+        : "";
       const lines = ("results" in result ? result.results : []).map((r, i) => formatSearchLine(r, i));
-      return structuredResponse(result, [header, ...lines].join("\n"));
+      return structuredResponse(result, [header, ...lines].join("\n") + truncationNote);
     })
   );
 
