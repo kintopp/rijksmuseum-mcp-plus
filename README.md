@@ -34,12 +34,11 @@ After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to y
 "Show me artworks depicting places near the Oude Kerk in Amsterdam"  
 "What works have the iconclass code for fabulous animals?"  
 "Which artworks have a provenance linked to Napoleon?"  
-"What are the museum's most popular pieces?"  
+"What are the 'top ten' works in the Rijksmuseum?"  
 "Are there any prints made after paintings by other artists?"  
 "I'm looking for artworks with inscriptions mentioning 'luctor et emergo'"  
-"Which paintings are wider than 300 centimeters?"  
 "Show me sculptures in the collection by artists born in Leiden"  
-"What was the first work that entered the museum's collection?"  
+"Which paintings are wider than 3 meters?"  
 
 Note: This README is an **incomplete draft**.
 

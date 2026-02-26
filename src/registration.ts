@@ -579,7 +579,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on inscription texts (~500K artworks — signatures, mottoes, dates on the object surface, not conceptual content). " +
-                  "Exact word matching, no stemming. E.g. 'Rembrandt f.' for signed works, Latin phrases. Requires vocabulary DB v1.0+."
+                  "Exact word matching, no stemming. E.g. 'Rembrandt f.' for signed works, Latin phrases. Requires vocabulary DB."
                 ),
               provenance: z
                 .string()
@@ -587,7 +587,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on provenance/ownership history (e.g. 'Six' for the Six collection). " +
-                  "Exact word matching, no stemming. Requires vocabulary DB v1.0+."
+                  "Exact word matching, no stemming. Requires vocabulary DB."
                 ),
               creditLine: z
                 .string()
@@ -595,7 +595,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on credit/donor lines (e.g. 'Drucker' for Drucker-Fraser bequest). " +
-                  "Exact word matching, no stemming. Requires vocabulary DB v1.0+."
+                  "Exact word matching, no stemming. Requires vocabulary DB."
                 ),
               curatorialNarrative: z
                 .string()
@@ -605,39 +605,40 @@ function registerTools(
                   "Full-text search on curatorial narrative (~14K artworks with museum wall text). " +
                   "Best for art-historical interpretation, exhibition context, and scholarly commentary — " +
                   "content written by curators that goes beyond what structured vocabulary captures. " +
-                  "Exact word matching, no stemming. For broad concept searches, start with subject instead. Requires vocabulary DB v1.0+."
+                  "Exact word matching, no stemming. For broad concept searches, start with subject instead. Requires vocabulary DB."
                 ),
               productionRole: z
                 .string()
                 .min(1)
                 .optional()
                 .describe(
-                  "Search by production role (e.g. 'painter', 'printmaker', 'attributed to'). " +
-                  "Requires vocabulary DB v1.0+."
+                  "Search by production role (e.g. 'painter', 'printmaker', 'after painting by'). " +
+                  "Covers craft roles and relational attribution, NOT attribution qualifiers " +
+                  "(workshop of, follower of, circle of — these are not indexed). Requires vocabulary DB."
                 ),
               minHeight: z
                 .number()
                 .optional()
                 .describe(
-                  "Minimum height in centimeters. Requires vocabulary DB v1.0+."
+                  "Minimum height in centimeters. Requires vocabulary DB."
                 ),
               maxHeight: z
                 .number()
                 .optional()
                 .describe(
-                  "Maximum height in centimeters. Requires vocabulary DB v1.0+."
+                  "Maximum height in centimeters. Requires vocabulary DB."
                 ),
               minWidth: z
                 .number()
                 .optional()
                 .describe(
-                  "Minimum width in centimeters. Requires vocabulary DB v1.0+."
+                  "Minimum width in centimeters. Requires vocabulary DB."
                 ),
               maxWidth: z
                 .number()
                 .optional()
                 .describe(
-                  "Maximum width in centimeters. Requires vocabulary DB v1.0+."
+                  "Maximum width in centimeters. Requires vocabulary DB."
                 ),
               nearPlace: z
                 .string()

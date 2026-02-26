@@ -23,6 +23,10 @@ search_artwork	{"provenance": "Napoleon"}
 search_artwork	{"productionRole": "after painting by"}
 search_artwork	{"creditLine": "bequest"}
 search_artwork	{"nearPlace": "Oude Kerk Amsterdam", "nearPlaceRadius": 0.1}
+lookup_iconclass	{"query": "fabulous animals"}
+search_artwork	{"inscription": "luctor et emergo"}
+search_artwork	{"type": "painting", "minWidth": 300}
+search_artwork	{"type": "sculpture", "birthPlace": "Leiden"}
 list_curated_sets	{}
 
 # ===================================================================
