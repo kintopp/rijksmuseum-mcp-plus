@@ -34,9 +34,9 @@ Note for developers: rijksmuseum-mcp+ can also be run as a local MCP server in S
 
 After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, verify that everything is working correctly by asking your AI assistant to confirm its access: 
 
-"What MCP tools can you access to search the collections of the Rijksmuseum?"
+"Which MCP tools can you access to search the Rijksmuseum?"
 
-This will give you a list of the different tools by rijksmuseum-mcp+ to query and retrieve metadata. After that, ask your own questions! For example:
+This will give you a list of the different tools provided by the rijksmuseum-mcp+ connector. After that, ask your own questions! For example:
 
 "What artworks evoke vanitas and mortality?"  
 "Show me artworks depicting places near the Oude Kerk in Amsterdam"  
