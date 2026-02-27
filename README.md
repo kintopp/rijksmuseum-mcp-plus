@@ -4,11 +4,11 @@
 
 Note: This README is an **incomplete draft**.
 
-**rijksmuseum-mcp+** allows you to explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). 
+**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). 
 
-It allows you to find artworks using the same (with three minor exceptions) filters provided by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, it also offers access to five full-text corpora (`description`, `inscription`, `provenance`, `creditLine`, and `curatorialNarrative`) and [Iconclass](https://iconclass.org), all of which can be searched by keyword or semantically by concept/meaning, as well as additional metadata including the spatial (`nearPlace`) and physical (`minWidth`/`maxHeight`) dimensions. 
+You can find artworks using the same (with minor exceptions) filters provided by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, it also offers access to five full-text corpora (`description`, `inscription`, `provenance`, `creditLine`, and `curatorialNarrative`) and [Iconclass](https://iconclass.org), all of which can be searched by keyword or semantically by concept/meaning, as well as additional metadata including spatial (`nearPlace`) and physical (`minWidth`/`maxHeight`) dimensions. 
 
-Images from the museum's collections can be viewed directly inside your chat conversations and you can ask the AI assistant to analyse the content of an image in conjunction with its curated metadata. Finally, because much of the data provided by rijksmuseum-mcp+ is already in structured form, it's possible for your AI assistant to use these for follow-up tasks, such as visualizations or other analyses.
+Images from the museum's collections can be viewed directly inside your chat. You can also ask the AI assistant to retrieve images from the collection and analyse their content in conjunction with their curated metadata. Finally, because much of the data provided by rijksmuseum-mcp+ is already in structured form, it's possible for your AI assistent to use these for follow-up tasks, such as visualizations or other analyses.
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
@@ -24,7 +24,7 @@ Goto Settings → Connectors → Add custom connector → Name it whatever you l
 
 Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it is also compatible with many other browser based chatbots including those whose large language models (LLMs) can be used without a paid subscription. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example. It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/).
 
-In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready. Moreover, the ability the view images inline in the chat in an interactive viewer is dependent on a [very recent extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) of the MCP standard and is currently (March, 2026) only supported by Anthropic in its products.
+In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready. Moreover, the ability the view images inline in the chat in an interactive viewer is depedent on a [very recent extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) of the MCP standard and is currently (March, 2026) only supported by Anthropic in its products.
 
 For all of these reasons, [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) will continue to be the best choice for most users on account of its excellent support of the underlying MCP standard and its tight integration with Anthropic's large language models. For best results, I recommend using rijksmuseum-mcp+ with an Anthropic 'Pro' subscription and the current [Claude Sonnet] model with 'extended thinking' turned on. 
 
@@ -34,7 +34,7 @@ Note for developers: rijksmuseum-mcp+ can also be run as a local MCP server in S
 
 After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, verify that everything is working correctly by asking your AI assistant to confirm its access: 
 
-"What MCP tools can you access to search the collections of the Rijksmuseum?"
+"What MCP tools can you acces to search the collections of the Rijksmuseum?"
 
 This will give you a list of the different tools by rijksmuseum-mcp+ to query and retrieve metadata. After that, ask your own questions! For example:
 
