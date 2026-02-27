@@ -4,7 +4,7 @@
 
 Note: This README is an **incomplete draft**.
 
-**Viewing images is currently broken** (27.02.26)
+`***Viewing images is temporarily broken*** (27.02.26)`
 
 **rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). 
 
