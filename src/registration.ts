@@ -1066,6 +1066,11 @@ function registerTools(
         "- Bottom-right quarter: pct:50,50,50,50\n" +
         "- Center strip: pct:25,25,50,50\n" +
         "- Full image: full (default)\n\n" +
+        "Best practice for overlay placement: ALWAYS inspect before overlaying. " +
+        "Start with region 'full' to understand the layout, then use close-up crops (600–800px) " +
+        "to pinpoint specific features before calling navigate_viewer with add_overlay. " +
+        "This two-pass approach (broad inspect → close-up verify → overlay) produces " +
+        "accurate placements; estimating coordinates without inspection leads to offset errors.\n\n" +
         "Optionally, use navigate_viewer afterwards to zoom the viewer or add labeled " +
         "overlays highlighting regions of interest for the user.",
       inputSchema: z.object({
@@ -1197,7 +1202,13 @@ function registerTools(
         "Navigate the artwork viewer to a specific region and/or add visual overlays. " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
         "Can be used after inspect_artwork_image to show the user what you found. " +
-        "Commands execute in order: typically clear_overlays → navigate → add_overlay.",
+        "Commands execute in order: typically clear_overlays → navigate → add_overlay.\n\n" +
+        "All region coordinates are in full-image space (percentages or pixels of the original image), " +
+        "not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image " +
+        "will target the identical area in the viewer.\n\n" +
+        "For accurate overlay placement: inspect the target area with inspect_artwork_image first, " +
+        "verify the region contains what you expect, then use the same or refined coordinates here. " +
+        "Do not estimate overlay positions from memory — always inspect first.",
       inputSchema: z.object({
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
         commands: z.array(z.object({

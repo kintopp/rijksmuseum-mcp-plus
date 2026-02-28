@@ -284,7 +284,10 @@ function createServer(httpPort?: number): McpServer {
         "Images are served via IIIF deep-zoom. get_artwork_image opens an interactive viewer (metadata + viewer link, no image bytes). " +
         "To get actual image bytes for visual analysis, use inspect_artwork_image — it returns base64 image data that the LLM can see directly. " +
         "Call it with region 'full' for the complete artwork, or 'pct:x,y,w,h' to zoom into a specific area. " +
-        "After analyzing a crop, you can call navigate_viewer with the same region to zoom the viewer for the user.\n\n" +
+        "After analyzing a crop, you can call navigate_viewer with the same region to zoom the viewer for the user. " +
+        "For overlay placement, always inspect before overlaying: full image first to understand layout, " +
+        "then close-up crops to verify target positions. Coordinates use full-image space — the same " +
+        "pct:x,y,w,h works identically in both inspect_artwork_image and navigate_viewer.\n\n" +
 
         "Person names are matched against 210K name variants (76K persons) using phrase matching with fallback " +
         "to token intersection — partial names and historical variants often work. " +

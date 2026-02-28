@@ -517,13 +517,13 @@ function iiifRegionToViewportRect(region: string): OpenSeadragon.Rect | null {
   const pctMatch = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
   if (pctMatch) {
     const [, px, py, pw, ph] = pctMatch.map(Number);
-    // OSD viewport: width normalized to 1.0, height scaled by aspect ratio
-    return new OpenSeadragon.Rect(
-      px / 100,
-      (py / 100) * (height / width),
-      pw / 100,
-      (ph / 100) * (height / width)
-    );
+    // Convert IIIF percentages to pixel coordinates, then use OSD's internal conversion
+    return viewer.viewport.imageToViewportRectangle(new OpenSeadragon.Rect(
+      (px / 100) * width,
+      (py / 100) * height,
+      (pw / 100) * width,
+      (ph / 100) * height
+    ));
   }
 
   const pxMatch = region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
