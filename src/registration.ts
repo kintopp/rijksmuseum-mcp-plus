@@ -17,6 +17,7 @@ import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { SystemIntegration } from "./utils/SystemIntegration.js";
+import type { SearchParams } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -191,7 +192,7 @@ const SearchResultOutput = {
     distance_km: z.number().optional(),
   })).optional().describe("Artwork summaries. Absent when compact=true."),
   ids: z.array(z.string()).optional().describe("Artwork URIs (compact mode only)."),
-  source: z.enum(["search_api", "vocabulary"]).optional(),
+  source: z.enum(["search_api", "vocabulary", "aboutActor-fallback"]).optional(),
   referencePlace: z.string().optional(),
   nextPageToken: z.string().optional(),
   warnings: z.array(z.string()).optional(),
@@ -458,7 +459,11 @@ function registerTools(
           .optional()
           .describe(
             "Search for artworks depicting or about a person (not the creator). E.g. 'Willem van Oranje'. " +
-            "Uses the Search API. Cannot be combined with vocabulary filters."
+            "Broader recall than depictedPerson — tolerant of cross-language name forms " +
+            "(e.g. 'Louis XIV' finds 'Lodewijk XIV') and fuzzy name matching, but not combinable " +
+            "with vocabulary filters (subject, depictedPlace, etc.). Uses the Search API. " +
+            "depictedPerson is usually the better first choice (precise, combinable, with automatic " +
+            "aboutActor fallback on 0 results); use aboutActor directly only for standalone broad person searches."
           ),
         type: z
           .string()
@@ -519,7 +524,9 @@ function registerTools(
                 .min(1)
                 .optional()
                 .describe(
-                  "Search for artworks depicting a specific person by name (e.g. 'Willem van Oranje'). Requires vocabulary DB."
+                  "Search for artworks depicting a specific person by name (e.g. 'Willem van Oranje'). " +
+                  "Matches against 210K name variants including historical forms. Combinable with all vocabulary filters. " +
+                  "Falls back to aboutActor (Search API) automatically when no results are found. Requires vocabulary DB."
                 ),
               depictedPlace: z
                 .string()
@@ -748,6 +755,54 @@ function registerTools(
             ...(result.warnings || []),
             `The following filters are not supported in vocabulary searches and were ignored: ${droppedKeys.join(", ")}.`
           ];
+        }
+
+        // Auto-fallback: depictedPerson 0 results → retry via aboutActor on Search API (#22)
+        // Only when depictedPerson is the sole vocab-only filter (other filters may have
+        // legitimately caused the 0 — retrying without them would give misleading results).
+        if (result.results.length === 0 && argsRecord.depictedPerson) {
+          const searchApiKeys = ["type", "material", "technique", "creationDate", "creator", "description"] as const;
+          const vocabOnlyKeys = vocabParamKeys.filter(
+            k => k !== "depictedPerson" && k !== "title" && !(searchApiKeys as readonly string[]).includes(k) && argsRecord[k] !== undefined
+          );
+
+          if (vocabOnlyKeys.length === 0) {
+            const fallbackParams: SearchParams = {
+              aboutActor: argsRecord.depictedPerson as string,
+              maxResults: args.maxResults,
+            };
+            // Forward Search API-compatible filters
+            for (const k of searchApiKeys) {
+              if (argsRecord[k] !== undefined) (fallbackParams as any)[k] = argsRecord[k];
+            }
+            // Forward query (title search on the Search API path)
+            if (argsRecord["query"]) fallbackParams.query = argsRecord["query"] as string;
+
+            const fallbackResult = await api.searchAndResolve(fallbackParams);
+
+            if (fallbackResult.totalResults > 0) {
+              // Enrich with object types from vocab DB
+              if (vocabDb) {
+                const typeMap = vocabDb.lookupTypes(fallbackResult.results.map(r => r.objectNumber));
+                for (const r of fallbackResult.results) {
+                  if (!r.type) r.type = typeMap.get(r.objectNumber);
+                }
+              }
+
+              const enriched = {
+                ...fallbackResult,
+                source: "aboutActor-fallback" as const,
+                warnings: [
+                  `depictedPerson:"${argsRecord.depictedPerson}" matched no results in the vocabulary database. ` +
+                  `Showing ${fallbackResult.totalResults} results via aboutActor (Search API) instead.`,
+                ],
+              };
+
+              const header = `${fallbackResult.results.length} results of ${fallbackResult.totalResults} total (aboutActor fallback)`;
+              const lines = fallbackResult.results.map((r, i) => formatSearchLine(r, i));
+              return structuredResponse(enriched, [header, ...lines].join("\n"));
+            }
+          }
         }
 
         const header = `${result.results.length} results` +

@@ -286,7 +286,8 @@ function createServer(httpPort?: number): McpServer {
         "use the analyse-artwork prompt, which fetches it server-side as base64.\n\n" +
 
         "Person names are matched against 210K name variants (76K persons) using phrase matching with fallback " +
-        "to token intersection — partial names and historical variants often work.\n\n" +
+        "to token intersection — partial names and historical variants often work. " +
+        "When depictedPerson returns no results, the server automatically retries via aboutActor (Search API) for broader matching.\n\n" +
 
         "Place searches support proximity (nearPlace), depicted places, and production places. " +
         "64% of places are geocoded. Multi-word queries like 'Oude Kerk Amsterdam' are resolved " +
