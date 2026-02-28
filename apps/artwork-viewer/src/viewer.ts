@@ -282,7 +282,7 @@ function initializeViewer(iiifInfoUrl: string): void {
   viewer = OpenSeadragon({
     element: container,
     prefixUrl:
-      'https://cdn.jsdelivr.net/npm/openseadragon@6/build/openseadragon/images/',
+      'https://cdn.jsdelivr.net/npm/openseadragon@6.0.1/build/openseadragon/images/',
     tileSources: iiifInfoUrl,
     crossOriginPolicy: 'Anonymous' as const,
     showNavigationControl: false,
