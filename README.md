@@ -6,9 +6,7 @@
 
 You can explore artworks using the same (with minor exceptions) filters provided by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ offers access to five full-text corpora (`description`, `inscription`, `provenance`, `creditLine`, and `curatorialNarrative`) not directly accessible from the museum's website and [Iconclass](https://iconclass.org), all of which can be searched by keyword or semantically by concept/meaning as well as additional metadata fields including spatial (`nearPlace`) and physical (`minWidth`/`maxHeight`) dimensions. 
 
-Artworks from the museum's collections can be viewed directly inside your chat — it will show these in an interactive viewer. You can also ask the AI assistant to retrieve an image, analyse its content, zoom in to a specific region and highlight areas of interest in the artwork. Finally, because much of the data provided by rijksmuseum-mcp+ is already in structured form, it's straightforward for your AI assistant to use these for follow-up tasks, such as visualizations or other analyses.
-
-to be added - introspection
+Artworks from the museum's collections can be viewed directly inside your chat — it will show these in an interactive viewer. You can also ask the AI assistant to retrieve an image, analyse its content, zoom in to a specific region and highlight areas of interest. Finally, because much of the data provided by rijksmuseum-mcp+ is already in structured form, it's straightforward for your AI assistant to use these for follow-up tasks, such as visualizations or other analyses.
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
@@ -34,7 +32,9 @@ For developers: rijksmuseum-mcp+ can also be run as a local MCP server in STDIO 
 
 ### Sample Questions
 
-After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you access to search the Rijksmuseum?". After that, ask your own questions. For example:
+After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you access to search the Rijksmuseum?". 
+
+After that, ask your own questions. For example:
 
 "What artworks evoke vanitas and mortality?"  
 "Show me artworks depicting places near the Oude Kerk in Amsterdam"  
@@ -43,8 +43,8 @@ After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to y
 "What are the 'top ten' works in the Rijksmuseum?"  
 "I'm looking for artworks with inscriptions mentioning 'luctor et emergo'"  
 "Show me sculptures in the collection by artists born in Leiden"  
-"Which paintings are wider than 3 meters?"
-"Which classical elements of an Annunciation are visible in this painting?"
+"Which paintings are wider than 3 meters?"  
+"Someone seems to have taken a tumble in SK-A-1718. Can you show me where?"
 
 ### How it works
 
