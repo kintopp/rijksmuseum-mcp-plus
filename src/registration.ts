@@ -1119,14 +1119,18 @@ function registerTools(
         return cropError("No image available for this artwork");
       }
 
-      // Clamp size to region width — iiif.micr.io rejects upscaling
+      // Clamp size to region width — iiif.micr.io rejects upscaling.
+      // For pct: regions, the IIIF server computes pixel bounds as
+      // ceil(start) / floor(end), which can yield a region 1-2px narrower
+      // than our floor(width * pct/100) estimate. Subtract 1 to avoid
+      // hitting the exact boundary.
       let effectiveSize = args.size;
       if (imageInfo.width) {
         let regionWidth = imageInfo.width;
         const pctMatch = args.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
         const pxMatch = args.region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
         if (pctMatch) {
-          regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100);
+          regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 1;
         } else if (pxMatch) {
           regionWidth = parseInt(pxMatch[3]);
         } else if (args.region === "square") {
