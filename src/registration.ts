@@ -1068,14 +1068,17 @@ function registerTools(
       ...withOutputSchema(CropImageOutput),
     },
     withLogging("crop_artwork_image", async (args) => {
-      const cropError = (error: string) => structuredResponse({
-        objectNumber: args.objectNumber,
-        region: args.region,
-        requestedSize: args.size,
-        rotation: args.rotation,
-        quality: args.quality,
-        error,
-      }, error);
+      const cropError = (error: string) => ({
+        ...structuredResponse({
+          objectNumber: args.objectNumber,
+          region: args.region,
+          requestedSize: args.size,
+          rotation: args.rotation,
+          quality: args.quality,
+          error,
+        }, error),
+        isError: true as const,
+      });
 
       const { object } = await api.findByObjectNumber(args.objectNumber);
       const imageInfo = await api.getImageInfo(object);
@@ -1084,13 +1087,30 @@ function registerTools(
         return cropError("No image available for this artwork");
       }
 
+      // Clamp size to region width — iiif.micr.io rejects upscaling
+      let effectiveSize = args.size;
+      if (imageInfo.width) {
+        let regionWidth = imageInfo.width;
+        const pctMatch = args.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+        const pxMatch = args.region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
+        if (pctMatch) {
+          regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100);
+        } else if (pxMatch) {
+          regionWidth = parseInt(pxMatch[3]);
+        } else if (args.region === "square") {
+          regionWidth = Math.min(imageInfo.width, imageInfo.height ?? imageInfo.width);
+        }
+        // region === "full" keeps regionWidth = imageInfo.width
+        if (effectiveSize > regionWidth) effectiveSize = regionWidth;
+      }
+
       let base64: string;
       let mimeType: string;
       try {
         ({ data: base64, mimeType } = await api.fetchRegionBase64(
           imageInfo.iiifId,
           args.region,
-          args.size,
+          effectiveSize,
           args.rotation,
           args.quality,
         ));
@@ -1102,7 +1122,8 @@ function registerTools(
       const title = RijksmuseumApiClient.parseTitle(object);
       const creator = RijksmuseumApiClient.parseCreator(object);
       const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
-      const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${args.size}px)`;
+      const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
+      const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${effectiveSize}px${sizeNote})`;
 
       const content = [
         { type: "image" as const, data: base64, mimeType },
@@ -1115,7 +1136,7 @@ function registerTools(
         structuredContent: {
           objectNumber: args.objectNumber,
           region: args.region,
-          requestedSize: args.size,
+          requestedSize: effectiveSize,
           nativeWidth: imageInfo.width,
           nativeHeight: imageInfo.height,
           rotation: args.rotation,
