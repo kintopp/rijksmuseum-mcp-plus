@@ -387,6 +387,33 @@ const CuratedSetsOutput = {
   error: z.string().optional(),
 };
 
+// ─── Shared IIIF region validation ───────────────────────────────────
+
+const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+)$/;
+
+// ─── Viewer command queue (module-scoped — survives across HTTP requests) ─
+
+interface ViewerCommand {
+  action: "navigate" | "add_overlay" | "clear_overlays";
+  region?: string;
+  label?: string;
+  color?: string;
+}
+interface ViewerQueue {
+  commands: ViewerCommand[];
+  createdAt: number;
+  lastAccess: number;
+}
+const viewerQueues = new Map<string, ViewerQueue>();
+
+// Sweep stale queues every 60s (viewers that disconnected without teardown)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, q] of viewerQueues) {
+    if (now - q.lastAccess > 120_000) viewerQueues.delete(id);
+  }
+}, 60_000).unref();
+
 // ─── Tools ──────────────────────────────────────────────────────────
 
 function registerTools(
@@ -400,31 +427,6 @@ function registerTools(
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>
 ): void {
-  // ── Shared IIIF region validation ─────────────────────────────────
-  const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+)$/;
-
-  // ── Viewer command queue (navigate_viewer → poll_viewer_commands) ──
-  interface ViewerCommand {
-    action: "navigate" | "add_overlay" | "clear_overlays";
-    region?: string;
-    label?: string;
-    color?: string;
-  }
-  interface ViewerQueue {
-    commands: ViewerCommand[];
-    createdAt: number;
-    lastAccess: number;
-  }
-  const viewerQueues = new Map<string, ViewerQueue>();
-
-  // Sweep stale queues every 60s (viewers that disconnected without teardown)
-  setInterval(() => {
-    const now = Date.now();
-    for (const [id, q] of viewerQueues) {
-      if (now - q.lastAccess > 120_000) viewerQueues.delete(id);
-    }
-  }, 60_000);
-
   // ── search_artwork ──────────────────────────────────────────────
 
   // Vocabulary-backed search params (require vocabulary DB)

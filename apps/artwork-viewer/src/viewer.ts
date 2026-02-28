@@ -593,9 +593,16 @@ async function pollForCommands(): Promise<void> {
     });
     if (result.isError) return;
     const data = result.structuredContent as { commands?: ViewerCommand[] } | undefined;
-    const textContent = result.content?.find((b: { type: string }) => b.type === 'text') as { text: string } | undefined;
-    const commands = data?.commands ?? (textContent ? JSON.parse(textContent.text).commands : []);
-    if (commands?.length) processCommands(commands);
+    let commands: ViewerCommand[] = [];
+    if (data?.commands) {
+      commands = data.commands;
+    } else {
+      const textContent = result.content?.find((b: { type: string }) => b.type === 'text') as { text: string } | undefined;
+      if (textContent) {
+        try { commands = JSON.parse(textContent.text)?.commands ?? []; } catch { /* not JSON */ }
+      }
+    }
+    if (commands.length) processCommands(commands);
   } catch { /* retry next interval */ }
 }
 
@@ -661,7 +668,9 @@ function addRegionOverlay(region: string, label?: string, color?: string): void 
   el.className = 'region-overlay';
   const c = color || 'rgba(255,100,0,0.7)';
   el.style.border = `2px solid ${c}`;
-  el.style.background = c.replace(/[0-9.]+\)$/, '0.1)');
+  // Derive low-opacity fill from rgba colors; use fixed fallback for named/hex colors
+  const rgbaMatch = c.match(/^(rgba?\([^)]+,\s*)[0-9.]+\)$/);
+  el.style.background = rgbaMatch ? `${rgbaMatch[1]}0.1)` : 'rgba(255,100,0,0.1)';
 
   if (label) {
     const labelEl = document.createElement('span');
