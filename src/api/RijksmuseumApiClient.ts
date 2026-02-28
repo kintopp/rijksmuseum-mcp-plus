@@ -224,7 +224,11 @@ export class RijksmuseumApiClient {
     quality: "default" | "gray" = "default",
   ): Promise<{ data: string; mimeType: string }> {
     const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/${region}/${size},/${rotation}/${quality}.jpg`;
-    const { data } = await this.http.get(url, { responseType: "arraybuffer" });
+    const { data } = await this.http.get(url, {
+      responseType: "arraybuffer",
+      headers: { Accept: "image/jpeg, image/*" },
+      timeout: 45_000,
+    });
     return { data: Buffer.from(data).toString("base64"), mimeType: "image/jpeg" };
   }
 

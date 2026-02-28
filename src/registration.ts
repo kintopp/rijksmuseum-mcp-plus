@@ -1044,7 +1044,11 @@ function registerTools(
         region: z
           .string()
           .default("full")
-          .describe("IIIF region: 'full', 'pct:x,y,w,h' (percentage), or 'x,y,w,h' (pixels). E.g. 'pct:0,60,40,40' for bottom-left 40%."),
+          .refine(
+            (v) => /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+)$/.test(v),
+            { message: "Invalid IIIF region. Use 'full', 'square', 'x,y,w,h' (pixels), or 'pct:x,y,w,h' (percentages)." }
+          )
+          .describe("IIIF region: 'full', 'square', 'pct:x,y,w,h' (percentage), or 'x,y,w,h' (pixels). E.g. 'pct:0,60,40,40' for bottom-left 40%."),
         size: z
           .number()
           .int()
@@ -1053,12 +1057,9 @@ function registerTools(
           .default(1200)
           .describe("Width of returned image in pixels (200-2000, default 1200)"),
         rotation: z
-          .number()
-          .int()
-          .min(0)
-          .max(360)
+          .union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)])
           .default(0)
-          .describe("Clockwise rotation in degrees (0, 90, 180, 270)"),
+          .describe("Clockwise rotation in degrees"),
         quality: z
           .enum(["default", "gray"])
           .default("default")
