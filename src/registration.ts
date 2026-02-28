@@ -9,6 +9,7 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
@@ -293,6 +294,7 @@ const ImageInfoOutput = {
   collectionUrl: z.string().optional(),
   iiifInfoUrl: z.string().optional(),
   viewerUrl: z.string().optional(),
+  viewUUID: z.string().optional().describe("Viewer session ID for use with navigate_viewer."),
   error: z.string().optional(),
 };
 
@@ -398,6 +400,31 @@ function registerTools(
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>
 ): void {
+  // ── Shared IIIF region validation ─────────────────────────────────
+  const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+)$/;
+
+  // ── Viewer command queue (navigate_viewer → poll_viewer_commands) ──
+  interface ViewerCommand {
+    action: "navigate" | "add_overlay" | "clear_overlays";
+    region?: string;
+    label?: string;
+    color?: string;
+  }
+  interface ViewerQueue {
+    commands: ViewerCommand[];
+    createdAt: number;
+    lastAccess: number;
+  }
+  const viewerQueues = new Map<string, ViewerQueue>();
+
+  // Sweep stale queues every 60s (viewers that disconnected without teardown)
+  setInterval(() => {
+    const now = Date.now();
+    for (const [id, q] of viewerQueues) {
+      if (now - q.lastAccess > 120_000) viewerQueues.delete(id);
+    }
+  }, 60_000);
+
   // ── search_artwork ──────────────────────────────────────────────
 
   // Vocabulary-backed search params (require vocabulary DB)
@@ -999,6 +1026,9 @@ function registerTools(
         imageInfo.viewerUrl = `${baseUrl}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
+      const viewUUID = randomUUID();
+      viewerQueues.set(viewUUID, { commands: [], createdAt: Date.now(), lastAccess: Date.now() });
+
       const { thumbnailUrl, iiifId, fullUrl, ...imageData } = imageInfo;
       const viewerData = {
         ...imageData,
@@ -1009,6 +1039,7 @@ function registerTools(
         license: RijksmuseumApiClient.parseLicense(object),
         physicalDimensions: RijksmuseumApiClient.parseDimensionStatement(object),
         collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
+        viewUUID,
       };
 
       return structuredResponse(viewerData);
@@ -1045,7 +1076,7 @@ function registerTools(
           .string()
           .default("full")
           .refine(
-            (v) => /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+)$/.test(v),
+            (v) => IIIF_REGION_RE.test(v),
             { message: "Invalid IIIF region. Use 'full', 'square', 'x,y,w,h' (pixels), or 'pct:x,y,w,h' (percentages)." }
           )
           .describe("IIIF region: 'full', 'square', 'pct:x,y,w,h' (percentage), or 'x,y,w,h' (pixels). E.g. 'pct:0,60,40,40' for bottom-left 40%."),
@@ -1144,6 +1175,100 @@ function registerTools(
         } as Record<string, unknown>,
       };
     })
+  );
+
+  // ── navigate_viewer ────────────────────────────────────────────
+
+  const NavigateViewerOutput = {
+    viewUUID: z.string(),
+    queued: z.number().int(),
+    error: z.string().optional(),
+  };
+
+  server.registerTool(
+    "navigate_viewer",
+    {
+      title: "Navigate Viewer",
+      description:
+        "Navigate the artwork viewer to a specific region and/or add visual overlays. " +
+        "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
+        "Use after crop_artwork_image to show the user what you found — reuse the same region string. " +
+        "Commands execute in order: typically clear_overlays → navigate → add_overlay.",
+      inputSchema: z.object({
+        viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
+        commands: z.array(z.object({
+          action: z.enum(["navigate", "add_overlay", "clear_overlays"]),
+          region: z.string().optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', or 'x,y,w,h'"),
+          label: z.string().optional().describe("Label text for add_overlay"),
+          color: z.string().optional().describe("CSS color for add_overlay border (default: orange)"),
+        })).min(1).describe("Commands to execute in the viewer, in order"),
+      }).strict(),
+      ...withOutputSchema(NavigateViewerOutput),
+    },
+    withLogging("navigate_viewer", async (args) => {
+      const queue = viewerQueues.get(args.viewUUID);
+      if (!queue) {
+        return {
+          ...structuredResponse({
+            viewUUID: args.viewUUID,
+            queued: 0,
+            error: "No active viewer for this UUID",
+          }, "No active viewer for this UUID — open an artwork with get_artwork_image first"),
+          isError: true as const,
+        };
+      }
+
+      // Validate region on commands that require it
+      for (const cmd of args.commands) {
+        if ((cmd.action === "navigate" || cmd.action === "add_overlay") && cmd.region) {
+          if (!IIIF_REGION_RE.test(cmd.region)) {
+            return {
+              ...structuredResponse({
+                viewUUID: args.viewUUID,
+                queued: 0,
+                error: `Invalid region '${cmd.region}'. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`,
+              }),
+              isError: true as const,
+            };
+          }
+        }
+      }
+
+      queue.commands.push(...args.commands);
+      queue.lastAccess = Date.now();
+
+      return structuredResponse({
+        viewUUID: args.viewUUID,
+        queued: args.commands.length,
+      });
+    })
+  );
+
+  // ── poll_viewer_commands (app-only) ───────────────────────────
+
+  registerAppTool(
+    server,
+    "poll_viewer_commands",
+    {
+      title: "Poll Viewer Commands",
+      description: "Internal: poll for pending viewer navigation commands",
+      inputSchema: z.object({
+        viewUUID: z.string(),
+      }).strict() as z.ZodTypeAny,
+      _meta: {
+        ui: {
+          resourceUri: ARTWORK_VIEWER_RESOURCE_URI,
+          visibility: ["app"],
+        },
+      },
+    },
+    async (args) => {
+      const queue = viewerQueues.get(args.viewUUID);
+      if (!queue) return structuredResponse({ commands: [] });
+      queue.lastAccess = Date.now();
+      const commands = queue.commands.splice(0);  // drain
+      return structuredResponse({ commands });
+    }
   );
 
   // ── get_artist_timeline ─────────────────────────────────────────

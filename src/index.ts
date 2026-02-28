@@ -284,6 +284,7 @@ function createServer(httpPort?: number): McpServer {
         "Images are served via IIIF deep-zoom. get_artwork_image opens an interactive viewer (metadata + viewer link, no image bytes). " +
         "To get actual image bytes for visual analysis, use crop_artwork_image — it returns base64 image data that the LLM can see directly. " +
         "Call it with region 'full' for the complete artwork, or 'pct:x,y,w,h' to zoom into a specific area. " +
+        "After analyzing a crop, call navigate_viewer with the same region to zoom the viewer for the user. " +
         "The analyse-artwork prompt also fetches image bytes (user-initiated).\n\n" +
 
         "Person names are matched against 210K name variants (76K persons) using phrase matching with fallback " +
