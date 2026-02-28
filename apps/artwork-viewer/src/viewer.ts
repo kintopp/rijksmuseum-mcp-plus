@@ -248,7 +248,6 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
-              <div class="shortcut-row"><kbd>d</kbd><span>Host diagnostics</span></div>
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
           </div>
@@ -405,9 +404,6 @@ function attachEventListeners(): void {
       case 'h':
         toggleFlip();
         break;
-      case 'd':
-        toggleDiagnostics();
-        break;
     }
   };
   document.addEventListener('keydown', keydownHandler);
@@ -442,120 +438,6 @@ function updateModelContext(data: ArtworkImageData): void {
   app.updateModelContext({
     content: [{ type: 'text', text: contextText }],
   });
-}
-
-// ── Diagnostics ─────────────────────────────────────────────────────
-
-function toggleDiagnostics(): void {
-  const existing = document.getElementById('diagnostics-overlay');
-  if (existing) {
-    existing.remove();
-    return;
-  }
-
-  const caps = app.getHostCapabilities();
-  const hostInfo = app.getHostVersion();
-  const context = app.getHostContext();
-
-  const lines: string[] = [
-    `<b>Host:</b> ${hostInfo?.name ?? 'unknown'} ${hostInfo?.version ?? ''}`,
-    `<b>Platform:</b> ${context?.platform ?? 'unknown'}`,
-    `<b>Display:</b> ${context?.displayMode ?? 'unknown'}`,
-    '',
-    '<b>Capabilities:</b>',
-  ];
-
-  if (!caps || Object.keys(caps).length === 0) {
-    lines.push('  (none reported)');
-  } else {
-    if (caps.serverTools) lines.push('  ✓ serverTools' + (caps.serverTools.listChanged ? ' (listChanged)' : ''));
-    else lines.push('  ✗ serverTools');
-
-    if (caps.message) lines.push('  ✓ message (' + Object.keys(caps.message).join(', ') + ')');
-    else lines.push('  ✗ message');
-
-    if (caps.updateModelContext) lines.push('  ✓ updateModelContext (' + Object.keys(caps.updateModelContext).join(', ') + ')');
-    else lines.push('  ✗ updateModelContext');
-
-    if (caps.openLinks) lines.push('  ✓ openLinks');
-    if (caps.logging) lines.push('  ✓ logging');
-    if (caps.serverResources) lines.push('  ✓ serverResources');
-  }
-
-  if (viewUUID) {
-    lines.push(`<b>viewUUID:</b> ${viewUUID}`);
-    lines.push(`<b>Polling:</b> ${pollTimer ? 'active' : 'inactive'}`);
-  }
-
-  if (context?.toolInfo) {
-    lines.push('', `<b>Tool:</b> ${context.toolInfo.tool.name}`);
-    if (context.toolInfo.id != null) lines.push(`<b>Tool call ID:</b> ${context.toolInfo.id}`);
-  }
-
-  // Probe callServerTool if supported
-  if (caps?.serverTools && currentData) {
-    lines.push('', '<b>callServerTool probe:</b> testing...');
-    renderDiagnosticsOverlay(lines);
-    probeCallServerTool(currentData.objectNumber);
-  } else {
-    if (!caps?.serverTools) lines.push('', '<i>callServerTool probe skipped (not supported)</i>');
-    else lines.push('', '<i>callServerTool probe skipped (no artwork loaded)</i>');
-    renderDiagnosticsOverlay(lines);
-  }
-}
-
-function renderDiagnosticsOverlay(lines: string[]): void {
-  let overlay = document.getElementById('diagnostics-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'diagnostics-overlay';
-    overlay.style.cssText = `
-      position: fixed; top: 8px; right: 8px; z-index: 10000;
-      background: var(--color-background-secondary, rgba(0,0,0,0.85));
-      color: var(--color-text-primary, #e0e0e0);
-      font-family: var(--font-mono, monospace); font-size: 11px;
-      padding: 12px 14px; border-radius: 6px; max-width: 360px;
-      line-height: 1.5; box-shadow: 0 2px 12px rgba(0,0,0,0.3);
-      cursor: pointer;
-    `;
-    overlay.title = 'Press d to dismiss';
-    overlay.addEventListener('click', () => overlay!.remove());
-    document.body.appendChild(overlay);
-  }
-  overlay.innerHTML = lines.join('<br>');
-}
-
-async function probeCallServerTool(objectNumber: string): Promise<void> {
-  const overlay = document.getElementById('diagnostics-overlay');
-  if (!overlay) return;
-
-  try {
-    // Call get_artwork_image with the current object number — a safe read-only tool
-    const t0 = performance.now();
-    const result = await app.callServerTool({
-      name: 'get_artwork_image',
-      arguments: { objectNumber },
-    });
-    const elapsed = Math.round(performance.now() - t0);
-
-    const ok = !result.isError && result.content && result.content.length > 0;
-    const status = ok
-      ? `✓ SUCCESS (${elapsed}ms)`
-      : `✗ returned isError (${elapsed}ms)`;
-
-    overlay.innerHTML = overlay.innerHTML.replace(
-      'testing...',
-      status
-    );
-    app.sendLog({ level: 'info', data: `callServerTool probe: ${status}` });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    overlay.innerHTML = overlay.innerHTML.replace(
-      'testing...',
-      `✗ FAILED: ${escapeHtml(msg)}`
-    );
-    app.sendLog({ level: 'warning', data: `callServerTool probe failed: ${msg}` });
-  }
 }
 
 // ── Viewer navigation (polling + overlays) ──────────────────────

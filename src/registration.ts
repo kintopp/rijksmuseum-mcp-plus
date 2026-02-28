@@ -1224,7 +1224,17 @@ function registerTools(
 
       // Validate region on commands that require it
       for (const cmd of args.commands) {
-        if ((cmd.action === "navigate" || cmd.action === "add_overlay") && cmd.region) {
+        if (cmd.action === "navigate" || cmd.action === "add_overlay") {
+          if (!cmd.region) {
+            return {
+              ...structuredResponse({
+                viewUUID: args.viewUUID,
+                queued: 0,
+                error: `'${cmd.action}' requires a region. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`,
+              }),
+              isError: true as const,
+            };
+          }
           if (!IIIF_REGION_RE.test(cmd.region)) {
             return {
               ...structuredResponse({
