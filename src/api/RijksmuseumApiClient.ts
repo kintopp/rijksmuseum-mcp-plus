@@ -227,7 +227,6 @@ export class RijksmuseumApiClient {
     const { data } = await this.http.get(url, {
       responseType: "arraybuffer",
       headers: { Accept: "image/jpeg, image/*" },
-      timeout: 45_000,
     });
     return { data: Buffer.from(data).toString("base64"), mimeType: "image/jpeg" };
   }
