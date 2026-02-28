@@ -1066,9 +1066,8 @@ function registerTools(
         "- Bottom-right quarter: pct:50,50,50,50\n" +
         "- Center strip: pct:25,25,50,50\n" +
         "- Full image: full (default)\n\n" +
-        "After inspecting, call navigate_viewer with the same region to show the user " +
-        "what you found. Multi-stage workflow: inspect with region 'full' first, " +
-        "then inspect specific regions, then navigate_viewer to highlight them.",
+        "Optionally, use navigate_viewer afterwards to zoom the viewer or add labeled " +
+        "overlays highlighting regions of interest for the user.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1197,7 +1196,7 @@ function registerTools(
       description:
         "Navigate the artwork viewer to a specific region and/or add visual overlays. " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
-        "Use after inspect_artwork_image to show the user what you found — pass the same region string. " +
+        "Can be used after inspect_artwork_image to show the user what you found. " +
         "Commands execute in order: typically clear_overlays → navigate → add_overlay.",
       inputSchema: z.object({
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
@@ -1876,115 +1875,6 @@ function registerAppViewerResource(server: McpServer): void {
 // ─── Prompts ────────────────────────────────────────────────────────
 
 function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
-  server.registerPrompt(
-    "analyse-artwork",
-    {
-      title: "Share Artwork with AI",
-      description:
-        "Share an image of an artwork with the AI assistant so that it can see and analyse it. You can click on the object number in the image viewer to copy it.",
-      argsSchema: {
-        "Object Number": z
-          .string()
-          .describe("The object number of the artwork (e.g. 'SK-C-5')"),
-        "Image Size": z
-          .string()
-          .optional()
-          .describe("Longest edge in pixels (default: 1200, max: 2000)"),
-      },
-    },
-    async (args) => {
-      const objectNumber = args["Object Number"];
-      const parsed = parseInt(args["Image Size"] ?? "", 10) || 1200;
-      const width = Math.min(Math.max(parsed, 200), 2000);
-
-      let object: Awaited<ReturnType<typeof api.findByObjectNumber>>["object"];
-      try {
-        ({ object } = await api.findByObjectNumber(objectNumber));
-      } catch {
-        return {
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `Artwork ${objectNumber} could not be found.`,
-              },
-            },
-          ],
-        };
-      }
-
-      const imageInfo = await api.getImageInfo(object, width);
-
-      if (!imageInfo) {
-        return {
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `No image is available for artwork ${objectNumber}.`,
-              },
-            },
-          ],
-        };
-      }
-
-      let base64: string;
-      try {
-        base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width, imageInfo.width, imageInfo.height);
-      } catch {
-        return {
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `Image could not be fetched for artwork ${objectNumber}. The IIIF server may be temporarily unavailable.`,
-              },
-            },
-          ],
-        };
-      }
-
-      const title = RijksmuseumApiClient.parseTitle(object);
-      const creator = RijksmuseumApiClient.parseCreator(object);
-      const date = RijksmuseumApiClient.parseDate(object);
-      const caption = `"${title}" by ${creator}${date ? ` (${date})` : ""} — ${objectNumber}`;
-
-      return {
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "image",
-              data: base64,
-              mimeType: "image/jpeg",
-            },
-          },
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text:
-                `${caption}\n` +
-                `Image: ${imageInfo.width}×${imageInfo.height}px (shown at ${width}px wide)\n\n` +
-                `The image is now in context. You could:\n` +
-                `- Describe what you see — composition, colours, figures, setting\n` +
-                `- Read any visible text, inscriptions, or signatures\n` +
-                `- Identify artistic technique, style, or period\n` +
-                `- Compare with other artworks in the conversation\n\n` +
-                `Use inspect_artwork_image(objectNumber: "${objectNumber}", region: "pct:x,y,w,h") ` +
-                `to zoom into a specific region for closer inspection.\n` +
-                `Use get_artwork_details(objectNumber: "${objectNumber}") for full metadata ` +
-                `(description, materials, provenance, curatorial narrative, etc.).`,
-            },
-          },
-        ],
-      };
-    }
-  );
-
   server.registerPrompt(
     "generate-artist-timeline",
     {
