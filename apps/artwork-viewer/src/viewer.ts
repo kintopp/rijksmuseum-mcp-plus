@@ -35,6 +35,7 @@ interface ArtworkImageData {
   license: string | null;
   physicalDimensions: string | null;
   collectionUrl: string;
+  viewUUID?: string;
 }
 
 // App state
@@ -45,6 +46,8 @@ let isFlipped = false;
 let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 let visibilityObserver: IntersectionObserver | null = null;
 let currentDisplayMode: 'inline' | 'fullscreen' | 'pip' = 'inline';
+let viewUUID: string | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 const app = new App(
   { name: 'Rijksmuseum Artwork Viewer', version: '1.0.0' },
@@ -100,6 +103,10 @@ app.ontoolresult = (result) => {
     currentData = data;
     renderViewer(data);
     updateModelContext(data);
+    if (data.viewUUID) {
+      viewUUID = data.viewUUID;
+      startPolling();
+    }
   } else {
     showError('No image available', 'Could not find IIIF image data in the tool result.');
   }
@@ -130,6 +137,7 @@ function applyHostContext(
 app.onhostcontextchanged = applyHostContext;
 
 app.onteardown = async () => {
+  stopPolling();
   const state: Record<string, unknown> = {};
   if (currentData) {
     state.objectNumber = currentData.objectNumber;
@@ -240,6 +248,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
+              <div class="shortcut-row"><kbd>d</kbd><span>Host diagnostics</span></div>
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
           </div>
@@ -396,6 +405,9 @@ function attachEventListeners(): void {
       case 'h':
         toggleFlip();
         break;
+      case 'd':
+        toggleDiagnostics();
+        break;
     }
   };
   document.addEventListener('keydown', keydownHandler);
@@ -430,6 +442,250 @@ function updateModelContext(data: ArtworkImageData): void {
   app.updateModelContext({
     content: [{ type: 'text', text: contextText }],
   });
+}
+
+// ── Diagnostics ─────────────────────────────────────────────────────
+
+function toggleDiagnostics(): void {
+  const existing = document.getElementById('diagnostics-overlay');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+
+  const caps = app.getHostCapabilities();
+  const hostInfo = app.getHostVersion();
+  const context = app.getHostContext();
+
+  const lines: string[] = [
+    `<b>Host:</b> ${hostInfo?.name ?? 'unknown'} ${hostInfo?.version ?? ''}`,
+    `<b>Platform:</b> ${context?.platform ?? 'unknown'}`,
+    `<b>Display:</b> ${context?.displayMode ?? 'unknown'}`,
+    '',
+    '<b>Capabilities:</b>',
+  ];
+
+  if (!caps || Object.keys(caps).length === 0) {
+    lines.push('  (none reported)');
+  } else {
+    if (caps.serverTools) lines.push('  ✓ serverTools' + (caps.serverTools.listChanged ? ' (listChanged)' : ''));
+    else lines.push('  ✗ serverTools');
+
+    if (caps.message) lines.push('  ✓ message (' + Object.keys(caps.message).join(', ') + ')');
+    else lines.push('  ✗ message');
+
+    if (caps.updateModelContext) lines.push('  ✓ updateModelContext (' + Object.keys(caps.updateModelContext).join(', ') + ')');
+    else lines.push('  ✗ updateModelContext');
+
+    if (caps.openLinks) lines.push('  ✓ openLinks');
+    if (caps.logging) lines.push('  ✓ logging');
+    if (caps.serverResources) lines.push('  ✓ serverResources');
+  }
+
+  if (viewUUID) {
+    lines.push(`<b>viewUUID:</b> ${viewUUID}`);
+    lines.push(`<b>Polling:</b> ${pollTimer ? 'active' : 'inactive'}`);
+  }
+
+  if (context?.toolInfo) {
+    lines.push('', `<b>Tool:</b> ${context.toolInfo.tool.name}`);
+    if (context.toolInfo.id != null) lines.push(`<b>Tool call ID:</b> ${context.toolInfo.id}`);
+  }
+
+  // Probe callServerTool if supported
+  if (caps?.serverTools && currentData) {
+    lines.push('', '<b>callServerTool probe:</b> testing...');
+    renderDiagnosticsOverlay(lines);
+    probeCallServerTool(currentData.objectNumber);
+  } else {
+    if (!caps?.serverTools) lines.push('', '<i>callServerTool probe skipped (not supported)</i>');
+    else lines.push('', '<i>callServerTool probe skipped (no artwork loaded)</i>');
+    renderDiagnosticsOverlay(lines);
+  }
+}
+
+function renderDiagnosticsOverlay(lines: string[]): void {
+  let overlay = document.getElementById('diagnostics-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'diagnostics-overlay';
+    overlay.style.cssText = `
+      position: fixed; top: 8px; right: 8px; z-index: 10000;
+      background: var(--color-background-secondary, rgba(0,0,0,0.85));
+      color: var(--color-text-primary, #e0e0e0);
+      font-family: var(--font-mono, monospace); font-size: 11px;
+      padding: 12px 14px; border-radius: 6px; max-width: 360px;
+      line-height: 1.5; box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+      cursor: pointer;
+    `;
+    overlay.title = 'Press d to dismiss';
+    overlay.addEventListener('click', () => overlay!.remove());
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = lines.join('<br>');
+}
+
+async function probeCallServerTool(objectNumber: string): Promise<void> {
+  const overlay = document.getElementById('diagnostics-overlay');
+  if (!overlay) return;
+
+  try {
+    // Call get_artwork_image with the current object number — a safe read-only tool
+    const t0 = performance.now();
+    const result = await app.callServerTool({
+      name: 'get_artwork_image',
+      arguments: { objectNumber },
+    });
+    const elapsed = Math.round(performance.now() - t0);
+
+    const ok = !result.isError && result.content && result.content.length > 0;
+    const status = ok
+      ? `✓ SUCCESS (${elapsed}ms)`
+      : `✗ returned isError (${elapsed}ms)`;
+
+    overlay.innerHTML = overlay.innerHTML.replace(
+      'testing...',
+      status
+    );
+    app.sendLog({ level: 'info', data: `callServerTool probe: ${status}` });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    overlay.innerHTML = overlay.innerHTML.replace(
+      'testing...',
+      `✗ FAILED: ${escapeHtml(msg)}`
+    );
+    app.sendLog({ level: 'warning', data: `callServerTool probe failed: ${msg}` });
+  }
+}
+
+// ── Viewer navigation (polling + overlays) ──────────────────────
+
+interface ViewerCommand {
+  action: 'navigate' | 'add_overlay' | 'clear_overlays';
+  region?: string;
+  label?: string;
+  color?: string;
+}
+
+const overlayElements: HTMLElement[] = [];
+
+function startPolling(): void {
+  stopPolling();
+  const caps = app.getHostCapabilities();
+  if (!caps?.serverTools) {
+    app.sendLog({ level: 'info', data: 'Polling skipped: serverTools not supported' });
+    return;
+  }
+  pollTimer = setInterval(pollForCommands, 500);
+  app.sendLog({ level: 'info', data: `Polling started for ${viewUUID}` });
+}
+
+function stopPolling(): void {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+async function pollForCommands(): Promise<void> {
+  if (!viewUUID) return;
+  try {
+    const result = await app.callServerTool({
+      name: 'poll_viewer_commands',
+      arguments: { viewUUID },
+    });
+    if (result.isError) return;
+    const data = result.structuredContent as { commands?: ViewerCommand[] } | undefined;
+    let commands: ViewerCommand[] = [];
+    if (data?.commands) {
+      commands = data.commands;
+    } else {
+      const textContent = result.content?.find((b: { type: string }) => b.type === 'text') as { text: string } | undefined;
+      if (textContent) {
+        try { commands = JSON.parse(textContent.text)?.commands ?? []; } catch { /* not JSON */ }
+      }
+    }
+    if (commands.length) processCommands(commands);
+  } catch { /* retry next interval */ }
+}
+
+function processCommands(commands: ViewerCommand[]): void {
+  for (const cmd of commands) {
+    switch (cmd.action) {
+      case 'navigate':
+        if (cmd.region) navigateToRegion(cmd.region);
+        break;
+      case 'add_overlay':
+        if (cmd.region) addRegionOverlay(cmd.region, cmd.label, cmd.color);
+        break;
+      case 'clear_overlays':
+        clearAllOverlays();
+        break;
+    }
+  }
+}
+
+function navigateToRegion(region: string): void {
+  if (region === 'full') { viewer?.viewport.goHome(); return; }
+  const rect = iiifRegionToViewportRect(region);
+  if (rect) viewer!.viewport.fitBounds(rect);
+}
+
+function iiifRegionToViewportRect(region: string): OpenSeadragon.Rect | null {
+  if (!viewer || !currentData) return null;
+  const { width, height } = currentData;
+
+  const pctMatch = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+  if (pctMatch) {
+    const [, px, py, pw, ph] = pctMatch.map(Number);
+    // OSD viewport: width normalized to 1.0, height scaled by aspect ratio
+    return new OpenSeadragon.Rect(
+      px / 100,
+      (py / 100) * (height / width),
+      pw / 100,
+      (ph / 100) * (height / width)
+    );
+  }
+
+  const pxMatch = region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
+  if (pxMatch) {
+    const [, x, y, w, h] = pxMatch.map(Number);
+    return viewer.viewport.imageToViewportRectangle(new OpenSeadragon.Rect(x, y, w, h));
+  }
+
+  if (region === 'square') {
+    const side = Math.min(width, height);
+    const sx = (width - side) / 2;
+    const sy = (height - side) / 2;
+    return viewer.viewport.imageToViewportRectangle(new OpenSeadragon.Rect(sx, sy, side, side));
+  }
+
+  return null;
+}
+
+function addRegionOverlay(region: string, label?: string, color?: string): void {
+  const rect = iiifRegionToViewportRect(region);
+  if (!rect || !viewer) return;
+
+  const el = document.createElement('div');
+  el.className = 'region-overlay';
+  const c = color || 'rgba(255,100,0,0.7)';
+  el.style.border = `2px solid ${c}`;
+  // Derive low-opacity fill from rgba colors; use fixed fallback for named/hex colors
+  const rgbaMatch = c.match(/^(rgba?\([^)]+,\s*)[0-9.]+\)$/);
+  el.style.background = rgbaMatch ? `${rgbaMatch[1]}0.1)` : 'rgba(255,100,0,0.1)';
+
+  if (label) {
+    const labelEl = document.createElement('span');
+    labelEl.className = 'region-label';
+    labelEl.textContent = label;
+    el.appendChild(labelEl);
+  }
+
+  viewer.addOverlay({ element: el, location: rect });
+  overlayElements.push(el);
+}
+
+function clearAllOverlays(): void {
+  for (const el of overlayElements) viewer?.removeOverlay(el);
+  overlayElements.length = 0;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

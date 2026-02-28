@@ -215,6 +215,27 @@ export class RijksmuseumApiClient {
     }
   }
 
+  /** Fetch a IIIF image URL as base64 (shared by region and thumbnail fetchers) */
+  private async fetchIiifAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
+    const { data } = await this.http.get(url, {
+      responseType: "arraybuffer",
+      headers: { Accept: "image/jpeg, image/*" },
+    });
+    return { data: Buffer.from(data).toString("base64"), mimeType: "image/jpeg" };
+  }
+
+  /** Fetch a IIIF region (or full image) as base64 for direct LLM visual analysis */
+  async fetchRegionBase64(
+    iiifId: string,
+    region: string = "full",
+    size: number = 1200,
+    rotation: number = 0,
+    quality: "default" | "gray" = "default",
+  ): Promise<{ data: string; mimeType: string }> {
+    const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/${region}/${size},/${rotation}/${quality}.jpg`;
+    return this.fetchIiifAsBase64(url);
+  }
+
   /** Download a IIIF thumbnail (longest edge ≤ maxEdge) and return as base64 */
   async fetchThumbnailBase64(
     iiifId: string,
@@ -226,10 +247,7 @@ export class RijksmuseumApiClient {
     const landscape = nativeWidth == null || nativeHeight == null || nativeWidth >= nativeHeight;
     const sizeParam = landscape ? `${maxEdge},` : `,${maxEdge}`;
     const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`;
-    const { data } = await this.http.get(url, {
-      responseType: "arraybuffer",
-    });
-    return Buffer.from(data).toString("base64");
+    return (await this.fetchIiifAsBase64(url)).data;
   }
 
   // ── Parsers (static) ───────────────────────────────────────────

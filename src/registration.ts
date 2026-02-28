@@ -9,6 +9,7 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
@@ -293,6 +294,18 @@ const ImageInfoOutput = {
   collectionUrl: z.string().optional(),
   iiifInfoUrl: z.string().optional(),
   viewerUrl: z.string().optional(),
+  viewUUID: z.string().optional().describe("Viewer session ID for use with navigate_viewer."),
+  error: z.string().optional(),
+};
+
+const CropImageOutput = {
+  objectNumber: z.string(),
+  region: z.string(),
+  requestedSize: z.number().int(),
+  nativeWidth: z.number().int().optional(),
+  nativeHeight: z.number().int().optional(),
+  rotation: z.number().int(),
+  quality: z.string(),
   error: z.string().optional(),
 };
 
@@ -373,6 +386,33 @@ const CuratedSetsOutput = {
   })),
   error: z.string().optional(),
 };
+
+// ─── Shared IIIF region validation ───────────────────────────────────
+
+const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+)$/;
+
+// ─── Viewer command queue (module-scoped — survives across HTTP requests) ─
+
+interface ViewerCommand {
+  action: "navigate" | "add_overlay" | "clear_overlays";
+  region?: string;
+  label?: string;
+  color?: string;
+}
+interface ViewerQueue {
+  commands: ViewerCommand[];
+  createdAt: number;
+  lastAccess: number;
+}
+const viewerQueues = new Map<string, ViewerQueue>();
+
+// Sweep stale queues every 60s (viewers that disconnected without teardown)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, q] of viewerQueues) {
+    if (now - q.lastAccess > 120_000) viewerQueues.delete(id);
+  }
+}, 60_000).unref();
 
 // ─── Tools ──────────────────────────────────────────────────────────
 
@@ -957,7 +997,8 @@ function registerTools(
         "Downloadable images are available from the artwork's collection page on rijksmuseum.nl. " +
         "Do not construct IIIF image URLs manually. " +
         "Note: this tool returns metadata and a viewer link, not the image bytes themselves. " +
-        "IIIF image URLs cannot be fetched via web_fetch or curl — do not attempt to download the image.",
+        "IIIF image URLs cannot be fetched via web_fetch or curl — do not attempt to download the image. " +
+        "To get the actual image bytes for visual analysis, use inspect_artwork_image instead.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -987,6 +1028,9 @@ function registerTools(
         imageInfo.viewerUrl = `${baseUrl}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
+      const viewUUID = randomUUID();
+      viewerQueues.set(viewUUID, { commands: [], createdAt: Date.now(), lastAccess: Date.now() });
+
       const { thumbnailUrl, iiifId, fullUrl, ...imageData } = imageInfo;
       const viewerData = {
         ...imageData,
@@ -997,10 +1041,238 @@ function registerTools(
         license: RijksmuseumApiClient.parseLicense(object),
         physicalDimensions: RijksmuseumApiClient.parseDimensionStatement(object),
         collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
+        viewUUID,
       };
 
       return structuredResponse(viewerData);
     })
+  );
+
+  // ── inspect_artwork_image ──────────────────────────────────────────
+
+  server.registerTool(
+    "inspect_artwork_image",
+    {
+      title: "Inspect Artwork Image",
+      description:
+        "Fetch an artwork image or region as base64 for direct visual analysis. " +
+        "Returns image bytes in the tool response — the LLM can see and reason " +
+        "about the image immediately.\n\n" +
+        "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
+        "region to zoom into details, read inscriptions, or examine specific areas.\n\n" +
+        "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended) " +
+        "or 'x,y,w,h' (pixel coordinates). Quick reference:\n" +
+        "- Top-left quarter: pct:0,0,50,50\n" +
+        "- Bottom-right quarter: pct:50,50,50,50\n" +
+        "- Center strip: pct:25,25,50,50\n" +
+        "- Full image: full (default)\n\n" +
+        "Optionally, use navigate_viewer afterwards to zoom the viewer or add labeled " +
+        "overlays highlighting regions of interest for the user.",
+      inputSchema: z.object({
+        objectNumber: z
+          .string()
+          .describe("The object number of the artwork (e.g. 'SK-C-5')"),
+        region: z
+          .string()
+          .default("full")
+          .refine(
+            (v) => IIIF_REGION_RE.test(v),
+            { message: "Invalid IIIF region. Use 'full', 'square', 'x,y,w,h' (pixels), or 'pct:x,y,w,h' (percentages)." }
+          )
+          .describe("IIIF region: 'full', 'square', 'pct:x,y,w,h' (percentage), or 'x,y,w,h' (pixels). E.g. 'pct:0,60,40,40' for bottom-left 40%."),
+        size: z
+          .number()
+          .int()
+          .min(200)
+          .max(2000)
+          .default(1200)
+          .describe("Width of returned image in pixels (200-2000, default 1200)"),
+        rotation: z
+          .union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)])
+          .default(0)
+          .describe("Clockwise rotation in degrees"),
+        quality: z
+          .enum(["default", "gray"])
+          .default("default")
+          .describe("Image quality — 'gray' can help read inscriptions or signatures"),
+      }).strict(),
+      ...withOutputSchema(CropImageOutput),
+    },
+    withLogging("inspect_artwork_image", async (args) => {
+      const cropError = (error: string) => ({
+        ...structuredResponse({
+          objectNumber: args.objectNumber,
+          region: args.region,
+          requestedSize: args.size,
+          rotation: args.rotation,
+          quality: args.quality,
+          error,
+        }, error),
+        isError: true as const,
+      });
+
+      const { object } = await api.findByObjectNumber(args.objectNumber);
+      const imageInfo = await api.getImageInfo(object);
+
+      if (!imageInfo) {
+        return cropError("No image available for this artwork");
+      }
+
+      // Clamp size to region width — iiif.micr.io rejects upscaling.
+      // For pct: regions, the IIIF server computes pixel bounds as
+      // ceil(start) / floor(end), which can yield a region 1-2px narrower
+      // than our floor(width * pct/100) estimate. Subtract 1 to avoid
+      // hitting the exact boundary.
+      let effectiveSize = args.size;
+      if (imageInfo.width) {
+        let regionWidth = imageInfo.width;
+        const pctMatch = args.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+        const pxMatch = args.region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
+        if (pctMatch) {
+          regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 1;
+        } else if (pxMatch) {
+          regionWidth = parseInt(pxMatch[3]);
+        } else if (args.region === "square") {
+          regionWidth = Math.min(imageInfo.width, imageInfo.height ?? imageInfo.width);
+        }
+        // region === "full" keeps regionWidth = imageInfo.width
+        if (effectiveSize > regionWidth) effectiveSize = regionWidth;
+      }
+
+      let base64: string;
+      let mimeType: string;
+      try {
+        ({ data: base64, mimeType } = await api.fetchRegionBase64(
+          imageInfo.iiifId,
+          args.region,
+          effectiveSize,
+          args.rotation,
+          args.quality,
+        ));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return cropError(`Failed to fetch image: ${message}`);
+      }
+
+      const title = RijksmuseumApiClient.parseTitle(object);
+      const creator = RijksmuseumApiClient.parseCreator(object);
+      const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
+      const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
+      const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${effectiveSize}px${sizeNote})`;
+
+      const content = [
+        { type: "image" as const, data: base64, mimeType },
+        { type: "text" as const, text: caption },
+      ];
+
+      if (!EMIT_STRUCTURED) return { content };
+      return {
+        content,
+        structuredContent: {
+          objectNumber: args.objectNumber,
+          region: args.region,
+          requestedSize: effectiveSize,
+          nativeWidth: imageInfo.width,
+          nativeHeight: imageInfo.height,
+          rotation: args.rotation,
+          quality: args.quality,
+        } as Record<string, unknown>,
+      };
+    })
+  );
+
+  // ── navigate_viewer ────────────────────────────────────────────
+
+  const NavigateViewerOutput = {
+    viewUUID: z.string(),
+    queued: z.number().int(),
+    error: z.string().optional(),
+  };
+
+  server.registerTool(
+    "navigate_viewer",
+    {
+      title: "Navigate Viewer",
+      description:
+        "Navigate the artwork viewer to a specific region and/or add visual overlays. " +
+        "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
+        "Can be used after inspect_artwork_image to show the user what you found. " +
+        "Commands execute in order: typically clear_overlays → navigate → add_overlay.",
+      inputSchema: z.object({
+        viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
+        commands: z.array(z.object({
+          action: z.enum(["navigate", "add_overlay", "clear_overlays"]),
+          region: z.string().optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', or 'x,y,w,h'"),
+          label: z.string().optional().describe("Label text for add_overlay"),
+          color: z.string().optional().describe("CSS color for add_overlay border (default: orange)"),
+        })).min(1).describe("Commands to execute in the viewer, in order"),
+      }).strict(),
+      ...withOutputSchema(NavigateViewerOutput),
+    },
+    withLogging("navigate_viewer", async (args) => {
+      const queue = viewerQueues.get(args.viewUUID);
+      if (!queue) {
+        return {
+          ...structuredResponse({
+            viewUUID: args.viewUUID,
+            queued: 0,
+            error: "No active viewer for this UUID",
+          }, "No active viewer for this UUID — open an artwork with get_artwork_image first"),
+          isError: true as const,
+        };
+      }
+
+      // Validate region on commands that require it
+      for (const cmd of args.commands) {
+        if ((cmd.action === "navigate" || cmd.action === "add_overlay") && cmd.region) {
+          if (!IIIF_REGION_RE.test(cmd.region)) {
+            return {
+              ...structuredResponse({
+                viewUUID: args.viewUUID,
+                queued: 0,
+                error: `Invalid region '${cmd.region}'. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`,
+              }),
+              isError: true as const,
+            };
+          }
+        }
+      }
+
+      queue.commands.push(...args.commands);
+      queue.lastAccess = Date.now();
+
+      return structuredResponse({
+        viewUUID: args.viewUUID,
+        queued: args.commands.length,
+      });
+    })
+  );
+
+  // ── poll_viewer_commands (app-only) ───────────────────────────
+
+  registerAppTool(
+    server,
+    "poll_viewer_commands",
+    {
+      title: "Poll Viewer Commands",
+      description: "Internal: poll for pending viewer navigation commands",
+      inputSchema: z.object({
+        viewUUID: z.string(),
+      }).strict() as z.ZodTypeAny,
+      _meta: {
+        ui: {
+          resourceUri: ARTWORK_VIEWER_RESOURCE_URI,
+          visibility: ["app"],
+        },
+      },
+    },
+    async (args) => {
+      const queue = viewerQueues.get(args.viewUUID);
+      if (!queue) return structuredResponse({ commands: [] });
+      queue.lastAccess = Date.now();
+      const commands = queue.commands.splice(0);  // drain
+      return structuredResponse({ commands });
+    }
   );
 
   // ── get_artist_timeline ─────────────────────────────────────────
@@ -1603,113 +1875,6 @@ function registerAppViewerResource(server: McpServer): void {
 // ─── Prompts ────────────────────────────────────────────────────────
 
 function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
-  server.registerPrompt(
-    "analyse-artwork",
-    {
-      title: "Share Artwork with AI",
-      description:
-        "Share an image of an artwork with the AI assistant so that it can see and analyse it. You can click on the object number in the image viewer to copy it.",
-      argsSchema: {
-        "Object Number": z
-          .string()
-          .describe("The object number of the artwork (e.g. 'SK-C-5')"),
-        "Image Size": z
-          .string()
-          .optional()
-          .describe("Longest edge in pixels (default: 1200, max: 2000)"),
-      },
-    },
-    async (args) => {
-      const objectNumber = args["Object Number"];
-      const parsed = parseInt(args["Image Size"] ?? "", 10) || 1200;
-      const width = Math.min(Math.max(parsed, 200), 2000);
-
-      let object: Awaited<ReturnType<typeof api.findByObjectNumber>>["object"];
-      try {
-        ({ object } = await api.findByObjectNumber(objectNumber));
-      } catch {
-        return {
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `Artwork ${objectNumber} could not be found.`,
-              },
-            },
-          ],
-        };
-      }
-
-      const imageInfo = await api.getImageInfo(object, width);
-
-      if (!imageInfo) {
-        return {
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `No image is available for artwork ${objectNumber}.`,
-              },
-            },
-          ],
-        };
-      }
-
-      let base64: string;
-      try {
-        base64 = await api.fetchThumbnailBase64(imageInfo.iiifId, width, imageInfo.width, imageInfo.height);
-      } catch {
-        return {
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `Image could not be fetched for artwork ${objectNumber}. The IIIF server may be temporarily unavailable.`,
-              },
-            },
-          ],
-        };
-      }
-
-      const title = RijksmuseumApiClient.parseTitle(object);
-      const creator = RijksmuseumApiClient.parseCreator(object);
-      const date = RijksmuseumApiClient.parseDate(object);
-      const caption = `"${title}" by ${creator}${date ? ` (${date})` : ""} — ${objectNumber}`;
-
-      return {
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "image",
-              data: base64,
-              mimeType: "image/jpeg",
-            },
-          },
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text:
-                `${caption}\n` +
-                `Image: ${imageInfo.width}×${imageInfo.height}px (shown at ${width}px wide)\n\n` +
-                `The image is now in context. You could:\n` +
-                `- Describe what you see — composition, colours, figures, setting\n` +
-                `- Read any visible text, inscriptions, or signatures\n` +
-                `- Identify artistic technique, style, or period\n` +
-                `- Compare with other artworks in the conversation\n\n` +
-                `Use get_artwork_details(objectNumber: "${objectNumber}") for full metadata ` +
-                `(description, materials, provenance, curatorial narrative, etc.).`,
-            },
-          },
-        ],
-      };
-    }
-  );
-
   server.registerPrompt(
     "generate-artist-timeline",
     {
