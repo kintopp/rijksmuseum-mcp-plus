@@ -4,8 +4,6 @@
 
 Note: This README is an **incomplete draft**.
 
-`***Viewing images is temporarily broken*** (27.02.26)`
-
 **rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). 
 
 You can explore artworks using the same (with minor exceptions) filters provided by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ offers access to five full-text corpora (`description`, `inscription`, `provenance`, `creditLine`, and `curatorialNarrative`) not directly accessible from the museum's website and [Iconclass](https://iconclass.org), all of which can be searched by keyword or semantically by concept/meaning as well as additional metadata fields including spatial (`nearPlace`) and physical (`minWidth`/`maxHeight`) dimensions. Images from the museum's collections can be viewed directly inside your chat — you can also ask the AI assistant to retrieve images and analyse their content in conjunction with their  metadata. Finally, because much of the data provided by rijksmuseum-mcp+ is already in structured form, it's straightforward for your AI assistant to use these for follow-up tasks, such as visualizations or other analyses.
