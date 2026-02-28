@@ -1082,13 +1082,27 @@ function registerTools(
         }, "No image available for this artwork");
       }
 
-      const { data: base64, mimeType } = await api.fetchRegionBase64(
-        imageInfo.iiifId,
-        args.region,
-        args.size,
-        args.rotation,
-        args.quality,
-      );
+      let base64: string;
+      let mimeType: string;
+      try {
+        ({ data: base64, mimeType } = await api.fetchRegionBase64(
+          imageInfo.iiifId,
+          args.region,
+          args.size,
+          args.rotation,
+          args.quality,
+        ));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return structuredResponse({
+          objectNumber: args.objectNumber,
+          region: args.region,
+          requestedSize: args.size,
+          rotation: args.rotation,
+          quality: args.quality,
+          error: `Failed to fetch image: ${message}`,
+        }, `Failed to fetch image: ${message}`);
+      }
 
       const title = RijksmuseumApiClient.parseTitle(object);
       const creator = RijksmuseumApiClient.parseCreator(object);
