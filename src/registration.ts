@@ -998,7 +998,7 @@ function registerTools(
         "Do not construct IIIF image URLs manually. " +
         "Note: this tool returns metadata and a viewer link, not the image bytes themselves. " +
         "IIIF image URLs cannot be fetched via web_fetch or curl — do not attempt to download the image. " +
-        "To get the actual image bytes for visual analysis, use crop_artwork_image instead.",
+        "To get the actual image bytes for visual analysis, use inspect_artwork_image instead.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1048,17 +1048,17 @@ function registerTools(
     })
   );
 
-  // ── crop_artwork_image ──────────────────────────────────────────
+  // ── inspect_artwork_image ──────────────────────────────────────────
 
   server.registerTool(
-    "crop_artwork_image",
+    "inspect_artwork_image",
     {
-      title: "Crop Artwork Image",
+      title: "Inspect Artwork Image",
       description:
-        "Fetch an artwork image or a cropped region for direct visual analysis. " +
-        "Returns base64 image bytes in the tool response — the LLM can see and reason " +
+        "Fetch an artwork image or region as base64 for direct visual analysis. " +
+        "Returns image bytes in the tool response — the LLM can see and reason " +
         "about the image immediately.\n\n" +
-        "Use with region 'full' (default) to get the complete artwork, or specify a " +
+        "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
         "region to zoom into details, read inscriptions, or examine specific areas.\n\n" +
         "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended) " +
         "or 'x,y,w,h' (pixel coordinates). Quick reference:\n" +
@@ -1066,10 +1066,9 @@ function registerTools(
         "- Bottom-right quarter: pct:50,50,50,50\n" +
         "- Center strip: pct:25,25,50,50\n" +
         "- Full image: full (default)\n\n" +
-        "Multi-stage workflow: call with region 'full' first to see the artwork, " +
-        "then call again with a specific region to zoom into areas of interest. " +
-        "Use the native dimensions (returned in the response) to calculate region " +
-        "coordinates from visual observations.",
+        "After inspecting, call navigate_viewer with the same region to show the user " +
+        "what you found. Multi-stage workflow: inspect with region 'full' first, " +
+        "then inspect specific regions, then navigate_viewer to highlight them.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1100,7 +1099,7 @@ function registerTools(
       }).strict(),
       ...withOutputSchema(CropImageOutput),
     },
-    withLogging("crop_artwork_image", async (args) => {
+    withLogging("inspect_artwork_image", async (args) => {
       const cropError = (error: string) => ({
         ...structuredResponse({
           objectNumber: args.objectNumber,
@@ -1194,7 +1193,7 @@ function registerTools(
       description:
         "Navigate the artwork viewer to a specific region and/or add visual overlays. " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
-        "Use after crop_artwork_image to show the user what you found — reuse the same region string. " +
+        "Use after inspect_artwork_image to show the user what you found — pass the same region string. " +
         "Commands execute in order: typically clear_overlays → navigate → add_overlay.",
       inputSchema: z.object({
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
@@ -1971,7 +1970,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
                 `- Read any visible text, inscriptions, or signatures\n` +
                 `- Identify artistic technique, style, or period\n` +
                 `- Compare with other artworks in the conversation\n\n` +
-                `Use crop_artwork_image(objectNumber: "${objectNumber}", region: "pct:x,y,w,h") ` +
+                `Use inspect_artwork_image(objectNumber: "${objectNumber}", region: "pct:x,y,w,h") ` +
                 `to zoom into a specific region for closer inspection.\n` +
                 `Use get_artwork_details(objectNumber: "${objectNumber}") for full metadata ` +
                 `(description, materials, provenance, curatorial narrative, etc.).`,

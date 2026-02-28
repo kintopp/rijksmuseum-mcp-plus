@@ -282,7 +282,7 @@ function createServer(httpPort?: number): McpServer {
         "Use search_artwork for discovery, get_artwork_details for full metadata on a specific work.\n\n" +
 
         "Images are served via IIIF deep-zoom. get_artwork_image opens an interactive viewer (metadata + viewer link, no image bytes). " +
-        "To get actual image bytes for visual analysis, use crop_artwork_image — it returns base64 image data that the LLM can see directly. " +
+        "To get actual image bytes for visual analysis, use inspect_artwork_image — it returns base64 image data that the LLM can see directly. " +
         "Call it with region 'full' for the complete artwork, or 'pct:x,y,w,h' to zoom into a specific area. " +
         "After analyzing a crop, call navigate_viewer with the same region to zoom the viewer for the user. " +
         "The analyse-artwork prompt also fetches image bytes (user-initiated).\n\n" +
