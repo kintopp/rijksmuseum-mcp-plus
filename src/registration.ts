@@ -296,6 +296,17 @@ const ImageInfoOutput = {
   error: z.string().optional(),
 };
 
+const CropImageOutput = {
+  objectNumber: z.string(),
+  region: z.string(),
+  requestedSize: z.number().int(),
+  nativeWidth: z.number().int().optional(),
+  nativeHeight: z.number().int().optional(),
+  rotation: z.number().int(),
+  quality: z.string(),
+  error: z.string().optional(),
+};
+
 const PaginatedBase = {
   returnedCount: z.number().int(),
   records: z.array(z.record(z.unknown())),
@@ -957,7 +968,8 @@ function registerTools(
         "Downloadable images are available from the artwork's collection page on rijksmuseum.nl. " +
         "Do not construct IIIF image URLs manually. " +
         "Note: this tool returns metadata and a viewer link, not the image bytes themselves. " +
-        "IIIF image URLs cannot be fetched via web_fetch or curl — do not attempt to download the image.",
+        "IIIF image URLs cannot be fetched via web_fetch or curl — do not attempt to download the image. " +
+        "To get the actual image bytes for visual analysis, use crop_artwork_image instead.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1000,6 +1012,114 @@ function registerTools(
       };
 
       return structuredResponse(viewerData);
+    })
+  );
+
+  // ── crop_artwork_image ──────────────────────────────────────────
+
+  server.registerTool(
+    "crop_artwork_image",
+    {
+      title: "Crop Artwork Image",
+      description:
+        "Fetch an artwork image or a cropped region for direct visual analysis. " +
+        "Returns base64 image bytes in the tool response — the LLM can see and reason " +
+        "about the image immediately.\n\n" +
+        "Use with region 'full' (default) to get the complete artwork, or specify a " +
+        "region to zoom into details, read inscriptions, or examine specific areas.\n\n" +
+        "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended) " +
+        "or 'x,y,w,h' (pixel coordinates). Quick reference:\n" +
+        "- Top-left quarter: pct:0,0,50,50\n" +
+        "- Bottom-right quarter: pct:50,50,50,50\n" +
+        "- Center strip: pct:25,25,50,50\n" +
+        "- Full image: full (default)\n\n" +
+        "Multi-stage workflow: call with region 'full' first to see the artwork, " +
+        "then call again with a specific region to zoom into areas of interest. " +
+        "Use the native dimensions (returned in the response) to calculate region " +
+        "coordinates from visual observations.",
+      inputSchema: z.object({
+        objectNumber: z
+          .string()
+          .describe("The object number of the artwork (e.g. 'SK-C-5')"),
+        region: z
+          .string()
+          .default("full")
+          .describe("IIIF region: 'full', 'pct:x,y,w,h' (percentage), or 'x,y,w,h' (pixels). E.g. 'pct:0,60,40,40' for bottom-left 40%."),
+        size: z
+          .number()
+          .int()
+          .min(200)
+          .max(2000)
+          .default(1200)
+          .describe("Width of returned image in pixels (200-2000, default 1200)"),
+        rotation: z
+          .number()
+          .int()
+          .min(0)
+          .max(360)
+          .default(0)
+          .describe("Clockwise rotation in degrees (0, 90, 180, 270)"),
+        quality: z
+          .enum(["default", "gray"])
+          .default("default")
+          .describe("Image quality — 'gray' can help read inscriptions or signatures"),
+      }).strict(),
+      ...withOutputSchema(CropImageOutput),
+    },
+    withLogging("crop_artwork_image", async (args) => {
+      const { object } = await api.findByObjectNumber(args.objectNumber);
+      const imageInfo = await api.getImageInfo(object);
+
+      if (!imageInfo) {
+        return structuredResponse({
+          objectNumber: args.objectNumber,
+          region: args.region,
+          requestedSize: args.size,
+          rotation: args.rotation,
+          quality: args.quality,
+          error: "No image available for this artwork",
+        }, "No image available for this artwork");
+      }
+
+      const { data: base64, mimeType } = await api.fetchRegionBase64(
+        imageInfo.iiifId,
+        args.region,
+        args.size,
+        args.rotation,
+        args.quality,
+      );
+
+      const title = RijksmuseumApiClient.parseTitle(object);
+      const creator = RijksmuseumApiClient.parseCreator(object);
+      const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
+      const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${args.size}px)`;
+
+      const structured = {
+        objectNumber: args.objectNumber,
+        region: args.region,
+        requestedSize: args.size,
+        nativeWidth: imageInfo.width,
+        nativeHeight: imageInfo.height,
+        rotation: args.rotation,
+        quality: args.quality,
+      };
+
+      if (!EMIT_STRUCTURED) {
+        return {
+          content: [
+            { type: "image" as const, data: base64, mimeType },
+            { type: "text" as const, text: caption },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          { type: "image" as const, data: base64, mimeType },
+          { type: "text" as const, text: caption },
+        ],
+        structuredContent: structured as Record<string, unknown>,
+      };
     })
   );
 
@@ -1701,6 +1821,8 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
                 `- Read any visible text, inscriptions, or signatures\n` +
                 `- Identify artistic technique, style, or period\n` +
                 `- Compare with other artworks in the conversation\n\n` +
+                `Use crop_artwork_image(objectNumber: "${objectNumber}", region: "pct:x,y,w,h") ` +
+                `to zoom into a specific region for closer inspection.\n` +
                 `Use get_artwork_details(objectNumber: "${objectNumber}") for full metadata ` +
                 `(description, materials, provenance, curatorial narrative, etc.).`,
             },

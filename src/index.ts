@@ -281,9 +281,10 @@ function createServer(httpPort?: number): McpServer {
         "and cannot be mixed with them. Results are returned in cataloguing order, not ranked by relevance. " +
         "Use search_artwork for discovery, get_artwork_details for full metadata on a specific work.\n\n" +
 
-        "Images are served via IIIF deep-zoom. For this purpose, get_artwork_image opens an interactive viewer — " +
-        "it does not return the image bytes. To get the actual image into the conversation for visual analysis, " +
-        "use the analyse-artwork prompt, which fetches it server-side as base64.\n\n" +
+        "Images are served via IIIF deep-zoom. get_artwork_image opens an interactive viewer (metadata + viewer link, no image bytes). " +
+        "To get actual image bytes for visual analysis, use crop_artwork_image — it returns base64 image data that the LLM can see directly. " +
+        "Call it with region 'full' for the complete artwork, or 'pct:x,y,w,h' to zoom into a specific area. " +
+        "The analyse-artwork prompt also fetches image bytes (user-initiated).\n\n" +
 
         "Person names are matched against 210K name variants (76K persons) using phrase matching with fallback " +
         "to token intersection — partial names and historical variants often work. " +

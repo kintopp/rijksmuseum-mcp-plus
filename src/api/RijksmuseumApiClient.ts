@@ -215,6 +215,19 @@ export class RijksmuseumApiClient {
     }
   }
 
+  /** Fetch a IIIF region (or full image) as base64 for direct LLM visual analysis */
+  async fetchRegionBase64(
+    iiifId: string,
+    region: string = "full",
+    size: number = 1200,
+    rotation: number = 0,
+    quality: "default" | "gray" = "default",
+  ): Promise<{ data: string; mimeType: string }> {
+    const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/${region}/${size},/${rotation}/${quality}.jpg`;
+    const { data } = await this.http.get(url, { responseType: "arraybuffer" });
+    return { data: Buffer.from(data).toString("base64"), mimeType: "image/jpeg" };
+  }
+
   /** Download a IIIF thumbnail (longest edge ≤ maxEdge) and return as base64 */
   async fetchThumbnailBase64(
     iiifId: string,
