@@ -1068,18 +1068,20 @@ function registerTools(
       ...withOutputSchema(CropImageOutput),
     },
     withLogging("crop_artwork_image", async (args) => {
+      const cropError = (error: string) => structuredResponse({
+        objectNumber: args.objectNumber,
+        region: args.region,
+        requestedSize: args.size,
+        rotation: args.rotation,
+        quality: args.quality,
+        error,
+      }, error);
+
       const { object } = await api.findByObjectNumber(args.objectNumber);
       const imageInfo = await api.getImageInfo(object);
 
       if (!imageInfo) {
-        return structuredResponse({
-          objectNumber: args.objectNumber,
-          region: args.region,
-          requestedSize: args.size,
-          rotation: args.rotation,
-          quality: args.quality,
-          error: "No image available for this artwork",
-        }, "No image available for this artwork");
+        return cropError("No image available for this artwork");
       }
 
       let base64: string;
@@ -1094,14 +1096,7 @@ function registerTools(
         ));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        return structuredResponse({
-          objectNumber: args.objectNumber,
-          region: args.region,
-          requestedSize: args.size,
-          rotation: args.rotation,
-          quality: args.quality,
-          error: `Failed to fetch image: ${message}`,
-        }, `Failed to fetch image: ${message}`);
+        return cropError(`Failed to fetch image: ${message}`);
       }
 
       const title = RijksmuseumApiClient.parseTitle(object);
@@ -1109,31 +1104,23 @@ function registerTools(
       const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
       const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${args.size}px)`;
 
-      const structured = {
-        objectNumber: args.objectNumber,
-        region: args.region,
-        requestedSize: args.size,
-        nativeWidth: imageInfo.width,
-        nativeHeight: imageInfo.height,
-        rotation: args.rotation,
-        quality: args.quality,
-      };
+      const content = [
+        { type: "image" as const, data: base64, mimeType },
+        { type: "text" as const, text: caption },
+      ];
 
-      if (!EMIT_STRUCTURED) {
-        return {
-          content: [
-            { type: "image" as const, data: base64, mimeType },
-            { type: "text" as const, text: caption },
-          ],
-        };
-      }
-
+      if (!EMIT_STRUCTURED) return { content };
       return {
-        content: [
-          { type: "image" as const, data: base64, mimeType },
-          { type: "text" as const, text: caption },
-        ],
-        structuredContent: structured as Record<string, unknown>,
+        content,
+        structuredContent: {
+          objectNumber: args.objectNumber,
+          region: args.region,
+          requestedSize: args.size,
+          nativeWidth: imageInfo.width,
+          nativeHeight: imageInfo.height,
+          rotation: args.rotation,
+          quality: args.quality,
+        } as Record<string, unknown>,
       };
     })
   );
