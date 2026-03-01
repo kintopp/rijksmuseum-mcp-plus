@@ -298,7 +298,7 @@ const ImageInfoOutput = {
   error: z.string().optional(),
 };
 
-const CropImageOutput = {
+const InspectImageOutput = {
   objectNumber: z.string(),
   region: z.string(),
   requestedSize: z.number().int(),
@@ -1127,7 +1127,7 @@ function registerTools(
           .default("default")
           .describe("Image quality — 'gray' can help read inscriptions or signatures"),
       }).strict(),
-      ...withOutputSchema(CropImageOutput),
+      ...withOutputSchema(InspectImageOutput),
     },
     withLogging("inspect_artwork_image", async (args) => {
       const cropError = (error: string) => ({
