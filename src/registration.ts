@@ -306,6 +306,7 @@ const CropImageOutput = {
   nativeHeight: z.number().int().optional(),
   rotation: z.number().int(),
   quality: z.string(),
+  fetchTimeMs: z.number().int().optional().describe("Time spent fetching from IIIF server (ms)"),
   error: z.string().optional(),
 };
 
@@ -1146,6 +1147,7 @@ function registerTools(
 
       let base64: string;
       let mimeType: string;
+      const fetchStart = performance.now();
       try {
         ({ data: base64, mimeType } = await api.fetchRegionBase64(
           imageInfo.iiifId,
@@ -1158,12 +1160,13 @@ function registerTools(
         const message = err instanceof Error ? err.message : String(err);
         return cropError(`Failed to fetch image: ${message}`);
       }
+      const fetchTimeMs = Math.round(performance.now() - fetchStart);
 
       const title = RijksmuseumApiClient.parseTitle(object);
       const creator = RijksmuseumApiClient.parseCreator(object);
       const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
       const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
-      const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${effectiveSize}px${sizeNote})`;
+      const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${effectiveSize}px${sizeNote}, ${fetchTimeMs}ms)`;
 
       const content = [
         { type: "image" as const, data: base64, mimeType },
@@ -1181,6 +1184,7 @@ function registerTools(
           nativeHeight: imageInfo.height,
           rotation: args.rotation,
           quality: args.quality,
+          fetchTimeMs,
         } as Record<string, unknown>,
       };
     })
@@ -1360,7 +1364,8 @@ function registerTools(
     {
       title: "Open in Browser",
       description:
-        "Open a URL in the user's default web browser. Useful for opening an artwork's Rijksmuseum collection page, where a high-resolution image can be downloaded.",
+        "Open a URL in the user's default web browser. Useful for opening an artwork's Rijksmuseum collection page, " +
+        "in environments where the interactive image viewer called with get_artwork_image is not available.",
       inputSchema: z.object({
         url: z
           .string()

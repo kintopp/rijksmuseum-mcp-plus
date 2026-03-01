@@ -15,6 +15,16 @@ export class SystemIntegration {
       throw new Error(`Refusing to open non-HTTP URL: ${url}`);
     }
     const [cmd, ...args] = OPEN_COMMANDS[process.platform] ?? ["xdg-open"];
-    await execFileAsync(cmd, [...args, url]);
+    try {
+      await execFileAsync(cmd, [...args, url]);
+    } catch (err: unknown) {
+      if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(
+          `No browser available in this environment (${cmd} not found). ` +
+          `Visit the URL directly: ${url}`
+        );
+      }
+      throw err;
+    }
   }
 }

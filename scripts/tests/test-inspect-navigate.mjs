@@ -105,6 +105,7 @@ assert(imageContent != null, "Image content returned");
 assert(imageContent?.mimeType === "image/jpeg", `mimeType is image/jpeg`);
 assert(imageContent?.data?.length > 1000, `base64 data present (~${Math.round((imageContent?.data?.length ?? 0) * 0.75 / 1024)} KB)`);
 assert(textContent?.text?.includes("SK-C-5"), "Caption includes object number");
+assert(/\d+ms/.test(textContent?.text ?? ""), "Caption includes fetch timing");
 assert(!r2a.isError, "Not marked as error");
 
 // 2b. Percentage region
@@ -158,6 +159,7 @@ if (sc) {
   assert(typeof sc.nativeWidth === "number", `structuredContent.nativeWidth (${sc.nativeWidth})`);
   assert(typeof sc.nativeHeight === "number", `structuredContent.nativeHeight (${sc.nativeHeight})`);
   assert(sc.region === "full", `structuredContent.region (${sc.region})`);
+  assert(typeof sc.fetchTimeMs === "number" && sc.fetchTimeMs > 0, `structuredContent.fetchTimeMs (${sc.fetchTimeMs}ms)`);
 } else {
   assert(false, "structuredContent not returned (STRUCTURED_CONTENT=true)");
 }
