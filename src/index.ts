@@ -342,6 +342,7 @@ async function runHttp(): Promise<void> {
   initUsageStats();
   const port = getHttpPort();
   const app = express();
+  app.set("trust proxy", 1); // Railway reverse proxy sets X-Forwarded-For
 
   const allowedOrigins = process.env.ALLOWED_ORIGINS;
   app.use(
