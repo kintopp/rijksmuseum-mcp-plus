@@ -404,6 +404,9 @@ interface ViewerQueue {
   commands: ViewerCommand[];
   createdAt: number;
   lastAccess: number;
+  objectNumber: string;
+  imageWidth?: number;
+  imageHeight?: number;
 }
 const viewerQueues = new Map<string, ViewerQueue>();
 
@@ -411,7 +414,7 @@ const viewerQueues = new Map<string, ViewerQueue>();
 setInterval(() => {
   const now = Date.now();
   for (const [id, q] of viewerQueues) {
-    if (now - q.lastAccess > 120_000) viewerQueues.delete(id);
+    if (now - q.lastAccess > 600_000) viewerQueues.delete(id);
   }
 }, 60_000).unref();
 
@@ -1030,7 +1033,14 @@ function registerTools(
       }
 
       const viewUUID = randomUUID();
-      viewerQueues.set(viewUUID, { commands: [], createdAt: Date.now(), lastAccess: Date.now() });
+      viewerQueues.set(viewUUID, {
+        commands: [],
+        createdAt: Date.now(),
+        lastAccess: Date.now(),
+        objectNumber,
+        imageWidth: imageInfo.width,
+        imageHeight: imageInfo.height,
+      });
 
       const { thumbnailUrl, iiifId, fullUrl, ...imageData } = imageInfo;
       const viewerData = {
@@ -1117,76 +1127,86 @@ function registerTools(
         isError: true as const,
       });
 
-      const { object } = await api.findByObjectNumber(args.objectNumber);
-      const imageInfo = await api.getImageInfo(object);
-
-      if (!imageInfo) {
-        return cropError("No image available for this artwork");
-      }
-
-      // Clamp size to region width — iiif.micr.io rejects upscaling.
-      // For pct: regions, the IIIF server computes pixel bounds as
-      // ceil(start) / floor(end), which can yield a region 1-2px narrower
-      // than our floor(width * pct/100) estimate. Subtract 1 to avoid
-      // hitting the exact boundary.
-      let effectiveSize = args.size;
-      if (imageInfo.width) {
-        let regionWidth = imageInfo.width;
-        const pctMatch = args.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-        const pxMatch = args.region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
-        if (pctMatch) {
-          regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 1;
-        } else if (pxMatch) {
-          regionWidth = parseInt(pxMatch[3]);
-        } else if (args.region === "square") {
-          regionWidth = Math.min(imageInfo.width, imageInfo.height ?? imageInfo.width);
-        }
-        // region === "full" keeps regionWidth = imageInfo.width
-        if (effectiveSize > regionWidth) effectiveSize = regionWidth;
-      }
-
-      let base64: string;
-      let mimeType: string;
-      const fetchStart = performance.now();
       try {
-        ({ data: base64, mimeType } = await api.fetchRegionBase64(
-          imageInfo.iiifId,
-          args.region,
-          effectiveSize,
-          args.rotation,
-          args.quality,
-        ));
+        const { object } = await api.findByObjectNumber(args.objectNumber);
+        const imageInfo = await api.getImageInfo(object);
+
+        // Refresh viewer TTL for this artwork
+        for (const [, q] of viewerQueues) {
+          if (q.objectNumber === args.objectNumber) q.lastAccess = Date.now();
+        }
+
+        if (!imageInfo) {
+          return cropError("No image available for this artwork");
+        }
+
+        // Clamp size to region width — iiif.micr.io rejects upscaling.
+        // For pct: regions, the IIIF server computes pixel bounds as
+        // ceil(start) / floor(end), which can yield a region 1-2px narrower
+        // than our floor(width * pct/100) estimate. Subtract 1 to avoid
+        // hitting the exact boundary.
+        let effectiveSize = args.size;
+        if (imageInfo.width) {
+          let regionWidth = imageInfo.width;
+          const pctMatch = args.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+          const pxMatch = args.region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
+          if (pctMatch) {
+            regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 1;
+          } else if (pxMatch) {
+            regionWidth = parseInt(pxMatch[3]);
+          } else if (args.region === "square") {
+            regionWidth = Math.min(imageInfo.width, imageInfo.height ?? imageInfo.width);
+          }
+          // region === "full" keeps regionWidth = imageInfo.width
+          if (effectiveSize > regionWidth) effectiveSize = regionWidth;
+        }
+
+        let base64: string;
+        let mimeType: string;
+        const fetchStart = performance.now();
+        try {
+          ({ data: base64, mimeType } = await api.fetchRegionBase64(
+            imageInfo.iiifId,
+            args.region,
+            effectiveSize,
+            args.rotation,
+            args.quality,
+          ));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return cropError(`Failed to fetch image: ${message}`);
+        }
+        const fetchTimeMs = Math.round(performance.now() - fetchStart);
+
+        const title = RijksmuseumApiClient.parseTitle(object);
+        const creator = RijksmuseumApiClient.parseCreator(object);
+        const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
+        const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
+        const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${effectiveSize}px${sizeNote}, ${fetchTimeMs}ms)`;
+
+        const content = [
+          { type: "image" as const, data: base64, mimeType },
+          { type: "text" as const, text: caption },
+        ];
+
+        if (!EMIT_STRUCTURED) return { content };
+        return {
+          content,
+          structuredContent: {
+            objectNumber: args.objectNumber,
+            region: args.region,
+            requestedSize: effectiveSize,
+            nativeWidth: imageInfo.width,
+            nativeHeight: imageInfo.height,
+            rotation: args.rotation,
+            quality: args.quality,
+            fetchTimeMs,
+          } as Record<string, unknown>,
+        };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        return cropError(`Failed to fetch image: ${message}`);
+        return cropError(`Failed to process artwork: ${message}`);
       }
-      const fetchTimeMs = Math.round(performance.now() - fetchStart);
-
-      const title = RijksmuseumApiClient.parseTitle(object);
-      const creator = RijksmuseumApiClient.parseCreator(object);
-      const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
-      const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
-      const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${effectiveSize}px${sizeNote}, ${fetchTimeMs}ms)`;
-
-      const content = [
-        { type: "image" as const, data: base64, mimeType },
-        { type: "text" as const, text: caption },
-      ];
-
-      if (!EMIT_STRUCTURED) return { content };
-      return {
-        content,
-        structuredContent: {
-          objectNumber: args.objectNumber,
-          region: args.region,
-          requestedSize: effectiveSize,
-          nativeWidth: imageInfo.width,
-          nativeHeight: imageInfo.height,
-          rotation: args.rotation,
-          quality: args.quality,
-          fetchTimeMs,
-        } as Record<string, unknown>,
-      };
     })
   );
 
@@ -1195,8 +1215,25 @@ function registerTools(
   const NavigateViewerOutput = {
     viewUUID: z.string(),
     queued: z.number().int(),
+    imageWidth: z.number().int().optional(),
+    imageHeight: z.number().int().optional(),
+    overlays: z.array(z.object({
+      label: z.string().optional(),
+      region: z.string(),
+      pixelRect: z.string().optional(),
+    })).optional(),
     error: z.string().optional(),
   };
+
+  function regionToPixels(region: string, w: number, h: number): string | undefined {
+    const m = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+    if (!m) return undefined;
+    const px = Math.round(parseFloat(m[1]) * w / 100);
+    const py = Math.round(parseFloat(m[2]) * h / 100);
+    const pw = Math.round(parseFloat(m[3]) * w / 100);
+    const ph = Math.round(parseFloat(m[4]) * h / 100);
+    return `${px},${py},${pw},${ph}`;
+  }
 
   server.registerTool(
     "navigate_viewer",
@@ -1266,9 +1303,22 @@ function registerTools(
       queue.commands.push(...args.commands);
       queue.lastAccess = Date.now();
 
+      const overlayDetails = (queue.imageWidth && queue.imageHeight)
+        ? args.commands
+            .filter((c) => c.action === "add_overlay")
+            .map((c) => ({
+              label: c.label,
+              region: c.region!,
+              pixelRect: regionToPixels(c.region!, queue.imageWidth!, queue.imageHeight!),
+            }))
+        : undefined;
+
       return structuredResponse({
         viewUUID: args.viewUUID,
         queued: args.commands.length,
+        imageWidth: queue.imageWidth,
+        imageHeight: queue.imageHeight,
+        overlays: overlayDetails?.length ? overlayDetails : undefined,
       });
     })
   );
