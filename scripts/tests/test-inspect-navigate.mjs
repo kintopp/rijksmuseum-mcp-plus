@@ -286,22 +286,81 @@ const r4e = await client.callTool({
 const nav4e = r4e.structuredContent ?? JSON.parse(r4e.content[0].text);
 assert(nav4e.queued === 2, `Second viewer: queued 2 commands`);
 
+// 4f. relativeTo projection
+console.log("\n--- 4f: relativeTo projection ---");
+const r4f = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUID1,
+    commands: [
+      { action: "add_overlay", region: "pct:50,50,20,20", relativeTo: "pct:50,0,50,100", label: "Projected" },
+    ],
+  },
+});
+const nav4f = r4f.structuredContent ?? JSON.parse(r4f.content[0].text);
+assert(!r4f.isError, "relativeTo accepted");
+assert(nav4f.queued === 1, "1 command queued");
+// Verify the projected region in currentOverlays
+// pct:50,50,20,20 relative to pct:50,0,50,100 → pct:75,50,10,20
+const projected = nav4f.currentOverlays?.find(o => o.label === "Projected");
+assert(projected, "Projected overlay in currentOverlays");
+assert(projected.region === "pct:75,50,10,20", `Projected region correct: ${projected.region}`);
+
+// 4g. relativeTo with non-pct region → error
+console.log("\n--- 4g: relativeTo with pixel region → error ---");
+const r4g = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUID1,
+    commands: [
+      { action: "add_overlay", region: "100,100,200,200", relativeTo: "pct:50,0,50,100", label: "Bad" },
+    ],
+  },
+});
+assert(r4g.isError === true, "relativeTo with pixel region → error");
+
+// 4h. invalid relativeTo format → error
+console.log("\n--- 4h: invalid relativeTo format → error ---");
+const r4h = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUID1,
+    commands: [
+      { action: "add_overlay", region: "pct:10,10,20,20", relativeTo: "not-valid", label: "Bad" },
+    ],
+  },
+});
+assert(r4h.isError === true, "Invalid relativeTo format → error");
+
+// 4i. relativeTo with non-pct IIIF format → error (must be pct:, not full/square/pixels)
+console.log("\n--- 4i: relativeTo 'full' → error (pct: required) ---");
+const r4i = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUID1,
+    commands: [
+      { action: "add_overlay", region: "pct:10,10,20,20", relativeTo: "full", label: "Bad" },
+    ],
+  },
+});
+assert(r4i.isError === true, "relativeTo 'full' → error (must be pct:)");
+
 // ══════════════════════════════════════════════════════════════════
 //  5. poll_viewer_commands — queue draining
 // ══════════════════════════════════════════════════════════════════
 
 section("5. poll_viewer_commands — queue draining");
 
-// 5a. Poll viewer 1 — should have accumulated commands from 4a (4) + 4d (1) = 5
-// Note: 4a commands + 4d command = 5 total (4c was rejected, not queued)
-console.log("\n--- 5a: Poll viewer 1 (should drain 5 commands) ---");
+// 5a. Poll viewer 1 — should have accumulated commands from 4a (4) + 4d (1) + 4f (1) = 6
+// Note: 4c/4g/4h were rejected, not queued
+console.log("\n--- 5a: Poll viewer 1 (should drain 6 commands) ---");
 const r5a = await client.callTool({
   name: "poll_viewer_commands",
   arguments: { viewUUID: viewUUID1 },
 });
 const poll1 = r5a.structuredContent ?? JSON.parse(r5a.content[0].text);
 assert(Array.isArray(poll1.commands), "commands is an array");
-assert(poll1.commands.length === 5, `Drained 5 commands (got ${poll1.commands.length})`);
+assert(poll1.commands.length === 6, `Drained 6 commands (got ${poll1.commands.length})`);
 
 // Verify command structure
 const clearCmd = poll1.commands.find(c => c.action === "clear_overlays");
@@ -309,6 +368,11 @@ assert(clearCmd != null, "Includes clear_overlays command");
 const overlayCmd = poll1.commands.find(c => c.action === "add_overlay" && c.label === "Test overlay 1");
 assert(overlayCmd?.color === "orange", "Overlay preserves color");
 assert(overlayCmd?.region === "pct:38,22,28,22", "Overlay preserves region");
+
+// Verify projected command has full-image region and no relativeTo
+const projCmd = poll1.commands.find(c => c.label === "Projected");
+assert(projCmd?.region === "pct:75,50,10,20", `Polled projected region: ${projCmd?.region}`);
+assert(projCmd?.relativeTo === undefined, "relativeTo stripped from polled command");
 
 // 5b. Poll again — queue should be empty now
 console.log("\n--- 5b: Poll again (should be empty) ---");

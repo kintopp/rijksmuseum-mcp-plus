@@ -397,6 +397,7 @@ const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]
 interface ViewerCommand {
   action: "navigate" | "add_overlay" | "clear_overlays";
   region?: string;
+  relativeTo?: string;
   label?: string;
   color?: string;
 }
@@ -1093,9 +1094,8 @@ function registerTools(
         "Best practice for overlay placement: ALWAYS inspect before overlaying. " +
         "Start with region 'full' to understand the layout, then use close-up crops (600–800px) " +
         "to pinpoint specific features before calling navigate_viewer with add_overlay. " +
-        "This two-pass approach (broad inspect → close-up verify → overlay) produces " +
-        "accurate placements; estimating coordinates from a full-image overview alone introduces " +
-        "5–10% error for small or peripheral subjects due to limited pixel resolution.\n\n" +
+        "Use navigate_viewer's 'relativeTo' parameter to place overlays using crop-local coordinates — " +
+        "the server handles the projection to full-image space, avoiding manual coordinate math.\n\n" +
         "Optionally, use navigate_viewer afterwards to zoom the viewer or add labeled " +
         "overlays highlighting regions of interest for the user.\n\n" +
         "This tool does not interact with the viewer session — calling it does not extend or affect the viewUUID lifetime.",
@@ -1256,6 +1256,25 @@ function registerTools(
     return `${px},${py},${pw},${ph}`;
   }
 
+  function parsePctRegion(region: string): [number, number, number, number] | null {
+    const m = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+    if (!m) return null;
+    return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]), parseFloat(m[4])];
+  }
+
+  /** Project crop-local coordinates to full-image space. Both must be pct: format. */
+  function projectToFullImage(local: string, relativeTo: string): string | null {
+    const l = parsePctRegion(local);
+    const o = parsePctRegion(relativeTo);
+    if (!l || !o) return null;
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const fx = round2(o[0] + (l[0] / 100) * o[2]);
+    const fy = round2(o[1] + (l[1] / 100) * o[3]);
+    const fw = round2((l[2] / 100) * o[2]);
+    const fh = round2((l[3] / 100) * o[3]);
+    return `pct:${fx},${fy},${fw},${fh}`;
+  }
+
   server.registerTool(
     "navigate_viewer",
     {
@@ -1273,12 +1292,21 @@ function registerTools(
         "Do not estimate overlay positions from memory — always inspect first.\n\n" +
         "Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set. " +
         "Keep batches under 10 commands per call. The viewer session (viewUUID) remains active as long as " +
-        "the viewer is open and polling (~30 minutes after the viewer closes or loses connection).",
+        "the viewer is open and polling (~30 minutes after the viewer closes or loses connection).\n\n" +
+        "Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, " +
+        "use 'relativeTo' with the crop's region string. Specify 'region' as coordinates within " +
+        "the crop's local space (pct: format) and the server projects to full-image space " +
+        "deterministically — eliminates manual coordinate conversion math.",
       inputSchema: z.object({
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
         commands: z.array(z.object({
           action: z.enum(["navigate", "add_overlay", "clear_overlays"]),
           region: z.string().optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', or 'x,y,w,h'"),
+          relativeTo: z.string().optional().describe(
+            "Crop region from a prior inspect_artwork_image call. When provided, " +
+            "'region' is interpreted as coordinates within that crop's local space " +
+            "and projected to full-image space by the server. Both must use pct: format."
+          ),
           label: z.string().optional().describe("Label text for add_overlay"),
           color: z.string().optional().describe("CSS color for add_overlay border (default: orange)"),
         })).min(1).describe("Commands to execute in the viewer, in order"),
@@ -1322,6 +1350,35 @@ function registerTools(
             };
           }
         }
+        if (cmd.relativeTo && !parsePctRegion(cmd.relativeTo)) {
+          return {
+            ...structuredResponse({
+              viewUUID: args.viewUUID,
+              queued: 0,
+              error: `Invalid relativeTo '${cmd.relativeTo}'. Must be in pct:x,y,w,h format.`,
+            }),
+            isError: true as const,
+          };
+        }
+      }
+
+      // Project relativeTo coordinates to full-image space
+      for (const cmd of args.commands) {
+        if (cmd.relativeTo && cmd.region) {
+          const projected = projectToFullImage(cmd.region, cmd.relativeTo);
+          if (!projected) {
+            return {
+              ...structuredResponse({
+                viewUUID: args.viewUUID,
+                queued: 0,
+                error: `relativeTo requires both 'region' and 'relativeTo' in pct: format. Got region='${cmd.region}', relativeTo='${cmd.relativeTo}'.`,
+              }),
+              isError: true as const,
+            };
+          }
+          cmd.region = projected;
+        }
+        delete cmd.relativeTo; // Never forward to viewer
       }
 
       queue.commands.push(...args.commands);
