@@ -1383,10 +1383,13 @@ function registerTools(
         );
       } catch (err) {
         const message = `Failed to open browser: ${err instanceof Error ? err.message : String(err)}`;
-        return structuredResponse(
-          { opened: false, url: args.url, error: message },
-          message
-        );
+        return {
+          ...structuredResponse(
+            { opened: false, url: args.url, error: message },
+            message
+          ),
+          isError: true as const,
+        };
       }
     })
   );
