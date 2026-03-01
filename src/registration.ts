@@ -400,13 +400,20 @@ interface ViewerCommand {
   label?: string;
   color?: string;
 }
+interface OverlayEntry {
+  label?: string;
+  region: string;
+  color?: string;
+}
 interface ViewerQueue {
   commands: ViewerCommand[];
   createdAt: number;
   lastAccess: number;
+  lastPolledAt: number;
   objectNumber: string;
   imageWidth?: number;
   imageHeight?: number;
+  activeOverlays: OverlayEntry[];
 }
 const viewerQueues = new Map<string, ViewerQueue>();
 
@@ -414,7 +421,7 @@ const viewerQueues = new Map<string, ViewerQueue>();
 setInterval(() => {
   const now = Date.now();
   for (const [id, q] of viewerQueues) {
-    if (now - q.lastAccess > 600_000) viewerQueues.delete(id);
+    if (now - q.lastAccess > 1_800_000) viewerQueues.delete(id);
   }
 }, 60_000).unref();
 
@@ -551,9 +558,12 @@ function registerTools(
                 .describe(
                   "PRIMARY parameter for concept or thematic searches — use this first, before description or curatorialNarrative. " +
                   "Searches 831K artworks by subject matter (Iconclass themes, depicted scenes). " +
-                  "Exact word matching, no stemming (e.g. 'cat' matches 'cat' but not 'cats'). " +
-                  "For variant forms, search separately or use iconclass for precise codes. " +
+                  "Exact word matching, no stemming — 'cat' won't match 'cats', 'crucifixion' won't match 'crucified'. " +
+                  "If a subject query returns 0 results, try variant word forms (singular/plural, nominalized) " +
+                  "or use lookup_iconclass to find the canonical Iconclass notation code for more reliable matching. " +
                   "Also covers historical events using Dutch labels (e.g. 'Tweede Wereldoorlog', 'Tachtigjarige Oorlog'). " +
+                  "Subject matching does not distinguish primary from incidental/decorative subjects — " +
+                  "a mortar with an Annunciation relief will match 'Annunciation'. Combine with type (e.g. type: 'painting') to filter. " +
                   "Requires vocabulary DB."
                 ),
               iconclass: z
@@ -1037,9 +1047,11 @@ function registerTools(
         commands: [],
         createdAt: Date.now(),
         lastAccess: Date.now(),
+        lastPolledAt: Date.now(),
         objectNumber,
         imageWidth: imageInfo.width,
         imageHeight: imageInfo.height,
+        activeOverlays: [],
       });
 
       const { thumbnailUrl, iiifId, fullUrl, ...imageData } = imageInfo;
@@ -1076,14 +1088,17 @@ function registerTools(
         "- Top-left quarter: pct:0,0,50,50\n" +
         "- Bottom-right quarter: pct:50,50,50,50\n" +
         "- Center strip: pct:25,25,50,50\n" +
-        "- Full image: full (default)\n\n" +
+        "- Full image: full (default)\n" +
+        "- For multi-panel works: use physical dimensions from get_artwork_details to estimate panel percentages, then inspect individual panels with close-up crops.\n\n" +
         "Best practice for overlay placement: ALWAYS inspect before overlaying. " +
         "Start with region 'full' to understand the layout, then use close-up crops (600–800px) " +
         "to pinpoint specific features before calling navigate_viewer with add_overlay. " +
         "This two-pass approach (broad inspect → close-up verify → overlay) produces " +
-        "accurate placements; estimating coordinates without inspection leads to offset errors.\n\n" +
+        "accurate placements; estimating coordinates from a full-image overview alone introduces " +
+        "5–10% error for small or peripheral subjects due to limited pixel resolution.\n\n" +
         "Optionally, use navigate_viewer afterwards to zoom the viewer or add labeled " +
-        "overlays highlighting regions of interest for the user.",
+        "overlays highlighting regions of interest for the user.\n\n" +
+        "This tool does not interact with the viewer session — calling it does not extend or affect the viewUUID lifetime.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1222,6 +1237,12 @@ function registerTools(
       region: z.string(),
       pixelRect: z.string().optional(),
     })).optional(),
+    viewerConnected: z.boolean().optional(),
+    currentOverlays: z.array(z.object({
+      label: z.string().optional(),
+      region: z.string(),
+      color: z.string().optional(),
+    })).optional(),
     error: z.string().optional(),
   };
 
@@ -1249,7 +1270,10 @@ function registerTools(
         "will target the identical area in the viewer.\n\n" +
         "For accurate overlay placement: inspect the target area with inspect_artwork_image first, " +
         "verify the region contains what you expect, then use the same or refined coordinates here. " +
-        "Do not estimate overlay positions from memory — always inspect first.",
+        "Do not estimate overlay positions from memory — always inspect first.\n\n" +
+        "Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set. " +
+        "Keep batches under 10 commands per call. The viewer session (viewUUID) remains active as long as " +
+        "the viewer is open and polling (~30 minutes after the viewer closes or loses connection).",
       inputSchema: z.object({
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
         commands: z.array(z.object({
@@ -1303,6 +1327,14 @@ function registerTools(
       queue.commands.push(...args.commands);
       queue.lastAccess = Date.now();
 
+      // Maintain server-side shadow overlay list
+      for (const cmd of args.commands) {
+        if (cmd.action === "clear_overlays") queue.activeOverlays = [];
+        else if (cmd.action === "add_overlay") {
+          queue.activeOverlays.push({ label: cmd.label, region: cmd.region!, color: cmd.color });
+        }
+      }
+
       const overlayDetails = (queue.imageWidth && queue.imageHeight)
         ? args.commands
             .filter((c) => c.action === "add_overlay")
@@ -1313,12 +1345,16 @@ function registerTools(
             }))
         : undefined;
 
+      const viewerConnected = (Date.now() - queue.lastPolledAt) < 5000;
+
       return structuredResponse({
         viewUUID: args.viewUUID,
         queued: args.commands.length,
         imageWidth: queue.imageWidth,
         imageHeight: queue.imageHeight,
         overlays: overlayDetails?.length ? overlayDetails : undefined,
+        viewerConnected,
+        currentOverlays: queue.activeOverlays.length ? queue.activeOverlays : undefined,
       });
     })
   );
@@ -1345,6 +1381,7 @@ function registerTools(
       const queue = viewerQueues.get(args.viewUUID);
       if (!queue) return structuredResponse({ commands: [] });
       queue.lastAccess = Date.now();
+      queue.lastPolledAt = Date.now();
       const commands = queue.commands.splice(0);  // drain
       return structuredResponse({ commands });
     }

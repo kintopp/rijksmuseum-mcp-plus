@@ -217,11 +217,23 @@ export class RijksmuseumApiClient {
 
   /** Fetch a IIIF image URL as base64 (shared by region and thumbnail fetchers) */
   private async fetchIiifAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
-    const { data } = await this.http.get(url, {
-      responseType: "arraybuffer",
-      headers: { Accept: "image/jpeg, image/*" },
-    });
-    return { data: Buffer.from(data).toString("base64"), mimeType: "image/jpeg" };
+    try {
+      const { data } = await this.http.get(url, {
+        responseType: "arraybuffer",
+        headers: { Accept: "image/jpeg, image/*" },
+      });
+      return { data: Buffer.from(data).toString("base64"), mimeType: "image/jpeg" };
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        if (status === 400) throw new Error("IIIF request rejected (HTTP 400) — likely an invalid region or size exceeding image dimensions");
+        if (status === 429) throw new Error("IIIF server rate limited — wait a moment and retry");
+        if (status === 404) throw new Error("Image not available from IIIF server");
+        if (status && status >= 500) throw new Error(`IIIF server error (HTTP ${status})`);
+        if (err.code === "ECONNABORTED") throw new Error("IIIF request timed out");
+      }
+      throw err;
+    }
   }
 
   /** Fetch a IIIF region (or full image) as base64 for direct LLM visual analysis */
