@@ -1,12 +1,12 @@
 # Profession Vocabulary
 
-600 distinct professions across 456,696 mappings. Labels are bilingual (English and Dutch). The `#` column shows the number of artworks linked to each profession.
+600 distinct professions across ~457,000 mappings. Labels are bilingual (English and Dutch). The `#` column shows the number of artworks linked to each profession.
 
 | Profession | # | Profession | # | Profession | # |
 |---|---|---|---|---|---|
 | aannemer | 1 | gouverneur-generaal | 5 | paarlemoerinlegger | 6 |
 | aardewerkfabriek | 259 | graficus | 825 | paarlemoerwerker | 18 |
-| aartshertog | 2 | grafisch ontwerper | 350 | painter | 55,053 |
+| aartshertog | 2 | grafisch ontwerper | 350 | painter | ~55,000 |
 | abt | 8 | grafisch vormgever | 515 | pamflettist | 1 |
 | acteur | 145 | graveur | 536 | papierfabriek | 1 |
 | activist | 16 | griffier | 9 | papierfabrikant | 15 |
@@ -47,7 +47,7 @@
 | ballonvaarder | 31 | inspecteur-generaal | 6 | priester | 91 |
 | bankier | 26 | installatie-kunstenaar | 26 | prins | 2 |
 | baron | 5 | instrument maker | 89 | prinses | 23 |
-| barones | 1 | interieurontwerper | 283 | print maker | 145,971 |
+| barones | 1 | interieurontwerper | 283 | print maker | ~146,000 |
 | batikkunstenaar | 2 | ivory carver | 14 | printer | 3,452 |
 | bediende | 1 | jeweler | 688 | procureur | 4 |
 | bedrijf | 38 | journalist | 948 | professor | 141 |
@@ -55,7 +55,7 @@
 | beeldhouwer (brons) | 9 | juwelier | 121 | prozaschrijver | 170 |
 | beeldhouwer (terracotta) | 1 | kaartmaker | 6 | psychiater | 11 |
 | behangselfabrikant | 1 | kabelfabrikant | 1 | publicist | 343 |
-| bellfounder | 3 | kaligraaf | 1 | publisher | 13,954 |
+| bellfounder | 3 | kaligraaf | 1 | publisher | ~14,000 |
 | beroepsduiker | 2 | kalligraaf | 132 | Raad van State-lid | 4 |
 | bestuurder | 5 | kamerheer | 1 | raadpensionaris | 5 |
 | bibliofiel | 5 | kamerlid | 2 | raadsheer | 1 |
@@ -145,7 +145,7 @@
 | dominee | 6 | militair-ingenieur | 1 | toneelschrijver | 50 |
 | draadtrekker | 1 | mineraloog | 27 | toneelspeler | 8 |
 | dramaturg | 6 | miniatuurschilder | 730 | tsaar | 2 |
-| draughtsman | 119,027 | minister | 127 | tuinarchitect | 3 |
+| draughtsman | ~119,000 | minister | 127 | tuinarchitect | 3 |
 | drogist | 4 | Minister van Algemene Zaken | 4 | Tweede Kamerlid | 168 |
 | drukkerij | 128 | Minister van Binnenlandse Zaken | 7 | typograaf | 65 |
 | Earl | 21 | Minister van Buitenlandse Zaken | 7 | uitgeverij | 217 |
@@ -170,7 +170,7 @@
 | fluitist | 1 | modelleur | 106 | vioolbouwer | 6 |
 | formateur | 2 | modeontwerper | 95 | vlootvoogd | 1 |
 | fotoagentschap | 36 | modetekenaar | 2 | voetballer | 222 |
-| fotograaf | 44,658 | modiste | 44 | voorlichter | 1 |
+| fotograaf | ~45,000 | modiste | 44 | voorlichter | 1 |
 | fotohandel | 6 | monnik | 21 | voorzitter | 1 |
 | fotopersbureau | 191 | monumentaal kunstenaar | 1,154 | vormgever | 100 |
 | fotostudio | 1,012 | muntmaker | 231 | vormsnijder | 93 |

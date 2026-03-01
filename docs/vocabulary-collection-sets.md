@@ -1,6 +1,6 @@
 # Collection Set Vocabulary
 
-192 curated sets across 2,804,118 set memberships. Use `list_curated_sets` to discover sets interactively.
+192 curated sets across ~2.8 million set memberships. Use `list_curated_sets` to discover sets interactively.
 
 | Set | Artworks | Set | Artworks |
 |---|---|---|---|
@@ -8,25 +8,25 @@
 | (under construction) Drawings 2 | 150 | kostuums en accessoires | 2,907 |
 | accessoires | 5,657 | kraakporselein | 423 |
 | affiches | 7,824 | kranten en tijdschriften | 361 |
-| Against Opacity | 19,427 | kunstnijverheid | 243 |
+| Against Opacity | ~19,000 | kunstnijverheid | 243 |
 | Album Ankersmit | 1 | L.J. Veen | 3,375 |
-| Alle gepubliceerde objecten | 831,615 | lakwerk | 101 |
+| Alle gepubliceerde objecten | ~832,000 | lakwerk | 101 |
 | ambtskostuums | 99 | Leeuwarden serie | 41 |
 | archeologische vondsten | 15 | lijsten | 2,065 |
 | archief Bonger | 691 | linnendamast | 2,942 |
 | Art Nouveau | 605 | Marinemodellenkamer | 1,538 |
-| Atlas Amsterdam (KOG) | 11,255 | maritiem digitaal | 50 |
+| Atlas Amsterdam (KOG) | ~11,000 | maritiem digitaal | 50 |
 | Atlas J.M. Coffeng (KOG) | 96 | maritieme collecties | 259 |
 | Atlas Ottens | 6,744 | Maten & gewichten | 10 |
 | Atlas Van Eck (KOG) | 1,722 | Meresteijn | 29 |
 | Atlas Zeden en Gewoonten (KOG) | 9,119 | metalen | 1 |
-| autografen | 15,957 | meubelen | 2,975 |
+| autografen | ~16,000 | meubelen | 2,975 |
 | Aziatische keramiek | 3,193 | Midden-Oosten keramiek | 286 |
 | Aziatische keramiek | 4,710 | MIMO: Musical Instruments | 366 |
 | beeldhouwwerken | 2,464 | miniaturen | 309 |
 | betimmeringen | 4 | mode | 2,401 |
-| Bik | 177 | munten, penningen en draagtekens | 17,597 |
-| biografisch | 82,661 | museuminventaris | 3 |
+| Bik | 177 | munten, penningen en draagtekens | ~18,000 |
+| biografisch | ~83,000 | museuminventaris | 3 |
 | boeken | 5,556 | muziekinstrumenten | 788 |
 | Boot | 3 | naaldwerk | 393 |
 | bouwfragmenten | 1,248 | Navy Models in the Rijksmuseum | 1,355 |
@@ -36,7 +36,7 @@
 | Cat. 15e en 16e eeuwse Nederlandse Schilderijen | 6 | Oosterse tapijten | 310 |
 | Cat. 17e eeuwse Nederlandse Schilderijen I | 7 | opticaprenten | 1,009 |
 | Cat. 17e eeuwse Vlaamse Schilderijen | 1 | Oranjeportretten | 3,565 |
-| Centraal-Azië (collectie) | 21 | ornamentprenten | 10,139 |
+| Centraal-Azië (collectie) | 21 | ornamentprenten | ~10,000 |
 | chalcografie | 909 | ornamenttekeningen | 139 |
 | China (collectie) | 4,263 | P.N. van Kampen | 38 |
 | Delfts aardewerk | 1,515 | pamfletten | 288 |
@@ -45,30 +45,30 @@
 | documenten en objecten | 4,606 | pastels | 115 |
 | Drawings by Rembrandt and his School in the Rijksmuseum | 139 | poppenhuis | 1,881 |
 | Drees | 370 | porselein | 798 |
-| Duits steengoed | 519 | prenten | 12,756 |
-| Dutch Drawings of the Seventeenth Century in the Rijksmuseum | 483 | prenten | 385,321 |
+| Duits steengoed | 519 | prenten | ~13,000 |
+| Dutch Drawings of the Seventeenth Century in the Rijksmuseum | 483 | prenten | ~385,000 |
 | Dutch Paintings of the Seventeenth Century in the Rijksmuseum | 713 | Princesse Maria | 43 |
 | Early Netherlandish Paintings | 163 | R.W.P. de Vries Jr. | 1,075 |
 | edele metalen | 3,729 | RijksXL | 6,987 |
 | Engels aardewerk | 653 | Roosdorp | 490 |
 | Engelse spotprenten | 468 | Rotterdamse V.O.C. serie | 35 |
-| Entire Public Domain Set | 730,005 | schaalmodellen | 6 |
+| Entire Public Domain Set | ~730,000 | schaalmodellen | 6 |
 | erotica | 53 | scheepsmodellen | 110 |
 | European Sculpture in the Rijksmuseum | 775 | scheepswrakvondsten | 6 |
 | Europees aardewerk | 2 | schilderijen | 4,911 |
 | Europees keramiek | 2,113 | schilderingen | 48 |
 | Europees porselein | 2,967 | schutterij | 410 |
 | Europese wandtapijten | 131 | sieraden | 1,372 |
-| ex librissen | 11,402 | sieraden | 70 |
+| ex librissen | ~11,000 | sieraden | 70 |
 | Flemish Paintings in the Rijksmuseum | 129 | sierpapier | 1,847 |
-| foto's | 198,868 | Slot ter Hooghe | 4 |
+| foto's | ~199,000 | Slot ter Hooghe | 4 |
 | foto-opdrachten | 2,107 | Snouckaert | 201 |
 | fotoalbums uit Nederlands-Indië | 3,693 | Spitsbergen (collectie) | 46 |
-| fotografisch geïllustreerde boeken | 51,728 | spotprenten | 1,710 |
-| Frankenportretten | 30,135 | Staten-Generaal | 393 |
-| Frederik Muller Historieplaten | 25,963 | Surimono from the Goslings Collection in the Rijksmuseum | 205 |
+| fotografisch geïllustreerde boeken | ~52,000 | spotprenten | 1,710 |
+| Frankenportretten | ~30,000 | Staten-Generaal | 393 |
+| Frederik Muller Historieplaten | ~26,000 | Surimono from the Goslings Collection in the Rijksmuseum | 205 |
 | Friderici-collectie | 15 | tegels | 12 |
-| gebrandschilderd glas | 499 | tekeningen | 88,576 |
+| gebrandschilderd glas | 499 | tekeningen | ~89,000 |
 | gelegenheidsgrafiek | 5,385 | textiel | 815 |
 | Gerritsen | 2,000 | tijdschriften | 82 |
 | glas | 1,719 | Top 100 | 133 |
@@ -85,7 +85,7 @@
 | huishoudtextiel | 451 | Varia 18e eeuw | 322 |
 | IJkwezen | 208 | Varia 19e eeuw | 186 |
 | Immerzeel | 572 | Varia 20e eeuw en later | 2,401 |
-| Indisch erfgoed | 11,826 | Vereniging Rembrandt | 3,755 |
+| Indisch erfgoed | ~12,000 | Vereniging Rembrandt | 3,755 |
 | interieuronderdelen | 321 | verzamelbanden | 16 |
 | interieurtextiel | 921 | Visser (collectie) | 366 |
 | Japan (collectie) | 7,734 | vlaggen en vaandels | 154 |
@@ -95,7 +95,7 @@
 | Katzenelnbogen serie | 7 | wapens & militaria | 2,333 |
 | keramiek (collectie) | 6,972 | Witte Leeuw | 1,185 |
 | kerkelijk textiel (collectie) | 205 | Works by Hercules Segers in the Rijksmuseum | 77 |
-| KOG | 29,528 | Zeelelie | 6 |
+| KOG | ~30,000 | Zeelelie | 6 |
 | koloniale kunstnijverheid | 222 | zijdeweefsels | 780 |
 | koptisch textiel | 70 | Zuid-Azië (collectie) | 113 |
 | Korea (collectie) | 38 | Zuidoost-Azië, maritiem (collectie) | 346 |

@@ -1,6 +1,6 @@
 ## Semantic search
 
-The `semantic_search` tool finds artworks by meaning, concept, or theme using natural language. Unlike `search_artwork`, which matches against structured metadata fields (titles, vocabulary terms, Iconclass notations), semantic search ranks all 831,667 artworks by embedding similarity to a free-text query.
+The `semantic_search` tool finds artworks by meaning, concept, or theme using natural language. Unlike `search_artwork`, which matches against structured metadata fields (titles, vocabulary terms, Iconclass notations), semantic search ranks all ~831,000 artworks by embedding similarity to a free-text query.
 
 ### How it works
 
@@ -59,7 +59,7 @@ The tool uses two internal search paths:
 
 | Mode | When | How |
 |------|------|-----|
-| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of all 831K vectors |
+| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of all ~831,000 vectors |
 | **Filtered KNN** | One or more filters specified | Vocabulary DB narrows candidates by metadata, then `vec_distance_cosine()` ranks the filtered set |
 
 The search mode (`semantic` or `semantic+filtered`) is reported in the response.
@@ -72,7 +72,7 @@ Each result includes:
 - **Source text** — the reconstructed composite text that was originally embedded, in the same `[Label] value` format. This is the grounding context — use it to explain *why* a result was retrieved or to identify false positives.
 - **URL** — link to the artwork on rijksmuseum.nl
 
-Source text is not stored in the embeddings database (saving 365 MB). It is reconstructed at query time from the vocabulary database, matching the original embedding generation format.
+Source text is not stored in the embeddings database (saving ~365 MB). It is reconstructed at query time from the vocabulary database, matching the original embedding generation format.
 
 ### Known limitations
 
@@ -87,6 +87,6 @@ Source text is not stored in the embeddings database (saving 365 MB). It is reco
 ### Technical details
 
 - **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The quantized ONNX model is sourced from the [Xenova mirror](https://huggingface.co/Xenova/multilingual-e5-small).
-- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) v0.1.6. Brute-force scan (no ANN index). 831,667 × int8[384] ≈ 305 MB in the vec0 table, plus a regular `artwork_embeddings` table for filtered queries.
+- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) v0.1.6. Brute-force scan (no ANN index). ~831,000 × int8[384] ≈ 305 MB in the vec0 table, plus a regular `artwork_embeddings` table for filtered queries.
 - **Query embedding prefix:** The model uses the `query:` prefix for queries and `passage:` for documents, following the E5 instruction format.
 - **Database size:** 699 MB (389 MB gzip-compressed). Auto-downloaded on first start when `EMBEDDINGS_DB_URL` is set.

@@ -53,7 +53,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 ### Subject and Iconographic Search
 
-`search_artwork` includes twenty database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `productionRole`, height ranges, and width ranges — drawn from a pre-built vocabulary database of 149,000 controlled terms mapped to 831,000 artworks via 12.8 million mappings. These enable searches by what is depicted, where it was made, who made it (including biographical attributes and production roles), what is written on it, what the museum says about it, and how large it is.
+`search_artwork` includes over twenty database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `productionRole`, height ranges, and width ranges — drawn from a pre-built vocabulary database of ~149,000 controlled terms mapped to ~831,000 artworks via ~12.8 million mappings. These enable searches by what is depicted, where it was made, who made it (including biographical attributes and production roles), what is written on it, what the museum says about it, and how large it is.
 
 #### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -127,7 +127,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 - `search_artwork` with `provenance: "Rembrandt"` for broader ownership-history search
 - `get_artwork_details` on each for full provenance chain and credit line context
 
-**Why it matters:** The `creditLine` and `provenance` filters enable full-text search across acquisition records (~358K credit lines, ~48K provenance entries), making collection history systematically researchable without examining each artwork individually.
+**Why it matters:** The `creditLine` and `provenance` filters enable full-text search across acquisition records (~358,000 credit lines, ~48,000 provenance entries), making collection history systematically researchable without examining each artwork individually.
 
 ---
 
@@ -182,8 +182,9 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 **How the tools enable it:**
 - `get_artwork_details` with `objectNumber: "SK-C-5"` returns materials, technique statement, structured dimensions, and inscriptions
 - `get_artwork_image` opens the interactive deep-zoom viewer for close examination at maximum magnification
+- `inspect_artwork_image` retrieves specific regions as base64 for direct AI analysis — e.g. crop the lower-right corner to read a signature, or zoom into a face to examine brushwork. The AI can describe what it sees and then use `navigate_viewer` to highlight the region in the viewer with a labeled overlay.
 
-**Why it matters:** Technical metadata — support material, paint type, exact dimensions — frames what the viewer reveals. Knowing a canvas is 363 x 437 cm contextualises the scale of visible brushwork; knowing the inscription text lets the user verify it against the painted surface at full zoom.
+**Why it matters:** Technical metadata — support material, paint type, exact dimensions — frames what the viewer reveals. Knowing a canvas is 363 x 437 cm contextualises the scale of visible brushwork; knowing the inscription text lets the user verify it against the painted surface at full zoom. Direct image inspection by the AI adds a layer of visual analysis that goes beyond metadata alone.
 
 #### 14. Comparative Detail Analysis Across Works
 
@@ -196,7 +197,19 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **Why it matters:** The `birthPlace` filter identifies artists by geographic origin without requiring the researcher to already know who belongs to which school. The quantitative comparison reveals the relative weight of each school in the collection, and the viewer delivers the images for visual analysis of their contrasting techniques.
 
-#### 15. Reproductive Prints and Their Painted Sources
+#### 15. Reading Inscriptions and Examining Details with AI Vision
+
+**Research question:** Can the AI assistant actually read the inscriptions on a painting or identify details that aren't described in the catalogue metadata?
+
+**How the tools enable it:**
+- `get_artwork_details` returns any transcribed inscription text from the catalogue
+- `inspect_artwork_image` with `region: "full"` gives the AI an overview of the composition, then targeted crops (e.g. `region: "pct:70,80,30,20"` for a signature area) let it examine specific areas at high resolution
+- `inspect_artwork_image` with `quality: "gray"` can improve legibility for faded or low-contrast text
+- `navigate_viewer` with `add_overlay` places labeled rectangles on the regions the AI identified, so the user can verify in the interactive viewer
+
+**Why it matters:** Museum catalogue inscriptions are sometimes incomplete or summarised. Direct image inspection lets the AI attempt to read text from the artwork surface — dates, signatures, mottoes — and flag details that might not appear in the structured metadata. The two-pass workflow (broad overview, then targeted crop) produces accurate region coordinates for overlays.
+
+#### 16. Reproductive Prints and Their Painted Sources
 
 **Research question:** How faithfully do reproductive prints translate the compositions of their painted sources? Find prints made "after" a specific painting and compare the print with the original at high magnification.
 
@@ -214,7 +227,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 `get_artist_timeline` arranges an artist's works chronologically, revealing career patterns invisible when browsing search results.
 
-#### 16. Tracing Career Evolution Through Subject and Place
+#### 17. Tracing Career Evolution Through Subject and Place
 
 **Research question:** Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?
 
@@ -225,7 +238,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **Why it matters:** Art historical narratives about career evolution are often based on a handful of securely dated works. A timeline across a full museum holding tests these narratives against a larger evidence base — and the production-place data can reveal whether the geographic move and the stylistic shift actually coincide.
 
-#### 17. Medium Shifts Within a Career
+#### 18. Medium Shifts Within a Career
 
 **Research question:** George Hendrik Breitner is classified in the Rijksmuseum's vocabulary as painter, draughtsman, and printmaker. Does the timeline of his works reveal a clear sequence — drawing first, then painting, then prints — or did he work across media simultaneously?
 
@@ -237,7 +250,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **Why it matters:** An artist classified under multiple professions may have practised them simultaneously or sequentially. The timeline reveals which, and whether any transition aligns with documented biographical events.
 
-#### 18. Comparing Parallel Careers
+#### 19. Comparing Parallel Careers
 
 **Research question:** How do the career trajectories of Jan Steen and Gabriël Metsu compare — two genre painters active in the same cities at the same time?
 
@@ -254,7 +267,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 `list_curated_sets` and `browse_set` expose the museum's 192 curatorial groupings — thematic, scholarly, and exhibition-based. These sets encode expert knowledge about how objects relate to each other.
 
-#### 19. Reconstructing Past Exhibitions
+#### 20. Reconstructing Past Exhibitions
 
 **Research question:** What objects were included in Rijksmuseum exhibitions related to Rembrandt, and how did the curatorial selection construct a narrative?
 
@@ -265,7 +278,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **Why it matters:** Exhibitions are arguments made with objects — the selection, sequencing, and juxtaposition of works constitutes an interpretation. Being able to retrieve the object list for a past exhibition enables historiographic analysis of curatorial practice.
 
-#### 20. Finding Thematic Connections Curators Have Already Made
+#### 21. Finding Thematic Connections Curators Have Already Made
 
 **Research question:** Has the Rijksmuseum curated any groupings related to Dutch maritime trade, and what objects did they consider central to that story?
 
@@ -275,7 +288,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **Why it matters:** Curated sets cross media boundaries. These cross-media juxtapositions can reveal connections that medium-specific searches miss.
 
-#### 21. Assessing Collection Depth for Grant Applications
+#### 22. Assessing Collection Depth for Grant Applications
 
 **Research question:** How many Japanese prints does the Rijksmuseum hold, what curated sets relate to Japanese art, what date range do the holdings cover, and which artists are best represented?
 
@@ -293,7 +306,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 `get_recent_changes` tracks what the museum adds and updates, providing a live feed of cataloguing activity.
 
-#### 22. Tracking New Acquisitions in a Research Area
+#### 23. Tracking New Acquisitions in a Research Area
 
 **Research question:** Has the Rijksmuseum added any new 17th-century paintings to its collection in the past six months? If so, who are the artists and what are the subjects?
 
@@ -304,7 +317,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **Why it matters:** New acquisitions can fill gaps in the evidence or provide crucial comparisons for ongoing research. A date-scoped query surfaces recently added or modified records without requiring the researcher to monitor the museum's website.
 
-#### 23. Monitoring Catalogue Activity in a Research Area
+#### 24. Monitoring Catalogue Activity in a Research Area
 
 **Research question:** Which objects in the Rijksmuseum's Asian art holdings have been recently modified in the catalogue? Retrieve the current metadata for the most recent changes.
 
@@ -319,9 +332,9 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 ### Semantic Search
 
-`semantic_search` finds artworks by meaning, concept, or theme using natural language — ranking all 831,000 artworks by embedding similarity to a free-text query. Unlike the structured filters above, semantic search works with concepts that cannot be expressed as vocabulary terms, Iconclass notations, or keyword matches. It is most effective when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly. For full technical details, see [Semantic Search](semantic-search.md).
+`semantic_search` finds artworks by meaning, concept, or theme using natural language — ranking all ~831,000 artworks by embedding similarity to a free-text query. Unlike the structured filters above, semantic search works with concepts that cannot be expressed as vocabulary terms, Iconclass notations, or keyword matches. It is most effective when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly. For full technical details, see [Semantic Search](semantic-search.md).
 
-#### 24. Discovering Thematic Connections Beyond Formal Cataloguing
+#### 25. Discovering Thematic Connections Beyond Formal Cataloguing
 
 **Research question:** Which artworks in the Rijksmuseum engage with the theme of cultural exchange between Europe and Asia — not just objects *from* Asia or *depicting* Asia, but works where the mixing of cultures is the subject?
 
@@ -333,7 +346,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **Why it matters:** "Cultural exchange" is not a vocabulary term, an Iconclass notation, or a keyword in any structured field. It is an interpretive concept that exists in curatorial narratives and descriptive texts. Semantic search is the only path to these works — and the source text grounding explains the connection, rather than leaving the researcher to guess why a result appeared.
 
-#### 25. Atmospheric and Emotional Concepts in Art
+#### 26. Atmospheric and Emotional Concepts in Art
 
 **Research question:** Can we find artworks in the Rijksmuseum that evoke a sense of solitude or isolation — a single figure in an empty landscape, a lone ship on a vast sea, an abandoned building?
 
@@ -345,7 +358,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **Why it matters:** Emotional and atmospheric qualities are not catalogued as metadata. No Iconclass code maps to "loneliness." The `description` and `curatorialNarrative` text filters require exact word matches and won't find synonyms or related concepts. Semantic search bridges this gap — imperfectly, since it depends on what curators have written, but it is often the only available path. The source text grounding makes this limitation transparent.
 
-#### 26. Cross-Language Conceptual Search
+#### 27. Cross-Language Conceptual Search
 
 **Research question:** A German art historian researching Blumenstillleben (flower still lifes) wants to find relevant works in the Rijksmuseum's predominantly Dutch-catalogued collection without needing to know the Dutch terminology.
 

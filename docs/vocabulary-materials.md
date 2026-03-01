@@ -1,6 +1,6 @@
 # Material Vocabulary
 
-734 distinct materials across 1,190,051 mappings. The `#` column shows the number of artworks linked to each material. The table below lists a representative subset; the full set is searchable via the vocabulary database.
+734 distinct materials across ~1.2 million mappings. The `#` column shows the number of artworks linked to each material. The table below lists a representative subset; the full set is searchable via the vocabulary database.
 
 **Usage:** `search_artwork` with `material: "canvas"`, `material: "oil paint"`, etc. Terms resolve to [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) equivalents where available.
 
@@ -24,7 +24,7 @@
 | acrylic paint | 124 | gauze | 14 | porcelain | 8,958 |
 | agate (chalcedony) | 47 | gesso | 9 | poster paint | 167 |
 | agate glass | 1 | gilding (material) | 1,320 | precious stone (material) | 45 |
-| alabaster (mineral) | 59 | glass | 10,035 | prepared paper | 821 |
+| alabaster (mineral) | 59 | glass | ~10,000 | prepared paper | 821 |
 | alcohol (general) | 1 | glassine | 124 | pressure-sensitive tape | 369 |
 | alder (wood) | 2 | glaze | 7,164 | printing ink | 5,210 |
 | alloy | 86 | glitter | 16 | purpleheart (wood) | 59 |
@@ -54,7 +54,7 @@
 | ball-point pen | 409 | imitation leather | 166 | satinwood (wood) | 80 |
 | bamboo | 59 | imitation pearl | 6 | sawdust | 3 |
 | bark (plant material) | 4 | imitation tortoise shell | 8 | scarab | 1 |
-| baryta paper | 28,728 | ink | 50,017 | sealing wax | 51 |
+| baryta paper | ~29,000 | ink | ~50,000 | sealing wax | 51 |
 | batiste | 338 | iron (metal) | 3,959 | sealskin | 11 |
 | beech (wood) | 247 | ironwood | 23 | sepia (ink) | 30 |
 | beryl | 2 | ivory | 1,142 | serge | 4 |
@@ -65,7 +65,7 @@
 | bole (clay) | 6 | kingwood (wood) | 20 | shellac | 13 |
 | bone (material) | 355 | labradorite | 1 | silicone | 3 |
 | bone china (material) | 436 | laburnum (wood) | 1 | silk | 5,384 |
-| bone glue | 1 | lacquer (coating) | 812 | silver (metal) | 11,348 |
+| bone glue | 1 | lacquer (coating) | 812 | silver (metal) | ~11,000 |
 | boxwood | 201 | lampas (textile material) | 30 | silver amalgam | 1 |
 | boxwood (hardwood) | 128 | lamé (textile) | 2 | silver leaf | 35 |
 | brass (alloy) | 3,787 | lapis lazuli (rock) | 13 | silver stain | 174 |
@@ -79,12 +79,12 @@
 | buckram | 56 | lenyard | 58 | sodalite | 1 |
 | buckskin | 2 | limestone | 29 | soft board | 4 |
 | calcium oxide | 8 | linden | 220 | soft-paste porcelain | 92 |
-| calf (leather) | 124 | linen (material) | 10,177 | softwood | 94 |
+| calf (leather) | 124 | linen (material) | ~10,000 | softwood | 94 |
 | calico | 18 | linoleum | 27 | sponge | 1 |
 | camlet | 3 | loam | 17 | spruce (wood) | 84 |
 | canvas | 2,680 | locust | 3 | stain (coating) | 57 |
 | carbon | 1 | looking glasses | 131 | stainless steel | 7 |
-| cardboard | 88,617 | luminous paint | 4 | starch | 3 |
+| cardboard | ~89,000 | luminous paint | 4 | starch | 3 |
 | carnelian | 25 | luster (textile) | 78 | steel (alloy) | 303 |
 | cartridge paper | 67 | luster glaze | 44 | stoneware | 1,453 |
 | casein paint | 5 | magnetite | 5 | strawboard | 5 |
@@ -96,7 +96,7 @@
 | cellulose acetate | 306 | marlstone | 1 | tantalum | 2 |
 | cement (construction material) | 8 | meerschaum | 1 | tarlatan | 11 |
 | chalcedony | 15 | melamine | 1 | teak (wood) | 42 |
-| chalk | 31,231 | mercury | 12 | tempera | 54 |
+| chalk | ~31,000 | mercury | 12 | tempera | 54 |
 | chamois (animal material) | 120 | mercury and amalgam | 1 | terracotta (clay material) | 369 |
 | charcoal stick | 1,379 | mercury sulfide | 2 | terry | 3 |
 | cherry (wood) | 29 | metal | 3,855 | ticking | 8 |
@@ -131,8 +131,8 @@
 | crystal (lead glass) | 61 | paillette | 40 | walnut (hardwood) | 752 |
 | cuprous oxide | 18 | paint (coating) | 2,768 | walnut (nut) | 1 |
 | cypress (wood) | 18 | palm leaf (material) | 6 | water | 4 |
-| deck paint | 5,284 | panel | 1,974 | watercolor (paint) | 15,321 |
-| denim | 1 | paper | 606,677 | watercolor paper | 203 |
+| deck paint | 5,284 | panel | 1,974 | watercolor (paint) | ~15,000 |
+| denim | 1 | paper | ~607,000 | watercolor paper | 203 |
 | diamond (mineral) | 167 | papier mâché | 24 | wax | 145 |
 | distemper | 1 | parchment (animal material) | 1,465 | weft loop weave | 3 |
 | dogwood (wood) | 3 | particle board | 18 | white gold | 11 |
@@ -142,10 +142,10 @@
 | ebony (wood) | 571 | pear (wood) | 34 | wood (plant material) | 9,511 |
 | egg (material) | 3 | pearl | 150 | wood board | 2 |
 | elm (wood) | 107 | pen | 10 | wool | 1,472 |
-| emerald (mineral) | 18 | pencil | 45,705 | worsted | 10 |
+| emerald (mineral) | 18 | pencil | ~46,000 | worsted | 10 |
 | enamel paint | 13 | pepper | 3 | wrought iron (iron alloy) | 24 |
 | encaustic paint | 1 | photographic film (photographic materials) | 511 | yarn | 72 |
-| engobe | 176 | photographic support | 90,367 | yew (wood) | 8 |
+| engobe | 176 | photographic support | ~90,000 | yew (wood) | 8 |
 | etching ground | 1 | pigment | 41 | zinc | 395 |
 | extrusive rock | 6 | pigskin | 6 | zinc alloy | 2 |
 | faille | 5 | pinchbeck | 6 | zircon | 3 |
