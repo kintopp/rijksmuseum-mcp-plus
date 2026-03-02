@@ -765,8 +765,10 @@ function registerTools(
       // Route ALL queries through vocab DB when available (v0.19 vocab-DB-only routing)
       if (vocabAvailable && vocabDb) {
         // At least one filter required (prevent unfiltered full-collection scans)
-        const hasAnyFilter = vocabParamKeys.some(k => argsRecord[k] !== undefined)
-          || argsRecord["query"] !== undefined;
+        // imageAvailable: false adds no condition, so treat it as "no filter"
+        const hasAnyFilter = vocabParamKeys.some(k =>
+            argsRecord[k] !== undefined && !(k === "imageAvailable" && argsRecord[k] === false)
+          ) || argsRecord["query"] !== undefined;
         if (!hasAnyFilter) {
           return errorResponse(
             "At least one search filter is required. Use specific parameters like subject, creator, type, " +

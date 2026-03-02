@@ -1297,6 +1297,13 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     """Phase 4: Resolve all artwork Linked Art URIs for Tier 2 fields."""
     cur = conn.cursor()
 
+    # Guard: Phase 3 drops tier2_done and linked_art_uri columns — Phase 4 cannot run after that
+    artworks_cols = get_columns(conn, "artworks")
+    if "tier2_done" not in artworks_cols or "linked_art_uri" not in artworks_cols:
+        print("  tier2_done/linked_art_uri columns not present (Phase 3 already finalized).")
+        print("  To re-run Tier 2 resolution, start from a fresh Phase 1+2 harvest.")
+        return
+
     # Get all artworks that haven't been processed yet
     pending = cur.execute("""
         SELECT object_number, linked_art_uri
