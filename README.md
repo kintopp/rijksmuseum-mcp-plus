@@ -44,13 +44,13 @@ Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://mod
 
 In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready. The ability the view images inline in the chat is dependent on a [recent extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) of the MCP standard. To date this feature is only supported by Anthropic in its own products. However, even when a MCP client can't support this feature, the AI assistants will still able to provide links to the Rijksmuseum's own pages.  These also allow one to view information about the artwork, zoom into it, and optionally download a high-resolution copy.
 
-**For developers:** rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details. The [rijksmuseum-se](https://github.com/kintopp/rijksmuseum-se) repo provides Jupyter notebooks and standalone scripts as starting points or interactive explorations of UMAP and PacMAP visualizations of the vocabulary embeddings.
+**For developers:** rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details. The [rijksmuseum-se](https://github.com/kintopp/rijksmuseum-se) repo provides Jupyter notebooks and standalone scripts as starting points for interactive explorations of UMAP and PacMAP visualizations of the vocabulary embeddings.
 
 ### Sample Questions
 
-After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you access to search the Rijksmuseum?". 
+After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". It should give you a list [like this](docs/available-tools.md).
 
-After that, ask your own questions. For example:
+After that, start asking your own questions. For example:
 
 "What artworks evoke vanitas and mortality?"  
 "Show me artworks depicting places near the Oude Kerk in Amsterdam"  
@@ -62,13 +62,15 @@ After that, ask your own questions. For example:
 "Which paintings are wider than 3 meters?"  
 "Someone seems to have taken a tumble in SK-A-1718. Can you show me where?"
 
+For sample of more complex questions, see the example [research scenarios](docs/research-scenarios.md). 
+
 ### How it works
 
-<to be added>
+<to be added> 
 
 ### Technical notes
 
-<to be added>
+<to be added> For now, see [this file](docs/technical-guide.md).
 
 ### Tips and Limitations
 
@@ -84,7 +86,11 @@ The AI assistant handles search strategy automatically — choosing the right to
 
 **Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. This is especially useful for atmospheric or thematic queries like "sense of loneliness" or "cultural exchange." The assistant can also search Iconclass itself by concept — finding the right notation code by meaning rather than exact keyword — and then use that notation for precise structured search. This two-step path avoids the painting underrepresentation that affects direct concept search.
 
+**The MCP server (rijksmuseum-mcp+) seems stuck**. If the server is not responding or seems stuck, it could be that it's been updated. To fix this, in your AI system's (aka MCP client's) settings (e.g. in _Settings_ in Claude Desktop or claude.ai) disconnect and reconnect the server, and then click on _Configure_ to verify that all permissions are still set correctly. In other MCP clients, you may not be able to disconnect/reconnect. In that case, remove/add the rijksmuseum-mcp+ MCP server using its remote URL: `https://rijksmuseum-mcp-plus-production.up.railway.app/mcp`
+
 #### Known Limitations
+
+<p align="center"><img src="docs/fallen-skater.jpg" alt="Fallen Skater"> </p>
 
 **Structured search results are not ranked by relevance.** When filtering by subject, material, place, technique, or other structured fields, results come back in internal catalogue order — not by quality, importance, or closeness to the query. For a large result set, the first page is essentially an arbitrary slice of the matching artworks, not a curated selection. Concept-based (semantic) searches are the exception: those results are ranked by similarity to your query.
 
@@ -106,18 +112,18 @@ The AI assistant handles search strategy automatically — choosing the right to
 
 **Soon:**
 
-- support for `assigned_by attribution` metadata (e.g. "attributed to", "workshop of", and "follower of")
+- add support for `assigned_by attribution` metadata (e.g. "attributed to", "workshop of", and "follower of")
 - reduce dependencies on Rijskuseum [Search API](https://data.rijksmuseum.nl/docs/)
 - improve documentation
 - fine-tuning
-- add research use cases
-- add repo with interactive visualization of semantic space
-- paper/presentation
 
 **Later:**
 
-- support for optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) files
-- support for LLM analysis of user defined image selections
+- add support for optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) files
+- investigate support for 
+- add support for LLM analysis of user defined image selections
+- review toponyms without clear geolocation data
+- paper/presentation
 
 **Maybe:**
 
