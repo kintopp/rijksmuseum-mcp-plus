@@ -506,7 +506,7 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
     const warnings: string[] = [];
-    let geoResult: { placeIds: number[]; referencePlace: string; refLat: number; refLon: number } | null = null;
+    let geoResult: { placeIds: string[]; referencePlace: string; refLat: number; refLon: number } | null = null;
 
     // Handle geo proximity filter: nearLat/nearLon (coordinates) or nearPlace (name)
     const hasCoordPair = effective.nearLat != null && effective.nearLon != null;
@@ -568,7 +568,7 @@ export class VocabularyDb {
 
         const geoFilter = this.mappingFilterDirect(
           ["subject", "spatial"],
-          geoResult.placeIds.map(String),
+          geoResult.placeIds,
         );
         conditions.push(geoFilter.condition);
         bindings.push(...geoFilter.bindings);
@@ -1101,7 +1101,7 @@ export class VocabularyDb {
     placeName: string,
     radiusKm: number,
     warnings?: string[]
-  ): { placeIds: number[]; refPlace: string; refLat: number; refLon: number } | null {
+  ): { placeIds: string[]; refPlace: string; refLat: number; refLon: number } | null {
     const ref = this.resolvePlaceCoordinates(placeName, warnings);
     if (!ref) return null;
 
@@ -1110,7 +1110,7 @@ export class VocabularyDb {
   }
 
   /** Find all place vocab IDs within radiusKm of the given coordinates (bounding box + Haversine). */
-  private findPlaceIdsNearCoords(lat: number, lon: number, radiusKm: number): number[] {
+  private findPlaceIdsNearCoords(lat: number, lon: number, radiusKm: number): string[] {
     const toRad = Math.PI / 180;
     const latDelta = radiusKm / 111.0;
     const lonDelta = radiusKm / (111.0 * Math.cos(lat * toRad));
@@ -1125,7 +1125,7 @@ export class VocabularyDb {
       lat - latDelta, lat + latDelta,
       lon - lonDelta, lon + lonDelta,
       lat, lon, radiusKm
-    ) as { id: number }[];
+    ) as { id: string }[];
 
     return rows.map((r) => r.id);
   }
