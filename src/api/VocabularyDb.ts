@@ -37,6 +37,10 @@ export interface VocabSearchParams {
   nearLat?: number;
   nearLon?: number;
   nearPlaceRadius?: number;
+  // Image availability (requires vocabulary DB v0.19+ with has_image column)
+  imageAvailable?: boolean;
+  // Broad person search (searches both depicted persons and creators)
+  aboutActor?: string;
   maxResults?: number;
 }
 
@@ -96,6 +100,7 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "creator",        fields: ["creator"],               matchMode: "like",                               ftsUpgrade: true },
   { param: "collectionSet",  fields: ["collection_set"],        matchMode: "like", vocabType: "set",            ftsUpgrade: true },
   { param: "productionRole",fields: ["production_role"],        matchMode: "like",                               ftsUpgrade: true },
+  { param: "aboutActor",   fields: ["subject", "creator"],    matchMode: "like", vocabType: "person",         ftsUpgrade: true },
 ];
 
 /** Row shape returned by place-candidate queries (findPlaceCandidates, resolveMultiWordPlace). */
@@ -232,6 +237,7 @@ export class VocabularyDb {
   private hasIntMappings = false;
   private hasRightsLookup = false;
   private hasPersonNames = false;
+  private hasImageColumn = false;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtFilterArtIds = new Map<string, Statement>();
@@ -247,13 +253,19 @@ export class VocabularyDb {
    * Build a SQL field filter clause with bindings for either integer or text mappings.
    * Returns e.g. `m.field_id = ?` or `m.field_id IN (?, ?)` for int path,
    * or `m.field = ?` / `m.field IN (?, ?)` for text path.
+   *
+   * When `noFieldIndex` is true, prefixes the column with `+` to prevent SQLite
+   * from using any field_id-leading index. This forces PK prefix scans on the
+   * mappings table, which is 9,000-17,000x faster for enrichment queries that
+   * look up a small set of artwork_ids across all fields.
    */
-  private buildFieldClause(fields: string[]): { clause: string; bindings: (string | number)[] } {
+  private buildFieldClause(fields: string[], noFieldIndex = false): { clause: string; bindings: (string | number)[] } {
     if (this.hasIntMappings) {
       const fieldIds = fields.map((f) => this.requireFieldId(f));
+      const col = noFieldIndex ? "+m.field_id" : "m.field_id";
       return fieldIds.length === 1
-        ? { clause: "m.field_id = ?", bindings: fieldIds }
-        : { clause: `m.field_id IN (${fieldIds.map(() => "?").join(", ")})`, bindings: fieldIds };
+        ? { clause: `${col} = ?`, bindings: fieldIds }
+        : { clause: `${col} IN (${fieldIds.map(() => "?").join(", ")})`, bindings: fieldIds };
     }
     return fields.length === 1
       ? { clause: "m.field = ?", bindings: fields }
@@ -294,6 +306,7 @@ export class VocabularyDb {
       }
       this.hasRightsLookup = this.tableExists("rights_lookup");
       this.hasPersonNames = this.tableExists("person_names_fts");
+      this.hasImageColumn = this.columnExists("artworks", "has_image");
 
       // Warn if geo index is missing (must be created during harvest, not at runtime — DB is read-only)
       if (this.hasCoordinates) {
@@ -321,6 +334,7 @@ export class VocabularyDb {
         this.hasCoordinates && "coordinates",
         this.hasIntMappings && "intMappings",
         this.hasPersonNames && "personNames",
+        this.hasImageColumn && "hasImage",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -339,7 +353,7 @@ export class VocabularyDb {
     const map = new Map<string, string>();
     if (!this.db || objectNumbers.length === 0) return map;
 
-    const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(["type"]);
+    const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(["type"], true);
     const CHUNK = 500;
 
     for (let i = 0; i < objectNumbers.length; i += CHUNK) {
@@ -405,11 +419,12 @@ export class VocabularyDb {
       }[];
 
       // Query 2: subject labels per artwork
+      // +m.field_id prevents field_id-leading index (forces PK prefix scan on artwork_id)
       const subjectRows = this.db.prepare(
         `SELECT m.artwork_id, COALESCE(v.label_en, v.label_nl) AS label
          FROM mappings m
          JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-         WHERE m.field_id = ? AND m.artwork_id IN (${placeholders})`
+         WHERE +m.field_id = ? AND m.artwork_id IN (${placeholders})`
       ).all(subjectFieldId, ...chunk) as { artwork_id: number; label: string | null }[];
 
       // Group subject labels by artwork_id
@@ -461,8 +476,26 @@ export class VocabularyDb {
     }
   }
 
+  /** Compact search: returns only object numbers and total count, no enrichment.
+   *  Uses the same filter logic as search() but skips lookupTypes/distance enrichment. */
+  searchCompact(params: VocabSearchParams): { totalResults?: number; ids: string[]; source: "vocabulary"; warnings?: string[] } {
+    if (!this.db) return { ids: [], source: "vocabulary" };
+    // Delegate to search with compact flag — the internal implementation checks this
+    const result = this.searchInternal(params, true);
+    return {
+      ...(result.totalResults != null && { totalResults: result.totalResults }),
+      ids: result.results.map((r) => r.objectNumber),
+      source: "vocabulary",
+      ...(result.warnings && result.warnings.length > 0 && { warnings: result.warnings }),
+    };
+  }
+
   /** Search artworks by vocabulary criteria. Multiple params are intersected (AND). */
   search(params: VocabSearchParams): VocabSearchResult {
+    return this.searchInternal(params, false);
+  }
+
+  private searchInternal(params: VocabSearchParams, compact: boolean): VocabSearchResult {
     if (!this.db) {
       return emptyResult();
     }
@@ -619,6 +652,15 @@ export class VocabularyDb {
       bindings.push(`%${effective.license}%`);
     }
 
+    // Image availability filter (requires has_image column from v0.19+ DB)
+    if (effective.imageAvailable === true) {
+      if (this.hasImageColumn) {
+        conditions.push("a.has_image = 1");
+      } else {
+        warnings.push("imageAvailable requires vocabulary DB v0.19+. This filter was ignored.");
+      }
+    }
+
     // Tier 2: Text FTS filters (inscription, provenance, creditLine, curatorialNarrative)
     const TEXT_FILTERS: [keyof VocabSearchParams, string][] = [
       ["description", "description_text"],
@@ -702,11 +744,12 @@ export class VocabularyDb {
     }[];
 
     // When nearPlace is active, enrich results with nearest place + distance
+    // Skip enrichment in compact mode (only IDs needed)
     let distanceMap: Map<string, { place: string; dist: number }> | undefined;
-    if (geoResult && rows.length > 0) {
+    if (!compact && geoResult && rows.length > 0) {
       const objNums = rows.map((r) => r.object_number);
       const objPlaceholders = objNums.map(() => "?").join(", ");
-      const { clause: geoFieldClause, bindings: geoFieldBindings } = this.buildFieldClause(["subject", "spatial"]);
+      const { clause: geoFieldClause, bindings: geoFieldBindings } = this.buildFieldClause(["subject", "spatial"], true);
 
       const distSql = this.hasIntMappings
         ? `SELECT a.object_number, v.label_en, v.label_nl,
@@ -739,8 +782,8 @@ export class VocabularyDb {
       }
     }
 
-    // Enrich results with object type from mappings
-    const typeMap = this.lookupTypes(rows.map((r) => r.object_number));
+    // Enrich results with object type from mappings (skip in compact mode)
+    const typeMap = compact ? new Map<string, string>() : this.lookupTypes(rows.map((r) => r.object_number));
 
     return {
       totalResults,

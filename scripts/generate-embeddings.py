@@ -54,9 +54,8 @@ def load_artworks(vocab_db: str) -> list[dict]:
         SELECT art_id, object_number, title_all_text, creator_label,
                narrative_text, inscription_text, description_text
         FROM artworks
-        WHERE tier2_done = 1
     """).fetchall()
-    print(f"    {len(rows):,} artworks with Tier 2 data")
+    print(f"    {len(rows):,} artworks")
 
     # Load subject labels per artwork (most important for semantic search)
     print("  Loading subject labels...")

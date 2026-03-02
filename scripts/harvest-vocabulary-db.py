@@ -90,6 +90,7 @@ HEIGHT_URIS = {AAT_HEIGHT, RM_HEIGHT}
 WIDTH_URIS = {AAT_WIDTH, RM_WIDTH}
 AAT_NARRATIVE = "http://vocab.getty.edu/aat/300048722"
 AAT_DESCRIPTION = "http://vocab.getty.edu/aat/300435452"
+AAT_PRODUCTION_STATEMENT = "http://vocab.getty.edu/aat/300435416"
 
 # ─── N-Triples parsing (same as pilot) ──────────────────────────────
 
@@ -211,6 +212,7 @@ CREATE TABLE IF NOT EXISTS artworks (
     date_earliest    INTEGER,
     date_latest      INTEGER,
     title_all_text   TEXT,
+    has_image        INTEGER DEFAULT 0,
     tier2_done       INTEGER DEFAULT 0
 );
 
@@ -686,12 +688,26 @@ def extract_records(root: ET.Element) -> list[dict]:
             if rights_el is not None:
                 rights_uri = rights_el.get(RDF_RESOURCE, "")
 
+        # Check for image availability (edm:isShownBy on ore:Aggregation)
+        has_image = 0
+        if agg is not None:
+            is_shown = agg.find("{http://www.europeana.eu/schemas/edm/}isShownBy")
+            if is_shown is not None:
+                # Present as either rdf:resource attribute or nested WebResource
+                has_image = 1
+            else:
+                # Fallback: check edm:object (alternative image reference)
+                edm_obj = agg.find("{http://www.europeana.eu/schemas/edm/}object")
+                if edm_obj is not None:
+                    has_image = 1
+
         records.append({
             "object_number": object_number,
             "title": title,
             "creator_label": creator_label,
             "rights_uri": rights_uri,
             "linked_art_uri": lod_uri,
+            "has_image": has_image,
             "mappings": mappings,
         })
 
@@ -748,8 +764,8 @@ def run_phase1(conn: sqlite3.Connection, resume: bool = False):
 
         for rec in records:
             conn.execute(
-                "INSERT OR IGNORE INTO artworks (object_number, title, creator_label, rights_uri, linked_art_uri) VALUES (?, ?, ?, ?, ?)",
-                (rec["object_number"], rec["title"], rec["creator_label"], rec["rights_uri"], rec["linked_art_uri"]),
+                "INSERT OR IGNORE INTO artworks (object_number, title, creator_label, rights_uri, linked_art_uri, has_image) VALUES (?, ?, ?, ?, ?, ?)",
+                (rec["object_number"], rec["title"], rec["creator_label"], rec["rights_uri"], rec["linked_art_uri"], rec["has_image"]),
             )
             for vocab_id, field in rec["mappings"]:
                 conn.execute(
@@ -1039,11 +1055,11 @@ def extract_dimension_cm(dimensions: list | None, type_uris: set[str]) -> float 
     return None
 
 
-def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-    """Extract production roles and attribution qualifiers from produced_by.
+def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+    """Extract production roles, attribution qualifiers, and assigned creators from produced_by.
 
     Returns:
-        (roles, qualifiers) where each is a list of (vocab_id, field) tuples.
+        (roles, qualifiers, creators) where each is a list of (vocab_id, field) tuples.
 
     Production structure in Linked Art:
         produced_by: {
@@ -1051,17 +1067,31 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
                 {
                     carried_out_by: [{ id: "https://id.rijksmuseum.nl/31xxx" }],
                     technique: [{ id: "https://id.rijksmuseum.nl/12xxx" }],  # role (painter, printmaker)
-                    classified_as: [{ id: "..." }],  # qualifier (attributed to, workshop of)
+                    classified_as: [{ id: "..." }],  # priority level (primary/secondary/undetermined)
+                    assigned_by: [
+                        {
+                            type: "AttributeAssignment",
+                            assigned_property: "carried_out_by",
+                            assigned: [{ id: "https://id.rijksmuseum.nl/31xxx" }],  # person
+                            classified_as: [{ id: "..." }],  # REAL qualifier (attributed to, workshop of)
+                        }
+                    ]
                 }
             ]
         }
+
+    Note: part.classified_as contains priority levels (primary/secondary), NOT rich
+    attribution qualifiers. The real qualifiers (attributed to, workshop of, manner of,
+    etc.) come from assigned_by[].classified_as. Both are stored as
+    "attribution_qualifier" mappings (different AAT codes, additive).
     """
     roles: list[tuple[str, str]] = []
     qualifiers: list[tuple[str, str]] = []
+    creators: list[tuple[str, str]] = []
 
     produced_by = data.get("produced_by")
     if not isinstance(produced_by, dict):
-        return roles, qualifiers
+        return roles, qualifiers, creators
 
     parts = produced_by.get("part", [])
     if not isinstance(parts, list):
@@ -1078,15 +1108,36 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
                 if tid:
                     vid = tid.split("/")[-1]
                     roles.append((vid, "production_role"))
-        # Extract classified_as (attribution qualifier: attributed to, workshop of, etc.)
+        # Extract classified_as (priority level: primary/secondary/undetermined)
         for cls in part.get("classified_as", []):
             if isinstance(cls, dict):
                 cid = cls.get("id", "")
                 if cid:
                     vid = cid.split("/")[-1]
                     qualifiers.append((vid, "attribution_qualifier"))
+        # Extract assigned_by (AttributeAssignment pattern — #43)
+        for assignment in part.get("assigned_by", []):
+            if not isinstance(assignment, dict):
+                continue
+            if (assignment.get("type") != "AttributeAssignment"
+                    or assignment.get("assigned_property") != "carried_out_by"):
+                continue
+            # Extract person URI from assigned[]
+            for person in assignment.get("assigned", []):
+                if isinstance(person, dict):
+                    pid = person.get("id", "")
+                    if pid:
+                        vid = pid.split("/")[-1]
+                        creators.append((vid, "creator"))
+            # Extract real attribution qualifiers (attributed to, workshop of, etc.)
+            for cls in assignment.get("classified_as", []):
+                if isinstance(cls, dict):
+                    cid = cls.get("id", "")
+                    if cid:
+                        vid = cid.split("/")[-1]
+                        qualifiers.append((vid, "attribution_qualifier"))
 
-    return roles, qualifiers
+    return roles, qualifiers, creators
 
 
 def extract_narrative(data: dict) -> str | None:
@@ -1170,8 +1221,36 @@ def resolve_artwork(uri: str) -> dict | None:
     height_cm = extract_dimension_cm(dimensions, HEIGHT_URIS)
     width_cm = extract_dimension_cm(dimensions, WIDTH_URIS)
 
-    # Production roles and attribution qualifiers
-    roles, qualifiers = extract_production_parts(data)
+    # Production roles, attribution qualifiers, and assigned creators
+    roles, qualifiers, creators = extract_production_parts(data)
+
+    # Creator label from production statement text (referred_to_by with AAT 300435416)
+    # Contains the qualifier-prefixed creator name (e.g. "attributed to Claes van Beresteyn")
+    creator_label = None
+    produced_by = data.get("produced_by", {})
+    if isinstance(produced_by, dict):
+        prod_refs = produced_by.get("referred_to_by", [])
+        if isinstance(prod_refs, list):
+            label_by_lang: dict[str, str] = {}
+            for ref in prod_refs:
+                if not isinstance(ref, dict):
+                    continue
+                if not has_classification(ref.get("classified_as"), AAT_PRODUCTION_STATEMENT):
+                    continue
+                content = ref.get("content", "")
+                if isinstance(content, list):
+                    content = " ".join(s for s in content if isinstance(s, str))
+                if not content:
+                    continue
+                for lang in ref.get("language", []):
+                    lid = lang.get("id", "") if isinstance(lang, dict) else ""
+                    if lid and lid not in label_by_lang:
+                        label_by_lang[lid] = content
+                        break
+            # Prefer English → Dutch → first available
+            creator_label = label_by_lang.get(LANG_EN) or label_by_lang.get(LANG_NL)
+            if not creator_label and label_by_lang:
+                creator_label = next(iter(label_by_lang.values()))
 
     # Curatorial narrative (museum wall text)
     narrative_text = extract_narrative(data)
@@ -1223,8 +1302,10 @@ def resolve_artwork(uri: str) -> dict | None:
         "date_earliest": date_earliest,
         "date_latest": date_latest,
         "title_all_text": title_all_text,
+        "creator_label": creator_label,
         "roles": roles,
         "qualifiers": qualifiers,
+        "creators": creators,
     }
 
 
@@ -1272,8 +1353,10 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     with_narrative = 0
     with_dates = 0
     with_titles = 0
+    with_creator_label = 0
     role_count = 0
     qualifier_count = 0
+    creator_count = 0
     t0 = time.time()
 
     TIER2_UPDATE_SQL = """
@@ -1288,6 +1371,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
             date_earliest = ?,
             date_latest = ?,
             title_all_text = ?,
+            creator_label = COALESCE(?, creator_label),
             tier2_done = 1
         WHERE object_number = ?
     """
@@ -1343,6 +1427,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     with_dates += 1
                 if result["title_all_text"]:
                     with_titles += 1
+                if result.get("creator_label"):
+                    with_creator_label += 1
 
                 conn.execute(TIER2_UPDATE_SQL, (
                     result["inscription_text"],
@@ -1355,14 +1441,16 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     result["date_earliest"],
                     result["date_latest"],
                     result["title_all_text"],
+                    result.get("creator_label"),
                     obj_num,
                 ))
 
-                # Insert production role and attribution qualifier mappings
-                for vocab_id, field in result["roles"] + result["qualifiers"]:
+                # Insert production role, attribution qualifier, and creator mappings
+                for vocab_id, field in result["roles"] + result["qualifiers"] + result["creators"]:
                     conn.execute(MAPPING_INSERT_SQL, (obj_num, vocab_id, field))
                 role_count += len(result["roles"])
                 qualifier_count += len(result["qualifiers"])
+                creator_count += len(result["creators"])
 
             conn.commit()
             batch_start = batch_end
@@ -1389,8 +1477,10 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Narratives:   {with_narrative:,}")
     print(f"    Dates:        {with_dates:,}")
     print(f"    All titles:   {with_titles:,}")
+    print(f"    Creator label:{with_creator_label:,}")
     print(f"    Prod. roles:  {role_count:,}")
     print(f"    Attr. quals:  {qualifier_count:,}")
+    print(f"    Creators:     {creator_count:,} (from assigned_by)")
 
 
 # ─── Geocoding Import ────────────────────────────────────────────────
@@ -1553,10 +1643,11 @@ def normalize_mappings(conn: sqlite3.Connection):
     conn.commit()
 
     # Step 5: Recreate secondary indexes
+    # Only idx_mappings_field_vocab is needed. idx_mappings_field_artwork is a
+    # performance anti-pattern (9,000-17,000x slower on enrichment queries) and
+    # idx_mappings_vocab is redundant (not used by any runtime query path).
     print("  Creating secondary indexes...")
-    conn.execute("CREATE INDEX idx_mappings_field_vocab   ON mappings(field_id, vocab_rowid)")
-    conn.execute("CREATE INDEX idx_mappings_field_artwork ON mappings(field_id, artwork_id)")
-    conn.execute("CREATE INDEX idx_mappings_vocab         ON mappings(vocab_rowid)")
+    conn.execute("CREATE INDEX idx_mappings_field_vocab ON mappings(field_id, vocab_rowid)")
     conn.commit()
 
     elapsed = time.time() - t0
@@ -1622,6 +1713,18 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
     # Drop harvest-only index (only useful during Phase 4 to find unresolved artworks)
     conn.execute("DROP INDEX IF EXISTS idx_artworks_tier2")
+
+    # Drop redundant/harmful indexes (safety — in case running against older DB)
+    conn.execute("DROP INDEX IF EXISTS idx_mappings_field_artwork")
+    conn.execute("DROP INDEX IF EXISTS idx_mappings_vocab")
+
+    # Drop harvest-only columns (SQLite >= 3.35.0)
+    for col in ["linked_art_uri", "tier2_done"]:
+        try:
+            conn.execute(f"ALTER TABLE artworks DROP COLUMN {col}")
+            print(f"    Dropped {col} column")
+        except Exception:
+            print(f"    Note: Could not drop {col} (SQLite < 3.35.0)")
     conn.commit()
 
     print("\n" + "=" * 60)
@@ -1731,8 +1834,9 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     conn.commit()
 
     # Create FTS5 virtual table for artwork text fields (Tier 2)
+    # Detect Tier 2 data by checking for non-null text fields (tier2_done column may be dropped)
     has_tier2 = cur.execute(
-        "SELECT COUNT(*) FROM artworks WHERE tier2_done = 1"
+        "SELECT COUNT(*) FROM artworks WHERE inscription_text IS NOT NULL OR description_text IS NOT NULL OR narrative_text IS NOT NULL"
     ).fetchone()[0]
     if has_tier2 > 0:
         print("  Building FTS5 index on artwork text fields (Tier 2)...")
@@ -1825,7 +1929,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
     # Tier 2 stats
     if has_tier2 > 0:
-        print(f"\n--- Tier 2 Coverage (of {has_tier2:,} resolved) ---")
+        print(f"\n--- Tier 2 Coverage ({has_tier2:,} artworks with text data) ---")
 
         # Text and dimension column coverage
         text_cols = [
@@ -1849,7 +1953,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
             print(f"  {label:20s} {cnt:8,} artworks")
 
         # Mapping field coverage
-        for field, label in [("production_role", "Prod. roles"), ("attribution_qualifier", "Attr. qualifiers")]:
+        for field, label in [("production_role", "Prod. roles"), ("attribution_qualifier", "Attr. qualifiers"), ("creator", "Creators")]:
             fid = cur.execute("SELECT id FROM field_lookup WHERE name = ?", (field,)).fetchone()
             if fid:
                 cnt = cur.execute(
@@ -1862,11 +1966,27 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
                 cnt, artworks = 0, 0
             print(f"  {label:20s} {cnt:8,} mappings ({artworks:,} artworks)")
 
-        tier2_pending = cur.execute(
-            "SELECT COUNT(*) FROM artworks WHERE tier2_done = 0 AND linked_art_uri IS NOT NULL AND linked_art_uri != ''"
+        # Creator label coverage (should increase from ~55% to ~95%+ after assigned_by extraction)
+        creator_label_cnt = cur.execute(
+            "SELECT COUNT(*) FROM artworks WHERE creator_label IS NOT NULL AND creator_label != ''"
         ).fetchone()[0]
-        if tier2_pending > 0:
-            print(f"  Still pending:     {tier2_pending:,} artworks (use --resume --phase 4)")
+        total_artworks_cnt = cur.execute("SELECT COUNT(*) FROM artworks").fetchone()[0]
+        pct = (creator_label_cnt / total_artworks_cnt * 100) if total_artworks_cnt > 0 else 0
+        print(f"  {'Creator labels':20s} {creator_label_cnt:8,} artworks ({pct:.1f}%)")
+
+        # has_image coverage
+        if "has_image" in get_columns(conn, "artworks"):
+            has_img_cnt = cur.execute("SELECT COUNT(*) FROM artworks WHERE has_image = 1").fetchone()[0]
+            pct = (has_img_cnt / total_artworks_cnt * 100) if total_artworks_cnt > 0 else 0
+            print(f"  {'Has image':20s} {has_img_cnt:8,} artworks ({pct:.1f}%)")
+
+        # Tier 2 pending (only if columns still exist — they're dropped in Phase 3)
+        if "tier2_done" in get_columns(conn, "artworks") and "linked_art_uri" in get_columns(conn, "artworks"):
+            tier2_pending = cur.execute(
+                "SELECT COUNT(*) FROM artworks WHERE tier2_done = 0 AND linked_art_uri IS NOT NULL AND linked_art_uri != ''"
+            ).fetchone()[0]
+            if tier2_pending > 0:
+                print(f"  Still pending:     {tier2_pending:,} artworks (use --resume --phase 4)")
 
     print("\n--- Sample Queries ---")
 

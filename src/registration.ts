@@ -182,7 +182,7 @@ const SearchResultOutput = {
   totalResults: z.number().int().nullable().optional()
     .describe("Total matching artworks. Null/absent for complex cross-filter queries."),
   results: z.array(z.object({
-    id: z.string().optional().describe("Linked Art URI (present for Search API results, absent for vocabulary results)."),
+    id: z.string().optional().describe("Linked Art URI (present for degraded Search API fallback only)."),
     objectNumber: z.string(),
     title: z.string(),
     creator: z.string(),
@@ -192,10 +192,9 @@ const SearchResultOutput = {
     nearestPlace: z.string().optional(),
     distance_km: z.number().optional(),
   })).optional().describe("Artwork summaries. Absent when compact=true."),
-  ids: z.array(z.string()).optional().describe("Artwork URIs (compact mode only)."),
-  source: z.enum(["search_api", "vocabulary", "aboutActor-fallback"]).optional(),
+  ids: z.array(z.string()).optional().describe("Object numbers (compact mode only)."),
+  source: z.enum(["vocabulary", "search_api"]).optional(),
   referencePlace: z.string().optional(),
-  nextPageToken: z.string().optional(),
   warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 };
@@ -443,6 +442,8 @@ function registerTools(
 
   // Vocabulary-backed search params (require vocabulary DB)
   const vocabAvailable = vocabDb?.available ?? false;
+  // All search parameters that the vocab DB handles.
+  // With vocab-DB-only routing (v0.19), every parameter routes through the vocab DB.
   const vocabParamKeys = [
     "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
     "birthPlace", "deathPlace", "profession", "collectionSet", "license",
@@ -451,14 +452,14 @@ function registerTools(
     "minHeight", "maxHeight", "minWidth", "maxWidth",
     "nearPlace", "nearLat", "nearLon",
     "title",
+    "material", "technique", "type", "creator",
+    "creationDate",
+    "imageAvailable",
+    "aboutActor",
   ] as const;
-  // nearPlaceRadius excluded: its Zod default (25) would trigger
-  // vocab routing on every query. Forwarded separately via allVocabKeys.
-
-  // Keys that cross both paths: forwarded to vocab DB when a vocab param triggers routing
-  const crossFilterKeys = ["material", "technique", "type", "creator"] as const;
-  const hybridKeys = ["creationDate"] as const;
-  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", ...crossFilterKeys, ...hybridKeys];
+  // nearPlaceRadius excluded from routing key check: its Zod default (25) would trigger
+  // on every query. Forwarded separately.
+  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius"] as const;
 
   server.registerTool(
     "search_artwork",
@@ -482,11 +483,7 @@ function registerTools(
         "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
         "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
         (vocabAvailable
-          ? " Vocabulary-based filters (subject, iconclass, depictedPerson, depictedPlace, productionPlace, " +
-            "birthPlace, deathPlace, profession, collectionSet, license, description, inscription, provenance, creditLine, " +
-            "curatorialNarrative, productionRole, and dimension filters) " +
-            "can be freely combined with each other and with creator, type, material, technique, creationDate, and query. " +
-            "Vocabulary filters cannot be combined with imageAvailable or aboutActor. " +
+          ? " All parameters can be freely combined with each other. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
@@ -515,7 +512,8 @@ function registerTools(
             "(e.g. 'Louis XIV' finds 'Lodewijk XIV') and fuzzy name matching, but not combinable " +
             "with vocabulary filters (subject, depictedPlace, etc.). Uses the Search API. " +
             "depictedPerson is usually the better first choice (precise, combinable, with automatic " +
-            "aboutActor fallback on 0 results); use aboutActor directly only for standalone broad person searches."
+            "aboutActor fallback on 0 results); use aboutActor directly only for standalone broad " +
+            "person searches."
           ),
         type: z
           .string()
@@ -549,6 +547,9 @@ function registerTools(
           .describe(
             "If true, only return artworks that have a digital image available. Not supported in vocabulary-based searches."
           ),
+        // NOTE: aboutActor description above still references Search API for backward
+        // compatibility with cached LLM system prompts. At runtime, aboutActor routes
+        // through the vocab DB when available (v0.19+).
         // Vocabulary-backed params
         ...(vocabAvailable
           ? {
@@ -581,7 +582,8 @@ function registerTools(
                 .describe(
                   "Search for artworks depicting a specific person by name (e.g. 'Willem van Oranje'). " +
                   "Matches against 210K name variants including historical forms. Combinable with all vocabulary filters. " +
-                  "Falls back to aboutActor (Search API) automatically when no results are found. Requires vocabulary DB."
+                  "Searches depicted persons only; use aboutActor for broader person matching (depicted + creators). " +
+                  "Requires vocabulary DB."
                 ),
               depictedPlace: z
                 .string()
@@ -753,111 +755,66 @@ function registerTools(
           .boolean()
           .default(false)
           .describe(
-            "If true, returns only total count and IDs without resolving details (faster). Only applies to Search API queries, not vocabulary-based searches."
+            "If true, returns only total count and IDs without resolving details (faster)."
           ),
         pageToken: z
           .string()
           .optional()
-          .describe("Pagination token from a previous search result. Only applies to Search API queries, not vocabulary-based searches."),
+          .describe("Deprecated. Pagination is not supported in the current search backend. Use maxResults to control result count."),
       }).strict(),
       ...withOutputSchema(SearchResultOutput),
     },
     withLogging("search_artwork", async (args) => {
       const argsRecord = args as Record<string, unknown>;
 
-      // Check if any vocabulary param is present -> route through VocabularyDb
-      const hasVocabParam = vocabAvailable && vocabParamKeys.some(
-        (k) => argsRecord[k] !== undefined
-      );
-
-      // Reject incompatible parameter combinations before routing (#27)
-      // imageAvailable: false is a no-op — only true triggers the Search API image filter
-      if (hasVocabParam) {
-        const incompatible = (["imageAvailable", "aboutActor"] as const).filter(
-          k => k === "imageAvailable" ? argsRecord[k] === true : argsRecord[k] !== undefined
-        );
-        if (incompatible.length > 0) {
-          const vocabPresent = vocabParamKeys.filter(k => argsRecord[k] !== undefined);
-          const hasAboutActor = incompatible.includes("aboutActor");
-          const suggestion = hasAboutActor
-            ? " Tip: use query instead of title to combine with aboutActor (query stays on the Search API path)."
-            : "";
+      // Route ALL queries through vocab DB when available (v0.19 vocab-DB-only routing)
+      if (vocabAvailable && vocabDb) {
+        // At least one filter required (prevent unfiltered full-collection scans)
+        const hasAnyFilter = vocabParamKeys.some(k => argsRecord[k] !== undefined)
+          || argsRecord["query"] !== undefined;
+        if (!hasAnyFilter) {
           return errorResponse(
-            `${incompatible.join(", ")} cannot be combined with vocabulary filters (${vocabPresent.join(", ")}). ` +
-            `Use them separately: ${incompatible.join("/")} route through the Search API, while vocabulary filters use a different search path.` +
-            suggestion
+            "At least one search filter is required. Use specific parameters like subject, creator, type, " +
+            "material, technique, depictedPerson, etc. For concept-based search, try semantic_search instead."
           );
         }
-      }
 
-      if (hasVocabParam && vocabDb) {
         const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
         for (const k of allVocabKeys) {
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
         }
-        // Map query → title for vocab path (query searches by title on Search API too)
+        // Map query → title for vocab path (query searches by title)
         if (argsRecord["query"] && !vocabArgs["title"]) {
           vocabArgs["title"] = argsRecord["query"];
         }
-        const result = vocabDb.search(vocabArgs as any);
 
-        // Warn about Search API-only filters silently dropped on the vocab path
-        const droppedKeys = (["pageToken", "compact"] as const).filter(
-          k => argsRecord[k] !== undefined && argsRecord[k] !== false
-        );
-        if (droppedKeys.length > 0) {
-          result.warnings = [
-            ...(result.warnings || []),
-            `The following filters are not supported in vocabulary searches and were ignored: ${droppedKeys.join(", ")}.`
-          ];
+        // Compact mode: return only IDs without enrichment
+        if (args.compact) {
+          const compactResult = vocabDb.searchCompact(vocabArgs as any);
+
+          if (argsRecord["pageToken"]) {
+            compactResult.warnings = [...(compactResult.warnings || []),
+              "pageToken is deprecated — use maxResults to control result count."];
+          }
+
+          const header = (compactResult.totalResults != null
+            ? `${compactResult.totalResults} results`
+            : `${compactResult.ids.length} results`) + " (compact)";
+          return structuredResponse(compactResult, header);
         }
 
-        // Auto-fallback: depictedPerson 0 results → retry via aboutActor on Search API (#22)
-        // Only when depictedPerson is the sole vocab-only filter (other filters may have
-        // legitimately caused the 0 — retrying without them would give misleading results).
+        const result = vocabDb.search(vocabArgs as any);
+
+        if (argsRecord["pageToken"]) {
+          result.warnings = [...(result.warnings || []),
+            "pageToken is deprecated — use maxResults to control result count."];
+        }
+
+        // Suggest aboutActor when depictedPerson returns 0 results
         if (result.results.length === 0 && argsRecord.depictedPerson) {
-          const searchApiKeys = ["type", "material", "technique", "creationDate", "creator", "description"] as const;
-          const vocabOnlyKeys = vocabParamKeys.filter(
-            k => k !== "depictedPerson" && k !== "title" && !(searchApiKeys as readonly string[]).includes(k) && argsRecord[k] !== undefined
-          );
-
-          if (vocabOnlyKeys.length === 0) {
-            const fallbackParams: SearchParams = {
-              aboutActor: argsRecord.depictedPerson as string,
-              maxResults: args.maxResults,
-            };
-            // Forward Search API-compatible filters
-            for (const k of searchApiKeys) {
-              if (argsRecord[k] !== undefined) (fallbackParams as any)[k] = argsRecord[k];
-            }
-            // Forward query (title search on the Search API path)
-            if (argsRecord["query"]) fallbackParams.query = argsRecord["query"] as string;
-
-            const fallbackResult = await api.searchAndResolve(fallbackParams);
-
-            if (fallbackResult.totalResults > 0) {
-              // Enrich with object types from vocab DB
-              if (vocabDb) {
-                const typeMap = vocabDb.lookupTypes(fallbackResult.results.map(r => r.objectNumber));
-                for (const r of fallbackResult.results) {
-                  if (!r.type) r.type = typeMap.get(r.objectNumber);
-                }
-              }
-
-              const enriched = {
-                ...fallbackResult,
-                source: "aboutActor-fallback" as const,
-                warnings: [
-                  `depictedPerson:"${argsRecord.depictedPerson}" matched no results in the vocabulary database. ` +
-                  `Showing ${fallbackResult.totalResults} results via aboutActor (Search API) instead.`,
-                ],
-              };
-
-              const header = `${fallbackResult.results.length} results of ${fallbackResult.totalResults} total (aboutActor fallback)`;
-              const lines = fallbackResult.results.map((r, i) => formatSearchLine(r, i));
-              return structuredResponse(enriched, [header, ...lines].join("\n"));
-            }
-          }
+          result.warnings = [...(result.warnings || []),
+            `depictedPerson:"${argsRecord.depictedPerson}" matched no results. ` +
+            `Try aboutActor for broader person matching (searches both depicted persons and creators).`];
         }
 
         const header = `${result.results.length} results` +
@@ -870,7 +827,7 @@ function registerTools(
         return structuredResponse(result, [header, ...lines].join("\n") + truncationNote);
       }
 
-      // Default: use Search API
+      // Degraded fallback: use Search API when vocab DB is unavailable
       const result = args.compact
         ? await api.searchCompact(args)
         : await api.searchAndResolve(args);
@@ -900,7 +857,7 @@ function registerTools(
         (args.creator ? ` for creator "${args.creator}"` : '') +
         (result.nextPageToken ? ` (page token: ${result.nextPageToken})` : '');
       const truncationNote = result.totalResults > resultCount && resultCount > 0
-        ? "\nNote: results are not ranked by relevance. Use nextPageToken to see more, add filters to narrow, or use semantic_search for concept-ranked results."
+        ? "\nNote: results are not ranked by relevance. Add filters to narrow, or use semantic_search for concept-ranked results."
         : "";
       const lines = ("results" in result ? result.results : []).map((r, i) => formatSearchLine(r, i));
       return structuredResponse(result, [header, ...lines].join("\n") + truncationNote);

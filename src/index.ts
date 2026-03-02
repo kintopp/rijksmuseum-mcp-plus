@@ -275,10 +275,9 @@ function createServer(httpPort?: number): McpServer {
         "Rijksmuseum collection explorer — circa 830,000 artworks from antiquity to the present day " +
         "spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.\n\n" +
 
-        "Search combines two backends: a title-based Search API and a vocabulary database with structured filters " +
+        "Search uses a vocabulary database with structured filters " +
         "(subject, material, technique, creator, depicted persons/places, Iconclass notation, dates, dimensions, and more). " +
-        "Vocabulary filters combine freely with each other; imageAvailable and aboutActor use a separate search path " +
-        "and cannot be mixed with them. Results are returned in cataloguing order, not ranked by relevance. " +
+        "All filters combine freely with each other. Results are returned in cataloguing order, not ranked by relevance. " +
         "Use search_artwork for discovery, get_artwork_details for full metadata on a specific work.\n\n" +
 
         "Images are served via IIIF deep-zoom. get_artwork_image opens an interactive viewer (metadata + viewer link, no image bytes). " +
@@ -291,7 +290,7 @@ function createServer(httpPort?: number): McpServer {
 
         "Person names are matched against 210K name variants (76K persons) using phrase matching with fallback " +
         "to token intersection — partial names and historical variants often work. " +
-        "When depictedPerson returns no results, the server automatically retries via aboutActor (Search API) for broader matching.\n\n" +
+        "aboutActor searches both subject and creator vocabulary for broader person matching.\n\n" +
 
         "Place searches support proximity (nearPlace), depicted places, and production places. " +
         "64% of places are geocoded. Multi-word queries like 'Oude Kerk Amsterdam' are resolved " +
