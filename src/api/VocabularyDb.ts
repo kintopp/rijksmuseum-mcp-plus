@@ -782,8 +782,23 @@ export class VocabularyDb {
       }
     }
 
-    // Enrich results with object type from mappings (skip in compact mode)
-    const typeMap = compact ? new Map<string, string>() : this.lookupTypes(rows.map((r) => r.object_number));
+    // In compact mode, skip all enrichment — only IDs needed
+    if (compact) {
+      return {
+        totalResults,
+        results: rows.map((r) => ({
+          objectNumber: r.object_number,
+          title: "",
+          creator: "",
+          url: "",
+        })),
+        source: "vocabulary" as const,
+        ...(warnings.length > 0 && { warnings }),
+      };
+    }
+
+    // Enrich results with object type from mappings
+    const typeMap = this.lookupTypes(rows.map((r) => r.object_number));
 
     return {
       totalResults,

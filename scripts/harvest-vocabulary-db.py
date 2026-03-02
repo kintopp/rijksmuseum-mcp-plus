@@ -1055,6 +1055,24 @@ def extract_dimension_cm(dimensions: list | None, type_uris: set[str]) -> float 
     return None
 
 
+def _pick_preferred_lang(by_lang: dict[str, str]) -> str | None:
+    """Return EN value, then NL, then first available."""
+    return by_lang.get(LANG_EN) or by_lang.get(LANG_NL) or (
+        next(iter(by_lang.values())) if by_lang else None
+    )
+
+
+def _extract_ids(items: list, field: str) -> list[tuple[str, str]]:
+    """Extract (vocab_id, field) tuples from a list of Linked Art typed dicts."""
+    result = []
+    for item in items:
+        if isinstance(item, dict):
+            uri = item.get("id", "")
+            if uri:
+                result.append((uri.split("/")[-1], field))
+    return result
+
+
 def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
     """Extract production roles, attribution qualifiers, and assigned creators from produced_by.
 
@@ -1101,20 +1119,8 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
     for part in parts:
         if not isinstance(part, dict):
             continue
-        # Extract technique (production role: painter, printmaker, etc.)
-        for tech in part.get("technique", []):
-            if isinstance(tech, dict):
-                tid = tech.get("id", "")
-                if tid:
-                    vid = tid.split("/")[-1]
-                    roles.append((vid, "production_role"))
-        # Extract classified_as (priority level: primary/secondary/undetermined)
-        for cls in part.get("classified_as", []):
-            if isinstance(cls, dict):
-                cid = cls.get("id", "")
-                if cid:
-                    vid = cid.split("/")[-1]
-                    qualifiers.append((vid, "attribution_qualifier"))
+        roles.extend(_extract_ids(part.get("technique", []), "production_role"))
+        qualifiers.extend(_extract_ids(part.get("classified_as", []), "attribution_qualifier"))
         # Extract assigned_by (AttributeAssignment pattern — #43)
         for assignment in part.get("assigned_by", []):
             if not isinstance(assignment, dict):
@@ -1122,20 +1128,8 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
             if (assignment.get("type") != "AttributeAssignment"
                     or assignment.get("assigned_property") != "carried_out_by"):
                 continue
-            # Extract person URI from assigned[]
-            for person in assignment.get("assigned", []):
-                if isinstance(person, dict):
-                    pid = person.get("id", "")
-                    if pid:
-                        vid = pid.split("/")[-1]
-                        creators.append((vid, "creator"))
-            # Extract real attribution qualifiers (attributed to, workshop of, etc.)
-            for cls in assignment.get("classified_as", []):
-                if isinstance(cls, dict):
-                    cid = cls.get("id", "")
-                    if cid:
-                        vid = cid.split("/")[-1]
-                        qualifiers.append((vid, "attribution_qualifier"))
+            creators.extend(_extract_ids(assignment.get("assigned", []), "creator"))
+            qualifiers.extend(_extract_ids(assignment.get("classified_as", []), "attribution_qualifier"))
 
     return roles, qualifiers, creators
 
@@ -1174,14 +1168,7 @@ def extract_narrative(data: dict) -> str | None:
                 if content and lang_uri and lang_uri not in narratives:
                     narratives[lang_uri] = content
 
-    # Prefer EN → NL → first available (matches project convention)
-    if LANG_EN in narratives:
-        return narratives[LANG_EN]
-    if LANG_NL in narratives:
-        return narratives[LANG_NL]
-    if narratives:
-        return next(iter(narratives.values()))
-    return None
+    return _pick_preferred_lang(narratives)
 
 
 def resolve_artwork(uri: str) -> dict | None:
@@ -1247,10 +1234,7 @@ def resolve_artwork(uri: str) -> dict | None:
                     if lid and lid not in label_by_lang:
                         label_by_lang[lid] = content
                         break
-            # Prefer English → Dutch → first available
-            creator_label = label_by_lang.get(LANG_EN) or label_by_lang.get(LANG_NL)
-            if not creator_label and label_by_lang:
-                creator_label = next(iter(label_by_lang.values()))
+            creator_label = _pick_preferred_lang(label_by_lang)
 
     # Curatorial narrative (museum wall text)
     narrative_text = extract_narrative(data)
@@ -1975,13 +1959,14 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         print(f"  {'Creator labels':20s} {creator_label_cnt:8,} artworks ({pct:.1f}%)")
 
         # has_image coverage
-        if "has_image" in get_columns(conn, "artworks"):
+        artworks_cols = get_columns(conn, "artworks")
+        if "has_image" in artworks_cols:
             has_img_cnt = cur.execute("SELECT COUNT(*) FROM artworks WHERE has_image = 1").fetchone()[0]
             pct = (has_img_cnt / total_artworks_cnt * 100) if total_artworks_cnt > 0 else 0
             print(f"  {'Has image':20s} {has_img_cnt:8,} artworks ({pct:.1f}%)")
 
         # Tier 2 pending (only if columns still exist — they're dropped in Phase 3)
-        if "tier2_done" in get_columns(conn, "artworks") and "linked_art_uri" in get_columns(conn, "artworks"):
+        if "tier2_done" in artworks_cols and "linked_art_uri" in artworks_cols:
             tier2_pending = cur.execute(
                 "SELECT COUNT(*) FROM artworks WHERE tier2_done = 0 AND linked_art_uri IS NOT NULL AND linked_art_uri != ''"
             ).fetchone()[0]

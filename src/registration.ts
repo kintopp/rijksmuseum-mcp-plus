@@ -192,7 +192,7 @@ const SearchResultOutput = {
     nearestPlace: z.string().optional(),
     distance_km: z.number().optional(),
   })).optional().describe("Artwork summaries. Absent when compact=true."),
-  ids: z.array(z.string()).optional().describe("Object numbers (compact mode only)."),
+  ids: z.array(z.string()).optional().describe("Object numbers (compact mode). Degraded Search API fallback returns Linked Art URIs instead."),
   source: z.enum(["vocabulary", "search_api"]).optional(),
   referencePlace: z.string().optional(),
   warnings: z.array(z.string()).optional(),
@@ -493,7 +493,7 @@ function registerTools(
           .string()
           .optional()
           .describe(
-            "General search term — searches by title (equivalent to the title parameter). For more targeted results, use the specific field parameters instead (creator, description, subject, etc.)"
+            "General search term — maps to title search in the vocabulary database (equivalent to the title parameter). For more targeted results, use the specific field parameters instead (creator, description, subject, etc.)"
           ),
         title: z
           .string()
@@ -508,12 +508,10 @@ function registerTools(
           .optional()
           .describe(
             "Search for artworks depicting or about a person (not the creator). E.g. 'Willem van Oranje'. " +
-            "Broader recall than depictedPerson — tolerant of cross-language name forms " +
-            "(e.g. 'Louis XIV' finds 'Lodewijk XIV') and fuzzy name matching, but not combinable " +
-            "with vocabulary filters (subject, depictedPlace, etc.). Uses the Search API. " +
-            "depictedPerson is usually the better first choice (precise, combinable, with automatic " +
-            "aboutActor fallback on 0 results); use aboutActor directly only for standalone broad " +
-            "person searches."
+            "Broader recall than depictedPerson — searches both subject and creator vocabulary, tolerant of " +
+            "cross-language name forms (e.g. 'Louis XIV' finds 'Lodewijk XIV'). Combinable with all other filters. " +
+            "depictedPerson is usually the better first choice (precise, depicted persons only); " +
+            "use aboutActor for broader person matching across depicted persons and creators."
           ),
         type: z
           .string()
@@ -545,11 +543,8 @@ function registerTools(
           .boolean()
           .optional()
           .describe(
-            "If true, only return artworks that have a digital image available. Not supported in vocabulary-based searches."
+            "If true, only return artworks that have a digital image available. Requires vocabulary DB v0.19+."
           ),
-        // NOTE: aboutActor description above still references Search API for backward
-        // compatibility with cached LLM system prompts. At runtime, aboutActor routes
-        // through the vocab DB when available (v0.19+).
         // Vocabulary-backed params
         ...(vocabAvailable
           ? {
@@ -788,13 +783,16 @@ function registerTools(
           vocabArgs["title"] = argsRecord["query"];
         }
 
+        // Warn on deprecated pageToken (applies to both compact and full paths)
+        const pageTokenWarning = argsRecord["pageToken"]
+          ? "pageToken is deprecated — use maxResults to control result count."
+          : undefined;
+
         // Compact mode: return only IDs without enrichment
         if (args.compact) {
           const compactResult = vocabDb.searchCompact(vocabArgs as any);
-
-          if (argsRecord["pageToken"]) {
-            compactResult.warnings = [...(compactResult.warnings || []),
-              "pageToken is deprecated — use maxResults to control result count."];
+          if (pageTokenWarning) {
+            compactResult.warnings = [...(compactResult.warnings || []), pageTokenWarning];
           }
 
           const header = (compactResult.totalResults != null
@@ -804,10 +802,8 @@ function registerTools(
         }
 
         const result = vocabDb.search(vocabArgs as any);
-
-        if (argsRecord["pageToken"]) {
-          result.warnings = [...(result.warnings || []),
-            "pageToken is deprecated — use maxResults to control result count."];
+        if (pageTokenWarning) {
+          result.warnings = [...(result.warnings || []), pageTokenWarning];
         }
 
         // Suggest aboutActor when depictedPerson returns 0 results
