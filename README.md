@@ -4,9 +4,23 @@
 
 **rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). 
 
-You can explore artworks using the same (with minor exceptions) filters provided by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ offers access to five full-text corpora (`description`, `inscription`, `provenance`, `creditLine`, and `curatorialNarrative`) not directly accessible from the museum's website and [Iconclass](https://iconclass.org), all of which can be searched by keyword or semantically by concept/meaning as well as additional metadata fields including spatial (`nearPlace`) and physical (`minWidth`/`maxHeight`) dimensions. 
+You can explore artworks using the same (with minor exceptions) core filters provided by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ offers the following additional features:
 
-Artworks from the museum's collections can be viewed directly inside your chat — it will show these in an interactive viewer. You can also ask the AI assistant to retrieve an image, analyse its content, zoom in to a specific region and highlight areas of interest. Finally, because much of the data provided by rijksmuseum-mcp+ is already in structured form, it's straightforward for your AI assistant to use these for follow-up tasks, such as visualizations or other analyses.
+1. **Full-text corpora** (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`). This permits, for example, comparative analyses of the collection's catalogue (`description`) and curated wall texts (`curatedNarrative`).
+
+2. **Semantic search** — this enables [multilingual, concept/meaning-based search](docs/semantic-search.md) across multiple metadata categories with results presented in ranked order. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
+
+3. **Spatial dimensions** — proximity radius search on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters `nearLat` and `nearLon` to enable spatial searches from arbitrary locations.
+
+4. **Additional metadata** — several more metadata fields shared by the museum but not not accessible from its [search portal](https://www.rijksmuseum.nl/en/collection) (`birthPlace` / `deathPlace`, `profession`, and `collectionSet`)
+
+5. **Iconclass** — access to its own [Iconclass](https://iconclass.org) database, cross-linked with the Rijksmuseum, which can be searched and explored not just by notation by also title, description, parent/child classes and semantically by concept.
+
+6. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, flip horizontally or view the image full-screen.
+
+7. **Image analysis** (experimental) — the AI assistant can analyse images of artworks using a combination of its own background knowledge and structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also highlight (annotate) these elements in the image itself (e.g. "identify the biblical scenes depicted in the panels and highlight these for me").
+
+8. **Follow-up analyses** — Because most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to similary represent or export these in structured form (e.g. tabular format) or drawn on them for follow-up tasks, such as visualizations or other analyses.
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
@@ -18,15 +32,15 @@ The best way to get started is with [Claude Desktop](https://claude.com/download
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-Goto Settings → Connectors → Add custom connector → Name it whatever you like and paste the URL shown above into the 'Remote MCP Server URL' field. Once the connector has been configured, set the permissions for the individual tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded) for more details. 
+Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it whatever you like and paste the URL shown above into the _Remote MCP Server URL_ field. Once the connector is configured, set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded) for more details. 
 
 #### Choosing an AI system
 
-Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it is also compatible with many other browser based chatbots including those whose large language models (LLMs) can be used without subscription. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example. It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/).
+Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used without a paid subscription. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example. It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/).
 
-In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready. The ability the view images inline in the chat is dependent on a [recent extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) of the MCP standard but to date this feature is only supported by Anthropic in its own products (AI assistants can still provide links to the Rijksmuseum's own artworks pages).
+In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready. The ability the view images inline in the chat is dependent on a [recent extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) of the MCP standard. To date this feature is only supported by Anthropic in its own products. However, in all cases, an AI assistants is still able to provide links to the Rijksmuseum's own artworks pages. These allow one to zoom, view artwork details and download images.
 
-For all these reasons, [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) remains the current best choice of AI system for rijksmuseum-mcp+ on account of its excellent support of the underlying MCP standard and its tight integration with Anthropic's large language models. I recommend using rijksmuseum-mcp+ with an Anthropic 'Pro' subscription and the current [Claude Sonnet] model with 'extended thinking' turned on. 
+Because of these limitations, at present (March, 2026) [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) remain the best choice for using rijksmuseum-mcp+. I recommend using rijksmuseum-mcp+ with an Anthropic 'Pro' subscription and the current [Claude Sonnet](https://www.anthropic.com/claude/sonnet) model with 'extended thinking' turned on. For complex tasks, try switching to [Claude Opus](https://www.anthropic.com/claude/opus) with extended thinking. 
 
 For developers: rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes] for details. 
 
@@ -45,18 +59,6 @@ After that, ask your own questions. For example:
 "Show me sculptures in the collection by artists born in Leiden"  
 "Which paintings are wider than 3 meters?"  
 "Someone seems to have taken a tumble in SK-A-1718. Can you show me where?"
-
-### How it works
-
-What follows below is an overview of the rijksmuseum-mcp+ (the MCP server) interactions with the metadata sources from the Rijksmuseum, Iconclass, and with the AI assistant. For a more detailed descriptions, please see the [technical note].
-
-When you ask a question in your chat session, the AI assistant first reasons about your query and decides which combination of the MCP server's [tools] is most likely to give you a useful answer drawn from the museum's [metadata]. It then evaluates the initial response and triggers a new round of queries until it is satisfied and presents you with its answer (this is the so-called 'agentic loop'). The MCP tools connect to different parts of the Rijksmuseum's data infrastructure: some queries go directly to the museum's [search API], while others draw on a [vocabulary] database built from a periodic harvest of the museum's collection records. It is also able to direct some queries to an adjacent resource (Iconclass). The results come back to the AI system as structured data, which it then interprets, contextualises, and presents to you in natural language together with an image of the artwork displayed in an interactive image viewer. At each step, the AI model can combine what it retrieves with its own background knowledge — about artists, periods or iconographic traditions, and historical context — to go beyond what the museum's metadata alone would tell you. That said, AI assistants capable of 'tool calling' by interacting with MCP servers have been trained to lean heavily on the information provided by the connected resources.
-
-In this case, because the rijksmuseum-mcp+ MCP server has no direct access to the database driving the museum's [own search portal] it draws its answers from three different sources: a public, less capable, but free to use search interface (API) to its collections, its own database of Rijksmuseum metadata harvested from an alternative (OAI-PMH) public interface, and its own database of the public Iconclass data.
-
-On the one hand, this is more complicated – the AI assistant often needs to route its queries through multiple tools and data sources to answer a question. And a very small subset of queries possible on the museum's website (e.g. `XYZ`) are simply not possible here. On the other hand, because rijksmuseum-mcp+ is partly based on its own copy of Rijksmuseum data, I was able to store, enrich and organise this data however I liked — for example by retrieving the lat/long coordinates of places depicted in artworks (`depictedPlace`), drawing on curated metadata not provided through its search interface (e.g. `description`, `inscription`, `provenance`, `creditLine`, and `curatorialNarrative`) and deciding how to make this most useful researchers (by providing a means to search it semantically and multilingually by meaning/concept). 
-
-rijksmuseum-mcp+ trades off conceptual simplicity and full control over a small set of search parameters against more powerful and varied exploration and analysis options orchestrated by an AI assistant combined with some arbitrary restrictions on how these can be used. In the end, the users of both systems will need to decide for themselves which set of priorities are more important to them.
 
 ### Tips and Limitations
 
@@ -92,7 +94,25 @@ The AI assistant handles search strategy automatically — choosing the right to
 
 ### Roadmap
 
-to be added
+**Soon:**
+
+- support for `assigned_by attribution` metadata (e.g. "attributed to", "workshop of", and "follower of")
+- reduce dependencies on Rijskuseum [Search API](https://data.rijksmuseum.nl/docs/)
+- improve documentation
+- fine-tuning
+- add research use cases
+- add repo with interactive visualization of semantic space
+- paper/presentation
+
+**Later:**
+
+- support for optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) files
+- support for LLM analysis of user defined image selections
+
+**Maybe:**
+
+- integrate with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
+- add support for image similarity search (whole image, image segments)
 
 ### Authors
 
