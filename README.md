@@ -4,27 +4,29 @@
 
 **rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). 
 
-You can explore artworks using the same (with minor exceptions) core filters provided by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ offers the following additional features:
+> This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
+
+**rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks. I am particularly interested in exploring the technical and research opportunities and challenges posed by connecting (un)structured data to agentic LLMs for art historical research. If you are interested in collaborating on these questions, please [get in touch](mailto:rise@unibas.ch).
+
+### Features
+
+You can explore artworks using rijksmuseum-mcp+ with the same (with minor exceptions) filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, it provides the following additional features:
 
 1. **Full-text corpora** (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`). This permits, for example, comparative analyses of the collection's catalogue (`description`) and curated wall texts (`curatedNarrative`).
 
-2. **Semantic search** — this enables [multilingual, concept/meaning-based search](docs/semantic-search.md) across multiple metadata categories with results presented in ranked order. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
+2. **Semantic search** — this enables [multilingual, concept/meaning-based explorations](docs/semantic-search.md) across multiple metadata categories. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
 
-3. **Spatial dimensions** — proximity radius search on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters `nearLat` and `nearLon` to enable spatial searches from arbitrary locations.
+3. **Spatial dimensions** — proximity radius searches on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable spatial queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters (`nearLat` and `nearLon`) to enable spatial queries from arbitrary locations.
 
-4. **Additional metadata** — several more metadata fields shared by the museum but not not accessible from its [search portal](https://www.rijksmuseum.nl/en/collection) (`birthPlace` / `deathPlace`, `profession`, and `collectionSet`)
+4. **Additional metadata** — several more metadata fields not not accessible from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) (`birthPlace` / `deathPlace`, `profession`, and `collectionSet`).
 
 5. **Iconclass** — access to its own [Iconclass](https://iconclass.org) database, cross-linked with the Rijksmuseum, which can be searched and explored not just by notation by also title, description, parent/child classes and semantically by concept.
 
 6. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, flip horizontally or view the image full-screen.
 
-7. **Image analysis** (experimental) — the AI assistant can analyse images of artworks using a combination of its own background knowledge and structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also highlight (annotate) these elements in the image itself (e.g. "identify the biblical scenes depicted in the panels and highlight these for me").
+7. **Image analysis** (experimental) — the AI assistant can analyse images of artworks using a combination of its own background knowledge and structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also annotate (this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)) these elements in the image itself (e.g. "identify the biblical scenes depicted in the painting's panels and highlight these for me").
 
-8. **Follow-up analyses** — Because most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to similary represent or export these in structured form (e.g. tabular format) or drawn on them for follow-up tasks, such as visualizations or other analyses.
-
-> This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
-
-**rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks. I am particularly interested in exploring the technical and research opportunities and challenges posed by connecting (un)structured data to agentic LLMs for art historical research. If you are interested in collaborating on these questions, please [get in touch](mailto:rise@unibas.ch).
+8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in structured form (e.g. tabular formats, network graphs) or drawn on them for follow-up tasks, such as visualizations or other analyses.
 
 ## Quick Start
 
@@ -60,6 +62,14 @@ After that, ask your own questions. For example:
 "Which paintings are wider than 3 meters?"  
 "Someone seems to have taken a tumble in SK-A-1718. Can you show me where?"
 
+### How it works
+
+<to be added>
+
+### Technical notes
+
+<to be added>
+
 ### Tips and Limitations
 
 The AI assistant handles search strategy automatically — choosing the right tool, translating between languages, trying alternative phrasings on empty results, and combining filters. The tips below describe how best to leverage these capabilities and how to address the limitations it cannot always compensate for: data coverage gaps, structural limits of the underlying collection metadata, and cases where how you frame your question affects which results you get.
@@ -74,8 +84,6 @@ The AI assistant handles search strategy automatically — choosing the right to
 
 **Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. This is especially useful for atmospheric or thematic queries like "sense of loneliness" or "cultural exchange." The assistant can also search Iconclass itself by concept — finding the right notation code by meaning rather than exact keyword — and then use that notation for precise structured search. This two-step path avoids the painting underrepresentation that affects direct concept search.
 
----
-
 #### Known Limitations
 
 **Structured search results are not ranked by relevance.** When filtering by subject, material, place, technique, or other structured fields, results come back in internal catalogue order — not by quality, importance, or closeness to the query. For a large result set, the first page is essentially an arbitrary slice of the matching artworks, not a curated selection. Concept-based (semantic) searches are the exception: those results are ranked by similarity to your query.
@@ -89,6 +97,8 @@ The AI assistant handles search strategy automatically — choosing the right to
 **Iconclass subject classification can be counterintuitive.** The Iconclass system assigns subjects to specific branches of a strict hierarchy that does not always match everyday expectations. However, the assistant can search Iconclass by concept as well as by keyword — describing what you're looking for in plain language (e.g. "domestic animals" or "religious suffering") will often find the right notation even when the exact vocabulary term is unknown. Once the right notation is found, it can be used for precise structured search across the full collection.
 
 **The collection data is predominantly in Dutch.** Titles and subject tags are available in Dutch for virtually all records; English is available for roughly a third. The assistant will try both languages automatically, but searches for specialist terminology, historical place names, or older material may miss records that are catalogued only in Dutch.
+
+**Image analysis works better than image annotation.** Currently, Anthropic's models are more accurate at describing the contents of an image than annotating it. For example, the models will often accurately describe what can be seen (sometimes drawing on the content rich `description` data for guidance) but struggle to draw bounding-boxes around this content (the bounding boxes are usually approximately in the same area but offset).
 
 **Not all artworks have images.** Coverage is good for major works but incomplete for the full collection. The assistant will report when an image is unavailable.
 
