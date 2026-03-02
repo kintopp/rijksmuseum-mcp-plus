@@ -14,7 +14,7 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 1. **Full-text corpora** — (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`). This permits, for example, comparative analyses of the collection's catalogue (`description`) and curated wall texts (`curatedNarrative`).
 
-2. **Semantic search** — this enables [multilingual, concept/meaning-based explorations](docs/semantic-search.md) across multiple metadata categories. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
+2. **Semantic search** — this enables multilingual, concept/meaning-based explorations across multiple metadata categories. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
 
 3. **Spatial dimensions** — proximity radius searches on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable spatial queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters (`nearLat` and `nearLon`) to enable spatial queries from arbitrary locations.
 
@@ -28,7 +28,7 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in structured form (e.g. tabular formats, network graphs) or drawn on them for follow-up tasks, such as visualizations or other analyses.
 
-Please view [this reference](docs/search-parameters.md) for a comprehensive overview of all the available search parameters. 
+Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters. 
 
 ## Quick Start
 
@@ -50,27 +50,27 @@ In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' supp
 
 After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". It should give you a list [like this](docs/available-tools.md).
 
-After that, start asking your own questions. For example:
+After that, start asking your own questions:
 
-"What artworks evoke vanitas and mortality?"  
-"Show me artworks depicting places near the Oude Kerk in Amsterdam"  
-"What works have the iconclass code for fabulous animals?"  
-"Which artworks have a provenance linked to Napoleon?"  
-"What are the 'top ten' works in the Rijksmuseum?"  
-"I'm looking for artworks with inscriptions mentioning 'luctor et emergo'"  
-"Show me sculptures in the collection by artists born in Leiden"  
-"Which paintings are wider than 3 meters?"  
-"Someone seems to have taken a tumble in SK-A-1718. Can you show me where?"
+- What artworks evoke vanitas and mortality?
+- Show me artworks depicting places near the Oude Kerk in Amsterdam
+- What works have the iconclass code for fabulous animals?
+- Which artworks have a provenance linked to Napoleon?
+- What are the 'top ten' works in the Rijksmuseum?
+- I'm looking for artworks with inscriptions mentioning 'luctor et emergo'
+- Show me sculptures in the collection by artists born in Leiden
+- Which paintings are wider than 3 meters?
+- Someone seems to have taken a tumble in SK-A-1718. Can you show me where?
 
-For sample of more complex questions, see the example [research scenarios](docs/research-scenarios.md). 
+For examples of more complex questions, see the [research scenarios](docs/research-scenarios.md). 
 
 ### How it works
 
-<to be added> 
+`to be added`
 
 ### Technical notes
 
-<to be added> For now, see [this file](docs/technical-guide.md).
+`to be added` For now, please see [this file](docs/technical-guide.md).
 
 ### Tips and Limitations
 
@@ -90,11 +90,9 @@ The AI assistant handles search strategy automatically — choosing the right to
 
 #### Known Limitations
 
-<p align="center"><img src="docs/fallen-skater.jpg" alt="Fallen Skater"> </p>
+**Structured search results are not ranked by relevance.** When filtering by subject, material, place, technique, or other structured fields, results currently come back in internal catalogue order — not by quality, importance, or closeness to the query. For a large result set, the first page is essentially an arbitrary slice of the matching artworks, not a curated selection. Concept-based (semantic) searches are the exception: those results are ranked by similarity to your query. 
 
-**Structured search results are not ranked by relevance.** When filtering by subject, material, place, technique, or other structured fields, results come back in internal catalogue order — not by quality, importance, or closeness to the query. For a large result set, the first page is essentially an arbitrary slice of the matching artworks, not a curated selection. Concept-based (semantic) searches are the exception: those results are ranked by similarity to your query.
-
-**Result sets are capped and only partially paginated.** Each search returns up to 25 results by default (up to 100 on request). For title and creator searches, the assistant can request additional pages beyond the first 100. For searches by subject, material, place, technique, and other structured filters, there is a hard cap of 100 results with no way to continue beyond them. When a query matches thousands of artworks, only a small, non-representative sample is returned. Adding more specific filters is the best way to get meaningful results from large collections.
+**Result sets are capped and only partially paginated.** Each search returns up to 25 results by default (up to 100 on request). For title and creator searches, the assistant can request additional pages beyond the first 100. For searches by subject, material, place, technique, and other structured filters, there is currently a hard cap of 100 results. When a query matches thousands of artworks, only a small, non-representative sample is returned. Adding more specific filters is the best way to get meaningful results from large collections and helps prevent the LLM being overwhelmed with metadata from hundreds of search results.
 
 **Text coverage varies by field.** About 61% of records include a cataloguer's description (in Dutch). Curatorial wall texts (in English) cover only about 14,000 artworks — mostly highlights and recent acquisitions. Searches by description, inscription, provenance, or narrative only cover the portion of the collection where that text exists.
 
@@ -105,8 +103,6 @@ The AI assistant handles search strategy automatically — choosing the right to
 **The collection data is predominantly in Dutch.** Titles and subject tags are available in Dutch for virtually all records; English is available for roughly a third. The assistant will try both languages automatically, but searches for specialist terminology, historical place names, or older material may miss records that are catalogued only in Dutch.
 
 **Image analysis works better than image annotation.** Currently, Anthropic's models are more accurate at describing the contents of an image than annotating it. For example, the models will often accurately describe what can be seen (sometimes drawing on the content rich `description` data for guidance) but struggle to draw bounding-boxes around this content (the bounding boxes are usually approximately in the same area but offset).
-
-**Not all artworks have images.** Coverage is good for major works but incomplete for the full collection. The assistant will report when an image is unavailable.
 
 ### Roadmap
 
@@ -119,10 +115,11 @@ The AI assistant handles search strategy automatically — choosing the right to
 
 **Later:**
 
+- address inconsistent pagination and ranked results issues
 - add support for optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) files
-- investigate support for 
 - add support for LLM analysis of user defined image selections
 - review toponyms without clear geolocation data
+- investigate support for MCP elicitations
 - paper/presentation
 
 **Maybe:**
