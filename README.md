@@ -28,8 +28,6 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or drawn on them for follow-up tasks, such as visualizations or other analyses.
 
-Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters.<br>
-
 <br>
 <p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion" width="500"></p>
 
@@ -45,9 +43,7 @@ Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it whatever
 
 Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used without a paid subscription. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example. It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local or cloud based LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/).
 
-In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready. Note: the ability the view images inline in the chat is dependent on a [recent extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) of the MCP standard. To date (March, 2026) this feature is only supported by Anthropic in its own products. However, even when a MCP client can't support this feature, the AI assistant will still able to provide links to artwork's page at the Rijksmuseum.  Here you can view information about the artwork, zoom into it, and optionally download a high-resolution copy.
-
-**For developers:** rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details. The [rijksmuseum-se](https://github.com/kintopp/rijksmuseum-se) repo provides Jupyter notebooks and standalone scripts as starting points for interactive explorations of UMAP and PacMAP visualizations of the vocabulary embeddings.
+In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready. Note: the ability the view images inline in the chat is dependent on a [very recent extension](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) of the MCP standard. To date (March, 2026) this feature is only supported by Anthropic in its own products. 
 
 ### Sample Questions
 
@@ -69,17 +65,15 @@ For examples of more complex questions, see the [research scenarios](docs/resear
 
 ### How it works
 
-`to be added`
+`to be added` Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters.
 
 ### Technical notes
 
 `to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo.
 
-### Tips and Limitations
+rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details. The [rijksmuseum-se](https://github.com/kintopp/rijksmuseum-se) repo provides Jupyter notebooks and standalone scripts as starting points for interactive explorations of UMAP and PacMAP visualizations of the vocabulary embeddings.
 
-The AI assistant handles search strategy automatically — choosing the right tool, translating between languages, trying alternative phrasings on empty results, and combining filters. The tips below describe how best to leverage these capabilities and how to address the limitations it cannot always compensate for: data coverage gaps, structural limits of the underlying collection metadata, and cases where how you frame your question affects which results you get.
-
-#### Tips
+### Tips
 
 **Say what you are actually looking for, not how to find it.** The assistant generally does better when given a research question than a list of parameters. "What prints were made after paintings by Rembrandt?" works better than "search for prints with technique etching by Rembrandt", because the first framing lets the assistant choose the right combination of tools and strategies.
 
@@ -87,36 +81,36 @@ The AI assistant handles search strategy automatically — choosing the right to
 
 **Specify "paintings" when that is what you want, especially for concept searches.** Paintings are underrepresented in concept-based (semantic) search results relative to prints and drawings, because those have denser subject tagging in the Rijksmuseum's catalogue. Saying "paintings showing X" rather than just "artworks showing X" helps the assistant apply the right corrections.
 
-**Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. This is especially useful for atmospheric or thematic queries like "sense of loneliness" or "cultural exchange." The assistant can also search Iconclass itself by concept — finding the right notation code by meaning rather than exact keyword — and then use that notation for precise structured search. This two-step path avoids the painting underrepresentation that affects direct concept search.
+**Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. This is especially useful for atmospheric or thematic queries. The assistant can also search Iconclass concept — finding the right notation code by meaning rather than exact keyword — and then use that notation for a precise structured search.
 
-**The MCP server (rijksmuseum-mcp+) seems stuck**. If the server is not responding or seems stuck, it could be that it's been updated. To fix this, in your AI system's (aka MCP client's) settings (e.g. in _Settings_ in Claude Desktop or claude.ai) disconnect and reconnect the server, and then click on _Configure_ to verify that all permissions are still set correctly. In other MCP clients, you may not be able to disconnect/reconnect. In that case, remove/add the rijksmuseum-mcp+ MCP server using its remote URL: `https://rijksmuseum-mcp-plus-production.up.railway.app/mcp`.
+**The MCP server (rijksmuseum-mcp+) seems stuck**. If the server is not responding, it could be that it has been updated and the connection needs to be refreshed. To fix this, in your AI system's settings (e.g. in _Settings_ in Claude Desktop or claude.ai) disconnect and reconnect the server, and then click on _Configure_ to verify that all permissions are still correct. In other MCP clients, you may not be able to disconnect/reconnect. In that case, remove and add the server again.
 
-#### Known Limitations
+### Known Limitations
 
 **Structured search results are not ranked by relevance.** When filtering by subject, material, place, technique, or other structured fields, results currently come back in internal catalogue order — not by quality, importance, or closeness to the query. For a large result set, the first page is essentially an arbitrary slice of the matching artworks, not a curated selection. Concept-based (semantic) searches are the exception: those results are ranked by similarity to your query. 
 
-**Result sets are capped and only partially paginated.** Each search returns up to 25 results by default (up to 100 on request). For title and creator searches, the assistant can request additional pages beyond the first 100. For searches by subject, material, place, technique, and other structured filters, there is currently a hard cap of 100 results. When a query matches thousands of artworks, only a small, non-representative sample is returned. Adding more specific filters is the best way to get meaningful results from large collections and helps prevent the LLM being overwhelmed with metadata from hundreds of search results.
+**Result sets are capped and only partially paginated.** Each search returns up to 25 results by default (up to 100 on request). When a query matches thousands of artworks, only a small, non-representative sample is returned. Adding more specific filters is the best way to get meaningful results from large collections and helps prevent the LLM being overwhelmed with metadata from too many search results.
 
-**Text coverage varies by field.** About 61% of records include a cataloguer's description (in Dutch). Curatorial wall texts (in English) cover only about 14,000 artworks — mostly highlights and recent acquisitions. Searches by description, inscription, provenance, or narrative only cover the portion of the collection where that text exists.
+**Text coverage varies by field.** About 61% of records include a cataloguer's description (in Dutch). Curatorial wall texts (in English) cover only about 14,000 artworks — mostly highlights and recent acquisitions. 
 
-**Geolocation coverage is partial.** About 64% of named production places have been geocoded. Proximity searches ("artworks produced near Delft") will miss artworks from places that haven't been geocoded. Where coordinates exist, they typically point to the nearest town or region rather than a specific workshop address.
+**Geolocation coverage is partial.** About 64% of named production places have been geocoded. Proximity searches (e.g. "artworks produced near Delft") will miss artworks from places that haven't been geocoded. Where coordinates exist, they may point to the nearest town or region rather than a specific address.
 
-**Iconclass subject classification can be counterintuitive.** The Iconclass system assigns subjects to specific branches of a strict hierarchy that does not always match everyday expectations. However, the assistant can search Iconclass by concept as well as by keyword — describing what you're looking for in plain language (e.g. "domestic animals" or "religious suffering") will often find the right notation even when the exact vocabulary term is unknown. Once the right notation is found, it can be used for precise structured search across the full collection.
+**Iconclass subject classification can be counterintuitive.** The Iconclass system assigns subjects to specific branches of a strict hierarchy that does not always match everyday expectations. However, the assistant can search Iconclass by concept as well as by keyword — describing what you're looking for in plain language (e.g. "domestic animals" or "religious suffering") will often find the right notation even when the exact vocabulary term is unknown.
 
 **The collection data is predominantly in Dutch.** Titles and subject tags are available in Dutch for virtually all records; English is available for roughly a third. The assistant will try both languages automatically, but searches for specialist terminology, historical place names, or older material may miss records that are catalogued only in Dutch.
 
-**Image analysis works better than image annotation.** Currently, Anthropic's models are more accurate at describing the contents of an image than annotating it. For example, the models will often accurately describe what can be seen (sometimes drawing on the content rich `description` data for guidance) but struggle to draw bounding-boxes around this content (the bounding boxes are usually approximately in the same area but offset).
+**Image analysis works better than image annotation.** Anthropic's models are more accurate at describing the contents of an image than annotating it. For example, the models will often correctly describe they can 'see' (even drawing on the content rich `description` data for guidance) but struggle to draw accurate bounding-boxes around this content.
 
 ### Roadmap
 
-**Soon:**
+Soon:
 
 - add support for `assigned_by attribution` metadata (e.g. "attributed to", "workshop of", and "follower of")
 - reduce dependencies on Rijskuseum [Search API](https://data.rijksmuseum.nl/docs/)
 - improve documentation
 - fine-tuning
 
-**Later:**
+Later:
 
 - address inconsistent pagination and ranked results issues
 - add support for optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) files
@@ -126,7 +120,7 @@ The AI assistant handles search strategy automatically — choosing the right to
 - investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 - paper/presentation
 
-**Maybe:**
+Maybe:
 
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - investigate support for image similarity search (whole image, [image segments](https://engineering.q42.nl/visual-search/))
