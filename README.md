@@ -118,14 +118,15 @@ The AI assistant handles search strategy automatically — choosing the right to
 - address inconsistent pagination and ranked results issues
 - add support for optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) files
 - add support for LLM analysis of user defined image selections
+- address print vs. painting bias in semantic search from unbalanced subject labels
 - review toponyms without clear geolocation data
 - investigate support for MCP elicitations
 - paper/presentation
 
 **Maybe:**
 
-- integrate with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
-- add support for image similarity search (whole image, image segments)
+- investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
+- investiagte support for image similarity search (whole image, [image segments](https://engineering.q42.nl/visual-search/)
 
 ### Authors
 
