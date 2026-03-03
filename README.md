@@ -28,8 +28,9 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or drawn on them for follow-up tasks, such as visualizations or other analyses.
 
-Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters. 
+Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters.<br>
 
+<br>
 <p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion" width="500"></p>
 
 ## Quick Start
