@@ -30,6 +30,8 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters. 
 
+<p align="center"><img src="docs/roermond_passion.jpg" alt="Roermond Passion"></p>
+
 ## Quick Start
 
 The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Claude using the URL below. This currently requires a paid ('Pro') [subscription](https://claude.com/pricing) from Anthropic. 
