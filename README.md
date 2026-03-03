@@ -73,7 +73,7 @@ For examples of more complex questions, see the [research scenarios](docs/resear
 
 ### Technical notes
 
-`to be added` For now, please see [this file](docs/technical-guide.md).
+`to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo.
 
 ### Tips and Limitations
 
