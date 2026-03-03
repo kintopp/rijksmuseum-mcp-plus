@@ -123,7 +123,7 @@ The AI assistant handles search strategy automatically — choosing the right to
 - add support for LLM analysis of user defined image selections
 - address print vs. painting bias in semantic search from unbalanced subject labels
 - review toponyms without clear geolocation data
-- investigate support for MCP elicitations
+- investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 - paper/presentation
 
 **Maybe:**
