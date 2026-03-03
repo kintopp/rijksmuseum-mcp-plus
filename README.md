@@ -26,7 +26,7 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 7. **Image analysis** (experimental) — the AI assistant can analyse images of artworks using a combination of its own background knowledge and structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also annotate (this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)) these elements in the image itself (e.g. "identify the biblical scenes depicted in the painting's panels and highlight these for me").
 
-8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in structured form (e.g. tabular formats, network graphs) or drawn on them for follow-up tasks, such as visualizations or other analyses.
+8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or drawn on them for follow-up tasks, such as visualizations or other analyses.
 
 Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters. 
 
