@@ -30,8 +30,6 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters. 
 
-![Avercamp_Winter_Landscape](docs/Avercamp.png)
-
 ## Quick Start
 
 The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Claude using the URL below. This currently requires a paid ('Pro') [subscription](https://claude.com/pricing) from Anthropic. 
