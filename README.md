@@ -30,7 +30,7 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters. 
 
-<p align="center"><img src="docs/roermond-passion.png" alt="Roermond Passion" width="500"></p>
+<p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion" width="500"></p>
 
 ## Quick Start
 
