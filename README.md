@@ -39,6 +39,8 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
 Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it whatever you like and paste the URL shown above into the _Remote MCP Server URL_ field. Once the connector is configured, set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded) for more details. 
 
+rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
+
 #### Choosing an AI system
 
 Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used without a paid subscription. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example. It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local or cloud based LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/).
@@ -69,9 +71,7 @@ For examples of more complex questions, see the [research scenarios](docs/resear
 
 ### Technical notes
 
-`to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo.
-
-rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details. The [rijksmuseum-se](https://github.com/kintopp/rijksmuseum-se) repo provides Jupyter notebooks and standalone scripts as starting points for interactive explorations of UMAP and PacMAP visualizations of the vocabulary embeddings.
+`to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo. The [rijksmuseum-se](https://github.com/kintopp/rijksmuseum-se) repo provides Jupyter notebooks and standalone scripts as starting points for interactive explorations of UMAP and PacMAP visualizations of the vocabulary embeddings.
 
 ### Tips
 
