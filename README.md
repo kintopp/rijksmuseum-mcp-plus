@@ -129,7 +129,7 @@ The AI assistant handles search strategy automatically — choosing the right to
 **Maybe:**
 
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
-- investiagte support for image similarity search (whole image, [image segments](https://engineering.q42.nl/visual-search/)
+- investigate support for image similarity search (whole image, [image segments](https://engineering.q42.nl/visual-search/))
 
 ### Authors
 
