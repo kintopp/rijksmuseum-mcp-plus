@@ -48,9 +48,9 @@ In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' supp
 
 ### Sample Questions
 
-After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". It should give you a list [like this](docs/available-tools.md).
+After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". It should show you a list [like this](docs/available-tools.md).
 
-After that, start asking your own questions:
+After that, ask your own questions:
 
 - What artworks evoke vanitas and mortality?
 - Show me artworks depicting places near the Oude Kerk in Amsterdam
@@ -60,7 +60,7 @@ After that, start asking your own questions:
 - I'm looking for artworks with inscriptions mentioning 'luctor et emergo'
 - Show me sculptures in the collection by artists born in Leiden
 - Which paintings are wider than 3 meters?
-- Someone seems to have taken a tumble in SK-A-1718. Can you show me where?
+- Has anyone taken a tumble in SK-A-1718? Show me where.
 
 For examples of more complex questions, see the [research scenarios](docs/research-scenarios.md). 
 
@@ -86,7 +86,7 @@ The AI assistant handles search strategy automatically — choosing the right to
 
 **Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. This is especially useful for atmospheric or thematic queries like "sense of loneliness" or "cultural exchange." The assistant can also search Iconclass itself by concept — finding the right notation code by meaning rather than exact keyword — and then use that notation for precise structured search. This two-step path avoids the painting underrepresentation that affects direct concept search.
 
-**The MCP server (rijksmuseum-mcp+) seems stuck**. If the server is not responding or seems stuck, it could be that it's been updated. To fix this, in your AI system's (aka MCP client's) settings (e.g. in _Settings_ in Claude Desktop or claude.ai) disconnect and reconnect the server, and then click on _Configure_ to verify that all permissions are still set correctly. In other MCP clients, you may not be able to disconnect/reconnect. In that case, remove/add the rijksmuseum-mcp+ MCP server using its remote URL: `https://rijksmuseum-mcp-plus-production.up.railway.app/mcp`
+**The MCP server (rijksmuseum-mcp+) seems stuck**. If the server is not responding or seems stuck, it could be that it's been updated. To fix this, in your AI system's (aka MCP client's) settings (e.g. in _Settings_ in Claude Desktop or claude.ai) disconnect and reconnect the server, and then click on _Configure_ to verify that all permissions are still set correctly. In other MCP clients, you may not be able to disconnect/reconnect. In that case, remove/add the rijksmuseum-mcp+ MCP server using its remote URL: `https://rijksmuseum-mcp-plus-production.up.railway.app/mcp`.
 
 #### Known Limitations
 
