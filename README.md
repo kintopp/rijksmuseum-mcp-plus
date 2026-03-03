@@ -24,7 +24,7 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 6. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, rotate, flip horizontally or view the image full-screen.
 
-7. **Image analysis** (experimental) — the AI assistant can analyse images visually in combination with its own background knowledge and the artwork's structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also annotate (this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)) these elements in the image itself (e.g. "identify the biblical scenes depicted in the painting's panels and highlight these for me").
+7. **Image analysis** (experimental) — the AI assistant can analyse images visually in combination with its own background knowledge and the artwork's structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also annotate the image with these elements in the image viewer (e.g. "identify the biblical scenes depicted in the painting's panels and highlight these for me").
 
 8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or drawn on them for follow-up tasks, such as visualizations or other analyses.
 
