@@ -55,15 +55,15 @@ After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to y
 
 After that, ask your own questions:
 
-- What artworks evoke vanitas and mortality?
-- Show me artworks depicting places near the Oude Kerk in Amsterdam
-- What works have the iconclass code for fabulous animals?
-- Which artworks have a provenance linked to Napoleon?
-- What are the 'top ten' works in the Rijksmuseum?
-- I'm looking for artworks with inscriptions mentioning 'luctor et emergo'
-- Show me sculptures in the collection by artists born in Leiden
-- Which paintings are wider than 3 meters?
-- Has anyone taken a tumble in SK-A-1718? Show me where.
+- _What artworks evoke vanitas and mortality?_
+- _Show me artworks depicting places near the Oude Kerk in Amsterdam_
+- _What works have the iconclass code for fabulous animals?_
+- _Which artworks have a provenance linked to Napoleon?_
+- _What are the 'top ten' works in the Rijksmuseum?_
+- _I'm looking for artworks with inscriptions mentioning 'luctor et emergo'_
+- _Show me sculptures in the collection by artists born in Leiden_
+- _Which paintings are wider than 3 meters?_
+- _Has anyone taken a tumble in SK-A-1718? Show me where._
 
 For examples of more complex questions, see the [research scenarios](docs/research-scenarios.md). 
 
