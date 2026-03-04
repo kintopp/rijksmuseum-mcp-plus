@@ -193,6 +193,8 @@ const SearchResultOutput = {
     distance_km: z.number().optional(),
   })).optional().describe("Artwork summaries. Absent when compact=true."),
   ids: z.array(z.string()).optional().describe("Object numbers (compact mode)."),
+  remainingIds: z.array(z.string()).optional()
+    .describe("Object numbers beyond the first 25 results. Use get_artwork_details to fetch full metadata."),
   source: z.enum(["vocabulary", "search_api"]).optional(),
   referencePlace: z.string().optional(),
   warnings: z.array(z.string()).optional(),
@@ -467,8 +469,8 @@ function registerTools(
       title: "Search Artwork",
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
-        "Results are in cataloguing order, not ranked by relevance or importance — " +
-        "for relevance-ranked results, use semantic_search instead. " +
+        "Results are ranked by relevance when text search (description, title, etc.) or geographic proximity is used; " +
+        "otherwise results are in cataloguing order. For concept-ranked results, use semantic_search. " +
         "At least one search filter is required. " +
         "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
         "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), " +
@@ -740,7 +742,7 @@ function registerTools(
           .min(1)
           .max(RESULTS_MAX)
           .default(RESULTS_DEFAULT)
-          .describe(`Maximum results to return (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT})`),
+          .describe(`Maximum results to return (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}). First 25 include full metadata; additional results return only object numbers for use with get_artwork_details.`),
         compact: z
           .boolean()
           .default(false)
@@ -811,13 +813,14 @@ function registerTools(
         }
 
         const header = `${result.results.length} results` +
+          (result.remainingIds ? ` + ${result.remainingIds.length} more IDs` : '') +
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
           ` (vocabulary search)`;
-        const truncationNote = result.totalResults != null && result.totalResults > result.results.length
-          ? "\nNote: results are in catalogue order, not ranked by relevance. Add filters to narrow the set, or use semantic_search for concept-ranked results."
-          : "";
         const lines = result.results.map((r, i) => formatSearchLine(r, i));
-        return structuredResponse(result, [header, ...lines].join("\n") + truncationNote);
+        if (result.remainingIds) {
+          lines.push(`\n${result.remainingIds.length} additional object numbers: ${result.remainingIds.join(", ")}`);
+        }
+        return structuredResponse(result, [header, ...lines].join("\n"));
       }
 
       // Degraded fallback: use Search API when vocab DB is unavailable

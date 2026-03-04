@@ -57,6 +57,7 @@ export interface VocabSearchResult {
     nearestPlace?: string;
     distance_km?: number;
   }[];
+  remainingIds?: string[];
   source: "vocabulary";
   warnings?: string[];
 }
@@ -75,6 +76,7 @@ const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]
 
 const DEFAULT_MAX_RESULTS = 25;
 const MAX_RESULTS_CAP = 100;
+const ENRICHMENT_LIMIT = 25;
 
 interface VocabFilter {
   param: keyof VocabSearchParams;
@@ -671,13 +673,27 @@ export class VocabularyDb {
       ["title", "title_all_text"],
     ];
     const requestedTextFilters = TEXT_FILTERS.filter(([param]) => typeof effective[param] === "string");
+    // BM25 ranking: the first text FTS filter is promoted to a JOIN so we can
+    // ORDER BY fts.rank. Additional text filters remain as IN-subqueries.
+    let ftsJoinClause = "";
+    let ftsJoinBinding: unknown | null = null;
+    let ftsRankOrder = false;
     if (requestedTextFilters.length > 0) {
       if (this.hasTextFts) {
+        let isFirst = true;
         for (const [param, column] of requestedTextFilters) {
           const ftsPhrase = escapeFts5(effective[param] as string);
           if (!ftsPhrase) continue; // skip empty-after-stripping queries
-          conditions.push(`a.rowid IN (SELECT rowid FROM artwork_texts_fts WHERE ${column} MATCH ?)`);
-          bindings.push(ftsPhrase);
+          if (isFirst) {
+            // JOIN for BM25 rank access
+            ftsJoinClause = `JOIN artwork_texts_fts fts ON fts.rowid = a.rowid AND fts.${column} MATCH ?`;
+            ftsJoinBinding = ftsPhrase;
+            ftsRankOrder = true;
+            isFirst = false;
+          } else {
+            conditions.push(`a.rowid IN (SELECT rowid FROM artwork_texts_fts WHERE ${column} MATCH ?)`);
+            bindings.push(ftsPhrase);
+          }
         }
       } else {
         warnings.push(
@@ -729,13 +745,20 @@ export class VocabularyDb {
     const limit = Math.min(effective.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP);
 
     // COUNT is expensive for cross-filter queries (multiple IN-subquery intersections
-    // can scan tens of thousands of rows). Only compute it for single-filter queries.
-    const totalResults = conditions.length === 1
-      ? (this.db.prepare(`SELECT COUNT(*) as n FROM artworks a WHERE ${where}`).get(...bindings) as { n: number }).n
+    // can scan tens of thousands of rows). Only compute it for single-filter queries
+    // (plus the optional FTS JOIN which is cheap).
+    const countFilterCount = conditions.length + (ftsJoinClause ? 1 : 0);
+    const totalResults = countFilterCount === 1
+      ? (this.db.prepare(`SELECT COUNT(*) as n FROM artworks a ${ftsJoinClause} WHERE ${where}`).get(
+          ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : bindings),
+        ) as { n: number }).n
       : undefined;
 
-    const sql = `SELECT a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest FROM artworks a WHERE ${where} LIMIT ?`;
-    const rows = this.db.prepare(sql).all(...bindings, limit) as {
+    const orderBy = ftsRankOrder ? "ORDER BY fts.rank" : "";
+    const sql = `SELECT a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
+    const rows = this.db.prepare(sql).all(
+      ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, limit] : [...bindings, limit]),
+    ) as {
       object_number: string;
       title: string;
       creator_label: string;
@@ -782,6 +805,15 @@ export class VocabularyDb {
       }
     }
 
+    // Sort by distance when geo is active and BM25 isn't already ordering
+    if (distanceMap && distanceMap.size > 0 && !ftsRankOrder) {
+      rows.sort((a, b) => {
+        const da = distanceMap!.get(a.object_number)?.dist ?? Infinity;
+        const db = distanceMap!.get(b.object_number)?.dist ?? Infinity;
+        return da - db;
+      });
+    }
+
     // In compact mode, skip all enrichment — only IDs needed
     if (compact) {
       return {
@@ -797,13 +829,19 @@ export class VocabularyDb {
       };
     }
 
-    // Enrich results with object type from mappings
-    const typeMap = this.lookupTypes(rows.map((r) => r.object_number));
+    // Hybrid format: enrich first ENRICHMENT_LIMIT results, return rest as IDs only
+    const enrichedRows = rows.slice(0, ENRICHMENT_LIMIT);
+    const overflowRows = rows.slice(ENRICHMENT_LIMIT);
+
+    const typeMap = this.lookupTypes(enrichedRows.map((r) => r.object_number));
+    const remainingIds = overflowRows.length > 0
+      ? overflowRows.map((r) => r.object_number)
+      : undefined;
 
     return {
       totalResults,
       ...(geoResult && { referencePlace: geoResult.referencePlace }),
-      results: rows.map((r) => {
+      results: enrichedRows.map((r) => {
         const d = distanceMap?.get(r.object_number);
         const t = typeMap?.get(r.object_number);
         let date: string | undefined;
@@ -822,6 +860,7 @@ export class VocabularyDb {
           ...(d && { nearestPlace: d.place, distance_km: d.dist }),
         };
       }),
+      ...(remainingIds && { remainingIds }),
       source: "vocabulary",
       ...(warnings.length > 0 && { warnings }),
     };
