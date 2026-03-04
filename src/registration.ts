@@ -470,7 +470,8 @@ function registerTools(
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "Results are ranked by relevance when text search (description, title, etc.) or geographic proximity is used; " +
-        "otherwise results are in cataloguing order. For concept-ranked results, use semantic_search. " +
+        "otherwise results are ordered by importance (image availability, curatorial attention, metadata richness). " +
+        "For concept-ranked results, use semantic_search. " +
         "At least one search filter is required. " +
         "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
         "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), " +
@@ -813,14 +814,27 @@ function registerTools(
         }
 
         const header = `${result.results.length} results` +
-          (result.remainingIds ? ` + ${result.remainingIds.length} more IDs` : '') +
+          (result.remaining ? ` + ${result.remaining.length} more` : '') +
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
           ` (vocabulary search)`;
         const lines = result.results.map((r, i) => formatSearchLine(r, i));
-        if (result.remainingIds) {
-          lines.push(`\n${result.remainingIds.length} additional object numbers: ${result.remainingIds.join(", ")}`);
+        if (result.remaining) {
+          // Text channel: slim lines (objectNumber + title + creator) for LLM reasoning
+          const offset = result.results.length;
+          const slimLines = result.remaining.map((r, i) =>
+            `${offset + i + 1}. ${r.objectNumber} | "${r.title}"${r.creator ? ` — ${r.creator}` : ""}`
+          );
+          lines.push("", ...slimLines);
         }
-        return structuredResponse(result, [header, ...lines].join("\n"));
+        // structuredContent: swap remaining (slim) → remainingIds (bare IDs) to save tokens
+        const structured = {
+          ...result,
+          ...(result.remaining && {
+            remainingIds: result.remaining.map(r => r.objectNumber),
+            remaining: undefined,
+          }),
+        };
+        return structuredResponse(structured, [header, ...lines].join("\n"));
       }
 
       // Degraded fallback: use Search API when vocab DB is unavailable
@@ -1799,7 +1813,9 @@ function registerTools(
           "desolation) may yield lower precision because catalogue descriptions often do not use that language.\n\n" +
           "Not for: queries expressible as structured metadata (specific artists, dates, places, materials) — " +
           "use search_artwork for those.\n\n" +
-          "Filter notes: Use type: 'painting' to restrict to the paintings collection. " +
+          "Filter notes: Supports pre-filtering by subject, depictedPerson, depictedPlace, productionPlace, " +
+          "collectionSet, aboutActor, iconclass, and imageAvailable in addition to type, material, technique, creator, and creationDate. " +
+          "Use type: 'painting' to restrict to the paintings collection. " +
           "Do NOT use technique: 'painting' for this purpose — it matches painted decoration on any object type " +
           "(ceramics, textiles, frames) and will return unexpected results.\n\n" +
           "Painting queries — two-step pattern: Paintings are systematically underrepresented in semantic results " +
@@ -1816,6 +1832,14 @@ function registerTools(
           technique: z.string().optional().describe("Filter by technique (e.g. 'etching', 'oil painting')"),
           creationDate: z.string().optional().describe("Filter by date — exact year ('1642') or wildcard ('16*')"),
           creator: z.string().optional().describe("Filter by artist name"),
+          subject: z.string().optional().describe("Pre-filter by subject before semantic ranking"),
+          iconclass: z.string().optional().describe("Pre-filter by Iconclass notation before semantic ranking"),
+          depictedPerson: z.string().optional().describe("Pre-filter by depicted person before semantic ranking"),
+          depictedPlace: z.string().optional().describe("Pre-filter by depicted place before semantic ranking"),
+          productionPlace: z.string().optional().describe("Pre-filter by production place before semantic ranking"),
+          collectionSet: z.string().optional().describe("Pre-filter by collection set before semantic ranking"),
+          aboutActor: z.string().optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
+          imageAvailable: z.boolean().optional().describe("Pre-filter to artworks with images"),
           maxResults: z.number().int().min(1).max(100).default(25).optional()
             .describe("Number of results to return (default 25)"),
         }).strict(),
@@ -1828,20 +1852,24 @@ function registerTools(
         const queryVec = await embeddingModel!.embed(args.query);
 
         // 2. Choose search path based on filters
-        const hasFilters = args.type || args.material || args.technique || args.creationDate || args.creator;
+        const filterParams: Record<string, unknown> = {};
+        for (const key of [
+          "type", "material", "technique", "creationDate", "creator",
+          "subject", "iconclass", "depictedPerson", "depictedPlace",
+          "productionPlace", "collectionSet", "aboutActor", "imageAvailable",
+        ] as const) {
+          if ((args as Record<string, unknown>)[key] !== undefined) {
+            filterParams[key] = (args as Record<string, unknown>)[key];
+          }
+        }
+        const hasFilters = Object.keys(filterParams).length > 0;
         let candidates: SemanticSearchResult[];
         let filtersApplied = false;
         const warnings: string[] = [];
 
         if (hasFilters && vocabDb?.available) {
           // FILTERED PATH: pre-filter via vocab DB, then distance-rank
-          const candidateArtIds = vocabDb.filterArtIds({
-            type: args.type,
-            material: args.material,
-            technique: args.technique,
-            creationDate: args.creationDate,
-            creator: args.creator,
-          });
+          const candidateArtIds = vocabDb.filterArtIds(filterParams);
           if (candidateArtIds === null) {
             // DB lacks integer mappings (text-schema) — fall back to pure KNN
             candidates = embeddingsDb!.search(queryVec, maxResults);

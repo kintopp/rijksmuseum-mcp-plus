@@ -57,7 +57,7 @@ export interface VocabSearchResult {
     nearestPlace?: string;
     distance_km?: number;
   }[];
-  remainingIds?: string[];
+  remaining?: { objectNumber: string; title: string; creator: string }[];
   source: "vocabulary";
   warnings?: string[];
 }
@@ -240,6 +240,7 @@ export class VocabularyDb {
   private hasRightsLookup = false;
   private hasPersonNames = false;
   private hasImageColumn = false;
+  private hasImportance = false;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtFilterArtIds = new Map<string, Statement>();
@@ -309,6 +310,7 @@ export class VocabularyDb {
       this.hasRightsLookup = this.tableExists("rights_lookup");
       this.hasPersonNames = this.tableExists("person_names_fts");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
+      this.hasImportance = this.columnExists("artworks", "importance");
 
       // Warn if geo index is missing (must be created during harvest, not at runtime — DB is read-only)
       if (this.hasCoordinates) {
@@ -337,6 +339,7 @@ export class VocabularyDb {
         this.hasIntMappings && "intMappings",
         this.hasPersonNames && "personNames",
         this.hasImageColumn && "hasImage",
+        this.hasImportance && "importance",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -577,91 +580,11 @@ export class VocabularyDb {
       }
     }
 
-    for (const filter of VOCAB_FILTERS) {
-      const value = effective[filter.param];
-      if (value === undefined) continue;
-
-      for (const f of filter.fields) {
-        if (!ALLOWED_FIELDS.has(f)) throw new Error(`Invalid vocab field: ${f}`);
-      }
-      if (filter.vocabType && !ALLOWED_VOCAB_TYPES.has(filter.vocabType)) {
-        throw new Error(`Invalid vocab type: ${filter.vocabType}`);
-      }
-
-      const typeClause = filter.vocabType ? ` AND type = ?` : "";
-      const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
-
-      const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
-
-      if (useFts) {
-        // Person name matching: use person_names_fts (two-tier) when available
-        let vocabIds = filter.vocabType === "person" && this.hasPersonNames
-          ? this.findPersonIdsFts(String(value))
-          : this.findVocabIdsFts(String(value), typeClause, typeBindings);
-
-        // Multi-word place fallback: split "Oude Kerk Amsterdam" → "Oude Kerk" near "Amsterdam"
-        if (vocabIds.length === 0 && filter.vocabType === "place") {
-          const resolved = this.resolveMultiWordPlace(String(value));
-          if (resolved && resolved.candidates.length > 0) {
-            const hasContext = resolved.contextLat != null && resolved.contextLon != null;
-            const prefix = `${filter.param}:"${value}"`;
-
-            if (hasContext && resolved.candidates.length > 1) {
-              const { ids, geocodedCount } = rankByProximity(
-                resolved.candidates, resolved.contextLat!, resolved.contextLon!,
-              );
-              vocabIds = ids;
-              warnings.push(buildMultiWordPlaceWarning(
-                prefix, resolved.namePart, resolved.contextPart,
-                resolved.candidates.length,
-                { filteredCount: ids.length, geocodedCount },
-              ));
-            } else {
-              vocabIds = resolved.candidates.map((c) => c.id);
-              warnings.push(buildMultiWordPlaceWarning(
-                prefix, resolved.namePart, resolved.contextPart,
-                vocabIds.length,
-              ));
-            }
-          }
-        }
-
-        if (vocabIds.length === 0) {
-          return emptyResult(warnings);
-        }
-        const ftsFilter = this.mappingFilterDirect(filter.fields, vocabIds);
-        conditions.push(ftsFilter.condition);
-        bindings.push(...ftsFilter.bindings);
-      } else {
-        const { where: vocabWhere, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
-        const nonFtsFilter = this.mappingFilterSubquery(
-          filter.fields,
-          `${vocabWhere}${typeClause}`,
-          [...matchBindings, ...typeBindings],
-        );
-        conditions.push(nonFtsFilter.condition);
-        bindings.push(...nonFtsFilter.bindings);
-      }
-    }
-
-    // Direct column filter: license matches against artworks.rights_uri (or rights_lookup)
-    if (effective.license) {
-      if (this.hasRightsLookup) {
-        conditions.push("a.rights_id IN (SELECT id FROM rights_lookup WHERE uri LIKE ?)");
-      } else {
-        conditions.push("a.rights_uri LIKE ?");
-      }
-      bindings.push(`%${effective.license}%`);
-    }
-
-    // Image availability filter (requires has_image column from v0.19+ DB)
-    if (effective.imageAvailable === true) {
-      if (this.hasImageColumn) {
-        conditions.push("a.has_image = 1");
-      } else {
-        warnings.push("imageAvailable requires vocabulary DB v0.19+. This filter was ignored.");
-      }
-    }
+    // Vocab mapping filters, license, imageAvailable, date range
+    const vocabResult = this.buildVocabConditions(effective, warnings);
+    if (vocabResult === null) return emptyResult(warnings);
+    conditions.push(...vocabResult.conditions);
+    bindings.push(...vocabResult.bindings);
 
     // Tier 2: Text FTS filters (inscription, provenance, creditLine, curatorialNarrative)
     const TEXT_FILTERS: [keyof VocabSearchParams, string][] = [
@@ -721,22 +644,6 @@ export class VocabularyDb {
       }
     }
 
-    // Creation date range filter
-    if (effective.creationDate) {
-      if (this.hasDates) {
-        const range = parseDateFilter(effective.creationDate);
-        if (range) {
-          // Overlap test: artwork range [date_earliest, date_latest] overlaps query range [earliest, latest]
-          conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
-          bindings.push(range.earliest, range.latest);
-        } else {
-          warnings.push(`Could not parse creationDate "${effective.creationDate}". Expected a year ("1642") or wildcard ("164*", "16*").`);
-        }
-      } else {
-        warnings.push("Date filtering requires a vocabulary DB with date columns (re-run harvest Phase 4). This filter was ignored.");
-      }
-    }
-
     if (conditions.length === 0) {
       return emptyResult(warnings);
     }
@@ -754,7 +661,11 @@ export class VocabularyDb {
         ) as { n: number }).n
       : undefined;
 
-    const orderBy = ftsRankOrder ? "ORDER BY fts.rank" : "";
+    const orderBy = ftsRankOrder
+      ? "ORDER BY fts.rank"
+      : this.hasImportance
+        ? "ORDER BY a.importance DESC"
+        : "";
     const sql = `SELECT a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
     const rows = this.db.prepare(sql).all(
       ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, limit] : [...bindings, limit]),
@@ -829,13 +740,17 @@ export class VocabularyDb {
       };
     }
 
-    // Hybrid format: enrich first ENRICHMENT_LIMIT results, return rest as IDs only
+    // Hybrid format: enrich first ENRICHMENT_LIMIT results, return rest as slim summaries
     const enrichedRows = rows.slice(0, ENRICHMENT_LIMIT);
     const overflowRows = rows.slice(ENRICHMENT_LIMIT);
 
     const typeMap = this.lookupTypes(enrichedRows.map((r) => r.object_number));
-    const remainingIds = overflowRows.length > 0
-      ? overflowRows.map((r) => r.object_number)
+    const remaining = overflowRows.length > 0
+      ? overflowRows.map((r) => ({
+          objectNumber: r.object_number,
+          title: r.title || "",
+          creator: r.creator_label || "",
+        }))
       : undefined;
 
     return {
@@ -860,73 +775,153 @@ export class VocabularyDb {
           ...(d && { nearestPlace: d.place, distance_km: d.dist }),
         };
       }),
-      ...(remainingIds && { remainingIds }),
+      ...(remaining && { remaining }),
       source: "vocabulary",
       ...(warnings.length > 0 && { warnings }),
     };
   }
 
   /**
-   * Return art_ids matching metadata filters, for use as candidates in semantic search.
-   * Supports a subset of VocabSearchParams (the structured filters, not text search).
-   * Returns up to 50,000 art_ids — beyond that, pure KNN + post-filter is faster.
-   * Returns null if the DB lacks integer mappings (text-schema backward compat).
+   * Build conditions for vocab mapping filters, license, imageAvailable, and date range.
+   * Shared by searchInternal() and filterArtIds() to avoid duplicating complex filter logic
+   * (FTS5 upgrade, person name matching, multi-word place resolution, etc.).
+   *
+   * Returns null if any filter produced zero vocab matches (caller should return empty result).
+   * Returns { conditions: [], bindings: [] } if no applicable filters were found.
    */
-  filterArtIds(params: Pick<VocabSearchParams, "type" | "material" | "technique" | "creator" | "creationDate">): number[] | null {
-    if (!this.db) return null; // DB not open — unreachable when guarded by `available`, but safe for external callers
-    if (!this.hasIntMappings) return null; // text-schema DB — caller should fall back to pure KNN
-
+  private buildVocabConditions(
+    effective: Record<string, unknown>,
+    warnings: string[],
+  ): { conditions: string[]; bindings: unknown[] } | null {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
-    // Vocab mapping filters (type, material, technique, creator)
-    const FILTER_MAP: { param: keyof typeof params; fields: string[] }[] = [
-      { param: "type", fields: ["type"] },
-      { param: "material", fields: ["material"] },
-      { param: "technique", fields: ["technique"] },
-      { param: "creator", fields: ["creator"] },
-    ];
-
-    for (const { param, fields } of FILTER_MAP) {
-      const value = params[param];
+    for (const filter of VOCAB_FILTERS) {
+      const value = effective[filter.param];
       if (value === undefined) continue;
 
-      if (this.hasFts5) {
-        const vocabIds = this.findVocabIdsFts(String(value), "", []);
-        if (vocabIds.length === 0) return [];
-        const filter = this.mappingFilterDirect(fields, vocabIds);
-        conditions.push(filter.condition);
-        bindings.push(...filter.bindings);
+      for (const f of filter.fields) {
+        if (!ALLOWED_FIELDS.has(f)) throw new Error(`Invalid vocab field: ${f}`);
+      }
+      if (filter.vocabType && !ALLOWED_VOCAB_TYPES.has(filter.vocabType)) {
+        throw new Error(`Invalid vocab type: ${filter.vocabType}`);
+      }
+
+      const typeClause = filter.vocabType ? ` AND type = ?` : "";
+      const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
+
+      const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
+
+      if (useFts) {
+        // Person name matching: use person_names_fts (two-tier) when available
+        let vocabIds = filter.vocabType === "person" && this.hasPersonNames
+          ? this.findPersonIdsFts(String(value))
+          : this.findVocabIdsFts(String(value), typeClause, typeBindings);
+
+        // Multi-word place fallback: split "Oude Kerk Amsterdam" → "Oude Kerk" near "Amsterdam"
+        if (vocabIds.length === 0 && filter.vocabType === "place") {
+          const resolved = this.resolveMultiWordPlace(String(value));
+          if (resolved && resolved.candidates.length > 0) {
+            const hasContext = resolved.contextLat != null && resolved.contextLon != null;
+            const prefix = `${filter.param}:"${value}"`;
+
+            if (hasContext && resolved.candidates.length > 1) {
+              const { ids, geocodedCount } = rankByProximity(
+                resolved.candidates, resolved.contextLat!, resolved.contextLon!,
+              );
+              vocabIds = ids;
+              warnings.push(buildMultiWordPlaceWarning(
+                prefix, resolved.namePart, resolved.contextPart,
+                resolved.candidates.length,
+                { filteredCount: ids.length, geocodedCount },
+              ));
+            } else {
+              vocabIds = resolved.candidates.map((c) => c.id);
+              warnings.push(buildMultiWordPlaceWarning(
+                prefix, resolved.namePart, resolved.contextPart,
+                vocabIds.length,
+              ));
+            }
+          }
+        }
+
+        if (vocabIds.length === 0) {
+          return null; // signal: zero matches for this filter
+        }
+        const ftsFilter = this.mappingFilterDirect(filter.fields, vocabIds);
+        conditions.push(ftsFilter.condition);
+        bindings.push(...ftsFilter.bindings);
       } else {
-        const filter = this.mappingFilterSubquery(
-          fields,
-          `(label_en LIKE ? OR label_nl LIKE ?)`,
-          [`%${value}%`, `%${value}%`],
+        const { where: vocabWhere, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
+        const nonFtsFilter = this.mappingFilterSubquery(
+          filter.fields,
+          `${vocabWhere}${typeClause}`,
+          [...matchBindings, ...typeBindings],
         );
-        conditions.push(filter.condition);
-        bindings.push(...filter.bindings);
+        conditions.push(nonFtsFilter.condition);
+        bindings.push(...nonFtsFilter.bindings);
       }
     }
 
-    // Creation date range
-    if (params.creationDate) {
-      if (!this.hasDates) return null; // DB lacks date columns — caller should fall back to pure KNN
-      const range = parseDateFilter(params.creationDate);
-      if (range) {
-        conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
-        bindings.push(range.earliest, range.latest);
+    // Direct column filter: license matches against artworks.rights_uri (or rights_lookup)
+    if (effective.license) {
+      if (this.hasRightsLookup) {
+        conditions.push("a.rights_id IN (SELECT id FROM rights_lookup WHERE uri LIKE ?)");
+      } else {
+        conditions.push("a.rights_uri LIKE ?");
+      }
+      bindings.push(`%${effective.license}%`);
+    }
+
+    // Image availability filter (requires has_image column from v0.19+ DB)
+    if (effective.imageAvailable === true) {
+      if (this.hasImageColumn) {
+        conditions.push("a.has_image = 1");
+      } else {
+        warnings.push("imageAvailable requires vocabulary DB v0.19+. This filter was ignored.");
       }
     }
 
-    if (conditions.length === 0) return [];
+    // Creation date range filter
+    if (effective.creationDate) {
+      if (this.hasDates) {
+        const range = parseDateFilter(effective.creationDate as string);
+        if (range) {
+          conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
+          bindings.push(range.earliest, range.latest);
+        } else {
+          warnings.push(`Could not parse creationDate "${effective.creationDate}". Expected a year ("1642") or wildcard ("164*", "16*").`);
+        }
+      } else {
+        warnings.push("Date filtering requires a vocabulary DB with date columns (re-run harvest Phase 4). This filter was ignored.");
+      }
+    }
 
-    const sql = `SELECT a.art_id FROM artworks a WHERE ${conditions.join(" AND ")} LIMIT 50000`;
+    return { conditions, bindings };
+  }
+
+  /**
+   * Return art_ids matching metadata filters, for use as candidates in semantic search.
+   * Supports all structured vocab filters (not text search, geo, or dimensions).
+   * Returns up to 50,000 art_ids — beyond that, pure KNN + post-filter is faster.
+   * Returns null if the DB lacks integer mappings (text-schema backward compat).
+   */
+  filterArtIds(params: Partial<VocabSearchParams>): number[] | null {
+    if (!this.db) return null;
+    if (!this.hasIntMappings) return null;
+
+    const warnings: string[] = [];
+    const vocabResult = this.buildVocabConditions(params as Record<string, unknown>, warnings);
+    if (vocabResult === null) return []; // a filter matched zero vocab terms
+    if (vocabResult.conditions.length === 0) return [];
+
+    const sql = `SELECT a.art_id FROM artworks a WHERE ${vocabResult.conditions.join(" AND ")} LIMIT 50000`;
     let stmt = this.stmtFilterArtIds.get(sql);
     if (!stmt) {
       stmt = this.db.prepare(sql);
       this.stmtFilterArtIds.set(sql, stmt);
     }
-    const rows = stmt.all(...bindings) as { art_id: number }[];
+    const rows = stmt.all(...vocabResult.bindings) as { art_id: number }[];
     return rows.map(r => r.art_id);
   }
 
