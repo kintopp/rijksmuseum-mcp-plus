@@ -147,6 +147,15 @@ EXTERNAL_VOCAB = {
     "300404450": {"type": "classification", "label_en": "primary", "label_nl": "primair", "external_id": "http://vocab.getty.edu/aat/300404450"},
     "300404451": {"type": "classification", "label_en": "secondary", "label_nl": "secundair", "external_id": "http://vocab.getty.edu/aat/300404451"},
     "300379012": {"type": "classification", "label_en": "undetermined", "label_nl": "onbepaald", "external_id": "http://vocab.getty.edu/aat/300379012"},
+    # Attribution qualifiers — rich labels for assigned_by[].classified_as (#43)
+    "300404269": {"type": "classification", "label_en": "attributed to", "label_nl": "toegeschreven aan", "external_id": "http://vocab.getty.edu/aat/300404269"},
+    "300404274": {"type": "classification", "label_en": "workshop of", "label_nl": "werkplaats van", "external_id": "http://vocab.getty.edu/aat/300404274"},
+    "300404284": {"type": "classification", "label_en": "circle of", "label_nl": "omgeving van", "external_id": "http://vocab.getty.edu/aat/300404284"},
+    "300404282": {"type": "classification", "label_en": "follower of", "label_nl": "navolger van", "external_id": "http://vocab.getty.edu/aat/300404282"},
+    "300404272": {"type": "classification", "label_en": "manner of", "label_nl": "manier van", "external_id": "http://vocab.getty.edu/aat/300404272"},
+    "300404279": {"type": "classification", "label_en": "copy after", "label_nl": "kopie naar", "external_id": "http://vocab.getty.edu/aat/300404279"},
+    "300404434": {"type": "classification", "label_en": "school of", "label_nl": "school van", "external_id": "http://vocab.getty.edu/aat/300404434"},
+    "300404273": {"type": "classification", "label_en": "studio of", "label_nl": "atelier van", "external_id": "http://vocab.getty.edu/aat/300404273"},
 }
 
 # ─── XML Namespaces ──────────────────────────────────────────────────
@@ -1073,6 +1082,32 @@ def _extract_ids(items: list, field: str) -> list[tuple[str, str]]:
     return result
 
 
+def _extract_assigned_creators(items: list) -> list[tuple[str, str]]:
+    """Extract creator (vocab_id, field) tuples from assigned[] items.
+
+    Handles two patterns:
+      1. Direct person: {"type": "Person", "id": "https://.../{id}"}
+      2. Inline Group (workshop of): {"type": "Group", "formed_by": {
+             "influenced_by": [{"type": "Person", "id": "https://.../{id}"}]}}
+    """
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        uri = item.get("id", "")
+        if uri:
+            result.append((uri.split("/")[-1], "creator"))
+            continue
+        # Inline Group — traverse formed_by.influenced_by to find the person
+        if item.get("type") == "Group":
+            formed_by = item.get("formed_by")
+            if isinstance(formed_by, dict):
+                for inf in formed_by.get("influenced_by", []):
+                    if isinstance(inf, dict) and inf.get("id"):
+                        result.append((inf["id"].split("/")[-1], "creator"))
+    return result
+
+
 def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
     """Extract production roles, attribution qualifiers, and assigned creators from produced_by.
 
@@ -1125,10 +1160,12 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
         for assignment in part.get("assigned_by", []):
             if not isinstance(assignment, dict):
                 continue
-            if (assignment.get("type") != "AttributeAssignment"
-                    or assignment.get("assigned_property") != "carried_out_by"):
+            if assignment.get("type") != "AttributeAssignment":
                 continue
-            creators.extend(_extract_ids(assignment.get("assigned", []), "creator"))
+            prop = assignment.get("assigned_property", "")
+            if prop not in ("carried_out_by", "influenced_by"):
+                continue
+            creators.extend(_extract_assigned_creators(assignment.get("assigned", [])))
             qualifiers.extend(_extract_ids(assignment.get("classified_as", []), "attribution_qualifier"))
 
     return roles, qualifiers, creators
@@ -2041,6 +2078,46 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         label = en or nl or "?"
         code = notation if vtype == "classification" else "—"
         print(f"  {code or '—':12s} {label:50s} {cnt:6,}")
+
+    # ── Importance score ─────────────────────────────────────────────
+    # Pre-computed column used for default ORDER BY in search results.
+    # Score: has_image(+3), narrative(+3), log2(1+mapping_count)(+1..6).
+    # Range: 0–12. Computed in Python to avoid slow correlated SQL UPDATEs.
+    print("\n--- Importance Score ---")
+    artworks_cols = get_columns(conn, "artworks")
+    if "importance" not in artworks_cols:
+        conn.execute("ALTER TABLE artworks ADD COLUMN importance INTEGER DEFAULT 0")
+        conn.commit()
+    t0 = time.time()
+    conn.execute("""
+        UPDATE artworks SET importance =
+            (CASE WHEN has_image = 1 THEN 3 ELSE 0 END) +
+            (CASE WHEN length(narrative_text) > 0 THEN 3 ELSE 0 END)
+    """)
+    conn.commit()
+    # Mapping count bonus: aggregate in SQL, batch update in Python
+    import math
+    counts = dict(cur.execute(
+        "SELECT artwork_id, COUNT(*) FROM mappings GROUP BY artwork_id"
+    ).fetchall())
+    CHUNK = 5000
+    items = [(int(math.log2(1 + cnt)), aid) for aid, cnt in counts.items()]
+    for i in range(0, len(items), CHUNK):
+        conn.executemany(
+            "UPDATE artworks SET importance = importance + ? WHERE art_id = ?",
+            items[i:i + CHUNK],
+        )
+    conn.commit()
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_importance ON artworks(importance DESC)")
+    conn.commit()
+    dist = cur.execute(
+        "SELECT importance, COUNT(*) as cnt FROM artworks GROUP BY importance ORDER BY importance DESC"
+    ).fetchall()
+    total_art = cur.execute("SELECT COUNT(*) FROM artworks").fetchone()[0]
+    for score, cnt in dist:
+        pct = cnt / total_art * 100
+        print(f"  {score:3d}: {cnt:8,} ({pct:5.1f}%)")
+    print(f"  Computed in {time.time() - t0:.1f}s")
 
     # Final VACUUM to reclaim space from dropped tables/columns
     print("\n--- VACUUM ---")
