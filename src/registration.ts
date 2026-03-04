@@ -182,7 +182,7 @@ const SearchResultOutput = {
   totalResults: z.number().int().nullable().optional()
     .describe("Total matching artworks. Null/absent for complex cross-filter queries."),
   results: z.array(z.object({
-    id: z.string().optional().describe("Linked Art URI (present for degraded Search API fallback only)."),
+    id: z.string().optional().describe("Linked Art URI (present only when vocabulary DB is unavailable)."),
     objectNumber: z.string(),
     title: z.string(),
     creator: z.string(),
@@ -192,7 +192,7 @@ const SearchResultOutput = {
     nearestPlace: z.string().optional(),
     distance_km: z.number().optional(),
   })).optional().describe("Artwork summaries. Absent when compact=true."),
-  ids: z.array(z.string()).optional().describe("Object numbers (compact mode). Degraded Search API fallback returns Linked Art URIs instead."),
+  ids: z.array(z.string()).optional().describe("Object numbers (compact mode)."),
   source: z.enum(["vocabulary", "search_api"]).optional(),
   referencePlace: z.string().optional(),
   warnings: z.array(z.string()).optional(),
@@ -498,7 +498,7 @@ function registerTools(
         title: z
           .string()
           .optional()
-          .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Requires vocabulary DB. For quick title lookups via the Search API (brief titles only), use the query parameter instead."),
+          .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Equivalent to query but explicit."),
         creator: z
           .string()
           .optional()
@@ -560,15 +560,14 @@ function registerTools(
                   "or use lookup_iconclass to find the canonical Iconclass notation code for more reliable matching. " +
                   "Also covers historical events using Dutch labels (e.g. 'Tweede Wereldoorlog', 'Tachtigjarige Oorlog'). " +
                   "Subject matching does not distinguish primary from incidental/decorative subjects — " +
-                  "a mortar with an Annunciation relief will match 'Annunciation'. Combine with type (e.g. type: 'painting') to filter. " +
-                  "Requires vocabulary DB."
+                  "a mortar with an Annunciation relief will match 'Annunciation'. Combine with type (e.g. type: 'painting') to filter."
                 ),
               iconclass: z
                 .string()
                 .min(1)
                 .optional()
                 .describe(
-                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use lookup_iconclass to discover codes by concept. Requires vocabulary DB."
+                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use lookup_iconclass to discover codes by concept."
                 ),
               depictedPerson: z
                 .string()
@@ -577,8 +576,7 @@ function registerTools(
                 .describe(
                   "Search for artworks depicting a specific person by name (e.g. 'Willem van Oranje'). " +
                   "Matches against 210K name variants including historical forms. Combinable with all vocabulary filters. " +
-                  "Searches depicted persons only; use aboutActor for broader person matching (depicted + creators). " +
-                  "Requires vocabulary DB."
+                  "Searches depicted persons only; use aboutActor for broader person matching (depicted + creators)."
                 ),
               depictedPlace: z
                 .string()
@@ -586,8 +584,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Search for artworks depicting a specific place by name (e.g. 'Amsterdam'). " +
-                  "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Oude Kerk Amsterdam'). " +
-                  "Requires vocabulary DB."
+                  "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Oude Kerk Amsterdam')."
                 ),
               productionPlace: z
                 .string()
@@ -595,29 +592,28 @@ function registerTools(
                 .optional()
                 .describe(
                   "Search for artworks produced in a specific place (e.g. 'Delft'). " +
-                  "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Paleis van Justitie Den Haag'). " +
-                  "Requires vocabulary DB."
+                  "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Paleis van Justitie Den Haag')."
                 ),
               birthPlace: z
                 .string()
                 .min(1)
                 .optional()
                 .describe(
-                  "Search by artist's birth place (e.g. 'Amsterdam'). Requires vocabulary DB."
+                  "Search by artist's birth place (e.g. 'Amsterdam')."
                 ),
               deathPlace: z
                 .string()
                 .min(1)
                 .optional()
                 .describe(
-                  "Search by artist's death place (e.g. 'Paris'). Requires vocabulary DB."
+                  "Search by artist's death place (e.g. 'Paris')."
                 ),
               profession: z
                 .string()
                 .min(1)
                 .optional()
                 .describe(
-                  "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor'). Requires vocabulary DB."
+                  "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor')."
                 ),
               collectionSet: z
                 .string()
@@ -625,7 +621,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Search for artworks in curated collection sets by name (e.g. 'Rembrandt', 'Japanese'). " +
-                  "Use list_curated_sets to discover available sets. Requires vocabulary DB."
+                  "Use list_curated_sets to discover available sets."
                 ),
               license: z
                 .string()
@@ -633,7 +629,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Filter by license/rights. Common values: 'publicdomain', 'zero' (CC0), 'by' (CC BY). " +
-                  "Matches against the rights URI. Requires vocabulary DB."
+                  "Matches against the rights URI."
                 ),
               inscription: z
                 .string()
@@ -641,7 +637,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on inscription texts (~500K artworks — signatures, mottoes, dates on the object surface, not conceptual content). " +
-                  "Exact word matching, no stemming. E.g. 'Rembrandt f.' for signed works, Latin phrases. Requires vocabulary DB."
+                  "Exact word matching, no stemming. E.g. 'Rembrandt f.' for signed works, Latin phrases."
                 ),
               provenance: z
                 .string()
@@ -649,7 +645,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on provenance/ownership history (e.g. 'Six' for the Six collection). " +
-                  "Exact word matching, no stemming. Requires vocabulary DB."
+                  "Exact word matching, no stemming."
                 ),
               creditLine: z
                 .string()
@@ -657,7 +653,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Full-text search on credit/donor lines (e.g. 'Drucker' for Drucker-Fraser bequest). " +
-                  "Exact word matching, no stemming. Requires vocabulary DB."
+                  "Exact word matching, no stemming."
                 ),
               curatorialNarrative: z
                 .string()
@@ -667,7 +663,7 @@ function registerTools(
                   "Full-text search on curatorial narrative (~14K artworks with museum wall text). " +
                   "Best for art-historical interpretation, exhibition context, and scholarly commentary — " +
                   "content written by curators that goes beyond what structured vocabulary captures. " +
-                  "Exact word matching, no stemming. For broad concept searches, start with subject instead. Requires vocabulary DB."
+                  "Exact word matching, no stemming. For broad concept searches, start with subject instead."
                 ),
               productionRole: z
                 .string()
@@ -676,31 +672,31 @@ function registerTools(
                 .describe(
                   "Search by production role (e.g. 'painter', 'printmaker', 'after painting by'). " +
                   "Covers craft roles and relational attribution, NOT attribution qualifiers " +
-                  "(workshop of, follower of, circle of — these are not indexed). Requires vocabulary DB."
+                  "(workshop of, follower of, circle of — these are not indexed)."
                 ),
               minHeight: z
                 .number()
                 .optional()
                 .describe(
-                  "Minimum height in centimeters. Requires vocabulary DB."
+                  "Minimum height in centimeters."
                 ),
               maxHeight: z
                 .number()
                 .optional()
                 .describe(
-                  "Maximum height in centimeters. Requires vocabulary DB."
+                  "Maximum height in centimeters."
                 ),
               minWidth: z
                 .number()
                 .optional()
                 .describe(
-                  "Minimum width in centimeters. Requires vocabulary DB."
+                  "Minimum width in centimeters."
                 ),
               maxWidth: z
                 .number()
                 .optional()
                 .describe(
-                  "Maximum width in centimeters. Requires vocabulary DB."
+                  "Maximum width in centimeters."
                 ),
               nearPlace: z
                 .string()
@@ -709,8 +705,7 @@ function registerTools(
                 .describe(
                   "Search for artworks related to places near a named location (e.g. 'Leiden'). " +
                   "Supports multi-word place names with geo-disambiguation (e.g. 'Oude Kerk Amsterdam' resolves to the Oude Kerk in Amsterdam). " +
-                  "Searches both depicted and production places within the specified radius. " +
-                  "Requires vocabulary DB with geocoded places."
+                  "Searches both depicted and production places within the specified radius."
                 ),
               nearLat: z
                 .number()
@@ -719,7 +714,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Latitude for coordinate-based proximity search (-90 to 90). Use with nearLon. " +
-                  "Alternative to nearPlace for searching near arbitrary locations. Requires vocabulary DB with geocoded places."
+                  "Alternative to nearPlace for searching near arbitrary locations."
                 ),
               nearLon: z
                 .number()
@@ -727,7 +722,7 @@ function registerTools(
                 .max(180)
                 .optional()
                 .describe(
-                  "Longitude for coordinate-based proximity search (-180 to 180). Use with nearLat. Requires vocabulary DB with geocoded places."
+                  "Longitude for coordinate-based proximity search (-180 to 180). Use with nearLat."
                 ),
               nearPlaceRadius: z
                 .number()
@@ -1424,24 +1419,27 @@ function registerTools(
       ...withOutputSchema(TimelineOutput),
     },
     withLogging("get_artist_timeline", async (args) => {
-      const result = await api.searchAndResolve({
+      if (!vocabAvailable || !vocabDb) {
+        return errorResponse("Artist timeline requires the vocabulary database.");
+      }
+      const result = vocabDb.search({
         creator: args.artist,
         maxResults: args.maxWorks,
       });
 
       const parseYear = (s: string): number => parseInt(s, 10) || 0;
       const timeline = result.results
-        .map(({ date, ...rest }) => ({ year: date, ...rest }))
+        .map(({ date, ...rest }) => ({ year: date ?? "", ...rest }))
         .sort((a, b) => parseYear(a.year) - parseYear(b.year));
 
-      const warnings = result.totalResults === 0
-        ? ["No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
-           "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling."]
+      const total = result.totalResults ?? 0;
+      const warnings = total === 0
+        ? ["No results found. Try alternative spellings or name forms for the artist."]
         : undefined;
 
       const response = {
         artist: args.artist,
-        totalWorksInCollection: result.totalResults,
+        totalWorksInCollection: total,
         timeline,
         ...(warnings ? { warnings } : {}),
       };
@@ -1449,7 +1447,7 @@ function registerTools(
       const years = timeline.map(t => parseYear(t.year)).filter(y => y > 0);
       const rangeStr = years.length > 0 ? `, ${years[0]}–${years[years.length - 1]}` : '';
       const header = `${timeline.length} works by ${args.artist}` +
-        (result.totalResults > 0 ? ` (${result.totalResults} total in collection)` : '') +
+        (total > 0 ? ` (${total} total in collection)` : '') +
         rangeStr;
       const lines = timeline.map((t, i) => formatTimelineLine(t, i));
       return structuredResponse(response, [header, ...lines].join("\n"));
