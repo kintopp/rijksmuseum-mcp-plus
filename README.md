@@ -104,7 +104,8 @@ Soon:
 
 - add support for `assigned_by attribution` metadata (e.g. "attributed to", "workshop of", and "follower of")
 - reduce dependencies on Rijskuseum [Search API](https://data.rijksmuseum.nl/docs/)
-- address print vs. painting bias in semantic search from unbalanced subject labels
+- address print vs. painting bias in semantic search
+- consolidate tools (16 -> 12)
 - improve documentation
 - fine-tuning default and max. retrieved results.
 
@@ -112,11 +113,11 @@ Later:
 
 - paper/presentation
 - address inconsistent pagination and ranked results issues
-- add support for optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) files
+- investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
+- create optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file
 - add support for LLM analysis of user defined image selections
 - add support for browsing related images in image viewer
 - review toponyms without clear geolocation data
-- investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 
 Maybe:
 
