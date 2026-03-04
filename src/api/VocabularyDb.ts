@@ -105,6 +105,16 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "aboutActor",   fields: ["subject", "creator"],    matchMode: "like", vocabType: "person",         ftsUpgrade: true },
 ];
 
+/**
+ * Parameter keys eligible for filterArtIds — all VOCAB_FILTERS params plus direct-column filters.
+ * Used by semantic_search to forward structured filters. Excludes text FTS, geo, and dimensions.
+ */
+export const FILTER_ART_IDS_KEYS: ReadonlySet<string> = new Set([
+  ...VOCAB_FILTERS.map(f => f.param),
+  "imageAvailable",
+  "creationDate",
+]);
+
 /** Row shape returned by place-candidate queries (findPlaceCandidates, resolveMultiWordPlace). */
 type PlaceCandidateRow = {
   id: string;
@@ -791,7 +801,7 @@ export class VocabularyDb {
    */
   private buildVocabConditions(
     effective: Record<string, unknown>,
-    warnings: string[],
+    warnings?: string[],
   ): { conditions: string[]; bindings: unknown[] } | null {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
@@ -830,14 +840,14 @@ export class VocabularyDb {
                 resolved.candidates, resolved.contextLat!, resolved.contextLon!,
               );
               vocabIds = ids;
-              warnings.push(buildMultiWordPlaceWarning(
+              warnings?.push(buildMultiWordPlaceWarning(
                 prefix, resolved.namePart, resolved.contextPart,
                 resolved.candidates.length,
                 { filteredCount: ids.length, geocodedCount },
               ));
             } else {
               vocabIds = resolved.candidates.map((c) => c.id);
-              warnings.push(buildMultiWordPlaceWarning(
+              warnings?.push(buildMultiWordPlaceWarning(
                 prefix, resolved.namePart, resolved.contextPart,
                 vocabIds.length,
               ));
@@ -878,7 +888,7 @@ export class VocabularyDb {
       if (this.hasImageColumn) {
         conditions.push("a.has_image = 1");
       } else {
-        warnings.push("imageAvailable requires vocabulary DB v0.19+. This filter was ignored.");
+        warnings?.push("imageAvailable requires vocabulary DB v0.19+. This filter was ignored.");
       }
     }
 
@@ -890,10 +900,10 @@ export class VocabularyDb {
           conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
           bindings.push(range.earliest, range.latest);
         } else {
-          warnings.push(`Could not parse creationDate "${effective.creationDate}". Expected a year ("1642") or wildcard ("164*", "16*").`);
+          warnings?.push(`Could not parse creationDate "${effective.creationDate}". Expected a year ("1642") or wildcard ("164*", "16*").`);
         }
       } else {
-        warnings.push("Date filtering requires a vocabulary DB with date columns (re-run harvest Phase 4). This filter was ignored.");
+        warnings?.push("Date filtering requires a vocabulary DB with date columns (re-run harvest Phase 4). This filter was ignored.");
       }
     }
 
@@ -910,8 +920,7 @@ export class VocabularyDb {
     if (!this.db) return null;
     if (!this.hasIntMappings) return null;
 
-    const warnings: string[] = [];
-    const vocabResult = this.buildVocabConditions(params as Record<string, unknown>, warnings);
+    const vocabResult = this.buildVocabConditions(params as Record<string, unknown>);
     if (vocabResult === null) return []; // a filter matched zero vocab terms
     if (vocabResult.conditions.length === 0) return [];
 

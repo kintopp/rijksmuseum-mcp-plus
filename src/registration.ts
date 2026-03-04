@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -1853,13 +1853,9 @@ function registerTools(
 
         // 2. Choose search path based on filters
         const filterParams: Record<string, unknown> = {};
-        for (const key of [
-          "type", "material", "technique", "creationDate", "creator",
-          "subject", "iconclass", "depictedPerson", "depictedPlace",
-          "productionPlace", "collectionSet", "aboutActor", "imageAvailable",
-        ] as const) {
-          if ((args as Record<string, unknown>)[key] !== undefined) {
-            filterParams[key] = (args as Record<string, unknown>)[key];
+        for (const [key, val] of Object.entries(args)) {
+          if (val !== undefined && FILTER_ART_IDS_KEYS.has(key)) {
+            filterParams[key] = val;
           }
         }
         const hasFilters = Object.keys(filterParams).length > 0;

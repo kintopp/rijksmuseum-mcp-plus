@@ -17,6 +17,53 @@ from pathlib import Path
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "data" / "vocabulary.db"
 
 
+def compute_importance_scores(conn: sqlite3.Connection, cur: sqlite3.Cursor) -> dict:
+    """Core importance scoring algorithm. Shared by standalone script and harvest Phase 3.
+
+    Expects the 'importance' column and 'art_id' column to already exist.
+    Returns a dict with timing and distribution info.
+
+    Formula: has_image(+3) + narrative(+3) + floor(log2(1 + mapping_count))(+1..6).
+    Range: 0–12.
+    """
+    total = cur.execute("SELECT COUNT(*) FROM artworks").fetchone()[0]
+    t0 = time.time()
+
+    # Step 1: base score from direct columns (image + narrative)
+    conn.execute("""
+        UPDATE artworks SET importance =
+            (CASE WHEN has_image = 1 THEN 3 ELSE 0 END) +
+            (CASE WHEN length(narrative_text) > 0 THEN 3 ELSE 0 END)
+    """)
+    conn.commit()
+
+    # Step 2: mapping count bonus — computed in Python to avoid slow correlated UPDATEs
+    counts = dict(cur.execute(
+        "SELECT artwork_id, COUNT(*) FROM mappings GROUP BY artwork_id"
+    ).fetchall())
+    CHUNK = 5000
+    items = [(int(math.log2(1 + cnt)), aid) for aid, cnt in counts.items()]
+    for i in range(0, len(items), CHUNK):
+        conn.executemany(
+            "UPDATE artworks SET importance = importance + ? WHERE art_id = ?",
+            items[i:i + CHUNK],
+        )
+    conn.commit()
+
+    # Step 3: index
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_importance ON artworks(importance DESC)")
+    conn.commit()
+
+    elapsed = time.time() - t0
+
+    # Collect distribution
+    dist = cur.execute(
+        "SELECT importance, COUNT(*) as cnt FROM artworks GROUP BY importance ORDER BY importance DESC"
+    ).fetchall()
+
+    return {"total": total, "elapsed": elapsed, "distribution": dist}
+
+
 def compute_importance(db_path: str, recompute: bool = False) -> None:
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
@@ -45,59 +92,14 @@ def compute_importance(db_path: str, recompute: bool = False) -> None:
         conn.close()
         sys.exit(1)
 
-    total = cur.execute("SELECT COUNT(*) FROM artworks").fetchone()[0]
-    print(f"Computing importance for {total:,} artworks...")
-
-    t0 = time.time()
-
-    # Step 1: base score from direct columns (image + narrative)
-    t = time.time()
-    conn.execute("""
-        UPDATE artworks SET importance =
-            (CASE WHEN has_image = 1 THEN 3 ELSE 0 END) +
-            (CASE WHEN length(narrative_text) > 0 THEN 3 ELSE 0 END)
-    """)
-    conn.commit()
-    print(f"  Step 1 (image+narrative): {time.time() - t:.1f}s")
-
-    # Step 2: mapping count bonus — computed in Python to avoid slow correlated UPDATEs
-    t = time.time()
-    # Pre-aggregate mapping counts
-    counts = dict(cur.execute(
-        "SELECT artwork_id, COUNT(*) FROM mappings GROUP BY artwork_id"
-    ).fetchall())
-    print(f"  Step 2a (aggregate {len(counts):,} counts): {time.time() - t:.1f}s")
-
-    t = time.time()
-    # Batch update in chunks
-    CHUNK = 5000
-    items = [(int(math.log2(1 + cnt)), aid) for aid, cnt in counts.items()]
-    for i in range(0, len(items), CHUNK):
-        chunk = items[i:i + CHUNK]
-        conn.executemany(
-            "UPDATE artworks SET importance = importance + ? WHERE art_id = ?",
-            chunk,
-        )
-        if (i // CHUNK) % 20 == 0 and i > 0:
-            print(f"    ... {i:,}/{len(items):,}")
-    conn.commit()
-    print(f"  Step 2b (batch update): {time.time() - t:.1f}s")
-
-    # Step 3: index
-    t = time.time()
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_importance ON artworks(importance DESC)")
-    conn.commit()
-    print(f"  Step 3 (index): {time.time() - t:.1f}s")
-
-    print(f"\nTotal: {time.time() - t0:.1f}s")
+    print(f"Computing importance scores...")
+    result = compute_importance_scores(conn, cur)
+    print(f"  Computed {result['total']:,} artworks in {result['elapsed']:.1f}s")
 
     # Report distribution
     print("\n--- Importance Distribution ---")
-    dist = cur.execute(
-        "SELECT importance, COUNT(*) as cnt FROM artworks GROUP BY importance ORDER BY importance DESC"
-    ).fetchall()
-    for score, cnt in dist:
-        pct = cnt / total * 100
+    for score, cnt in result["distribution"]:
+        pct = cnt / result["total"] * 100
         bar = "█" * int(pct / 2)
         print(f"  {score:3d}: {cnt:8,} ({pct:5.1f}%) {bar}")
 

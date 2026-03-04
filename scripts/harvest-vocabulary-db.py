@@ -2080,44 +2080,18 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         print(f"  {code or '—':12s} {label:50s} {cnt:6,}")
 
     # ── Importance score ─────────────────────────────────────────────
-    # Pre-computed column used for default ORDER BY in search results.
-    # Score: has_image(+3), narrative(+3), log2(1+mapping_count)(+1..6).
-    # Range: 0–12. Computed in Python to avoid slow correlated SQL UPDATEs.
+    # Delegates to compute-importance.py's shared function to avoid formula duplication.
     print("\n--- Importance Score ---")
     artworks_cols = get_columns(conn, "artworks")
     if "importance" not in artworks_cols:
         conn.execute("ALTER TABLE artworks ADD COLUMN importance INTEGER DEFAULT 0")
         conn.commit()
-    t0 = time.time()
-    conn.execute("""
-        UPDATE artworks SET importance =
-            (CASE WHEN has_image = 1 THEN 3 ELSE 0 END) +
-            (CASE WHEN length(narrative_text) > 0 THEN 3 ELSE 0 END)
-    """)
-    conn.commit()
-    # Mapping count bonus: aggregate in SQL, batch update in Python
-    import math
-    counts = dict(cur.execute(
-        "SELECT artwork_id, COUNT(*) FROM mappings GROUP BY artwork_id"
-    ).fetchall())
-    CHUNK = 5000
-    items = [(int(math.log2(1 + cnt)), aid) for aid, cnt in counts.items()]
-    for i in range(0, len(items), CHUNK):
-        conn.executemany(
-            "UPDATE artworks SET importance = importance + ? WHERE art_id = ?",
-            items[i:i + CHUNK],
-        )
-    conn.commit()
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_artworks_importance ON artworks(importance DESC)")
-    conn.commit()
-    dist = cur.execute(
-        "SELECT importance, COUNT(*) as cnt FROM artworks GROUP BY importance ORDER BY importance DESC"
-    ).fetchall()
-    total_art = cur.execute("SELECT COUNT(*) FROM artworks").fetchone()[0]
-    for score, cnt in dist:
-        pct = cnt / total_art * 100
+    from compute_importance import compute_importance_scores
+    result = compute_importance_scores(conn, cur)
+    for score, cnt in result["distribution"]:
+        pct = cnt / result["total"] * 100
         print(f"  {score:3d}: {cnt:8,} ({pct:5.1f}%)")
-    print(f"  Computed in {time.time() - t0:.1f}s")
+    print(f"  Computed in {result['elapsed']:.1f}s")
 
     # Final VACUUM to reclaim space from dropped tables/columns
     print("\n--- VACUUM ---")
