@@ -57,7 +57,6 @@ After that, ask your own questions:
 - _Show me artworks depicting places near the Oude Kerk in Amsterdam_
 - _What works have the iconclass code for fabulous animals?_
 - _Which artworks have a provenance linked to Napoleon?_
-- _What are the 'top ten' works in the Rijksmuseum?_
 - _I'm looking for artworks with inscriptions mentioning 'luctor et emergo'_
 - _Show me sculptures in the collection by artists born in Leiden_
 - _Which paintings are wider than 3 meters?_
@@ -107,18 +106,19 @@ Soon:
 
 - add support for `assigned_by attribution` metadata (e.g. "attributed to", "workshop of", and "follower of")
 - reduce dependencies on Rijskuseum [Search API](https://data.rijksmuseum.nl/docs/)
+- address print vs. painting bias in semantic search from unbalanced subject labels
 - improve documentation
-- fine-tuning
+- fine-tuning default and max. retrieved results.
 
 Later:
 
+- paper/presentation
 - address inconsistent pagination and ranked results issues
 - add support for optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) files
 - add support for LLM analysis of user defined image selections
-- address print vs. painting bias in semantic search from unbalanced subject labels
+- add support for browsing related images in image viewer
 - review toponyms without clear geolocation data
 - investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
-- paper/presentation
 
 Maybe:
 
