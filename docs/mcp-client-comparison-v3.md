@@ -1,48 +1,7 @@
-# AI assistants as MCP clients: a comprehensive feature comparison
+# MCP clients feature comparison
 
 *Research current as of March 2026*
 
----
-
-The Rijksmuseum MCP+ server (`kintopp/rijksmuseum-mcp-plus`) is an enhanced TypeScript/Node.js MCP server developed at the Research and Infrastructure Support (RISE) unit, University of Basel. It exposes **14 tools** covering semantic and full-text search, Iconclass vocabulary lookup, IIIF image inspection with region cropping, interactive deep-zoom viewer navigation with labelled overlays, bibliography retrieval, Linked Art URI resolution, curated set browsing via OAI-PMH, and proximity/geo search across 831,000+ artworks.
-
-### Transport modes
-
-The server supports two deployment modes:
-
-| Mode | Details |
-|---|---|
-| **Remote HTTP (primary)** | Hosted on Railway: `https://rijksmuseum-mcp-plus-production.up.railway.app/mcp` — configured as a "custom Connector" in any MCP client that supports remote servers. No local setup required. The recommended entry point for most users. |
-| **Local STDIO (secondary)** | Run locally with a local copy of the SQLite/FTS5 vocabulary and embedding databases. Requires Node.js 18+, a Rijksmuseum API key passed as an environment variable, and manual `claude_desktop_config.json` setup. For technical users who need offline operation or local data customisation. |
-
-### MCP primitives and authentication
-
-The server exposes **tools only** — it does not implement Resources, Prompts, or Sampling endpoints. The remote Railway instance requires no MCP-level OAuth; the Rijksmuseum API key is baked into the server's runtime environment, so clients simply point to the URL without needing to manage credentials.
-
-### The interactive image viewer
-
-The server's most visually distinctive feature — an inline deep-zoom image viewer with pan, rotate, flip, and annotation capabilities — relies on MCP returning structured content that the client renders as interactive UI. This maps onto Anthropic's Integrations / Desktop Extensions framework and is confirmed to work **in Claude Desktop and claude.ai only**. Other clients receive image URLs and artwork metadata in tool output and can display static images, but the seamless in-conversation viewer is an Anthropic-specific affordance. For art-historical research workflows where close looking at high-resolution images is central, this is a meaningful differentiator.
-
-### Confirmed compatible clients (per the README)
-
-The server's own documentation names the following as confirmed working: **Claude Desktop, claude.ai, Mistral LeChat, Jan.ai, Claude Code, OpenAI Codex**. ChatGPT is described as offering only "limited, developer-mode support". Google Gemini's web interface MCP support is described as announced but not yet shipped.
-
----
-
-## The MCP protocol: version history and current state
-
-MCP launched in **November 2024** (spec 2024-11-05) with stdio and HTTP/SSE transports. Four major revisions followed:
-
-- **March 2025** (2025-03-26): Introduced **Streamable HTTP** as the successor to the now-deprecated HTTP/SSE transport; added **OAuth 2.1** with mandatory PKCE; formalised tool annotations for describing side effects.
-- **June 2025**: Enhanced OAuth by separating MCP servers as Resource Servers in the authorisation model.
-- **November 2025** (2025-11-25, the current stable release): Added async **Tasks**, **Client ID Metadata Documents** (a simpler alternative to Dynamic Client Registration), **Enterprise-Managed Authorization** for SSO integration, and an extensions framework. Also introduced sampling-with-tools for full agentic loops.
-- **January 2026**: **MCP Apps** launched as an official extension enabling servers to return interactive UI components rendered directly in conversations — supported initially by Claude, ChatGPT, Goose, and VS Code.
-
-In **December 2025**, Anthropic donated MCP to the newly formed **Agentic AI Foundation** under the Linux Foundation, co-founded with Block and OpenAI. Platinum members include AWS, Bloomberg, Cloudflare, Google, and Microsoft — cementing MCP as vendor-neutral infrastructure rather than an Anthropic-proprietary protocol.
-
----
-
-## MCP client comparison tables
 
 Legend: ✅ fully supported · ⚠️ partial or workaround needed · ❌ not supported · ❓ unknown / undocumented
 
