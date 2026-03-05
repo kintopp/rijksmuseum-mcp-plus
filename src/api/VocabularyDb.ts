@@ -42,6 +42,7 @@ export interface VocabSearchParams {
   // Broad person search (searches both depicted persons and creators)
   aboutActor?: string;
   maxResults?: number;
+  facets?: boolean;
 }
 
 export interface VocabSearchResult {
@@ -59,6 +60,7 @@ export interface VocabSearchResult {
   }[];
   source: "vocabulary";
   warnings?: string[];
+  facets?: Record<string, Array<{ label: string; count: number }>>;
 }
 
 // ─── Filter definitions ─────────────────────────────────────────────
@@ -187,6 +189,14 @@ export function buildMultiWordPlaceWarning(
     return `${base} (could not resolve context "${contextPart}"). ${pluralize(candidateCount, "ambiguous match")}.`;
   }
   return `${base}. ${pluralize(candidateCount, "match")}.`;
+}
+
+/** Format a number with ordinal suffix: 1→"1st", 2→"2nd", 17→"17th". */
+function ordinal(n: number): string {
+  const abs = Math.abs(n);
+  const suffixes = ["th", "st", "nd", "rd"];
+  const v = abs % 100;
+  return `${abs}${suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]}`;
 }
 
 function emptyResult(warnings?: string[]): VocabSearchResult {
@@ -490,6 +500,72 @@ export class VocabularyDb {
     return this.searchInternal(params, false);
   }
 
+  /**
+   * Compute top-5 faceted counts across type, material, technique, and century.
+   * Runs GROUP BY queries using the same WHERE clause as the main search.
+   * Skips dimensions the user already filtered on.
+   */
+  private computeFacets(
+    conditions: string[],
+    bindings: unknown[],
+    ftsJoinClause: string,
+    ftsJoinBinding: unknown | null,
+    excludeFields: Set<string>,
+  ): Record<string, Array<{ label: string; count: number }>> {
+    if (!this.db || !this.hasIntMappings) return {};
+    const result: Record<string, Array<{ label: string; count: number }>> = {};
+
+    const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
+    const allBindings = ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : [...bindings];
+
+    // Vocab-based facets: type, material, technique
+    const VOCAB_FACETS: [string, string][] = [
+      ["type", "type"],
+      ["material", "material"],
+      ["technique", "technique"],
+    ];
+    for (const [label, fieldName] of VOCAB_FACETS) {
+      if (excludeFields.has(label)) continue;
+      const fieldId = this.fieldIdMap.get(fieldName);
+      if (fieldId === undefined) continue;
+      // fieldId binding must come after ftsJoinBinding (if any) but before WHERE bindings,
+      // matching the positional order of ? in the SQL: JOIN fts... JOIN fm.field_id=? WHERE ...
+      const facetBindings = ftsJoinBinding != null
+        ? [ftsJoinBinding, fieldId, ...bindings]
+        : [fieldId, ...bindings];
+      const sql =
+        `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT fm.artwork_id) AS cnt ` +
+        `FROM artworks a ${ftsJoinClause} ` +
+        `JOIN mappings fm ON fm.artwork_id = a.art_id AND fm.field_id = ? ` +
+        `JOIN vocabulary v ON fm.vocab_rowid = v.vocab_int_id ` +
+        `WHERE ${where} AND v.label_en IS NOT NULL ` +
+        `GROUP BY label ORDER BY cnt DESC LIMIT 5`;
+      const rows = this.db.prepare(sql).all(...facetBindings) as { label: string; cnt: number }[];
+      if (rows.length > 0) {
+        result[label] = rows.map(r => ({ label: r.label, count: r.cnt }));
+      }
+    }
+
+    // Century facet (computed from date_earliest)
+    if (!excludeFields.has("century") && this.hasDates) {
+      const sql =
+        `SELECT (CASE WHEN a.date_earliest >= 0 THEN (a.date_earliest / 100 + 1) ELSE -((-a.date_earliest - 1) / 100 + 1) END) AS century, ` +
+        `COUNT(*) AS cnt ` +
+        `FROM artworks a ${ftsJoinClause} ` +
+        `WHERE ${where} AND a.date_earliest IS NOT NULL ` +
+        `GROUP BY century ORDER BY cnt DESC LIMIT 5`;
+      const rows = this.db.prepare(sql).all(...allBindings) as { century: number; cnt: number }[];
+      if (rows.length > 0) {
+        result["century"] = rows.map(r => ({
+          label: r.century > 0 ? `${ordinal(r.century)} century` : `${ordinal(-r.century)} century BCE`,
+          count: r.cnt,
+        }));
+      }
+    }
+
+    return result;
+  }
+
   private searchInternal(params: VocabSearchParams, compact: boolean): VocabSearchResult {
     if (!this.db) {
       return emptyResult();
@@ -715,6 +791,18 @@ export class VocabularyDb {
       });
     }
 
+    // Faceted counts: compute when requested, results were truncated, and not compact
+    let facets: Record<string, Array<{ label: string; count: number }>> | undefined;
+    if (effective.facets && !compact && rows.length >= limit) {
+      const excludeFields = new Set<string>();
+      if (effective.type) excludeFields.add("type");
+      if (effective.material) excludeFields.add("material");
+      if (effective.technique) excludeFields.add("technique");
+      if (effective.creationDate) excludeFields.add("century");
+      facets = this.computeFacets(conditions, bindings, ftsJoinClause, ftsJoinBinding, excludeFields);
+      if (Object.keys(facets).length === 0) facets = undefined;
+    }
+
     // In compact mode, skip all enrichment — only IDs needed
     if (compact) {
       return {
@@ -755,6 +843,7 @@ export class VocabularyDb {
         };
       }),
       source: "vocabulary",
+      ...(facets && { facets }),
       ...(warnings.length > 0 && { warnings }),
     };
   }

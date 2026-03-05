@@ -75,6 +75,17 @@ function formatSearchLine(r: { objectNumber: string; title: string; creator: str
   return line;
 }
 
+/** Format faceted counts as a compact "Narrow by:" block for LLM content. */
+function formatFacets(facets: Record<string, Array<{ label: string; count: number }>>): string {
+  const lines: string[] = ["Narrow by:"];
+  for (const [dim, entries] of Object.entries(facets)) {
+    const dimLabel = dim.charAt(0).toUpperCase() + dim.slice(1);
+    const items = entries.map(e => `${e.label} (${e.count.toLocaleString()})`).join(", ");
+    lines.push(`  ${dimLabel}: ${items}`);
+  }
+  return lines.join("\n");
+}
+
 /** Truncate a string to maxLen, appending "..." if truncated. */
 function truncate(s: string, maxLen: number): string {
   return s.length <= maxLen ? s : s.slice(0, maxLen - 3) + "...";
@@ -279,6 +290,10 @@ const SearchResultOutput = {
   ids: z.array(z.string()).optional().describe("Object numbers (compact mode)."),
   source: z.enum(["vocabulary", "search_api"]).optional(),
   referencePlace: z.string().optional(),
+  facets: z.record(z.string(), z.array(z.object({
+    label: z.string(),
+    count: z.number().int(),
+  }))).optional().describe("Top-5 counts per dimension when results are truncated and facets=true."),
   warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 };
@@ -834,6 +849,12 @@ function registerTools(
           .max(RESULTS_MAX)
           .default(RESULTS_DEFAULT)
           .describe(`Maximum results to return (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}). All results include full metadata.`),
+        facets: z
+          .boolean()
+          .default(false)
+          .describe(
+            "When true and results are truncated, include top-5 counts per dimension (type, material, technique, century) to guide narrowing. Dimensions already filtered on are excluded."
+          ),
         compact: z
           .boolean()
           .default(false)
@@ -868,6 +889,7 @@ function registerTools(
         for (const k of allVocabKeys) {
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
         }
+        if (args.facets) vocabArgs["facets"] = true;
         // Map query → title for vocab path (query searches by title)
         if (argsRecord["query"] && !vocabArgs["title"]) {
           vocabArgs["title"] = argsRecord["query"];
@@ -907,9 +929,11 @@ function registerTools(
         const header = `${result.results.length} results` +
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
           ` (vocabulary search)`;
-        const lines = result.results.map((r, i) => formatSearchLine(r, i));
+        const textParts: string[] = [header];
+        if (result.facets) textParts.push(formatFacets(result.facets));
+        textParts.push(...result.results.map((r, i) => formatSearchLine(r, i)));
         const structured: InferOutput<typeof SearchResultOutput> = result;
-        return structuredResponse(structured, [header, ...lines].join("\n"));
+        return structuredResponse(structured, textParts.join("\n"));
       }
 
       // Degraded fallback: use Search API when vocab DB is unavailable
