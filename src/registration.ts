@@ -27,7 +27,7 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
 /** Shared limits for maxResults / maxWorks across search_artwork and get_artist_timeline. */
 const RESULTS_DEFAULT = 25;
-const RESULTS_MAX = 100;
+const RESULTS_MAX = 50;
 
 type ToolResponse = { content: [{ type: "text"; text: string }] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
@@ -1917,7 +1917,7 @@ function registerTools(
           collectionSet: z.string().optional().describe("Pre-filter by collection set before semantic ranking"),
           aboutActor: z.string().optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
           imageAvailable: z.boolean().optional().describe("Pre-filter to artworks with images"),
-          maxResults: z.number().int().min(1).max(100).default(25).optional()
+          maxResults: z.number().int().min(1).max(RESULTS_MAX).default(RESULTS_DEFAULT).optional()
             .describe("Number of results to return (default 25)"),
         }).strict(),
         ...withOutputSchema(SemanticSearchOutput),
