@@ -124,8 +124,9 @@ type PlaceCandidateRow = {
   lon: number | null;
 };
 
+// Exported for testing
 /** Haversine distance in km between two lat/lon points. */
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const toRad = Math.PI / 180;
   const dLat = (lat2 - lat1) * toRad;
   const dLon = (lon2 - lon1) * toRad;
@@ -135,8 +136,9 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return 6371 * 2 * Math.asin(Math.sqrt(a));
 }
 
+// Exported for testing
 /** Pluralize a count: `pluralize(3, "place") → "3 places"`. */
-function pluralize(n: number, noun: string): string {
+export function pluralize(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : (noun.endsWith("ch") || noun.endsWith("s") ? "es" : "s")}`;
 }
 
@@ -166,11 +168,12 @@ function rankByProximity(
   return { ids, geocodedCount: ranked.length };
 }
 
+// Exported for testing
 /**
  * Build a warning message for multi-word place interpretation.
  * Three variants: geo-filtered (with context coords), unresolved context, no context.
  */
-function buildMultiWordPlaceWarning(
+export function buildMultiWordPlaceWarning(
   prefix: string,
   namePart: string,
   contextPart: string,
@@ -197,6 +200,7 @@ function emptyResult(warnings?: string[]): VocabSearchResult {
   };
 }
 
+// Exported for testing
 /**
  * Parse a creationDate wildcard string into an integer year range.
  * - "1642"  → { earliest: 1642, latest: 1642 }
@@ -204,7 +208,7 @@ function emptyResult(warnings?: string[]): VocabSearchResult {
  * - "16*"   → { earliest: 1600, latest: 1699 }
  * - "-5*"   → { earliest: -5999, latest: -5000 } (BCE, 4-digit convention)
  */
-function parseDateFilter(creationDate: string): { earliest: number; latest: number } | null {
+export function parseDateFilter(creationDate: string): { earliest: number; latest: number } | null {
   const trimmed = creationDate.trim();
   if (!trimmed) return null;
 

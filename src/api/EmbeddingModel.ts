@@ -11,7 +11,6 @@ export class EmbeddingModel {
   // Typed as `any` because @huggingface/transformers pipeline() returns
   // a union type too complex for TypeScript to represent. At runtime,
   // "feature-extraction" always returns a FeatureExtractionPipeline.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private pipe: any = null;
   private _modelId: string = "";
   private queryPrefix = "query: ";

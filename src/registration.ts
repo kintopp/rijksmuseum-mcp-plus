@@ -430,6 +430,36 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
+// ─── Geometry helpers (pure) ─────────────────────────────────────────
+
+// Exported for testing
+export function regionToPixels(region: string, w: number, h: number): string | undefined {
+  const p = parsePctRegion(region);
+  if (!p) return undefined;
+  return `${Math.round(p[0] * w / 100)},${Math.round(p[1] * h / 100)},${Math.round(p[2] * w / 100)},${Math.round(p[3] * h / 100)}`;
+}
+
+// Exported for testing
+export function parsePctRegion(region: string): [number, number, number, number] | null {
+  const m = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+  if (!m) return null;
+  return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]), parseFloat(m[4])];
+}
+
+// Exported for testing
+/** Project crop-local coordinates to full-image space. Both must be pct: format. */
+export function projectToFullImage(local: string, relativeTo: string): string | null {
+  const l = parsePctRegion(local);
+  const o = parsePctRegion(relativeTo);
+  if (!l || !o) return null;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const fx = round2(o[0] + (l[0] / 100) * o[2]);
+  const fy = round2(o[1] + (l[1] / 100) * o[3]);
+  const fw = round2((l[2] / 100) * o[2]);
+  const fh = round2((l[3] / 100) * o[3]);
+  return `pct:${fx},${fy},${fw},${fh}`;
+}
+
 // ─── Tools ──────────────────────────────────────────────────────────
 
 function registerTools(
@@ -1223,35 +1253,6 @@ function registerTools(
     })).optional(),
     error: z.string().optional(),
   };
-
-  function regionToPixels(region: string, w: number, h: number): string | undefined {
-    const m = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-    if (!m) return undefined;
-    const px = Math.round(parseFloat(m[1]) * w / 100);
-    const py = Math.round(parseFloat(m[2]) * h / 100);
-    const pw = Math.round(parseFloat(m[3]) * w / 100);
-    const ph = Math.round(parseFloat(m[4]) * h / 100);
-    return `${px},${py},${pw},${ph}`;
-  }
-
-  function parsePctRegion(region: string): [number, number, number, number] | null {
-    const m = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-    if (!m) return null;
-    return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]), parseFloat(m[4])];
-  }
-
-  /** Project crop-local coordinates to full-image space. Both must be pct: format. */
-  function projectToFullImage(local: string, relativeTo: string): string | null {
-    const l = parsePctRegion(local);
-    const o = parsePctRegion(relativeTo);
-    if (!l || !o) return null;
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    const fx = round2(o[0] + (l[0] / 100) * o[2]);
-    const fy = round2(o[1] + (l[1] / 100) * o[3]);
-    const fw = round2((l[2] / 100) * o[2]);
-    const fh = round2((l[3] / 100) * o[3]);
-    return `pct:${fx},${fy},${fw},${fh}`;
-  }
 
   server.registerTool(
     "navigate_viewer",

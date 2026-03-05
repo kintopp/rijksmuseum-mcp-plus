@@ -27,8 +27,9 @@ import {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
+// Exported for testing
 /** Check if a classified_as array contains a given AAT URI */
-function hasClassification(
+export function hasClassification(
   classifiedAs: ({ id?: string } | string)[] | undefined,
   aatUri: string
 ): boolean {
@@ -43,20 +44,23 @@ function getLangId(langs: { id: string }[] | undefined): string | undefined {
   return langs?.[0]?.id;
 }
 
+// Exported for testing
 /** Normalize content that may be a string or array (~34 artworks return arrays) */
-function extractContent(content: string | string[] | undefined): string {
+export function extractContent(content: string | string[] | undefined): string {
   if (content == null) return "";
   return Array.isArray(content) ? content.join("; ") : content;
 }
 
+// Exported for testing
 /** Extract IIIF identifier from a full IIIF URL */
-function extractIiifId(url: string): string | null {
+export function extractIiifId(url: string): string | null {
   const match = url.match(/iiif\.micr\.io\/([^/]+)/);
   return match ? match[1] : null;
 }
 
+// Exported for testing
 /** Extract the pageToken query parameter from a next-page URL */
-function extractPageToken(nextRef: { id: string } | undefined): string | undefined {
+export function extractPageToken(nextRef: { id: string } | undefined): string | undefined {
   if (!nextRef?.id) return undefined;
   try {
     const url = new URL(nextRef.id);
