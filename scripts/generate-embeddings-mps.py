@@ -36,6 +36,17 @@ DIMENSIONS = 384
 COMMIT_BATCH = 5000
 
 
+def get_vocab_db_built_at(vocab_db: str) -> str:
+    """Read built_at from vocab DB's version_info table."""
+    try:
+        conn = sqlite3.connect(f"file:{vocab_db}?mode=ro", uri=True)
+        row = conn.execute("SELECT value FROM version_info WHERE key = 'built_at'").fetchone()
+        conn.close()
+        return row[0] if row else "unknown"
+    except Exception:
+        return "unknown"
+
+
 def open_vec_db(path: str) -> sqlite3.Connection:
     """Open a SQLite connection with the sqlite-vec extension loaded."""
     import sqlite_vec
@@ -149,7 +160,7 @@ def embed_and_write(
     """)
 
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS metadata (
+        CREATE TABLE IF NOT EXISTS version_info (
             key   TEXT PRIMARY KEY,
             value TEXT
         )
@@ -244,7 +255,7 @@ def embed_and_write(
         ("built_at", built_at),
     ]
     conn.executemany(
-        "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", meta
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)", meta
     )
     conn.commit()
     conn.close()
@@ -421,6 +432,16 @@ def main():
         model, artworks, args.output, args.model,
         args.batch_size, args.resume,
     )
+
+    # Record vocab DB provenance
+    vocab_built_at = get_vocab_db_built_at(args.vocab_db)
+    conn = open_vec_db(args.output)
+    conn.execute(
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)",
+        ("vocab_db_built_at", vocab_built_at),
+    )
+    conn.commit()
+    conn.close()
 
     # ── Phase 4: Validate ─────────────────────────────────────────────
     print("\nPhase 4: Validation...")

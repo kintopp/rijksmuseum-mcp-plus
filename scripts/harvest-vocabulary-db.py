@@ -38,6 +38,7 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 # ─── Configuration ───────────────────────────────────────────────────
@@ -2092,6 +2093,32 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         pct = cnt / result["total"] * 100
         print(f"  {score:3d}: {cnt:8,} ({pct:5.1f}%)")
     print(f"  Computed in {result['elapsed']:.1f}s")
+
+    # Write version_info
+    print("\n--- version_info ---")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS version_info (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+    built_at = datetime.now(timezone.utc).isoformat()
+    artwork_count = cur.execute("SELECT COUNT(*) FROM artworks").fetchone()[0]
+    vocab_count = cur.execute("SELECT COUNT(*) FROM vocabulary").fetchone()[0]
+    mapping_count = cur.execute("SELECT COUNT(*) FROM mappings").fetchone()[0]
+    version_rows = [
+        ("built_at", built_at),
+        ("artwork_count", str(artwork_count)),
+        ("vocab_count", str(vocab_count)),
+        ("mapping_count", str(mapping_count)),
+    ]
+    conn.executemany(
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)",
+        version_rows,
+    )
+    conn.commit()
+    for k, v in version_rows:
+        print(f"  {k}: {v}")
 
     # Final VACUUM to reclaim space from dropped tables/columns
     print("\n--- VACUUM ---")

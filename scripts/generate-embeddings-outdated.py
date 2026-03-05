@@ -164,7 +164,7 @@ def write_embeddings_db(
     """)
 
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS metadata (
+        CREATE TABLE IF NOT EXISTS version_info (
             key   TEXT PRIMARY KEY,
             value TEXT
         )
@@ -224,7 +224,7 @@ def write_embeddings_db(
         ("built_at", built_at),
     ]
     conn.executemany(
-        "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", meta
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)", meta
     )
     conn.commit()
 

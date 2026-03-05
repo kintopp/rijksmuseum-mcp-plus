@@ -151,17 +151,26 @@ def get_iconclass_commit(data_dir: str) -> str:
 
 
 def get_vocab_db_version(vocab_db_path: str) -> str:
-    """Get version info from vocabulary.db if available."""
+    """Get version info from vocabulary.db's version_info table."""
     if not os.path.exists(vocab_db_path):
         return "none"
     try:
         conn = sqlite3.connect(f"file:{vocab_db_path}?mode=ro", uri=True)
-        # Try to get a meaningful version indicator
-        row = conn.execute("SELECT COUNT(*) FROM artworks").fetchone()
+        # Read built_at + artwork_count from version_info if available
+        meta = dict(conn.execute("SELECT key, value FROM version_info").fetchall())
         conn.close()
-        return f"{row[0]} artworks" if row else "unknown"
+        built_at = meta.get("built_at", "unknown")
+        count = meta.get("artwork_count", "?")
+        return f"{built_at} ({count} artworks)"
     except Exception:
-        return "unknown"
+        # Fallback for older vocab DBs without version_info
+        try:
+            conn = sqlite3.connect(f"file:{vocab_db_path}?mode=ro", uri=True)
+            row = conn.execute("SELECT COUNT(*) FROM artworks").fetchone()
+            conn.close()
+            return f"{row[0]} artworks" if row else "unknown"
+        except Exception:
+            return "unknown"
 
 
 def load_artwork_counts(vocab_db_path: str) -> dict[str, int]:
@@ -173,14 +182,28 @@ def load_artwork_counts(vocab_db_path: str) -> dict[str, int]:
     print(f"  Loading artwork counts from {vocab_db_path}...")
     conn = sqlite3.connect(f"file:{vocab_db_path}?mode=ro", uri=True)
 
-    # Count artworks per iconclass notation via mappings + vocabulary tables
-    rows = conn.execute("""
-        SELECT v.notation, COUNT(DISTINCT m.object_number) as cnt
-        FROM mappings m
-        JOIN vocabulary v ON m.vocab_id = v.id
-        WHERE m.field = 'subject' AND v.notation IS NOT NULL AND v.notation != ''
-        GROUP BY v.notation
-    """).fetchall()
+    # Detect schema: integer-encoded (v0.13+) vs text
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(mappings)").fetchall()}
+    has_int = "field_id" in cols
+
+    if has_int:
+        fid_row = conn.execute("SELECT id FROM field_lookup WHERE name = 'subject'").fetchone()
+        subject_fid = fid_row[0] if fid_row else -1
+        rows = conn.execute("""
+            SELECT v.notation, COUNT(DISTINCT m.artwork_id) as cnt
+            FROM mappings m
+            JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+            WHERE m.field_id = ? AND v.notation IS NOT NULL AND v.notation != ''
+            GROUP BY v.notation
+        """, (subject_fid,)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT v.notation, COUNT(DISTINCT m.object_number) as cnt
+            FROM mappings m
+            JOIN vocabulary v ON m.vocab_id = v.id
+            WHERE m.field = 'subject' AND v.notation IS NOT NULL AND v.notation != ''
+            GROUP BY v.notation
+        """).fetchall()
 
     conn.close()
     counts = {notation: cnt for notation, cnt in rows}
