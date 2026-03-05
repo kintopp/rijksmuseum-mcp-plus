@@ -1020,22 +1020,23 @@ export class VocabularyDb {
    * Find vocabulary IDs via FTS5, falling back to LIKE on normalized labels
    * for compound word variants (e.g. "printmaker" vs "print maker").
    */
+  private queryVocabFts(match: string, typeClause: string, typeBindings: unknown[]): string[] {
+    return (this.db!.prepare(
+      `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
+    ).all(match, ...typeBindings) as { id: string }[]).map((r) => r.id);
+  }
+
   private findVocabIdsFts(value: string, typeClause: string, typeBindings: unknown[]): string[] {
     const ftsPhrase = escapeFts5(value);
     if (!ftsPhrase) return [];
-    const rows = this.db!.prepare(
-      `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
-    ).all(ftsPhrase, ...typeBindings) as { id: string }[];
-
-    if (rows.length > 0) return rows.map((r) => r.id);
+    const ids = this.queryVocabFts(ftsPhrase, typeClause, typeBindings);
+    if (ids.length > 0) return ids;
 
     // Tier 1.5: FTS5 morphological expansion (English stems)
     const expanded = expandFtsQuery(value);
     if (expanded) {
-      const morphRows = this.db!.prepare(
-        `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
-      ).all(expanded, ...typeBindings) as { id: string }[];
-      if (morphRows.length > 0) return morphRows.map((r) => r.id);
+      const morphIds = this.queryVocabFts(expanded, typeClause, typeBindings);
+      if (morphIds.length > 0) return morphIds;
     }
 
     // Tier 2: FTS5 found nothing — try LIKE on space-stripped normalized labels

@@ -26,11 +26,11 @@ export function generateMorphVariants(word: string): string[] {
   const w = word.toLowerCase();
   const variants = new Set<string>();
 
-  // Plural → singular
+  // Plural → singular (most-specific suffix first)
   if (w.endsWith("ies") && w.length > 4) variants.add(w.slice(0, -3) + "y");
-  if (w.endsWith("ses") && w.length > 4) variants.add(w.slice(0, -2));
   else if (w.endsWith("ches") || w.endsWith("shes") || w.endsWith("xes") || w.endsWith("zes"))
     variants.add(w.slice(0, -2));
+  else if (w.endsWith("ses") && w.length > 4) variants.add(w.slice(0, -2));
   else if (w.endsWith("s") && !w.endsWith("ss") && w.length > 3) variants.add(w.slice(0, -1));
 
   // Singular → plural
@@ -46,7 +46,6 @@ export function generateMorphVariants(word: string): string[] {
   if (w.endsWith("ied") && w.length > 4) variants.add(w.slice(0, -3) + "y");
   else if (w.endsWith("ed") && w.length > 4) {
     variants.add(w.slice(0, -2));        // painted → paint
-    variants.add(w.slice(0, -1));        // caused → cause (strip d only — nah, -ed → root + e)
     variants.add(w.slice(0, -2) + "e");  // caused → cause
   }
 

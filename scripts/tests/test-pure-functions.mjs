@@ -281,6 +281,21 @@ section("generateMorphVariants");
   assert(v.includes("crucify"), "crucified → crucify");
 }
 
+// Specific plural edge cases (rule ordering)
+{
+  const v = generateMorphVariants("foxes");
+  assert(v.includes("fox"), "foxes → fox (xes rule, not ses)");
+  assert(!v.includes("foxe"), "foxes does not produce 'foxe'");
+}
+{
+  const v = generateMorphVariants("buses");
+  assert(v.includes("bus"), "buses → bus (ses rule)");
+}
+{
+  const v = generateMorphVariants("watches");
+  assert(v.includes("watch"), "watches → watch (ches rule)");
+}
+
 // Minimum stem guard
 {
   const v = generateMorphVariants("is");
