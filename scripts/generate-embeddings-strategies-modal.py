@@ -233,6 +233,8 @@ def load_artworks(
                 ("Description", row["description_text"]),
                 ("Subjects", subject_text),
             ]
+        else:
+            raise ValueError(f"Unknown strategy '{strategy}' in field builder")
 
         text = " ".join(f"[{label}] {val}" for label, val in fields if val)
         artworks.append((art_id, obj_num, text))
@@ -403,7 +405,7 @@ def main(
         for j, (art_id, obj_num, text) in enumerate(chunk):
             blob = embs[j].tobytes()
             source_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
-            batch_rows_regular.append((art_id, obj_num, blob, text, source_hash))
+            batch_rows_regular.append((art_id, obj_num, blob, None, source_hash))
             batch_rows_vec.append((art_id, blob))
             total_inserted += 1
 

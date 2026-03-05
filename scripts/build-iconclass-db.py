@@ -156,21 +156,19 @@ def get_vocab_db_version(vocab_db_path: str) -> str:
         return "none"
     try:
         conn = sqlite3.connect(f"file:{vocab_db_path}?mode=ro", uri=True)
-        # Read built_at + artwork_count from version_info if available
-        meta = dict(conn.execute("SELECT key, value FROM version_info").fetchall())
-        conn.close()
-        built_at = meta.get("built_at", "unknown")
-        count = meta.get("artwork_count", "?")
-        return f"{built_at} ({count} artworks)"
-    except Exception:
-        # Fallback for older vocab DBs without version_info
         try:
-            conn = sqlite3.connect(f"file:{vocab_db_path}?mode=ro", uri=True)
-            row = conn.execute("SELECT COUNT(*) FROM artworks").fetchone()
-            conn.close()
-            return f"{row[0]} artworks" if row else "unknown"
+            meta = dict(conn.execute("SELECT key, value FROM version_info").fetchall())
+            built_at = meta.get("built_at", "unknown")
+            count = meta.get("artwork_count", "?")
+            return f"{built_at} ({count} artworks)"
         except Exception:
-            return "unknown"
+            # Fallback for older vocab DBs without version_info
+            row = conn.execute("SELECT COUNT(*) FROM artworks").fetchone()
+            return f"{row[0]} artworks" if row else "unknown"
+        finally:
+            conn.close()
+    except Exception:
+        return "unknown"
 
 
 def load_artwork_counts(vocab_db_path: str) -> dict[str, int]:
@@ -345,10 +343,20 @@ def build(data_dir: str, vocab_db_path: str, output_path: str):
     built_at = datetime.now(timezone.utc).isoformat()
     iconclass_commit = get_iconclass_commit(data_dir)
     vocab_version = get_vocab_db_version(vocab_db_path)
+    # Extract raw built_at for machine-parseable provenance (matches embeddings convention)
+    vocab_built_at = "unknown"
+    try:
+        vconn = sqlite3.connect(f"file:{vocab_db_path}?mode=ro", uri=True)
+        row = vconn.execute("SELECT value FROM version_info WHERE key = 'built_at'").fetchone()
+        if row:
+            vocab_built_at = row[0]
+        vconn.close()
+    except Exception:
+        pass
 
     conn.executemany("INSERT INTO version_info VALUES (?, ?)", [
         ("built_at", built_at),
-        ("vocab_db_version", vocab_version),
+        ("vocab_db_built_at", vocab_built_at),
         ("iconclass_data_commit", iconclass_commit),
     ])
     conn.commit()

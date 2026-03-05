@@ -129,6 +129,7 @@ def embed_and_write(
     model_name: str,
     batch_size: int,
     resume: bool,
+    vocab_db: str = "",
 ) -> int:
     """Stream: embed a batch → quantize → write to DB. Repeat.
 
@@ -222,7 +223,7 @@ def embed_and_write(
             source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
             batch_rows_regular.append(
-                (art_id, obj_num, emb_blob, text, source_hash)
+                (art_id, obj_num, emb_blob, None, source_hash)
             )
             batch_rows_vec.append((art_id, emb_blob))
             inserted += 1
@@ -247,12 +248,14 @@ def embed_and_write(
     # Write metadata
     built_at = datetime.now(timezone.utc).isoformat()
     artwork_count = inserted + len(existing_ids)
+    vocab_built_at = get_vocab_db_built_at(vocab_db) if vocab_db else "unknown"
     meta = [
         ("model", model_name),
         ("dimensions", str(DIMENSIONS)),
         ("quantization", "int8"),
         ("artwork_count", str(artwork_count)),
         ("built_at", built_at),
+        ("vocab_db_built_at", vocab_built_at),
     ]
     conn.executemany(
         "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)", meta
@@ -430,18 +433,8 @@ def main():
     print(f"\nPhase 2+3: Streaming embed → quantize → write ({args.batch_size} batch size)...")
     inserted = embed_and_write(
         model, artworks, args.output, args.model,
-        args.batch_size, args.resume,
+        args.batch_size, args.resume, vocab_db=args.vocab_db,
     )
-
-    # Record vocab DB provenance
-    vocab_built_at = get_vocab_db_built_at(args.vocab_db)
-    conn = open_vec_db(args.output)
-    conn.execute(
-        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)",
-        ("vocab_db_built_at", vocab_built_at),
-    )
-    conn.commit()
-    conn.close()
 
     # ── Phase 4: Validate ─────────────────────────────────────────────
     print("\nPhase 4: Validation...")
