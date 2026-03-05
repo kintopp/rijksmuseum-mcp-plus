@@ -12,7 +12,7 @@
 
 You can explore artworks using rijksmuseum-mcp+ with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, it provides the following additional features:
 
-1. **Full-text corpora** — (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`). This permits, for example, comparative analyses of the collection's catalogue (`description`) and curated wall texts (`curatedNarrative`).
+1. **Full-text corpora** — (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`). This permits, for example, comparative analyses of the collection's catalogue entries and the curated wall texts.
 
 2. **Semantic search** — this enables multilingual, concept/meaning-based explorations across multiple metadata categories. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
 
@@ -62,7 +62,7 @@ After that, ask your own questions:
 - _Which paintings are wider than 3 meters?_
 - _Has anyone taken a tumble in SK-A-1718? Show me where._
 
-For examples of more complex questions, see the [research scenarios](docs/research-scenarios.md). 
+Et bien sûr también puedes explorar संग्रहों को 用你自己的语言。For samples of more complex questions, see the [research scenarios](docs/research-scenarios.md). 
 
 ### How it works
 
