@@ -17,15 +17,14 @@ import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
-import { SystemIntegration } from "./utils/SystemIntegration.js";
-import type { SearchParams } from "./types.js";
+import type { SearchParams, LinkedArtObject } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
-/** Shared limits for maxResults / maxWorks across search_artwork and get_artist_timeline. */
+/** Shared limits for maxResults across search_artwork, lookup_iconclass, and semantic_search. */
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 50;
 
@@ -73,14 +72,6 @@ function formatSearchLine(r: { objectNumber: string; title: string; creator: str
   line += ` | "${r.title}"`;
   if (r.creator) line += ` — ${r.creator}`;
   if (r.nearestPlace) line += ` [${r.nearestPlace}, ${r.distance_km?.toFixed(1)}km]`;
-  return line;
-}
-
-/** Format a timeline entry as a compact one-liner for LLM content. */
-function formatTimelineLine(t: { year: string; objectNumber: string; title: string; type?: string }, i: number): string {
-  let line = `${i + 1}. ${t.year}  ${t.objectNumber}`;
-  if (t.type) line += ` | ${t.type}`;
-  line += `  "${t.title}"`;
   return line;
 }
 
@@ -358,22 +349,6 @@ const BibliographyOutput = {
   error: z.string().optional(),
 };
 
-const TimelineOutput = {
-  artist: z.string(),
-  totalWorksInCollection: z.number().int(),
-  timeline: z.array(z.object({
-    id: z.string().describe("Linked Art URI."),
-    objectNumber: z.string(),
-    title: z.string(),
-    creator: z.string(),
-    year: z.string(),
-    type: z.string().optional(),
-    url: z.string(),
-  })),
-  warnings: z.array(z.string()).optional(),
-  error: z.string().optional(),
-};
-
 const ImageInfoOutput = {
   objectNumber: z.string(),
   title: z.string().optional(),
@@ -459,12 +434,6 @@ const SemanticSearchOutput = {
     url: z.string(),
   })),
   warnings: z.array(z.string()).optional(),
-  error: z.string().optional(),
-};
-
-const OpenInBrowserOutput = {
-  opened: z.boolean(),
-  url: z.string(),
   error: z.string().optional(),
 };
 
@@ -989,52 +958,46 @@ function registerTools(
     {
       title: "Get Artwork Details",
       description:
-        "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch). " +
+        "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch) " +
+        "or by its Linked Art URI (e.g. from relatedObjects). Provide exactly one of objectNumber or uri. " +
         "Returns 24 metadata categories including titles, creator, date, description, curatorial narrative, " +
         "dimensions (text + structured), materials, object type, production details, provenance, " +
         "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
         "Also reports the bibliography count — use get_artwork_bibliography for full citations. " +
-        "The relatedObjects field contains Linked Art URIs — use resolve_uri to get full details of related works. " +
+        "The relatedObjects field contains Linked Art URIs — pass them as uri to get full details of related works. " +
         "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",
       inputSchema: z.object({
         objectNumber: z
           .string()
+          .optional()
           .describe(
             "The object number of the artwork (e.g. 'SK-C-5', 'SK-A-3262')"
           ),
-      }).strict(),
-      ...withOutputSchema(ArtworkDetailOutput),
-    },
-    withLogging("get_artwork_details", async (args) => {
-      const { uri, object } = await api.findByObjectNumber(args.objectNumber);
-      const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, uri);
-      return structuredResponse(detail, formatDetailSummary(detail));
-    })
-  );
-
-  // ── resolve_uri ────────────────────────────────────────────────
-
-  server.registerTool(
-    "resolve_uri",
-    {
-      title: "Resolve URI",
-      description:
-        "Resolve a Linked Art URI to full artwork details. " +
-        "Use this when you have a URI from relatedObjects or other tool output " +
-        "and want to learn what that object is. Returns the same enriched detail as get_artwork_details.",
-      inputSchema: z.object({
         uri: z
           .string()
           .url()
+          .optional()
           .describe(
             "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
           ),
-      }).strict(),
+      }).strict().refine(
+        (d) => (d.objectNumber ? 1 : 0) + (d.uri ? 1 : 0) === 1,
+        { message: "Provide exactly one of objectNumber or uri" }
+      ),
       ...withOutputSchema(ArtworkDetailOutput),
     },
-    withLogging("resolve_uri", async (args) => {
-      const object = await api.resolveObject(args.uri);
-      const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, args.uri);
+    withLogging("get_artwork_details", async (args) => {
+      let resolvedUri: string;
+      let object: LinkedArtObject;
+      if (args.objectNumber) {
+        const found = await api.findByObjectNumber(args.objectNumber);
+        resolvedUri = found.uri;
+        object = found.object;
+      } else {
+        resolvedUri = args.uri!;
+        object = await api.resolveObject(resolvedUri);
+      }
+      const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, resolvedUri);
       return structuredResponse(detail, formatDetailSummary(detail));
     })
   );
@@ -1477,104 +1440,6 @@ function registerTools(
       const text = commands.length ? `${commands.length} commands polled` : "No pending commands";
       return structuredResponse({ commands }, text);
     }
-  );
-
-  // ── get_artist_timeline ─────────────────────────────────────────
-
-  server.registerTool(
-    "get_artist_timeline",
-    {
-      title: "Get Artist Timeline",
-      description:
-        "Generate a chronological timeline of an artist's works in the Rijksmuseum collection. " +
-        "Searches by creator name, resolves each result, and sorts by creation date. " +
-        "Each work includes an objectNumber for use with get_artwork_details or get_artwork_image.",
-      inputSchema: z.object({
-        artist: z
-          .string()
-          .describe("Artist name, e.g. 'Rembrandt van Rijn', 'Johannes Vermeer'"),
-        maxWorks: z
-          .number()
-          .int()
-          .min(1)
-          .max(RESULTS_MAX)
-          .default(RESULTS_DEFAULT)
-          .describe(`Maximum works to include (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT})`),
-      }).strict(),
-      ...withOutputSchema(TimelineOutput),
-    },
-    withLogging("get_artist_timeline", async (args) => {
-      if (!vocabAvailable || !vocabDb) {
-        return errorResponse("Artist timeline requires the vocabulary database.");
-      }
-      const result = vocabDb.search({
-        creator: args.artist,
-        maxResults: args.maxWorks,
-      });
-
-      const parseYear = (s: string): number => parseInt(s, 10) || 0;
-      const timeline = result.results
-        .map(({ date, objectNumber, title, creator, type, url }) => ({
-          id: `https://id.rijksmuseum.nl/${objectNumber}`,
-          objectNumber,
-          title,
-          creator,
-          year: date ?? "",
-          ...(type && { type }),
-          url,
-        }))
-        .sort((a, b) => parseYear(a.year) - parseYear(b.year));
-
-      const total = result.totalResults ?? 0;
-      const warnings = total === 0
-        ? ["No results found. Try alternative spellings or name forms for the artist."]
-        : undefined;
-
-      const response: InferOutput<typeof TimelineOutput> = {
-        artist: args.artist,
-        totalWorksInCollection: total,
-        timeline,
-        ...(warnings ? { warnings } : {}),
-      };
-
-      const years = timeline.map(t => parseYear(t.year)).filter(y => y > 0);
-      const rangeStr = years.length > 0 ? `, ${years[0]}–${years[years.length - 1]}` : '';
-      const header = `${timeline.length} works by ${args.artist}` +
-        (total > 0 ? ` (${total} total in collection)` : '') +
-        rangeStr;
-      const lines = timeline.map((t, i) => formatTimelineLine(t, i));
-      return structuredResponse(response, [header, ...lines].join("\n"));
-    })
-  );
-
-  // ── open_in_browser ─────────────────────────────────────────────
-
-  server.registerTool(
-    "open_in_browser",
-    {
-      title: "Open in Browser",
-      description:
-        "Open a URL in the user's default web browser. Useful for opening an artwork's Rijksmuseum collection page, " +
-        "in environments where the interactive image viewer called with get_artwork_image is not available.",
-      inputSchema: z.object({
-        url: z
-          .string()
-          .url()
-          .describe("The URL to open in the browser"),
-      }).strict(),
-      ...withOutputSchema(OpenInBrowserOutput),
-    },
-    withLogging("open_in_browser", async (args) => {
-      try {
-        await SystemIntegration.openInBrowser(args.url);
-        const data: InferOutput<typeof OpenInBrowserOutput> = { opened: true, url: args.url };
-        return structuredResponse(data, `Opened in browser: ${args.url}`);
-      } catch (err) {
-        const message = `Failed to open browser: ${err instanceof Error ? err.message : String(err)}`;
-        const data: InferOutput<typeof OpenInBrowserOutput> = { opened: false, url: args.url, error: message };
-        return { ...structuredResponse(data, message), isError: true as const };
-      }
-    })
   );
 
   // ── list_curated_sets ───────────────────────────────────────────
@@ -2133,9 +1998,9 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
             text:
               `Create a visual timeline showing the chronological progression of ${args.artist}'s most notable works` +
               `${args.maxWorks ? ` (limited to ${args.maxWorks} works)` : ""}.\n\n` +
-              `Use the get_artist_timeline tool with artist="${args.artist}"` +
-              `${args.maxWorks ? ` and maxWorks=${args.maxWorks}` : ""} to get the data.\n\n` +
-              `Note: the tool returns at most ${RESULTS_MAX} works. For prolific artists, this is a small sample of their collection.\n\n` +
+              `Use search_artwork with creator="${args.artist}"` +
+              `${args.maxWorks ? ` and maxResults=${args.maxWorks}` : ""} to get the data, then sort by date.\n\n` +
+              `Note: search returns at most ${RESULTS_MAX} works. For prolific artists, this is a small sample of their collection.\n\n` +
               `For each work, include:\n` +
               `- Year of creation\n` +
               `- Title of the work\n` +

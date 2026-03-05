@@ -101,14 +101,14 @@ search_artwork	{"birthPlace": "Haarlem", "profession": "painter", "type": "paint
 search_artwork	{"productionRole": "after painting by", "creator": "Rembrandt"}
 
 # 16. Tracing Career Evolution Through Subject and Place
-get_artist_timeline	{"artist": "Jacob van Ruisdael", "maxWorks": 10}
+search_artwork	{"creator": "Jacob van Ruisdael", "maxResults": 10}
 
 # 17. Medium Shifts Within a Career
-get_artist_timeline	{"artist": "George Hendrik Breitner", "maxWorks": 10}
+search_artwork	{"creator": "George Hendrik Breitner", "maxResults": 10}
 
 # 18. Comparing Parallel Careers
-get_artist_timeline	{"artist": "Jan Steen", "maxWorks": 10}
-get_artist_timeline	{"artist": "Gabriël Metsu", "maxWorks": 10}
+search_artwork	{"creator": "Jan Steen", "maxResults": 10}
+search_artwork	{"creator": "Gabriël Metsu", "maxResults": 10}
 
 # 19. Reconstructing Past Exhibitions
 list_curated_sets	{"query": "Rembrandt"}

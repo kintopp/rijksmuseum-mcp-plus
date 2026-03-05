@@ -44,8 +44,8 @@ const PROJECT_ROOT = resolve(__dirname, "..");
 const DEFAULT_FILE = resolve(__dirname, "warm-cache-prompts.tsv");
 
 // Tools whose content text should be a compact human-readable summary,
-// not raw JSON. These have custom formatSearchLine / formatTimelineLine output.
-const COMPACT_CONTENT_TOOLS = new Set(["search_artwork", "get_artist_timeline"]);
+// not raw JSON. These have custom formatSearchLine output.
+const COMPACT_CONTENT_TOOLS = new Set(["search_artwork"]);
 
 function parseArgs() {
   const args = process.argv.slice(2);
