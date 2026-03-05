@@ -1,21 +1,22 @@
 ## Semantic search
 
-The `semantic_search` tool finds artworks by meaning, concept, or theme using natural language. Unlike `search_artwork`, which matches against structured metadata fields (titles, vocabulary terms, Iconclass notations), semantic search ranks all ~831,000 artworks by embedding similarity to a free-text query.
+The `semantic_search` tool finds artworks by meaning, concept, or theme using natural language. Unlike `search_artwork`, which matches against structured metadata fields (titles, vocabulary terms, Iconclass notations), semantic search ranks all ~832,000 artworks by embedding similarity to a free-text query.
 
 ### How it works
 
-Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 384-dimensional vector generated from a composite text built from six metadata fields:
+Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 384-dimensional vector generated from a composite text built from five metadata fields:
 
 | Field | Source | Coverage |
 |-------|--------|----------|
 | Title | All title variants (brief, full, former × EN/NL) | ~99% |
 | Creator | Artist name / attribution | ~61% |
-| Subjects | Iconclass subject labels (English, with Dutch fallback) | ~87% |
 | Curatorial narrative | Museum wall text (English/Dutch) | ~2% (14K works) |
 | Inscriptions | Transcribed text from the object surface | ~60% |
 | Description | Cataloguer observations (Dutch) | ~61% |
 
-The composite text is assembled as `[Title] ... [Creator] ... [Subjects] ... [Narrative] ... [Inscriptions] ... [Description] ...` and embedded using [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small), a multilingual sentence embedding model. Embeddings are int8-quantized (384 dimensions) and stored in a SQLite database using [sqlite-vec](https://github.com/asg017/sqlite-vec).
+Iconclass subject labels are deliberately excluded — benchmarking showed that including them biased results toward tagged vocabulary matches rather than semantic meaning, reducing the number of paintings surfaced by 71% in painting-expected queries.
+
+The composite text is assembled as `[Title] ... [Creator] ... [Narrative] ... [Inscriptions] ... [Description] ...` and embedded using [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small), a multilingual sentence embedding model. Embeddings are int8-quantized (384 dimensions) and stored in a SQLite database using [sqlite-vec](https://github.com/asg017/sqlite-vec).
 
 At query time, the user's query is embedded with the same model, and the nearest artwork vectors are returned ranked by cosine similarity.
 
@@ -43,7 +44,11 @@ At query time, the user's query is embedded with the same model, and the nearest
 | `technique` | No | Filter by technique (e.g. `"etching"`, `"oil painting"`) |
 | `creationDate` | No | Filter by date — exact year (`"1642"`) or wildcard (`"16*"`) |
 | `creator` | No | Filter by artist name |
-| `maxResults` | No | Number of results (1–100, default 25) |
+| `collectionSet` | No | Filter by curated set name (e.g. `"Rembrandt"`) |
+| `aboutActor` | No | Filter by person (depicted or creator) |
+| `iconclass` | No | Filter by Iconclass notation code (e.g. `"73D82"`) |
+| `imageAvailable` | No | Restrict to artworks with a digital image |
+| `maxResults` | No | Number of results (1–50, default 15) |
 
 Filters narrow the candidate set via the vocabulary database *before* semantic ranking. This is more precise than post-filtering because it searches the full metadata (not just the embedded text) and ensures all results match the filter exactly.
 
@@ -87,6 +92,6 @@ Source text is not stored in the embeddings database (saving ~365 MB). It is rec
 ### Technical details
 
 - **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The quantized ONNX model is sourced from the [Xenova mirror](https://huggingface.co/Xenova/multilingual-e5-small).
-- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) v0.1.6. Brute-force scan (no ANN index). ~831,000 × int8[384] ≈ 305 MB in the vec0 table, plus a regular `artwork_embeddings` table for filtered queries.
+- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) v0.1.6. Brute-force scan (no ANN index). ~832,000 × int8[384] ≈ 305 MB in the vec0 table, plus a regular `artwork_embeddings` table for filtered queries.
 - **Query embedding prefix:** The model uses the `query:` prefix for queries and `passage:` for documents, following the E5 instruction format.
-- **Database size:** 699 MB (389 MB gzip-compressed). Auto-downloaded on first start when `EMBEDDINGS_DB_URL` is set.
+- **Database size:** ~705 MB. Auto-downloaded on first start when `EMBEDDINGS_DB_URL` is set.

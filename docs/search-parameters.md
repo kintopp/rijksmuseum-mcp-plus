@@ -1,6 +1,6 @@
 ## Search parameters
 
-The `search_artwork` tool accepts over 30 parameters, drawn from two backends: the online [Rijksmuseum Search API](https://data.rijksmuseum.nl/) and a large set of [vocabulary data](https://data.rijksmuseum.nl/docs/data-dumps/) made available by the Rijksmuseum as downloads. Search parameters from either backend can generally be combined freely; a few restrictions are noted below. At present, all searches are configured to return a maximum of 25 results by default. However, in your chat, you can can also request to see up to 100 results for a query.
+The `search_artwork` tool accepts over 30 parameters, drawn from two backends: the online [Rijksmuseum Search API](https://data.rijksmuseum.nl/) and a large set of [vocabulary data](https://data.rijksmuseum.nl/docs/data-dumps/) made available by the Rijksmuseum as downloads. Search parameters from either backend can generally be combined freely; a few restrictions are noted below. At present, all searches are configured to return a maximum of 25 results by default (up to 50 on request).
 
 ### Rijksmuseum Search API  parameters
 
@@ -22,7 +22,7 @@ These parameters query the Rijksmuseum Search API directly. They support free-te
 
 ### Rijksmuseum vocabulary parameters
 
-These parameters search a Linked Open Data [vocabulary dataset](https://data.rijksmuseum.nl/docs/data-dumps/) that maps ~149,000 controlled vocabulary terms to ~831,000 artworks via ~12.8 million mappings. To allow this, original files were converted into an online, searchable database connected to rijksmuseum-mcp+. Its parameters can be freely combined with each other (e.g. `depictedPerson` + `productionPlace` + `creationDate: "17*"`) and with `creator`, `type`, `material`, `technique`, `creationDate` (with wildcards), `title`, `query`, from the Rijksmuseum search API and the geographic proximity parameters described in the next section. N.B. `aboutActor`, `imageAvailable`, `compact`, and `pageToken` (from the Rijksmuseum search API) cannot be used alongside vocabulary-backed filters.
+These parameters search a Linked Open Data [vocabulary dataset](https://data.rijksmuseum.nl/docs/data-dumps/) that maps ~194,000 controlled vocabulary terms to ~832,000 artworks via ~13.5 million mappings. To allow this, original files were converted into an online, searchable database connected to rijksmuseum-mcp+. Its parameters can be freely combined with each other (e.g. `depictedPerson` + `productionPlace` + `creationDate: "17*"`) and with `creator`, `type`, `material`, `technique`, `creationDate` (with wildcards), `title`, `query`, from the Rijksmuseum search API and the geographic proximity parameters described in the next section. N.B. `aboutActor`, `imageAvailable`, `compact`, and `pageToken` (from the Rijksmuseum search API) cannot be used alongside vocabulary-backed filters.
 
 | Search Parameter | What it queries | Notes |
 |---|---|---|
@@ -60,7 +60,7 @@ N.B. The latitude/longitude coordinates were derived from the authority file IDs
 
 ### Semantic search
 
-For concepts that cannot be expressed as structured vocabulary terms (atmosphere, emotion, composition, art-historical interpretation), use the `semantic_search` tool instead. It accepts free-text queries and ranks artworks by embedding similarity. Its filters (`type`, `material`, `technique`, `creationDate`, `creator`) are a subset of those listed here. Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly; purely emotional or stylistic concepts may yield lower precision. Multilingual queries are supported. See [Semantic Search](semantic-search.md) for full documentation.
+For concepts that cannot be expressed as structured vocabulary terms (atmosphere, emotion, composition, art-historical interpretation), use the `semantic_search` tool instead. It accepts free-text queries and ranks artworks by embedding similarity. Its filters (`type`, `material`, `technique`, `creationDate`, `creator`, `collectionSet`, `aboutActor`, `iconclass`, `imageAvailable`) are a subset of those listed here. Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly; purely emotional or stylistic concepts may yield lower precision. Multilingual queries are supported. See [Semantic Search](semantic-search.md) for full documentation.
 
 ### Artwork detail fields
 

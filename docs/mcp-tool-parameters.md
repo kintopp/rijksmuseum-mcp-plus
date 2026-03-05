@@ -20,7 +20,7 @@ The primary search tool. Vocabulary-based filters can be freely combined with ea
 | Parameter | Description |
 |---|---|
 | `title` | Search all title variants (brief, full, former × EN/NL) |
-| `subject` | Primary concept/theme search — searches 831K artworks via Iconclass vocabulary. Start here for thematic queries |
+| `subject` | Primary concept/theme search — searches ~832K artworks via Iconclass vocabulary. Start here for thematic queries |
 | `iconclass` | Exact Iconclass notation code (e.g. `34B11` for dogs). More precise than `subject` |
 | `description` | Full-text search on cataloguer descriptions (~510K artworks) |
 | `curatorialNarrative` | Full-text search on museum wall text (~14K artworks) |
@@ -53,7 +53,7 @@ The primary search tool. Vocabulary-based filters can be freely combined with ea
 | `nearPlace` | Proximity search by place name |
 | `nearLat` / `nearLon` | Proximity search by coordinates |
 | `nearPlaceRadius` | Radius in km for proximity search (default 25) |
-| `maxResults` | 1–100 (default 25) |
+| `maxResults` | 1–50 (default 25) |
 | `compact` | `true` returns IDs only without full metadata (faster) |
 | `pageToken` | Pagination token from a previous result |
 
@@ -71,7 +71,11 @@ Natural language / concept-based search. Best for atmospheric, thematic, or art-
 | `material` | Filter by material |
 | `technique` | Filter by technique |
 | `creationDate` | Exact year or wildcard |
-| `maxResults` | 1–100 (default 25) |
+| `collectionSet` | Filter by curated set name |
+| `aboutActor` | Filter by person (depicted or creator) |
+| `iconclass` | Filter by Iconclass notation code |
+| `imageAvailable` | `true` to restrict to artworks with images |
+| `maxResults` | 1–50 (default 15) |
 
 ---
 
@@ -84,7 +88,7 @@ Search or browse the Iconclass subject classification vocabulary. Provide either
 | `query` | Text search across Iconclass labels in all 13 languages |
 | `notation` | Browse a specific Iconclass notation and its children (e.g. `31A33`) |
 | `lang` | Preferred language for labels (default `en`; supports en, nl, de, fr, it, es, pt, fi, cz, hu, pl, jp, zh) |
-| `maxResults` | 1–100 (default 25) |
+| `maxResults` | 1–50 (default 25) |
 
 ---
 
@@ -92,7 +96,8 @@ Search or browse the Iconclass subject classification vocabulary. Provide either
 
 | Parameter | Description |
 |---|---|
-| `objectNumber` | Object identifier, e.g. `SK-C-5` |
+| `objectNumber` | Object identifier, e.g. `SK-C-5` (provide this or `uri`, not both) |
+| `uri` | Linked Art URI, e.g. `https://id.rijksmuseum.nl/200666460` (from `relatedObjects`) |
 
 ---
 
@@ -110,14 +115,6 @@ Search or browse the Iconclass subject classification vocabulary. Provide either
 |---|---|
 | `objectNumber` | Object identifier |
 | `full` | `true` to return all citations; default returns first 5 with total count |
-
----
-
-## resolve_uri
-
-| Parameter | Description |
-|---|---|
-| `uri` | A Linked Art URI from `relatedObjects`, e.g. `https://id.rijksmuseum.nl/200666460` |
 
 ---
 
@@ -150,19 +147,3 @@ Search or browse the Iconclass subject classification vocabulary. Provide either
 | `identifiersOnly` | `true` returns headers only — much faster |
 | `resumptionToken` | Pagination token from a previous result |
 
----
-
-## get_artist_timeline
-
-| Parameter | Description |
-|---|---|
-| `artist` | Artist name, e.g. `Johannes Vermeer` |
-| `maxWorks` | 1–100 (default 25) |
-
----
-
-## open_in_browser
-
-| Parameter | Description |
-|---|---|
-| `url` | URL to open, e.g. an artwork's Rijksmuseum collection page |

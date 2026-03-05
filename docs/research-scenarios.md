@@ -216,7 +216,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 **How the tools enable it:**
 - `search_artwork` with `productionRole: "after painting by"` and `creator: "Rembrandt"` to find reproductive prints based on Rembrandt's compositions
 - `get_artwork_details` on a result — the `relatedObjects` field links to the source painting
-- `resolve_uri` on the related object URI to retrieve the source painting's full metadata
+- `get_artwork_details` with the related object's URI to retrieve the source painting's full metadata
 - `get_artwork_image` on both the print and the painting for side-by-side comparison at high zoom
 
 **Why it matters:** The `productionRole` filter distinguishes the *function* an artist played in creating a specific work — "after painting by" identifies reproductive prints explicitly, rather than requiring the researcher to infer the relationship from titles or descriptions. The `relatedObjects` link then provides a direct path from reproduction to source, and the viewer enables the visual comparison that art historical analysis demands.
@@ -225,14 +225,14 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 ### Artist Timelines
 
-`get_artist_timeline` arranges an artist's works chronologically, revealing career patterns invisible when browsing search results.
+`search_artwork` with a `creator` filter returns results sorted by importance, which can be re-sorted by date to reveal career patterns invisible when browsing search results. The `generate-artist-timeline` prompt automates this workflow.
 
 #### 17. Tracing Career Evolution Through Subject and Place
 
 **Research question:** Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?
 
 **How the tools enable it:**
-- `get_artist_timeline` with `artist: "Jacob van Ruisdael"`
+- `search_artwork` with `creator: "Jacob van Ruisdael"`, then sort results by date
 - `get_artwork_details` on each work — read description, title, and `production[].place` to identify subject matter and where each work was made
 - Map subject type and production place against date: do the dune landscapes cluster in the early years and the waterfalls in the later ones?
 
@@ -244,7 +244,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 **How the tools enable it:**
 - `search_artwork` with `profession: "painter"` and `creator: "Breitner"` to confirm his multi-profession classification
-- `get_artist_timeline` with `artist: "George Hendrik Breitner"`
+- `search_artwork` with `creator: "George Hendrik Breitner"`, then sort by date
 - `get_artwork_details` on each work to extract medium and technique
 - Plot medium against date: do drawings cluster in the early years, paintings in the middle, photographs at the end — or is the practice mixed throughout?
 
@@ -255,11 +255,11 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 **Research question:** How do the career trajectories of Jan Steen and Gabriël Metsu compare — two genre painters active in the same cities at the same time?
 
 **How the tools enable it:**
-- `get_artist_timeline` for both artists
+- `search_artwork` with `creator: "Jan Steen"` and `creator: "Gabriël Metsu"` separately, then sort each by date
 - Compare: date ranges, number of works per decade, medium distribution
 - Use `get_artwork_details` on representative works from each to compare subject matter and scale
 
-**Why it matters:** Parallel career comparison is a standard for understanding market positioning, artistic rivalry, and influence. The timeline tool generates the raw data for these comparisons.
+**Why it matters:** Parallel career comparison is a standard for understanding market positioning, artistic rivalry, and influence. Sorting creator searches by date generates the raw data for these comparisons.
 
 ---
 
