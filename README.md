@@ -8,6 +8,9 @@
 
 **rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks carried out by large language models (LLMs). We are particularly interested in exploring the [research opportunities](docs/research-scenarios.md) and technical challenges posed by using structured data with LLMs for humanities research. If you are an interested in collaborating on these questions, please [get in touch](mailto:rise@unibas.ch).
 
+<br>
+<p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion" width="500"></p>
+
 ### Features
 
 You can explore artworks using rijksmuseum-mcp+ with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, it provides the following additional features:
@@ -27,9 +30,6 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 7. **Image analysis** (experimental) — the AI assistant can analyse images visually in combination with its own background knowledge and the artwork's structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also annotate the image with these elements in the image viewer (e.g. "identify the biblical scenes depicted in the painting's panels and highlight these for me").
 
 8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
-
-<br>
-<p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion" width="500"></p>
 
 ## Quick Start
 
