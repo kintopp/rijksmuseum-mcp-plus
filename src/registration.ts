@@ -32,6 +32,9 @@ const RESULTS_MAX = 100;
 type ToolResponse = { content: [{ type: "text"; text: string }] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
 
+/** Infer a TypeScript type from a Zod shape (plain object of ZodTypes used for outputSchema). */
+type InferOutput<T extends Record<string, z.ZodTypeAny>> = z.infer<z.ZodObject<T>>;
+
 function jsonResponse(data: unknown): ToolResponse {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 }
@@ -798,7 +801,8 @@ function registerTools(
           const header = (compactResult.totalResults != null
             ? `${compactResult.totalResults} results`
             : `${compactResult.ids.length} results`) + " (compact)";
-          return structuredResponse(compactResult, header);
+          const data: InferOutput<typeof SearchResultOutput> = compactResult;
+          return structuredResponse(data, header);
         }
 
         const result = vocabDb.search(vocabArgs as any);
@@ -827,7 +831,7 @@ function registerTools(
           lines.push("", ...slimLines);
         }
         // structuredContent: swap remaining (slim) → remainingIds (bare IDs) to save tokens
-        const structured = {
+        const structured: InferOutput<typeof SearchResultOutput> = {
           ...result,
           ...(result.remaining && {
             remainingIds: result.remaining.map(r => r.objectNumber),
@@ -852,7 +856,7 @@ function registerTools(
 
       // Hint when creator search returns 0 — the API is accent-sensitive
       if (result.totalResults === 0 && args.creator) {
-        const withWarnings = {
+        const withWarnings: InferOutput<typeof SearchResultOutput> = {
           ...result,
           warnings: [
             "No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
@@ -870,7 +874,9 @@ function registerTools(
         ? "\nNote: results are not ranked by relevance. Add filters to narrow, or use semantic_search for concept-ranked results."
         : "";
       const lines = ("results" in result ? result.results : []).map((r, i) => formatSearchLine(r, i));
-      return structuredResponse(result, [header, ...lines].join("\n") + truncationNote);
+      const { nextPageToken, ...structured } = result;
+      const apiData: InferOutput<typeof SearchResultOutput> = { ...structured, source: "search_api" as const };
+      return structuredResponse(apiData, [header, ...lines].join("\n") + truncationNote);
     })
   );
 
@@ -899,7 +905,7 @@ function registerTools(
     },
     withLogging("get_artwork_details", async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
-      const detail = await api.toDetailEnriched(object, uri);
+      const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, uri);
       return structuredResponse(detail);
     })
   );
@@ -926,7 +932,7 @@ function registerTools(
     },
     withLogging("resolve_uri", async (args) => {
       const object = await api.resolveObject(args.uri);
-      const detail = await api.toDetailEnriched(object, args.uri);
+      const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, args.uri);
       return structuredResponse(detail);
     })
   );
@@ -959,7 +965,7 @@ function registerTools(
     },
     withLogging("get_artwork_bibliography", async (args) => {
       const { object } = await api.findByObjectNumber(args.objectNumber);
-      const result = await api.getBibliography(object, {
+      const result: InferOutput<typeof BibliographyOutput> = await api.getBibliography(object, {
         limit: args.full ? 0 : 5,
       });
       return structuredResponse(result);
@@ -996,10 +1002,11 @@ function registerTools(
       const imageInfo = await api.getImageInfo(object);
 
       if (!imageInfo) {
-        return structuredResponse({
+        const errorData: InferOutput<typeof ImageInfoOutput> = {
           objectNumber: args.objectNumber,
           error: "No image available for this artwork",
-        }, "No image available for this artwork");
+        };
+        return structuredResponse(errorData, "No image available for this artwork");
       }
 
       const title = RijksmuseumApiClient.parseTitle(object);
@@ -1023,7 +1030,7 @@ function registerTools(
       });
 
       const { thumbnailUrl, iiifId, fullUrl, ...imageData } = imageInfo;
-      const viewerData = {
+      const viewerData: InferOutput<typeof ImageInfoOutput> = {
         ...imageData,
         objectNumber,
         title,
@@ -1097,17 +1104,20 @@ function registerTools(
       ...withOutputSchema(InspectImageOutput),
     },
     withLogging("inspect_artwork_image", async (args) => {
-      const cropError = (error: string) => ({
-        ...structuredResponse({
+      const cropError = (error: string) => {
+        const data: InferOutput<typeof InspectImageOutput> = {
           objectNumber: args.objectNumber,
           region: args.region,
           requestedSize: args.size,
           rotation: args.rotation,
           quality: args.quality,
           error,
-        }, error),
-        isError: true as const,
-      });
+        };
+        return {
+          ...structuredResponse(data, error),
+          isError: true as const,
+        };
+      };
 
       try {
         const { object } = await api.findByObjectNumber(args.objectNumber);
@@ -1172,18 +1182,19 @@ function registerTools(
         ];
 
         if (!EMIT_STRUCTURED) return { content };
+        const inspectData: InferOutput<typeof InspectImageOutput> = {
+          objectNumber: args.objectNumber,
+          region: args.region,
+          requestedSize: effectiveSize,
+          nativeWidth: imageInfo.width,
+          nativeHeight: imageInfo.height,
+          rotation: args.rotation,
+          quality: args.quality,
+          fetchTimeMs,
+        };
         return {
           content,
-          structuredContent: {
-            objectNumber: args.objectNumber,
-            region: args.region,
-            requestedSize: effectiveSize,
-            nativeWidth: imageInfo.width,
-            nativeHeight: imageInfo.height,
-            rotation: args.rotation,
-            quality: args.quality,
-            fetchTimeMs,
-          } as Record<string, unknown>,
+          structuredContent: inspectData as Record<string, unknown>,
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1281,51 +1292,33 @@ function registerTools(
       ...withOutputSchema(NavigateViewerOutput),
     },
     withLogging("navigate_viewer", async (args) => {
+      const navError = (error: string, text?: string) => {
+        const data: InferOutput<typeof NavigateViewerOutput> = {
+          viewUUID: args.viewUUID, queued: 0, error,
+        };
+        return { ...structuredResponse(data, text ?? error), isError: true as const };
+      };
+
       const queue = viewerQueues.get(args.viewUUID);
       if (!queue) {
-        return {
-          ...structuredResponse({
-            viewUUID: args.viewUUID,
-            queued: 0,
-            error: "No active viewer for this UUID",
-          }, "No active viewer for this UUID — open an artwork with get_artwork_image first"),
-          isError: true as const,
-        };
+        return navError(
+          "No active viewer for this UUID",
+          "No active viewer for this UUID — open an artwork with get_artwork_image first",
+        );
       }
 
       // Validate region on commands that require it
       for (const cmd of args.commands) {
         if (cmd.action === "navigate" || cmd.action === "add_overlay") {
           if (!cmd.region) {
-            return {
-              ...structuredResponse({
-                viewUUID: args.viewUUID,
-                queued: 0,
-                error: `'${cmd.action}' requires a region. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`,
-              }),
-              isError: true as const,
-            };
+            return navError(`'${cmd.action}' requires a region. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`);
           }
           if (!IIIF_REGION_RE.test(cmd.region)) {
-            return {
-              ...structuredResponse({
-                viewUUID: args.viewUUID,
-                queued: 0,
-                error: `Invalid region '${cmd.region}'. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`,
-              }),
-              isError: true as const,
-            };
+            return navError(`Invalid region '${cmd.region}'. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`);
           }
         }
         if (cmd.relativeTo && !parsePctRegion(cmd.relativeTo)) {
-          return {
-            ...structuredResponse({
-              viewUUID: args.viewUUID,
-              queued: 0,
-              error: `Invalid relativeTo '${cmd.relativeTo}'. Must be in pct:x,y,w,h format.`,
-            }),
-            isError: true as const,
-          };
+          return navError(`Invalid relativeTo '${cmd.relativeTo}'. Must be in pct:x,y,w,h format.`);
         }
       }
 
@@ -1334,14 +1327,7 @@ function registerTools(
         if (cmd.relativeTo && cmd.region) {
           const projected = projectToFullImage(cmd.region, cmd.relativeTo);
           if (!projected) {
-            return {
-              ...structuredResponse({
-                viewUUID: args.viewUUID,
-                queued: 0,
-                error: `relativeTo requires both 'region' and 'relativeTo' in pct: format. Got region='${cmd.region}', relativeTo='${cmd.relativeTo}'.`,
-              }),
-              isError: true as const,
-            };
+            return navError(`relativeTo requires both 'region' and 'relativeTo' in pct: format. Got region='${cmd.region}', relativeTo='${cmd.relativeTo}'.`);
           }
           cmd.region = projected;
         }
@@ -1371,7 +1357,7 @@ function registerTools(
 
       const viewerConnected = (Date.now() - queue.lastPolledAt) < 5000;
 
-      return structuredResponse({
+      const navData: InferOutput<typeof NavigateViewerOutput> = {
         viewUUID: args.viewUUID,
         queued: args.commands.length,
         imageWidth: queue.imageWidth,
@@ -1379,7 +1365,8 @@ function registerTools(
         overlays: overlayDetails?.length ? overlayDetails : undefined,
         viewerConnected,
         currentOverlays: queue.activeOverlays.length ? queue.activeOverlays : undefined,
-      });
+      };
+      return structuredResponse(navData);
     })
   );
 
@@ -1446,7 +1433,15 @@ function registerTools(
 
       const parseYear = (s: string): number => parseInt(s, 10) || 0;
       const timeline = result.results
-        .map(({ date, ...rest }) => ({ year: date ?? "", ...rest }))
+        .map(({ date, objectNumber, title, creator, type, url }) => ({
+          id: `https://id.rijksmuseum.nl/${objectNumber}`,
+          objectNumber,
+          title,
+          creator,
+          year: date ?? "",
+          ...(type && { type }),
+          url,
+        }))
         .sort((a, b) => parseYear(a.year) - parseYear(b.year));
 
       const total = result.totalResults ?? 0;
@@ -1454,7 +1449,7 @@ function registerTools(
         ? ["No results found. Try alternative spellings or name forms for the artist."]
         : undefined;
 
-      const response = {
+      const response: InferOutput<typeof TimelineOutput> = {
         artist: args.artist,
         totalWorksInCollection: total,
         timeline,
@@ -1491,19 +1486,12 @@ function registerTools(
     withLogging("open_in_browser", async (args) => {
       try {
         await SystemIntegration.openInBrowser(args.url);
-        return structuredResponse(
-          { opened: true, url: args.url },
-          `Opened in browser: ${args.url}`
-        );
+        const data: InferOutput<typeof OpenInBrowserOutput> = { opened: true, url: args.url };
+        return structuredResponse(data, `Opened in browser: ${args.url}`);
       } catch (err) {
         const message = `Failed to open browser: ${err instanceof Error ? err.message : String(err)}`;
-        return {
-          ...structuredResponse(
-            { opened: false, url: args.url, error: message },
-            message
-          ),
-          isError: true as const,
-        };
+        const data: InferOutput<typeof OpenInBrowserOutput> = { opened: false, url: args.url, error: message };
+        return { ...structuredResponse(data, message), isError: true as const };
       }
     })
   );
@@ -1535,11 +1523,12 @@ function registerTools(
         ? allSets.filter((s) => s.name.toLowerCase().includes(q))
         : allSets;
 
-      return structuredResponse({
+      const data: InferOutput<typeof CuratedSetsOutput> = {
         totalSets: sets.length,
         ...(q ? { filteredFrom: allSets.length, query: args.query } : {}),
         sets,
-      });
+      };
+      return structuredResponse(data);
     })
   );
 
@@ -1752,7 +1741,8 @@ function registerTools(
             if (e.path.length > 0) line += ` [${e.path.map((p) => p.notation).join(" > ")}]`;
             return line;
           });
-          return structuredResponse(result, [header, ...lines].join("\n"));
+          const data: InferOutput<typeof LookupIconclassOutput> = result;
+          return structuredResponse(data, [header, ...lines].join("\n"));
         }
 
         // FTS search mode
@@ -1765,7 +1755,8 @@ function registerTools(
             if (e.path.length > 0) line += ` [${e.path.map((p) => p.notation).join(" > ")}]`;
             return line;
           });
-          return structuredResponse(result, [header, ...lines].join("\n"));
+          const data: InferOutput<typeof LookupIconclassOutput> = result;
+          return structuredResponse(data, [header, ...lines].join("\n"));
         }
 
         // Browse mode
@@ -1789,7 +1780,8 @@ function registerTools(
           );
           sections.push(`Children (${childLines.length}):`, ...childLines);
         }
-        return structuredResponse(result, sections.join("\n"));
+        const browseData: InferOutput<typeof LookupIconclassOutput> = result;
+        return structuredResponse(browseData, sections.join("\n"));
       })
     );
   }
@@ -1871,9 +1863,12 @@ function registerTools(
             candidates = embeddingsDb!.search(queryVec, maxResults);
             warnings.push("Metadata filters ignored: vocabulary DB does not support filtered search. Results ranked by semantic similarity only.");
           } else if (candidateArtIds.length === 0) {
+            const emptyData: InferOutput<typeof SemanticSearchOutput> = {
+              searchMode: "semantic+filtered", query: args.query, returnedCount: 0, results: [],
+              warnings: ["No artworks match the specified filters."],
+            };
             return structuredResponse(
-              { searchMode: "semantic+filtered", query: args.query, returnedCount: 0, results: [],
-                warnings: ["No artworks match the specified filters."] },
+              emptyData,
               `0 semantic matches for "${args.query}" (no filter matches)`
             );
           } else {
@@ -1944,7 +1939,7 @@ function registerTools(
         if (resultLines.length) textParts.push("\n" + resultLines.join("\n\n"));
 
         // 6. Return dual-channel response
-        const data = {
+        const data: InferOutput<typeof SemanticSearchOutput> = {
           searchMode: mode,
           query: args.query,
           returnedCount: results.length,
