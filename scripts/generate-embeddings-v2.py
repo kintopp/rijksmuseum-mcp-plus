@@ -59,10 +59,6 @@ def load_artworks(vocab_db: str) -> list[tuple[int, str, str]]:
     conn = sqlite3.connect(vocab_db)
     conn.row_factory = sqlite3.Row
 
-    # Check schema: integer-encoded or text mappings
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(mappings)").fetchall()}
-    has_int = "field_id" in cols
-
     print("  Loading artworks...")
     rows = conn.execute("""
         SELECT art_id, object_number, title_all_text, creator_label,
@@ -71,60 +67,22 @@ def load_artworks(vocab_db: str) -> list[tuple[int, str, str]]:
     """).fetchall()
     print(f"    {len(rows):,} artworks")
 
-    # Load subject labels per artwork (most important for semantic search)
-    print("  Loading subject labels...")
-    if has_int:
-        subject_field_id = conn.execute(
-            "SELECT id FROM field_lookup WHERE name = 'subject'"
-        ).fetchone()
-        if subject_field_id:
-            subject_rows = conn.execute("""
-                SELECT m.artwork_id, COALESCE(v.label_en, v.label_nl) as label
-                FROM mappings m
-                JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-                WHERE m.field_id = ?
-                  AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
-            """, (subject_field_id[0],)).fetchall()
-        else:
-            subject_rows = []
-    else:
-        subject_rows = conn.execute("""
-            SELECT m.object_number, COALESCE(v.label_en, v.label_nl) as label
-            FROM mappings m
-            JOIN vocabulary v ON v.id = m.vocab_id
-            WHERE m.field = 'subject'
-              AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
-        """).fetchall()
-
-    # Build subject lookup: art_id/object_number → list of labels
-    subject_map: dict[int | str, list[str]] = {}
-    for row in subject_rows:
-        key = row[0]
-        subject_map.setdefault(key, []).append(row[1])
-    del subject_rows  # free ~50 MB
-    print(f"    {len(subject_map):,} artworks with subject labels")
-
-    # Build (art_id, object_number, composite_text) tuples — discard raw fields
+    # Build (art_id, object_number, composite_text) tuples (no-subjects strategy)
     print("  Building composite texts...")
     artworks = []
     for row in rows:
-        art_id = row["art_id"]
-        obj_num = row["object_number"]
-        subjects = subject_map.get(art_id, []) if has_int else subject_map.get(obj_num, [])
-
         # Build composite text inline (field order = truncation priority)
         fields = [
             ("Title", row["title_all_text"]),
             ("Creator", row["creator_label"]),
-            ("Subjects", ", ".join(subjects) if subjects else None),
             ("Narrative", row["narrative_text"]),
             ("Inscriptions", row["inscription_text"]),
             ("Description", row["description_text"]),
         ]
         text = " ".join(f"[{label}] {val}" for label, val in fields if val)
-        artworks.append((art_id, obj_num, text))
+        artworks.append((row["art_id"], row["object_number"], text))
 
-    del rows, subject_map  # free raw data
+    del rows  # free raw data
     conn.close()
     return artworks
 

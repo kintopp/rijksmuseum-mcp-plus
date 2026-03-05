@@ -413,8 +413,6 @@ export class VocabularyDb {
     if (!this.db || !this.hasIntMappings || artIds.length === 0) return result;
 
     const CHUNK = 500;
-    const subjectFieldId = this.fieldIdMap.get("subject");
-    if (subjectFieldId === undefined) return result;
 
     for (let i = 0; i < artIds.length; i += CHUNK) {
       const chunk = artIds.slice(i, i + CHUNK);
@@ -433,31 +431,11 @@ export class VocabularyDb {
         description_text: string | null;
       }[];
 
-      // Query 2: subject labels per artwork
-      // +m.field_id prevents field_id-leading index (forces PK prefix scan on artwork_id)
-      const subjectRows = this.db.prepare(
-        `SELECT m.artwork_id, COALESCE(v.label_en, v.label_nl) AS label
-         FROM mappings m
-         JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-         WHERE +m.field_id = ? AND m.artwork_id IN (${placeholders})`
-      ).all(subjectFieldId, ...chunk) as { artwork_id: number; label: string | null }[];
-
-      // Group subject labels by artwork_id
-      const subjectMap = new Map<number, string[]>();
-      for (const sr of subjectRows) {
-        if (!sr.label) continue;
-        let labels = subjectMap.get(sr.artwork_id);
-        if (!labels) { labels = []; subjectMap.set(sr.artwork_id, labels); }
-        labels.push(sr.label);
-      }
-
-      // Assemble composite text in same format as embedding generation
+      // Assemble composite text in same format as embedding generation (no-subjects strategy)
       for (const row of artRows) {
-        const subjects = subjectMap.get(row.art_id);
         const fields: [string, string | null | undefined][] = [
           ["Title", row.title_all_text],
           ["Creator", row.creator_label],
-          ["Subjects", subjects ? subjects.join(", ") : null],
           ["Narrative", row.narrative_text],
           ["Inscriptions", row.inscription_text],
           ["Description", row.description_text],

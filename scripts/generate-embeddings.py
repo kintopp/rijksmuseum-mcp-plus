@@ -45,10 +45,6 @@ def load_artworks(vocab_db: str) -> list[dict]:
     conn = sqlite3.connect(vocab_db)
     conn.row_factory = sqlite3.Row
 
-    # Check schema: integer-encoded or text mappings
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(mappings)").fetchall()}
-    has_int = "field_id" in cols
-
     print("  Loading artworks...")
     rows = conn.execute("""
         SELECT art_id, object_number, title_all_text, creator_label,
@@ -57,55 +53,16 @@ def load_artworks(vocab_db: str) -> list[dict]:
     """).fetchall()
     print(f"    {len(rows):,} artworks")
 
-    # Load subject labels per artwork (most important for semantic search)
-    print("  Loading subject labels...")
-    if has_int:
-        subject_field_id = conn.execute(
-            "SELECT id FROM field_lookup WHERE name = 'subject'"
-        ).fetchone()
-        if subject_field_id:
-            subject_rows = conn.execute("""
-                SELECT m.artwork_id, COALESCE(v.label_en, v.label_nl) as label
-                FROM mappings m
-                JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-                WHERE m.field_id = ?
-                  AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
-            """, (subject_field_id[0],)).fetchall()
-        else:
-            subject_rows = []
-    else:
-        subject_rows = conn.execute("""
-            SELECT m.object_number, COALESCE(v.label_en, v.label_nl) as label
-            FROM mappings m
-            JOIN vocabulary v ON v.id = m.vocab_id
-            WHERE m.field = 'subject'
-              AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
-        """).fetchall()
-
-    # Build subject lookup: art_id/object_number → list of labels
-    subject_map: dict[int | str, list[str]] = {}
-    for row in subject_rows:
-        key = row[0]
-        subject_map.setdefault(key, []).append(row[1])
-    print(f"    {len(subject_map):,} artworks with subject labels")
-
     conn.close()
 
-    # Build artwork dicts with composite text
+    # Build artwork dicts (no-subjects strategy — subjects excluded from embeddings)
     artworks = []
     for row in rows:
-        art_id = row["art_id"]
-        obj_num = row["object_number"]
-
-        # Get subjects for this artwork
-        subjects = subject_map.get(art_id, []) if has_int else subject_map.get(obj_num, [])
-
         artworks.append({
-            "art_id": art_id,
-            "object_number": obj_num,
+            "art_id": row["art_id"],
+            "object_number": row["object_number"],
             "title_all_text": row["title_all_text"],
             "creator_label": row["creator_label"],
-            "subjects": subjects,
             "narrative_text": row["narrative_text"],
             "inscription_text": row["inscription_text"],
             "description_text": row["description_text"],
@@ -128,9 +85,6 @@ def build_composite_text(artwork: dict) -> str:
 
     if artwork["creator_label"]:
         parts.append(f"[Creator] {artwork['creator_label']}")
-
-    if artwork["subjects"]:
-        parts.append(f"[Subjects] {', '.join(artwork['subjects'])}")
 
     if artwork["narrative_text"]:
         parts.append(f"[Narrative] {artwork['narrative_text']}")
