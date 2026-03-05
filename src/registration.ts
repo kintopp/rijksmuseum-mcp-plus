@@ -28,6 +28,9 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 50;
 
+/** Zod type accepting a single string or array of strings (AND intersection, max 5). */
+const stringOrArray = z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(5)]);
+
 type ToolResponse = { content: [{ type: "text"; text: string }] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
 
@@ -555,7 +558,7 @@ function registerTools(
     "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
     "birthPlace", "deathPlace", "profession", "collectionSet", "license",
     // Tier 2 (vocabulary DB v1.0+)
-    "description", "inscription", "provenance", "creditLine", "curatorialNarrative", "productionRole",
+    "description", "inscription", "provenance", "creditLine", "curatorialNarrative", "productionRole", "attributionQualifier",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
     "nearPlace", "nearLat", "nearLon",
     "title",
@@ -588,6 +591,7 @@ function registerTools(
         "For broader concept or theme discovery beyond structured vocabulary, use semantic_search — " +
         "but note that paintings are underrepresented there, so combine it with " +
         "search_artwork(type: 'painting', subject/creator: ...) for painting queries. " +
+        "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both subjects). " +
         "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
         "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
         (vocabAvailable
@@ -607,10 +611,9 @@ function registerTools(
           .string()
           .optional()
           .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Equivalent to query but explicit."),
-        creator: z
-          .string()
+        creator: stringOrArray
           .optional()
-          .describe("Search by artist name, e.g. 'Rembrandt van Rijn'"),
+          .describe("Search by artist name, e.g. 'Rembrandt van Rijn'. Array = AND (both creators)."),
         aboutActor: z
           .string()
           .optional()
@@ -621,18 +624,15 @@ function registerTools(
             "depictedPerson is usually the better first choice (precise, depicted persons only); " +
             "use aboutActor for broader person matching across depicted persons and creators."
           ),
-        type: z
-          .string()
+        type: stringOrArray
           .optional()
-          .describe("Filter by object type: 'painting', 'print', 'drawing', etc."),
-        material: z
-          .string()
+          .describe("Filter by object type: 'painting', 'print', 'drawing', etc. Array = AND (all types)."),
+        material: stringOrArray
           .optional()
-          .describe("Filter by material: 'canvas', 'paper', 'wood', etc."),
-        technique: z
-          .string()
+          .describe("Filter by material: 'canvas', 'paper', 'wood', etc. Array = AND (all materials)."),
+        technique: stringOrArray
           .optional()
-          .describe("Filter by technique: 'oil painting', 'etching', etc."),
+          .describe("Filter by technique: 'oil painting', 'etching', etc. Array = AND (all techniques)."),
         creationDate: z
           .string()
           .optional()
@@ -656,9 +656,7 @@ function registerTools(
         // Vocabulary-backed params
         ...(vocabAvailable
           ? {
-              subject: z
-                .string()
-                .min(1)
+              subject: stringOrArray
                 .optional()
                 .describe(
                   "PRIMARY parameter for concept or thematic searches — use this first, before description or curatorialNarrative. " +
@@ -670,70 +668,52 @@ function registerTools(
                   "Subject matching does not distinguish primary from incidental/decorative subjects — " +
                   "a mortar with an Annunciation relief will match 'Annunciation'. Combine with type (e.g. type: 'painting') to filter."
                 ),
-              iconclass: z
-                .string()
-                .min(1)
+              iconclass: stringOrArray
                 .optional()
                 .describe(
                   "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use lookup_iconclass to discover codes by concept."
                 ),
-              depictedPerson: z
-                .string()
-                .min(1)
+              depictedPerson: stringOrArray
                 .optional()
                 .describe(
                   "Search for artworks depicting a specific person by name (e.g. 'Willem van Oranje'). " +
                   "Matches against 210K name variants including historical forms. Combinable with all vocabulary filters. " +
                   "Searches depicted persons only; use aboutActor for broader person matching (depicted + creators)."
                 ),
-              depictedPlace: z
-                .string()
-                .min(1)
+              depictedPlace: stringOrArray
                 .optional()
                 .describe(
                   "Search for artworks depicting a specific place by name (e.g. 'Amsterdam'). " +
                   "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Oude Kerk Amsterdam')."
                 ),
-              productionPlace: z
-                .string()
-                .min(1)
+              productionPlace: stringOrArray
                 .optional()
                 .describe(
                   "Search for artworks produced in a specific place (e.g. 'Delft'). " +
                   "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Paleis van Justitie Den Haag')."
                 ),
-              birthPlace: z
-                .string()
-                .min(1)
+              birthPlace: stringOrArray
                 .optional()
                 .describe(
                   "Search by artist's birth place (e.g. 'Amsterdam')."
                 ),
-              deathPlace: z
-                .string()
-                .min(1)
+              deathPlace: stringOrArray
                 .optional()
                 .describe(
                   "Search by artist's death place (e.g. 'Paris')."
                 ),
-              profession: z
-                .string()
-                .min(1)
+              profession: stringOrArray
                 .optional()
                 .describe(
                   "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor')."
                 ),
-              collectionSet: z
-                .string()
-                .min(1)
+              collectionSet: stringOrArray
                 .optional()
                 .describe(
                   "Search for artworks in curated collection sets by name (e.g. 'Rembrandt', 'Japanese'). " +
                   "Use list_curated_sets to discover available sets."
                 ),
-              license: z
-                .string()
-                .min(1)
+              license: z.string().min(1)
                 .optional()
                 .describe(
                   "Filter by license/rights. Common values: 'publicdomain', 'zero' (CC0), 'by' (CC BY). " +
@@ -773,14 +753,19 @@ function registerTools(
                   "content written by curators that goes beyond what structured vocabulary captures. " +
                   "Exact word matching, no stemming. For broad concept searches, start with subject instead."
                 ),
-              productionRole: z
-                .string()
-                .min(1)
+              productionRole: stringOrArray
                 .optional()
                 .describe(
                   "Search by production role (e.g. 'painter', 'printmaker', 'after painting by'). " +
-                  "Covers craft roles and relational attribution, NOT attribution qualifiers " +
-                  "(workshop of, follower of, circle of — these are not indexed)."
+                  "Covers craft roles and relational attribution terms. " +
+                  "For attribution qualifiers (workshop of, follower of, circle of), use attributionQualifier instead."
+                ),
+              attributionQualifier: stringOrArray
+                .optional()
+                .describe(
+                  "Filter by attribution qualifier: 'primary', 'attributed to', 'workshop of', " +
+                  "'circle of', 'follower of', 'secondary', 'undetermined'. " +
+                  "Combine with creator to narrow attribution (e.g. attributionQualifier: 'workshop of' + creator: 'Rembrandt')."
                 ),
               minHeight: z
                 .number()
@@ -937,9 +922,17 @@ function registerTools(
       }
 
       // Degraded fallback: use Search API when vocab DB is unavailable
+      // Search API only supports single-string params; flatten arrays to first element
+      const searchArgs: SearchParams = {
+        ...args,
+        creator: Array.isArray(args.creator) ? args.creator[0] : args.creator,
+        type: Array.isArray(args.type) ? args.type[0] : args.type,
+        material: Array.isArray(args.material) ? args.material[0] : args.material,
+        technique: Array.isArray(args.technique) ? args.technique[0] : args.technique,
+      };
       const result = args.compact
-        ? await api.searchCompact(args)
-        : await api.searchAndResolve(args);
+        ? await api.searchCompact(searchArgs)
+        : await api.searchAndResolve(searchArgs);
 
       // Enrich resolved results with object type from vocab DB (free batch lookup)
       if (!args.compact && "results" in result && vocabDb) {
@@ -1793,17 +1786,17 @@ function registerTools(
           "from a wider result window or English reformulation if canonical works are missing.",
         inputSchema: z.object({
           query: z.string().describe("Natural language concept query (e.g. 'winter landscape with ice skating')"),
-          type: z.string().optional().describe("Filter by object type (e.g. 'painting', 'print')"),
-          material: z.string().optional().describe("Filter by material (e.g. 'canvas', 'paper')"),
-          technique: z.string().optional().describe("Filter by technique (e.g. 'etching', 'oil painting')"),
+          type: stringOrArray.optional().describe("Filter by object type (e.g. 'painting', 'print'). Array = AND."),
+          material: stringOrArray.optional().describe("Filter by material (e.g. 'canvas', 'paper'). Array = AND."),
+          technique: stringOrArray.optional().describe("Filter by technique (e.g. 'etching', 'oil painting'). Array = AND."),
           creationDate: z.string().optional().describe("Filter by date — exact year ('1642') or wildcard ('16*')"),
-          creator: z.string().optional().describe("Filter by artist name"),
-          subject: z.string().optional().describe("Pre-filter by subject before semantic ranking"),
-          iconclass: z.string().optional().describe("Pre-filter by Iconclass notation before semantic ranking"),
-          depictedPerson: z.string().optional().describe("Pre-filter by depicted person before semantic ranking"),
-          depictedPlace: z.string().optional().describe("Pre-filter by depicted place before semantic ranking"),
-          productionPlace: z.string().optional().describe("Pre-filter by production place before semantic ranking"),
-          collectionSet: z.string().optional().describe("Pre-filter by collection set before semantic ranking"),
+          creator: stringOrArray.optional().describe("Filter by artist name. Array = AND."),
+          subject: stringOrArray.optional().describe("Pre-filter by subject before semantic ranking. Array = AND."),
+          iconclass: stringOrArray.optional().describe("Pre-filter by Iconclass notation before semantic ranking. Array = AND."),
+          depictedPerson: stringOrArray.optional().describe("Pre-filter by depicted person before semantic ranking. Array = AND."),
+          depictedPlace: stringOrArray.optional().describe("Pre-filter by depicted place before semantic ranking. Array = AND."),
+          productionPlace: stringOrArray.optional().describe("Pre-filter by production place before semantic ranking. Array = AND."),
+          collectionSet: stringOrArray.optional().describe("Pre-filter by collection set before semantic ranking. Array = AND."),
           aboutActor: z.string().optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
           imageAvailable: z.boolean().optional().describe("Pre-filter to artworks with images"),
           maxResults: z.number().int().min(1).max(RESULTS_MAX).default(15).optional()

@@ -3,20 +3,23 @@ import { escapeFts5, expandFtsQuery, resolveDbPath } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
+/** Single value or array of values (array = AND/intersection). */
+type StringOrArray = string | string[];
+
 export interface VocabSearchParams {
-  subject?: string;
-  iconclass?: string;
-  depictedPerson?: string;
-  depictedPlace?: string;
-  productionPlace?: string;
-  birthPlace?: string;
-  deathPlace?: string;
-  profession?: string;
-  material?: string;
-  technique?: string;
-  type?: string;
-  creator?: string;
-  collectionSet?: string;
+  subject?: StringOrArray;
+  iconclass?: StringOrArray;
+  depictedPerson?: StringOrArray;
+  depictedPlace?: StringOrArray;
+  productionPlace?: StringOrArray;
+  birthPlace?: StringOrArray;
+  deathPlace?: StringOrArray;
+  profession?: StringOrArray;
+  material?: StringOrArray;
+  technique?: StringOrArray;
+  type?: StringOrArray;
+  creator?: StringOrArray;
+  collectionSet?: StringOrArray;
   license?: string;
   // Tier 2 fields (require vocabulary DB v1.0+)
   description?: string;
@@ -24,7 +27,8 @@ export interface VocabSearchParams {
   provenance?: string;
   creditLine?: string;
   curatorialNarrative?: string;
-  productionRole?: string;
+  productionRole?: StringOrArray;
+  attributionQualifier?: StringOrArray;
   minHeight?: number;
   maxHeight?: number;
   minWidth?: number;
@@ -102,6 +106,7 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "creator",        fields: ["creator"],               matchMode: "like",                               ftsUpgrade: true },
   { param: "collectionSet",  fields: ["collection_set"],        matchMode: "like", vocabType: "set",            ftsUpgrade: true },
   { param: "productionRole",fields: ["production_role"],        matchMode: "like",                               ftsUpgrade: true },
+  { param: "attributionQualifier", fields: ["attribution_qualifier"], matchMode: "like",                       ftsUpgrade: true },
   { param: "aboutActor",   fields: ["subject", "creator"],    matchMode: "like", vocabType: "person",         ftsUpgrade: true },
 ];
 
@@ -864,8 +869,8 @@ export class VocabularyDb {
     const bindings: unknown[] = [];
 
     for (const filter of VOCAB_FILTERS) {
-      const value = effective[filter.param];
-      if (value === undefined) continue;
+      const rawValue = effective[filter.param];
+      if (rawValue === undefined) continue;
 
       for (const f of filter.fields) {
         if (!ALLOWED_FIELDS.has(f)) throw new Error(`Invalid vocab field: ${f}`);
@@ -877,56 +882,61 @@ export class VocabularyDb {
       const typeClause = filter.vocabType ? ` AND type = ?` : "";
       const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
 
-      const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
+      // Multi-value AND: each array element becomes a separate AND condition
+      const values = Array.isArray(rawValue) ? rawValue : [rawValue];
 
-      if (useFts) {
-        // Person name matching: use person_names_fts (two-tier) when available
-        let vocabIds = filter.vocabType === "person" && this.hasPersonNames
-          ? this.findPersonIdsFts(String(value))
-          : this.findVocabIdsFts(String(value), typeClause, typeBindings);
+      for (const value of values) {
+        const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
 
-        // Multi-word place fallback: split "Oude Kerk Amsterdam" → "Oude Kerk" near "Amsterdam"
-        if (vocabIds.length === 0 && filter.vocabType === "place") {
-          const resolved = this.resolveMultiWordPlace(String(value));
-          if (resolved && resolved.candidates.length > 0) {
-            const hasContext = resolved.contextLat != null && resolved.contextLon != null;
-            const prefix = `${filter.param}:"${value}"`;
+        if (useFts) {
+          // Person name matching: use person_names_fts (two-tier) when available
+          let vocabIds = filter.vocabType === "person" && this.hasPersonNames
+            ? this.findPersonIdsFts(String(value))
+            : this.findVocabIdsFts(String(value), typeClause, typeBindings);
 
-            if (hasContext && resolved.candidates.length > 1) {
-              const { ids, geocodedCount } = rankByProximity(
-                resolved.candidates, resolved.contextLat!, resolved.contextLon!,
-              );
-              vocabIds = ids;
-              warnings?.push(buildMultiWordPlaceWarning(
-                prefix, resolved.namePart, resolved.contextPart,
-                resolved.candidates.length,
-                { filteredCount: ids.length, geocodedCount },
-              ));
-            } else {
-              vocabIds = resolved.candidates.map((c) => c.id);
-              warnings?.push(buildMultiWordPlaceWarning(
-                prefix, resolved.namePart, resolved.contextPart,
-                vocabIds.length,
-              ));
+          // Multi-word place fallback: split "Oude Kerk Amsterdam" → "Oude Kerk" near "Amsterdam"
+          if (vocabIds.length === 0 && filter.vocabType === "place") {
+            const resolved = this.resolveMultiWordPlace(String(value));
+            if (resolved && resolved.candidates.length > 0) {
+              const hasContext = resolved.contextLat != null && resolved.contextLon != null;
+              const prefix = `${filter.param}:"${value}"`;
+
+              if (hasContext && resolved.candidates.length > 1) {
+                const { ids, geocodedCount } = rankByProximity(
+                  resolved.candidates, resolved.contextLat!, resolved.contextLon!,
+                );
+                vocabIds = ids;
+                warnings?.push(buildMultiWordPlaceWarning(
+                  prefix, resolved.namePart, resolved.contextPart,
+                  resolved.candidates.length,
+                  { filteredCount: ids.length, geocodedCount },
+                ));
+              } else {
+                vocabIds = resolved.candidates.map((c) => c.id);
+                warnings?.push(buildMultiWordPlaceWarning(
+                  prefix, resolved.namePart, resolved.contextPart,
+                  vocabIds.length,
+                ));
+              }
             }
           }
-        }
 
-        if (vocabIds.length === 0) {
-          return null; // signal: zero matches for this filter
+          if (vocabIds.length === 0) {
+            return null; // signal: zero matches for this filter element
+          }
+          const ftsFilter = this.mappingFilterDirect(filter.fields, vocabIds);
+          conditions.push(ftsFilter.condition);
+          bindings.push(...ftsFilter.bindings);
+        } else {
+          const { where: vocabWhere, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
+          const nonFtsFilter = this.mappingFilterSubquery(
+            filter.fields,
+            `${vocabWhere}${typeClause}`,
+            [...matchBindings, ...typeBindings],
+          );
+          conditions.push(nonFtsFilter.condition);
+          bindings.push(...nonFtsFilter.bindings);
         }
-        const ftsFilter = this.mappingFilterDirect(filter.fields, vocabIds);
-        conditions.push(ftsFilter.condition);
-        bindings.push(...ftsFilter.bindings);
-      } else {
-        const { where: vocabWhere, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
-        const nonFtsFilter = this.mappingFilterSubquery(
-          filter.fields,
-          `${vocabWhere}${typeClause}`,
-          [...matchBindings, ...typeBindings],
-        );
-        conditions.push(nonFtsFilter.condition);
-        bindings.push(...nonFtsFilter.bindings);
       }
     }
 

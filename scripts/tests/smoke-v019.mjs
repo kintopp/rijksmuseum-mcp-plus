@@ -79,6 +79,37 @@ const firstResult = sc?.results?.[0];
 check("Has similarityScore", firstResult?.similarityScore != null);
 if (firstResult) console.log(`    → keys: ${Object.keys(firstResult).join(", ")}`);
 
+console.log("\n11. search_artwork — attributionQualifier");
+sc = await call("search_artwork", { attributionQualifier: "workshop of", maxResults: 3 });
+check("Returns results", sc?.results?.length > 0);
+console.log(`    → ${sc?.totalResults ?? sc?.results?.length ?? 0} results`);
+
+console.log("\n12. search_artwork — attributionQualifier + creator");
+sc = await call("search_artwork", { attributionQualifier: "workshop of", creator: "Rembrandt", maxResults: 3 });
+check("Returns results", sc?.results?.length > 0);
+const workshopCount = sc?.totalResults ?? sc?.results?.length ?? 0;
+console.log(`    → ${workshopCount} results`);
+
+console.log("\n13. search_artwork — multi-value AND subject");
+const landscapeSc = await call("search_artwork", { subject: "landscape", compact: true });
+const landscapeCount = landscapeSc?.totalResults ?? landscapeSc?.ids?.length ?? 0;
+sc = await call("search_artwork", { subject: ["landscape", "seascape"], compact: true });
+const andCount = sc?.ids?.length ?? 0;
+check("Returns results", andCount > 0);
+check("AND is narrower than single", andCount < landscapeCount);
+console.log(`    → landscape: ${landscapeCount}, landscape+seascape: ${andCount} ids`);
+
+console.log("\n14. search_artwork — multi-value AND technique");
+sc = await call("search_artwork", { technique: ["etching", "engraving"], compact: true });
+check("Returns results", (sc?.ids?.length ?? 0) > 0);
+console.log(`    → ${sc?.ids?.length ?? 0} ids`);
+
+console.log("\n15. search_artwork — multi-value AND productionPlace");
+sc = await call("search_artwork", { productionPlace: ["Amsterdam", "Paris"], compact: true });
+// Very few artworks produced in BOTH cities — may be 0 or small number
+check("Returns without error", sc?._error === undefined);
+console.log(`    → ${sc?.ids?.length ?? 0} ids`);
+
 console.log(`\n═══════════════════════════════════════`);
 console.log(`  Passed: ${passed}  Failed: ${failed}`);
 console.log(`═══════════════════════════════════════\n`);
