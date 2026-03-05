@@ -47,7 +47,7 @@ Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://mod
 
 In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
 
-### Sample Questions
+### Sample Queries
 
 After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". It should show you a list [like this](docs/available-tools.md).
 
