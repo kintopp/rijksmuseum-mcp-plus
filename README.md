@@ -26,7 +26,7 @@ You can explore artworks using rijksmuseum-mcp+ with the same (with minor except
 
 7. **Image analysis** (experimental) — the AI assistant can analyse images visually in combination with its own background knowledge and the artwork's structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also annotate the image with these elements in the image viewer (e.g. "identify the biblical scenes depicted in the painting's panels and highlight these for me").
 
-8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or drawn on them for follow-up tasks, such as visualizations or other analyses.
+8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
 
 <br>
 <p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion" width="500"></p>
@@ -70,7 +70,7 @@ For examples of more complex questions, see the [research scenarios](docs/resear
 
 ### Technical notes
 
-`to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo. The [rijksmuseum-se](https://github.com/kintopp/rijksmuseum-se) repo provides Jupyter notebooks and standalone scripts as starting points for interactive explorations of UMAP and PacMAP visualizations of the vocabulary embeddings.
+`to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo. 
 
 ### Tips
 
