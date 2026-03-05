@@ -1,5 +1,5 @@
 import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
-import { escapeFts5, resolveDbPath } from "../utils/db.js";
+import { escapeFts5, expandFtsQuery, resolveDbPath } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -1029,7 +1029,16 @@ export class VocabularyDb {
 
     if (rows.length > 0) return rows.map((r) => r.id);
 
-    // FTS5 found nothing — try LIKE on space-stripped normalized labels
+    // Tier 1.5: FTS5 morphological expansion (English stems)
+    const expanded = expandFtsQuery(value);
+    if (expanded) {
+      const morphRows = this.db!.prepare(
+        `SELECT id FROM vocabulary WHERE rowid IN (SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH ?)${typeClause}`
+      ).all(expanded, ...typeBindings) as { id: string }[];
+      if (morphRows.length > 0) return morphRows.map((r) => r.id);
+    }
+
+    // Tier 2: FTS5 found nothing — try LIKE on space-stripped normalized labels
     if (this.hasNormLabels) {
       const normValue = `%${value.toLowerCase().replace(/ /g, "")}%`;
       const fallbackRows = this.db!.prepare(

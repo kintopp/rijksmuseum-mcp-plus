@@ -26,7 +26,7 @@ import {
   projectToFullImage,
 } from "../../dist/registration.js";
 
-import { escapeFts5 } from "../../dist/utils/db.js";
+import { escapeFts5, escapeFts5Token, generateMorphVariants, expandFtsQuery } from "../../dist/utils/db.js";
 
 // ── Test helpers ─────────────────────────────────────────────────
 
@@ -226,6 +226,121 @@ section("projectToFullImage");
 }
 assertEq(projectToFullImage("full", "pct:50,50,50,50"), null, "invalid local → null");
 assertEq(projectToFullImage("pct:50,50,50,50", "garbage"), null, "invalid relativeTo → null");
+
+// ── escapeFts5Token ─────────────────────────────────────────────
+
+section("escapeFts5Token");
+
+assertEq(escapeFts5Token("cat"), "cat", "simple word passthrough");
+assertEq(escapeFts5Token("wild*"), "wild", "strips FTS5 operators");
+assertEq(escapeFts5Token('"quoted"'), "quoted", "strips double quotes");
+assertEq(escapeFts5Token(""), null, "empty → null");
+assertEq(escapeFts5Token("***"), null, "all operators → null");
+
+// ── generateMorphVariants ───────────────────────────────────────
+
+section("generateMorphVariants");
+
+// Plural → singular
+{
+  const v = generateMorphVariants("cats");
+  assert(v.includes("cat"), "cats → cat");
+}
+{
+  const v = generateMorphVariants("churches");
+  assert(v.includes("church"), "churches → church");
+}
+{
+  const v = generateMorphVariants("butterflies");
+  assert(v.includes("butterfly"), "butterflies → butterfly");
+}
+
+// Singular → plural
+{
+  const v = generateMorphVariants("cat");
+  assert(v.includes("cats"), "cat → cats");
+}
+
+// Gerunds
+{
+  const v = generateMorphVariants("painting");
+  assert(v.includes("paint"), "painting → paint");
+}
+{
+  const v = generateMorphVariants("skating");
+  assert(v.includes("skate"), "skating → skate");
+}
+
+// Past tense
+{
+  const v = generateMorphVariants("painted");
+  assert(v.includes("paint"), "painted → paint");
+}
+{
+  const v = generateMorphVariants("crucified");
+  assert(v.includes("crucify"), "crucified → crucify");
+}
+
+// Minimum stem guard
+{
+  const v = generateMorphVariants("is");
+  assertDeepEq(v, [], "is → [] (too short)");
+}
+{
+  const v = generateMorphVariants("ass");
+  assert(!v.includes("as"), "ass does not produce 'as' (min stem 3)");
+}
+
+// No self-reference
+{
+  const v = generateMorphVariants("cat");
+  assert(!v.includes("cat"), "cat variants don't include 'cat' itself");
+}
+
+// ── expandFtsQuery ──────────────────────────────────────────────
+
+section("expandFtsQuery");
+
+// Single word
+{
+  const q = expandFtsQuery("cats");
+  assert(q !== null, "cats → non-null");
+  assert(q.includes("cats"), "cats query includes original");
+  assert(q.includes("cat"), "cats query includes stem");
+  assert(q.includes("OR"), "cats query uses OR");
+}
+
+// Two words
+{
+  const q = expandFtsQuery("wild cats");
+  assert(q !== null, "wild cats → non-null");
+  assert(q.includes("AND"), "two-word query uses AND");
+  assert(q.includes("OR"), "two-word query has OR for variants");
+}
+
+// >3 tokens → null
+assertEq(expandFtsQuery("the old church in Amsterdam"), null, ">3 tokens → null");
+assertEq(expandFtsQuery("one two three four"), null, "4 tokens → null");
+
+// 3 tokens — should work
+assert(expandFtsQuery("wild forest cat") !== null, "3 tokens → non-null");
+
+// Empty
+assertEq(expandFtsQuery(""), null, "empty → null");
+
+// Cap enforcement: total terms ≤ 8
+{
+  const q = expandFtsQuery("painting skating");
+  if (q) {
+    const terms = q.replace(/[()]/g, "").split(/\s+(?:AND|OR)\s+/).length;
+    // Count actual terms by splitting on spaces and filtering out operators
+    const allTerms = q.replace(/[()]/g, "").split(/\s+/).filter(t => t !== "AND" && t !== "OR");
+    assert(allTerms.length <= 8, `cap enforcement: ${allTerms.length} terms ≤ 8`);
+  }
+}
+
+// No expansion possible (no variants) → null
+assertEq(expandFtsQuery("a"), null, "single short token with no variants → null");
 
 // ── Summary ──────────────────────────────────────────────────────
 
