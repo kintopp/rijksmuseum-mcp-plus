@@ -72,30 +72,20 @@ def load_artworks(vocab_db: str) -> list[dict]:
 
 
 def build_composite_text(artwork: dict) -> str:
-    """Build composite text for embedding.
+    """Build composite text for embedding (no-subjects strategy).
 
     Field order reflects truncation priority — multilingual-e5-small has a
     512-token window and silently truncates from the end. Most semantically
     rich fields first, most expendable last.
     """
-    parts = []
-
-    if artwork["title_all_text"]:
-        parts.append(f"[Title] {artwork['title_all_text']}")
-
-    if artwork["creator_label"]:
-        parts.append(f"[Creator] {artwork['creator_label']}")
-
-    if artwork["narrative_text"]:
-        parts.append(f"[Narrative] {artwork['narrative_text']}")
-
-    if artwork["inscription_text"]:
-        parts.append(f"[Inscriptions] {artwork['inscription_text']}")
-
-    if artwork["description_text"]:
-        parts.append(f"[Description] {artwork['description_text']}")
-
-    return " ".join(parts)
+    fields = [
+        ("Title", artwork["title_all_text"]),
+        ("Creator", artwork["creator_label"]),
+        ("Narrative", artwork["narrative_text"]),
+        ("Inscriptions", artwork["inscription_text"]),
+        ("Description", artwork["description_text"]),
+    ]
+    return " ".join(f"[{label}] {val}" for label, val in fields if val)
 
 
 # ─── Phase 2: Batch embed ────────────────────────────────────────────
@@ -251,8 +241,10 @@ def _flush_batch(conn, regular_rows, vec_rows):
         regular_rows,
     )
     # vec0: DELETE then INSERT (INSERT OR REPLACE is broken, issue #259)
-    for art_id, emb_blob in vec_rows:
-        conn.execute("DELETE FROM vec_artworks WHERE artwork_id = ?", (art_id,))
+    conn.executemany(
+        "DELETE FROM vec_artworks WHERE artwork_id = ?",
+        [(art_id,) for art_id, _ in vec_rows],
+    )
     conn.executemany(
         "INSERT INTO vec_artworks (artwork_id, embedding) VALUES (?, ?)",
         vec_rows,
@@ -296,7 +288,7 @@ def validate(output_path: str, model, model_name: str):
         rows = conn.execute(
             """
             SELECT ae.object_number, ae.source_text,
-                   vec_distance_cosine(ae.embedding, ?) as distance
+                   vec_distance_cosine(vec_int8(ae.embedding), vec_int8(?)) as distance
             FROM artwork_embeddings ae
             ORDER BY distance
             LIMIT 5
