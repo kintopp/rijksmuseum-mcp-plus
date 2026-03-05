@@ -33,7 +33,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 ## Quick Start
 
-The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Claude using the URL below. Custom connectors using remote MCP are available on Claude and Claude Desktop for users on free, Pro, Max, Team, and Enterprise plans. Free users are limited to one custom connector.  
+The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Anthopic's Claude AI assistant using the URL below. Custom connectors are available on claude.ai and Claude Desktop for users on free, Pro, Max, Team, and Enterprise plans. Free users are limited to one custom connector.  
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
@@ -62,7 +62,7 @@ After that, ask your own questions:
 - _Which paintings are wider than 3 meters?_
 - _Has anyone taken a tumble in SK-A-1718? Show me where._
 
-Et bien sûr también puedes explorar संग्रहों को 用你自己的语言。For samples of more complex questions, see the [research scenarios](docs/research-scenarios.md). 
+Et bien sûr también puedes explorar संग्रहों को 用你自己的语言。For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
 
 ### How it works
 
