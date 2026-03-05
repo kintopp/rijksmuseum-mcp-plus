@@ -1917,13 +1917,13 @@ function registerTools(
           collectionSet: z.string().optional().describe("Pre-filter by collection set before semantic ranking"),
           aboutActor: z.string().optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
           imageAvailable: z.boolean().optional().describe("Pre-filter to artworks with images"),
-          maxResults: z.number().int().min(1).max(RESULTS_MAX).default(RESULTS_DEFAULT).optional()
-            .describe("Number of results to return (default 25)"),
+          maxResults: z.number().int().min(1).max(RESULTS_MAX).default(15).optional()
+            .describe("Number of results to return (default 15). Similarity scores plateau after ~15 results; request more only if needed."),
         }).strict(),
         ...withOutputSchema(SemanticSearchOutput),
       },
       withLogging("semantic_search", async (args) => {
-        const maxResults = args.maxResults ?? RESULTS_DEFAULT;
+        const maxResults = args.maxResults ?? 15;
 
         // 1. Embed query text
         const queryVec = await embeddingModel!.embed(args.query);
