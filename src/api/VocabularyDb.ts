@@ -636,11 +636,11 @@ export class VocabularyDb {
       }
     }
 
-    if (conditions.length === 0) {
+    if (conditions.length === 0 && !ftsJoinClause) {
       return emptyResult(warnings);
     }
 
-    const where = conditions.join(" AND ");
+    const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
     const limit = Math.min(effective.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP);
 
     // COUNT is expensive for cross-filter queries (multiple IN-subquery intersections
