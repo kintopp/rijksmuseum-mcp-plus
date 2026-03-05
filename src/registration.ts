@@ -84,6 +84,84 @@ function formatTimelineLine(t: { year: string; objectNumber: string; title: stri
   return line;
 }
 
+/** Truncate a string to maxLen, appending "..." if truncated. */
+function truncate(s: string, maxLen: number): string {
+  return s.length <= maxLen ? s : s.slice(0, maxLen - 3) + "...";
+}
+
+/** Format artwork detail as a compact key-value summary for LLM content (Tier 3). */
+function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string {
+  const lines: string[] = [];
+  lines.push(`${d.objectNumber} — ${d.title}`);
+  lines.push(`${d.creator}${d.date ? `, ${d.date}` : ""}`);
+  if (d.techniqueStatement || d.dimensionStatement) {
+    lines.push([d.techniqueStatement, d.dimensionStatement].filter(Boolean).join(", "));
+  }
+  if (d.location) lines.push(d.location);
+  lines.push("");
+
+  const termLabels = (arr: { label: string }[], max = 5) => {
+    const labels = arr.map((t) => t.label);
+    return labels.length <= max ? labels.join(", ") : labels.slice(0, max).join(", ") + ` ...and ${labels.length - max} more`;
+  };
+
+  if (d.objectTypes.length) lines.push(`Types: ${termLabels(d.objectTypes)}`);
+  if (d.materials.length) lines.push(`Materials: ${termLabels(d.materials)}`);
+  if (d.subjects.iconclass.length) lines.push(`Iconclass: ${d.subjects.iconclass.map((t) => t.id).join(" | ")}`);
+  if (d.subjects.depictedPersons.length) lines.push(`Depicted persons: ${termLabels(d.subjects.depictedPersons)}`);
+  if (d.subjects.depictedPlaces.length) lines.push(`Depicted places: ${termLabels(d.subjects.depictedPlaces)}`);
+  if (d.production.length) {
+    const parts = d.production.map((p) => {
+      let s = p.name;
+      if (p.role) s += ` (${p.role})`;
+      if (p.place) s += `, ${p.place}`;
+      return s;
+    });
+    lines.push(`Production: ${parts.join("; ")}`);
+  }
+
+  if (d.description) lines.push(`\n[Description] ${truncate(d.description, 200)}`);
+  if (d.curatorialNarrative.en) lines.push(`[Narrative] ${truncate(d.curatorialNarrative.en, 200)}`);
+  else if (d.curatorialNarrative.nl) lines.push(`[Narrative] ${truncate(d.curatorialNarrative.nl, 200)}`);
+  if (d.inscriptions.length) lines.push(`[Inscriptions] ${truncate(d.inscriptions.join("; "), 200)}`);
+  if (d.provenance) lines.push(`[Provenance] ${truncate(d.provenance, 200)}`);
+  if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
+
+  if (d.bibliographyCount) lines.push(`\nBibliography: ${d.bibliographyCount} entries`);
+  lines.push(`URL: ${d.url}`);
+
+  return lines.join("\n");
+}
+
+/** Format a bibliography entry as a compact one-liner (Tier 2). */
+function formatBibliographyLine(e: { citation: string; pages?: string }, i: number): string {
+  let line = `${i + 1}. ${truncate(e.citation, 100)}`;
+  if (e.pages) line += ` ${e.pages}`;
+  return line;
+}
+
+/** Format a curated set as a compact one-liner (Tier 2). */
+function formatSetLine(s: { setSpec: string; name: string }, i: number): string {
+  return `${i + 1}. ${s.setSpec} | ${s.name}`;
+}
+
+/** Format an OAI-PMH record as a compact one-liner (Tier 2). */
+function formatRecordLine(r: Record<string, unknown>, i: number): string {
+  const obj = (r.objectNumber as string) || "?";
+  const title = (r.title as string) || "";
+  const creator = r.creator && typeof r.creator === "object" && (r.creator as Record<string, unknown>).name
+    ? (r.creator as Record<string, unknown>).name as string
+    : "";
+  const type = (r.type as string) || "";
+  const datestamp = (r.datestamp as string) || "";
+  let line = `${i + 1}. ${obj}`;
+  if (datestamp) line += ` | ${datestamp}`;
+  if (type) line += ` | ${type}`;
+  if (title) line += ` | "${title}"`;
+  if (creator) line += ` — ${creator}`;
+  return line;
+}
+
 /** Create a logging wrapper that records timing to stderr and optional UsageStats. */
 function createLogger(stats?: UsageStats) {
   return function withLogging<A extends unknown[], R>(
@@ -124,7 +202,8 @@ function paginatedResponse(
   maxResults: number,
   totalLabel: string,
   toolName: string,
-  extra?: Record<string, unknown>
+  extra?: Record<string, unknown>,
+  formatLine?: (record: Record<string, unknown>, index: number) => string
 ): ToolResponse | StructuredToolResponse {
   const records = result.records.slice(0, maxResults);
 
@@ -140,6 +219,17 @@ function paginatedResponse(
         }
       : {}),
   };
+
+  if (formatLine) {
+    const total = result.completeListSize;
+    const header = total != null
+      ? `${records.length} of ${total} records`
+      : `${records.length} records`;
+    const lines = records.map((r, i) => formatLine(r as Record<string, unknown>, i));
+    const parts = [header, ...lines];
+    if (result.resumptionToken) parts.push("[resumptionToken available for next page]");
+    return structuredResponse(data, parts.join("\n"));
+  }
   return structuredResponse(data);
 }
 
@@ -196,8 +286,6 @@ const SearchResultOutput = {
     distance_km: z.number().optional(),
   })).optional().describe("Artwork summaries. Absent when compact=true."),
   ids: z.array(z.string()).optional().describe("Object numbers (compact mode)."),
-  remainingIds: z.array(z.string()).optional()
-    .describe("Object numbers beyond the first 25 results. Use get_artwork_details to fetch full metadata."),
   source: z.enum(["vocabulary", "search_api"]).optional(),
   referencePlace: z.string().optional(),
   warnings: z.array(z.string()).optional(),
@@ -776,7 +864,7 @@ function registerTools(
           .min(1)
           .max(RESULTS_MAX)
           .default(RESULTS_DEFAULT)
-          .describe(`Maximum results to return (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}). First 25 include full metadata; additional results return only object numbers for use with get_artwork_details.`),
+          .describe(`Maximum results to return (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}). All results include full metadata.`),
         compact: z
           .boolean()
           .default(false)
@@ -848,26 +936,10 @@ function registerTools(
         }
 
         const header = `${result.results.length} results` +
-          (result.remaining ? ` + ${result.remaining.length} more` : '') +
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
           ` (vocabulary search)`;
         const lines = result.results.map((r, i) => formatSearchLine(r, i));
-        if (result.remaining) {
-          // Text channel: slim lines (objectNumber + title + creator) for LLM reasoning
-          const offset = result.results.length;
-          const slimLines = result.remaining.map((r, i) =>
-            `${offset + i + 1}. ${r.objectNumber} | "${r.title}"${r.creator ? ` — ${r.creator}` : ""}`
-          );
-          lines.push("", ...slimLines);
-        }
-        // structuredContent: swap remaining (slim) → remainingIds (bare IDs) to save tokens
-        const structured: InferOutput<typeof SearchResultOutput> = {
-          ...result,
-          ...(result.remaining && {
-            remainingIds: result.remaining.map(r => r.objectNumber),
-            remaining: undefined,
-          }),
-        };
+        const structured: InferOutput<typeof SearchResultOutput> = result;
         return structuredResponse(structured, [header, ...lines].join("\n"));
       }
 
@@ -936,7 +1008,7 @@ function registerTools(
     withLogging("get_artwork_details", async (args) => {
       const { uri, object } = await api.findByObjectNumber(args.objectNumber);
       const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, uri);
-      return structuredResponse(detail);
+      return structuredResponse(detail, formatDetailSummary(detail));
     })
   );
 
@@ -963,7 +1035,7 @@ function registerTools(
     withLogging("resolve_uri", async (args) => {
       const object = await api.resolveObject(args.uri);
       const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, args.uri);
-      return structuredResponse(detail);
+      return structuredResponse(detail, formatDetailSummary(detail));
     })
   );
 
@@ -998,7 +1070,9 @@ function registerTools(
       const result: InferOutput<typeof BibliographyOutput> = await api.getBibliography(object, {
         limit: args.full ? 0 : 5,
       });
-      return structuredResponse(result);
+      const header = `${result.objectNumber} — ${result.total} bibliography entries`;
+      const lines = result.entries.map((e, i) => formatBibliographyLine(e, i));
+      return structuredResponse(result, [header, ...lines].join("\n"));
     })
   );
 
@@ -1072,7 +1146,9 @@ function registerTools(
         viewUUID,
       };
 
-      return structuredResponse(viewerData);
+      const dims = viewerData.width && viewerData.height ? ` | ${viewerData.width}×${viewerData.height}px` : "";
+      const text = `${objectNumber} — "${title}" by ${viewerData.creator ?? "unknown"}${dims} | viewUUID: ${viewUUID.slice(0, 8)}`;
+      return structuredResponse(viewerData, text);
     })
   );
 
@@ -1367,7 +1443,10 @@ function registerTools(
         viewerConnected,
         currentOverlays: queue.activeOverlays.length ? queue.activeOverlays : undefined,
       };
-      return structuredResponse(navData);
+      const connStatus = viewerConnected ? "connected" : "not connected";
+      const overlayCount = queue.activeOverlays.length;
+      const text = `Queued ${args.commands.length} commands for viewer ${args.viewUUID.slice(0, 8)} (${connStatus})${overlayCount ? ` | ${overlayCount} active overlays` : ""}`;
+      return structuredResponse(navData, text);
     })
   );
 
@@ -1391,11 +1470,12 @@ function registerTools(
     },
     async (args) => {
       const queue = viewerQueues.get(args.viewUUID);
-      if (!queue) return structuredResponse({ commands: [] });
+      if (!queue) return structuredResponse({ commands: [] }, "No pending commands");
       queue.lastAccess = Date.now();
       queue.lastPolledAt = Date.now();
       const commands = queue.commands.splice(0);  // drain
-      return structuredResponse({ commands });
+      const text = commands.length ? `${commands.length} commands polled` : "No pending commands";
+      return structuredResponse({ commands }, text);
     }
   );
 
@@ -1529,7 +1609,11 @@ function registerTools(
         ...(q ? { filteredFrom: allSets.length, query: args.query } : {}),
         sets,
       };
-      return structuredResponse(data);
+      const headerParts = [`${sets.length} sets`];
+      if (q) headerParts.push(`filtered from ${allSets.length}, query: "${args.query}"`);
+      const header = headerParts.join(" (") + (q ? ")" : "");
+      const lines = sets.map((s, i) => formatSetLine(s, i));
+      return structuredResponse(data, [header, ...lines].join("\n"));
     })
   );
 
@@ -1571,7 +1655,7 @@ function registerTools(
         ? await oai.listRecords({ resumptionToken: args.resumptionToken })
         : await oai.listRecords({ set: args.setSpec });
 
-      return paginatedResponse(result, args.maxResults, "totalInSet", "browse_set");
+      return paginatedResponse(result, args.maxResults, "totalInSet", "browse_set", undefined, formatRecordLine);
     })
   );
 
@@ -1637,7 +1721,7 @@ function registerTools(
         : await oai.listRecords(opts);
 
       const extra = args.identifiersOnly ? { identifiersOnly: true } : undefined;
-      return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra);
+      return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine);
     })
   );
 

@@ -57,7 +57,6 @@ export interface VocabSearchResult {
     nearestPlace?: string;
     distance_km?: number;
   }[];
-  remaining?: { objectNumber: string; title: string; creator: string }[];
   source: "vocabulary";
   warnings?: string[];
 }
@@ -76,7 +75,6 @@ const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]
 
 const DEFAULT_MAX_RESULTS = 25;
 const MAX_RESULTS_CAP = 100;
-const ENRICHMENT_LIMIT = 25;
 
 interface VocabFilter {
   param: keyof VocabSearchParams;
@@ -732,23 +730,12 @@ export class VocabularyDb {
       };
     }
 
-    // Hybrid format: enrich first ENRICHMENT_LIMIT results, return rest as slim summaries
-    const enrichedRows = rows.slice(0, ENRICHMENT_LIMIT);
-    const overflowRows = rows.slice(ENRICHMENT_LIMIT);
-
-    const typeMap = this.lookupTypes(enrichedRows.map((r) => r.object_number));
-    const remaining = overflowRows.length > 0
-      ? overflowRows.map((r) => ({
-          objectNumber: r.object_number,
-          title: r.title || "",
-          creator: r.creator_label || "",
-        }))
-      : undefined;
+    const typeMap = this.lookupTypes(rows.map((r) => r.object_number));
 
     return {
       totalResults,
       ...(geoResult && { referencePlace: geoResult.referencePlace }),
-      results: enrichedRows.map((r) => {
+      results: rows.map((r) => {
         const d = distanceMap?.get(r.object_number);
         const t = typeMap?.get(r.object_number);
         let date: string | undefined;
@@ -767,7 +754,6 @@ export class VocabularyDb {
           ...(d && { nearestPlace: d.place, distance_km: d.dist }),
         };
       }),
-      ...(remaining && { remaining }),
       source: "vocabulary",
       ...(warnings.length > 0 && { warnings }),
     };
