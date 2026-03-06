@@ -13,6 +13,7 @@ import json
 import sqlite3
 import sys
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -103,8 +104,6 @@ def fetch_dates(object_number: str) -> tuple[str, int | None, int | None]:
 
 
 def main():
-    import urllib.parse
-
     dry_run = "--dry-run" in sys.argv
 
     conn = sqlite3.connect(str(DB_PATH))
@@ -127,7 +126,6 @@ def main():
     object_numbers = [r[0] for r in rows]
 
     updated = 0
-    not_found = 0
     no_dates = 0
     errors = 0
     t0 = time.time()
