@@ -1694,10 +1694,10 @@ function registerTools(
           }
 
           const queryVec = await embeddingModel.embed(args.semanticQuery);
-          // Iconclass embeddings are always 384d — reject if query vector has incompatible dimensions
-          if (queryVec.length !== 384) {
+          // Reject if query vector dimensions don't match the iconclass embedding index
+          if (queryVec.length !== db.embeddingDimensions) {
             return errorResponse(
-              `Iconclass semantic search requires 384-dimensional query vectors, but the embedding model produced ${queryVec.length}d. ` +
+              `Iconclass semantic search requires ${db.embeddingDimensions}-dimensional query vectors, but the embedding model produced ${queryVec.length}d. ` +
               "This can happen when artwork embeddings use MRL truncation to a different dimension. " +
               "Use query (keyword search) or notation (browse) instead."
             );

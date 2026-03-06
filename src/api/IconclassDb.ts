@@ -170,6 +170,11 @@ export class IconclassDb {
     return this._hasEmbeddings;
   }
 
+  /** Iconclass embeddings are always 384d (e5-small native dimension). */
+  get embeddingDimensions(): number {
+    return 384;
+  }
+
   get countsAsOf(): string | null {
     return this._countsAsOf;
   }
