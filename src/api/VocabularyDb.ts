@@ -353,7 +353,7 @@ export class VocabularyDb {
 
       // Cache frequently-used prepared statements
       this.stmtLookupArtwork = this.db.prepare(
-        "SELECT title, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
+        "SELECT title, title_all_text, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
       );
 
       const features = [
@@ -413,9 +413,9 @@ export class VocabularyDb {
   /** Look up basic metadata for a single artwork by object number. */
   lookupArtwork(objectNumber: string): { title: string; creator: string; dateEarliest: number | null; dateLatest: number | null } | null {
     if (!this.db || !this.stmtLookupArtwork) return null;
-    const row = this.stmtLookupArtwork.get(objectNumber) as { title: string; creator_label: string; date_earliest: number | null; date_latest: number | null } | undefined;
+    const row = this.stmtLookupArtwork.get(objectNumber) as { title: string; title_all_text: string | null; creator_label: string; date_earliest: number | null; date_latest: number | null } | undefined;
     if (!row) return null;
-    return { title: row.title || "", creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
+    return { title: row.title || row.title_all_text?.split("\n")[0] || "", creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
   }
 
   /**
@@ -737,12 +737,13 @@ export class VocabularyDb {
       : this.hasImportance
         ? "ORDER BY a.importance DESC"
         : "";
-    const sql = `SELECT a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
+    const sql = `SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
     const rows = this.db.prepare(sql).all(
       ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, limit] : [...bindings, limit]),
     ) as {
       object_number: string;
       title: string;
+      title_all_text: string | null;
       creator_label: string;
       date_earliest: number | null;
       date_latest: number | null;
@@ -839,7 +840,7 @@ export class VocabularyDb {
         }
         return {
           objectNumber: r.object_number,
-          title: r.title || "",
+          title: r.title || r.title_all_text?.split("\n")[0] || "",
           creator: r.creator_label || "",
           ...(date && { date }),
           ...(t && { type: t }),
