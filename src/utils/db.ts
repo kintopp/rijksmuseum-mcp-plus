@@ -8,7 +8,7 @@ export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.
 /** Escape a value for safe FTS5 phrase matching. Returns null if input is empty after stripping.
  *  Strips FTS5 operators and bracket characters; preserves hyphens (safe inside quoted phrases). */
 export function escapeFts5(value: string): string | null {
-  const cleaned = value.replace(/[*^():{}[\]\\]/g, "").replace(/"/g, '""').trim();
+  const cleaned = value.replace(/[.*^():{}[\]\\]/g, "").replace(/"/g, '""').trim();
   if (!cleaned) return null;
   return `"${cleaned}"`;
 }
@@ -16,7 +16,7 @@ export function escapeFts5(value: string): string | null {
 /** Escape a single token for FTS5 (strip operators, no phrase quoting).
  *  Returns null if input is empty after stripping. */
 export function escapeFts5Token(value: string): string | null {
-  const cleaned = value.replace(/[*^():{}[\]\\"]/g, "").trim();
+  const cleaned = value.replace(/[.*^():{}[\]\\"]/g, "").trim();
   return cleaned || null;
 }
 
