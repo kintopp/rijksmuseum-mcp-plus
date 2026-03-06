@@ -30,9 +30,13 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 6. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, rotate, flip horizontally or view the image full-screen.
 
-7. **Image analysis** (experimental) — the AI assistant can analyse images visually in combination with its own background knowledge and the artwork's structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?"). It can also annotate the image with these elements in the image viewer (e.g. "identify the biblical scenes depicted in the painting's panels and highlight these for me").
+7. **AI image analysis** (experimental) — the AI assistant can analyse images visually in combination with its own background knowledge and the artwork's structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?").
 
-8. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
+8. **AI image annotation** (experimental) - the AI assistant can annotate the image with elements it has recognised (e.g. "highlight the biblical scenes depicted in the painting's panels").
+
+9. **User image annotation** (experimental) - first click somewhere inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now draw an area of interest to you. You'll be asked to allow a prompt (with the coordinates of the area you selected) to be written to the chat. After it appears (in square brackets) in the chat, add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
+
+10. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
 
 ## Quick Start
 
@@ -102,7 +106,8 @@ Recent ([v0.19](https://github.com/kintopp/rijksmuseum-mcp-plus/releases/tag/v0.
 - Added morphological stemming for English subject queries (else subject: 'cat' ≠ 'cats')
 - Added attribution filter (attributed to, workshop of, etc.)
 - Now use Rijksmuseum search API as fallback only
-- Fresh harvest of all metadata (832,095 artworks, 194,050 vocab terms, 13.5M mappings)
+- Fresh harvest of Rijksmuseum metadata (832,095 artworks, 194,050 vocab terms, 13.5M mappings)
+- Added support for LLM analysis of a user drawn image selection
 
 Soon:
 
@@ -116,7 +121,6 @@ Later:
 - review toponyms without clear geolocation data
 - investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 - create optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file
-- add support for LLM analysis of user defined image selections
 - add support for browsing related images in image viewer
 - review toponyms without clear geolocation data
 - investigate exporting from image viewer with overlays
