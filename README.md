@@ -77,25 +77,17 @@ Et bien sûr también puedes explorar संग्रहों को 用你自�
 
 **Say what you are actually looking for, not how to find it.** The assistant generally does better when given a research question than a list of parameters. "What prints were made after paintings by Rembrandt?" works better than "search for prints with technique etching by Rembrandt", because the first framing lets the assistant choose the right combination of tools and strategies.
 
-**For broad queries, add a second constraint.** Searches across very broad categories — all paintings, all works on paper, all portraits — can match tens of thousands of records. The results are not ranked by importance and only a sample is returned (see 'Known Limitations' below). Combining with a date range, production place, or second subject term makes the results both faster and more meaningful.
-
 **Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. This is especially useful for atmospheric or thematic queries. The assistant can also search Iconclass concept — finding the right notation code by meaning rather than exact keyword — and then use that notation for a precise structured search.
 
 **The MCP server (rijksmuseum-mcp+) seems stuck**. If the server is not responding, it could be that it has been updated and the connection needs to be refreshed. To fix this, in your AI system's settings (e.g. in _Settings_ in Claude Desktop or claude.ai) disconnect and reconnect the server, and then click on _Configure_ to verify that all permissions are still correct. In other MCP clients, you may not be able to disconnect/reconnect. In that case, remove and add the server again.
 
 ### Known Limitations
 
-**Structured search results are not ranked by relevance.** When filtering by subject, material, place, technique, or other structured fields, results currently come back in internal catalogue order — not by quality, importance, or closeness to the query. For a large result set, the first page is essentially an arbitrary slice of the matching artworks, not a curated selection. Concept-based (semantic) searches are the exception: those results are ranked by similarity to your query. 
-
-**Result sets are capped and only partially paginated.** Each search returns up to 25 results by default (up to 100 on request). When a query matches thousands of artworks, only a small, non-representative sample is returned. Adding more specific filters is the best way to get meaningful results from large collections and helps prevent the LLM being overwhelmed with metadata from too many search results.
-
 **Text coverage varies by field.** About 61% of records include a cataloguer's description (in Dutch). Curatorial wall texts (in English) cover only about 14,000 artworks — mostly highlights and recent acquisitions. 
 
 **Geolocation coverage is partial.** About 64% of named production places have been geocoded. Proximity searches (e.g. "artworks produced near Delft") will miss artworks from places that haven't been geocoded. Where coordinates exist, they may point to the nearest town or region rather than a specific address.
 
 **Iconclass subject classification can be counterintuitive.** The Iconclass system assigns subjects to specific branches of a strict hierarchy that does not always match everyday expectations. However, the assistant can search Iconclass by concept as well as by keyword — describing what you're looking for in plain language (e.g. "domestic animals" or "religious suffering") will often find the right notation even when the exact vocabulary term is unknown.
-
-**The collection data is predominantly in Dutch.** Titles and subject tags are available in Dutch for virtually all records; English is available for roughly a third. The assistant will try both languages automatically, but searches for specialist terminology, historical place names, or older material may miss records that are catalogued only in Dutch.
 
 **Image analysis works better than image annotation.** Anthropic's models are more accurate at describing the contents of an image than annotating it. For example, the models will often correctly describe they can 'see' (even drawing on the content rich `description` data for guidance) but struggle to draw accurate bounding-boxes around this content.
 
@@ -114,7 +106,8 @@ Recent ([v0.19](https://github.com/kintopp/rijksmuseum-mcp-plus/releases/tag/v0.
 
 Soon:
 
-- improve documentation
+- improve image handling in MCP clients besides Anthropic's Claude
+- update documentation
 - paper/presentation
 - v1.0 release
 
