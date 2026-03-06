@@ -989,7 +989,7 @@ export class VocabularyDb {
 
     const vocabResult = this.buildVocabConditions(params as Record<string, unknown>);
     if (vocabResult === null) return []; // a filter matched zero vocab terms
-    if (vocabResult.conditions.length === 0) return [];
+    if (vocabResult.conditions.length === 0) return null; // no effective filters — fall back to unfiltered
 
     const sql = `SELECT a.art_id FROM artworks a WHERE ${vocabResult.conditions.join(" AND ")} LIMIT 50000`;
     let stmt = this.stmtFilterArtIds.get(sql);

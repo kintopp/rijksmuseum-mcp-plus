@@ -79,11 +79,17 @@ app.ontoolresult = (result) => {
     return;
   }
 
-  // Parse artwork data from JSON content blocks
+  // Parse artwork data — prefer structuredContent, fall back to JSON in text blocks
   let data: ArtworkImageData | null = null;
 
-  // Try each text content block for valid JSON
-  if (result.content) {
+  // Structured content path (post-v0.18 default)
+  const sc = result.structuredContent as Record<string, unknown> | undefined;
+  if (sc && typeof sc.iiifInfoUrl === 'string') {
+    data = sc as unknown as ArtworkImageData;
+  }
+
+  // Fallback: try each text content block for valid JSON
+  if (!data && result.content) {
     for (const block of result.content) {
       if (block?.type === 'text' && block.text.startsWith('{')) {
         try {

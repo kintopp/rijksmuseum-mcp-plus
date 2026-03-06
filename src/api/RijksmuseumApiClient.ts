@@ -1098,7 +1098,7 @@ export class RijksmuseumApiClient {
 
     return {
       totalResults,
-      ids: items.map((i) => i.id),
+      ids: items.map((i) => i.id.split("/").pop() ?? i.id),
       nextPageToken: extractPageToken(searchResponse.next),
     };
   }
