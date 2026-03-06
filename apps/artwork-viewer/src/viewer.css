@@ -51,6 +51,7 @@ html, body {
   line-height: 1.5;
   background: var(--color-background-primary);
   color: var(--color-text-primary);
+  overflow: hidden;
 }
 
 #app {

@@ -112,7 +112,7 @@ assert(!r2a.isError, "Not marked as error");
 console.log("\n--- 2b: pct region (SK-C-5, pct:0,0,50,50, 400px) ---");
 const r2b = await client.callTool({
   name: "inspect_artwork_image",
-  arguments: { objectNumber: "SK-C-5", region: "pct:0,0,50,50", size: 400 },
+  arguments: { objectNumber: "SK-C-5", region: "pct:0,0,50,50", size: 400, navigateViewer: false },
 });
 const img2b = r2b.content.find(c => c.type === "image");
 assert(img2b != null, "pct region returns image");
@@ -123,7 +123,7 @@ assert(r2b.content.find(c => c.type === "text")?.text?.includes("pct:0,0,50,50")
 console.log("\n--- 2c: Pixel region (SK-C-5, 1000,800,500,500, 500px) ---");
 const r2c = await client.callTool({
   name: "inspect_artwork_image",
-  arguments: { objectNumber: "SK-C-5", region: "1000,800,500,500", size: 500 },
+  arguments: { objectNumber: "SK-C-5", region: "1000,800,500,500", size: 500, navigateViewer: false },
 });
 assert(r2c.content.find(c => c.type === "image") != null, "Pixel region returns image");
 
@@ -131,7 +131,7 @@ assert(r2c.content.find(c => c.type === "image") != null, "Pixel region returns 
 console.log("\n--- 2d: Square region (SK-C-5, 600px) ---");
 const r2d = await client.callTool({
   name: "inspect_artwork_image",
-  arguments: { objectNumber: "SK-C-5", region: "square", size: 600 },
+  arguments: { objectNumber: "SK-C-5", region: "square", size: 600, navigateViewer: false },
 });
 assert(r2d.content.find(c => c.type === "image") != null, "Square region returns image");
 
@@ -163,6 +163,51 @@ if (sc) {
 } else {
   assert(false, "structuredContent not returned (STRUCTURED_CONTENT=true)");
 }
+
+// 2h. viewUUID returned when viewer is open
+console.log("\n--- 2h: viewUUID in structuredContent ---");
+const sc2h = r2b.structuredContent;
+if (sc2h) {
+  assert(sc2h.viewUUID === viewUUID1, `structuredContent.viewUUID matches viewer (${sc2h.viewUUID?.slice(0, 8)})`);
+} else {
+  assert(false, "structuredContent not returned for 2b");
+}
+
+// 2i. auto-navigate queues command for non-full region
+console.log("\n--- 2i: auto-navigate (navigateViewer: true) ---");
+const r2i = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: { objectNumber: "SK-C-5", region: "pct:20,30,40,40", size: 400, navigateViewer: true },
+});
+const sc2i = r2i.structuredContent;
+assert(sc2i?.viewerNavigated === true, "viewerNavigated is true");
+// Drain the auto-navigate command so it doesn't affect later tests
+const r2i_poll = await client.callTool({
+  name: "poll_viewer_commands",
+  arguments: { viewUUID: viewUUID1 },
+});
+const poll2i = r2i_poll.structuredContent ?? JSON.parse(r2i_poll.content[0].text);
+assert(poll2i.commands.length === 1, `Auto-navigate produced 1 command (got ${poll2i.commands.length})`);
+assert(poll2i.commands[0].action === "navigate", "Auto-navigate command is 'navigate'");
+assert(poll2i.commands[0].region === "pct:20,30,40,40", `Auto-navigate region matches (${poll2i.commands[0].region})`);
+
+// 2j. auto-navigate skipped for 'full' region
+console.log("\n--- 2j: auto-navigate skipped for 'full' ---");
+const r2j = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: { objectNumber: "SK-C-5", region: "full", size: 400, navigateViewer: true },
+});
+const sc2j = r2j.structuredContent;
+assert(!sc2j?.viewerNavigated, "viewerNavigated not set for full region");
+
+// 2k. auto-navigate skipped when navigateViewer: false
+console.log("\n--- 2k: navigateViewer: false suppresses auto-navigate ---");
+const r2k = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: { objectNumber: "SK-C-5", region: "pct:10,10,20,20", size: 400, navigateViewer: false },
+});
+const sc2k = r2k.structuredContent;
+assert(!sc2k?.viewerNavigated, "viewerNavigated not set when disabled");
 
 // ══════════════════════════════════════════════════════════════════
 //  3. inspect_artwork_image — error handling
@@ -199,7 +244,7 @@ assert(errText.toLowerCase().includes("no object found") || errText.toLowerCase(
 console.log("\n--- 3c: Size clamping ---");
 const r3c = await client.callTool({
   name: "inspect_artwork_image",
-  arguments: { objectNumber: "SK-C-5", region: "pct:0,0,10,10", size: 2000 },
+  arguments: { objectNumber: "SK-C-5", region: "pct:0,0,10,10", size: 2000, navigateViewer: false },
 });
 const caption3c = r3c.content.find(c => c.type === "text")?.text ?? "";
 assert(caption3c.includes("clamped"), `Caption mentions clamping: "${caption3c.slice(0, 80)}"`);

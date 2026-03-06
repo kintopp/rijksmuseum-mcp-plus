@@ -54,9 +54,10 @@ let selectMode = false;
 let selectionTracker: OpenSeadragon.MouseTracker | null = null;
 let dragStart: OpenSeadragon.Point | null = null;
 let selectionOverlay: HTMLDivElement | null = null;
+let userHighlightEl: HTMLElement | null = null;
 
-const SELECTION_STROKE = 'rgba(59,130,246,0.8)';
-const SELECTION_FILL = 'rgba(59,130,246,0.15)';
+const HIGHLIGHT_STROKE = 'rgba(59,130,246,0.8)';
+const HIGHLIGHT_FILL = 'rgba(59,130,246,0.12)';
 
 const app = new App(
   { name: 'Rijksmuseum Artwork Viewer', version: '1.0.0' },
@@ -188,6 +189,7 @@ function resetView(): void {
   viewer.viewport.setRotation(0);
   viewer.viewport.setFlip(false);
   viewer.viewport.goHome();
+  clearAllOverlays();
 }
 
 async function toggleFullscreen(): Promise<void> {
@@ -217,122 +219,6 @@ function updateFullscreenButton(): void {
   }
 }
 
-// ── Downloads ────────────────────────────────────────────────────
-
-function canDownload(): boolean {
-  const caps = app.getHostCapabilities();
-  return !!caps?.downloadFile;
-}
-
-function updateDownloadButton(): void {
-  const btn = document.getElementById('download-view');
-  const sep = btn?.previousElementSibling;
-  if (!canDownload()) {
-    btn?.remove();
-    if (sep?.classList.contains('control-separator')) sep.remove();
-  }
-}
-
-async function downloadCurrentView(): Promise<void> {
-  if (!viewer || !currentData) return;
-
-  if (!canDownload()) {
-    app.sendLog({ level: 'warning', data: 'Host does not support downloadFile' });
-    return;
-  }
-
-  const btn = document.getElementById('download-view');
-  if (btn) { btn.textContent = '...'; btn.style.pointerEvents = 'none'; }
-
-  try {
-    // Render the OSD canvas (includes current zoom/pan, but not overlays)
-    const canvas = viewer.drawer.getCanvasElement() as HTMLCanvasElement | null;
-    if (!canvas) throw new Error('No canvas available');
-
-    // Composite: draw OSD canvas + overlay elements onto an offscreen canvas
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = canvas.width;
-    exportCanvas.height = canvas.height;
-    const ctx = exportCanvas.getContext('2d')!;
-    ctx.drawImage(canvas, 0, 0);
-
-    // Draw overlay rectangles onto the export canvas
-    drawOverlaysOnCanvas(ctx, canvas.width, canvas.height);
-
-    const dataUrl = exportCanvas.toDataURL('image/jpeg', 0.92);
-    const base64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
-    const filename = `${currentData.objectNumber}-view.jpg`;
-
-    const { isError } = await app.downloadFile({
-      contents: [{
-        type: 'resource',
-        resource: {
-          uri: `file:///${filename}`,
-          mimeType: 'image/jpeg',
-          blob: base64,
-        },
-      }],
-    });
-
-    if (isError) {
-      app.sendLog({ level: 'info', data: 'Download cancelled by user' });
-    } else {
-      app.sendLog({ level: 'info', data: `Downloaded: ${filename}` });
-    }
-  } catch (err) {
-    app.sendLog({ level: 'error', data: `Download failed: ${err}` });
-  } finally {
-    if (btn) { btn.textContent = '\u21D9'; btn.style.pointerEvents = ''; }
-  }
-}
-
-function drawOverlaysOnCanvas(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void {
-  if (!viewer) return;
-  const vp = viewer.viewport;
-  const containerSize = viewer.viewport.getContainerSize();
-  const scaleX = canvasWidth / containerSize.x;
-  const scaleY = canvasHeight / containerSize.y;
-
-  for (const el of overlayElements) {
-    // Get the overlay's OpenSeadragon Rect from the viewer
-    const overlay = viewer.getOverlayById(el);
-    if (!overlay) continue;
-    const bounds = overlay.getBounds(vp);
-    // Convert viewport rect to pixel coordinates
-    const topLeft = vp.viewportToViewerElementCoordinates(bounds.getTopLeft());
-    const bottomRight = vp.viewportToViewerElementCoordinates(bounds.getBottomRight());
-
-    const x = topLeft.x * scaleX;
-    const y = topLeft.y * scaleY;
-    const w = (bottomRight.x - topLeft.x) * scaleX;
-    const h = (bottomRight.y - topLeft.y) * scaleY;
-
-    // Border
-    const style = getComputedStyle(el);
-    const color = style.borderColor || OVERLAY_STROKE;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2 * scaleX;
-    ctx.strokeRect(x, y, w, h);
-
-    // Fill
-    ctx.fillStyle = style.backgroundColor || OVERLAY_FILL;
-    ctx.fillRect(x, y, w, h);
-
-    // Label
-    const labelEl = el.querySelector('.region-label') as HTMLElement | null;
-    if (labelEl?.textContent) {
-      const fontSize = Math.round(11 * scaleX);
-      ctx.font = `${fontSize}px sans-serif`;
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      const textWidth = ctx.measureText(labelEl.textContent).width;
-      const labelY = y + h + 2 * scaleY;
-      ctx.fillRect(x, labelY, textWidth + 8 * scaleX, fontSize + 4 * scaleY);
-      ctx.fillStyle = 'white';
-      ctx.fillText(labelEl.textContent, x + 4 * scaleX, labelY + fontSize);
-    }
-  }
-}
-
 // ── Selection mode ───────────────────────────────────────────────
 
 function toggleSelectMode(): void {
@@ -351,8 +237,8 @@ function toggleSelectMode(): void {
 function updateSelectButton(): void {
   const btn = document.getElementById('select-mode');
   if (btn) {
-    btn.textContent = selectMode ? '✓' : '☐';
-    btn.title = selectMode ? 'Exit Select Mode (q)' : 'Select Region (q)';
+    btn.textContent = '☐';
+    btn.title = selectMode ? 'Exit Select Mode (i)' : 'Select Region (i)';
     btn.classList.toggle('active', selectMode);
   }
   // Change cursor on the OSD canvas
@@ -433,8 +319,11 @@ function onSelectionRelease(event: OpenSeadragon.MouseTrackerEvent): void {
 
   if (r.pctW < 1 || r.pctH < 1) return; // too small — accidental click
 
+  // Remove previous user highlight (only one at a time)
+  clearUserHighlight();
+
   const region = `pct:${r.pctX.toFixed(1)},${r.pctY.toFixed(1)},${r.pctW.toFixed(1)},${r.pctH.toFixed(1)}`;
-  addRegionOverlay(region, 'Selection', SELECTION_STROKE);
+  userHighlightEl = addRegionOverlay(region, 'Highlight', HIGHLIGHT_STROKE, HIGHLIGHT_FILL);
   toggleSelectMode();
   sendSelectionToChat(region);
 }
@@ -445,8 +334,8 @@ function showSelectionPreview(rect: OpenSeadragon.Rect): void {
   if (!selectionOverlay) {
     selectionOverlay = document.createElement('div');
     selectionOverlay.className = 'selection-preview';
-    selectionOverlay.style.border = `2px dashed ${SELECTION_STROKE}`;
-    selectionOverlay.style.background = SELECTION_FILL;
+    selectionOverlay.style.border = `2px dashed ${HIGHLIGHT_STROKE}`;
+    selectionOverlay.style.background = HIGHLIGHT_FILL;
     selectionOverlay.style.pointerEvents = 'none';
     viewer.addOverlay({ element: selectionOverlay, location: rect });
   } else {
@@ -461,22 +350,31 @@ function removeSelectionPreview(): void {
   }
 }
 
+function clearUserHighlight(): void {
+  if (userHighlightEl && viewer) {
+    viewer.removeOverlay(userHighlightEl);
+    const idx = overlayElements.indexOf(userHighlightEl);
+    if (idx >= 0) overlayElements.splice(idx, 1);
+    userHighlightEl = null;
+  }
+}
+
 async function sendSelectionToChat(region: string): Promise<void> {
   if (!currentData) return;
   const { objectNumber, title } = currentData;
-  const message = `[User selected region ${region} on "${title}" (${objectNumber})]`;
+  const message = `[Highlight: region ${region} on "${title}" (${objectNumber})]`;
   try {
     await app.sendMessage({
       role: 'user',
       content: [{ type: 'text', text: message }],
     });
-    app.sendLog({ level: 'info', data: `Selection sent: ${region}` });
+    app.sendLog({ level: 'info', data: `Highlight sent: ${region}` });
   } catch {
     // sendMessage may not be supported — update model context as fallback
     app.updateModelContext({
-      content: [{ type: 'text', text: `User selected region: ${region} on ${objectNumber}` }],
+      content: [{ type: 'text', text: `Highlight: region ${region} on ${objectNumber}` }],
     });
-    app.sendLog({ level: 'info', data: `Selection added to context: ${region}` });
+    app.sendLog({ level: 'info', data: `Highlight added to context: ${region}` });
   }
 }
 
@@ -515,9 +413,7 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="rotate-right" title="Rotate Right">&#8635;</button>
           <button id="fullscreen" title="Fullscreen">&#8862;</button>
           <div class="control-separator"></div>
-          <button id="select-mode" title="Select Region">&#9633;</button>
-          <div class="control-separator"></div>
-          <button id="download-view" title="Save Current View">&#8681;</button>
+          <button id="select-mode" title="Select Region">&#9744;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
           <div class="shortcuts-content">
@@ -531,8 +427,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
-              <div class="shortcut-row"><kbd>q</kbd><span>Select region</span></div>
-              <div class="shortcut-row"><kbd>s</kbd><span>Save current view</span></div>
+              <div class="shortcut-row"><kbd>i</kbd><span>Draw highlight</span></div>
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
           </div>
@@ -552,7 +447,6 @@ function renderViewer(data: ArtworkImageData): void {
   initializeViewer(data.iiifInfoUrl);
   attachEventListeners();
   setupVisibilityObserver();
-  updateDownloadButton();
 
   requestAnimationFrame(() => {
     const mainEl = document.querySelector('.main');
@@ -589,8 +483,11 @@ function initializeViewer(iiifInfoUrl: string): void {
     maxZoomPixelRatio: 3,
     minZoomImageRatio: 0.8,
     visibilityRatio: 0.5,
-    gestureSettingsMouse: { scrollToZoom: true },
+    gestureSettingsMouse: { scrollToZoom: true, clickToZoom: false, dblClickToZoom: false },
   });
+
+  // Prevent browser scroll-into-view shift when OSD canvas receives focus
+  viewer.canvas.addEventListener('focus', () => { window.scrollTo(0, 0); }, true);
 
   viewer.addHandler('open-failed', () => {
     const viewerContainer = document.getElementById('openseadragon-viewer');
@@ -645,7 +542,6 @@ function attachEventListeners(): void {
   document.getElementById('rotate-left')?.addEventListener('click', () => rotateBy(-90));
   document.getElementById('rotate-right')?.addEventListener('click', () => rotateBy(90));
   document.getElementById('fullscreen')?.addEventListener('click', toggleFullscreen);
-  document.getElementById('download-view')?.addEventListener('click', downloadCurrentView);
   document.getElementById('select-mode')?.addEventListener('click', toggleSelectMode);
 
   // Shortcuts overlay
@@ -662,6 +558,7 @@ function attachEventListeners(): void {
   keydownHandler = (e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+    let handled = true;
     switch (e.key) {
       case '?':
         shortcutsOverlay?.classList.toggle('hidden');
@@ -672,14 +569,16 @@ function attachEventListeners(): void {
         break;
       case 'ArrowUp':
         if (e.shiftKey) {
-          e.preventDefault();
           viewer?.viewport.zoomBy(1.5);
+        } else {
+          handled = false;
         }
         break;
       case 'ArrowDown':
         if (e.shiftKey) {
-          e.preventDefault();
           viewer?.viewport.zoomBy(1 / 1.5);
+        } else {
+          handled = false;
         }
         break;
       case 'r':
@@ -693,12 +592,16 @@ function attachEventListeners(): void {
       case 'h':
         toggleFlip();
         break;
-      case 'q':
+      case 'i':
         toggleSelectMode();
         break;
-      case 's':
-        downloadCurrentView();
+      default:
+        handled = false;
         break;
+    }
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
     }
   };
   document.addEventListener('keydown', keydownHandler);
@@ -839,17 +742,21 @@ function iiifRegionToViewportRect(region: string): OpenSeadragon.Rect | null {
   return null;
 }
 
-function addRegionOverlay(region: string, label?: string, color?: string): void {
+function addRegionOverlay(region: string, label?: string, color?: string, fill?: string): HTMLElement | null {
   const rect = iiifRegionToViewportRect(region);
-  if (!rect || !viewer) return;
+  if (!rect || !viewer) return null;
 
   const el = document.createElement('div');
   el.className = 'region-overlay';
   const c = color || OVERLAY_STROKE;
   el.style.border = `2px solid ${c}`;
-  // Derive low-opacity fill from rgba colors; use fixed fallback for named/hex colors
-  const rgbaMatch = c.match(/^(rgba?\([^)]+,\s*)[0-9.]+\)$/);
-  el.style.background = rgbaMatch ? `${rgbaMatch[1]}0.1)` : OVERLAY_FILL;
+  if (fill) {
+    el.style.background = fill;
+  } else {
+    // Derive low-opacity fill from rgba colors; use fixed fallback for named/hex colors
+    const rgbaMatch = c.match(/^(rgba?\([^)]+,\s*)[0-9.]+\)$/);
+    el.style.background = rgbaMatch ? `${rgbaMatch[1]}0.1)` : OVERLAY_FILL;
+  }
 
   if (label) {
     const labelEl = document.createElement('span');
@@ -860,11 +767,13 @@ function addRegionOverlay(region: string, label?: string, color?: string): void 
 
   viewer.addOverlay({ element: el, location: rect });
   overlayElements.push(el);
+  return el;
 }
 
 function clearAllOverlays(): void {
   for (const el of overlayElements) viewer?.removeOverlay(el);
   overlayElements.length = 0;
+  userHighlightEl = null;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

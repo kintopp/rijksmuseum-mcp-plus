@@ -393,6 +393,8 @@ const InspectImageOutput = {
   rotation: z.number().int(),
   quality: z.string(),
   fetchTimeMs: z.number().int().optional().describe("Time spent fetching from IIIF server (ms)"),
+  viewUUID: z.string().optional().describe("Active viewer session ID (if a viewer is open for this artwork)"),
+  viewerNavigated: z.boolean().optional().describe("Whether the viewer was auto-navigated to the inspected region"),
   error: z.string().optional(),
 };
 
@@ -1157,9 +1159,11 @@ function registerTools(
         "to pinpoint specific features before calling navigate_viewer with add_overlay. " +
         "Use navigate_viewer's 'relativeTo' parameter to place overlays using crop-local coordinates — " +
         "the server handles the projection to full-image space, avoiding manual coordinate math.\n\n" +
-        "Optionally, use navigate_viewer afterwards to zoom the viewer or add labeled " +
-        "overlays highlighting regions of interest for the user.\n\n" +
-        "This tool does not interact with the viewer session — calling it does not extend or affect the viewUUID lifetime.",
+        "Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms " +
+        "to the inspected region (navigateViewer defaults to true). This keeps the viewer in sync " +
+        "with your analysis — no separate navigate_viewer call needed for basic zoom. " +
+        "Use navigate_viewer separately only when you need overlays, labels, or clear_overlays.\n\n" +
+        "The response includes the active viewUUID (if any) for follow-up navigate_viewer calls.",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1187,6 +1191,10 @@ function registerTools(
           .enum(["default", "gray"])
           .default("default")
           .describe("Image quality — 'gray' can help read inscriptions or signatures"),
+        navigateViewer: z
+          .boolean()
+          .default(true)
+          .describe("Auto-navigate the open viewer to the inspected region (default: true). Only effective when a viewer is open for this artwork."),
       }).strict(),
       ...withOutputSchema(InspectImageOutput),
     },
@@ -1210,9 +1218,13 @@ function registerTools(
         const { object } = await api.findByObjectNumber(args.objectNumber);
         const imageInfo = await api.getImageInfo(object);
 
-        // Refresh viewer TTL for this artwork
-        for (const [, q] of viewerQueues) {
-          if (q.objectNumber === args.objectNumber) q.lastAccess = Date.now();
+        // Find active viewer for this artwork and refresh TTL
+        let activeViewUUID: string | undefined;
+        for (const [uuid, q] of viewerQueues) {
+          if (q.objectNumber === args.objectNumber) {
+            q.lastAccess = Date.now();
+            activeViewUUID = uuid;
+          }
         }
 
         if (!imageInfo) {
@@ -1260,7 +1272,25 @@ function registerTools(
         const creator = RijksmuseumApiClient.parseCreator(object);
         const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
         const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
-        const caption = `"${title}" by ${creator} — ${args.objectNumber} (${regionLabel}, ${effectiveSize}px${sizeNote}, ${fetchTimeMs}ms)`;
+
+        // Auto-navigate viewer to inspected region (non-full only)
+        let viewerNavigated = false;
+        if (args.navigateViewer && activeViewUUID && args.region !== "full") {
+          const queue = viewerQueues.get(activeViewUUID);
+          if (queue) {
+            queue.commands.push({ action: "navigate", region: args.region });
+            queue.lastAccess = Date.now();
+            viewerNavigated = true;
+          }
+        }
+
+        const captionParts = [
+          `"${title}" by ${creator} — ${args.objectNumber}`,
+          `(${regionLabel}, ${effectiveSize}px${sizeNote}, ${fetchTimeMs}ms)`,
+        ];
+        if (viewerNavigated) captionParts.push("| viewer navigated");
+        else if (activeViewUUID) captionParts.push(`| viewer open (${activeViewUUID.slice(0, 8)})`);
+        const caption = captionParts.join(" ");
 
         const content = [
           { type: "image" as const, data: base64, mimeType },
@@ -1277,6 +1307,8 @@ function registerTools(
           rotation: args.rotation,
           quality: args.quality,
           fetchTimeMs,
+          viewUUID: activeViewUUID,
+          viewerNavigated: viewerNavigated || undefined,
         };
         return {
           content,
