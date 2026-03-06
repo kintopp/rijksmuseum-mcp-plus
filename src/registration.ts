@@ -180,8 +180,9 @@ function createLogger(stats?: UsageStats) {
       try {
         const result = await fn(...args);
         const ms = Math.round(performance.now() - start);
-        console.error(JSON.stringify({ tool: toolName, ms, ok: true, ...(input && { input }) }));
-        stats?.record(toolName, ms, true);
+        const ok = !(result && typeof result === "object" && "isError" in result && (result as Record<string, unknown>).isError);
+        console.error(JSON.stringify({ tool: toolName, ms, ok, ...(input && { input }) }));
+        stats?.record(toolName, ms, ok);
         return result;
       } catch (err) {
         const ms = Math.round(performance.now() - start);
@@ -1127,7 +1128,7 @@ function registerTools(
       };
 
       const dims = viewerData.width && viewerData.height ? ` | ${viewerData.width}×${viewerData.height}px` : "";
-      const text = `${objectNumber} — "${title}" by ${viewerData.creator ?? "unknown"}${dims} | viewUUID: ${viewUUID.slice(0, 8)}`;
+      const text = `${objectNumber} — "${title}" by ${viewerData.creator ?? "unknown"}${dims} | viewUUID: ${viewUUID}`;
       return structuredResponse(viewerData, text);
     })
   );
@@ -1219,17 +1220,16 @@ function registerTools(
         }
 
         // Clamp size to region width — iiif.micr.io rejects upscaling.
-        // For pct: regions, the IIIF server computes pixel bounds as
-        // ceil(start) / floor(end), which can yield a region 1-2px narrower
-        // than our floor(width * pct/100) estimate. Subtract 1 to avoid
-        // hitting the exact boundary.
+        // For pct: regions, the IIIF server's internal rounding (implementation-
+        // specific) can yield a pixel region up to 3px narrower than our
+        // estimate. Subtract 3 to avoid hitting the boundary.
         let effectiveSize = args.size;
         if (imageInfo.width) {
           let regionWidth = imageInfo.width;
           const pctMatch = args.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
           const pxMatch = args.region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
           if (pctMatch) {
-            regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 1;
+            regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 3;
           } else if (pxMatch) {
             regionWidth = parseInt(pxMatch[3]);
           } else if (args.region === "square") {
@@ -1356,7 +1356,18 @@ function registerTools(
         return { ...structuredResponse(data, text ?? error), isError: true as const };
       };
 
-      const queue = viewerQueues.get(args.viewUUID);
+      // Retry briefly — claude.ai sends get_artwork_image and navigate_viewer
+      // as concurrent HTTP POSTs. The Map lookup (0ms) can race ahead of the
+      // artwork resolution (~25-30ms) that sets the UUID. Three retries at
+      // 100ms intervals cover this with generous margin.
+      let queue = viewerQueues.get(args.viewUUID);
+      if (!queue) {
+        for (let i = 0; i < 3; i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          queue = viewerQueues.get(args.viewUUID);
+          if (queue) break;
+        }
+      }
       if (!queue) {
         return navError(
           "No active viewer for this UUID",
