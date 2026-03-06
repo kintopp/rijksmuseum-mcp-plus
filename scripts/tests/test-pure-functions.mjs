@@ -231,9 +231,9 @@ assertEq(projectToFullImage("pct:50,50,50,50", "garbage"), null, "invalid relati
 
 section("escapeFts5Token");
 
-assertEq(escapeFts5Token("cat"), "cat", "simple word passthrough");
-assertEq(escapeFts5Token("wild*"), "wild", "strips FTS5 operators");
-assertEq(escapeFts5Token('"quoted"'), "quoted", "strips double quotes");
+assertEq(escapeFts5Token("cat"), '"cat"', "simple word quoted");
+assertEq(escapeFts5Token("wild*"), '"wild"', "strips FTS5 operators and quotes");
+assertEq(escapeFts5Token('"quoted"'), '"quoted"', "strips double quotes and re-quotes");
 assertEq(escapeFts5Token(""), null, "empty → null");
 assertEq(escapeFts5Token("***"), null, "all operators → null");
 

@@ -13,11 +13,12 @@ export function escapeFts5(value: string): string | null {
   return `"${cleaned}"`;
 }
 
-/** Escape a single token for FTS5 (strip operators, no phrase quoting).
+/** Escape a single token for FTS5 (strip operators, quote to prevent
+ *  reserved-word interpretation: AND, OR, NOT, NEAR).
  *  Returns null if input is empty after stripping. */
 export function escapeFts5Token(value: string): string | null {
   const cleaned = value.replace(/[.*^():{}[\]\\"]/g, "").trim();
-  return cleaned || null;
+  return cleaned ? `"${cleaned}"` : null;
 }
 
 /** Generate English morphological variants for a single word.
