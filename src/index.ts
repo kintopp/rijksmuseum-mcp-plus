@@ -201,14 +201,16 @@ const UNRESOLVABLE_IDS = new Set([
   "300404451", // secondary
   "300078817", // rectos
   "300010292", // versos
+  "300404269", // retired AAT term (404 since 2026-03)
+  "300404274", // retired AAT term (404 since 2026-03)
 ]);
 
 /** Pre-warm the top 200 vocabulary terms by frequency in the collection. */
 async function warmVocabCache(): Promise<void> {
   if (!vocabDb?.available) return;
 
-  // Fetch 205 to get 200 after filtering 5 unresolvable terms
-  const uris = vocabDb.topTermUris(205).filter(
+  // Fetch 207 to get 200 after filtering 7 unresolvable terms
+  const uris = vocabDb.topTermUris(207).filter(
     (uri) => !UNRESOLVABLE_IDS.has(uri.split("/").pop()!)
   );
   if (uris.length === 0) return;
