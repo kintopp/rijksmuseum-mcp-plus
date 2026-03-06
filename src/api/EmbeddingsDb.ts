@@ -123,9 +123,11 @@ export class EmbeddingsDb {
     const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
 
     // For very large candidate sets (>50K), fall back to pure KNN + post-filter
-    // since iterating 50K+ rows with vec_distance_cosine is slower than full scan
+    // since iterating 50K+ rows with vec_distance_cosine is slower than full scan.
+    // Always use 4096 global neighbors — vec0 brute-force scan cost is independent of k,
+    // and a larger pool prevents underfilling when filter overlap with top neighbors is sparse.
     if (candidateArtIds.length > 50000) {
-      const allResults = this.search(queryEmbedding, Math.min(k * 10, 4096));
+      const allResults = this.search(queryEmbedding, 4096);
       const idSet = new Set(candidateArtIds);
       const filtered = allResults.filter(r => idSet.has(r.artId)).slice(0, k);
       const warning = filtered.length < k
