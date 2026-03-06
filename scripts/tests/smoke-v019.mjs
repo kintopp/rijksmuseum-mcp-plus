@@ -110,6 +110,27 @@ sc = await call("search_artwork", { productionPlace: ["Amsterdam", "Paris"], com
 check("Returns without error", sc?._error === undefined);
 console.log(`    → ${sc?.ids?.length ?? 0} ids`);
 
+console.log("\n16. search_artwork — facets on broad search");
+sc = await call("search_artwork", { subject: "landscape", facets: true });
+check("Has facets", sc?.facets != null);
+if (sc?.facets) {
+  const dims = Object.keys(sc.facets);
+  check("All 4 dimensions present", dims.length === 4);
+  check("Entries sorted descending", Object.values(sc.facets).every(
+    entries => entries.every((e, i) => i === 0 || entries[i-1].count >= e.count)));
+  console.log(`    → ${dims.join(", ")}: ${dims.map(d => sc.facets[d][0]?.label + " (" + sc.facets[d][0]?.count + ")").join(", ")}`);
+}
+
+console.log("\n17. search_artwork — facets exclude filtered dimensions");
+sc = await call("search_artwork", { type: "painting", subject: "portrait", facets: true });
+check("type facet excluded", !sc?.facets?.type);
+check("Other facets present", sc?.facets?.material != null || sc?.facets?.century != null);
+
+console.log("\n18. search_artwork — no facets when not truncated");
+sc = await call("search_artwork", { creator: "Rembrandt", type: "painting", material: "canvas", subject: "self-portrait", facets: true, maxResults: 50 });
+check("No facets (results fit)", sc?.facets === undefined);
+console.log(`    → ${sc?.results?.length ?? 0} results (not truncated)`);
+
 console.log(`\n═══════════════════════════════════════`);
 console.log(`  Passed: ${passed}  Failed: ${failed}`);
 console.log(`═══════════════════════════════════════\n`);
