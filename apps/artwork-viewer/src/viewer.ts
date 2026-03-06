@@ -428,6 +428,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
               <div class="shortcut-row"><kbd>i</kbd><span>Draw highlight</span></div>
+              <div class="shortcut-row"><kbd>Esc</kbd><span>Exit fullscreen / cancel</span></div>
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
           </div>
@@ -566,6 +567,7 @@ function attachEventListeners(): void {
       case 'Escape':
         shortcutsOverlay?.classList.add('hidden');
         if (selectMode) toggleSelectMode();
+        else if (currentDisplayMode === 'fullscreen') toggleFullscreen();
         break;
       case 'ArrowUp':
         if (e.shiftKey) {
