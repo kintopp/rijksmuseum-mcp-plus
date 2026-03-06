@@ -90,11 +90,9 @@ export class IconclassDb {
       } catch { /* version_info table may not exist */ }
 
       // Detect and load embeddings (sqlite-vec extension required).
-      // Note: iconclass embeddings are always 384d (e5-small native). The shared
-      // EmbeddingModel must output 384d queries — this holds when artwork embeddings
-      // also use e5-small (384d). If artwork embeddings switch to a different model
-      // with MRL truncation (e.g. EmbeddingGemma 768→256d), a separate query path
-      // for iconclass will be needed.
+      // Note: iconclass embeddings are always 384d (e5-small native). A runtime
+      // dimension check in registration.ts rejects queries when the shared model
+      // produces non-384d vectors (e.g. MRL truncation for artwork embeddings).
       try {
         this.db.prepare("SELECT 1 FROM iconclass_embeddings LIMIT 1").get();
         // Embeddings table exists — load sqlite-vec extension

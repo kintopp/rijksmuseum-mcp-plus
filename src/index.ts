@@ -162,10 +162,13 @@ async function initDatabases(): Promise<void> {
   iconclassDb = new IconclassDb();
   await ensureDb(EMBEDDINGS_DB_SPEC);
   embeddingsDb = new EmbeddingsDb();
-  if (embeddingsDb.available) {
+  // Init embedding model when any consumer needs it (artwork semantic search or iconclass semantic search)
+  const needsModel = embeddingsDb.available || iconclassDb?.embeddingsAvailable;
+  if (needsModel) {
     embeddingModel = new EmbeddingModel();
     const modelId = process.env.EMBEDDING_MODEL_ID ?? "Xenova/multilingual-e5-small";
-    await embeddingModel.init(modelId, embeddingsDb.vectorDimensions);
+    const targetDim = embeddingsDb.available ? embeddingsDb.vectorDimensions : 0;
+    await embeddingModel.init(modelId, targetDim);
   }
 }
 
