@@ -93,7 +93,7 @@ export interface ProductionPart {
 
 export interface Production {
   type: "Production";
-  timespan?: Timespan;
+  timespan?: Timespan | Timespan[];
   referred_to_by?: ReferredToBy[];
   part?: ProductionPart[];
 }

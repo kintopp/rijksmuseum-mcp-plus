@@ -1282,6 +1282,14 @@ def resolve_artwork(uri: str) -> dict | None:
     date_latest = None
     produced_by = data.get("produced_by", {})
     timespan = produced_by.get("timespan", {}) if isinstance(produced_by, dict) else {}
+    if isinstance(timespan, list) and timespan:
+        # Multi-phase production: take widest date range across all phases
+        all_begins = [t.get("begin_of_the_begin", "") for t in timespan if isinstance(t, dict)]
+        all_ends = [t.get("end_of_the_end", "") for t in timespan if isinstance(t, dict)]
+        timespan = {
+            "begin_of_the_begin": min((b for b in all_begins if b), default=""),
+            "end_of_the_end": max((e for e in all_ends if e), default=""),
+        }
     if isinstance(timespan, dict):
         for key, target in [("begin_of_the_begin", "earliest"), ("end_of_the_end", "latest")]:
             val = timespan.get(key, "")

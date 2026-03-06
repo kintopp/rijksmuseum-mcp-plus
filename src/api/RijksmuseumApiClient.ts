@@ -338,7 +338,8 @@ export class RijksmuseumApiClient {
 
   /** Extract creation date from produced_by.timespan */
   static parseDate(obj: LinkedArtObject): string {
-    const timespan = obj.produced_by?.timespan;
+    const raw = obj.produced_by?.timespan;
+    const timespan = Array.isArray(raw) ? raw[0] : raw;
     if (!timespan) return "Unknown";
 
     // Prefer English date label
