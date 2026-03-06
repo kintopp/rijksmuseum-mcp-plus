@@ -17,7 +17,7 @@ import {
   applyDocumentTheme,
   applyHostStyleVariables,
   applyHostFonts,
-} from 'https://unpkg.com/@modelcontextprotocol/ext-apps@1.0.1/app-with-deps';
+} from 'https://unpkg.com/@modelcontextprotocol/ext-apps@1.1.2/app-with-deps';
 
 declare const OpenSeadragon: typeof import('openseadragon');
 
@@ -207,6 +207,122 @@ function updateFullscreenButton(): void {
   }
 }
 
+// ── Downloads ────────────────────────────────────────────────────
+
+function canDownload(): boolean {
+  const caps = app.getHostCapabilities();
+  return !!caps?.downloadFile;
+}
+
+function updateDownloadButton(): void {
+  const btn = document.getElementById('download-view');
+  const sep = btn?.previousElementSibling;
+  if (!canDownload()) {
+    btn?.remove();
+    if (sep?.classList.contains('control-separator')) sep.remove();
+  }
+}
+
+async function downloadCurrentView(): Promise<void> {
+  if (!viewer || !currentData) return;
+
+  if (!canDownload()) {
+    app.sendLog({ level: 'warning', data: 'Host does not support downloadFile' });
+    return;
+  }
+
+  const btn = document.getElementById('download-view');
+  if (btn) { btn.textContent = '...'; btn.style.pointerEvents = 'none'; }
+
+  try {
+    // Render the OSD canvas (includes current zoom/pan, but not overlays)
+    const canvas = viewer.drawer.getCanvasElement() as HTMLCanvasElement | null;
+    if (!canvas) throw new Error('No canvas available');
+
+    // Composite: draw OSD canvas + overlay elements onto an offscreen canvas
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const ctx = exportCanvas.getContext('2d')!;
+    ctx.drawImage(canvas, 0, 0);
+
+    // Draw overlay rectangles onto the export canvas
+    drawOverlaysOnCanvas(ctx, canvas.width, canvas.height);
+
+    const dataUrl = exportCanvas.toDataURL('image/jpeg', 0.92);
+    const base64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
+    const filename = `${currentData.objectNumber}-view.jpg`;
+
+    const { isError } = await app.downloadFile({
+      contents: [{
+        type: 'resource',
+        resource: {
+          uri: `file:///${filename}`,
+          mimeType: 'image/jpeg',
+          blob: base64,
+        },
+      }],
+    });
+
+    if (isError) {
+      app.sendLog({ level: 'info', data: 'Download cancelled by user' });
+    } else {
+      app.sendLog({ level: 'info', data: `Downloaded: ${filename}` });
+    }
+  } catch (err) {
+    app.sendLog({ level: 'error', data: `Download failed: ${err}` });
+  } finally {
+    if (btn) { btn.textContent = '\u21D9'; btn.style.pointerEvents = ''; }
+  }
+}
+
+function drawOverlaysOnCanvas(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void {
+  if (!viewer) return;
+  const vp = viewer.viewport;
+  const containerSize = viewer.viewport.getContainerSize();
+  const scaleX = canvasWidth / containerSize.x;
+  const scaleY = canvasHeight / containerSize.y;
+
+  for (const el of overlayElements) {
+    // Get the overlay's OpenSeadragon Rect from the viewer
+    const overlay = viewer.getOverlayById(el);
+    if (!overlay) continue;
+    const bounds = overlay.getBounds(vp);
+    // Convert viewport rect to pixel coordinates
+    const topLeft = vp.viewportToViewerElementCoordinates(bounds.getTopLeft());
+    const bottomRight = vp.viewportToViewerElementCoordinates(bounds.getBottomRight());
+
+    const x = topLeft.x * scaleX;
+    const y = topLeft.y * scaleY;
+    const w = (bottomRight.x - topLeft.x) * scaleX;
+    const h = (bottomRight.y - topLeft.y) * scaleY;
+
+    // Border
+    const style = getComputedStyle(el);
+    const color = style.borderColor || OVERLAY_STROKE;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2 * scaleX;
+    ctx.strokeRect(x, y, w, h);
+
+    // Fill
+    ctx.fillStyle = style.backgroundColor || OVERLAY_FILL;
+    ctx.fillRect(x, y, w, h);
+
+    // Label
+    const labelEl = el.querySelector('.region-label') as HTMLElement | null;
+    if (labelEl?.textContent) {
+      const fontSize = Math.round(11 * scaleX);
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      const textWidth = ctx.measureText(labelEl.textContent).width;
+      const labelY = y + h + 2 * scaleY;
+      ctx.fillRect(x, labelY, textWidth + 8 * scaleX, fontSize + 4 * scaleY);
+      ctx.fillStyle = 'white';
+      ctx.fillText(labelEl.textContent, x + 4 * scaleX, labelY + fontSize);
+    }
+  }
+}
+
 // ── Rendering ───────────────────────────────────────────────────────
 
 function renderViewer(data: ArtworkImageData): void {
@@ -241,6 +357,8 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="rotate-left" title="Rotate Left">&#8634;</button>
           <button id="rotate-right" title="Rotate Right">&#8635;</button>
           <button id="fullscreen" title="Fullscreen">&#8862;</button>
+          <div class="control-separator"></div>
+          <button id="download-view" title="Save Current View">&#8681;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
           <div class="shortcuts-content">
@@ -254,6 +372,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
+              <div class="shortcut-row"><kbd>s</kbd><span>Save current view</span></div>
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
           </div>
@@ -273,6 +392,7 @@ function renderViewer(data: ArtworkImageData): void {
   initializeViewer(data.iiifInfoUrl);
   attachEventListeners();
   setupVisibilityObserver();
+  updateDownloadButton();
 
   requestAnimationFrame(() => {
     const mainEl = document.querySelector('.main');
@@ -365,6 +485,7 @@ function attachEventListeners(): void {
   document.getElementById('rotate-left')?.addEventListener('click', () => rotateBy(-90));
   document.getElementById('rotate-right')?.addEventListener('click', () => rotateBy(90));
   document.getElementById('fullscreen')?.addEventListener('click', toggleFullscreen);
+  document.getElementById('download-view')?.addEventListener('click', downloadCurrentView);
 
   // Shortcuts overlay
   const shortcutsOverlay = document.getElementById('shortcuts-overlay');
@@ -409,6 +530,9 @@ function attachEventListeners(): void {
       case 'F':
       case 'h':
         toggleFlip();
+        break;
+      case 's':
+        downloadCurrentView();
         break;
     }
   };
@@ -455,6 +579,8 @@ interface ViewerCommand {
   color?: string;
 }
 
+const OVERLAY_STROKE = 'rgba(255,100,0,0.7)';
+const OVERLAY_FILL = 'rgba(255,100,0,0.1)';
 const overlayElements: HTMLElement[] = [];
 
 function startPolling(): void {
@@ -554,11 +680,11 @@ function addRegionOverlay(region: string, label?: string, color?: string): void 
 
   const el = document.createElement('div');
   el.className = 'region-overlay';
-  const c = color || 'rgba(255,100,0,0.7)';
+  const c = color || OVERLAY_STROKE;
   el.style.border = `2px solid ${c}`;
   // Derive low-opacity fill from rgba colors; use fixed fallback for named/hex colors
   const rgbaMatch = c.match(/^(rgba?\([^)]+,\s*)[0-9.]+\)$/);
-  el.style.background = rgbaMatch ? `${rgbaMatch[1]}0.1)` : 'rgba(255,100,0,0.1)';
+  el.style.background = rgbaMatch ? `${rgbaMatch[1]}0.1)` : OVERLAY_FILL;
 
   if (label) {
     const labelEl = document.createElement('span');
