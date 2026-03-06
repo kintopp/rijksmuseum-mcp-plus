@@ -34,7 +34,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 8. **AI image annotation** (experimental) - the AI assistant can annotate the image with elements it has recognised (e.g. "highlight the biblical scenes depicted in the painting's panels").
 
-9. **User image annotation** (experimental) - first click somewhere inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now click and draw a rectangle around an area of interest to you. You'll be asked for permission to allow a prompt (with the coordinates of the area you selected) to be written into the chat. After it appears (in square brackets) in the chat, add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
+9. **User image annotation** (experimental) - first click somewhere inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now click and draw a rectangle around an area of interest to you. You'll be asked for permission to allow a prompt (with the coordinates of the area you selected) to be written into the chat. Then add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
 
 10. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
 
