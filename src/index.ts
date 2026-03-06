@@ -32,10 +32,16 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"
 const SERVER_VERSION: string = pkg.version;
 
 function getGitCommit(): string {
-  // Railway injects this automatically
+  // Railway webhook deploys
   if (process.env.RAILWAY_GIT_COMMIT_SHA) {
     return process.env.RAILWAY_GIT_COMMIT_SHA.slice(0, 7);
   }
+  // `railway up` / CLI deploys — read hash baked at build time
+  try {
+    const commitFile = new URL("commit.txt", import.meta.url);
+    return fs.readFileSync(commitFile, "utf-8").trim();
+  } catch { /* no build artifact */ }
+  // Local dev with git repo available
   try {
     return execSync("git rev-parse --short HEAD", { encoding: "utf-8" }).trim();
   } catch {

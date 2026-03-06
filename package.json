@@ -11,7 +11,7 @@
     "rijksmuseum-mcp-plus": "./dist/index.js"
   },
   "scripts": {
-    "build": "npm run build:ui && tsc",
+    "build": "npm run build:ui && tsc && git rev-parse --short HEAD > dist/commit.txt 2>/dev/null || true",
     "build:ui": "vite build -c apps/artwork-viewer/vite.config.ts",
     "start": "node dist/index.js",
     "serve": "node dist/index.js --http",
