@@ -28,8 +28,14 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 50;
 
-/** Zod type accepting a single string or array of strings (AND intersection, max 5). */
-const stringOrArray = z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(5)]);
+/** Zod type accepting a single string or array of strings (AND intersection, max 5).
+ *  Nullable: LLMs may pass null instead of omitting optional params — coerce to undefined. */
+const stringOrArray = z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(5)])
+  .nullable().transform(v => v ?? undefined);
+
+/** Nullable string — coerces null → undefined so LLMs can pass null for "no filter". */
+const optStr = z.string().nullable().transform(v => v ?? undefined);
+const optMinStr = z.string().min(1).nullable().transform(v => v ?? undefined);
 
 type ToolResponse = { content: [{ type: "text"; text: string }] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
@@ -604,21 +610,18 @@ function registerTools(
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
           : ""),
       inputSchema: z.object({
-        query: z
-          .string()
+        query: optStr
           .optional()
           .describe(
             "General search term — maps to title search in the vocabulary database (equivalent to the title parameter). For more targeted results, use the specific field parameters instead (creator, description, subject, etc.)"
           ),
-        title: z
-          .string()
+        title: optStr
           .optional()
           .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Equivalent to query but explicit."),
         creator: stringOrArray
           .optional()
           .describe("Search by artist name, e.g. 'Rembrandt van Rijn'. Array = AND (both creators)."),
-        aboutActor: z
-          .string()
+        aboutActor: optStr
           .optional()
           .describe(
             "Search for artworks depicting or about a person (not the creator). E.g. 'Willem van Oranje'. " +
@@ -636,14 +639,12 @@ function registerTools(
         technique: stringOrArray
           .optional()
           .describe("Filter by technique: 'oil painting', 'etching', etc. Array = AND (all techniques)."),
-        creationDate: z
-          .string()
+        creationDate: optStr
           .optional()
           .describe(
             "Filter by creation date. Exact year ('1642') or wildcard ('16*' for 1600s, '164*' for 1640s)."
           ),
-        description: z
-          .string()
+        description: optStr
           .optional()
           .describe(
             "Full-text search on artwork descriptions (~510K artworks, 61% coverage). " +
@@ -716,39 +717,31 @@ function registerTools(
                   "Search for artworks in curated collection sets by name (e.g. 'Rembrandt', 'Japanese'). " +
                   "Use list_curated_sets to discover available sets."
                 ),
-              license: z.string().min(1)
+              license: optMinStr
                 .optional()
                 .describe(
                   "Filter by license/rights. Common values: 'publicdomain', 'zero' (CC0), 'by' (CC BY). " +
                   "Matches against the rights URI."
                 ),
-              inscription: z
-                .string()
-                .min(1)
+              inscription: optMinStr
                 .optional()
                 .describe(
                   "Full-text search on inscription texts (~500K artworks — signatures, mottoes, dates on the object surface, not conceptual content). " +
                   "Exact word matching, no stemming. E.g. 'Rembrandt f.' for signed works, Latin phrases."
                 ),
-              provenance: z
-                .string()
-                .min(1)
+              provenance: optMinStr
                 .optional()
                 .describe(
                   "Full-text search on provenance/ownership history (e.g. 'Six' for the Six collection). " +
                   "Exact word matching, no stemming."
                 ),
-              creditLine: z
-                .string()
-                .min(1)
+              creditLine: optMinStr
                 .optional()
                 .describe(
                   "Full-text search on credit/donor lines (e.g. 'Drucker' for Drucker-Fraser bequest). " +
                   "Exact word matching, no stemming."
                 ),
-              curatorialNarrative: z
-                .string()
-                .min(1)
+              curatorialNarrative: optMinStr
                 .optional()
                 .describe(
                   "Full-text search on curatorial narrative (~14K artworks with museum wall text). " +
@@ -794,9 +787,7 @@ function registerTools(
                 .describe(
                   "Maximum width in centimeters."
                 ),
-              nearPlace: z
-                .string()
-                .min(1)
+              nearPlace: optMinStr
                 .optional()
                 .describe(
                   "Search for artworks related to places near a named location (e.g. 'Leiden'). " +
@@ -849,8 +840,7 @@ function registerTools(
           .describe(
             "If true, returns only total count and IDs without resolving details (faster)."
           ),
-        pageToken: z
-          .string()
+        pageToken: optStr
           .optional()
           .describe("Deprecated. Pagination is not supported in the current search backend. Use maxResults to control result count."),
       }).strict(),
@@ -987,8 +977,7 @@ function registerTools(
         "The relatedObjects field contains Linked Art URIs — pass them as uri to get full details of related works. " +
         "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",
       inputSchema: z.object({
-        objectNumber: z
-          .string()
+        objectNumber: optStr
           .optional()
           .describe(
             "The object number of the artwork (e.g. 'SK-C-5', 'SK-A-3262')"
@@ -996,6 +985,8 @@ function registerTools(
         uri: z
           .string()
           .url()
+          .nullable()
+          .transform(v => v ?? undefined)
           .optional()
           .describe(
             "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
@@ -1368,14 +1359,14 @@ function registerTools(
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
         commands: z.array(z.object({
           action: z.enum(["navigate", "add_overlay", "clear_overlays"]),
-          region: z.string().optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', or 'x,y,w,h'"),
-          relativeTo: z.string().optional().describe(
+          region: optStr.optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', or 'x,y,w,h'"),
+          relativeTo: optStr.optional().describe(
             "Crop region from a prior inspect_artwork_image call. When provided, " +
             "'region' is interpreted as coordinates within that crop's local space " +
             "and projected to full-image space by the server. Both must use pct: format."
           ),
-          label: z.string().optional().describe("Label text for add_overlay"),
-          color: z.string().optional().describe("CSS color for add_overlay border (default: orange)"),
+          label: optStr.optional().describe("Label text for add_overlay"),
+          color: optStr.optional().describe("CSS color for add_overlay border (default: orange)"),
         })).min(1).describe("Commands to execute in the viewer, in order"),
       }).strict(),
       ...withOutputSchema(NavigateViewerOutput),
@@ -1513,8 +1504,7 @@ function registerTools(
         "Returns set identifiers that can be used with browse_set to explore their contents. " +
         "Optionally filter by name substring.",
       inputSchema: z.object({
-        query: z
-          .string()
+        query: optStr
           .optional()
           .describe(
             "Filter sets by name (case-insensitive substring match). E.g. 'painting', 'Rembrandt', 'Japanese'"
@@ -1566,8 +1556,7 @@ function registerTools(
           .max(50)
           .default(10)
           .describe("Maximum records to return (1-50, default 10)"),
-        resumptionToken: z
-          .string()
+        resumptionToken: optStr
           .optional()
           .describe(
             "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
@@ -1601,14 +1590,12 @@ function registerTools(
           .describe(
             "Start date in ISO 8601 format (e.g. '2026-02-01T00:00:00Z' or '2026-02-01')"
           ),
-        until: z
-          .string()
+        until: optStr
           .optional()
           .describe(
             "End date in ISO 8601 format (defaults to now)"
           ),
-        setSpec: z
-          .string()
+        setSpec: optStr
           .optional()
           .describe("Restrict to changes within a specific set"),
         identifiersOnly: z
@@ -1624,8 +1611,7 @@ function registerTools(
           .max(50)
           .default(10)
           .describe("Maximum records to return (1-50, default 10)"),
-        resumptionToken: z
-          .string()
+        resumptionToken: optStr
           .optional()
           .describe(
             "Pagination token from a previous get_recent_changes result. When provided, all other filters are ignored."
@@ -1674,23 +1660,20 @@ function registerTools(
           "• semanticQuery — find notations by meaning/concept (e.g. 'domestic animals' finds dogs, cats, horses)" +
           (semanticAvailable ? "" : " [currently unavailable — embeddings not loaded]"),
         inputSchema: z.object({
-          query: z
-            .string()
+          query: optStr
             .optional()
             .describe(
               "Text search across Iconclass labels and keywords in all 13 languages. " +
               "Exact word matching (no stemming): 'crucifixion' won't match 'crucified' — try word variants if needed. " +
               "Returns matching notations ranked by Rijksmuseum artwork count."
             ),
-          notation: z
-            .string()
+          notation: optStr
             .optional()
             .describe(
               "Browse a specific Iconclass notation (e.g. '31A33' for smell). " +
               "Returns the entry with its hierarchy and direct children."
             ),
-          semanticQuery: z
-            .string()
+          semanticQuery: optStr
             .optional()
             .describe(
               "Semantic concept search across Iconclass — finds notations by meaning rather than exact words. " +
@@ -1840,7 +1823,7 @@ function registerTools(
           type: stringOrArray.optional().describe("Filter by object type (e.g. 'painting', 'print'). Array = AND."),
           material: stringOrArray.optional().describe("Filter by material (e.g. 'canvas', 'paper'). Array = AND."),
           technique: stringOrArray.optional().describe("Filter by technique (e.g. 'etching', 'oil painting'). Array = AND."),
-          creationDate: z.string().optional().describe("Filter by date — exact year ('1642') or wildcard ('16*')"),
+          creationDate: optStr.optional().describe("Filter by date — exact year ('1642') or wildcard ('16*')"),
           creator: stringOrArray.optional().describe("Filter by artist name. Array = AND."),
           subject: stringOrArray.optional().describe("Pre-filter by subject before semantic ranking. Array = AND."),
           iconclass: stringOrArray.optional().describe("Pre-filter by Iconclass notation before semantic ranking. Array = AND."),
@@ -1848,7 +1831,7 @@ function registerTools(
           depictedPlace: stringOrArray.optional().describe("Pre-filter by depicted place before semantic ranking. Array = AND."),
           productionPlace: stringOrArray.optional().describe("Pre-filter by production place before semantic ranking. Array = AND."),
           collectionSet: stringOrArray.optional().describe("Pre-filter by collection set before semantic ranking. Array = AND."),
-          aboutActor: z.string().optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
+          aboutActor: optStr.optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
           imageAvailable: z.boolean().optional().describe("Pre-filter to artworks with images"),
           maxResults: z.number().int().min(1).max(RESULTS_MAX).default(15).optional()
             .describe("Number of results to return (default 15). Similarity scores plateau after ~15 results; request more only if needed."),
