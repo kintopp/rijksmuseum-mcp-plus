@@ -49,6 +49,15 @@ let currentDisplayMode: 'inline' | 'fullscreen' | 'pip' = 'inline';
 let viewUUID: string | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
+// Selection mode state
+let selectMode = false;
+let selectionTracker: OpenSeadragon.MouseTracker | null = null;
+let dragStart: OpenSeadragon.Point | null = null;
+let selectionOverlay: HTMLDivElement | null = null;
+
+const SELECTION_STROKE = 'rgba(59,130,246,0.8)';
+const SELECTION_FILL = 'rgba(59,130,246,0.15)';
+
 const app = new App(
   { name: 'Rijksmuseum Artwork Viewer', version: '1.0.0' },
   { tools: { listChanged: false }, availableDisplayModes: ['inline', 'fullscreen'] },
@@ -144,6 +153,7 @@ app.onhostcontextchanged = applyHostContext;
 
 app.onteardown = async () => {
   stopPolling();
+  teardownSelectionTracker();
   const state: Record<string, unknown> = {};
   if (currentData) {
     state.objectNumber = currentData.objectNumber;
@@ -323,6 +333,153 @@ function drawOverlaysOnCanvas(ctx: CanvasRenderingContext2D, canvasWidth: number
   }
 }
 
+// ── Selection mode ───────────────────────────────────────────────
+
+function toggleSelectMode(): void {
+  if (!viewer) return;
+  selectMode = !selectMode;
+  viewer.setMouseNavEnabled(!selectMode);
+  updateSelectButton();
+
+  if (selectMode) {
+    setupSelectionTracker();
+  } else {
+    teardownSelectionTracker();
+  }
+}
+
+function updateSelectButton(): void {
+  const btn = document.getElementById('select-mode');
+  if (btn) {
+    btn.textContent = selectMode ? '✓' : '☐';
+    btn.title = selectMode ? 'Exit Select Mode (q)' : 'Select Region (q)';
+    btn.classList.toggle('active', selectMode);
+  }
+  // Change cursor on the OSD canvas
+  const canvas = document.getElementById('openseadragon-viewer');
+  if (canvas) canvas.style.cursor = selectMode ? 'crosshair' : '';
+}
+
+function setupSelectionTracker(): void {
+  if (!viewer || selectionTracker) return;
+
+  selectionTracker = new OpenSeadragon.MouseTracker({
+    element: viewer.canvas,
+    pressHandler: onSelectionPress,
+    dragHandler: onSelectionDrag,
+    releaseHandler: onSelectionRelease,
+  });
+}
+
+function teardownSelectionTracker(): void {
+  if (selectionTracker) {
+    selectionTracker.destroy();
+    selectionTracker = null;
+  }
+  dragStart = null;
+  removeSelectionPreview();
+}
+
+interface SelectionRegion {
+  x: number; y: number; w: number; h: number;
+  pctX: number; pctY: number; pctW: number; pctH: number;
+}
+
+function computeSelectionRegion(
+  a: OpenSeadragon.Point, b: OpenSeadragon.Point,
+  imgWidth: number, imgHeight: number
+): SelectionRegion {
+  const x1 = Math.max(0, Math.min(a.x, b.x));
+  const y1 = Math.max(0, Math.min(a.y, b.y));
+  const x2 = Math.min(imgWidth, Math.max(a.x, b.x));
+  const y2 = Math.min(imgHeight, Math.max(a.y, b.y));
+  return {
+    x: x1, y: y1, w: x2 - x1, h: y2 - y1,
+    pctX: (x1 / imgWidth) * 100, pctY: (y1 / imgHeight) * 100,
+    pctW: ((x2 - x1) / imgWidth) * 100, pctH: ((y2 - y1) / imgHeight) * 100,
+  };
+}
+
+function onSelectionPress(event: OpenSeadragon.MouseTrackerEvent): void {
+  if (!viewer || !event.position) return;
+  dragStart = viewer.viewport.viewerElementToImageCoordinates(event.position);
+  removeSelectionPreview();
+}
+
+function onSelectionDrag(event: OpenSeadragon.MouseTrackerEvent): void {
+  if (!viewer || !dragStart || !event.position || !currentData) return;
+  const dragEnd = viewer.viewport.viewerElementToImageCoordinates(event.position);
+  const r = computeSelectionRegion(dragStart, dragEnd, currentData.width, currentData.height);
+
+  if (r.pctW < 0.5 || r.pctH < 0.5) return; // too small to show
+
+  const rect = viewer.viewport.imageToViewportRectangle(
+    new OpenSeadragon.Rect(r.x, r.y, r.w, r.h)
+  );
+  showSelectionPreview(rect);
+}
+
+function onSelectionRelease(event: OpenSeadragon.MouseTrackerEvent): void {
+  if (!viewer || !dragStart || !event.position || !currentData) {
+    dragStart = null;
+    return;
+  }
+
+  const dragEnd = viewer.viewport.viewerElementToImageCoordinates(event.position);
+  const r = computeSelectionRegion(dragStart, dragEnd, currentData.width, currentData.height);
+
+  dragStart = null;
+  removeSelectionPreview();
+
+  if (r.pctW < 1 || r.pctH < 1) return; // too small — accidental click
+
+  const region = `pct:${r.pctX.toFixed(1)},${r.pctY.toFixed(1)},${r.pctW.toFixed(1)},${r.pctH.toFixed(1)}`;
+  addRegionOverlay(region, 'Selection', SELECTION_STROKE);
+  toggleSelectMode();
+  sendSelectionToChat(region);
+}
+
+function showSelectionPreview(rect: OpenSeadragon.Rect): void {
+  if (!viewer) return;
+
+  if (!selectionOverlay) {
+    selectionOverlay = document.createElement('div');
+    selectionOverlay.className = 'selection-preview';
+    selectionOverlay.style.border = `2px dashed ${SELECTION_STROKE}`;
+    selectionOverlay.style.background = SELECTION_FILL;
+    selectionOverlay.style.pointerEvents = 'none';
+    viewer.addOverlay({ element: selectionOverlay, location: rect });
+  } else {
+    viewer.updateOverlay(selectionOverlay, rect);
+  }
+}
+
+function removeSelectionPreview(): void {
+  if (selectionOverlay && viewer) {
+    viewer.removeOverlay(selectionOverlay);
+    selectionOverlay = null;
+  }
+}
+
+async function sendSelectionToChat(region: string): Promise<void> {
+  if (!currentData) return;
+  const { objectNumber, title } = currentData;
+  const message = `[User selected region ${region} on "${title}" (${objectNumber})]`;
+  try {
+    await app.sendMessage({
+      role: 'user',
+      content: [{ type: 'text', text: message }],
+    });
+    app.sendLog({ level: 'info', data: `Selection sent: ${region}` });
+  } catch {
+    // sendMessage may not be supported — update model context as fallback
+    app.updateModelContext({
+      content: [{ type: 'text', text: `User selected region: ${region} on ${objectNumber}` }],
+    });
+    app.sendLog({ level: 'info', data: `Selection added to context: ${region}` });
+  }
+}
+
 // ── Rendering ───────────────────────────────────────────────────────
 
 function renderViewer(data: ArtworkImageData): void {
@@ -358,6 +515,8 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="rotate-right" title="Rotate Right">&#8635;</button>
           <button id="fullscreen" title="Fullscreen">&#8862;</button>
           <div class="control-separator"></div>
+          <button id="select-mode" title="Select Region">&#9633;</button>
+          <div class="control-separator"></div>
           <button id="download-view" title="Save Current View">&#8681;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
@@ -372,6 +531,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
+              <div class="shortcut-row"><kbd>q</kbd><span>Select region</span></div>
               <div class="shortcut-row"><kbd>s</kbd><span>Save current view</span></div>
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
@@ -486,6 +646,7 @@ function attachEventListeners(): void {
   document.getElementById('rotate-right')?.addEventListener('click', () => rotateBy(90));
   document.getElementById('fullscreen')?.addEventListener('click', toggleFullscreen);
   document.getElementById('download-view')?.addEventListener('click', downloadCurrentView);
+  document.getElementById('select-mode')?.addEventListener('click', toggleSelectMode);
 
   // Shortcuts overlay
   const shortcutsOverlay = document.getElementById('shortcuts-overlay');
@@ -507,6 +668,7 @@ function attachEventListeners(): void {
         break;
       case 'Escape':
         shortcutsOverlay?.classList.add('hidden');
+        if (selectMode) toggleSelectMode();
         break;
       case 'ArrowUp':
         if (e.shiftKey) {
@@ -531,6 +693,9 @@ function attachEventListeners(): void {
       case 'h':
         toggleFlip();
         break;
+      case 'q':
+        toggleSelectMode();
+        break;
       case 's':
         downloadCurrentView();
         break;
@@ -548,7 +713,7 @@ function setupVisibilityObserver(): void {
   visibilityObserver = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        viewer?.setMouseNavEnabled(entry.isIntersecting);
+        if (!selectMode) viewer?.setMouseNavEnabled(entry.isIntersecting);
       }
     },
     { threshold: 0.1 }

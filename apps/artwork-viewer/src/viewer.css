@@ -256,6 +256,10 @@ html, body {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.image-controls button.active {
+  background: rgba(59, 130, 246, 0.4);
+}
+
 .image-controls .control-separator {
   width: 1px;
   height: 20px;
@@ -391,6 +395,12 @@ html, body {
 
 .shortcut-row span {
   color: #b0b0b0;
+}
+
+/* Selection preview (select mode) */
+.selection-preview {
+  pointer-events: none;
+  box-sizing: border-box;
 }
 
 /* Region overlays (navigate_viewer) */
