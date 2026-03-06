@@ -361,7 +361,9 @@ async function runHttp(): Promise<void> {
   // this server is fully public. The stub issues tokens but /mcp never
   // checks them.
 
-  const publicUrl = process.env.PUBLIC_URL || `http://localhost:${port}`;
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  const publicUrl = process.env.PUBLIC_URL
+    || (railwayDomain ? `https://${railwayDomain}` : `http://localhost:${port}`);
   app.use(mcpAuthRouter({
     provider: new StubOAuthProvider(),
     issuerUrl: new URL(publicUrl),
