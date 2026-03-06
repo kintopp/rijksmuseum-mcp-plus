@@ -113,6 +113,7 @@ Soon:
 
 - improve image handling in MCP clients besides Anthropic's Claude
 - update documentation
+- fine-tune search strategies
 - paper/presentation
 - v1.0 release
 
