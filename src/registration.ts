@@ -2030,9 +2030,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
     {
       title: "Artist Timeline",
       description:
-        "Generate a chronological timeline of an artist's works in the collection. " +
-        "Click on the artist's name in the image viewer to copy it. " +
-        `Note: limited to ${RESULTS_MAX} works maximum — for prolific artists this is a small sample.`,
+        "Generate a chronological timeline of an artist's works in the collection.",
       argsSchema: {
         artist: z.string().describe("Name of the artist"),
         maxWorks: z
@@ -2058,6 +2056,64 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
               `- Title of the work\n` +
               `- A brief description of its significance\n\n` +
               `Format as a visually appealing chronological progression using markdown.`,
+          },
+        },
+      ],
+    })
+  );
+
+  server.registerPrompt(
+    "generate-session-trace",
+    {
+      title: "Session Debug Trace",
+      description:
+        "Developer Feedback: Creates a record of interactions between the AI assistant " +
+        "and the rijksmuseum-mcp+ server for debugging purposes.",
+      argsSchema: {
+        description: z
+          .string()
+          .optional()
+          .describe("Optional: brief description of what you were trying to do in this session"),
+      },
+    },
+    async (args) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `Review all tool calls made to the rijksmuseum-mcp+ server during this conversation and output a debug trace.\n\n` +
+              (args.description
+                ? `Session context: ${args.description}\n\n`
+                : "") +
+              `**Privacy:** Include ONLY tool calls made to this MCP server and client-side tool discovery calls (e.g. tool_search/ToolSearch) that loaded its tools. ` +
+              `Do NOT include any user messages, your own reasoning, or any other conversation content — ` +
+              `the user may have discussed private topics earlier in this conversation that must not appear in the trace. ` +
+              `The trace must contain nothing beyond the tool call data.\n\n` +
+              `**Output format:** A single fenced code block of JSONL (one JSON object per line). ` +
+              `This format is directly ingestible by analyse-railway-logs.py.\n\n` +
+              `Each line must have these fields:\n` +
+              `- "timestamp": ISO 8601 UTC (use sequential timestamps 1 second apart)\n` +
+              `- "tool": the tool name exactly as called\n` +
+              `- "input": the arguments object passed to the tool (reproduce exactly)\n` +
+              `- "ok": true if the tool succeeded, false if it returned an error\n` +
+              `- "ms": 0 (latency is not available from conversation context)\n` +
+              `- "result_summary": 1–2 sentence summary of the result\n\n` +
+              `**result_summary rules:**\n` +
+              `- For search/semantic_search: include totalResults and first 3 object numbers\n` +
+              `- For artwork details: include title, creator, date\n` +
+              `- For inspect_artwork_image: note region and that image was returned (omit base64 data entirely)\n` +
+              `- For errors: include the error message\n` +
+              `- For all others: summarize the key information returned\n\n` +
+              (args.description
+                ? `After the JSONL block, add a one-line note: "Session description: ${args.description}"\n\n`
+                : "") +
+              `After the JSONL block, politely ask the user to review the trace before sharing it, ` +
+              `to make sure it contains only the tool call data and nothing personal.\n\n` +
+              `Output the JSONL code block` +
+              (args.description ? `, the session description line,` : "") +
+              ` and the review reminder — nothing else.`,
           },
         },
       ],
