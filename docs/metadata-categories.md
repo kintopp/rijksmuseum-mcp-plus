@@ -4,7 +4,7 @@ The `get_artwork_details` tool returns **24 metadata categories** plus a bibliog
 
 All categories are returned together in a single response.
 
-Several of these categories have corresponding search parameters in `search_artwork`, allowing collection-wide discovery: titles (via `title`/`query`), date (via `creationDate`), description (via `description`), curatorial narrative (via `curatorialNarrative`), inscriptions (via `inscription`), provenance (via `provenance`), credit line (via `creditLine`), dimensions (via `minHeight`/`maxHeight`/`minWidth`/`maxWidth`), license (via `license`), collection sets (via `collectionSet`), and subjects (via `subject`, `iconclass`, `depictedPerson`, `depictedPlace`). Production details are searchable via `creator`, `productionPlace`, and `productionRole`.
+Several of these categories have corresponding search parameters in `search_artwork`, allowing collection-wide discovery: titles (via `title`/`query`), date (via `creationDate`), description (via `description`), curatorial narrative (via `curatorialNarrative`), inscriptions (via `inscription`), provenance (via `provenance`), credit line (via `creditLine`), dimensions (via `minHeight`/`maxHeight`/`minWidth`/`maxWidth`), license (via `license`), collection sets (via `collectionSet`), and subjects (via `subject`, `iconclass`, `depictedPerson`, `depictedPlace`). Production details are searchable via `creator`, `productionPlace`, `productionRole`, and creator demographic filters (`creatorGender`, `creatorBornAfter`, `creatorBornBefore`). Place searches can be expanded to include sub-places via `expandPlaceHierarchy`.
 
 ---
 
@@ -23,7 +23,7 @@ Several of these categories have corresponding search parameters in `search_artw
 |---|----------|-------|-------------|
 | 5 | **Creator** | `creator` | Creator name or attribution statement in English (e.g. "Rembrandt van Rijn"). Falls back to Dutch if no English version exists. |
 | 6 | **Date** | `date` | Creation date as a human-readable string (e.g. "1642"). Prefers English date labels; falls back to Dutch or raw year. |
-| 7 | **Production details** | `production` | Structured list of all production participants. Each entry includes: `name` (resolved label), `role` (e.g. "painter", "printmaker"), `place` (e.g. "Amsterdam"), and `actorUri` (link to the artist's Linked Art record). Resolved from vocabulary URIs. |
+| 7 | **Production details** | `production` | Structured list of all production participants. Each entry includes: `name` (resolved label), `role` (e.g. "painter", "printmaker"), `place` (e.g. "Amsterdam"), `actorUri` (link to the artist's Linked Art record), and an optional `personInfo` sub-object with biographical data: `birthYear`, `deathYear` (integers), `gender` (`"male"`, `"female"`, or null), `bio` (biographical note, predominantly in Dutch), and `wikidataId` (e.g. `"Q5598"`). Person info is available for creators whose records could be matched to the Rijksmuseum's actor authority files (~49K with life dates, ~11K with biographical notes). Resolved from vocabulary URIs. |
 
 ## Description
 

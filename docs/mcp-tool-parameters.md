@@ -45,14 +45,27 @@ The primary search tool. Vocabulary-based filters can be freely combined with ea
 | `minHeight` | Minimum height in cm |
 | `maxHeight` | Maximum height in cm |
 
-### Other filters
+### Creator demographic filters
 | Parameter | Description |
 |---|---|
-| `aboutActor` | Artworks about a person (not vocabulary-based; cannot combine with vocabulary filters) |
-| `imageAvailable` | `true` to return only works with a digital image (not combinable with vocabulary filters) |
+| `creatorGender` | Filter by creator gender: `male` or `female` (~64K of ~76K person entries have gender data) |
+| `creatorBornAfter` | Filter to creators born in or after this year, e.g. `1800` (~49K person entries have birth year data) |
+| `creatorBornBefore` | Filter to creators born in or before this year, e.g. `1700`. Combine with `creatorBornAfter` for a range |
+| `attributionQualifier` | Filter by attribution qualifier: `primary`, `attributed to`, `workshop of`, `circle of`, `follower of`, `secondary`, `undetermined` |
+
+### Place and proximity filters
+| Parameter | Description |
+|---|---|
+| `expandPlaceHierarchy` | When `true`, place searches (`productionPlace`, `depictedPlace`, `birthPlace`, `deathPlace`) expand to include sub-places. E.g. `productionPlace: 'Netherlands'` includes Amsterdam, Delft, etc. (up to 3 levels) |
 | `nearPlace` | Proximity search by place name |
 | `nearLat` / `nearLon` | Proximity search by coordinates |
 | `nearPlaceRadius` | Radius in km for proximity search (default 25) |
+
+### Other filters
+| Parameter | Description |
+|---|---|
+| `aboutActor` | Artworks about a person — broader recall than `depictedPerson`, searches both subject and creator vocabulary |
+| `imageAvailable` | `true` to return only works with a digital image |
 | `maxResults` | 1–50 (default 25) |
 | `compact` | `true` returns IDs only without full metadata (faster) |
 | `pageToken` | Pagination token from a previous result |
