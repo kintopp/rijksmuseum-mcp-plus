@@ -13,7 +13,6 @@ Usage:
 
 import argparse
 import json
-import random
 import sqlite3
 import sys
 import urllib.parse
@@ -22,7 +21,6 @@ import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from textwrap import indent
 
 # ─── Configuration ───────────────────────────────────────────────────
 
@@ -45,6 +43,8 @@ RM_HEIGHT = "https://id.rijksmuseum.nl/22011"
 RM_WIDTH = "https://id.rijksmuseum.nl/22012"
 HEIGHT_URIS = {AAT_HEIGHT, RM_HEIGHT}
 WIDTH_URIS = {AAT_WIDTH, RM_WIDTH}
+LANG_EN = "http://vocab.getty.edu/aat/300388277"
+LANG_NL = "http://vocab.getty.edu/aat/300388256"
 
 # ─── Expected shapes ────────────────────────────────────────────────
 # Maps JSON path → set of expected Python types.
@@ -182,19 +182,12 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
                 "sample": repr(val)[:200],
             })
 
-    def check_classified_as_entries(path: str, classified_as):
-        """Track whether classified_as entries are dicts or bare strings."""
-        if not isinstance(classified_as, list):
+    def check_list_entry_types(path: str, items):
+        """Track whether list entries are dicts or bare strings (classified_as, language)."""
+        if not isinstance(items, list):
             return
-        for c in classified_as:
-            shape_counts[f"{path}_entry:{type_name(c)}"] += 1
-
-    def check_language_entries(path: str, language):
-        """Track whether language entries are dicts or bare strings."""
-        if not isinstance(language, list):
-            return
-        for l in language:
-            shape_counts[f"{path}_entry:{type_name(l)}"] += 1
+        for item in items:
+            shape_counts[f"{path}_entry:{type_name(item)}"] += 1
 
     # ── Top-level fields ──
     check("produced_by", data.get("produced_by"))
@@ -224,8 +217,8 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
             check("prod_ref[].content", ref.get("content"))
             check("prod_ref[].language", ref.get("language"))
             check("prod_ref[].classified_as", ref.get("classified_as"))
-            check_classified_as_entries("prod_ref[].classified_as", ref.get("classified_as"))
-            check_language_entries("prod_ref[].language", ref.get("language"))
+            check_list_entry_types("prod_ref.classified_as", ref.get("classified_as"))
+            check_list_entry_types("prod_ref.language", ref.get("language"))
 
         # produced_by.part[] (production roles, qualifiers, creators)
         parts = produced_by.get("part", [])
@@ -239,7 +232,7 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
             check("produced_by.part[].classified_as", part.get("classified_as"))
             check("produced_by.part[].carried_out_by", part.get("carried_out_by"))
             check("produced_by.part[].assigned_by", part.get("assigned_by"))
-            check_classified_as_entries("part.classified_as", part.get("classified_as"))
+            check_list_entry_types("part.classified_as", part.get("classified_as"))
 
             # assigned_by[] (AttributeAssignment — #43)
             for assignment in (part.get("assigned_by") or []):
@@ -249,7 +242,7 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
                 check("assigned_by[].assigned", assignment.get("assigned"))
                 check("assigned_by[].classified_as", assignment.get("classified_as"))
                 check("assigned_by[].assigned_property", assignment.get("assigned_property"))
-                check_classified_as_entries("assigned_by.classified_as", assignment.get("classified_as"))
+                check_list_entry_types("assigned_by.classified_as", assignment.get("classified_as"))
 
                 # assigned[] items (creators — direct person or inline Group)
                 for item in (assignment.get("assigned") or []):
@@ -270,8 +263,8 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
         check("identified_by[].content", entry.get("content"))
         check("identified_by[].classified_as", entry.get("classified_as"))
         check("identified_by[].language", entry.get("language"))
-        check_classified_as_entries("identified_by.classified_as", entry.get("classified_as"))
-        check_language_entries("identified_by.language", entry.get("language"))
+        check_list_entry_types("identified_by.classified_as", entry.get("classified_as"))
+        check_list_entry_types("identified_by.language", entry.get("language"))
 
     # ── referred_to_by[] (inscriptions, descriptions, credit lines, etc.) ──
     for entry in (data.get("referred_to_by") or []):
@@ -281,8 +274,8 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
         check("referred_to_by[].content", entry.get("content"))
         check("referred_to_by[].language", entry.get("language"))
         check("referred_to_by[].classified_as", entry.get("classified_as"))
-        check_classified_as_entries("referred_to_by.classified_as", entry.get("classified_as"))
-        check_language_entries("referred_to_by.language", entry.get("language"))
+        check_list_entry_types("referred_to_by.classified_as", entry.get("classified_as"))
+        check_list_entry_types("referred_to_by.language", entry.get("language"))
 
     # ── dimension[] (height, width) ──
     for entry in (data.get("dimension") or []):
@@ -292,7 +285,7 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
         check("dimension[].value", entry.get("value"))
         check("dimension[].classified_as", entry.get("classified_as"))
         check("dimension[].unit", entry.get("unit"))
-        check_classified_as_entries("dimension.classified_as", entry.get("classified_as"))
+        check_list_entry_types("dimension.classified_as", entry.get("classified_as"))
 
     # ── subject_of[] (narrative) ──
     for entry in (data.get("subject_of") or []):
@@ -301,14 +294,14 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
             continue
         check("subject_of[].language", entry.get("language"))
         check("subject_of[].part", entry.get("part"))
-        check_language_entries("subject_of.language", entry.get("language"))
+        check_list_entry_types("subject_of.language", entry.get("language"))
         for part in (entry.get("part") or []):
             if not isinstance(part, dict):
                 shape_counts["subject_of_part[]:non_dict"] += 1
                 continue
             check("subject_of_part[].classified_as", part.get("classified_as"))
             check("subject_of_part[].content", part.get("content"))
-            check_classified_as_entries("subject_of_part.classified_as", part.get("classified_as"))
+            check_list_entry_types("subject_of_part.classified_as", part.get("classified_as"))
 
     # ── equivalent[] (Wikidata, external IDs) ──
     for entry in (data.get("equivalent") or []):
@@ -434,10 +427,7 @@ def extract_creator_label(data: dict) -> str | None:
             if lid and lid not in label_by_lang:
                 label_by_lang[lid] = content
                 break
-    # Prefer English
-    en_uri = "http://vocab.getty.edu/aat/300388277"
-    nl_uri = "http://vocab.getty.edu/aat/300388256"
-    return label_by_lang.get(en_uri) or label_by_lang.get(nl_uri) or next(iter(label_by_lang.values()), None)
+    return label_by_lang.get(LANG_EN) or label_by_lang.get(LANG_NL) or next(iter(label_by_lang.values()), None)
 
 
 # ─── Data drift comparison ──────────────────────────────────────────
@@ -510,11 +500,12 @@ def main():
     parser.add_argument("--threads", type=int, default=8, help="Thread count (default: 8)")
     args = parser.parse_args()
 
-    if not DB_PATH.exists():
-        print(f"ERROR: vocab DB not found at {DB_PATH}")
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute("SELECT 1 FROM version_info LIMIT 1")
+    except sqlite3.OperationalError as e:
+        print(f"ERROR: cannot open vocab DB at {DB_PATH}: {e}")
         sys.exit(1)
-
-    conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
 
     # Get last harvest date
@@ -748,7 +739,8 @@ def main():
     print(f"  Shape anomalies: {len(all_anomalies)}")
     print(f"  Data drifts: {len(all_drifts)}")
     drift_artworks = len(set(d["object_number"] for d in all_drifts)) if all_drifts else 0
-    print(f"  Artworks with drift: {drift_artworks}/{resolved} ({drift_artworks/resolved*100:.1f}%)" if resolved else "")
+    if resolved:
+        print(f"  Artworks with drift: {drift_artworks}/{resolved} ({drift_artworks/resolved*100:.1f}%)")
     if all_anomalies:
         print(f"  ⚠ SHAPE ANOMALIES DETECTED — review before harvesting")
     if drift_artworks > resolved * 0.1:
