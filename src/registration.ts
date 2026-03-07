@@ -48,9 +48,10 @@ function jsonResponse(data: unknown): ToolResponse {
 }
 
 function errorResponse(message: string) {
-  const base = { content: [{ type: "text" as const, text: message }], isError: true as const };
-  if (!EMIT_STRUCTURED) return base;
-  return { ...base, structuredContent: { error: message } as Record<string, unknown> };
+  // Never emit structuredContent here — a bare { error } won't conform to
+  // any tool's outputSchema (which has required fields like totalResults,
+  // results, etc.) and causes the SDK to reject with -32602.
+  return { content: [{ type: "text" as const, text: message }], isError: true as const };
 }
 
 /** Return both structured content (for apps/typed clients) and text content (for LLMs).
