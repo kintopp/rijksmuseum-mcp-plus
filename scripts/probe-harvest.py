@@ -119,6 +119,24 @@ EXPECTED_SHAPES = {
 
     # place-specific
     "defined_by":                              {"str", "NoneType"},
+
+    # ── attributed_by[] (top-level — object relationships & examination reports) ──
+    "attributed_by":                           {"list", "NoneType"},
+    "attributed_by[].assigned":                {"list", "NoneType"},
+    "attributed_by[].identified_by":           {"list", "NoneType"},
+    "attributed_by[].carried_out_by":          {"list", "NoneType"},
+    "attributed_by[].classified_as":           {"list", "NoneType"},
+    "attributed_by[].timespan":                {"dict", "NoneType"},
+    # attributed_by[].assigned[] children
+    "attrib_assigned[].type":                  {"str", "NoneType"},
+    "attrib_assigned[].id":                    {"str", "NoneType"},
+    # attributed_by[].identified_by[] children (relationship labels)
+    "attrib_idb[].content":                    {"str", "NoneType"},
+    "attrib_idb[].language":                   {"list", "NoneType"},
+    # attributed_by[].carried_out_by[] children (examiner)
+    "attrib_actor[].identified_by":            {"list", "NoneType"},
+    # attributed_by[].timespan children (examination date)
+    "attrib_timespan.identified_by":           {"list", "NoneType"},
 }
 
 
@@ -191,7 +209,7 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
 
     # ── Top-level fields ──
     check("produced_by", data.get("produced_by"))
-    for field in ("referred_to_by", "identified_by", "dimension", "subject_of", "equivalent", "made_of"):
+    for field in ("referred_to_by", "identified_by", "dimension", "subject_of", "equivalent", "made_of", "attributed_by"):
         check(field, data.get(field))
 
     # ── produced_by internals ──
@@ -309,6 +327,75 @@ def probe_shapes(data: dict, shape_counts: Counter) -> list[dict]:
             check("equivalent[].id", entry.get("id"))
         else:
             shape_counts["equivalent[]:non_dict"] += 1
+
+    # ── attributed_by[] (object relationships & examination reports) ──
+    for entry in (data.get("attributed_by") or []):
+        if not isinstance(entry, dict):
+            shape_counts["attributed_by[]:non_dict"] += 1
+            continue
+        check("attributed_by[].assigned", entry.get("assigned"))
+        check("attributed_by[].identified_by", entry.get("identified_by"))
+        check("attributed_by[].carried_out_by", entry.get("carried_out_by"))
+        check("attributed_by[].classified_as", entry.get("classified_as"))
+        check("attributed_by[].timespan", entry.get("timespan"))
+        check_list_entry_types("attributed_by.classified_as", entry.get("classified_as"))
+
+        # Classify pattern: object-relationship vs examination-report
+        has_actor = entry.get("carried_out_by") is not None
+        shape_counts[f"attributed_by_pattern:{'examination' if has_actor else 'relationship'}"] += 1
+
+        # assigned[] children (linked objects)
+        for item in (entry.get("assigned") or []):
+            if not isinstance(item, dict):
+                shape_counts["attrib_assigned[]:non_dict"] += 1
+                continue
+            check("attrib_assigned[].type", item.get("type"))
+            check("attrib_assigned[].id", item.get("id"))
+            shape_counts[f"attrib_assigned_type:{item.get('type', '?')}"] += 1
+
+        # identified_by[] children (relationship labels)
+        for idb in (entry.get("identified_by") or []):
+            if not isinstance(idb, dict):
+                shape_counts["attrib_idb[]:non_dict"] += 1
+                continue
+            check("attrib_idb[].content", idb.get("content"))
+            check("attrib_idb[].language", idb.get("language"))
+            check_list_entry_types("attrib_idb.language", idb.get("language"))
+            # Track relationship label (EN preferred)
+            content = idb.get("content", "")
+            lang_uri = ""
+            for lang in (idb.get("language") or []):
+                if isinstance(lang, dict):
+                    lang_uri = lang.get("id", "")
+                    break
+            if LANG_EN in lang_uri:
+                shape_counts[f"attrib_label_en:{content}"] += 1
+
+        # carried_out_by[] children (examiner — inline Actor)
+        for actor in (entry.get("carried_out_by") or []):
+            if not isinstance(actor, dict):
+                shape_counts["attrib_actor[]:non_dict"] += 1
+                continue
+            check("attrib_actor[].identified_by", actor.get("identified_by"))
+            # Extract examiner name
+            for idb in (actor.get("identified_by") or []):
+                if isinstance(idb, dict) and idb.get("type") == "Name":
+                    shape_counts[f"attrib_examiner:{idb.get('content', '?')}"] += 1
+
+        # classified_as[] children (report type)
+        for cls in (entry.get("classified_as") or []):
+            cls_id = cls.get("id", "") if isinstance(cls, dict) else str(cls)
+            if cls_id:
+                shape_counts[f"attrib_report_type:{cls_id.split('/')[-1]}"] += 1
+
+        # timespan children (examination date)
+        ts = entry.get("timespan")
+        if isinstance(ts, dict):
+            check("attrib_timespan.identified_by", ts.get("identified_by"))
+            for idb in (ts.get("identified_by") or []):
+                if isinstance(idb, dict) and idb.get("content"):
+                    shape_counts["attrib_has_date"] += 1
+                    break
 
     # ── Discover unknown top-level keys ──
     known_top = {
@@ -639,7 +726,7 @@ def main():
     # Top-level and produced_by fields (per-artwork counts)
     top_paths = {
         "produced_by", "referred_to_by", "identified_by", "dimension",
-        "subject_of", "equivalent", "made_of",
+        "subject_of", "equivalent", "made_of", "attributed_by",
         "produced_by.timespan", "produced_by.referred_to_by", "produced_by.part",
     }
     print_shape_group("Top-level & produced_by fields",
@@ -668,6 +755,17 @@ def main():
     print_shape_group("classified_as & language entry shapes (dict vs bare string)",
         lambda k: "_entry:" in k)
 
+    # attributed_by fields
+    attrib_paths = {
+        "attributed_by[].assigned", "attributed_by[].identified_by",
+        "attributed_by[].carried_out_by", "attributed_by[].classified_as",
+        "attributed_by[].timespan", "attrib_assigned[].type", "attrib_assigned[].id",
+        "attrib_idb[].content", "attrib_idb[].language",
+        "attrib_actor[].identified_by", "attrib_timespan.identified_by",
+    }
+    print_shape_group("attributed_by fields",
+        lambda k: k.rsplit(":", 1)[0] in attrib_paths)
+
     # Non-dict entries in lists (should be 0)
     non_dict_keys = [k for k in shape_counts if "non_dict" in k]
     if non_dict_keys:
@@ -675,6 +773,83 @@ def main():
         for key in sorted(non_dict_keys):
             print(f"    {key} = {shape_counts[key]:,}")
         print()
+
+    # ─── Phase D: attributed_by Deep Inspection ──────────────────────
+
+    print("=" * 60)
+    print("PHASE D: attributed_by Deep Inspection")
+    print("=" * 60)
+
+    # Prevalence
+    ab_present = shape_counts.get("attributed_by:list", 0)
+    ab_absent = shape_counts.get("attributed_by:NoneType", 0)
+    ab_total_entries = sum(v for k, v in shape_counts.items() if k.startswith("attributed_by_pattern:"))
+    print(f"  Artworks with attributed_by: {ab_present}/{resolved} ({ab_present/resolved*100:.1f}%)" if resolved else "")
+    print(f"  Total attributed_by entries: {ab_total_entries}")
+    print()
+
+    # Pattern distribution
+    rel_count = shape_counts.get("attributed_by_pattern:relationship", 0)
+    exam_count = shape_counts.get("attributed_by_pattern:examination", 0)
+    print(f"  Pattern distribution:")
+    print(f"    Object relationships (no carried_out_by): {rel_count}")
+    print(f"    Examination reports (has carried_out_by):  {exam_count}")
+    if ab_total_entries:
+        print(f"    Ratio: {rel_count/ab_total_entries*100:.0f}% relationships, {exam_count/ab_total_entries*100:.0f}% examinations")
+    print()
+
+    # Assigned object types
+    assigned_types = {k: v for k, v in shape_counts.items() if k.startswith("attrib_assigned_type:")}
+    if assigned_types:
+        print(f"  Assigned object types:")
+        for k, v in sorted(assigned_types.items(), key=lambda x: -x[1]):
+            print(f"    {k.split(':', 1)[1]}: {v}")
+        print()
+
+    # Relationship labels (EN)
+    labels = {k: v for k, v in shape_counts.items() if k.startswith("attrib_label_en:")}
+    if labels:
+        print(f"  Relationship labels (English, {len(labels)} distinct):")
+        for k, v in sorted(labels.items(), key=lambda x: -x[1]):
+            print(f"    {k.split(':', 1)[1]}: {v}")
+        print()
+
+    # Report types
+    report_types = {k: v for k, v in shape_counts.items() if k.startswith("attrib_report_type:")}
+    if report_types:
+        print(f"  Report types (classified_as):")
+        for k, v in sorted(report_types.items(), key=lambda x: -x[1]):
+            print(f"    {k.split(':', 1)[1]}: {v}")
+        print()
+
+    # Examiners
+    examiners = {k: v for k, v in shape_counts.items() if k.startswith("attrib_examiner:")}
+    if examiners:
+        print(f"  Examiners ({len(examiners)} distinct):")
+        for k, v in sorted(examiners.items(), key=lambda x: -x[1])[:15]:
+            print(f"    {k.split(':', 1)[1]}: {v}")
+        if len(examiners) > 15:
+            print(f"    ... and {len(examiners) - 15} more")
+        print()
+
+    # Dates on examinations
+    dated_exams = shape_counts.get("attrib_has_date", 0)
+    if exam_count:
+        print(f"  Examinations with dates: {dated_exams}/{exam_count}")
+        print()
+
+    # Extrapolation
+    if resolved:
+        print(f"  Extrapolation to 832K artworks:")
+        est_artworks = int(ab_present / resolved * 832000)
+        est_entries = int(ab_total_entries / resolved * 832000)
+        est_relationships = int(rel_count / resolved * 832000)
+        est_examinations = int(exam_count / resolved * 832000)
+        print(f"    Artworks with attributed_by: ~{est_artworks:,}")
+        print(f"    Total entries:               ~{est_entries:,}")
+        print(f"    Object relationships:        ~{est_relationships:,}")
+        print(f"    Examination reports:         ~{est_examinations:,}")
+    print()
 
     # ─── Phase B: Data Drift ─────────────────────────────────────────
 
@@ -741,6 +916,8 @@ def main():
     drift_artworks = len(set(d["object_number"] for d in all_drifts)) if all_drifts else 0
     if resolved:
         print(f"  Artworks with drift: {drift_artworks}/{resolved} ({drift_artworks/resolved*100:.1f}%)")
+    if ab_total_entries:
+        print(f"  attributed_by: {ab_present} artworks, {ab_total_entries} entries ({rel_count} relationships, {exam_count} examinations)")
     if all_anomalies:
         print(f"  ⚠ SHAPE ANOMALIES DETECTED — review before harvesting")
     if drift_artworks > resolved * 0.1:

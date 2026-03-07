@@ -6,6 +6,14 @@ import { escapeFts5, expandFtsQuery, resolveDbPath } from "../utils/db.js";
 /** Single value or array of values (array = AND/intersection). */
 type StringOrArray = string | string[];
 
+export interface PersonInfo {
+  birthYear: number | null;
+  deathYear: number | null;
+  gender: string | null;
+  bio: string | null;
+  wikidataId: string | null;
+}
+
 export interface VocabSearchParams {
   subject?: StringOrArray;
   iconclass?: StringOrArray;
@@ -270,6 +278,7 @@ export class VocabularyDb {
   private hasImportance = false;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
+  private stmtLookupPersonInfo: Statement | null = null;
   private stmtFilterArtIds = new Map<string, Statement>();
 
   /** Look up a field_id by name, throwing if missing. */
@@ -356,6 +365,13 @@ export class VocabularyDb {
         "SELECT title, title_all_text, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
       );
 
+      // Detect person enrichment columns (birth_year, death_year, gender, bio, wikidata_id)
+      if (this.columnExists("vocabulary", "birth_year") && this.columnExists("vocabulary", "gender")) {
+        this.stmtLookupPersonInfo = this.db.prepare(
+          "SELECT id, birth_year, death_year, gender, bio, wikidata_id FROM vocabulary WHERE id = ? AND type = 'person'"
+        );
+      }
+
       const features = [
         this.hasFts5 && "vocabFTS5",
         this.hasTextFts && "textFTS5",
@@ -367,6 +383,7 @@ export class VocabularyDb {
         this.hasPersonNames && "personNames",
         this.hasImageColumn && "hasImage",
         this.hasImportance && "importance",
+        this.stmtLookupPersonInfo && "personEnrichment",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -416,6 +433,25 @@ export class VocabularyDb {
     const row = this.stmtLookupArtwork.get(objectNumber) as { title: string; title_all_text: string | null; creator_label: string; date_earliest: number | null; date_latest: number | null } | undefined;
     if (!row) return null;
     return { title: row.title || row.title_all_text?.split("\n")[0] || "", creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
+  }
+
+  /** Look up enriched person info (birth/death/gender/bio/wikidata) by vocab IDs. */
+  lookupPersonInfo(vocabIds: string[]): Map<string, PersonInfo> {
+    const map = new Map<string, PersonInfo>();
+    if (!this.stmtLookupPersonInfo || vocabIds.length === 0) return map;
+    for (const id of vocabIds) {
+      const row = this.stmtLookupPersonInfo.get(id) as {
+        id: string; birth_year: number | null; death_year: number | null;
+        gender: string | null; bio: string | null; wikidata_id: string | null;
+      } | undefined;
+      if (row && (row.birth_year != null || row.death_year != null || row.gender || row.bio || row.wikidata_id)) {
+        map.set(id, {
+          birthYear: row.birth_year, deathYear: row.death_year,
+          gender: row.gender, bio: row.bio, wikidataId: row.wikidata_id,
+        });
+      }
+    }
+    return map;
   }
 
   /**

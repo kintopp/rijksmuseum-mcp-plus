@@ -129,11 +129,17 @@ function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string
   if (d.production.length) {
     const parts = d.production.map((p) => {
       let s = p.name;
-      if (p.role) s += ` (${p.role})`;
+      const pi = p.personInfo;
+      if (pi?.birthYear != null || pi?.deathYear != null) {
+        s += ` (${pi.birthYear ?? "?"}–${pi.deathYear ?? "?"})`;
+      }
+      if (p.role) s += ` [${p.role}]`;
       if (p.place) s += `, ${p.place}`;
       return s;
     });
     lines.push(`Production: ${parts.join("; ")}`);
+    const primaryBio = d.production[0]?.personInfo?.bio;
+    if (primaryBio) lines.push(`Bio: ${truncate(primaryBio, 300)}`);
   }
 
   if (d.description) lines.push(`\n[Description] ${truncate(d.description, 200)}`);
@@ -352,6 +358,13 @@ const ArtworkDetailOutput = {
   materials: z.array(ResolvedTermShape),
   production: z.array(z.object({
     name: z.string(), role: z.string().nullable(), place: z.string().nullable(), actorUri: z.string(),
+    personInfo: z.object({
+      birthYear: z.number().int().nullable(),
+      deathYear: z.number().int().nullable(),
+      gender: z.string().nullable(),
+      bio: z.string().nullable(),
+      wikidataId: z.string().nullable(),
+    }).optional(),
   })),
   collectionSetLabels: z.array(ResolvedTermShape),
   // Enriched Group C
@@ -1006,6 +1019,20 @@ function registerTools(
         object = await api.resolveObject(resolvedUri);
       }
       const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, resolvedUri);
+      // Enrich production entries with person info from vocab DB
+      if (vocabDb?.available && detail.production.length > 0) {
+        const idToParticipant = new Map(
+          detail.production.flatMap(p => {
+            const id = p.actorUri.split("/").pop();
+            return id ? [[id, p] as const] : [];
+          })
+        );
+        const personMap = vocabDb.lookupPersonInfo([...idToParticipant.keys()]);
+        for (const [id, p] of idToParticipant) {
+          const info = personMap.get(id);
+          if (info) p.personInfo = info;
+        }
+      }
       return structuredResponse(detail, formatDetailSummary(detail));
     })
   );
