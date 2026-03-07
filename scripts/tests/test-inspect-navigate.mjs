@@ -653,6 +653,129 @@ console.log("\n--- 7i: result count sanity checks ---");
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  8. Schema surface — no $ref pointers
+// ══════════════════════════════════════════════════════════════════
+
+section("8. Schema surface — no $ref");
+
+{
+  const { tools } = await client.listTools();
+  assert(tools.length >= 12, `Server exposes >= 12 tools (got ${tools.length})`);
+
+  for (const tool of tools) {
+    const schemaStr = JSON.stringify(tool.inputSchema);
+    assert(
+      !schemaStr.includes('"$ref"'),
+      `${tool.name}: no $ref in inputSchema`
+    );
+  }
+
+  // Verify string params are inlined (not shared) — spot-check search_artwork
+  const searchTool = tools.find((t) => t.name === "search_artwork");
+  if (searchTool) {
+    const props = searchTool.inputSchema.properties ?? {};
+    const stringFields = ["creator", "subject", "type", "material", "technique"]
+      .filter((f) => f in props);
+    for (const f of stringFields) {
+      assert(
+        props[f].type === "string",
+        `search_artwork.${f} has inline type:"string" (not $ref)`
+      );
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  9. JSON null acceptance — claude.ai sends null for omitted params
+// ══════════════════════════════════════════════════════════════════
+
+section("9. JSON null acceptance");
+
+// 9a. Actual JSON null for string params → stripped, real filter works
+console.log("\n--- 9a: JSON null + real filter (should succeed) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { subject: null, creator: "Rembrandt van Rijn", maxResults: 5 },
+  });
+  const { isError, totalResults } = parseResult(r);
+  assert(!isError, "JSON null subject + real creator succeeds");
+  assert(totalResults > 0, `Has results (${totalResults})`);
+}
+
+// 9b. Multiple JSON nulls + real filter → stripped, search works
+console.log("\n--- 9b: multiple JSON nulls + real filter ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: {
+      subject: null,
+      productionPlace: null,
+      depictedPlace: null,
+      type: "painting",
+      creator: "Vermeer",
+      maxResults: 5,
+    },
+  });
+  const { isError, totalResults } = parseResult(r);
+  assert(!isError, "Multiple null params + real filters succeeds");
+  assert(totalResults > 0, `Has results (${totalResults})`);
+}
+
+// 9c. All JSON nulls → stripped to empty, rejected by filter guard
+console.log("\n--- 9c: all JSON nulls (should be rejected) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { subject: null, creator: null, type: null },
+  });
+  const { isError } = parseResult(r);
+  assert(isError, "All JSON null filters is rejected by filter guard");
+}
+
+// 9d. JSON null on navigate_viewer command fields
+console.log("\n--- 9d: JSON null on navigate_viewer command fields ---");
+{
+  // navigate_viewer commands use optStr() for region, label, color —
+  // verify null values don't cause validation errors
+  const r = await client.callTool({
+    name: "navigate_viewer",
+    arguments: {
+      viewUUID: "00000000-0000-0000-0000-000000000000",
+      commands: [{ action: "navigate", region: "full", label: null, color: null }],
+    },
+  });
+  // Will fail with "unknown viewer" but should NOT fail with validation error
+  const { text } = parseResult(r);
+  assert(
+    !text.includes("Input validation error") && !text.includes("invalid_type"),
+    "navigate_viewer accepts null label/color without validation error"
+  );
+}
+
+// 9e. JSON null on semantic_search filter params
+console.log("\n--- 9e: JSON null on semantic_search filters ---");
+{
+  const r = await client.callTool({
+    name: "semantic_search",
+    arguments: { query: "winter landscape", type: null, creator: null, maxResults: 5 },
+  });
+  const { isError } = parseResult(r);
+  assert(!isError, "semantic_search accepts null filter params");
+}
+
+// 9f. JSON null on lookup_iconclass
+console.log("\n--- 9f: JSON null on lookup_iconclass ---");
+{
+  const r = await client.callTool({
+    name: "lookup_iconclass",
+    arguments: { query: "dog", notation: null, semanticQuery: null, maxResults: 5 },
+  });
+  const { isError } = parseResult(r);
+  assert(!isError, "lookup_iconclass accepts null notation + semanticQuery");
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 
