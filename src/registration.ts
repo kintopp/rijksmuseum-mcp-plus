@@ -31,11 +31,11 @@ const RESULTS_MAX = 50;
 /** Zod type accepting a single string or array of strings (AND intersection, max 5).
  *  Nullable: LLMs may pass null instead of omitting optional params — coerce to undefined. */
 const stringOrArray = z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(5)])
-  .nullable().transform(v => v ?? undefined);
+  .nullable().transform(v => (v == null || v === "null") ? undefined : v);
 
 /** Nullable string — coerces null → undefined so LLMs can pass null for "no filter". */
-const optStr = z.string().nullable().transform(v => v ?? undefined);
-const optMinStr = z.string().min(1).nullable().transform(v => v ?? undefined);
+const optStr = z.string().nullable().transform(v => (v == null || v === "null") ? undefined : v);
+const optMinStr = z.string().min(1).nullable().transform(v => (v == null || v === "null") ? undefined : v);
 
 type ToolResponse = { content: [{ type: "text"; text: string }] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
@@ -991,13 +991,12 @@ function registerTools(
           .describe(
             "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
           ),
-      }).strict().refine(
-        (d) => (d.objectNumber ? 1 : 0) + (d.uri ? 1 : 0) === 1,
-        { message: "Provide exactly one of objectNumber or uri" }
-      ),
+      }).strict(),
       ...withOutputSchema(ArtworkDetailOutput),
     },
     withLogging("get_artwork_details", async (args) => {
+      const count = (args.objectNumber ? 1 : 0) + (args.uri ? 1 : 0);
+      if (count !== 1) throw new Error("Provide exactly one of objectNumber or uri.");
       let resolvedUri: string;
       let object: LinkedArtObject;
       if (args.objectNumber) {
