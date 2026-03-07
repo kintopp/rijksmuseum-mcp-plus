@@ -136,6 +136,28 @@ Maybe:
 
 [Arno Bosse](https://orcid.org/0000-0003-3681-1289) — [RISE](https://rise.unibas.ch/), University of Basel with [Claude Code](https://claude.com/product/claude-code), Anthropic.
 
+### Citation
+
+If you use rijksmuseum-mcp+ in your research, please cite it as follows. A `CITATION.cff` file is included for use with Zotero, GitHub's "Cite this repository" button, and other reference managers.
+
+**APA (7th ed.)**
+
+> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.19.0) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
+
+**BibTeX**
+```bibtex
+@software{bosse_2026_rijksmuseum_mcp_plus,
+  author    = {Bosse, Arno},
+  title     = {{rijksmuseum-mcp+}},
+  year      = {2026},
+  version   = {0.19.0},
+  publisher = {Research and Infrastructure Support (RISE), University of Basel},
+  url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
+  orcid     = {0000-0003-3681-1289},
+  note      = {Developed with Claude Code (Anthropic, \url{https://www.anthropic.com})}
+}
+```
+
 ### Image and Data Credits
 
 Collection data and images are provided by the **[Rijksmuseum, Amsterdam](https://www.rijksmuseum.nl/)** via their [Linked Open Data APIs](https://data.rijksmuseum.nl/).

@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as below."
+type: software
+title: "rijksmuseum-mcp+"
+abstract: >
+  An MCP server providing AI-mediated access to the Rijksmuseum collection
+  via its Linked Open Data APIs, supporting search, iconographic exploration,
+  high-resolution image viewing, and bibliographic retrieval.
+authors:
+  - family-names: Bosse
+    given-names: Arno
+    orcid: "https://orcid.org/0000-0003-3681-1289"
+    affiliation: "Research and Infrastructure Support (RISE), University of Basel"
+repository-code: "https://github.com/kintopp/rijksmuseum-mcp-plus"
+url: "https://rijksmuseum-mcp-plus-production.up.railway.app/mcp"
+license: MIT
+version: "0.19.0"
+date-released: "2026-03-06"
+keywords:
+  - digital humanities
+  - museum collections
+  - linked open data
+  - model context protocol
+  - Rijksmuseum
+  - art history
+references:
+  - type: software
+    title: "Claude Code"
+    authors:
+      - name: "Anthropic"
+    url: "https://www.anthropic.com"
+    notes: "AI coding assistant used in the development of this software"
+  - type: database
+    title: "Rijksmuseum Collection — Linked Open Data APIs"
+    authors:
+      - name: "Rijksmuseum, Amsterdam"
+    url: "https://data.rijksmuseum.nl/"
+    license: "CC0-1.0 and CC-BY-4.0"
+    notes: "Collection data and images accessed via the Rijksmuseum Linked Open Data APIs. Licensing varies by object; see https://data.rijksmuseum.nl/policy/information-and-data-policy"
