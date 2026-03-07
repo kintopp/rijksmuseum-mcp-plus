@@ -28,19 +28,22 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 50;
 
-/** Coerce null, the literal string "null" (a claude.ai client serialisation bug),
- *  and empty strings to undefined. */
-const coerceNull = <T>(v: T | null): T | undefined =>
-  (v == null || v === "null" || v === "") ? undefined : v as T;
+/** Defensively strip the literal string "null" and empty strings to undefined.
+ *  claude.ai generates "null" strings when null is in the schema type —
+ *  removing nullable (v0.19.1) prevents this, but keep the guard for safety. */
+const coerceNull = (v: string | undefined): string | undefined =>
+  (v === undefined || v === "null" || v === "") ? undefined : v;
 
-/** Nullable string filter — emits `"type": ["string", "null"]` in JSON Schema.
- *  Avoids `anyOf` which causes claude.ai to serialise values as the literal string "null".
- *  Downstream code (VocabularyDb) still accepts string[] via its own normalisation. */
-const stringOrArray = z.string().nullable().transform(coerceNull);
+/** String filter — NOT nullable. Emits `{"type": "string", "minLength": 1}` in JSON Schema.
+ *  v0.18 used non-nullable optional strings; v0.19 added .nullable() which put "null"
+ *  into the schema type and caused claude.ai to generate the string "null" instead of
+ *  real values. Reverting to optional-only so the model sees only string is valid.
+ *  min(1) rejects empty strings at schema level (was present in v0.18 params). */
+const stringOrArray = z.string().min(1).optional().transform(coerceNull);
 
-/** Nullable string — coerces null → undefined so LLMs can pass null for "no filter". */
-const optStr = z.string().nullable().transform(coerceNull);
-const optMinStr = z.string().min(1).nullable().transform(coerceNull);
+/** Optional string — NOT nullable. LLMs should omit the param, not pass null. */
+const optStr = z.string().optional().transform(coerceNull);
+const optMinStr = z.string().min(1).optional().transform(coerceNull);
 
 type ToolResponse = { content: [{ type: "text"; text: string }] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
@@ -984,8 +987,6 @@ function registerTools(
         uri: z
           .string()
           .url()
-          .nullable()
-          .transform(v => v ?? undefined)
           .optional()
           .describe(
             "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
