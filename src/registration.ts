@@ -606,8 +606,10 @@ function registerTools(
         "but note that paintings are underrepresented there, so combine it with " +
         "search_artwork(type: 'painting', subject/creator: ...) for painting queries. " +
         "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both subjects). " +
-        "Each result includes an objectNumber for use with get_artwork_details (full metadata), " +
-        "get_artwork_image (deep-zoom viewer), or get_artwork_bibliography (scholarly references)." +
+        "Each result includes an objectNumber for follow-up calls: " +
+        "get_artwork_details (full metadata), get_artwork_bibliography (scholarly references), " +
+        "or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; " +
+        "do not open the viewer for list/count/summary requests)." +
         (vocabAvailable
           ? " All parameters can be freely combined with each other. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
@@ -1054,6 +1056,8 @@ function registerTools(
       title: "Get Artwork Image",
       description:
         "View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate, flip). " +
+        "Use ONLY when the user explicitly wants to see or view an artwork — " +
+        "do not call this for list, summary, count, or text-only requests. " +
         "Not all artworks have images available. " +
         "Downloadable images are available from the artwork's collection page on rijksmuseum.nl. " +
         "Do not construct IIIF image URLs manually. " +
@@ -1129,6 +1133,8 @@ function registerTools(
       title: "Inspect Artwork Image",
       description:
         "Fetch an artwork image or region as base64 for direct visual analysis. " +
+        "Use ONLY when visual analysis is needed (e.g. identifying details, reading inscriptions, " +
+        "comparing compositions) — not for listing or summarising artworks. " +
         "Returns image bytes in the tool response — the LLM can see and reason " +
         "about the image immediately.\n\n" +
         "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
