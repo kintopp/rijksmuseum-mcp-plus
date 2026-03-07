@@ -9,15 +9,20 @@ Usage:
     python3 scripts/analyse-railway-logs.py logs.jsonl              # stdout
     python3 scripts/analyse-railway-logs.py logs.jsonl -o report.md # file
 
+    # Date range filtering
+    python3 scripts/analyse-railway-logs.py logs.jsonl --since 2026-03-01
+    python3 scripts/analyse-railway-logs.py logs.jsonl --since 2026-03-01 --until 2026-03-07
+    python3 scripts/analyse-railway-logs.py logs.jsonl --period weekly -o report.md
+
 Typically invoked via the wrapper:
-    ./scripts/analyse-railway-logs.sh [--lines N] [--limit N]
+    ./scripts/analyse-railway-logs.sh [--lines N] [--limit N] [--period weekly]
 """
 
 import json
 import re
 import sys
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -41,6 +46,7 @@ TOOL_ORDER = [
 ]
 
 SESSION_GAP_MINUTES = 30
+PERIOD_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
 
 STARTUP_PATTERNS = [
     "Vocabulary DB loaded",
@@ -903,6 +909,13 @@ def section_appendix(calls, logs, sessions):
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
+def _resolve_date(s):
+    """Parse a date string to timezone-aware UTC datetime."""
+    if len(s) == 10:
+        return datetime.fromisoformat(s + "T00:00:00+00:00")
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Analyse Railway deployment logs → markdown report."
@@ -911,7 +924,32 @@ def main():
     parser.add_argument(
         "-o", "--output", help="Write report to file (default: stdout)"
     )
+    parser.add_argument(
+        "--since", help="Only include calls on/after DATE (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--until", help="Only include calls on/before DATE (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--period", choices=["daily", "weekly", "monthly"],
+        help="Sugar for --since: daily=1d, weekly=7d, monthly=30d ago"
+    )
     args = parser.parse_args()
+
+    if args.period and args.since:
+        print("Cannot use both --period and --since", file=sys.stderr)
+        sys.exit(1)
+
+    since_dt = None
+    until_dt = None
+    if args.period:
+        since_dt = datetime.now(tz=timezone.utc) - timedelta(days=PERIOD_DAYS[args.period])
+    elif args.since:
+        since_dt = _resolve_date(args.since)
+    if args.until:
+        until_dt = _resolve_date(args.until)
+        if len(args.until) == 10:
+            until_dt = until_dt + timedelta(hours=23, minutes=59, seconds=59)
 
     print(f"Loading {args.input}...", file=sys.stderr)
     logs = load_logs(args.input)
@@ -928,7 +966,32 @@ def main():
         )
         sys.exit(1)
 
-    startup = extract_startup_events(logs)
+    # Apply date filtering
+    if since_dt or until_dt:
+        before = len(calls)
+        if since_dt:
+            calls = [c for c in calls if c["ts"] >= since_dt]
+        if until_dt:
+            calls = [c for c in calls if c["ts"] <= until_dt]
+        since_s = since_dt.strftime("%Y-%m-%d") if since_dt else "..."
+        until_s = until_dt.strftime("%Y-%m-%d") if until_dt else "..."
+        print(f"  Filtered {before} → {len(calls)} calls "
+              f"({since_s} to {until_s})", file=sys.stderr)
+        if not calls:
+            print("No calls in date range.", file=sys.stderr)
+            sys.exit(1)
+        # Also filter startup events by range
+        startup_logs = logs
+    else:
+        startup_logs = logs
+
+    startup = extract_startup_events(startup_logs)
+    if since_dt or until_dt:
+        if since_dt:
+            startup = [e for e in startup if e["ts"] >= since_dt]
+        if until_dt:
+            startup = [e for e in startup if e["ts"] <= until_dt]
+
     sessions = identify_sessions(calls)
     print(
         f"  {len(calls)} tool calls, {len(sessions)} sessions, "

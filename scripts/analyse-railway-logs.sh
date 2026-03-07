@@ -13,6 +13,9 @@
 #   --limit N      Max deployments to fetch (default: 20)
 #   --output DIR   Output directory for logs + report (default: .)
 #   --skip-fetch   Skip fetching; analyse existing logs from --output dir
+#   --since DATE   Only include calls on/after DATE (YYYY-MM-DD)
+#   --until DATE   Only include calls on/before DATE (YYYY-MM-DD)
+#   --period P     Sugar for --since: daily, weekly, monthly
 #
 # Output files (in --output dir):
 #   railway-logs-YYYY-MM-DD.jsonl          Raw merged log lines
@@ -28,6 +31,7 @@ LINES=500
 DEPLOY_LIMIT=20
 OUTPUT_DIR="."
 SKIP_FETCH=false
+PY_EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -36,6 +40,9 @@ while [[ $# -gt 0 ]]; do
     --output)     OUTPUT_DIR="$2"; shift 2 ;;
     --skip-fetch) SKIP_FETCH=true; shift ;;
     --raw)        OUTPUT_DIR="$(dirname "$2")"; shift 2 ;;  # backward compat
+    --since)      PY_EXTRA_ARGS+=(--since "$2"); shift 2 ;;
+    --until)      PY_EXTRA_ARGS+=(--until "$2"); shift 2 ;;
+    --period)     PY_EXTRA_ARGS+=(--period "$2"); shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -95,7 +102,7 @@ fi
 
 # ─── Analyse ─────────────────────────────────────────────────────────────────
 
-python3 "$SCRIPT_DIR/analyse-railway-logs.py" "$LOGFILE" -o "$REPORT"
+python3 "$SCRIPT_DIR/analyse-railway-logs.py" "$LOGFILE" -o "$REPORT" "${PY_EXTRA_ARGS[@]}"
 
 echo "" >&2
 echo "Done." >&2
