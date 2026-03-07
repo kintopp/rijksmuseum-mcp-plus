@@ -682,7 +682,8 @@ function registerTools(
           .boolean()
           .optional()
           .describe(
-            "If true, only return artworks that have a digital image available. Requires vocabulary DB v0.19+."
+            "If true, only return artworks that have a digital image available. " +
+            "Cannot be used alone — combine with at least one other filter."
           ),
         // Vocabulary-backed params
         ...(vocabAvailable
@@ -795,7 +796,7 @@ function registerTools(
                 .describe(
                   "Filter by creator gender: 'male' or 'female'. " +
                   "Coverage: ~64K of ~76K person entries have gender data. " +
-                  "Combine with other filters (e.g. type: 'painting', creationDate: '17*')."
+                  "Cannot be used alone — combine with at least one other filter (e.g. type: 'painting', creationDate: '17*')."
                 ),
               creatorBornAfter: z.preprocess(stripNull, z
                 .number()
@@ -803,7 +804,8 @@ function registerTools(
                 .optional()
                 .describe(
                   "Filter to creators born in or after this year (e.g. 1800). " +
-                  "Coverage: ~49K person entries have birth year data."
+                  "Coverage: ~49K person entries have birth year data. " +
+                  "Cannot be used alone — combine with at least one other filter."
                 )),
               creatorBornBefore: z.preprocess(stripNull, z
                 .number()
@@ -811,7 +813,8 @@ function registerTools(
                 .optional()
                 .describe(
                   "Filter to creators born in or before this year (e.g. 1700). " +
-                  "Combine with creatorBornAfter for a range (e.g. born 1600–1700)."
+                  "Combine with creatorBornAfter for a range (e.g. born 1600–1700). " +
+                  "Cannot be used alone — combine with at least one other filter."
                 )),
               expandPlaceHierarchy: z.preprocess(stripNull, z
                 .boolean()
@@ -820,7 +823,8 @@ function registerTools(
                   "When true, place searches (productionPlace, depictedPlace, birthPlace, deathPlace) " +
                   "expand to include sub-places in the administrative hierarchy. " +
                   "E.g. productionPlace: 'Netherlands' with expandPlaceHierarchy: true includes Amsterdam, Delft, etc. " +
-                  "Expansion follows up to 3 levels of parent→child relationships."
+                  "Expansion follows up to 3 levels of parent→child relationships. " +
+                  "Requires a place filter — cannot be used alone."
                 )),
               minHeight: z
                 .number()
@@ -916,8 +920,10 @@ function registerTools(
           ) || argsRecord["query"] !== undefined;
         if (!hasAnyFilter) {
           return errorResponse(
-            "At least one search filter is required. Use specific parameters like subject, creator, type, " +
-            "material, technique, depictedPerson, etc. For concept-based search, try semantic_search instead."
+            "At least one search filter is required (creatorGender, creatorBornAfter/Before, imageAvailable, " +
+            "and expandPlaceHierarchy are modifiers that cannot be used alone). " +
+            "Add a filter like subject, creator, type, material, technique, depictedPerson, or creationDate. " +
+            "For concept-based search, try semantic_search instead."
           );
         }
 

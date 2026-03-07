@@ -2,7 +2,7 @@
 # Format: tool_name<TAB>json_args
 # Lines starting with # are comments; blank lines are ignored.
 #
-# Derived from the Example Queries and 26 Research Scenarios in README.md.
+# Derived from the Example Queries and 24 Research Scenarios in docs/research-scenarios.md.
 # Notes:
 # - compact: true is omitted from vocabulary-routed calls (it has no effect there)
 # - Calls are ordered: vocabulary searches first (warm SQLite page cache),
@@ -27,10 +27,14 @@ lookup_iconclass	{"query": "fabulous animals"}
 search_artwork	{"inscription": "luctor et emergo"}
 search_artwork	{"type": "painting", "minWidth": 300}
 search_artwork	{"type": "sculpture", "birthPlace": "Leiden"}
+get_artwork_details	{"objectNumber": "SK-A-1718"}
+search_artwork	{"creatorGender": "female", "type": "painting"}
+search_artwork	{"attributionQualifier": "circle of", "creator": "Hieronymus Bosch"}
+search_artwork	{"type": "photograph", "birthPlace": "Indonesia"}
 list_curated_sets	{}
 
 # ===================================================================
-# Research Scenarios 1–26
+# Research Scenarios 1–24 (+ extra warm-cache scenarios 25–28)
 # ===================================================================
 
 # 1. Mapping an Artist's Output Across Media
@@ -44,6 +48,7 @@ search_artwork	{"productionPlace": "China"}
 search_artwork	{"productionPlace": "Java"}
 search_artwork	{"productionPlace": "India"}
 search_artwork	{"depictedPlace": "Japan"}
+search_artwork	{"productionPlace": "Japan", "imageAvailable": true, "compact": true}
 
 # 3. Tracking the Adoption of Artistic Techniques
 search_artwork	{"type": "print", "technique": "engraving", "creationDate": "15*", "compact": true}
@@ -67,16 +72,21 @@ search_artwork	{"profession": "printmaker", "birthPlace": "Haarlem"}
 search_artwork	{"subject": "vanitas", "type": "painting"}
 search_artwork	{"subject": "vanitas", "type": "print"}
 
-# 7. Reading Inscriptions as Primary Sources (Saenredam painting search in Example Queries)
+# 7. Dimensions as Evidence for Workshop Practice
+search_artwork	{"type": "painting", "material": "panel", "minHeight": 40, "maxHeight": 50, "minWidth": 30, "maxWidth": 40}
 search_artwork	{"inscription": "Saenredam"}
 
-# 8. Dimensions as Evidence for Workshop Practice
-search_artwork	{"type": "painting", "material": "panel", "minHeight": 40, "maxHeight": 50, "minWidth": 30, "maxWidth": 40}
-
-# 9. Credit Lines and Acquisition Context
+# 8. Credit Lines and Acquisition Context
 search_artwork	{"creditLine": "purchase", "creator": "Rembrandt"}
 search_artwork	{"creditLine": "bequest", "creator": "Rembrandt"}
 search_artwork	{"provenance": "Rembrandt"}
+
+# 9. Women Artists Across Centuries and Media
+search_artwork	{"creatorGender": "female", "type": "painting", "compact": true}
+search_artwork	{"creatorGender": "female", "creationDate": "17*"}
+search_artwork	{"creatorGender": "female", "type": "painting"}
+search_artwork	{"creatorGender": "female", "creatorBornAfter": 1800, "creatorBornBefore": 1900, "type": "painting"}
+search_artwork	{"creatorGender": "female", "productionPlace": "Netherlands", "expandPlaceHierarchy": true}
 
 # 10. Measuring Scholarly Attention
 search_artwork	{"creator": "Johannes Vermeer", "type": "painting"}
@@ -99,6 +109,7 @@ search_artwork	{"birthPlace": "Haarlem", "profession": "painter", "type": "paint
 
 # 15. Reproductive Prints and Their Painted Sources
 search_artwork	{"productionRole": "after painting by", "creator": "Rembrandt"}
+search_artwork	{"attributionQualifier": "workshop of", "creator": "Rembrandt"}
 
 # 16. Tracing Career Evolution Through Subject and Place
 search_artwork	{"creator": "Jacob van Ruisdael", "maxResults": 10}

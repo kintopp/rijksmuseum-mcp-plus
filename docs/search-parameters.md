@@ -1,92 +1,187 @@
-## Search parameters
+# Search Parameters
 
-The `search_artwork` tool accepts over 30 parameters, drawn from two backends: the online [Rijksmuseum Search API](https://data.rijksmuseum.nl/) and a large set of [vocabulary data](https://data.rijksmuseum.nl/docs/data-dumps/) made available by the Rijksmuseum as downloads. Search parameters from either backend can generally be combined freely; a few restrictions are noted below. At present, all searches are configured to return a maximum of 25 results by default (up to 50 on request).
+`search_artwork` accepts 37 search filters and 4 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
 
-### Rijksmuseum Search API  parameters
+Parameters that accept arrays (marked **[]**) AND-combine their values: `subject: ["landscape", "seascape"]` returns artworks tagged with *both* subjects.
 
-These parameters query the Rijksmuseum Search API directly. They support free-text and wildcard matching and can be combined with each other. Most of these parameters also work when combined with vocabulary-backed filters: `creator`, `type`, `material`, `technique`, `creationDate`, and `title`/`query` can all be used alongside vocabulary-backed searches. N.B. Four parameters — `aboutActor`, `imageAvailable`, `compact`, and `pageToken` — are Search API-only and cannot be combined with vocabulary-backed filters (they are silently dropped with a warning when any vocab filter is present).
+All searches are backed by a vocabulary database of ~194,000 controlled terms mapped to ~832,000 artworks via ~13.5 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations) and a spatial place hierarchy (~31K geocoded places).
 
-| Search Parameter | What it queries | Notes |
-|---|---|---|
-| `query` | Artwork title | ~837K artworks. Functionally equivalent to the `title` filter below. It's provided as a convenience alias for exploratory queries where the user thinks of it as a general purpose search term. Can be combined with vocabulary-backed filters. |
-| `title` | Artwork title.  | ~826K artworks with titles. Functionally equivalent to the `query` filter above; when both are provided, `title` takes precedence on the vocabulary path (`query` is ignored). Can be combined with vocabulary-backed filters. When used with vocabulary-backed filters, title search matches against all title variants (brief, full, former) — broader than the Search API, which indexes brief titles only. |
-| `creator` | Artist or maker name. | ~510K artworks, ~21K unique names. Uses the museum's canonical name form (e.g. "Rembrandt van Rijn", not "Rembrandt Harmensz. van Rijn"). As a result, variant historical spellings may not match. Can also be combined with vocabulary-backed filters as a cross-filter. |
-| `creationDate` | Year or date range of creation. | ~628K artworks with dates (3000 BCE–2025). Supports wildcards: `1642` (exact year), `164*` (1640–1649), `16*` (1600–1699). Can be combined with vocabulary-backed filters. Wildcard date ranges work on both the Search API and the vocabulary database. |
-| `type` | Object type.   | 4,385 terms. Values follow Rijksmuseum vocabulary terms (e.g. `painting`, `print`, `drawing`, `photograph`, `sculpture`). Can be combined with vocabulary-backed filters as a cross-filter. |
-| `material` | Material or support.   | [734 terms](vocabulary-materials.md). Values follow Rijksmuseum vocabulary terms (e.g. `canvas`, `paper`, `panel`, `oil paint`, `copper`). Can be combined with vocabulary-backed filters as a cross-filter. |
-| `technique` | Artistic technique. | [967 terms](vocabulary-techniques.md). Values follow Rijksmuseum vocabulary terms (e.g. `oil painting`, `etching`, `engraving`, `mezzotint`, `woodcut`). Can be combined with vocabulary-backed filters as a cross-filter. |
-| `aboutActor` | Person depicted or referenced | ~1.3K artworks with actor references. Searches free-text references to persons via the Search API. Broader name-variant tolerance than `depictedPerson` — catches cases where the authority form differs. Cannot be combined with vocabulary-backed filters. |
-| `imageAvailable` | Whether a digital image exists | Set to `true` to restrict results to artworks with a digital image (~728K artworks). Cannot be combined with vocabulary-backed filters — `imageAvailable: true` is rejected when any vocab filter is present; `false` is silently ignored. |
-| `compact` | Return counts and IDs only | If `true`, returns only the total count and artwork URIs without resolving full details (faster). Only applies to Search API queries — silently dropped with a warning when vocabulary-backed filters are present. Default: `false`. |
-| `pageToken` | Pagination token | Token from a previous search result to retrieve the next page. Only applies to Search API queries — silently dropped with a warning when vocabulary-backed filters are present. |
+- [Ranking](#ranking)
+- [1. Vocabulary label filters](#1-vocabulary-label-filters) (17 parameters)
+- [2. Full-text search filters](#2-full-text-search-filters) (7 parameters)
+- [3. Column and metadata filters](#3-column-and-metadata-filters) (13 parameters)
+- [4. Output controls](#4-output-controls) (4 parameters)
+- [Semantic search](#semantic-search)
+- [Artwork detail fields](#artwork-detail-fields)
 
-### Rijksmuseum vocabulary parameters
+## Ranking
 
-These parameters search a Linked Open Data [vocabulary dataset](https://data.rijksmuseum.nl/docs/data-dumps/) that maps ~194,000 controlled vocabulary terms to ~832,000 artworks via ~13.5 million mappings. To allow this, original files were converted into an online, searchable database connected to rijksmuseum-mcp+. Its parameters can be freely combined with each other (e.g. `depictedPerson` + `productionPlace` + `creationDate: "17*"`) and with `creator`, `type`, `material`, `technique`, `creationDate` (with wildcards), `title`, `query`, from the Rijksmuseum search API and the geographic proximity parameters described in the next section. N.B. `aboutActor`, `imageAvailable`, `compact`, and `pageToken` (from the Rijksmuseum search API) cannot be used alongside vocabulary-backed filters.
+Results are ranked differently depending on which filters are active:
 
-| Search Parameter | What it queries | Notes |
-|---|---|---|
-| `subject` | Iconographic subject labels | ~108K terms, ~722K artworks. Searches [Iconclass](https://iconclass.org/) subject terms by label text (e.g. `vanitas`, `winter landscape`, `civic guard`). Uses word-boundary matching — `cat` matches "cat" but not "Catharijnekerk". |
-| `iconclass` | Iconclass notation code | ~25K notation codes. Exact match on the alphanumeric [Iconclass](https://iconclass.org/) notation (e.g. `73D82` for the Crucifixion, `45(+26)` for civic guard pieces). More precise than `subject` label search. |
-| `depictedPerson` | Named person depicted | ~60K persons, ~217K artworks. Searches controlled name authority records for persons represented in the artwork (e.g. `Willem van Oranje`, `Maria Stuart`). Uses structured vocabulary with person name variants for precise matching. |
-| `depictedPlace` | Named place depicted | 20,689 places. Searches controlled place names for locations shown in the artwork (e.g. `Amsterdam`, `Batavia`). Part of a shared geocoded place vocabulary (20,828 locations with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/)). Distinct from `productionPlace` — a painting *depicting* Amsterdam may have been made in Haarlem. Place identifications reflect the museum's cataloguing and may occasionally be imprecise or outdated — verify against artwork details when precision matters. |
-| `productionPlace` | Place where the work was made | 9,002 places. Searches controlled place names for production locations (e.g. `Delft`, `Antwerp`, `Kyoto`). Same geocoded place vocabulary as `depictedPlace`. Production place data reflects the museum's cataloguing at the time of the data harvest and may not always be precise — some entries use regional or approximate attributions (e.g. "Netherlands" rather than a specific city). |
-| `birthPlace` | Artist's place of birth. Derived from EDM creator records in the OAI-PMH harvest.  | ~2K places, ~196K artworks. Searches biographical place data for the creator's birth location (e.g. `Leiden`, `Haarlem`). Search-only: not returned by `get_artwork_details` (use it to *find* artists from a place, then examine their works individually). |
-| `deathPlace` | Artist's place of death | ~1.3K places, ~180K artworks. Searches biographical place data for the creator's death location (e.g. `Amsterdam`, `Paris`). Useful for tracking artist migration patterns — compare `birthPlace: "Antwerp"` with `deathPlace: "Amsterdam"` to find Flemish artists who moved north. |
-| `profession` | Artist's profession | [600 terms](vocabulary-professions.md), bilingual (English and Dutch). Examples: `painter`, `draughtsman`, `printmaker`, `photographer`. Try the Dutch term if English returns no results. Search-only: not returned by `get_artwork_details`. Useful for finding artists by role rather than name — e.g. `profession: "architect"` with `productionPlace: "Amsterdam"`. |
-| `collectionSet` | Curated collection set name | [192 sets](vocabulary-collection-sets.md) defined by Rijksmuseum curators — thematic groupings, exhibition selections, and scholarly collections (e.g. `Rembrandt`, `Japanese`, `Delftware`). Matches by name substring. |
-| `license` | Rights/license designation | `publicdomain` ([Public Domain Mark 1.0](http://creativecommons.org/publicdomain/mark/1.0/) — 728K works), `zero` ([CC0 1.0](http://creativecommons.org/publicdomain/zero/1.0/) — 1.7K works), `InC` ([In Copyright](http://rightsstatements.org/vocab/InC/1.0/) — 101K works). Uses [RightsStatements.org](https://rightsstatements.org/) and [Creative Commons](http://creativecommons.org) URIs. |
-| `description` | Artwork description | Full-text search across ~510K artworks (61% coverage). Cataloguer observations including compositional details, motifs, physical condition, and attribution remarks. Exact word matching, no stemming. |
-| `inscription` | Transcribed text on the object surface.  | Full-text search across ~500K artworks with transcribed inscriptions. Covers signatures, dates, dedications, mottoes, stamps, and labels physically present on the object. Examples: `fecit` (Latin "made [this]"), `Rembrandt f.`, `anno 1642`. |
-| `provenance` | Ownership history text. | Full-text search across ~48K artworks with recorded provenance. Covers auction records, dealer transactions, collection transfers, and restitution notes. Examples: `Napoleon`, `Six`, `Rothschild`, `Goudstikker`. Coverage is weighted toward paintings and major works. |
-| `creditLine` | Acquisition mode and acknowledgement.   | Full-text search across ~358K artworks with credit lines. Records how the museum acquired the work — purchase, bequest, gift, loan, state allocation. Examples: `purchase`, `bequest`, `Vereniging Rembrandt`, `Drucker`. |
-| `curatorialNarrative` | Curatorial narrative (museum wall text).  | Full-text search across ~14K artworks with curatorial narratives. Harvested from the Linked Art `subject_of` field — distinct from `description`, which queries a different, broader text. These are interpretive, art-historical texts written by museum curators — equivalent to the wall labels in the galleries. |
-| `productionRole` | Role in production | [178 terms](vocabulary-production-roles.md), bilingual. Specifies the role an actor played in creating the work — distinct from `profession` (what the person *was*) vs. production role (what they *did* for this specific work). Key terms: `print maker` (382K mappings), `publisher` (185K), `printer` (67K), `after painting by` (46K), `after design by` (60K).  |
-| `minHeight` / `maxHeight` | Height range in centimetres. | Numeric range filter on structured dimensions. Values are in centimetres. |
-| `minWidth` / `maxWidth` | Width range in centimetres. | Numeric range filter on structured dimensions. Values are in centimetres. |
+- **BM25** — when any full-text filter is active (`title`, `description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), results are ranked by text relevance.
+- **Geographic proximity** — when `nearPlace` or `nearLat`/`nearLon` is active (without text filters), results are ranked by distance from the search point.
+- **Importance** — when only vocabulary, column, or modifier filters are active, results are ordered by a composite importance score reflecting image availability, curatorial attention, and metadata richness.
 
-### Geographic proximity search
+---
 
-These parameters find artworks related to places near a given location. They search across both depicted and production places (see above) using coordinates from ~21,000 geocoded places. These searches can be combined with any vocabulary-backed parameter and with `creator`, `type`, `material`, `technique`, `creationDate`, and `title`/`query` from the Rijksmuseum backend. N.B. Geo parameters cannot be combined in the same search with `aboutActor`, `imageAvailable`, `compact`, or `pageToken`. 
+## 1. Vocabulary label filters
 
-N.B. The latitude/longitude coordinates were derived from the authority file IDs (Getty TGN, Wikidata, GeoNames, World Historical Gazetteer) already present in the Rijksmuseum's vocabulary dataset. However, these coordinates may not always align exactly with the location the museum intended — particularly for historical place names that have shifted boundaries or been renamed. Place identifications also reflect the museum's cataloguing, which can be approximate. As a precaution, approximately 5,500 places with uncertain location data have been witheld from the online database pending further review. 
+Match against ~194,000 controlled terms. Labels are bilingual (English and Dutch) — try the Dutch term if English returns no results (e.g. "fotograaf" instead of "photographer").
 
-| Search Parameter | What it queries | Notes |
-|---|---|---|
-| `nearPlace` | Artworks related to places near a named location | Searches both depicted and production places within a radius of the named location (e.g. `nearPlace: "Leiden"`). ~21,000 geocoded places with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/). |
-| `nearLat` | Latitude for coordinate-based proximity search | Use with `nearLon` as an alternative to `nearPlace` for searching near arbitrary locations (e.g. `nearLat: 52.37, nearLon: 4.89`). Range: -90 to 90. If both `nearLat`/`nearLon` and `nearPlace` are provided, coordinates take precedence. |
-| `nearLon` | Longitude for coordinate-based proximity search | Use with `nearLat`. Range: -180 to 180. |
-| `nearPlaceRadius` | Search radius in kilometres | Default: 25 km, range: 0.1–500 km. Controls the geographic scope of `nearPlace` and `nearLat`/`nearLon` queries. |
+### Subject and iconography
 
-### Semantic search
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `subject` | string **[]** | Subject matter (Iconclass themes, depicted scenes). Primary parameter for concept searches — use before `description` or `curatorialNarrative`. ~108K terms, ~722K artworks. Exact word matching with morphological stemming. | `"winter landscape"` |
+| `iconclass` | string **[]** | Exact Iconclass notation code. More precise than `subject` — use `lookup_iconclass` to discover codes by concept. ~25K notation codes. | `"73D82"` |
+| `depictedPerson` | string **[]** | Person depicted in the artwork. ~60K persons, ~217K artworks. Matches against 210K name variants including historical forms. | `"Willem van Oranje"` |
+| `depictedPlace` | string **[]** | Place depicted in the artwork. 20,689 places. Supports multi-word names with geo-disambiguation (e.g. "Oude Kerk Amsterdam" resolves to the Oude Kerk in Amsterdam). Distinct from `productionPlace` — a painting *depicting* Amsterdam may have been made in Haarlem. | `"Batavia"` |
 
-For concepts that cannot be expressed as structured vocabulary terms (atmosphere, emotion, composition, art-historical interpretation), use the `semantic_search` tool instead. It accepts free-text queries and ranks artworks by embedding similarity. Its filters (`type`, `material`, `technique`, `creationDate`, `creator`, `collectionSet`, `aboutActor`, `iconclass`, `imageAvailable`) are a subset of those listed here. Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly; purely emotional or stylistic concepts may yield lower precision. Multilingual queries are supported. See [Semantic Search](semantic-search.md) for full documentation.
+### Production
 
-### Artwork detail fields
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `creator` | string **[]** | Artist or maker name. ~510K artworks, ~21K unique names. Uses canonical name forms (e.g. "Rembrandt van Rijn"). | `"Rembrandt van Rijn"` |
+| `aboutActor` | string | Broader person search across depicted persons *and* creators. More tolerant of cross-language name forms than `depictedPerson` (e.g. "Louis XIV" finds "Lodewijk XIV"). | `"Louis XIV"` |
+| `productionPlace` | string **[]** | Where the artwork was made. 9,002 places. Supports multi-word names with geo-disambiguation. | `"Delft"` |
+| `productionRole` | string **[]** | Role an actor played in creating this specific work — distinct from `profession` (what the person *was*). [178 terms](vocabulary-production-roles.md). Key terms: "print maker" (382K), "publisher" (185K), "after painting by" (46K). | `"after painting by"` |
+| `attributionQualifier` | string **[]** | Attribution qualifier. 7 values: "primary", "attributed to", "workshop of", "circle of", "follower of", "secondary", "undetermined". Combine with `creator` to narrow attribution. | `"workshop of"` |
 
-`get_artwork_details` returns metadata across the categories listed below, plus summary fields (`id`, `title`, `creator`, `date`, `url`) that provide the Linked Art URI, display title, creator name, creation date, and Rijksmuseum collection URL. Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters. N.B. The exceptions are identifiers (object number, persistent ID, external IDs), current location, web page, related objects, and bibliography count. See the [full field reference](metadata-categories.md) for details on each category and its search counterpart.
+### Creator biography
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `birthPlace` | string **[]** | Artist's place of birth. ~2K places, ~196K artworks. Search-only: not returned by `get_artwork_details`. | `"Leiden"` |
+| `deathPlace` | string **[]** | Artist's place of death. ~1.3K places, ~180K artworks. Useful for tracking artist migration — compare `birthPlace: "Antwerp"` with `deathPlace: "Amsterdam"`. | `"Paris"` |
+| `profession` | string **[]** | Artist's profession. [600 terms](vocabulary-professions.md), bilingual. Search-only: not returned by `get_artwork_details`. | `"printmaker"` |
+
+### Object classification
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `type` | string **[]** | Object type. 4,385 terms (e.g. "painting", "print", "drawing", "photograph", "sculpture"). | `"painting"` |
+| `material` | string **[]** | Material or support. [734 terms](vocabulary-materials.md) (e.g. "canvas", "paper", "panel", "oil paint"). | `"panel"` |
+| `technique` | string **[]** | Artistic technique. [967 terms](vocabulary-techniques.md) (e.g. "oil painting", "etching", "mezzotint"). | `"etching"` |
+
+### Collection
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `collectionSet` | string **[]** | Curated collection set by name. [192 sets](vocabulary-collection-sets.md). Use `list_curated_sets` to discover sets. | `"Rembrandt"` |
+| `license` | string | Rights/license filter. Values: "publicdomain" ([PDM 1.0](http://creativecommons.org/publicdomain/mark/1.0/) — 728K), "zero" ([CC0 1.0](http://creativecommons.org/publicdomain/zero/1.0/) — 1.7K), "InC" ([In Copyright](http://rightsstatements.org/vocab/InC/1.0/) — 101K). | `"publicdomain"` |
+
+---
+
+## 2. Full-text search filters
+
+BM25-ranked search on FTS5 indexes. Exact word matching, no stemming (except `subject` above, which has morphological stemming). When any of these are active, results are ranked by text relevance.
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `title` | string | Search across all title variants (brief, full, former x EN/NL). ~826K artworks. | `"Night Watch"` |
+| `query` | string | Alias for `title`. Provided as a convenience for exploratory queries. When both are provided, `title` takes precedence. | `"Night Watch"` |
+| `description` | string | Cataloguer descriptions (~510K artworks, 61% coverage). Compositional details, motifs, condition notes, attribution remarks. Dutch-language. | `"zwart krijt"` |
+| `inscription` | string | Inscription texts (~500K artworks). Signatures, mottoes, dates on the object surface. | `"fecit"`, `"Rembrandt f."` |
+| `provenance` | string | Ownership history (~48K artworks). Auction records, dealer transactions, collection transfers. Coverage weighted toward paintings and major works. | `"Napoleon"`, `"Goudstikker"` |
+| `creditLine` | string | Credit/donor lines (~358K artworks). Acquisition mode — purchase, bequest, gift, loan. | `"Drucker"`, `"purchase"` |
+| `curatorialNarrative` | string | Curatorial wall text (~14K artworks). Art-historical interpretation written by museum curators — distinct from `description`. | `"civic guard"` |
+
+---
+
+## 3. Column and metadata filters
+
+Direct filters on artwork table columns, JOIN-based demographic filters, and spatial queries.
+
+### Date and image
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `creationDate` | string | Creation date. ~628K artworks with dates (3000 BCE–2025). Exact year or wildcard. | `"1642"`, `"16*"`, `"164*"` |
+| `imageAvailable` | boolean | When `true`, only artworks with a digital image (~728K artworks). *Modifier.* | `true` |
+
+### Dimensions
+
+All values in centimeters.
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `minHeight` | number | Minimum height. | `40` |
+| `maxHeight` | number | Maximum height. | `50` |
+| `minWidth` | number | Minimum width. | `300` |
+| `maxWidth` | number | Maximum width. | `40` |
+
+### Creator demographics
+
+Based on enrichment data from Rijksmuseum actor authority files (~49K with life dates, ~64K with gender). *Modifiers* — cannot be the sole filter.
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `creatorGender` | string | Creator gender: "male" or "female". | `"female"` |
+| `creatorBornAfter` | integer | Creators born in or after this year. Combine with `creatorBornBefore` for a range. | `1800` |
+| `creatorBornBefore` | integer | Creators born in or before this year. | `1900` |
+
+### Geographic proximity
+
+Searches both depicted and production places within the specified radius, using coordinates from ~31,000 geocoded places ([Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), [World Historical Gazetteer](https://whgazetteer.org/)).
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `nearPlace` | string | Named location for proximity search. Supports multi-word names with geo-disambiguation. | `"Oude Kerk Amsterdam"` |
+| `nearLat` | number | Latitude (-90 to 90). Use with `nearLon` for coordinate-based search. Takes precedence over `nearPlace` if both provided. | `52.3676` |
+| `nearLon` | number | Longitude (-180 to 180). Use with `nearLat`. | `4.8945` |
+| `nearPlaceRadius` | number | Radius in km (0.1–500, default 25). | `15` |
+
+### Place hierarchy
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `expandPlaceHierarchy` | boolean | Expand place filters (`productionPlace`, `depictedPlace`, `birthPlace`, `deathPlace`) to include sub-places in the administrative hierarchy, up to 3 levels deep. E.g. `productionPlace: "Netherlands"` includes Amsterdam, Delft, etc. *Modifier.* | `true` |
+
+---
+
+## 4. Output controls
+
+Not filters — these control how results are returned.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `maxResults` | integer | 25 | Maximum results (1–50). All results include full metadata unless `compact` is true. |
+| `compact` | boolean | `false` | Returns only total count and object IDs without resolving metadata (faster for counting). |
+| `facets` | boolean | `false` | When results are truncated, includes top-5 counts per dimension (type, material, technique, century) to guide narrowing. Dimensions already filtered on are excluded. |
+
+---
+
+## Semantic search
+
+For concepts that cannot be expressed as structured vocabulary terms — atmosphere, emotion, composition, art-historical interpretation — use the `semantic_search` tool instead. It accepts free-text queries in any language and ranks all ~831,000 artworks by embedding similarity. Its filters (`type`, `material`, `technique`, `creationDate`, `creator`, `collectionSet`, `aboutActor`, `iconclass`, `imageAvailable`) are a subset of those listed above. Results are most reliable when curatorial narrative texts discuss the relevant concept explicitly. See [Semantic Search](semantic-search.md) for full documentation.
+
+---
+
+## Artwork detail fields
+
+`get_artwork_details` returns [24 metadata categories](metadata-categories.md) per artwork, plus summary fields (`id`, `title`, `creator`, `date`, `url`). Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters. The exceptions are identifiers, current location, web page, related objects, and bibliography count.
 
 | Field | What it contains | Notes |
 |---|---|---|
-| Object number (`objectNumber`) | Museum inventory number (e.g. `SK-C-5`) | The primary collection identifier. Format encodes the collection: `SK` = paintings (*Schilderijen Kabinet*), `RP` = prints (*Rijksprentenkabinet*), `BK` = sculpture/applied art (*Beeldhouwkunst*), `NG` = modern acquisitions (*Nagelaten Gift*). |
-| Persistent identifier (`persistentId`) | Stable [Handle](https://www.handle.net/) URI | Permanent citation link (e.g. `http://hdl.handle.net/10934/RM0001.COLLECT.5216`). Unlike web URLs, Handle URIs are guaranteed to resolve long-term. Use in publications and bibliographies. |
-| External identifiers (`externalIds`) | All cataloguing identifiers | Includes the object number and any additional identifiers assigned during cataloguing. |
-| Title variants (`titles`) | All known titles with language and type.  | Each entry has a language (`en` or `nl` — the collection is strictly bilingual) and qualifier (`brief`, `full`, or `former`). Up to 6 variants per artwork. The brief English title is the primary display title; ~71% of artworks have Dutch-only titles. Note: the Search API's `query`/`title` parameters only match against brief titles. |
-| Curatorial narrative (`curatorialNarrative`) | Museum wall text in English and/or Dutch.  | Interpretive art-historical context written by curators. Harvested from the Linked Art `subject_of` field. Distinct from `description`. |
-| Description (`description`) | Cataloguer description (Dutch). | Compositional details, motifs, physical condition, and attribution remarks. ~510K artworks (61% coverage). Also searchable via the `description` filter above. |
-| Production details (`production`) | Structured creator, role, and place data | Each participant entry includes `name` (resolved label), `role` (e.g. "painter"), `place` (e.g. "Amsterdam"), and `actorUri` (link to the artist's Linked Art record). Creator, place, and role are individually searchable via the filters above; the structured production record provides the full context. |
-| Object types (`objectTypes`) | What the object is, with authority links | Resolved vocabulary terms (e.g. "painting", "print") with equivalents linking to [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) and [Wikidata](https://www.wikidata.org/). Also searchable via the `type` filter above. |
-| Materials (`materials`) | What the object is made of, with authority links | Resolved vocabulary terms (e.g. "oil paint", "canvas") with AAT and Wikidata equivalents. Also searchable via the `material` filter above. |
-| Technique statement (`techniqueStatement`) | Free-text technique description.  |  |
-| Dimension statement (`dimensionStatement`) | Human-readable dimensions text.   | For numeric filtering, use `minHeight`/`maxHeight`/`minWidth`/`maxWidth` above. |
-| Structured dimensions (`dimensions`) | Numeric dimension values | Each entry has a resolved type label (e.g. "height"), numeric `value`, `unit` (cm, mm, kg, g, m), and optional `note`.  |
-| Subjects (`subjects`) | Iconographic annotations | Three components: `iconclass` ([Iconclass](https://iconclass.org/) concepts), `depictedPersons` (named individuals), `depictedPlaces` (geographic locations). Each entry is a resolved term with `label`, `id`, and `equivalents` linking to Iconclass, AAT, or Wikidata URIs. Derived from the Linked Art VisualItem layer. Searchable via `subject`, `iconclass`, `depictedPerson`, and `depictedPlace` filters above. |
-| Provenance (`provenance`) | Ownership history text.   | Searchable via the `provenance` filter above; the full text is returned here. |
-| Credit line (`creditLine`) | Acquisition acknowledgement.   | Searchable via the `creditLine` filter above; the full text is returned here. |
-| Inscriptions (`inscriptions`) | Text transcribed from the object surface.   | May include multiple entries (signatures, dates, labels, stamps). Searchable via the `inscription` filter above. |
-| License (`license`) | Rights/license URI | CC0, Public Domain Mark, or In Copyright. Also searchable via the `license` filter above. |
-| Collection sets (`collectionSets`, `collectionSetLabels`) | Curatorial groupings | Raw vocabulary URIs and resolved English labels with AAT and Wikidata equivalents. Also searchable via `collectionSet` above and discoverable via `list_curated_sets`. |
-| Current location (`location`) | Gallery and room within the museum | Physical location identifier parsed from Linked Art `current_location`. Indicates whether the work is currently on display and where. Not all artworks have location data; the field may be absent for works in storage or on loan. |
-| Web page (`webPage`) | Rijksmuseum website URL | Link to the artwork's page on [rijksmuseum.nl](https://www.rijksmuseum.nl/en/collection). |
-| Related objects (`relatedObjects`) | Links to associated artworks | Each entry has a `relationship` label (in English) and an `objectUri` pointing to the related Linked Art record. It is possible to retrieve full details of the related object. |
-| Bibliography count (`bibliographyCount`) | Number of scholarly references | A count only — use `get_artwork_bibliography` for full citations. Major works can have 100+ references (e.g. *The Night Watch*). |
+| Object number (`objectNumber`) | Museum inventory number (e.g. `SK-C-5`) | Format encodes the collection: `SK` = paintings, `RP` = prints, `BK` = sculpture/applied art, `NG` = modern acquisitions. |
+| Persistent identifier (`persistentId`) | Stable [Handle](https://www.handle.net/) URI | Permanent citation link. Use in publications and bibliographies. |
+| External identifiers (`externalIds`) | All cataloguing identifiers | Includes the object number and any additional identifiers. |
+| Title variants (`titles`) | All known titles with language and type | Each entry has language (`en`/`nl`) and qualifier (`brief`/`full`/`other`). Up to 6 variants. The brief English title is the primary display title. |
+| Curatorial narrative (`curatorialNarrative`) | Museum wall text in EN and/or NL | Interpretive art-historical context written by curators. Distinct from `description`. |
+| Description (`description`) | Cataloguer description (Dutch) | Compositional details, motifs, condition, attribution remarks. ~510K artworks. |
+| Production details (`production`) | Structured creator, role, and place data | Each entry: `name`, `role`, `place`, `actorUri`, and optional `personInfo` (with `birthYear`, `deathYear`, `gender`, `bio`, `wikidataId`). Person info available for ~49K creators with life dates, ~11K with biographical notes. |
+| Object types (`objectTypes`) | What the object is, with authority links | Resolved terms with [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) and [Wikidata](https://www.wikidata.org/) equivalents. |
+| Materials (`materials`) | What it is made of, with authority links | Resolved terms with AAT and Wikidata equivalents. |
+| Technique statement (`techniqueStatement`) | Free-text technique description | |
+| Dimension statement (`dimensionStatement`) | Human-readable dimensions text | For numeric filtering, use `minHeight`/`maxHeight`/`minWidth`/`maxWidth`. |
+| Structured dimensions (`dimensions`) | Numeric dimension values | Each entry: type label, numeric `value`, `unit` (cm/mm/kg/g/m), optional `note`. |
+| Subjects (`subjects`) | Iconographic annotations | Three components: `iconclass`, `depictedPersons`, `depictedPlaces`. Each a resolved term with `label`, `id`, and `equivalents`. |
+| Provenance (`provenance`) | Ownership history text | |
+| Credit line (`creditLine`) | Acquisition acknowledgement | |
+| Inscriptions (`inscriptions`) | Text transcribed from the object surface | May include multiple entries. |
+| License (`license`) | Rights/license URI | CC0, Public Domain Mark, or In Copyright. |
+| Collection sets (`collectionSets`, `collectionSetLabels`) | Curatorial groupings | Raw URIs and resolved English labels with authority equivalents. |
+| Current location (`location`) | Gallery and room within the museum | May be absent for works in storage or on loan. |
+| Web page (`webPage`) | Rijksmuseum website URL | |
+| Related objects (`relatedObjects`) | Links to associated artworks | Each entry: `relationship` label and `objectUri`. |
+| Bibliography count (`bibliographyCount`) | Number of scholarly references | Use `get_artwork_bibliography` for full citations. Major works can have 100+. |

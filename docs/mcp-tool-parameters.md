@@ -4,7 +4,7 @@ Rijksmuseum MCP — Tool Parameters Reference
 
 ## search_artwork
 
-The primary search tool. Vocabulary-based filters can be freely combined with each other and with the core filters below.
+The primary search tool. All 37 filters can be freely combined. See [search-parameters.md](search-parameters.md) for the full reference with examples, coverage numbers, and ranking rules.
 
 ### Core filters
 | Parameter | Description |
@@ -68,7 +68,7 @@ The primary search tool. Vocabulary-based filters can be freely combined with ea
 | `imageAvailable` | `true` to return only works with a digital image |
 | `maxResults` | 1–50 (default 25) |
 | `compact` | `true` returns IDs only without full metadata (faster) |
-| `pageToken` | Pagination token from a previous result |
+| `facets` | `true` includes top-5 counts per dimension (type, material, technique, century) when results are truncated |
 
 ---
 

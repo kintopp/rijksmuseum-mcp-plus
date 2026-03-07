@@ -14,7 +14,7 @@
 
 ### Searching the Collection
 
-The `search_artwork` tool combines over 30 filters — from basic fields like creator, type, and date to vocabulary-backed parameters covering subject matter, production place, depicted persons, inscriptions, provenance, dimension ranges, creator demographics, and place hierarchy — that can be composed to answer questions no single filter handles alone. Results are ranked by relevance (BM25) when text search filters are active (title, description, inscription, narrative, provenance), by geographic proximity for spatial queries, and by importance (a composite score reflecting image availability, curatorial attention, and metadata richness) for vocabulary-filter queries — so the most significant works surface first.
+The `search_artwork` tool combines [37 filters](search-parameters.md) — from basic fields like creator, type, and date to vocabulary-backed parameters covering subject matter, production place, depicted persons, inscriptions, provenance, dimension ranges, creator demographics, attribution qualifiers, and place hierarchy — that can be composed to answer questions no single filter handles alone. Results are ranked by relevance (BM25) when text search filters are active (title, description, inscription, narrative, provenance), by geographic proximity for spatial queries, and by importance (a composite score reflecting image availability, curatorial attention, and metadata richness) for vocabulary-filter queries — so the most significant works surface first.
 
 #### 1. Mapping an Artist's Output Across Media
 
@@ -55,7 +55,7 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 
 ### Subject and Iconographic Search
 
-`search_artwork` includes over thirty database-backed filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `productionRole`, `attributionQualifier`, `creatorGender`, `creatorBornAfter`/`creatorBornBefore`, `expandPlaceHierarchy`, height/width ranges, and geo proximity — drawn from a pre-built vocabulary database of ~194,000 controlled terms mapped to ~832,000 artworks via ~13.5 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations) and a spatial place hierarchy (~31K geocoded places). These enable searches by what is depicted, where it was made, who made it (including life dates, gender, and production roles), what is written on it, what the museum says about it, and how large it is.
+`search_artwork` includes [37 database-backed filters](search-parameters.md) drawn from a vocabulary database of ~194,000 controlled terms mapped to ~832,000 artworks via ~13.5 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations) and a spatial place hierarchy (~31K geocoded places). These enable searches by what is depicted, where it was made, who made it (including life dates, gender, and production roles), what is written on it, what the museum says about it, and how large it is.
 
 #### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -125,12 +125,11 @@ The `search_artwork` tool combines over 30 filters — from basic fields like cr
 *What is the representation of women artists in the Rijksmuseum's collection? How does their presence vary across centuries and media — and which women produced the most works in the collection?*
 
 **How the tools enable it:**
-- `search_artwork` with `creatorGender: "female"` and `compact: true` for a total count — then compare with `creatorGender: "male"`
+- `search_artwork` with `creatorGender: "female"`, `type: "painting"`, and `compact: true` for a count of paintings by women — then repeat with `type: "print"`, `type: "drawing"` to compare across media, and with `creatorGender: "male"` for the overall ratio
 - Break down by century: add `creationDate: "16*"`, `"17*"`, `"18*"`, `"19*"` to map the distribution over time
-- Break down by medium: add `type: "painting"`, then `type: "print"`, then `type: "drawing"` to see which media women artists worked in
 - Non-compact search to identify the leading women artists in each century
 - `get_artwork_details` on selected works — the `personInfo` on production entries shows birth/death years and biographical notes
-- Use `creatorBornAfter: 1800` and `creatorBornBefore: 1900` with `creatorGender: "female"` to focus on 19th-century women artists specifically
+- Use `creatorBornAfter: 1800` and `creatorBornBefore: 1900` with `creatorGender: "female"` and `type: "painting"` to focus on 19th-century women painters specifically
 - Combine with `expandPlaceHierarchy: true` and `productionPlace: "Netherlands"` to include works from all Dutch cities
 
 **Why it matters:** The gender filter makes visible a dimension of collection composition that is otherwise buried in individual records. Rather than searching by name for artists the researcher already knows to be women, `creatorGender` reveals the full extent of women's presence — including lesser-known figures whose work may not appear in standard art historical narratives. The century and medium breakdowns expose structural patterns: whether women were more active in certain media, whether their representation grew or shrank over time, and which individuals anchor the collection's holdings.

@@ -4,7 +4,7 @@ The `get_artwork_details` tool returns **24 metadata categories** plus a bibliog
 
 All categories are returned together in a single response.
 
-Several of these categories have corresponding search parameters in `search_artwork`, allowing collection-wide discovery: titles (via `title`/`query`), date (via `creationDate`), description (via `description`), curatorial narrative (via `curatorialNarrative`), inscriptions (via `inscription`), provenance (via `provenance`), credit line (via `creditLine`), dimensions (via `minHeight`/`maxHeight`/`minWidth`/`maxWidth`), license (via `license`), collection sets (via `collectionSet`), and subjects (via `subject`, `iconclass`, `depictedPerson`, `depictedPlace`). Production details are searchable via `creator`, `productionPlace`, `productionRole`, and creator demographic filters (`creatorGender`, `creatorBornAfter`, `creatorBornBefore`). Place searches can be expanded to include sub-places via `expandPlaceHierarchy`.
+Nearly all categories have corresponding search parameters in `search_artwork` — see the [full search parameter reference](search-parameters.md) for all 37 filters grouped by type (vocabulary label, full-text, column/metadata) with examples.
 
 ---
 

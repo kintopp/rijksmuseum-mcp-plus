@@ -24,7 +24,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 3. **Spatial dimensions** — proximity radius searches on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable spatial queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters (`nearLat` and `nearLon`) to enable spatial queries from arbitrary locations.
 
-4. **More metadata** — several metadata fields not accessible from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) (`birthPlace` / `deathPlace`, `profession`, `iconclass`, `collectionSet`) as well as creator demographics (`gender`, `birth/death years`, `biographical notes`, `Wikidata IDs`) and place hierarchy expansion for spatial searches.
+4. **More metadata** — several metadata fields not accessible from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) (`birthPlace` / `deathPlace`, `profession`, `iconclass`, `collectionSet`, `attributionQualifier`) as well as creator demographics (`gender`, `birth/death years`, `biographical notes`, `Wikidata IDs`) and place hierarchy expansion for spatial searches.
 
 5. **Iconclass** — access to its own [Iconclass](https://iconclass.org) database, cross-linked with the Rijksmuseum's metadata, which can be searched and explored not just by notation by also title, description, parent/child classes and semantically by concept.
 
@@ -46,9 +46,11 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
 Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it whatever you like and paste the URL shown above into the _Remote MCP Server URL_ field. You can ignore the Authentication section. Once the connector is configured, set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) for more details. 
 
+#### Choosing an AI system
+
 Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector) - note: no authentication is required). It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local or cloud based LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/). In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
 
-Recommended configuration: [Claude Desktop](https://claude.com/download) with an Anthropic 'Pro' [subscription](https://claude.com/pricing) and the current [Claude Sonnet](https://www.anthropic.com/claude/sonnet) model with 'extended thinking' turned on. For complex tasks such as object recognition, switch to [Claude Opus](https://www.anthropic.com/claude/opus) with extended thinking.
+However, **none can view and interact with images** from the Rijksmuseum's collections in your chat timeline. For this reason, the best way to use this MCP server remains [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) with an Anthropic 'Pro' [subscription](https://claude.com/pricing) with the current [Claude Sonnet](https://www.anthropic.com/claude/sonnet) model. For complex object recognition tasks, switching to [Claude Opus](https://www.anthropic.com/claude/opus) with extended thinking will often produce better results.
 
 Note to developers: rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
 
@@ -65,6 +67,9 @@ After that, ask your own questions:
 - _I'm looking for artworks with inscriptions mentioning 'luctor et emergo'_
 - _Show me sculptures in the collection by artists born in Leiden_
 - _Which paintings are wider than 3 meters?_
+- _How many works in the collection are by women artists?_
+- _Which works are attributed to the circle of Hieronymus Bosch?_
+- _What photographs does the collection have by artists born in Indonesia?_
 - _Has anyone taken a tumble in SK-A-1718? Show me where._
 
 Et bien sûr también puedes explorar संग्रहों को 用你自己的语言。For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
