@@ -24,7 +24,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 3. **Spatial dimensions** — proximity radius searches on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable spatial queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters (`nearLat` and `nearLon`) to enable spatial queries from arbitrary locations.
 
-4. **More metadata** — several metadata fields not accessible from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) (`birthPlace` / `deathPlace`, `profession`, `iconclass`, `collectionSet`, `attributionQualifier`) as well as creator demographics (`gender`, `birth/death years`, `biographical notes`, `Wikidata IDs`) and place hierarchy expansion for spatial searches.
+4. **More metadata** — several metadata fields not accessible from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) (`birthPlace` / `deathPlace`, `profession`, `iconclass`, `collectionSet`, `attributionQualifier` — e.g. "workshop of", "attributed to", "circle of") as well as creator demographics (`gender`, `birth/death years`, `biographical notes`, `Wikidata IDs`) and place hierarchy expansion for spatial searches.
 
 5. **Iconclass** — access to its own [Iconclass](https://iconclass.org) database, cross-linked with the Rijksmuseum's metadata, which can be searched and explored not just by notation by also title, description, parent/child classes and semantically by concept.
 
