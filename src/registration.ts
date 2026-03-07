@@ -2091,12 +2091,18 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
               `Do NOT include any user messages, your own reasoning, or any other conversation content — ` +
               `the user may have discussed private topics earlier in this conversation that must not appear in the trace. ` +
               `The trace must contain nothing beyond the tool call data.\n\n` +
-              `**Output format:** A single fenced code block of JSONL (one JSON object per line). ` +
-              `This format is directly ingestible by analyse-railway-logs.py.\n\n` +
-              `Each line must have these fields:\n` +
+              `**Output format:** Create a downloadable markdown artifact. ` +
+              `The file should be named \`session-trace-YYYY-MM-DD.md\` using today's date.\n\n` +
+              `The markdown file must contain:\n` +
+              `1. A heading: \`# Session Trace — YYYY-MM-DD\`\n` +
+              (args.description
+                ? `2. A line: \`Session: ${args.description}\`\n`
+                : "") +
+              `${args.description ? "3" : "2"}. A fenced code block (language: jsonl) with one JSON object per line.\n\n` +
+              `Each JSONL line must have these fields:\n` +
               `- "timestamp": ISO 8601 UTC (use sequential timestamps 1 second apart)\n` +
-              `- "tool": the tool name exactly as called\n` +
-              `- "input": the arguments object passed to the tool (reproduce exactly)\n` +
+              `- "tool": the bare tool name without any server prefix — e.g. "search_artwork", not "Rijksmuseum:search_artwork"\n` +
+              `- "input": the arguments object passed to the tool. Omit keys whose value was null — do not include them.\n` +
               `- "ok": true if the tool succeeded, false if it returned an error\n` +
               `- "ms": 0 (latency is not available from conversation context)\n` +
               `- "result_summary": 1–2 sentence summary of the result\n\n` +
@@ -2106,14 +2112,8 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
               `- For inspect_artwork_image: note region and that image was returned (omit base64 data entirely)\n` +
               `- For errors: include the error message\n` +
               `- For all others: summarize the key information returned\n\n` +
-              (args.description
-                ? `After the JSONL block, add a one-line note: "Session description: ${args.description}"\n\n`
-                : "") +
-              `After the JSONL block, politely ask the user to review the trace before sharing it, ` +
-              `to make sure it contains only the tool call data and nothing personal.\n\n` +
-              `Output the JSONL code block` +
-              (args.description ? `, the session description line,` : "") +
-              ` and the review reminder — nothing else.`,
+              `After the artifact, politely ask the user to review the trace before sharing it, ` +
+              `to make sure it contains only the tool call data and nothing personal.`,
           },
         },
       ],

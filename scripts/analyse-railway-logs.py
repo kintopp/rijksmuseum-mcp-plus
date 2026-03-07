@@ -110,9 +110,13 @@ def extract_tool_calls(logs):
                 inp = json.loads(inp)
             except json.JSONDecodeError:
                 inp = {}
+        # Strip client-side server prefix (e.g. "Rijksmuseum:search_artwork" → "search_artwork")
+        tool_name = log["tool"]
+        if ":" in tool_name:
+            tool_name = tool_name.rsplit(":", 1)[-1]
         calls.append({
             "ts": ts,
-            "tool": log["tool"],
+            "tool": tool_name,
             "ms": int(float(log.get("ms", 0))),
             "ok": log.get("ok", True),
             "input": inp if isinstance(inp, dict) else {},
