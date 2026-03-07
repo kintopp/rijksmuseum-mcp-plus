@@ -122,6 +122,14 @@ function validateResponse(result, toolName, hasOutputSchema) {
     }
   }
 
+  // 5. Result count sanity: search_artwork should never return 700K+ (unfiltered collection)
+  if (toolName === "search_artwork" && sc && typeof sc === "object") {
+    const total = sc.totalResults;
+    if (typeof total === "number" && total > 500000) {
+      issues.push(`totalResults=${total} — filters likely not applied (unfiltered collection is ~725K)`);
+    }
+  }
+
   return issues;
 }
 

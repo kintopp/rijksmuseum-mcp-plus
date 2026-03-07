@@ -522,6 +522,137 @@ assert(pollWf.commands[3].label === "Test region B", "Last overlay label preserv
 assert(pollWf.commands[3].color === "crimson", "Last overlay color preserved");
 
 // ══════════════════════════════════════════════════════════════════
+//  7. Filter guard & coerceNull — client misbehaviour tests
+// ══════════════════════════════════════════════════════════════════
+
+section("7. Filter guard & coerceNull");
+
+// Helper: extract text, structured content, and total result count from a tool result.
+// totalResults is parsed from text header ("N results of M total") as a reliable fallback
+// since structuredContent may omit totalResults in some code paths.
+function parseResult(r) {
+  const text = r.content?.[0]?.text ?? "";
+  const sc = r.structuredContent ?? (text.startsWith("{") ? JSON.parse(text) : null);
+  // Parse "N results of M total" or "N results" from compact text header
+  const totalMatch = text.match(/(\d+) results? of (\d+) total/);
+  const countMatch = text.match(/^(\d+) results?/);
+  const totalResults = sc?.totalResults
+    ?? (totalMatch ? parseInt(totalMatch[2], 10) : null)
+    ?? (countMatch ? parseInt(countMatch[1], 10) : null);
+  return { text, sc, totalResults, isError: !!r.isError };
+}
+
+// 7a. imageAvailable: true alone → rejected
+console.log("\n--- 7a: imageAvailable alone (should be rejected) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { imageAvailable: true, maxResults: 5 },
+  });
+  const { isError, text } = parseResult(r);
+  assert(isError, "imageAvailable alone is rejected");
+  assert(text.includes("At least one search filter"), "Error mentions filter requirement");
+}
+
+// 7b. imageAvailable: true + "null" strings → rejected (null strings stripped)
+console.log("\n--- 7b: imageAvailable + null strings (should be rejected) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { imageAvailable: true, productionPlace: "null", subject: "null", maxResults: 5 },
+  });
+  const { isError } = parseResult(r);
+  assert(isError, "imageAvailable + null-string filters is rejected");
+}
+
+// 7c. imageAvailable: false alone → rejected
+console.log("\n--- 7c: imageAvailable false alone (should be rejected) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { imageAvailable: false },
+  });
+  const { isError } = parseResult(r);
+  assert(isError, "imageAvailable false alone is rejected");
+}
+
+// 7d. Empty args → rejected
+console.log("\n--- 7d: empty args (should be rejected) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: {},
+  });
+  const { isError } = parseResult(r);
+  assert(isError, "Empty args is rejected");
+}
+
+// 7e. All "null" strings → rejected (all stripped to undefined)
+console.log("\n--- 7e: all null strings (should be rejected) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { productionPlace: "null", subject: "null", creator: "null" },
+  });
+  const { isError } = parseResult(r);
+  assert(isError, "All null-string filters is rejected");
+}
+
+// 7f. Real filter + imageAvailable → works, returns narrowed results
+console.log("\n--- 7f: real filter + imageAvailable (should work) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { productionPlace: "Japan", imageAvailable: true, maxResults: 5 },
+  });
+  const { isError, totalResults } = parseResult(r);
+  assert(!isError, "productionPlace Japan + imageAvailable succeeds");
+  assert(totalResults > 0 && totalResults < 50000, `Result count is narrowed (${totalResults}), not 725K`);
+}
+
+// 7g. "null" string for one filter + real value for another → works with real filter only
+console.log("\n--- 7g: mixed null + real filter (should work) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { subject: "null", creator: "Rembrandt van Rijn", maxResults: 5 },
+  });
+  const { isError, totalResults } = parseResult(r);
+  assert(!isError, "Null subject + real creator succeeds");
+  assert(totalResults > 0 && totalResults < 5000, `Rembrandt results are narrowed (${totalResults})`);
+}
+
+// 7h. Empty string filter → treated as no filter (coerceNull strips it)
+console.log("\n--- 7h: empty string filter (should be rejected) ---");
+{
+  const r = await client.callTool({
+    name: "search_artwork",
+    arguments: { productionPlace: "", subject: "" },
+  });
+  const { isError } = parseResult(r);
+  assert(isError, "Empty string filters are rejected");
+}
+
+// 7i. Result count sanity: known queries should not return 700K+
+console.log("\n--- 7i: result count sanity checks ---");
+{
+  const queries = [
+    { args: { productionPlace: "Japan" }, label: "Japan", maxExpected: 20000 },
+    { args: { creator: "Rembrandt van Rijn", type: "painting" }, label: "Rembrandt paintings", maxExpected: 1000 },
+    { args: { subject: "vanitas", type: "painting" }, label: "vanitas paintings", maxExpected: 5000 },
+  ];
+  for (const { args, label, maxExpected } of queries) {
+    const r = await client.callTool({
+      name: "search_artwork",
+      arguments: { ...args, maxResults: 5 },
+    });
+    const { totalResults } = parseResult(r);
+    assert(totalResults > 0, `${label}: has results (${totalResults})`);
+    assert(totalResults <= maxExpected, `${label}: result count ${totalResults} <= ${maxExpected} (not unfiltered)`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 
