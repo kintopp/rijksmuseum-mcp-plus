@@ -857,10 +857,10 @@ function registerTools(
 
       // Route ALL queries through vocab DB when available (v0.19 vocab-DB-only routing)
       if (vocabAvailable && vocabDb) {
-        // At least one filter required (prevent unfiltered full-collection scans)
-        // imageAvailable: false adds no condition, so treat it as "no filter"
+        // At least one substantive filter required (prevent unfiltered full-collection scans).
+        // imageAvailable is a modifier (725K of 831K artworks have images), not a search filter.
         const hasAnyFilter = vocabParamKeys.some(k =>
-            argsRecord[k] !== undefined && !(k === "imageAvailable" && argsRecord[k] === false)
+            k !== "imageAvailable" && argsRecord[k] !== undefined
           ) || argsRecord["query"] !== undefined;
         if (!hasAnyFilter) {
           return errorResponse(
