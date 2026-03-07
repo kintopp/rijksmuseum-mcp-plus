@@ -28,6 +28,9 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 50;
 
+/** Params that narrow results but are too broad to stand alone as the only filter. */
+const MODIFIER_KEYS = new Set(["imageAvailable", "creatorGender", "creatorBornAfter", "creatorBornBefore", "expandPlaceHierarchy"]);
+
 /** Preprocess: strip JSON null / "null" string / "" → undefined BEFORE Zod validates.
  *  claude.ai sends actual JSON null for every optional string param the LLM omits.
  *  z.string().optional() rejects null (only accepts string | undefined), so the
@@ -593,6 +596,10 @@ function registerTools(
     "creationDate",
     "imageAvailable",
     "aboutActor",
+    // Creator demographic filters (require person enrichment)
+    "creatorGender", "creatorBornAfter", "creatorBornBefore",
+    // Place hierarchy
+    "expandPlaceHierarchy",
   ] as const;
   // nearPlaceRadius excluded from routing key check: its Zod default (25) would trigger
   // on every query. Forwarded separately.
@@ -783,6 +790,38 @@ function registerTools(
                   "'circle of', 'follower of', 'secondary', 'undetermined'. " +
                   "Combine with creator to narrow attribution (e.g. attributionQualifier: 'workshop of' + creator: 'Rembrandt')."
                 ),
+              creatorGender: optMinStr()
+                .optional()
+                .describe(
+                  "Filter by creator gender: 'male' or 'female'. " +
+                  "Coverage: ~64K of ~76K person entries have gender data. " +
+                  "Combine with other filters (e.g. type: 'painting', creationDate: '17*')."
+                ),
+              creatorBornAfter: z.preprocess(stripNull, z
+                .number()
+                .int()
+                .optional()
+                .describe(
+                  "Filter to creators born in or after this year (e.g. 1800). " +
+                  "Coverage: ~49K person entries have birth year data."
+                )),
+              creatorBornBefore: z.preprocess(stripNull, z
+                .number()
+                .int()
+                .optional()
+                .describe(
+                  "Filter to creators born in or before this year (e.g. 1700). " +
+                  "Combine with creatorBornAfter for a range (e.g. born 1600–1700)."
+                )),
+              expandPlaceHierarchy: z.preprocess(stripNull, z
+                .boolean()
+                .optional()
+                .describe(
+                  "When true, place searches (productionPlace, depictedPlace, birthPlace, deathPlace) " +
+                  "expand to include sub-places in the administrative hierarchy. " +
+                  "E.g. productionPlace: 'Netherlands' with expandPlaceHierarchy: true includes Amsterdam, Delft, etc. " +
+                  "Expansion follows up to 3 levels of parent→child relationships."
+                )),
               minHeight: z
                 .number()
                 .optional()
@@ -872,9 +911,8 @@ function registerTools(
       // Route ALL queries through vocab DB when available (v0.19 vocab-DB-only routing)
       if (vocabAvailable && vocabDb) {
         // At least one substantive filter required (prevent unfiltered full-collection scans).
-        // imageAvailable is a modifier (725K of 831K artworks have images), not a search filter.
         const hasAnyFilter = vocabParamKeys.some(k =>
-            k !== "imageAvailable" && argsRecord[k] !== undefined
+            !MODIFIER_KEYS.has(k) && argsRecord[k] !== undefined
           ) || argsRecord["query"] !== undefined;
         if (!hasAnyFilter) {
           return errorResponse(

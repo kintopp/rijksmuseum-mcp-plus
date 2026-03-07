@@ -53,6 +53,12 @@ export interface VocabSearchParams {
   imageAvailable?: boolean;
   // Broad person search (searches both depicted persons and creators)
   aboutActor?: string;
+  // Creator demographic filters (require person enrichment columns)
+  creatorGender?: string;
+  creatorBornAfter?: number;
+  creatorBornBefore?: number;
+  // Place hierarchy expansion
+  expandPlaceHierarchy?: boolean;
   maxResults?: number;
   facets?: boolean;
 }
@@ -126,6 +132,9 @@ export const FILTER_ART_IDS_KEYS: ReadonlySet<string> = new Set([
   ...VOCAB_FILTERS.map(f => f.param),
   "imageAvailable",
   "creationDate",
+  "creatorGender",
+  "creatorBornAfter",
+  "creatorBornBefore",
 ]);
 
 /** Row shape returned by place-candidate queries (findPlaceCandidates, resolveMultiWordPlace). */
@@ -348,17 +357,11 @@ export class VocabularyDb {
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
 
-      // Warn if geo index is missing (must be created during harvest, not at runtime — DB is read-only)
+      // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
-        try {
-          const hasGeoIdx = this.db.prepare(
-            "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_vocab_lat_lon'"
-          ).get();
-          if (!hasGeoIdx) {
-            console.error("Warning: idx_vocab_lat_lon index missing — nearPlace queries may be slower. Re-run harvest Phase 3 to create it.");
-          }
-        } catch { /* ignore */ }
+        this.warnIfIndexMissing("idx_vocab_lat_lon", "nearPlace queries may be slower. Re-run harvest Phase 3 to create it.");
       }
+      this.warnIfIndexMissing("idx_vocab_broader_id", "expandPlaceHierarchy will be slow. Run enrichment script to create it.");
 
       // Cache frequently-used prepared statements
       this.stmtLookupArtwork = this.db.prepare(
@@ -394,6 +397,17 @@ export class VocabularyDb {
 
   get available(): boolean {
     return this.db !== null;
+  }
+
+  /** Check if an index exists and warn if missing. */
+  private warnIfIndexMissing(indexName: string, context: string): void {
+    if (!this.db) return;
+    try {
+      const exists = this.db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?"
+      ).get(indexName);
+      if (!exists) console.error(`Warning: ${indexName} index missing — ${context}`);
+    } catch { /* ignore */ }
   }
 
   /** Batch-lookup object types from the mappings table. Returns objectNumber → label map.
@@ -958,6 +972,15 @@ export class VocabularyDb {
             }
           }
 
+          // Place hierarchy expansion: include children of matched places
+          if (vocabIds.length > 0 && filter.vocabType === "place" && effective.expandPlaceHierarchy) {
+            const before = vocabIds.length;
+            vocabIds = this.expandPlaceChildren(vocabIds);
+            if (vocabIds.length > before) {
+              warnings?.push(`${filter.param}: expanded ${before} place(s) to ${vocabIds.length} via hierarchy.`);
+            }
+          }
+
           if (vocabIds.length === 0) {
             return null; // signal: zero matches for this filter element
           }
@@ -1011,7 +1034,65 @@ export class VocabularyDb {
       }
     }
 
+    // Creator demographic filters (gender, birth year range) — require person enrichment + integer mappings
+    const hasCreatorDemographic = effective.creatorGender != null || effective.creatorBornAfter != null || effective.creatorBornBefore != null;
+    if (hasCreatorDemographic) {
+      if (this.stmtLookupPersonInfo && this.hasIntMappings) {
+        const creatorFieldId = this.fieldIdMap.get("creator");
+        if (creatorFieldId != null) {
+          const vocabConds: string[] = ["v.type = 'person'"];
+          const vocabBindings: unknown[] = [];
+          if (effective.creatorGender != null) {
+            vocabConds.push("v.gender = ?");
+            vocabBindings.push(effective.creatorGender);
+          }
+          if (effective.creatorBornAfter != null) {
+            vocabConds.push("v.birth_year >= ?");
+            vocabBindings.push(effective.creatorBornAfter);
+          }
+          if (effective.creatorBornBefore != null) {
+            vocabConds.push("v.birth_year <= ?");
+            vocabBindings.push(effective.creatorBornBefore);
+          }
+          conditions.push(
+            `a.art_id IN (SELECT m.artwork_id FROM mappings m ` +
+            `JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id ` +
+            `WHERE m.field_id = ? AND ${vocabConds.join(" AND ")})`
+          );
+          bindings.push(creatorFieldId, ...vocabBindings);
+        }
+      } else {
+        warnings?.push("Creator demographic filters (creatorGender, creatorBornAfter, creatorBornBefore) require vocabulary DB with person enrichment. These filters were ignored.");
+      }
+    }
+
     return { conditions, bindings };
+  }
+
+  /**
+   * Expand a set of place vocab IDs to include children (places whose broader_id
+   * points to one of the given IDs). Uses a recursive CTE limited to 10 levels deep,
+   * capped at 10,000 descendants to prevent pathological expansions.
+   *
+   * Performance: requires idx_vocab_broader_id index. The recursive step omits
+   * `AND type = 'place'` — with a type filter, SQLite uses idx_vocab_type (full
+   * scan of all places) instead of idx_vocab_broader_id (index lookup per parent).
+   * This is safe: only places have broader_id pointing to other places.
+   */
+  private expandPlaceChildren(placeIds: string[]): string[] {
+    if (!this.db || placeIds.length === 0) return placeIds;
+    const placeholders = placeIds.map(() => "?").join(", ");
+    const sql = `
+      WITH RECURSIVE descendants(id, depth) AS (
+        SELECT id, 0 FROM vocabulary WHERE id IN (${placeholders}) AND type = 'place'
+        UNION ALL
+        SELECT v.id, d.depth + 1
+        FROM descendants d JOIN vocabulary v ON v.broader_id = d.id
+        WHERE d.depth < 10
+      )
+      SELECT DISTINCT id FROM descendants LIMIT 10000`;
+    const rows = this.db.prepare(sql).all(...placeIds) as { id: string }[];
+    return rows.map(r => r.id);
   }
 
   /**

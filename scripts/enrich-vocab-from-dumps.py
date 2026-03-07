@@ -718,6 +718,7 @@ def create_indexes(conn):
         ("idx_vocab_gender", "CREATE INDEX IF NOT EXISTS idx_vocab_gender ON vocabulary(gender) WHERE gender IS NOT NULL"),
         ("idx_vocab_birth_year", "CREATE INDEX IF NOT EXISTS idx_vocab_birth_year ON vocabulary(birth_year) WHERE birth_year IS NOT NULL"),
         ("idx_vocab_wikidata", "CREATE INDEX IF NOT EXISTS idx_vocab_wikidata ON vocabulary(wikidata_id) WHERE wikidata_id IS NOT NULL"),
+        ("idx_vocab_broader_id", "CREATE INDEX IF NOT EXISTS idx_vocab_broader_id ON vocabulary(broader_id) WHERE broader_id IS NOT NULL"),
     ]
     for name, sql in indexes:
         conn.execute(sql)
