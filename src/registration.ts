@@ -28,14 +28,18 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 50;
 
+/** Coerce null and the literal string "null" (a claude.ai client serialisation bug) to undefined. */
+const coerceNull = <T>(v: T | null): T | undefined =>
+  (v == null || v === "null") ? undefined : v as T;
+
 /** Zod type accepting a single string or array of strings (AND intersection, max 5).
  *  Nullable: LLMs may pass null instead of omitting optional params — coerce to undefined. */
 const stringOrArray = z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(5)])
-  .nullable().transform(v => (v == null || v === "null") ? undefined : v);
+  .nullable().transform(coerceNull);
 
 /** Nullable string — coerces null → undefined so LLMs can pass null for "no filter". */
-const optStr = z.string().nullable().transform(v => (v == null || v === "null") ? undefined : v);
-const optMinStr = z.string().min(1).nullable().transform(v => (v == null || v === "null") ? undefined : v);
+const optStr = z.string().nullable().transform(coerceNull);
+const optMinStr = z.string().min(1).nullable().transform(coerceNull);
 
 type ToolResponse = { content: [{ type: "text"; text: string }] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
