@@ -28,14 +28,15 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 50;
 
-/** Coerce null and the literal string "null" (a claude.ai client serialisation bug) to undefined. */
+/** Coerce null, the literal string "null" (a claude.ai client serialisation bug),
+ *  and empty strings to undefined. */
 const coerceNull = <T>(v: T | null): T | undefined =>
-  (v == null || v === "null") ? undefined : v as T;
+  (v == null || v === "null" || v === "") ? undefined : v as T;
 
-/** Zod type accepting a single string or array of strings (AND intersection, max 5).
- *  Nullable: LLMs may pass null instead of omitting optional params — coerce to undefined. */
-const stringOrArray = z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(5)])
-  .nullable().transform(coerceNull);
+/** Nullable string filter — emits `"type": ["string", "null"]` in JSON Schema.
+ *  Avoids `anyOf` which causes claude.ai to serialise values as the literal string "null".
+ *  Downstream code (VocabularyDb) still accepts string[] via its own normalisation. */
+const stringOrArray = z.string().nullable().transform(coerceNull);
 
 /** Nullable string — coerces null → undefined so LLMs can pass null for "no filter". */
 const optStr = z.string().nullable().transform(coerceNull);
@@ -625,7 +626,7 @@ function registerTools(
           .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Equivalent to query but explicit."),
         creator: stringOrArray
           .optional()
-          .describe("Search by artist name, e.g. 'Rembrandt van Rijn'. Array = AND (both creators)."),
+          .describe("Search by artist name, e.g. 'Rembrandt van Rijn'."),
         aboutActor: optStr
           .optional()
           .describe(
@@ -637,13 +638,13 @@ function registerTools(
           ),
         type: stringOrArray
           .optional()
-          .describe("Filter by object type: 'painting', 'print', 'drawing', etc. Array = AND (all types)."),
+          .describe("Filter by object type: 'painting', 'print', 'drawing', etc."),
         material: stringOrArray
           .optional()
-          .describe("Filter by material: 'canvas', 'paper', 'wood', etc. Array = AND (all materials)."),
+          .describe("Filter by material: 'canvas', 'paper', 'wood', etc."),
         technique: stringOrArray
           .optional()
-          .describe("Filter by technique: 'oil painting', 'etching', etc. Array = AND (all techniques)."),
+          .describe("Filter by technique: 'oil painting', 'etching', etc."),
         creationDate: optStr
           .optional()
           .describe(
@@ -920,14 +921,7 @@ function registerTools(
       }
 
       // Degraded fallback: use Search API when vocab DB is unavailable
-      // Search API only supports single-string params; flatten arrays to first element
-      const searchArgs: SearchParams = {
-        ...args,
-        creator: Array.isArray(args.creator) ? args.creator[0] : args.creator,
-        type: Array.isArray(args.type) ? args.type[0] : args.type,
-        material: Array.isArray(args.material) ? args.material[0] : args.material,
-        technique: Array.isArray(args.technique) ? args.technique[0] : args.technique,
-      };
+      const searchArgs: SearchParams = { ...args };
       const result = args.compact
         ? await api.searchCompact(searchArgs)
         : await api.searchAndResolve(searchArgs);
@@ -1824,17 +1818,17 @@ function registerTools(
           "from a wider result window or English reformulation if canonical works are missing.",
         inputSchema: z.object({
           query: z.string().describe("Natural language concept query (e.g. 'winter landscape with ice skating')"),
-          type: stringOrArray.optional().describe("Filter by object type (e.g. 'painting', 'print'). Array = AND."),
-          material: stringOrArray.optional().describe("Filter by material (e.g. 'canvas', 'paper'). Array = AND."),
-          technique: stringOrArray.optional().describe("Filter by technique (e.g. 'etching', 'oil painting'). Array = AND."),
+          type: stringOrArray.optional().describe("Filter by object type (e.g. 'painting', 'print')."),
+          material: stringOrArray.optional().describe("Filter by material (e.g. 'canvas', 'paper')."),
+          technique: stringOrArray.optional().describe("Filter by technique (e.g. 'etching', 'oil painting')."),
           creationDate: optStr.optional().describe("Filter by date — exact year ('1642') or wildcard ('16*')"),
-          creator: stringOrArray.optional().describe("Filter by artist name. Array = AND."),
-          subject: stringOrArray.optional().describe("Pre-filter by subject before semantic ranking. Array = AND."),
-          iconclass: stringOrArray.optional().describe("Pre-filter by Iconclass notation before semantic ranking. Array = AND."),
-          depictedPerson: stringOrArray.optional().describe("Pre-filter by depicted person before semantic ranking. Array = AND."),
-          depictedPlace: stringOrArray.optional().describe("Pre-filter by depicted place before semantic ranking. Array = AND."),
-          productionPlace: stringOrArray.optional().describe("Pre-filter by production place before semantic ranking. Array = AND."),
-          collectionSet: stringOrArray.optional().describe("Pre-filter by collection set before semantic ranking. Array = AND."),
+          creator: stringOrArray.optional().describe("Filter by artist name."),
+          subject: stringOrArray.optional().describe("Pre-filter by subject before semantic ranking."),
+          iconclass: stringOrArray.optional().describe("Pre-filter by Iconclass notation before semantic ranking."),
+          depictedPerson: stringOrArray.optional().describe("Pre-filter by depicted person before semantic ranking."),
+          depictedPlace: stringOrArray.optional().describe("Pre-filter by depicted place before semantic ranking."),
+          productionPlace: stringOrArray.optional().describe("Pre-filter by production place before semantic ranking."),
+          collectionSet: stringOrArray.optional().describe("Pre-filter by collection set before semantic ranking."),
           aboutActor: optStr.optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
           imageAvailable: z.boolean().optional().describe("Pre-filter to artworks with images"),
           maxResults: z.number().int().min(1).max(RESULTS_MAX).default(15).optional()
