@@ -45,6 +45,14 @@ function getLangId(langs: { id: string }[] | undefined): string | undefined {
 }
 
 // Exported for testing
+/** Normalize a Linked Art field that may be a single object or an array.
+ *  JSON-LD allows any relationship to be singular or plural — this guards against it. */
+export function ensureArray<T>(value: T | T[] | undefined | null): T[] {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+// Exported for testing
 /** Normalize content that may be a string or array (~34 artworks return arrays) */
 export function extractContent(content: string | string[] | undefined): string {
   if (content == null) return "";
@@ -167,7 +175,7 @@ export class RijksmuseumApiClient {
   async getImageInfo(object: LinkedArtObject, thumbnailWidth: number = 800): Promise<ArtworkImageInfo | null> {
     try {
       // Step 1: Get VisualItem reference from object
-      const visualItemRef = object.shows?.[0];
+      const visualItemRef = ensureArray(object.shows)[0];
       if (!visualItemRef?.id) return null;
 
       // Step 2: Resolve VisualItem (cached)
@@ -176,7 +184,7 @@ export class RijksmuseumApiClient {
         async () => (await this.http.get<VisualItem>(visualItemRef.id)).data,
         RijksmuseumApiClient.TTL_IMAGE
       );
-      const digitalObjectRef = viData.digitally_shown_by?.[0];
+      const digitalObjectRef = ensureArray(viData.digitally_shown_by)[0];
       if (!digitalObjectRef?.id) return null;
 
       // Step 3: Resolve DigitalObject (cached)
@@ -270,7 +278,7 @@ export class RijksmuseumApiClient {
 
   /** Extract the preferred English title (brief text), falling back to any English name */
   static parseTitle(obj: LinkedArtObject): string {
-    const names = (obj.identified_by ?? []).filter((i) => i.type === "Name");
+    const names = ensureArray(obj.identified_by).filter((i) => i.type === "Name");
 
     // Prefer English brief title
     const enBrief = names.find(
@@ -300,7 +308,7 @@ export class RijksmuseumApiClient {
 
   /** Extract object number from identified_by */
   static parseObjectNumber(obj: LinkedArtObject): string {
-    const identifier = (obj.identified_by ?? []).find(
+    const identifier = ensureArray(obj.identified_by).find(
       (i) =>
         i.type === "Identifier" &&
         hasClassification(i.classified_as, AAT.OBJECT_NUMBER)
@@ -311,7 +319,7 @@ export class RijksmuseumApiClient {
   /** Extract creator name from produced_by.referred_to_by (English creator statement) */
   static parseCreator(obj: LinkedArtObject): string {
     // Look in produced_by.referred_to_by for creator statement (AAT 300435416)
-    const statements = obj.produced_by?.referred_to_by ?? [];
+    const statements = ensureArray(obj.produced_by?.referred_to_by);
     const enCreator = statements.find(
       (s) =>
         hasClassification(s.classified_as, AAT.CREATOR_DESCRIPTION) &&
@@ -343,13 +351,14 @@ export class RijksmuseumApiClient {
     if (!timespan) return "Unknown";
 
     // Prefer English date label
-    const enDate = timespan.identified_by?.find(
+    const dateLabels = ensureArray(timespan.identified_by);
+    const enDate = dateLabels.find(
       (i) => getLangId(i.language) === AAT.LANG_EN
     );
     if (enDate) return extractContent(enDate.content);
 
     // Fallback: any date label
-    const anyDate = timespan.identified_by?.[0];
+    const anyDate = dateLabels[0];
     if (anyDate) return extractContent(anyDate.content);
 
     // Fallback: extract year from begin_of_the_begin
@@ -401,17 +410,16 @@ export class RijksmuseumApiClient {
   /** Parse location from current_location */
   static parseLocation(obj: LinkedArtObject): string | null {
     const loc = obj.current_location;
-    if (!loc?.identified_by) return null;
+    const locIds = ensureArray(loc?.identified_by);
+    if (locIds.length === 0) return null;
 
     // Collect all identifier parts
     const parts: string[] = [];
-    for (const id of loc.identified_by) {
+    for (const id of locIds) {
       if (id.content) {
         parts.push(extractContent(id.content));
       } else if ((id as any).part) {
-        const rawParts = (id as any).part;
-        const partArray = Array.isArray(rawParts) ? rawParts : [rawParts];
-        for (const p of partArray) {
+        for (const p of ensureArray((id as any).part)) {
           if (p?.content) parts.push(extractContent(p.content));
         }
       }
@@ -423,7 +431,7 @@ export class RijksmuseumApiClient {
 
   /** Extract all title variants with language and qualifier */
   static parseTitles(obj: LinkedArtObject): TitleVariant[] {
-    return (obj.identified_by ?? [])
+    return ensureArray(obj.identified_by)
       .filter((i) => i.type === "Name")
       .map((n) => {
         const langId = getLangId(n.language);
@@ -450,7 +458,7 @@ export class RijksmuseumApiClient {
     let en: string | null = null;
     let nl: string | null = null;
 
-    for (const s of obj.subject_of ?? []) {
+    for (const s of ensureArray(obj.subject_of)) {
       // Language is on the parent subject_of entry, not on parts
       const langId = getLangId(s.language);
       const isEn = langId === AAT.LANG_EN;
@@ -458,7 +466,7 @@ export class RijksmuseumApiClient {
       if (!isEn && !isNl) continue;
 
       // Find the narrative part classified as AAT description (300048722)
-      for (const p of s.part ?? []) {
+      for (const p of ensureArray(s.part)) {
         if (
           p.content &&
           hasClassification(p.classified_as, AAT.NARRATIVE)
@@ -473,8 +481,8 @@ export class RijksmuseumApiClient {
 
   /** Extract license/rights URI (e.g. CC0) */
   static parseLicense(obj: LinkedArtObject): string | null {
-    for (const s of obj.subject_of ?? []) {
-      for (const st of s.subject_to ?? []) {
+    for (const s of ensureArray(obj.subject_of)) {
+      for (const st of ensureArray(s.subject_to)) {
         if (st.classified_as?.[0]) {
           const cls = st.classified_as[0];
           const uri = typeof cls === "string" ? cls : cls.id;
@@ -487,8 +495,8 @@ export class RijksmuseumApiClient {
 
   /** Extract web page URL from subject_of with digitally_carried_by */
   static parseWebPage(obj: LinkedArtObject): string | null {
-    for (const s of obj.subject_of ?? []) {
-      for (const d of s.digitally_carried_by ?? []) {
+    for (const s of ensureArray(obj.subject_of)) {
+      for (const d of ensureArray(s.digitally_carried_by)) {
         if (d.format === "text/html" && d.access_point?.[0]?.id) {
           return d.access_point[0].id;
         }
@@ -499,18 +507,19 @@ export class RijksmuseumApiClient {
 
   /** Extract human-readable dimension statement (e.g. "height 379.5 cm x width 453.5 cm") */
   static parseDimensionStatement(obj: LinkedArtObject): string | null {
-    return RijksmuseumApiClient.findStatement(obj.referred_to_by, AAT.DIMENSION_STATEMENT);
+    return RijksmuseumApiClient.findStatement(ensureArray(obj.referred_to_by), AAT.DIMENSION_STATEMENT);
   }
 
   /** Extract structured numeric dimensions (value + unit + label) */
   static parseDimensions(obj: LinkedArtObject): StructuredDimension[] {
-    return (obj.dimension ?? [])
+    return ensureArray(obj.dimension)
       .filter((d) => d.value != null)
       .map((d) => {
         const unitUri = d.unit?.id ?? d.unit?._label ?? "";
         const unit = AAT_UNIT_LABELS[unitUri] ?? unitUri;
-        const typeUri = d.classified_as?.[0]?.id ?? "";
-        const note = d.referred_to_by?.[0]?.content != null ? extractContent(d.referred_to_by[0].content) : null;
+        const typeUri = ensureArray(d.classified_as)[0]?.id ?? "";
+        const dimRef = ensureArray(d.referred_to_by)[0];
+        const note = dimRef?.content != null ? extractContent(dimRef.content) : null;
         return { type: typeUri, value: d.value!, unit, note };
       });
   }
@@ -518,11 +527,11 @@ export class RijksmuseumApiClient {
   /** Extract related object references from attributed_by (deduplicated by URI) */
   static parseRelatedObjects(obj: LinkedArtObject): RelatedObject[] {
     const seen = new Map<string, RelatedObject>();
-    for (const a of obj.attributed_by ?? []) {
+    for (const a of ensureArray(obj.attributed_by)) {
       const uri = a.assigned?.[0]?.id;
       if (!uri || seen.has(uri)) continue;
 
-      const labels = a.identified_by ?? [];
+      const labels = ensureArray(a.identified_by);
       const enLabel = labels.find(
         (l) => getLangId(l.language) === AAT.LANG_EN
       );
@@ -534,12 +543,12 @@ export class RijksmuseumApiClient {
 
   /** Extract persistent identifier (handle.net) from equivalent */
   static parsePersistentId(obj: LinkedArtObject): string | null {
-    return obj.equivalent?.[0]?.id ?? null;
+    return ensureArray(obj.equivalent)[0]?.id ?? null;
   }
 
   /** Count bibliography entries (for discoverability) */
   static parseBibliographyCount(obj: LinkedArtObject): number {
-    return (obj.assigned_by ?? []).filter((a) =>
+    return ensureArray(obj.assigned_by).filter((a) =>
       hasClassification(a.classified_as, AAT.CITATION)
     ).length;
   }
@@ -548,7 +557,7 @@ export class RijksmuseumApiClient {
 
   static toSummary(obj: LinkedArtObject, uri: string): ArtworkSummary {
     const objectNumber = RijksmuseumApiClient.parseObjectNumber(obj);
-    const typeLabel = (obj.classified_as ?? [])
+    const typeLabel = ensureArray(obj.classified_as)
       .map((c) => (typeof c === "string" ? undefined : c._label))
       .find(Boolean);
     return {
@@ -566,7 +575,7 @@ export class RijksmuseumApiClient {
 
   static toDetail(obj: LinkedArtObject, uri: string): ArtworkDetail {
     const summary = RijksmuseumApiClient.toSummary(obj, uri);
-    const statements = obj.referred_to_by;
+    const statements = ensureArray(obj.referred_to_by);
 
     return {
       ...summary,
@@ -595,9 +604,9 @@ export class RijksmuseumApiClient {
         AAT.INSCRIPTIONS
       ),
       location: RijksmuseumApiClient.parseLocation(obj),
-      collectionSets: (obj.member_of ?? []).map((m) => m.id),
+      collectionSets: ensureArray(obj.member_of).map((m) => m.id),
       externalIds: Object.fromEntries(
-        (obj.identified_by ?? [])
+        ensureArray(obj.identified_by)
           .filter((i) => i.type === "Identifier")
           .map((i) => {
             const cls = i.classified_as?.[0];
@@ -621,7 +630,7 @@ export class RijksmuseumApiClient {
         const { data } = await this.http.get(uri);
 
         // Extract English label, falling back to Dutch, then _label, then URI
-        const names = ((data.identified_by ?? []) as any[]).filter(
+        const names = (ensureArray(data.identified_by) as any[]).filter(
           (i: any) => i.type === "Name"
         );
         const enName = names.find(
@@ -635,7 +644,7 @@ export class RijksmuseumApiClient {
 
         // Extract external equivalents (AAT, Wikidata, Iconclass)
         const equivalents: Record<string, string> = {};
-        for (const eq of (data.equivalent ?? []) as any[]) {
+        for (const eq of ensureArray(data.equivalent) as any[]) {
           const eqId: string = eq.id ?? "";
           if (eqId.includes("vocab.getty.edu")) equivalents.aat = eqId;
           else if (eqId.includes("wikidata.org")) equivalents.wikidata = eqId;
@@ -664,32 +673,32 @@ export class RijksmuseumApiClient {
     subjects: SubjectData;
   }> {
     // Collect all URIs that need resolution
-    const typeUris = (obj.classified_as ?? [])
+    const typeUris = ensureArray(obj.classified_as)
       .map((c) => (typeof c === "string" ? c : c.id))
       .filter(Boolean) as string[];
-    const materialUris = (obj.made_of ?? [])
+    const materialUris = ensureArray(obj.made_of)
       .map((m) => m.id)
       .filter(Boolean);
-    const collectionUris = (obj.member_of ?? [])
+    const collectionUris = ensureArray(obj.member_of)
       .map((m) => m.id)
       .filter(Boolean);
 
     // Production parts: collect actor, technique, place URIs
-    const prodParts = obj.produced_by?.part ?? [];
+    const prodParts = ensureArray(obj.produced_by?.part);
     const actorUris = prodParts.flatMap(
-      (p) => (p.carried_out_by ?? []).map((a) => a.id).filter(Boolean)
+      (p) => ensureArray(p.carried_out_by).map((a) => a.id).filter(Boolean)
     );
     const techniqueUris = prodParts.flatMap(
-      (p) => (p.technique ?? []).map((t) => t.id).filter(Boolean)
+      (p) => ensureArray(p.technique).map((t) => t.id).filter(Boolean)
     );
     const placeUris = prodParts.flatMap(
-      (p) => (p.took_place_at ?? []).map((pl) => pl.id).filter(Boolean)
+      (p) => ensureArray(p.took_place_at).map((pl) => pl.id).filter(Boolean)
     );
 
     // Dimension type URIs (Rijksmuseum vocabulary)
     const dimTypeUris = [
       ...new Set(
-        (obj.dimension ?? [])
+        ensureArray(obj.dimension)
           .map((d) => d.classified_as?.[0]?.id)
           .filter(Boolean) as string[]
       ),
@@ -699,17 +708,17 @@ export class RijksmuseumApiClient {
     let subjectConceptUris: string[] = [];
     let subjectEntityUris: string[] = [];
     try {
-      const visualItemRef = obj.shows?.[0];
+      const visualItemRef = ensureArray(obj.shows)[0];
       if (visualItemRef?.id) {
         const vi = await this.cache.getOrFetch<VisualItem>(
           `vi:${visualItemRef.id}`,
           async () => (await this.http.get<VisualItem>(visualItemRef.id)).data,
           RijksmuseumApiClient.TTL_IMAGE
         );
-        subjectConceptUris = (vi.represents_instance_of_type ?? [])
+        subjectConceptUris = ensureArray(vi.represents_instance_of_type)
           .map((r) => r.id)
           .filter(Boolean);
-        subjectEntityUris = (vi.represents ?? [])
+        subjectEntityUris = ensureArray(vi.represents)
           .map((r) => r.id)
           .filter(Boolean);
       }
@@ -909,7 +918,7 @@ export class RijksmuseumApiClient {
     const objectNumber = RijksmuseumApiClient.parseObjectNumber(obj);
 
     // Filter to citation entries only
-    const citationEntries = (obj.assigned_by ?? []).filter((a: any) =>
+    const citationEntries = ensureArray(obj.assigned_by).filter((a: any) =>
       hasClassification(a.classified_as, AAT.CITATION)
     );
     const total = citationEntries.length;
