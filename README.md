@@ -150,7 +150,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows. A `CITA
   author    = {Bosse, Arno},
   title     = {{rijksmuseum-mcp+}},
   year      = {2026},
-  version   = {0.19.0},
+  version   = {0.20},
   publisher = {Research and Infrastructure Support (RISE), University of Basel},
   url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
   orcid     = {0000-0003-3681-1289},
