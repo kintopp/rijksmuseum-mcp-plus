@@ -64,14 +64,14 @@ After that, ask your own questions:
 
 - _What artworks evoke vanitas and mortality?_
 - _Show me artworks depicting places within 50m of the Spinhuis in Amsterdam_
-- _What works have the iconclass code for fabulous animals?_
+- _What are the iconclass codes for fabulous animals?_
 - _Which artworks have a provenance linked to Napoleon?_
 - _I'm looking for artworks with inscriptions mentioning 'luctor et emergo'_
 - _Show me sculptures in the collection by artists born in Leiden_
 - _Which paintings are wider than 3 meters?_
 - _Which works are attributed to the circle of Hieronymus Bosch?_
 - _What photographs does the collection have by artists born in Indonesia?_
-- _Has anyone taken a tumble in SK-A-1718? Show me where._
+- _Did someone just take a tumble in the middle of Avercamp's Winter Landscape with Ice Skaters?!_
 
 Et bien sûr también puedes explorar संग्रहों को 用你自己的语言。For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
 
