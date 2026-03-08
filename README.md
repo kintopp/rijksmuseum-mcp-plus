@@ -97,6 +97,8 @@ Et bien sûr también puedes explorar संग्रहों को 用你自�
 
 **Iconclass subject classification can be counterintuitive.** The Iconclass system assigns subjects to specific branches of a strict hierarchy that does not always match everyday expectations. However, the assistant can search Iconclass by concept as well as by keyword — describing what you're looking for in plain language (e.g. "domestic animals" or "religious suffering") will often find the right notation even when the exact vocabulary term is unknown.
 
+**Not all maker relation types are available.** The Rijksmuseum's [collection search](https://www.rijksmuseum.nl/en/collection) offers 16 maker sub-types (e.g. "Attributed to", "Made after", "Signed by", "Rejected maker"). rijksmuseum-mcp+ currently captures four of these as structured `attributionQualifier` values — "attributed to", "workshop of", "circle of", and "follower of". Three additional qualifiers ("after", "possibly", and a second "circle of" type) are present in the Linked Art data and will be added in a future update. The remaining sub-types ("Signed by", "Manner of", "Rejected maker", "Falsification after") are being looked at – these may not be available via the public Linked Art API. 
+
 **Image analysis works better than image annotation.** LLMs are generally more accurate at describing the contents of an image than annotating it. For example, the AI assistant will often correctly describe what it can 'see' (even drawing on the detailed `description` field for guidance) but struggle to place accurate bounding-boxes around this content.
 
 ### Roadmap
@@ -122,11 +124,13 @@ Later:
 
 - investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 - create a [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file for exploring the collection
+- investigate adding `attributionQualifier`: "after", "possibly", and "circle of" (second type)
 - investigate exporting jpg/png from image viewer together with overlays
 - investigate adding RGB pixel analyses of images
 
 Maybe:
 
+- investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after" 
 - investigate incorporating historical exhibition data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - investigate support for image similarity search (whole image, [image segments](https://engineering.q42.nl/visual-search/))
