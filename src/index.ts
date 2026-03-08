@@ -288,7 +288,8 @@ function createServer(httpPort?: number): McpServer {
 
         "Search uses a vocabulary database with structured filters " +
         "(subject, material, technique, creator, depicted persons/places, Iconclass notation, dates, dimensions, and more). " +
-        "All filters combine freely with each other. Results are returned in cataloguing order, not ranked by relevance. " +
+        "All filters combine freely with each other. Results are ranked by BM25 relevance when text search is used, " +
+        "by geographic proximity for nearPlace, and by importance (image availability, curatorial attention) otherwise. " +
         "Use search_artwork for discovery, get_artwork_details for full metadata on a specific work.\n\n" +
 
         "Images are served via IIIF deep-zoom. get_artwork_image opens an interactive viewer (metadata + viewer link, no image bytes). " +
@@ -317,7 +318,7 @@ function createServer(httpPort?: number): McpServer {
         "For concept and theme searches where exact vocabulary terms are unknown, use semantic_search — " +
         "it ranks artworks by embedding similarity to a free-text query. " +
         "Use search_artwork when the query names a specific artist, place, date, material, or Iconclass term. " +
-        "Use semantic_search when the concept cannot be expressed as a subject tag or notation " +
+        "Use semantic_search when the concept cannot be expressed as structured metadata " +
         "(atmosphere, emotion, composition, art-historical interpretation), or when search_artwork returned zero results. " +
         "For queries where paintings are the expected result type, always combine semantic_search with " +
         "a follow-up search_artwork(type: 'painting', subject: ...) or search_artwork(type: 'painting', creator: ...) — " +

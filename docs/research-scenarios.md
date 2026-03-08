@@ -326,8 +326,8 @@ The `search_artwork` tool combines [37 filters](search-parameters.md) — from b
 
 **How the tools enable it:**
 - `semantic_search` with `query: "loneliness and isolation in a vast empty space"`
-- The model matches against embedded descriptions, narratives, and subject tags — a farmhouse described as standing alone in flat terrain, a ship on an empty horizon, a solitary figure in a landscape
-- Filter with `type: "painting"` to focus on paintings if the initial results skew toward works on paper (a known bias — prints and drawings have denser subject tagging)
+- The model matches against embedded titles, descriptions, narratives, and inscriptions — a farmhouse described as standing alone in flat terrain, a ship on an empty horizon, a solitary figure in a landscape
+- Filter with `type: "painting"` to focus on paintings if the initial results skew toward works on paper (a known bias — prints and drawings outnumber paintings ~77:1 in the collection)
 - Use the source text to assess whether the "loneliness" is in the curatorial interpretation or inferred from sparse descriptions — this distinction matters for research rigour
 
 **Why it matters:** Emotional and atmospheric qualities are not catalogued as metadata. No Iconclass code maps to "loneliness." The `description` and `curatorialNarrative` text filters require exact word matches and won't find synonyms or related concepts. Semantic search bridges this gap — imperfectly, since it depends on what curators have written, but it is often the only available path. The source text grounding makes this limitation transparent.

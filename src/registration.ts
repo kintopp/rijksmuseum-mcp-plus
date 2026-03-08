@@ -617,7 +617,7 @@ function registerTools(
         "At least one search filter is required. " +
         "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
         "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), " +
-        "ALWAYS start with subject — it searches 831K artworks tagged with structured Iconclass vocabulary " +
+        "ALWAYS start with subject — it searches ~832K artworks tagged with structured Iconclass vocabulary " +
         "and has by far the highest recall for conceptual queries. " +
         "Use description for cataloguer observations (e.g. compositional details, specific motifs noted by specialists); " +
         "use curatorialNarrative for curatorial interpretation and art-historical context. " +
@@ -692,9 +692,11 @@ function registerTools(
                 .optional()
                 .describe(
                   "PRIMARY parameter for concept or thematic searches — use this first, before description or curatorialNarrative. " +
-                  "Searches 831K artworks by subject matter (Iconclass themes, depicted scenes). " +
-                  "Exact word matching, no stemming — 'cat' won't match 'cats', 'crucifixion' won't match 'crucified'. " +
-                  "If a subject query returns 0 results, try variant word forms (singular/plural, nominalized) " +
+                  "Searches ~832K artworks by subject matter (Iconclass themes, depicted scenes). " +
+                  "Has basic English morphological expansion (singular/plural, -ing, -ed) as a fallback — " +
+                  "'cat' matches 'cats' and 'painting' matches 'paint', but unrelated derivations like " +
+                  "'crucifixion' vs 'crucified' are not linked. " +
+                  "If a subject query returns 0 results, try different word forms " +
                   "or use lookup_iconclass to find the canonical Iconclass notation code for more reliable matching. " +
                   "Also covers historical events using Dutch labels (e.g. 'Tweede Wereldoorlog', 'Tachtigjarige Oorlog'). " +
                   "Subject matching does not distinguish primary from incidental/decorative subjects — " +
@@ -1028,7 +1030,8 @@ function registerTools(
         "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch) " +
         "or by its Linked Art URI (e.g. from relatedObjects). Provide exactly one of objectNumber or uri. " +
         "Returns 24 metadata categories including titles, creator, date, description, curatorial narrative, " +
-        "dimensions (text + structured), materials, object type, production details, provenance, " +
+        "dimensions (text + structured), materials, object type, production details (with creator life dates, " +
+        "gender, bio, and Wikidata ID where available), provenance, " +
         "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
         "Also reports the bibliography count — use get_artwork_bibliography for full citations. " +
         "The relatedObjects field contains Linked Art URIs — pass them as uri to get full details of related works. " +
@@ -1223,8 +1226,8 @@ function registerTools(
         "Use navigate_viewer's 'relativeTo' parameter to place overlays using crop-local coordinates — " +
         "the server handles the projection to full-image space, avoiding manual coordinate math.\n\n" +
         "Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms " +
-        "to the inspected region (navigateViewer defaults to true). This keeps the viewer in sync " +
-        "with your analysis — no separate navigate_viewer call needed for basic zoom. " +
+        "to the inspected region (navigateViewer defaults to true, no effect when region is 'full'). " +
+        "This keeps the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom. " +
         "Use navigate_viewer separately only when you need overlays, labels, or clear_overlays.\n\n" +
         "The response includes the active viewUUID (if any) for follow-up navigate_viewer calls.",
       inputSchema: z.object({
@@ -1421,8 +1424,8 @@ function registerTools(
         "verify the region contains what you expect, then use the same or refined coordinates here. " +
         "Do not estimate overlay positions from memory — always inspect first.\n\n" +
         "Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set. " +
-        "Keep batches under 10 commands per call. The viewer session (viewUUID) remains active as long as " +
-        "the viewer is open and polling (~30 minutes after the viewer closes or loses connection).\n\n" +
+        "Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for " +
+        "30 minutes of idle inactivity — any polling or navigation resets the clock.\n\n" +
         "Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, " +
         "use 'relativeTo' with the crop's region string. Specify 'region' as coordinates within " +
         "the crop's local space (pct: format) and the server projects to full-image space " +
@@ -1883,8 +1886,8 @@ function registerTools(
           "Use type: 'painting' to restrict to the paintings collection. " +
           "Do NOT use technique: 'painting' for this purpose — it matches painted decoration on any object type " +
           "(ceramics, textiles, frames) and will return unexpected results.\n\n" +
-          "Painting queries — two-step pattern: Paintings are systematically underrepresented in semantic results " +
-          "because prints and drawings have denser subject tagging. For queries where paintings are the expected " +
+          "Painting queries — two-step pattern: Paintings are underrepresented in semantic results " +
+          "because prints and drawings outnumber them ~77:1 in the collection. For queries where paintings are the expected " +
           "result type, ALWAYS combine semantic_search with a follow-up search_artwork(type: 'painting', subject: ...) " +
           "or search_artwork(type: 'painting', creator: ...) call — do not wait to observe skew, as the absence " +
           "of key works is not visible in the returned results.\n\n" +
