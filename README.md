@@ -42,7 +42,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 ## Quick Start
 
-The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Claude using the URL below. Note: This currently requires a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic.
+The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Claude using the URL below. This currently requires a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic.
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
@@ -52,7 +52,7 @@ Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it whatever
 
 Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector) - note: no authentication is required). It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local or cloud based LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/). In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
 
-However, **none can view and interact with images** from the Rijksmuseum's collections in the chat timeline. For this reason, the best way to use this MCP server remains [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) with an Anthropic 'Pro' [subscription](https://claude.com/pricing) with the current [Claude Sonnet](https://www.anthropic.com/claude/sonnet) model. For complex object recognition tasks, switching to [Claude Opus](https://www.anthropic.com/claude/opus) with extended thinking will often produce better results.
+However, **none can view and interact with images** from the Rijksmuseum's collections in the chat timeline. For this reason, the best way to use this MCP server remains [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) with an Anthropic 'Pro' [subscription](https://claude.com/pricing) and the current [Claude Sonnet](https://www.anthropic.com/claude/sonnet) model. For complex object recognition tasks, switching to [Claude Opus](https://www.anthropic.com/claude/opus) with extended thinking will often produce better results.
 
 Note to developers: rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
 
