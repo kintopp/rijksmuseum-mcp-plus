@@ -18,7 +18,7 @@
 
 You can explore artworks with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ provides the following additional features:
 
-1. **Search full-text corpora** — (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`). This permits, for example, comparative analyses of the collection's catalogue entries and the curated wall texts. 
+1. **Full-text corpora** — (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`). This permits, for example, comparative analyses of the collection's catalogue entries and the curated wall texts.
 
 2. **Semantic search** — multilingual, concept/meaning-based explorations across multiple metadata categories. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
 
@@ -30,7 +30,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 6. **Iconclass** — access to its own [Iconclass](https://iconclass.org) database, cross-linked with the Rijksmuseum's metadata, which can be searched and explored not just by notation by also title, description, parent/child classes and semantically by concept.
 
-7. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (N.B. this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, rotate, flip horizontally or view the image full-screen. It can also be used to highlight a specific area of an image for the AI assistant to analyse. 
+7. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (N.B. this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, rotate, flip horizontally or view the image full-screen.
 
 8. **AI image analysis** (experimental) — the AI assistant can analyse images visually in combination with its own background knowledge and the artwork's structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?").
 
@@ -63,25 +63,25 @@ After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to y
 After that, ask your own questions:
 
 - _What artworks evoke vanitas and mortality?_
-- _Show me artworks depicting places within 50m of the Spinhuis in Amsterdam_
-- _What are the iconclass codes for fabulous animals?_
+- _Show me artworks depicting places near the Oude Kerk in Amsterdam_
+- _What works have the iconclass code for fabulous animals?_
 - _Which artworks have a provenance linked to Napoleon?_
 - _I'm looking for artworks with inscriptions mentioning 'luctor et emergo'_
 - _Show me sculptures in the collection by artists born in Leiden_
 - _Which paintings are wider than 3 meters?_
 - _Which works are attributed to the circle of Hieronymus Bosch?_
 - _What photographs does the collection have by artists born in Indonesia?_
-- _Did someone just take a tumble in the middle of Avercamp's Winter Landscape with Ice Skaters?!_
+- _Has anyone taken a tumble in SK-A-1718? Show me where._
 
 Et bien sûr también puedes explorar संग्रहों को 用你自己的语言。For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
 
 ### How it works
 
-`to be added` These are all the supported [search parameters](docs/search-parameters.md) and [metadata categories](docs/metadata-categories.md) returned by a search. Here is a [diagram](docs/mcp-workflow-diagram.md) explaining how information flows between a user and the rijksmuseum-mcp+ server.
+`to be added`. Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters.
 
 ### Technical notes
 
-`to be added` For now, please see [the technical guide](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo. 
+`to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo. 
 
 ### Tips
 

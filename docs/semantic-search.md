@@ -85,13 +85,11 @@ Source text is not stored in the embeddings database (saving ~270 MB). It is rec
 
 ### Known limitations
 
-**Curatorial language dependency.** Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly. The model embeds *what curators have written*, not what artworks depict. For purely emotional or stylistic concepts (e.g. chiaroscuro, desolation), catalogue descriptions often do not use that language, and precision will be lower.
-
-**Print and paper bias.** Works on paper (prints, drawings, photographs) tend to have denser subject tagging, giving their embeddings a richer semantic footprint. Paintings are often underrepresented in results, even when canonical paintings exist for the query concept. If results skew toward works on paper, follow up with `search_artwork(type: "painting", subject: ...)`.
+**Curatorial language dependency.** Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly. The model embeds what curators have written, not what artworks depict. For purely emotional or stylistic concepts (e.g. chiaroscuro, desolation), catalogue descriptions often do not use that language, and precision will be lower.
 
 **Cross-language precision.** Queries in Dutch, German, French, and other languages are supported via the multilingual embedding model, but may carry a precision penalty compared to English queries. Expected canonical works may appear lower in the ranking or be absent. If results seem off, try reformulating in English.
 
-**No relevance ranking for filters.** Filters are exact-match metadata filters (same as `search_artwork`). Within the filtered set, results are ranked by embedding similarity — but there is no hybrid score combining metadata relevance with semantic similarity.
+**No relevance ranking for filters.** Within the filtered set, results are ranked by embedding similarity — there is no hybrid score combining metadata relevance with semantic similarity.
 
 ### Technical details
 
