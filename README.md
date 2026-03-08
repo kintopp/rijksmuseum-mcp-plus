@@ -63,7 +63,7 @@ After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to y
 After that, ask your own questions:
 
 - _What artworks evoke vanitas and mortality?_
-- _Show me artworks depicting places near the Oude Kerk in Amsterdam_
+- _Show me artworks depicting places within 50m of the Spinhuis in Amsterdam_
 - _What works have the iconclass code for fabulous animals?_
 - _Which artworks have a provenance linked to Napoleon?_
 - _I'm looking for artworks with inscriptions mentioning 'luctor et emergo'_
