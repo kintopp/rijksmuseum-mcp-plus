@@ -20,16 +20,13 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "rijksmuseum": {
       "command": "node",
-      "args": ["/absolute/path/to/rijksmuseum-mcp-plus/dist/index.js"],
-      "env": {
-        "STRUCTURED_CONTENT": "false"
-      }
+      "args": ["/absolute/path/to/rijksmuseum-mcp-plus/dist/index.js"]
     }
   }
 }
 ```
 
-The vocabulary, Iconclass, and embeddings databases are downloaded automatically on first start (~296 MB + ~51 MB + ~399 MB compressed). The server works without them, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters), `lookup_iconclass`, and `semantic_search` won't be available. The embedding model (~130 MB) is also downloaded on first use. `STRUCTURED_CONTENT=false` disables structured output as a workaround for clients with `outputSchema` bugs.
+The vocabulary, Iconclass, and embeddings databases are downloaded automatically on first start (~296 MB + ~51 MB + ~399 MB compressed). The server works without them, but [vocabulary-backed search parameters](#vocabulary-backed-search-parameters), `lookup_iconclass`, and `semantic_search` won't be available. The embedding model (~130 MB) is also downloaded on first use.
 
 Restart your MCP client after updating the config.
 
