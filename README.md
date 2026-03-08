@@ -24,7 +24,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 3. **Spatial dimensions** — proximity radius searches on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable spatial queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters (`nearLat` and `nearLon`) to enable spatial queries from arbitrary locations ("find artworks depicting places near me").
 
-4. **Smart searching and ranking** — subject-based queries use (English-only) morphological stemming (plurals, gerunds, past tenses) to make search term more forgiving. Large result sets that need to be truncated include faceted counts to allow the AI assistant to suggest additional filters. Textual queries are ranked by relevance instead of catalogue order, while filter-only queries are ordered by their expected importance to most users (drawing on image availability, metadata richness, and `curatorialNarrative`). 
+4. **Smart searching and ranking** — English subject-based queries use morphological stemming (plurals, gerunds, past tenses) to make search term more forgiving. Large result sets that need to be truncated include faceted counts to allow the AI assistant to suggest additional filters. Textual queries are ranked by relevance instead of catalogue order, while filter-only queries are ordered by their expected importance to most users (drawing on image availability, metadata richness, and `curatorialNarrative`). 
 
 5. **More metadata** — several metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection): `birthPlace` / `deathPlace`, `profession`, `iconclass`, `collectionSet`, `attributionQualifier` — e.g. "workshop of", "attributed to", "circle of") as well as creator demographics (`gender`, `birth/death years`, `biographical notes`; place hierarchy expansion for spatial searches, broad person search across both depicted persons and creators (`aboutActor`), title search across all 6 title variants (`title` — brief, full, former × EN/NL vs the website's brief titles only), an image availability filter (`imageAvailable`), and bibliography citations for individual artworks.
 
@@ -93,11 +93,11 @@ Et bien sûr también puedes explorar संग्रहों को 用你自�
 
 ### Known Limitations
 
-**Text coverage varies by field.** About 61% of records include a cataloguer's description (in Dutch). Curatorial wall texts (in English) cover only about 14,000 artworks — mostly highlights and recent acquisitions. 
+**Text coverage and language vary by field.** About 61% of records include a cataloguer's description (in Dutch). Curatorial wall texts (in English) cover only about 14,000 artworks — mostly highlights and recent acquisitions. Because `description` is in Dutch, English search terms won't match — use `curatorialNarrative` for English full-text search, or `semantic_search` which works across languages. Structured vocabulary labels for subjects, types, materials, and techniques are bilingual for about 70% of terms (using [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) equivalents). Places, events, professions, and production roles are mostly Dutch-only — though major cities, countries, and common roles (e.g. "painter", "photographer") have English labels. The AI assistant knows to try the Dutch term when an English search returns no results.
 
 **Iconclass subject classification can be counterintuitive.** The Iconclass system assigns subjects to specific branches of a strict hierarchy that does not always match everyday expectations. However, the assistant can search Iconclass by concept as well as by keyword — describing what you're looking for in plain language (e.g. "domestic animals" or "religious suffering") will often find the right notation even when the exact vocabulary term is unknown.
 
-**Image analysis works better than image annotation.** Anthropic's models are more accurate at describing the contents of an image than annotating it. For example, the models will often correctly describe they can 'see' (even drawing on the content rich `description` data for guidance) but struggle to draw accurate bounding-boxes around this content.
+**Image analysis works better than image annotation.** LLMs are generally more accurate at describing the contents of an image than annotating it. For example, the AI assistant will often correctly describe what it can 'see' (even drawing on the detailed `description` field for guidance) but struggle to place accurate bounding-boxes around this content.
 
 ### Roadmap
 
@@ -112,27 +112,27 @@ Recent ([v0.20](https://github.com/kintopp/rijksmuseum-mcp-plus/releases/tag/v0.
 
 Soon:
 
-- improve image handling in MCP clients besides Anthropic's Claude
+- review performance of MCP clients besides Anthropic's Claude
 - update documentation
-- fine-tune search strategies
-- paper/presentation
+- fine-tune query strategies
 - v1.0 release
+- paper/presentation
 
 Later:
 
 - investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
-- create optional [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file
-- investigate exporting from image viewer with overlays
-- investigate adding RGB pixel analysis of images
+- create a [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file for exploring the collection
+- investigate exporting jpg/png from image viewer together with overlays
+- investigate adding RGB pixel analyses of images
 
 Maybe:
 
 - investigate incorporating historical exhibition data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - investigate support for image similarity search (whole image, [image segments](https://engineering.q42.nl/visual-search/))
-- investigate support for `attributed_by` (condition report,  X-radiography, paint samples etc.)
-- investigate browsing multiple related images in image viewer
-- review toponyms without clear geolocation data
+- investigate support for `attributed_by` data (condition report,  X-radiography, paint samples etc.)
+- investigate browsing all related images in the image viewer
+- review remaining toponyms without geolocation data
 
 ### Authors
 
