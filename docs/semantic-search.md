@@ -44,9 +44,13 @@ At query time, the user's query is embedded with the same model, and the nearest
 | `technique` | No | Filter by technique (e.g. `"etching"`, `"oil painting"`) |
 | `creationDate` | No | Filter by date — exact year (`"1642"`) or wildcard (`"16*"`) |
 | `creator` | No | Filter by artist name |
+| `subject` | No | Filter by subject term |
+| `iconclass` | No | Filter by Iconclass notation code (e.g. `"73D82"`) |
+| `depictedPerson` | No | Filter by depicted person |
+| `depictedPlace` | No | Filter by depicted place |
+| `productionPlace` | No | Filter by production place |
 | `collectionSet` | No | Filter by curated set name (e.g. `"Rembrandt"`) |
 | `aboutActor` | No | Filter by person (depicted or creator) |
-| `iconclass` | No | Filter by Iconclass notation code (e.g. `"73D82"`) |
 | `imageAvailable` | No | Restrict to artworks with a digital image |
 | `maxResults` | No | Number of results (1–50, default 15) |
 
@@ -77,7 +81,7 @@ Each result includes:
 - **Source text** — the reconstructed composite text that was originally embedded, in the same `[Label] value` format. This is the grounding context — use it to explain *why* a result was retrieved or to identify false positives.
 - **URL** — link to the artwork on rijksmuseum.nl
 
-Source text is not stored in the embeddings database (saving ~365 MB). It is reconstructed at query time from the vocabulary database, matching the original embedding generation format.
+Source text is not stored in the embeddings database (saving ~270 MB). It is reconstructed at query time from the vocabulary database, matching the original embedding generation format.
 
 ### Known limitations
 
