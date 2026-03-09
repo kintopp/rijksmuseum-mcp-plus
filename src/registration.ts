@@ -82,13 +82,14 @@ function withOutputSchema<T>(schema: T): { outputSchema: T } | Record<never, nev
 }
 
 /** Format a search result as a compact one-liner for LLM content. */
-function formatSearchLine(r: { objectNumber: string; title: string; creator: string; date?: string; type?: string; nearestPlace?: string; distance_km?: number }, i: number): string {
+function formatSearchLine(r: { objectNumber: string; title: string; creator: string; date?: string; type?: string; url?: string; nearestPlace?: string; distance_km?: number }, i: number): string {
   let line = `${i + 1}. ${r.objectNumber}`;
   if (r.type) line += ` | ${r.type}`;
   if (r.date) line += ` | ${r.date}`;
   line += ` | "${r.title}"`;
   if (r.creator) line += ` — ${r.creator}`;
   if (r.nearestPlace) line += ` [${r.nearestPlace}, ${r.distance_km?.toFixed(1)}km]`;
+  if (r.url) line += ` ${r.url}`;
   return line;
 }
 
@@ -405,6 +406,7 @@ const ImageInfoOutput = {
   license: z.string().nullable().optional(),
   physicalDimensions: z.string().nullable().optional(),
   collectionUrl: z.string().optional(),
+  fullUrl: z.string().optional().describe("Direct IIIF image URL (full resolution). For programmatic use — not rendered inline."),
   iiifInfoUrl: z.string().optional(),
   viewerUrl: z.string().optional(),
   viewUUID: z.string().optional().describe("Viewer session ID for use with navigate_viewer."),
@@ -1186,7 +1188,7 @@ function registerTools(
         activeOverlays: [],
       });
 
-      const { thumbnailUrl, iiifId, fullUrl, ...imageData } = resolvedImageInfo;
+      const { thumbnailUrl, iiifId, ...imageData } = resolvedImageInfo;
       const viewerData: InferOutput<typeof ImageInfoOutput> = {
         ...imageData,
         objectNumber,
