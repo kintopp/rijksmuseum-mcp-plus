@@ -71,6 +71,7 @@ After that, ask your own questions:
 - _Which paintings are wider than 3 meters?_
 - _Does the Rijksmuseum hold any works made in the manner of Hieronymus Bosch?_
 - _What photographs does the collection have by artists born in Indonesia?_
+- _Show me the Roermond Passion and highlight the Betrayal of Judas_
 
 For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
 
