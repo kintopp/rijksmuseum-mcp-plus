@@ -40,13 +40,12 @@ const MODIFIER_KEYS = new Set(["imageAvailable", "creatorGender", "creatorBornAf
 const stripNull = (v: unknown) =>
   (v === null || v === undefined || v === "null" || v === "") ? undefined : v;
 
-/** Normalize null/comma-strings/arrays into string | string[] | undefined. */
+/** Normalize null/arrays into string | string[] | undefined. */
 function normalizeStringOrArray(v: unknown): string | string[] | undefined {
   if (v === null || v === undefined || v === "null" || v === "") return undefined;
-  // Comma-separated string → array (defensive normalization for clients that don't send arrays)
   if (typeof v === "string") {
-    const parts = v.split(",").map(s => s.trim()).filter(Boolean);
-    return parts.length > 1 ? parts : parts[0];
+    const trimmed = v.trim();
+    return trimmed === "" ? undefined : trimmed;
   }
   // Array: strip nulls/empties
   if (Array.isArray(v)) {
