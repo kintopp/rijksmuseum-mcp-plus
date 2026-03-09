@@ -974,8 +974,11 @@ function registerTools(
           const header = (compactResult.totalResults != null
             ? `${compactResult.totalResults} results`
             : `${compactResult.ids.length} results`) + " (compact)";
+          const textParts: string[] = [header];
+          if (compactResult.ids.length) textParts.push(compactResult.ids.join(", "));
+          if (compactResult.warnings?.length) textParts.push(...compactResult.warnings.map(w => `⚠ ${w}`));
           const data: InferOutput<typeof SearchResultOutput> = compactResult;
-          return structuredResponse(data, header);
+          return structuredResponse(data, textParts.join("\n"));
         }
 
         const result = vocabDb.search(vocabArgs as any);
@@ -1042,6 +1045,9 @@ function registerTools(
         ? "\nNote: results are not ranked by relevance. Add filters to narrow, or use semantic_search for concept-ranked results."
         : "";
       const lines = ("results" in result ? result.results : []).map((r, i) => formatSearchLine(r, i));
+      if ("ids" in result && result.ids?.length && lines.length === 0) {
+        lines.push(result.ids.join(", "));
+      }
       const { nextPageToken, ...structured } = result;
       const apiData: InferOutput<typeof SearchResultOutput> = { ...structured, source: "search_api" as const };
       return structuredResponse(apiData, [header, ...lines].join("\n") + truncationNote);
