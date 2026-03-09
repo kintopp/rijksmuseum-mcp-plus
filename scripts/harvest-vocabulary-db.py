@@ -23,7 +23,7 @@ Usage:
     python3 scripts/harvest-vocabulary-db.py --phase 3      # Run only from phase N onward
     python3 scripts/harvest-vocabulary-db.py --phase 4      # Run Phase 4 + 3 only
     python3 scripts/harvest-vocabulary-db.py --threads 16   # Phase 4 thread count
-    python3 scripts/harvest-vocabulary-db.py --phase 3 --geo-csv offline/geo/geocoded_places_full.csv
+    python3 scripts/harvest-vocabulary-db.py --phase 3 --geo-csv data/geo/geocoded_places_exported.csv
 
 Output: data/vocabulary.db (~1 GB)
 """
@@ -157,6 +157,11 @@ EXTERNAL_VOCAB = {
     "300404279": {"type": "classification", "label_en": "copy after", "label_nl": "kopie naar", "external_id": "http://vocab.getty.edu/aat/300404279"},
     "300404434": {"type": "classification", "label_en": "school of", "label_nl": "school van", "external_id": "http://vocab.getty.edu/aat/300404434"},
     "300404273": {"type": "classification", "label_en": "studio of", "label_nl": "atelier van", "external_id": "http://vocab.getty.edu/aat/300404273"},
+    # Additional attribution qualifiers — discovered via maker-relations probe (2026-03-08)
+    "300404286": {"type": "classification", "label_en": "after", "label_nl": "naar", "external_id": "http://vocab.getty.edu/aat/300404286"},
+    "300404287": {"type": "classification", "label_en": "copyist of", "label_nl": "imitator van", "external_id": "http://vocab.getty.edu/aat/300404287"},
+    "300435722": {"type": "classification", "label_en": "possibly", "label_nl": "mogelijk", "external_id": "http://vocab.getty.edu/aat/300435722"},
+    "300404283": {"type": "classification", "label_en": "circle of", "label_nl": "kring van", "external_id": "http://vocab.getty.edu/aat/300404283"},
 }
 
 # ─── XML Namespaces ──────────────────────────────────────────────────
