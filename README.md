@@ -137,7 +137,6 @@ Maybe:
 - investigate incorporating historical exhibition data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - investigate support for image similarity search (whole image, [image segments](https://engineering.q42.nl/visual-search/))
-- investigate support for `attributed_by` data (condition report,  X-radiography, paint samples etc.)
 - investigate browsing all related images in the image viewer
 - review remaining toponyms without geolocation data
 
