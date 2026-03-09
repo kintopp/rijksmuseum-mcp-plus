@@ -26,7 +26,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 4. **Smart searching and ranking** — English subject-based queries use morphological stemming (plurals, gerunds, past tenses) to make search term more forgiving. Large result sets that need to be truncated include faceted counts to allow the AI assistant to suggest additional filters. Textual queries are ranked by relevance instead of catalogue order, while filter-only queries are ordered by their expected importance to most users (drawing on image availability, metadata richness, and `curatorialNarrative`). 
 
-5. **More metadata** — several metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection): `birthPlace` / `deathPlace`, `profession`, creator demographics (`gender`, `birth/death years`, `biographical notes`), place hierarchy expansion for spatial searches, title search across all 6 title variants (`title` — brief, full, former × EN/NL vs the website's brief titles only), and bibliography citations for individual artworks.
+5. **More metadata** — several metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection): `birthPlace` / `deathPlace`, `profession`, creator demographics (`gender`, `birth/death years`, `biographical notes`), title search across all 6 title variants (`title` — brief, full, former × EN/NL vs the website's brief titles only), and bibliography citations for individual artworks.
 
 6. **Iconclass** — access to its own [Iconclass](https://iconclass.org) database, cross-linked with the Rijksmuseum's metadata, which can be searched and explored not just by notation by also title, description, parent/child classes and semantically by concept.
 
@@ -76,7 +76,7 @@ For samples of more complex questions, please see the [research scenarios](docs/
 
 ### How it works
 
-`to be added`. Please see [this reference](docs/search-parameters.md) for a comprehensive overview of all available search parameters.
+`to be added`. Here are references to the available [search parameters](docs/search-parameters.md) and [metadata categories](docs/metadata-categories.md). These [diagrams](docs/mcp-workflow-diagram.md) illustrate the structure and flow of information in a rijksmuseum-mcp+ search.
 
 ### Technical notes
 
@@ -113,7 +113,7 @@ Recent ([v0.20](https://github.com/kintopp/rijksmuseum-mcp-plus/releases/tag/v0.
 
 Soon:
 
-- review performance of MCP clients besides Anthropic's Claude
+- review capabilities of MCP clients besides Anthropic's Claude
 - update documentation
 - fine-tune query strategies
 - v1.0 release
