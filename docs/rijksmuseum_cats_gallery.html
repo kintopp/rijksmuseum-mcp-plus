@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cats in Print — Rijksmuseum Collection</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f8f7f4;
+    color: #2c2c2c;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    text-align: center;
+    padding: 3.5rem 1.5rem 2rem;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  header h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #1a1a1a;
+    margin-bottom: 0.5rem;
+  }
+
+  header p {
+    font-size: 0.95rem;
+    color: #6b6b6b;
+    font-weight: 300;
+    max-width: 540px;
+    margin: 0 auto;
+  }
+
+  header .badge {
+    display: inline-block;
+    margin-top: 1rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #8b7355;
+    background: #f0ebe3;
+    padding: 0.3rem 0.75rem;
+    border-radius: 99px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .controls {
+    max-width: 1400px;
+    margin: 0 auto 1.5rem;
+    padding: 0 2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .search-box {
+    flex: 1;
+    min-width: 200px;
+    max-width: 360px;
+    position: relative;
+  }
+
+  .search-box input {
+    width: 100%;
+    padding: 0.6rem 1rem 0.6rem 2.4rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: #fff;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  .search-box input:focus { border-color: #8b7355; }
+
+  .search-box::before {
+    content: '\1F50D';
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.85rem;
+    opacity: 0.4;
+  }
+
+  .count {
+    font-size: 0.8rem;
+    color: #999;
+    font-weight: 400;
+  }
+
+  .grid {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem 4rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  }
+
+  .card a { text-decoration: none; color: inherit; display: flex; flex-direction: column; height: 100%; }
+
+  .card .img-wrap {
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    background: #eee;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .card .img-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 8px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .card .img-wrap img.loaded { opacity: 1; }
+
+  .card .img-wrap .placeholder {
+    position: absolute;
+    color: #ccc;
+    font-size: 2rem;
+  }
+
+  .card .info {
+    padding: 0.85rem 1rem 1rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card .info .title {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: #1a1a1a;
+    margin-bottom: 0.3rem;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card .info .creator {
+    font-size: 0.75rem;
+    color: #777;
+    margin-bottom: 0.25rem;
+  }
+
+  .card .info .meta {
+    margin-top: auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.7rem;
+    color: #aaa;
+    padding-top: 0.5rem;
+  }
+
+  .card .info .type-badge {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: #f5f2ed;
+    color: #8b7355;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .no-results {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 4rem 1rem;
+    color: #999;
+    font-size: 0.9rem;
+  }
+
+  footer {
+    text-align: center;
+    padding: 2rem;
+    font-size: 0.75rem;
+    color: #bbb;
+  }
+
+  footer a { color: #8b7355; text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 600px) {
+    header { padding: 2rem 1rem 1.5rem; }
+    header h1 { font-size: 1.5rem; }
+    .grid { padding: 0 1rem 3rem; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+    .controls { padding: 0 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cats in Print</h1>
+  <p>Prints and illustrations featuring cats from the Rijksmuseum collection, spanning the late 17th to early 19th century</p>
+  <div class="badge">Iconclass 34B12 &middot; 181 works</div>
+</header>
+
+<div class="controls">
+  <div class="search-box">
+    <input type="text" id="search" placeholder="Filter by title, artist, or date&hellip;" autocomplete="off">
+  </div>
+  <div class="count" id="count">Showing 181 of 181</div>
+</div>
+
+<div class="grid" id="gallery"></div>
+
+<footer>
+  Images served via <a href="https://iiif.io" target="_blank" rel="noopener">IIIF</a> &middot;
+  Data from the <a href="https://www.rijksmuseum.nl/en/research" target="_blank" rel="noopener">Rijksmuseum</a> open collection (CC0)
+</footer>
+
+<script>
+const DATA = [
+  {"n":"KOG-ZG-1-19-4","t":"print","d":"1702–1726","title":"Nacht / Le Soir","c":"Pieter van den Berge","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-19-4","h":"PCZBY"},
+  {"n":"RP-P-BI-7315","t":"print","d":"1680–1704","title":"De kindertijd","c":"Cornelis Dusart","url":"https://www.rijksmuseum.nl/en/collection/RP-P-BI-7315","h":"JLCbj"},
+  {"n":"RP-P-1906-3101","t":"print","d":"1680–1704","title":"De kindertijd","c":"Cornelis Dusart","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1906-3101","h":"PEOOz"},
+  {"n":"RP-P-BI-7316","t":"print","d":"1680–1704","title":"De kindertijd","c":"Cornelis Dusart","url":"https://www.rijksmuseum.nl/en/collection/RP-P-BI-7316","h":"wyCEk"},
+  {"n":"RP-P-1906-3203","t":"print","d":"1670–1724","title":"Kattenconcert","c":"Jacob Gole","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1906-3203","h":"KIcYk"},
+  {"n":"RP-P-1903-A-23503","t":"print","d":"1667–1717","title":"Aap, kat, eekhoorn en ekster","c":"Jan Griffier (I)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1903-A-23503","h":"VcjjP"},
+  {"n":"RP-P-1903-A-23507","t":"print","d":"1667–1717","title":"Poes met vijf jongen","c":"Jan Griffier (I)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1903-A-23507","h":"YDuTW"},
+  {"n":"RP-P-1901-A-22320","t":"print","d":"1655–1700","title":"Kattenconcert","c":"Jan van Somer","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1901-A-22320","h":"SaiSb"},
+  {"n":"RP-P-1894-A-18224","t":"print","d":"1702–1726","title":"Nacht / Le Soir","c":"Pieter van den Berge","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1894-A-18224","h":"iJLVe"},
+  {"n":"RP-P-1936-898","t":"print","d":"1681–1720","title":"Titelvignet met omlijsting in de vorm van een lier","c":"François van Bleyswijck","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1936-898","h":"NlHjE"},
+  {"n":"RP-P-OB-42.213","t":"print","d":"1700–1799","title":"Twee drinkende kleuters met kat","c":"unknown","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-42.213","h":"tcaYi"},
+  {"n":"RP-P-OB-42.212","t":"print","d":"1705–1768","title":"Slapende kleuters met kat","c":"Anna Folkema (possibly)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-42.212","h":"QRyEF"},
+  {"n":"RP-P-1906-1876","t":"print","d":"1680–1723","title":"Aap dwingt een kat de kastanjes uit het vuur te halen","c":"Jacob Gole","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1906-1876","h":"EIRIp"},
+  {"n":"RP-P-1905-6602","t":"print","d":"1680–1723","title":"Kat verdedigt haar jongen tegenover een hond","c":"Jacob Gole","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1905-6602","h":"CTjFe"},
+  {"n":"RP-P-1896-A-19368-1847","t":"boekillustratie","d":"1695–1705","title":"Embleem: kat","c":"Caspar Luyken","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1896-A-19368-1847","h":"SXeDX"},
+  {"n":"RP-P-1884-A-7883","t":"print","d":"1604–1750","title":"Zondeval","c":"Jan Saenredam","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1884-A-7883","h":"GYAai"},
+  {"n":"RP-P-OB-32.999","t":"print","d":"1662–1742","title":"Verklede aap, uil en musicerende kat","c":"attributed to John Smith","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-32.999","h":"yZAZq"},
+  {"n":"RP-P-1890-A-15869","t":"print","d":"1643–1815","title":"Lachende jongen met kat","c":"Lambert Visscher","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1890-A-15869","h":"jtqty"},
+  {"n":"RP-P-OB-62.029","t":"print","d":"1643–1740","title":"Lachende jongen met kat","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-62.029","h":"BoyLm"},
+  {"n":"RP-P-OB-51.823","t":"print","d":"1683–1733","title":"Gezin aan de maaltijd","c":"Bernard Picart","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-51.823","h":"uerYj"},
+  {"n":"RP-P-OB-16.172","t":"print","d":"1630–1702","title":"Zondeval","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-16.172","h":"itiPM"},
+  {"n":"RP-P-1964-3396","t":"ornamentprent","d":"1706–1746","title":"Titelpagina voor klinkdichten","c":"François van Bleyswijck","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1964-3396","h":"rXkki"},
+  {"n":"RP-P-2009-8","t":"ornamentprent","d":"1698–1707","title":"Kat en hond en vechtende geiten","c":"Anthonie de Winter","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2009-8","h":"NPjzL"},
+  {"n":"RP-P-OB-103.831","t":"print","d":"1628–1708","title":"Twee kinderen en een kat bij een kampvuur","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-103.831","h":"gvZmH"},
+  {"n":"RP-P-OB-200.363","t":"popular print","d":"1500–1800","title":"Het Rattenschip","c":"Koene, S. & W.","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-200.363","h":"qnbIQ"},
+  {"n":"RP-P-OB-207.160","t":"popular print","d":"1700–1899","title":"Dieren","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-207.160","h":"AfpyT"},
+  {"n":"RP-P-1985-386-46","t":"albumblad","d":"1673–1743","title":"Portret van Nicolo Barbarigo","c":"Robert van Audenaerd","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1985-386-46","h":"fVoLc"},
+  {"n":"RP-P-1985-386-119","t":"albumblad","d":"1673–1743","title":"Personificatie van de Vrijheid","c":"Robert van Audenaerd","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1985-386-119","h":"nRrQt"},
+  {"n":"RP-P-2019-3269","t":"titelpagina","d":"1680–1787","title":"Hollandse Maagd zittend op een leeuw","c":"Jan Luyken","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2019-3269","h":"HNnXs"},
+  {"n":"KOG-ZG-1-30-157","t":"boekillustratie","d":"1635–1715","title":"Apen vlooien een jonge man","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-30-157","h":"cpNZC"},
+  {"n":"KOG-ZG-1-27-77","t":"print","d":"1702–1726","title":"De Middagh / Le Midi","c":"Pieter van den Berge","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-27-77","h":"VVLUZ"},
+  {"n":"KOG-ZG-1-27-78","t":"print","d":"1702–1726","title":"De Middag","c":"Pieter van den Berge","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-27-78","h":"tpUBf"},
+  {"n":"KOG-ZG-1-19A-55","t":"print","d":"1700–1799","title":"Meisje speelt met een bel en kat","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-19A-55","h":"yhZOD"},
+  {"n":"RP-P-1891-A-16295","t":"print","d":"1655–1700","title":"Lierspeler","c":"Jan van Somer","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1891-A-16295","h":"UdSej"},
+  {"n":"RP-P-1891-A-16297","t":"print","d":"1655–1700","title":"Rommelpotspeler met een kat","c":"Jan van Somer","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1891-A-16297","h":"nRTbe"},
+  {"n":"RP-P-OB-52.027","t":"print","d":"1702–1767","title":"Slapende kat","c":"Jacob Folkema","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-52.027","h":"WUWCB"},
+  {"n":"RP-P-OB-55.883","t":"print","d":"1679–1728","title":"Vrouw met poes","c":"Johannes Gronsveld","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-55.883","h":"wUcQq"},
+  {"n":"RP-P-1907-2775","t":"print","d":"1671–1710","title":"Twee katten met een vogel","c":"Jan van den Hecke (II)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1907-2775","h":"dIHou"},
+  {"n":"RP-P-1972-38","t":"print","d":"1617–1731","title":"Liggende poes","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1972-38","h":"ucTZl"},
+  {"n":"RP-P-OB-33.402","t":"print","d":"1662–1742","title":"Zogende kat met kitten","c":"attributed to John Smith","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-33.402","h":"ADvwy"},
+  {"n":"RP-P-OB-62.105","t":"print","d":"1638–1702","title":"Pannenkoekenbakster","c":"Cornelis Visscher (II)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-62.105","h":"LIJeA"},
+  {"n":"RP-P-OB-33.558","t":"print","d":"1670–1730","title":"Kat valt een haan aan bij een boerderij","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-33.558","h":"RvAKB"},
+  {"n":"RP-P-1957-865","t":"albumblad","d":"1705–1713","title":"Vrouw met kat","c":"Bernard Picart (possibly)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1957-865","h":null},
+  {"n":"RP-P-OB-18.336","t":"boekillustratie","d":"1714","title":"Fabel van Venus en de kat","c":"Francis Barlow","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-18.336","h":"jbEGY"},
+  {"n":"RP-P-OB-60.001","t":"print","d":"1712","title":"Apollo ontmaskert Marsyas","c":"Gilliam van der Gouwen","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-60.001","h":"lCjIy"},
+  {"n":"RP-P-OB-60.002","t":"print","d":"1712","title":"Apollo ontmaskert Marsyan","c":"Gilliam van der Gouwen","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-60.002","h":"fBRcb"},
+  {"n":"RP-P-OB-45.469","t":"boekillustratie","d":"1710","title":"Slapende ketter wordt aangevallen door een kat","c":"Caspar Luyken","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-45.469","h":"AAdhF"},
+  {"n":"RP-P-1896-A-19368-2454","t":"boekillustratie","d":"1710","title":"Slapende ketter wordt aangevallen door een kat","c":"Caspar Luyken","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1896-A-19368-2454","h":"qWAzQ"},
+  {"n":"RP-P-OB-45.482","t":"boekillustratie","d":"1710","title":"Twee franciscanen bezoeken een zieke Venetiaan","c":"Caspar Luyken","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-45.482","h":"vEgox"},
+  {"n":"RP-P-1896-A-19368-2481","t":"boekillustratie","d":"1710","title":"Twee franciscanen bezoeken een zieke Venetiaan","c":"Caspar Luyken","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1896-A-19368-2481","h":"dmgHh"},
+  {"n":"RP-P-OB-45.663","t":"print","d":"1711","title":"Vrouw vult een brandende olielamp bij","c":"Jan Luyken","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-45.663","h":"JQHUc"},
+  {"n":"RP-P-1905-866","t":"print","d":"1718","title":"Offeren van een kat","c":"Bernard Picart","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1905-866","h":"tIZAe"},
+  {"n":"RP-P-1985-96","t":"popular print","d":"1719–1724","title":"Jeugd spiegeld uw aan dezen kat","c":"Groot, erven Weduwe Gijsbert de","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1985-96","h":"uWBbO"},
+  {"n":"KOG-ZG-1-25-188","t":"boekillustratie","d":"1711","title":"Vrouw vult een brandende olielamp bij","c":"Jan Luyken","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-25-188","h":"VMJwg"},
+  {"n":"RP-P-1896-A-19368-2676","t":"boekillustratie","d":"1711","title":"Vrouw vult een brandende olielamp bij","c":"Jan Luyken","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1896-A-19368-2676","h":"tRfCc"},
+  {"n":"RP-P-1957-851","t":"boekillustratie","d":"1719","title":"Kat doodt een vleermuis","c":"Bernard Picart","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1957-851","h":null},
+  {"n":"RP-P-1906-3460","t":"print","d":"1723–1789","title":"Een vrouw luist een man","c":"Jacob Hoolaart","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1906-3460","h":"rqnFD"},
+  {"n":"RP-P-1909-98","t":"print","d":"1720–1792","title":"Twee figuren met een hond en een kat","c":"Aert Schouman","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1909-98","h":"yoAkk"},
+  {"n":"RP-P-OB-17.305","t":"print","d":"1720–1792","title":"Twee figuren met een hond en een kat","c":"Aert Schouman","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.305","h":"hQhcu"},
+  {"n":"RP-P-1909-99","t":"print","d":"1720–1792","title":"Twee figuren met een hond en een kat","c":"Aert Schouman","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1909-99","h":"sjGaE"},
+  {"n":"RP-P-1882-A-6717","t":"print","d":"1724–1798","title":"Het melkmeisje","c":"Jurriaan Cootwijck","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1882-A-6717","h":"UKfTr"},
+  {"n":"RP-P-1882-A-6718","t":"print","d":"1724–1798","title":"Keukenmeid met tobbe","c":"Jurriaan Cootwijck","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1882-A-6718","h":"XftQm"},
+  {"n":"RP-P-OB-23.576","t":"print","d":"1720–1730","title":"Kitchen interior with a woman and a boy","c":"Cornelis-Henricus van Meurs","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-23.576","h":"IhahS"},
+  {"n":"RP-P-1984-296","t":"popular print","d":"1725–1780","title":"De hond en kat / oliphant en aape","c":"Johannes Kannewet (II)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1984-296","h":"yLhmz"},
+  {"n":"RP-P-1984-421","t":"popular print","d":"1725–1780","title":"De Katte is / Alhier gewis","c":"Johannes Kannewet (II)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1984-421","h":"alUyK"},
+  {"n":"RP-P-OB-84.248","t":"popular print","d":"1725–1780","title":"Kinders wie heeft dit ouyt meer verzonnen","c":"Johannes Kannewet (II)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-84.248","h":"OrUzX"},
+  {"n":"RP-P-OB-204.107","t":"popular print","d":"1725–1780","title":"De hond en kat / oliphant en aape","c":"Johannes Kannewet (II)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-204.107","h":"AGsug"},
+  {"n":"RP-P-1907-4128","t":"print","d":"1720–1767","title":"Apen en katten bij een barbier","c":"Leonard Schenk (possibly)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1907-4128","h":"AEjBb"},
+  {"n":"RP-P-OB-4644","t":"print","d":"1730–1740","title":"De slaap","c":"François Boucher","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-4644","h":"ZciaN"},
+  {"n":"RP-P-1977-112","t":"print","d":"1738–1815","title":"Meisje met kat","c":"Francesco Bartolozzi","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1977-112","h":"avdHH"},
+  {"n":"RP-P-1949-377","t":"print","d":"1733–1797","title":"Gebed voor de maaltijd","c":"Pierre François Basan","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1949-377","h":"bYZIJ"},
+  {"n":"RP-P-OB-41.632","t":"print","d":"1733–1797","title":"Misleidende man in een herberg","c":"Pierre François Basan","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-41.632","h":"WyYNV"},
+  {"n":"RP-P-OB-41.633","t":"print","d":"1733–1797","title":"Misleidende man in een herberg","c":"Pierre François Basan","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-41.633","h":"BtBHZ"},
+  {"n":"RP-P-OB-41.641","t":"print","d":"1739–1797","title":"Winters tijdverdrijf","c":"Pierre François Basan","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-41.641","h":"HIvQb"},
+  {"n":"RP-P-OB-43.560","t":"print","d":"1733–1792","title":"Muziekleraar","c":"Jean Baptiste Guélard","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-43.560","h":"QBZDI"},
+  {"n":"RP-P-1944-1745","t":"print","d":"1739–1780","title":"Vijf musicerende kinderen","c":"Joseph Wagner","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1944-1745","h":"Lqqpk"},
+  {"n":"RP-P-1965-261","t":"ornamentprent","d":"1731–1761","title":"Katachtige in landschap met fruit en gebonden halmen","c":"Gabriel Huquier","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1965-261","h":"VzewY"},
+  {"n":"RP-P-1984-315","t":"popular print","d":"1738–1767","title":"Hier hebt ghy Jonge Lien, Vogels, Uyl, Kat en Nest te sien","c":"Gijsbert de Groot Keur","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1984-315","h":"DskUr"},
+  {"n":"RP-P-1882-A-4946","t":"print","d":"1737–1789","title":"Man warmt zijn handen bij een open haard","c":"Petrus Camper","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1882-A-4946","h":null},
+  {"n":"RP-P-OB-41.740","t":"print","d":"1741–1797","title":"Visverkoopster in een straat","c":"Jacques Beauvarlet","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-41.740","h":"ZhZhB"},
+  {"n":"RP-P-OB-41.742","t":"print","d":"1741–1797","title":"Huiselijk tafereel met twee vrouwen en een kind","c":"Cathérine Françoise Deschamps","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-41.742","h":"kNNxc"},
+  {"n":"RP-P-1887-A-11644","t":"print","d":"1748–1795","title":"Moeder met kind en kat","c":"Jan Chalon","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1887-A-11644","h":"pycbI"},
+  {"n":"RP-P-OB-43.302","t":"print","d":"1748–1771","title":"Slapend meisje met kat en vogel","c":"Nicolas-Gabriel Dupuis","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-43.302","h":"odQTD"},
+  {"n":"RP-P-OB-18.785","t":"print","d":"1747","title":"Tom Idle ligt in bed met een prostituée en schrikt omdat er een kat uit de schoorsteen valt","c":"William Hogarth","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-18.785","h":"WJdjQ"},
+  {"n":"RP-P-OB-69.411","t":"print","d":"1749–1799","title":"Interieur met man en vier vrouwen aan een tafel gezeten","c":"Jacques Le Roy","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-69.411","h":"spluf"},
+  {"n":"RP-P-OB-33.502","t":"print","d":"1745–1770","title":"Portret van een vrouw, mogelijk Charlotte Trimmer","c":"James Watson","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-33.502","h":"biCXM"},
+  {"n":"RP-P-OB-63.638","t":"print","d":"1748–1771","title":"Slapend meisje met kat en vogel","c":"Nicolas-Gabriel Dupuis","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-63.638","h":"BGobJ"},
+  {"n":"RP-P-OB-49.883","t":"print","d":"1746–1799","title":"Altijd bezige huisvrouw","c":"Jan Balzer","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-49.883","h":"BhJwT"},
+  {"n":"RP-P-1886-A-10705","t":"print","d":"1746–1793","title":"Oude vrouw met kat","c":"Theodorus de Roode","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1886-A-10705","h":"DLurC"},
+  {"n":"RP-P-1888-A-13935","t":"print","d":"1746–1793","title":"Een oude vrouw met kat","c":"Theodorus de Roode","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1888-A-13935","h":"ooZiZ"},
+  {"n":"RP-P-OB-115.840","t":"print","d":"1741","title":"Scharenslijper","c":"Christian Wilhelm Ernst Dietrich","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-115.840","h":"dcClJ"},
+  {"n":"RP-P-1938-1102","t":"print","d":"1748","title":"Twee etende kinderen","c":"Anna Folkema","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1938-1102","h":"quHbE"},
+  {"n":"RP-P-OB-52.211","t":"print","d":"1748","title":"Twee etende kinderen","c":"Anna Folkema","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-52.211","h":"vFIKs"},
+  {"n":"RP-P-OB-52.212","t":"print","d":"1748","title":"Twee slapende kinderen","c":"Anna Folkema","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-52.212","h":"mINKn"},
+  {"n":"RP-P-1883-A-7164","t":"print","d":"1756–1817","title":"Kat zit op een stoof","c":"Louis Bernard Coclers","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1883-A-7164","h":"OlhvP"},
+  {"n":"RP-P-1910-2046","t":"print","d":"1754–1784","title":"Gelaarsde kat","c":"Simon Fokke","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1910-2046","h":"rTTNE"},
+  {"n":"RP-P-OB-32.559","t":"print","d":"1756","title":"Portret van een onbekende vrouw met kat","c":"James McArdell","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-32.559","h":"zgmoO"},
+  {"n":"RP-P-OB-53.414","t":"boekillustratie","d":"1758","title":"Fabel van de haan, de kat en het muisje","c":"Johann Heinrich Meil","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-53.414","h":"WxlWZ"},
+  {"n":"RP-P-1908-2324","t":"print","d":"1755–1784","title":"Interieur met apen die een kat vlooien","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1908-2324","h":"FhcKA"},
+  {"n":"RP-P-OB-53.694","t":"print","d":"1751","title":"Wilde kat met spoor","c":"Johann Elias Ridinger","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-53.694","h":"vzGfX"},
+  {"n":"KOG-ZG-2-141","t":"print","d":"1754–1765","title":"De wiskonstenaars of het gevluchte juffertje","c":"Pieter Tanjé","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-141","h":"NcpNk"},
+  {"n":"KOG-ZG-2-143","t":"print","d":"1754–1765","title":"De wiskonstenaars of het gevluchte juffertje","c":"Pieter Tanjé","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-143","h":"JgqMt"},
+  {"n":"RP-P-OB-24.245","t":"print","d":"1745–1808","title":"Hond en kat","c":"Gerard van Nijmegen","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-24.245","h":"ZeoNX"},
+  {"n":"RP-P-OB-73.816","t":"print","d":"1746–1793","title":"Oude vrouw met kat","c":"Theodorus de Roode","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-73.816","h":"SqNPg"},
+  {"n":"RP-P-1878-A-1522","t":"print","d":"1746–1793","title":"Verzoeking van de heilige Antonius","c":"Theodorus de Roode","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1878-A-1522","h":"QfKyV"},
+  {"n":"RP-P-1910-1480","t":"print","d":"1768","title":"De kindertijd","c":"Philippe Joseph Tassaert","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1910-1480","h":"UiDpF"},
+  {"n":"RP-P-OB-18.486","t":"print","d":"1764","title":"Heilige Familie in de timmermanswerkplaats","c":"Thomas Chambars","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-18.486","h":"tQFhH"},
+  {"n":"RP-P-OB-42.782","t":"print","d":"1767","title":"Twee spinsters rustend in een portiek","c":"Pierre Philippe Choffard","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-42.782","h":"HYoAk"},
+  {"n":"RP-P-OB-43.303","t":"print","d":"1762","title":"Kinderen met kat en bladmuziek","c":"Nicolas-Gabriel Dupuis","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-43.303","h":"CZJLv"},
+  {"n":"RP-P-OB-43.406","t":"print","d":"1763","title":"Meisje met bol wol en kat","c":"Jean Jacques Flipart","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-43.406","h":"OeUbD"},
+  {"n":"RP-P-OB-69.231","t":"print","d":"1764","title":"Zingende katten gedirigeerd door een uil","c":"Louis Le Mire","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-69.231","h":"XkgeR"},
+  {"n":"RP-P-OB-19.314","t":"print","d":"1764","title":"Interieur met rokend en drinkend gezelschap","c":"William Walker","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-19.314","h":"vLadY"},
+  {"n":"RP-P-1929-31","t":"print","d":"1764","title":"Interieur met rokend en drinkend gezelschap","c":"William Walker","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1929-31","h":"HFNaa"},
+  {"n":"RP-P-OB-74.678","t":"print","d":"1767","title":"Interieur met een zittende vrouw die haar kind voedt","c":"Claude Henri Watelet","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-74.678","h":"ZAAlm"},
+  {"n":"RP-P-OB-33.501","t":"print","d":"1765–1770","title":"Portret van een vrouw, mogelijk Charlotte Trimmer","c":"James Watson","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-33.501","h":"yQZyN"},
+  {"n":"RP-P-2020-551","t":"print","d":"1764","title":"Heilige Familie in de timmermanswerkplaats","c":"Thomas Chambars","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2020-551","h":"ePefp"},
+  {"n":"RP-P-OB-69.589","t":"print","d":"1761–1811","title":"Vrouw met twee kinderen in een interieur met groentemand","c":"Joseph C. Maillet","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-69.589","h":"ROgwN"},
+  {"n":"RP-P-1984-348","t":"popular print","d":"1761–1804","title":"Beschouw eens deeze dieren, Zy spreeken met haar vieren","c":"Egmont, erven de Weduwe Jacobus van","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1984-348","h":"rGMwu"},
+  {"n":"RP-P-OB-84.266","t":"popular print","d":"1767–1793","title":"Hond en kat","c":"Monogrammist GVL","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-84.266","h":"dcXie"},
+  {"n":"AK-MAK-936","t":"print","d":"1770–1780","title":"Afkoelende jonge vrouw","c":"Isoda Kôryûsai","url":"https://www.rijksmuseum.nl/en/collection/AK-MAK-936","h":"vZvsW"},
+  {"n":"RP-P-OB-33.676","t":"print","d":"1775","title":"Koopman toont uitgestald wild, artisjokken, pompoenen en een kreeft","c":"Richard Earlom","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-33.676","h":"pkJmQ"},
+  {"n":"RP-P-OB-7215","t":"print","d":"1779","title":"Moeder met kinderen","c":"Pieter de Mare","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-7215","h":"URWSH"},
+  {"n":"RP-P-OB-7216","t":"print","d":"1779","title":"Moeder met kinderen","c":"Pieter de Mare","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-7216","h":"vYyVd"},
+  {"n":"RP-P-OB-7217","t":"print","d":"1779","title":"Moeder met kinderen","c":"Pieter de Mare","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-7217","h":"RRZVs"},
+  {"n":"RP-P-OB-7218","t":"print","d":"1779","title":"Moeder met kinderen","c":"Pieter de Mare","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-7218","h":"yQOTc"},
+  {"n":"RP-P-OB-115.729","t":"boekillustratie","d":"1774","title":"Vier voorstellingen over de beïnvloeding van menselijke gedachten","c":"Gottfried Chodowiecki","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-115.729","h":"vjQHM"},
+  {"n":"RP-P-1887-A-11751","t":"print","d":"1776–1815","title":"Boer en boerin met kind voor een huis","c":"Marie Lambertine Coclers","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1887-A-11751","h":"kASzz"},
+  {"n":"RP-P-OB-41.780","t":"boekillustratie","d":"1776","title":"Fabel van de kat, de haan en de muis","c":"Bertin","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-41.780","h":"Niqio"},
+  {"n":"RP-P-OB-64.748","t":"print","d":"1773","title":"De kat, de rat, de uil en de wezel","c":"Reinier Vinkeles (I)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-64.748","h":"pPYeq"},
+  {"n":"RP-P-1905-5362","t":"boekillustratie","d":"1773","title":"Wilde kat","c":"W. Tringham","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1905-5362","h":"BqIRo"},
+  {"n":"RP-P-OB-43.724","t":"print","d":"1779","title":"Jongen met vogel op zijn vinger, kijkt naar een kat in een venster","c":"François Robert Ingouf","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-43.724","h":"rhFgb"},
+  {"n":"RP-P-1984-305","t":"popular print","d":"1770–1794","title":"Den haan zal 's morgens vroeg het huysgezin opwekken","c":"Putte, erven Hendrik van der","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1984-305","h":"KWlWb"},
+  {"n":"RP-P-OB-14.500","t":"boekillustratie","d":"1782","title":"Gertrude aan het sterfbed van Catharina","c":"Daniel Nikolaus Chodowiecki","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.500","h":"iTSiL"},
+  {"n":"RP-P-OB-14.501","t":"boekillustratie","d":"1782","title":"Himmel ontdekt de arme kinderen","c":"Daniel Nikolaus Chodowiecki","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.501","h":"jTfMP"},
+  {"n":"RP-P-OB-14.562","t":"print","d":"1783","title":"Zes voorstellingen uit Sternes empfindsame Reise","c":"Daniel Nikolaus Chodowiecki","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.562","h":"qxagR"},
+  {"n":"RP-P-OB-14.571","t":"print","d":"1783","title":"La Fleur organiseert een feest","c":"Daniel Nikolaus Chodowiecki","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.571","h":"jbJEk"},
+  {"n":"RP-P-OB-14.557","t":"print","d":"1783","title":"La Fleur organiseert een feest","c":"Daniel Nikolaus Chodowiecki","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.557","h":"lKEDX"},
+  {"n":"RP-P-1922-636","t":"print","d":"1784","title":"Interieur met een jong echtpaar met kinderen","c":"Jean Louis Delignon","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1922-636","h":"vcBRi"},
+  {"n":"RP-P-OB-43.581","t":"boekillustratie","d":"1781–1782","title":"Gezelschap met paard, hond en kat in een dorp","c":"Louis Michel Halbou","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-43.581","h":"MIEQx"},
+  {"n":"RP-P-OB-69.529","t":"boekillustratie","d":"1780","title":"Man en vrouw aan een gesloten deur","c":"Joseph de Longueil","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-69.529","h":"bQntV"},
+  {"n":"RP-P-1935-1059(R)","t":"boekillustratie","d":"1781","title":"Zout en zeep","c":"Noach van der Meer (II)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1935-1059(R)","h":"oxmuf"},
+  {"n":"RP-P-1918-2207","t":"print","d":"1789","title":"Jonge vrouwen ontdekken dat een kat de vogel uit de kooi heeft gevangen","c":"William Ward","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1918-2207","h":"gWrJW"},
+  {"n":"RP-P-OB-19.133","t":"print","d":"1782","title":"Jonge vrouw aan een tafel kijkt op van haar boek","c":"Charles William White","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-19.133","h":"XVwXG"},
+  {"n":"RP-P-1970-219","t":"print","d":"1788–1888","title":"Amor met kat bij huilend meisje","c":"Jean Prud'hon","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1970-219","h":"vCCmx"},
+  {"n":"RP-P-OB-64.865","t":"print","d":"1789","title":"Oude man en een vrouw bekijken een brandend skelet","c":"Reinier Vinkeles (I)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-64.865","h":"tYoQY"},
+  {"n":"KOG-ZG-1-19A-180","t":"popular print","d":"1781–1800","title":"Rattenschip en Kattentoorn","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-19A-180","h":"sGCeD"},
+  {"n":"RP-P-2012-17","t":"spotprent","d":"1784–1799","title":"Satire op Miolant en Janinet en de ballonvaart","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2012-17","h":"KSftP"},
+  {"n":"RP-P-1921-2064","t":"print","d":"1797–1799","title":"De slaap van de rede brengt monsters voort","c":"Francisco de Goya","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1921-2064","h":"FZCQm"},
+  {"n":"RP-P-1921-2086","t":"print","d":"1797–1799","title":"Waar gaat moeder naar toe?","c":"Francisco de Goya","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1921-2086","h":"WICoj"},
+  {"n":"RP-P-1956-607","t":"print","d":"1793–1797","title":"Kintoki en Yamauba","c":"Kitagawa Utamaro","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1956-607","h":"BlVJu"},
+  {"n":"RP-P-1907-5005","t":"boekillustratie","d":"1792","title":"Man omringd door huisdieren","c":"Reinier Vinkeles (I)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1907-5005","h":"Ptxro"},
+  {"n":"RP-P-2002-303","t":"print","d":"1792","title":"Britse familie met vier kinderen","c":"Charles Knight","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2002-303","h":"TmGZO"},
+  {"n":"BI-B-FM-101-8","t":"boekillustratie","d":"1797–1798","title":"De kat uit de boom kijken","c":"Pieter van Woensel","url":"https://www.rijksmuseum.nl/en/collection/BI-B-FM-101-8","h":"Zxczh"},
+  {"n":"RP-P-OB-200.225","t":"popular print","d":"1781–1828","title":"Geen nutter dier voor rot en muis / Als een mooi katje in uw huis","c":"Jan Hendriksen","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-200.225","h":"KfghG"},
+  {"n":"RP-P-OB-200.657","t":"popular print","d":"1789–1826","title":"Deez' prent is 't geld wel dubbeld waard","c":"Johannes Scheffers","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-200.657","h":"vJALE"},
+  {"n":"RP-P-1989-185","t":"popular print","d":"1791–1812","title":"Ziet kindren hier een zestiental","c":"Jacobus Thompson (I)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1989-185","h":"QDRVh"},
+  {"n":"RP-P-OB-201.082","t":"popular print","d":"1791–1900","title":"Moeder Michel en haar kat","c":"Pellerin & Cie.","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-201.082","h":"gtlbs"},
+  {"n":"RP-P-OB-201.101","t":"popular print","d":"1791–1900","title":"Moeder Michel en haar kat","c":"Pellerin & Cie.","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-201.101","h":"qjggk"},
+  {"n":"RP-P-OB-204.615","t":"popular print","d":"1787–1822","title":"Dees beesten die gy hier ziet","c":"Jan Hendrik de Lange","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-204.615","h":"wktnO"},
+  {"n":"RP-P-1989-40","t":"popular print","d":"1767–1793","title":"Hier ziet gy jonge jeugd! veel dieren af-gebeeld","c":"Monogrammist LBM","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1989-40","h":"efkpb"},
+  {"n":"KOG-ZG-1-17A-41","t":"boekillustratie","d":"1770–1801","title":"Het muziekavondje","c":"Cornelis Bogerts","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-17A-41","h":"nHgTV"},
+  {"n":"KOG-ZG-1-17A-42","t":"print","d":"1775–1825","title":"Vrouw aan de tafelpiano","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-17A-42","h":"bUoae"},
+  {"n":"KOG-ZG-2-132","t":"print","d":"1765–1850","title":"De wiskonstenaars of het gevluchte juffertje","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-132","h":"Ffmgy"},
+  {"n":"RP-P-1898-A-20062","t":"popular print","d":"1715–1813","title":"Deze hond blaft niet. / Deze kat snoept niet","c":"Stichter, erven weduwe Cornelis","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1898-A-20062","h":"RnxRf"},
+  {"n":"RP-P-2015-26-774","t":"print","d":"1753–1808","title":"Drie oude vrouwen kijken naar een schilderij van een kat","c":"David Deuchar","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2015-26-774","h":"qyJEs"},
+  {"n":"RP-P-1949-507","t":"print","d":"1764","title":"Heilige Familie in de timmermanswerkplaats","c":"Thomas Chambars","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1949-507","h":"gVMQA"},
+  {"n":"RP-P-OB-69.352","t":"print","d":"1768","title":"Herberginterieur met figuren en in het midden een vrouw die een kind voedt","c":"Jean Baptist Leprince","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-69.352","h":"xQCpo"},
+  {"n":"RP-P-OB-69.372","t":"print","d":"1769","title":"Jonge vrouw met twee kinderen voor een huis","c":"Jean Baptist Leprince","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-69.372","h":"BJgQj"},
+  {"n":"RP-P-2019-3617-39-2","t":"albumblad","d":"1769","title":"Jonge vrouw met twee kinderen voor een huis","c":"Jean Baptist Leprince","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2019-3617-39-2","h":null},
+  {"n":"RP-P-2019-3617-37-2","t":"albumblad","d":"1768","title":"Herberginterieur met figuren en in het midden een vrouw die een kind voedt","c":"Jean Baptist Leprince","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2019-3617-37-2","h":null},
+  {"n":"RP-P-OB-205.493","t":"popular print","d":"1760–1767","title":"De hond en kat / harten en aape","c":"Ratelband en J. Bouwer, J.","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-205.493","h":"XMUvf"},
+  {"n":"RP-P-OB-205.494","t":"popular print","d":"1760–1767","title":"De hond en kat / harten en aape","c":"Ratelband en J. Bouwer, J.","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-205.494","h":"Ajjtf"},
+  {"n":"RP-P-OB-64.741","t":"print","d":"1772","title":"De olifant en de rat","c":"Reinier Vinkeles (I)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-64.741","h":"PJLxZ"},
+  {"n":"RP-P-OB-66.622","t":"print","d":"1776–1851","title":"Twee emblemen","c":"Daniël Veelwaard (I)","url":"https://www.rijksmuseum.nl/en/collection/RP-P-OB-66.622","h":"UNiXV"},
+  {"n":"RP-P-1944-345","t":"print","d":"1778–1830","title":"Vier katten","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1944-345","h":"wAeIN"},
+  {"n":"RP-P-2015-26-592","t":"print","d":"1786","title":"Zelfportret","c":"John Kay","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2015-26-592","h":"IKRkz"},
+  {"n":"RP-P-2015-26-1585","t":"spotprent","d":"1784","title":"Spotprent op de mislukte ballonvaart van Miolan en Janinet","c":"anonymous","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2015-26-1585","h":"ghpyy"},
+  {"n":"RP-P-1913-2623","t":"print","d":"1795–1873","title":"Slapende kantwerkster in een interieur met kat op tafel","c":"Ignatius Josephus Van Regemorter","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1913-2623","h":"hghkf"},
+  {"n":"RP-P-1889-A-14608","t":"print","d":"1795–1873","title":"Slapende kantwerkster in een interieur met kat op tafel","c":"Ignatius Josephus Van Regemorter","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1889-A-14608","h":"XwiyV"},
+  {"n":"RP-P-1888-A-13230","t":"print","d":"1795–1873","title":"Slapende kantwerkster in een interieur met kat op tafel","c":"Ignatius Josephus Van Regemorter","url":"https://www.rijksmuseum.nl/en/collection/RP-P-1888-A-13230","h":"MzNZX"},
+  {"n":"RP-P-2000-35","t":"print","d":"1793","title":"Vijf poezen en een vogel","c":"Martin Ferdinand Quadal","url":"https://www.rijksmuseum.nl/en/collection/RP-P-2000-35","h":"NmRdG"}
+];
+
+const gallery = document.getElementById('gallery');
+const searchInput = document.getElementById('search');
+const countEl = document.getElementById('count');
+
+function iiifThumb(hash) {
+  if (!hash) return null;
+  return `https://iiif.micr.io/${hash}/full/!400,500/0/default.jpg`;
+}
+
+function renderCards(items) {
+  gallery.innerHTML = '';
+  if (items.length === 0) {
+    gallery.innerHTML = '<div class="no-results">No matching artworks found.</div>';
+    countEl.textContent = `Showing 0 of ${DATA.length}`;
+    return;
+  }
+  countEl.textContent = `Showing ${items.length} of ${DATA.length}`;
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const imgUrl = iiifThumb(item.h);
+    card.innerHTML = `
+      <a href="${item.url}" target="_blank" rel="noopener">
+        <div class="img-wrap">
+          <span class="placeholder">&mdash;</span>
+          ${imgUrl ? `<img src="${imgUrl}" alt="${item.title}" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">` : ''}
+        </div>
+        <div class="info">
+          <div class="title">${item.title}</div>
+          <div class="creator">${item.c}</div>
+          <div class="meta">
+            <span>${item.d}</span>
+            <span class="type-badge">${item.t}</span>
+          </div>
+        </div>
+      </a>
+    `;
+    gallery.appendChild(card);
+  });
+}
+
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.toLowerCase().trim();
+  if (!q) { renderCards(DATA); return; }
+  const filtered = DATA.filter(d =>
+    d.title.toLowerCase().includes(q) ||
+    d.c.toLowerCase().includes(q) ||
+    d.d.includes(q) ||
+    d.t.toLowerCase().includes(q) ||
+    d.n.toLowerCase().includes(q)
+  );
+  renderCards(filtered);
+});
+
+renderCards(DATA);
+</script>
+</body>
+</html>
