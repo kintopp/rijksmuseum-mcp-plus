@@ -40,7 +40,25 @@ const MODIFIER_KEYS = new Set(["imageAvailable", "creatorGender", "creatorBornAf
 const stripNull = (v: unknown) =>
   (v === null || v === undefined || v === "null" || v === "") ? undefined : v;
 
-const stringOrArray = () => z.preprocess(stripNull, z.string().min(1).optional());
+/** Normalize null/comma-strings/arrays into string | string[] | undefined. */
+function normalizeStringOrArray(v: unknown): string | string[] | undefined {
+  if (v === null || v === undefined || v === "null" || v === "") return undefined;
+  // Comma-separated string → array (defensive normalization for clients that don't send arrays)
+  if (typeof v === "string") {
+    const parts = v.split(",").map(s => s.trim()).filter(Boolean);
+    return parts.length > 1 ? parts : parts[0];
+  }
+  // Array: strip nulls/empties
+  if (Array.isArray(v)) {
+    const cleaned = v.filter((x): x is string => typeof x === "string" && x.trim() !== "").map(x => x.trim());
+    return cleaned.length === 0 ? undefined : cleaned.length === 1 ? cleaned[0] : cleaned;
+  }
+  return String(v);
+}
+const stringOrArray = () => z.preprocess(
+  normalizeStringOrArray,
+  z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
+);
 const optStr = () => z.preprocess(stripNull, z.string().optional());
 const optMinStr = () => z.preprocess(stripNull, z.string().min(1).optional());
 
@@ -983,7 +1001,15 @@ function registerTools(
       }
 
       // Degraded fallback: use Search API when vocab DB is unavailable
-      const searchArgs: SearchParams = { ...args };
+      // Search API only accepts single strings — take first element from arrays
+      const first = (v: unknown) => Array.isArray(v) ? v[0] as string : v as string | undefined;
+      const searchArgs: SearchParams = {
+        ...args,
+        creator: first(args.creator),
+        type: first(args.type),
+        material: first(args.material),
+        technique: first(args.technique),
+      };
       const result = args.compact
         ? await api.searchCompact(searchArgs)
         : await api.searchAndResolve(searchArgs);
