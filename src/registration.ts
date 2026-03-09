@@ -1149,10 +1149,17 @@ function registerTools(
       },
     },
     withLogging("get_artwork_image", async (args) => {
-      const { object } = await api.findByObjectNumber(args.objectNumber);
-      const imageInfo = await api.getImageInfo(object);
+      // Fast path: use pre-harvested IIIF ID from vocab DB (skips 3-step Linked Art chain)
+      const cachedIiifId = vocabDb?.lookupIiifId(args.objectNumber) ?? null;
+      const imageInfo = cachedIiifId
+        ? await api.getImageInfoFast(cachedIiifId)
+        : null;
 
-      if (!imageInfo) {
+      // Slow path: full Linked Art resolution (fallback when no cached IIIF ID, or fast path failed)
+      const { object } = await api.findByObjectNumber(args.objectNumber);
+      const resolvedImageInfo = imageInfo ?? await api.getImageInfo(object);
+
+      if (!resolvedImageInfo) {
         const errorData: InferOutput<typeof ImageInfoOutput> = {
           objectNumber: args.objectNumber,
           error: "No image available for this artwork",
@@ -1165,7 +1172,7 @@ function registerTools(
 
       if (httpPort) {
         const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
-        imageInfo.viewerUrl = `${baseUrl}/viewer?iiif=${encodeURIComponent(imageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
+        resolvedImageInfo.viewerUrl = `${baseUrl}/viewer?iiif=${encodeURIComponent(resolvedImageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
       const viewUUID = randomUUID();
@@ -1175,12 +1182,12 @@ function registerTools(
         lastAccess: Date.now(),
         lastPolledAt: Date.now(),
         objectNumber,
-        imageWidth: imageInfo.width,
-        imageHeight: imageInfo.height,
+        imageWidth: resolvedImageInfo.width,
+        imageHeight: resolvedImageInfo.height,
         activeOverlays: [],
       });
 
-      const { thumbnailUrl, iiifId, fullUrl, ...imageData } = imageInfo;
+      const { thumbnailUrl, iiifId, fullUrl, ...imageData } = resolvedImageInfo;
       const viewerData: InferOutput<typeof ImageInfoOutput> = {
         ...imageData,
         objectNumber,
@@ -1281,8 +1288,14 @@ function registerTools(
       };
 
       try {
+        // Fast path: use pre-harvested IIIF ID (skips 3-step Linked Art chain)
+        const cachedIiifId = vocabDb?.lookupIiifId(args.objectNumber) ?? null;
+        const fastImageInfo = cachedIiifId
+          ? await api.getImageInfoFast(cachedIiifId)
+          : null;
+
         const { object } = await api.findByObjectNumber(args.objectNumber);
-        const imageInfo = await api.getImageInfo(object);
+        const imageInfo = fastImageInfo ?? await api.getImageInfo(object);
 
         // Find active viewer for this artwork and refresh TTL
         let activeViewUUID: string | undefined;

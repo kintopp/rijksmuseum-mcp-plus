@@ -177,6 +177,9 @@ RDF_RESOURCE = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource"
 RDF_ABOUT = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about"
 XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 
+# Regex to extract IIIF identifier from iiif.micr.io URLs
+IIIF_ID_RE = re.compile(r"https?://iiif\.micr\.io/([^/]+)")
+
 # EDM fields on ProvidedCHO that map to vocabulary references.
 # Each entry: (XML tag with full namespace, mapping field name)
 CHO_VOCAB_FIELDS = [
@@ -223,6 +226,7 @@ CREATE TABLE IF NOT EXISTS artworks (
     date_latest      INTEGER,
     title_all_text   TEXT,
     has_image        INTEGER DEFAULT 0,
+    iiif_id          TEXT,
     tier2_done       INTEGER DEFAULT 0
 );
 
@@ -698,18 +702,38 @@ def extract_records(root: ET.Element) -> list[dict]:
             if rights_el is not None:
                 rights_uri = rights_el.get(RDF_RESOURCE, "")
 
-        # Check for image availability (edm:isShownBy on ore:Aggregation)
+        # Check for image availability and extract IIIF ID from edm:isShownBy / edm:object
         has_image = 0
+        iiif_id = None
         if agg is not None:
             is_shown = agg.find("{http://www.europeana.eu/schemas/edm/}isShownBy")
+            edm_obj = agg.find("{http://www.europeana.eu/schemas/edm/}object")
+
+            # Extract IIIF URL from isShownBy (two RDF/XML shapes):
+            #   1. <edm:isShownBy rdf:resource="https://iiif.micr.io/{UUID}/..."/>
+            #   2. <edm:isShownBy><edm:WebResource rdf:about="https://iiif.micr.io/{UUID}/..."/></edm:isShownBy>
+            iiif_url = ""
             if is_shown is not None:
-                # Present as either rdf:resource attribute or nested WebResource
                 has_image = 1
-            else:
-                # Fallback: check edm:object (alternative image reference)
-                edm_obj = agg.find("{http://www.europeana.eu/schemas/edm/}object")
-                if edm_obj is not None:
-                    has_image = 1
+                iiif_url = is_shown.get(RDF_RESOURCE, "")
+                if not iiif_url:
+                    # Nested WebResource — URL is on rdf:about of the child element
+                    child = next(iter(is_shown), None)
+                    if child is not None:
+                        iiif_url = child.get(RDF_ABOUT, "")
+            elif edm_obj is not None:
+                has_image = 1
+                iiif_url = edm_obj.get(RDF_RESOURCE, "")
+                if not iiif_url:
+                    child = next(iter(edm_obj), None)
+                    if child is not None:
+                        iiif_url = child.get(RDF_ABOUT, "")
+
+            # Extract UUID from URL: https://iiif.micr.io/{UUID}/full/max/0/default.jpg
+            if iiif_url:
+                m = IIIF_ID_RE.match(iiif_url)
+                if m:
+                    iiif_id = m.group(1)
 
         records.append({
             "object_number": object_number,
@@ -718,6 +742,7 @@ def extract_records(root: ET.Element) -> list[dict]:
             "rights_uri": rights_uri,
             "linked_art_uri": lod_uri,
             "has_image": has_image,
+            "iiif_id": iiif_id,
             "mappings": mappings,
         })
 
@@ -774,8 +799,8 @@ def run_phase1(conn: sqlite3.Connection, resume: bool = False):
 
         for rec in records:
             conn.execute(
-                "INSERT OR IGNORE INTO artworks (object_number, title, creator_label, rights_uri, linked_art_uri, has_image) VALUES (?, ?, ?, ?, ?, ?)",
-                (rec["object_number"], rec["title"], rec["creator_label"], rec["rights_uri"], rec["linked_art_uri"], rec["has_image"]),
+                "INSERT OR IGNORE INTO artworks (object_number, title, creator_label, rights_uri, linked_art_uri, has_image, iiif_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (rec["object_number"], rec["title"], rec["creator_label"], rec["rights_uri"], rec["linked_art_uri"], rec["has_image"], rec["iiif_id"]),
             )
             for vocab_id, field in rec["mappings"]:
                 conn.execute(
@@ -2017,6 +2042,12 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
             has_img_cnt = cur.execute("SELECT COUNT(*) FROM artworks WHERE has_image = 1").fetchone()[0]
             pct = (has_img_cnt / total_artworks_cnt * 100) if total_artworks_cnt > 0 else 0
             print(f"  {'Has image':20s} {has_img_cnt:8,} artworks ({pct:.1f}%)")
+
+        # IIIF ID coverage
+        if "iiif_id" in artworks_cols:
+            iiif_cnt = cur.execute("SELECT COUNT(*) FROM artworks WHERE iiif_id IS NOT NULL").fetchone()[0]
+            pct = (iiif_cnt / total_artworks_cnt * 100) if total_artworks_cnt > 0 else 0
+            print(f"  {'IIIF ID':20s} {iiif_cnt:8,} artworks ({pct:.1f}%)")
 
         # Tier 2 pending (only if columns still exist — they're dropped in Phase 3)
         if "tier2_done" in artworks_cols and "linked_art_uri" in artworks_cols:

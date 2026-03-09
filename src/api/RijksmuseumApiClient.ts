@@ -227,6 +227,38 @@ export class RijksmuseumApiClient {
     }
   }
 
+  /**
+   * Fast-path image info: skip the 3-step Linked Art chain when we already
+   * have the IIIF ID from the vocabulary DB. Only fetches info.json (1 request
+   * instead of 4).
+   */
+  async getImageInfoFast(iiifId: string, thumbnailWidth: number = 800): Promise<ArtworkImageInfo | null> {
+    try {
+      const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/info.json`;
+      const info = await this.cache.getOrFetch<IIIFInfoResponse>(
+        `iiif:${iiifId}`,
+        async () => (await this.http.get<IIIFInfoResponse>(iiifInfoUrl)).data,
+        RijksmuseumApiClient.TTL_IMAGE
+      );
+
+      const sizeParam = info.width >= info.height
+        ? `${thumbnailWidth},`
+        : `,${thumbnailWidth}`;
+
+      return {
+        iiifId,
+        iiifInfoUrl,
+        thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`,
+        fullUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/max/0/default.jpg`,
+        width: info.width,
+        height: info.height,
+      };
+    } catch (err) {
+      console.error("Fast image info failed:", err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
   /** Fetch a IIIF image URL as base64 (shared by region and thumbnail fetchers) */
   private async fetchIiifAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
     try {
