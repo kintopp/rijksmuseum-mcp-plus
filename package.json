@@ -16,7 +16,8 @@
     "start": "node dist/index.js",
     "serve": "node dist/index.js --http",
     "dev:viewer": "vite dev -c apps/artwork-viewer/vite.config.ts",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test": "node scripts/tests/test-pure-functions.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
