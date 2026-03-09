@@ -12,7 +12,7 @@
 **rijksmuseum-mcp+** was developed at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and builds on our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks carried out by large language models (LLMs). We are particularly interested in exploring the [research opportunities](docs/research-scenarios.md) and technical challenges posed by using structured data with LLMs for humanities research. If you are an interested in collaborating on these questions, please [get in touch](mailto:rise@unibas.ch).
 
 <br>
-<p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion" width="500"></p>
+<p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion with highlighted panels" width="500"></p>
 
 ### Features
 
@@ -39,6 +39,9 @@ You can explore artworks with the same (with minor exceptions) search filters of
 10. **User image annotation** (experimental) - click inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now click and draw a rectangle around an area of interest to you. You may be asked for permission to allow a prompt (with the coordinates of the area you selected) to be written into the chat. Then add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
 
 11. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations ("show me a map of places depicted in artworks within 50 km of Basel") or other AI-enabled analyses.
+
+<br>
+<p align="center"><img src="docs/places-near-basel.png" alt="Artworks from the Rijksmuseum depicting places within 100km of Basel" width="500"></p>
 
 ## Quick Start
 
