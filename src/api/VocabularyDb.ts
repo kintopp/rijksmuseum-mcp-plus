@@ -285,7 +285,6 @@ export class VocabularyDb {
   private hasPersonNames = false;
   private hasImageColumn = false;
   private hasImportance = false;
-  private hasIiifId = false;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtLookupPersonInfo: Statement | null = null;
@@ -358,7 +357,6 @@ export class VocabularyDb {
       this.hasPersonNames = this.tableExists("person_names_fts");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
-      this.hasIiifId = this.columnExists("artworks", "iiif_id");
 
       // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
@@ -379,7 +377,7 @@ export class VocabularyDb {
       }
 
       // Pre-harvested IIIF identifiers (eliminates 3-step Linked Art image chain)
-      if (this.hasIiifId) {
+      if (this.columnExists("artworks", "iiif_id")) {
         this.stmtLookupIiifId = this.db.prepare(
           "SELECT iiif_id FROM artworks WHERE object_number = ?"
         );
@@ -397,7 +395,7 @@ export class VocabularyDb {
         this.hasImageColumn && "hasImage",
         this.hasImportance && "importance",
         this.stmtLookupPersonInfo && "personEnrichment",
-        this.hasIiifId && "iiifIds",
+        this.stmtLookupIiifId && "iiifIds",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {

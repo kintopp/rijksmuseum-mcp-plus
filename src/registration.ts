@@ -1149,15 +1149,14 @@ function registerTools(
       },
     },
     withLogging("get_artwork_image", async (args) => {
-      // Fast path: use pre-harvested IIIF ID from vocab DB (skips 3-step Linked Art chain)
+      // Resolve image info (fast path: 1 req) in parallel with object metadata (2 reqs).
+      // Falls back to 4-step image chain when no cached IIIF ID or fast path fails.
       const cachedIiifId = vocabDb?.lookupIiifId(args.objectNumber) ?? null;
-      const imageInfo = cachedIiifId
-        ? await api.getImageInfoFast(cachedIiifId)
-        : null;
-
-      // Slow path: full Linked Art resolution (fallback when no cached IIIF ID, or fast path failed)
-      const { object } = await api.findByObjectNumber(args.objectNumber);
-      const resolvedImageInfo = imageInfo ?? await api.getImageInfo(object);
+      const [fastImageInfo, { object }] = await Promise.all([
+        cachedIiifId ? api.getImageInfoFast(cachedIiifId) : Promise.resolve(null),
+        api.findByObjectNumber(args.objectNumber),
+      ]);
+      const resolvedImageInfo = fastImageInfo ?? await api.getImageInfo(object);
 
       if (!resolvedImageInfo) {
         const errorData: InferOutput<typeof ImageInfoOutput> = {
@@ -1288,13 +1287,12 @@ function registerTools(
       };
 
       try {
-        // Fast path: use pre-harvested IIIF ID (skips 3-step Linked Art chain)
+        // Resolve image info (fast path: 1 req) in parallel with object metadata (2 reqs).
         const cachedIiifId = vocabDb?.lookupIiifId(args.objectNumber) ?? null;
-        const fastImageInfo = cachedIiifId
-          ? await api.getImageInfoFast(cachedIiifId)
-          : null;
-
-        const { object } = await api.findByObjectNumber(args.objectNumber);
+        const [fastImageInfo, { object }] = await Promise.all([
+          cachedIiifId ? api.getImageInfoFast(cachedIiifId) : Promise.resolve(null),
+          api.findByObjectNumber(args.objectNumber),
+        ]);
         const imageInfo = fastImageInfo ?? await api.getImageInfo(object);
 
         // Find active viewer for this artwork and refresh TTL

@@ -200,27 +200,7 @@ export class RijksmuseumApiClient {
       const iiifId = extractIiifId(accessPoint.id);
       if (!iiifId) return null;
 
-      const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/info.json`;
-      const info = await this.cache.getOrFetch<IIIFInfoResponse>(
-        `iiif:${iiifId}`,
-        async () => (await this.http.get<IIIFInfoResponse>(iiifInfoUrl)).data,
-        RijksmuseumApiClient.TTL_IMAGE
-      );
-
-      // Constrain the longest edge: w, for landscape; ,h for portrait
-      // (iiif.micr.io's !w,h best-fit syntax is broken — forces exact w×h)
-      const sizeParam = info.width >= info.height
-        ? `${thumbnailWidth},`
-        : `,${thumbnailWidth}`;
-
-      return {
-        iiifId,
-        iiifInfoUrl,
-        thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`,
-        fullUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/max/0/default.jpg`,
-        width: info.width,
-        height: info.height,
-      };
+      return this.buildImageInfo(iiifId, thumbnailWidth);
     } catch (err) {
       console.error("Image chain failed:", err instanceof Error ? err.message : err);
       return null;
@@ -234,29 +214,36 @@ export class RijksmuseumApiClient {
    */
   async getImageInfoFast(iiifId: string, thumbnailWidth: number = 800): Promise<ArtworkImageInfo | null> {
     try {
-      const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/info.json`;
-      const info = await this.cache.getOrFetch<IIIFInfoResponse>(
-        `iiif:${iiifId}`,
-        async () => (await this.http.get<IIIFInfoResponse>(iiifInfoUrl)).data,
-        RijksmuseumApiClient.TTL_IMAGE
-      );
-
-      const sizeParam = info.width >= info.height
-        ? `${thumbnailWidth},`
-        : `,${thumbnailWidth}`;
-
-      return {
-        iiifId,
-        iiifInfoUrl,
-        thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`,
-        fullUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/max/0/default.jpg`,
-        width: info.width,
-        height: info.height,
-      };
+      return await this.buildImageInfo(iiifId, thumbnailWidth);
     } catch (err) {
       console.error("Fast image info failed:", err instanceof Error ? err.message : err);
       return null;
     }
+  }
+
+  /** Shared info.json fetch + URL construction (used by both getImageInfo and getImageInfoFast). */
+  private async buildImageInfo(iiifId: string, thumbnailWidth: number): Promise<ArtworkImageInfo> {
+    const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/info.json`;
+    const info = await this.cache.getOrFetch<IIIFInfoResponse>(
+      `iiif:${iiifId}`,
+      async () => (await this.http.get<IIIFInfoResponse>(iiifInfoUrl)).data,
+      RijksmuseumApiClient.TTL_IMAGE
+    );
+
+    // Constrain the longest edge: w, for landscape; ,h for portrait
+    // (iiif.micr.io's !w,h best-fit syntax is broken — forces exact w×h)
+    const sizeParam = info.width >= info.height
+      ? `${thumbnailWidth},`
+      : `,${thumbnailWidth}`;
+
+    return {
+      iiifId,
+      iiifInfoUrl,
+      thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`,
+      fullUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/max/0/default.jpg`,
+      width: info.width,
+      height: info.height,
+    };
   }
 
   /** Fetch a IIIF image URL as base64 (shared by region and thumbnail fetchers) */

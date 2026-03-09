@@ -35,7 +35,7 @@ CHECKPOINT_PATH = SCRIPT_DIR / ".backfill-iiif-checkpoint"
 
 OAI_BASE = "https://data.rijksmuseum.nl/oai"
 USER_AGENT = "rijksmuseum-mcp-backfill-iiif/1.0"
-BATCH_SIZE = 500  # Commit every N pages
+BATCH_SIZE = 50  # Commit every N pages (~5K rows, ~1-2 min)
 
 # RDF/XML attribute keys
 RDF_RESOURCE = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource"
@@ -195,11 +195,12 @@ def main():
 
         if not args.dry_run and pairs:
             # UPDATE only NULLs — never overwrite existing values
+            before = conn.total_changes
             conn.executemany(
                 "UPDATE artworks SET iiif_id = ? WHERE object_number = ? AND iiif_id IS NULL",
                 [(iiif_id, obj_num) for obj_num, iiif_id in pairs],
             )
-            total_updated += conn.total_changes  # approximation (cumulative)
+            total_updated += conn.total_changes - before
 
         # Check for resumption token
         token_el = root.find(".//oai:resumptionToken", NS)
