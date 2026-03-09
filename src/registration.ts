@@ -539,7 +539,7 @@ interface ViewerQueue {
   commands: ViewerCommand[];
   createdAt: number;
   lastAccess: number;
-  lastPolledAt: number;
+  lastPolledAt?: number;
   objectNumber: string;
   imageWidth?: number;
   imageHeight?: number;
@@ -1213,7 +1213,6 @@ function registerTools(
         commands: [],
         createdAt: Date.now(),
         lastAccess: Date.now(),
-        lastPolledAt: Date.now(),
         objectNumber,
         imageWidth: resolvedImageInfo.width,
         imageHeight: resolvedImageInfo.height,
@@ -1566,7 +1565,7 @@ function registerTools(
             }))
         : undefined;
 
-      const viewerConnected = (Date.now() - queue.lastPolledAt) < 5000;
+      const viewerConnected = queue.lastPolledAt != null && (Date.now() - queue.lastPolledAt) < 5000;
 
       const navData: InferOutput<typeof NavigateViewerOutput> = {
         viewUUID: args.viewUUID,

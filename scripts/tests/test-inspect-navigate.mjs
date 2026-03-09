@@ -677,9 +677,15 @@ section("8. Schema surface — no $ref");
     const stringFields = ["creator", "subject", "type", "material", "technique"]
       .filter((f) => f in props);
     for (const f of stringFields) {
+      const fieldSchema = JSON.stringify(props[f]);
       assert(
-        props[f].type === "string",
-        `search_artwork.${f} has inline type:"string" (not $ref)`
+        !fieldSchema.includes('"$ref"'),
+        `search_artwork.${f} has inline schema (not $ref)`
+      );
+      // Must be either type:"string" or anyOf:[string, array] — both are valid inlined forms
+      assert(
+        props[f].type === "string" || Array.isArray(props[f].anyOf),
+        `search_artwork.${f} has recognized schema shape`
       );
     }
   }
