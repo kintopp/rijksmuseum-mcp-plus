@@ -80,7 +80,7 @@ For samples of more complex questions, please see the [research scenarios](docs/
 
 ### How it works
 
-`to be added`. Here are references to the available [search parameters](docs/search-parameters.md) and [metadata categories](docs/metadata-categories.md). These [diagrams](docs/mcp-workflow-diagram.md) illustrate the structure and flow of information in a rijksmuseum-mcp+ search.
+`to be added`. Here are references to the available [search parameters](docs/search-parameters.md) and [metadata categories](docs/metadata-categories.md). These [diagrams](docs/mcp-workflow-diagram.md) illustrate the structure and flow of information when using rijksmuseum-mcp+.
 
 ### Technical notes
 
