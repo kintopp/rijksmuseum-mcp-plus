@@ -58,22 +58,21 @@ Note to developers: rijksmuseum-mcp+ can also be run as a local MCP server in ST
 
 ### Sample Queries
 
-After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". It should show you a list [like this](docs/available-tools.md).
+After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". 
 
 After that, ask your own questions:
 
 - _What artworks evoke vanitas and mortality?_
-- _Show me artworks depicting places near the Oude Kerk in Amsterdam_
-- _What works have the iconclass code for fabulous animals?_
-- _Which artworks have a provenance linked to Napoleon?_
-- _I'm looking for artworks with inscriptions mentioning 'luctor et emergo'_
+- _A list of works of the interior of the Nieuwe Kerk in Amsterdam_
+- _Is there an iconclass code for mythical creatures?_
+- _Which artworks have a provenance linked to Napoleon Bonaparte?_
+- _I'm looking for works with inscriptions mentioning 'luctor et emergo'_
 - _Show me sculptures in the collection by artists born in Leiden_
 - _Which paintings are wider than 3 meters?_
-- _Which works are attributed to the circle of Hieronymus Bosch?_
+- _Does the Rijksmuseum hold any works made in the manner of Hieronymus Bosch?_
 - _What photographs does the collection have by artists born in Indonesia?_
-- _Has anyone taken a tumble in SK-A-1718? Show me where._
 
-Et bien sûr también puedes explorar संग्रहों को 用你自己的语言。For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
+For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
 
 ### How it works
 
