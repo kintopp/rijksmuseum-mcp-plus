@@ -4,6 +4,7 @@ import { ResponseCache } from "../utils/ResponseCache.js";
 import {
   AAT,
   AAT_UNIT_LABELS,
+  AAT_QUALIFIER_LABELS,
   LinkedArtObject,
   ReferredToBy,
   SearchApiResponse,
@@ -37,6 +38,23 @@ export function hasClassification(
   return classifiedAs.some((c) =>
     typeof c === "string" ? c === aatUri : c.id === aatUri
   );
+}
+
+/** Extract the URI from a classified_as entry (bare string or {id} object). */
+function classificationId(c: { id?: string } | string): string | undefined {
+  return typeof c === "string" ? c : c.id;
+}
+
+/** Find the first label in a classified_as array that matches a known AAT lookup map. */
+function findClassificationLabel(
+  classifiedAs: ({ id?: string } | string)[] | undefined,
+  labels: Record<string, string>,
+): string | null {
+  for (const cls of ensureArray(classifiedAs)) {
+    const id = classificationId(cls);
+    if (id && labels[id]) return labels[id];
+  }
+  return null;
 }
 
 /** Get language AAT URI from a language array */
@@ -794,9 +812,23 @@ export class RijksmuseumApiClient {
         ? resolved.get(p.took_place_at[0].id)
         : undefined;
 
+      // Extract attribution qualifier: prefer rich qualifiers from assigned_by
+      // (attributed to, workshop of, etc.), fall back to part.classified_as
+      // priority levels (primary/secondary/undetermined).
+      let attributionQualifier: string | null = null;
+      for (const assignment of ensureArray(p.assigned_by)) {
+        if (assignment.type !== "AttributeAssignment") continue;
+        attributionQualifier = findClassificationLabel(assignment.classified_as, AAT_QUALIFIER_LABELS);
+        if (attributionQualifier) break;
+      }
+      if (!attributionQualifier) {
+        attributionQualifier = findClassificationLabel(p.classified_as, AAT_QUALIFIER_LABELS);
+      }
+
       return {
         name: actor?.label ?? "Unknown",
         role: tech?.label ?? null,
+        attributionQualifier,
         place: place?.label ?? null,
         actorUri,
       };

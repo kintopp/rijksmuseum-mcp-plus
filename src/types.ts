@@ -44,6 +44,27 @@ export const AAT_UNIT_LABELS: Record<string, string> = {
   "http://vocab.getty.edu/aat/300379225": "g",
 };
 
+/** Static map of AAT attribution qualifier URIs to English labels.
+ *  Extracted from produced_by.part[].assigned_by[].classified_as in Linked Art.
+ *  Small, stable set — no HTTP resolution needed. */
+export const AAT_QUALIFIER_LABELS: Record<string, string> = {
+  "http://vocab.getty.edu/aat/300404450": "primary",
+  "http://vocab.getty.edu/aat/300404451": "secondary",
+  "http://vocab.getty.edu/aat/300379012": "undetermined",
+  "http://vocab.getty.edu/aat/300404269": "attributed to",
+  "http://vocab.getty.edu/aat/300404274": "workshop of",
+  "http://vocab.getty.edu/aat/300404284": "circle of",
+  "http://vocab.getty.edu/aat/300404282": "follower of",
+  "http://vocab.getty.edu/aat/300404272": "manner of",
+  "http://vocab.getty.edu/aat/300404279": "copy after",
+  "http://vocab.getty.edu/aat/300404434": "school of",
+  "http://vocab.getty.edu/aat/300404273": "studio of",
+  "http://vocab.getty.edu/aat/300404286": "after",
+  "http://vocab.getty.edu/aat/300404287": "copyist of",
+  "http://vocab.getty.edu/aat/300435722": "possibly",
+  "http://vocab.getty.edu/aat/300404283": "circle of",  // distinct from 300404284; same English label, different Dutch ("kring van" vs "omgeving van")
+};
+
 // ─── Linked Art Primitives ──────────────────────────────────────────
 
 export interface LinkedArtRef {
@@ -81,6 +102,13 @@ export interface Timespan {
   end_of_the_end?: string;
 }
 
+export interface AttributeAssignment {
+  type: "AttributeAssignment";
+  assigned_property?: string;
+  assigned?: LinkedArtRef[];
+  classified_as?: (LinkedArtRef | string)[];
+}
+
 export interface ProductionPart {
   type: "Production";
   carried_out_by?: LinkedArtRef[];
@@ -89,6 +117,7 @@ export interface ProductionPart {
   referred_to_by?: ReferredToBy[];
   took_place_at?: LinkedArtRef[];
   identified_by?: IdentifiedBy[];
+  assigned_by?: AttributeAssignment[];
 }
 
 export interface Production {
@@ -283,6 +312,7 @@ export interface ResolvedTerm {
 export interface ProductionParticipant {
   name: string;
   role: string | null;
+  attributionQualifier: string | null;
   place: string | null;
   actorUri: string;
 }

@@ -149,7 +149,8 @@ function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string
   if (d.subjects.depictedPlaces.length) lines.push(`Depicted places: ${termLabels(d.subjects.depictedPlaces)}`);
   if (d.production.length) {
     const parts = d.production.map((p) => {
-      let s = p.name;
+      let s = p.attributionQualifier && p.attributionQualifier !== "primary"
+        ? `${p.attributionQualifier} ${p.name}` : p.name;
       const pi = p.personInfo;
       if (pi?.birthYear != null || pi?.deathYear != null) {
         s += ` (${pi.birthYear ?? "?"}–${pi.deathYear ?? "?"})`;
@@ -378,7 +379,7 @@ const ArtworkDetailOutput = {
   objectTypes: z.array(ResolvedTermShape),
   materials: z.array(ResolvedTermShape),
   production: z.array(z.object({
-    name: z.string(), role: z.string().nullable(), place: z.string().nullable(), actorUri: z.string(),
+    name: z.string(), role: z.string().nullable(), attributionQualifier: z.string().nullable(), place: z.string().nullable(), actorUri: z.string(),
     personInfo: z.object({
       birthYear: z.number().int().nullable(),
       deathYear: z.number().int().nullable(),

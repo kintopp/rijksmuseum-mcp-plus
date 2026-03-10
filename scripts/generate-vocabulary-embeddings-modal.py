@@ -8,18 +8,18 @@ Phase 3 (local):  Write int8 embeddings to SQLite + sqlite-vec DB
 
 Usage:
     # Single strategy:
-    modal run offline/explorations/embeddings/generate-embeddings-strategies-modal.py --strategy baseline
+    modal run scripts/generate-vocabulary-embeddings-modal.py --strategy baseline
 
     # All 5 strategies (sequentially — each ~8-12 min on A10):
     for s in baseline no-subjects idf-filtered cherry-pick subjects-last; do
-        modal run offline/explorations/embeddings/generate-embeddings-strategies-modal.py --strategy $s
+        modal run scripts/generate-vocabulary-embeddings-modal.py --strategy $s
     done
 
     # Quick test:
-    modal run offline/explorations/embeddings/generate-embeddings-strategies-modal.py --strategy cherry-pick --limit 1000
+    modal run scripts/generate-vocabulary-embeddings-modal.py --strategy cherry-pick --limit 1000
 
     # Validate existing DB:
-    modal run offline/explorations/embeddings/generate-embeddings-strategies-modal.py --strategy baseline --validate-only
+    modal run scripts/generate-vocabulary-embeddings-modal.py --strategy baseline --validate-only
 
 Prerequisites:
     pip install modal sqlite-vec numpy
@@ -50,8 +50,8 @@ def _find_project_root() -> Path:
         if (d / "package.json").exists():
             return d
         d = d.parent
-    # Fallback: assume 4 parents up from offline/explorations/embeddings/
-    return SCRIPT_DIR.parent.parent.parent.parent
+    # Fallback: assume 1 parent up from scripts/
+    return SCRIPT_DIR.parent
 
 PROJECT_DIR = _find_project_root()
 DEFAULT_VOCAB_DB = PROJECT_DIR / "data" / "vocabulary.db"
@@ -467,5 +467,5 @@ def main(
 
 
 if __name__ == "__main__":
-    print("Use: modal run offline/explorations/embeddings/generate-embeddings-strategies-modal.py --strategy <name>")
+    print("Use: modal run scripts/generate-vocabulary-embeddings-modal.py --strategy <name>")
     print("Not: python ...")

@@ -37,7 +37,7 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 | Script | Lang | Description |
 |--------|------|-------------|
 | `generate-embeddings-mps.py` | Python | Generates artwork embeddings locally using Apple MPS GPU. Streaming to SQLite. |
-| `generate-embeddings-strategies-modal.py` | Python | Generates embeddings on Modal cloud GPUs (A10) under different source text strategies. Production script for `no-subjects` strategy. |
+| `generate-vocabulary-embeddings-modal.py` | Python | Generates artwork embeddings on Modal cloud GPUs (A10) under different source text strategies. Production script for `no-subjects` strategy. |
 | `generate-iconclass-embeddings-modal.py` | Python | Generates Iconclass notation embeddings on Modal cloud GPU. |
 | `generate-embeddings-outdated.py` | Python | **Superseded** by `generate-embeddings-mps.py`. Original non-streaming version. |
 
