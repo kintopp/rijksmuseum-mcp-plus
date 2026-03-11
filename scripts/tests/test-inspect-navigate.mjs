@@ -668,6 +668,13 @@ section("8. Schema surface — no $ref");
       !schemaStr.includes('"$ref"'),
       `${tool.name}: no $ref in inputSchema`
     );
+    if (tool.outputSchema) {
+      const outStr = JSON.stringify(tool.outputSchema);
+      assert(
+        !outStr.includes('"$ref"'),
+        `${tool.name}: no $ref in outputSchema`
+      );
+    }
   }
 
   // Verify string params are inlined (not shared) — spot-check search_artwork

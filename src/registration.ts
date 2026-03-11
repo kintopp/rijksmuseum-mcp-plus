@@ -310,7 +310,9 @@ export function registerAll(
 
 // ─── Output Schemas (Zod raw shapes for outputSchema) ───────────────
 
-const ResolvedTermShape = z.object({
+/** Factory — each call returns a unique Zod instance so zod-to-json-schema
+ *  won't deduplicate into $ref pointers (which claude.ai cannot resolve). */
+const ResolvedTermShape = () => z.object({
   id: z.string(),
   label: z.string(),
   equivalents: z.record(z.string()).optional(),
@@ -376,8 +378,8 @@ const ArtworkDetailOutput = {
   })),
   persistentId: z.string().nullable(),
   // Enriched Group B
-  objectTypes: z.array(ResolvedTermShape),
-  materials: z.array(ResolvedTermShape),
+  objectTypes: z.array(ResolvedTermShape()),
+  materials: z.array(ResolvedTermShape()),
   production: z.array(z.object({
     name: z.string(), role: z.string().nullable(), attributionQualifier: z.string().nullable(), place: z.string().nullable(), actorUri: z.string(),
     personInfo: z.object({
@@ -388,12 +390,12 @@ const ArtworkDetailOutput = {
       wikidataId: z.string().nullable(),
     }).optional(),
   })),
-  collectionSetLabels: z.array(ResolvedTermShape),
+  collectionSetLabels: z.array(ResolvedTermShape()),
   // Enriched Group C
   subjects: z.object({
-    iconclass: z.array(ResolvedTermShape),
-    depictedPersons: z.array(ResolvedTermShape),
-    depictedPlaces: z.array(ResolvedTermShape),
+    iconclass: z.array(ResolvedTermShape()),
+    depictedPersons: z.array(ResolvedTermShape()),
+    depictedPlaces: z.array(ResolvedTermShape()),
   }),
   bibliographyCount: z.number().int(),
   error: z.string().optional(),
@@ -464,7 +466,8 @@ const RecentChangesOutput = {
   identifiersOnly: z.boolean().optional(),
 };
 
-const IconclassEntryShape = z.object({
+/** Factory — unique Zod instances per call to prevent $ref deduplication. */
+const IconclassEntryShape = () => z.object({
   notation: z.string(),
   text: z.string(),
   path: z.array(z.object({ notation: z.string(), text: z.string() })),
@@ -478,9 +481,9 @@ const LookupIconclassOutput = {
   query: z.string().optional(),
   totalResults: z.number().int().optional(),
   notation: z.string().optional(),
-  entry: IconclassEntryShape.optional(),
-  subtree: z.array(IconclassEntryShape).optional(),
-  results: z.array(IconclassEntryShape.extend({ distance: z.number().optional() })).optional(),
+  entry: IconclassEntryShape().optional(),
+  subtree: z.array(IconclassEntryShape()).optional(),
+  results: z.array(IconclassEntryShape().extend({ distance: z.number().optional() })).optional(),
   countsAsOf: z.string().nullable().optional()
     .describe("Date when rijksCount values were computed (ISO 8601)."),
   error: z.string().optional(),
@@ -1912,7 +1915,7 @@ function registerTools(
     server.registerTool(
       "semantic_search",
       {
-        title: "Semantic Artwork Search",
+        title: "Semantic Search",
         description:
           "Find artworks by meaning, concept, or theme using natural language. " +
           "Returns results ranked by semantic similarity with source text for grounding — " +
