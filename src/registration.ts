@@ -508,6 +508,41 @@ const SemanticSearchOutput = {
   error: z.string().optional(),
 };
 
+const FindSimilarOutput = {
+  mode: z.enum(["iconclass", "lineage"]),
+  queryObjectNumber: z.string(),
+  queryTitle: z.string(),
+  querySignals: z.array(z.object({
+    label: z.string(),
+    notation: z.string().optional(),
+    depth: z.number().int().optional(),
+    strength: z.number().optional(),
+  })).describe("Query artwork's Iconclass notations (iconclass mode) or lineage pairs (lineage mode)."),
+  returnedCount: z.number().int(),
+  results: z.array(z.object({
+    rank: z.number().int(),
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    date: z.string().optional(),
+    type: z.string().optional(),
+    score: z.number(),
+    sharedMotifs: z.array(z.object({
+      notation: z.string(),
+      label: z.string(),
+      weight: z.number(),
+    })).optional().describe("Shared Iconclass notations (iconclass mode only)."),
+    sharedLineage: z.array(z.object({
+      qualifierLabel: z.string(),
+      creatorLabel: z.string(),
+      strength: z.number(),
+    })).optional().describe("Shared (qualifier, creator) pairs (lineage mode only)."),
+    url: z.string(),
+  })),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+};
+
 const CuratedSetsOutput = {
   totalSets: z.number().int(),
   filteredFrom: z.number().int().optional(),
@@ -1905,6 +1940,127 @@ function registerTools(
         }
         const browseData: InferOutput<typeof LookupIconclassOutput> = result;
         return structuredResponse(browseData, sections.join("\n"));
+      })
+    );
+  }
+
+  // ── find_similar ──────────────────────────────────────────────────
+
+  if (vocabAvailable && vocabDb!.available) {
+    server.registerTool(
+      "find_similar",
+      {
+        title: "Find Similar Artworks",
+        description:
+          "Find artworks similar to a given artwork based on how the museum classifies them or their visual-style lineage.\n\n" +
+          "Two independent modes:\n" +
+          "- **iconclass** (default): finds artworks sharing the same Iconclass subject classifications — scenes, motifs, " +
+          "iconographic themes. Results include the specific shared motifs. More specific shared codes (deeper in the " +
+          "Iconclass hierarchy, appearing on fewer artworks) contribute more to the similarity score. Coverage: ~658K artworks (79%).\n" +
+          "- **lineage**: finds artworks that share the same visual-style lineage — works \"after\" the same artist, from " +
+          "the same workshop, or in the same stylistic circle. This captures visual resemblance independent of subject matter: " +
+          "two prints \"after Rembrandt\" share a visual language even if they depict different scenes. Coverage: ~208K artworks (25%).\n\n" +
+          "Use `iconclass` mode to find thematically related works (what is depicted). Use `lineage` mode to find visually " +
+          "related works (how it looks). An artwork may appear in both — similar theme AND similar style — but the two " +
+          "signals are independent.",
+        inputSchema: z.object({
+          objectNumber: z.string().describe("Object number of the artwork to find similar works for (e.g. 'SK-A-1718')."),
+          mode: z.preprocess(stripNull, z.enum(["iconclass", "lineage"]).default("iconclass").optional())
+            .describe("Similarity signal: 'iconclass' (shared motifs, default) or 'lineage' (shared visual style)."),
+          maxResults: z.preprocess(stripNull, z.number().int().min(1).max(RESULTS_MAX).default(15).optional())
+            .describe("Number of results to return (default 15, max 50)."),
+        }).strict(),
+        ...withOutputSchema(FindSimilarOutput),
+      },
+      withLogging("find_similar", async (args) => {
+        const mode = args.mode ?? "iconclass";
+        const maxResults = args.maxResults ?? 15;
+
+        if (mode === "iconclass") {
+          const result = vocabDb!.findSimilarByIconclass(args.objectNumber, maxResults);
+          if (!result) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
+
+          // Text channel
+          const header = `${result.results.length} iconclass-similar to "${result.queryTitle}" (${result.queryObjectNumber})`;
+          const queryLine = `Query notations: ${result.queryNotations.map(n => `${n.notation} (${n.label})`).join(", ") || "none"}`;
+          const resultLines = result.results.map((r, i) => {
+            const motifs = r.sharedMotifs.map(m => `${m.notation} (${m.label})`).join(", ");
+            let line = `${i + 1}. [${r.score}] ${r.objectNumber}`;
+            if (r.type) line += ` | ${r.type}`;
+            if (r.date) line += ` | ${r.date}`;
+            line += ` | "${r.title}" — ${r.creator}`;
+            line += `\n   ${r.sharedMotifs.length} shared: ${motifs}`;
+            return line;
+          });
+          const textParts = [header, queryLine];
+          if (resultLines.length) textParts.push("", ...resultLines);
+          if (result.warnings?.length) textParts.push("", ...result.warnings.map(w => `[WARNING] ${w}`));
+
+          // Structured channel
+          const data: InferOutput<typeof FindSimilarOutput> = {
+            mode: "iconclass",
+            queryObjectNumber: result.queryObjectNumber,
+            queryTitle: result.queryTitle,
+            querySignals: result.queryNotations.map(n => ({ label: n.label, notation: n.notation, depth: n.depth })),
+            returnedCount: result.results.length,
+            results: result.results.map((r, i) => ({
+              rank: i + 1,
+              objectNumber: r.objectNumber,
+              title: r.title,
+              creator: r.creator,
+              ...(r.date && { date: r.date }),
+              ...(r.type && { type: r.type }),
+              score: r.score,
+              sharedMotifs: r.sharedMotifs,
+              url: r.url,
+            })),
+            ...(result.warnings?.length && { warnings: result.warnings }),
+          };
+          return structuredResponse(data, textParts.join("\n"));
+
+        } else {
+          // lineage mode
+          const result = vocabDb!.findSimilarByLineage(args.objectNumber, maxResults);
+          if (!result) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
+
+          // Text channel
+          const header = `${result.results.length} lineage-similar to "${result.queryTitle}" (${result.queryObjectNumber})`;
+          const queryLine = `Query lineage: ${result.queryLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel}`).join(", ") || "none"}`;
+          const resultLines = result.results.map((r, i) => {
+            const lineage = r.sharedLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel} [${l.strength}]`).join(", ");
+            let line = `${i + 1}. [${r.score}] ${r.objectNumber}`;
+            if (r.type) line += ` | ${r.type}`;
+            if (r.date) line += ` | ${r.date}`;
+            line += ` | "${r.title}" — ${r.creator}`;
+            line += `\n   shared: ${lineage}`;
+            return line;
+          });
+          const textParts = [header, queryLine];
+          if (resultLines.length) textParts.push("", ...resultLines);
+          if (result.warnings?.length) textParts.push("", ...result.warnings.map(w => `[WARNING] ${w}`));
+
+          // Structured channel
+          const data: InferOutput<typeof FindSimilarOutput> = {
+            mode: "lineage",
+            queryObjectNumber: result.queryObjectNumber,
+            queryTitle: result.queryTitle,
+            querySignals: result.queryLineage.map(l => ({ label: `${l.qualifierLabel} ${l.creatorLabel}`, strength: l.strength })),
+            returnedCount: result.results.length,
+            results: result.results.map((r, i) => ({
+              rank: i + 1,
+              objectNumber: r.objectNumber,
+              title: r.title,
+              creator: r.creator,
+              ...(r.date && { date: r.date }),
+              ...(r.type && { type: r.type }),
+              score: r.score,
+              sharedLineage: r.sharedLineage,
+              url: r.url,
+            })),
+            ...(result.warnings?.length && { warnings: result.warnings }),
+          };
+          return structuredResponse(data, textParts.join("\n"));
+        }
       })
     );
   }

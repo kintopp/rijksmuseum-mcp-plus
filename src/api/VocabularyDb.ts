@@ -14,6 +14,73 @@ export interface PersonInfo {
   wikidataId: string | null;
 }
 
+// ─── find_similar types ──────────────────────────────────────────────
+
+export interface SharedMotif {
+  notation: string;
+  label: string;
+  weight: number;
+}
+
+export interface IconclassSimilarResult {
+  queryObjectNumber: string;
+  queryTitle: string;
+  queryNotations: { notation: string; label: string; depth: number }[];
+  results: {
+    objectNumber: string;
+    title: string;
+    creator: string;
+    date?: string;
+    type?: string;
+    score: number;
+    sharedMotifs: SharedMotif[];
+    url: string;
+  }[];
+  warnings?: string[];
+}
+
+export interface SharedLineage {
+  qualifierLabel: string;
+  creatorLabel: string;
+  strength: number;
+}
+
+export interface LineageSimilarResult {
+  queryObjectNumber: string;
+  queryTitle: string;
+  queryLineage: { qualifierLabel: string; creatorLabel: string; strength: number }[];
+  results: {
+    objectNumber: string;
+    title: string;
+    creator: string;
+    date?: string;
+    type?: string;
+    score: number;
+    sharedLineage: SharedLineage[];
+    url: string;
+  }[];
+  warnings?: string[];
+}
+
+/** AAT qualifier URIs that carry visual-similarity signal, with strength weights.
+ *  URI set is a subset of AAT_QUALIFIER_LABELS in types.ts — keep in sync. */
+const LINEAGE_QUALIFIERS: ReadonlyMap<string, number> = new Map([
+  ["http://vocab.getty.edu/aat/300404286", 3.0],  // after
+  ["http://vocab.getty.edu/aat/300404287", 3.0],  // copyist of
+  ["http://vocab.getty.edu/aat/300404274", 2.0],  // workshop of
+  ["http://vocab.getty.edu/aat/300404283", 1.0],  // circle of (kring van)
+  ["http://vocab.getty.edu/aat/300404284", 1.0],  // circle of (omgeving van) / school of
+  ["http://vocab.getty.edu/aat/300404282", 1.0],  // follower of
+]);
+
+/** Iconclass noise labels to exclude — high-frequency categorical artefacts, not iconographic signals. */
+const ICONCLASS_NOISE_LABELS = new Set([
+  "historical persons",
+  "historical persons - BB - woman",
+  "adult man",
+  "adult woman",
+]);
+
 export interface VocabSearchParams {
   subject?: StringOrArray;
   iconclass?: StringOrArray;
@@ -291,6 +358,16 @@ export class VocabularyDb {
   private stmtLookupIiifId: Statement | null = null;
   private stmtFilterArtIds = new Map<string, Statement>();
 
+  // ── find_similar caches (initialised lazily on first call) ──
+  private notationDf: Map<number, number> | null = null; // vocab_rowid → document frequency
+  private iconclassN = 0; // total artworks with any Iconclass notation
+  private stmtIconclassShared: Statement | null = null; // cached: artwork_id by field_id+vocab_rowid
+  private lineageCreatorDf: Map<number, number> | null = null; // creator vocab_rowid → df
+  private lineageN = 0; // total artworks with any visual-lineage qualifier
+  private lineageQualifierMap: Map<number, { label: string; strength: number }> | null = null; // vocab_rowid → info
+  private stmtLineageShared: Statement | null = null; // cached: artwork_id by qualifier+creator pair
+  private iconclassNoiseIds: Set<number> | null = null; // vocab_rowids to exclude
+
   /** Look up a field_id by name, throwing if missing. */
   private requireFieldId(name: string): number {
     const id = this.fieldIdMap.get(name);
@@ -532,6 +609,374 @@ export class VocabularyDb {
     }
 
     return result;
+  }
+
+  // ── find_similar: Iconclass overlap ──────────────────────────────────
+
+  /** Lazily initialise the Iconclass IDF cache. ~2s cold, <0.5s warm. */
+  private ensureIconclassCache(): void {
+    if (this.notationDf || !this.db || !this.hasIntMappings) return;
+    const subjectFieldId = this.requireFieldId("subject");
+
+    // Build noise ID set
+    this.iconclassNoiseIds = new Set<number>();
+    const noiseRows = this.db.prepare(
+      `SELECT vocab_int_id FROM vocabulary WHERE label_en IN (${[...ICONCLASS_NOISE_LABELS].map(() => "?").join(", ")})`
+    ).all(...ICONCLASS_NOISE_LABELS) as { vocab_int_id: number }[];
+    for (const r of noiseRows) this.iconclassNoiseIds.add(r.vocab_int_id);
+
+    // IDF: count artworks per notation
+    this.notationDf = new Map();
+    const rows = this.db.prepare(`
+      SELECT m.vocab_rowid, COUNT(DISTINCT m.artwork_id) as df
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
+      GROUP BY m.vocab_rowid
+    `).all(subjectFieldId) as { vocab_rowid: number; df: number }[];
+
+    for (const r of rows) {
+      if (this.iconclassNoiseIds.has(r.vocab_rowid)) continue;
+      this.notationDf.set(r.vocab_rowid, r.df);
+    }
+    // Count total unique artworks with Iconclass
+    const countRow = this.db.prepare(`
+      SELECT COUNT(DISTINCT m.artwork_id) as n
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
+    `).get(subjectFieldId) as { n: number };
+    this.iconclassN = countRow.n;
+    // Cache the per-notation candidate lookup statement (called N times per query)
+    this.stmtIconclassShared = this.db.prepare(
+      `SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?`
+    );
+    console.error(`[find_similar] Iconclass IDF cache: ${this.notationDf.size} notations, ${this.iconclassN.toLocaleString()} artworks`);
+  }
+
+  /**
+   * Find artworks similar to a given artwork by shared Iconclass notations.
+   * Scores by depth × IDF weighted overlap.
+   */
+  findSimilarByIconclass(objectNumber: string, maxResults: number): IconclassSimilarResult | null {
+    if (!this.db || !this.hasIntMappings) return null;
+    this.ensureIconclassCache();
+    if (!this.notationDf) return null;
+
+    const subjectFieldId = this.requireFieldId("subject");
+
+    // 1. Resolve art_id
+    const artRow = this.db.prepare("SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?")
+      .get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+    if (!artRow) return null;
+    const queryArtId = artRow.art_id;
+
+    // 2. Get query artwork's Iconclass notations
+    const queryNotationsRaw = this.db.prepare(`
+      SELECT m.vocab_rowid, v.notation, COALESCE(v.label_en, v.label_nl, '') as label
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.artwork_id = ? AND m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
+    `).all(queryArtId, subjectFieldId) as { vocab_rowid: number; notation: string; label: string }[];
+
+    // Filter noise labels
+    const queryNotations = queryNotationsRaw.filter(n => !this.iconclassNoiseIds!.has(n.vocab_rowid));
+    if (queryNotations.length === 0) {
+      return {
+        queryObjectNumber: objectNumber,
+        queryTitle: artRow.title || "",
+        queryNotations: [],
+        results: [],
+        warnings: ["This artwork has no Iconclass notations to search by."],
+      };
+    }
+
+    // 3. For each notation, find candidate artworks and accumulate scores
+    const candidates = new Map<number, { totalWeight: number; sharedMotifs: SharedMotif[] }>();
+
+    for (const qn of queryNotations) {
+      const depth = qn.notation.length;
+      const df = this.notationDf.get(qn.vocab_rowid) ?? 1;
+      const weight = depth * Math.log(this.iconclassN / df);
+      const motif: SharedMotif = { notation: qn.notation, label: qn.label, weight };
+
+      const rows = this.stmtIconclassShared!.all(subjectFieldId, qn.vocab_rowid) as { artwork_id: number }[];
+      for (const r of rows) {
+        if (r.artwork_id === queryArtId) continue; // exclude self
+        const entry = candidates.get(r.artwork_id);
+        if (entry) {
+          entry.totalWeight += weight;
+          entry.sharedMotifs.push(motif);
+        } else {
+          candidates.set(r.artwork_id, { totalWeight: weight, sharedMotifs: [motif] });
+        }
+      }
+    }
+
+    // 4. Sort by totalWeight, take top maxResults
+    const sorted = [...candidates.entries()]
+      .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
+      .slice(0, maxResults);
+
+    // 5. Batch-resolve metadata
+    const artIds = sorted.map(([artId]) => artId);
+    const metaMap = this.batchLookupByArtId(artIds);
+    const typeMap = this.batchLookupTypesByArtId(artIds);
+
+    const results = sorted.map(([artId, data]) => {
+      const meta = metaMap.get(artId);
+      const date = meta?.dateEarliest != null
+        ? (meta.dateEarliest === meta.dateLatest ? String(meta.dateEarliest) : `${meta.dateEarliest}–${meta.dateLatest}`)
+        : undefined;
+      // Sort shared motifs by weight descending
+      data.sharedMotifs.sort((a, b) => b.weight - a.weight);
+      return {
+        objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
+        title: meta?.title ?? "",
+        creator: meta?.creator ?? "",
+        ...(date && { date }),
+        ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
+        score: Math.round(data.totalWeight * 10) / 10, // 1dp — iconclass scores are coarse (depth × IDF)
+        sharedMotifs: data.sharedMotifs,
+        url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
+      };
+    });
+
+    return {
+      queryObjectNumber: objectNumber,
+      queryTitle: artRow.title || "",
+      queryNotations: queryNotations.map(n => ({
+        notation: n.notation,
+        label: n.label,
+        depth: n.notation.length,
+      })),
+      results,
+    };
+  }
+
+  // ── find_similar: Attribution lineage ──────────────────────────────
+
+  /** Lazily initialise lineage qualifier map and creator IDF cache. */
+  private ensureLineageCache(): void {
+    if (this.lineageQualifierMap || !this.db || !this.hasIntMappings) return;
+    const qualFieldId = this.requireFieldId("attribution_qualifier");
+    const creatorFieldId = this.requireFieldId("creator");
+
+    // Resolve AAT URIs → vocab_int_id for lineage qualifiers
+    this.lineageQualifierMap = new Map();
+    for (const [uri, strength] of LINEAGE_QUALIFIERS) {
+      const row = this.db.prepare(
+        "SELECT vocab_int_id, COALESCE(label_en, label_nl, '') as label FROM vocabulary WHERE external_id = ?"
+      ).get(uri) as { vocab_int_id: number; label: string } | undefined;
+      if (row) {
+        this.lineageQualifierMap.set(row.vocab_int_id, { label: row.label, strength });
+      }
+    }
+    const qualIds = [...this.lineageQualifierMap.keys()];
+    if (qualIds.length === 0) return;
+
+    // Creator IDF: for each creator that appears alongside a visual qualifier
+    this.lineageCreatorDf = new Map();
+    const placeholders = qualIds.map(() => "?").join(", ");
+    const rows = this.db.prepare(`
+      SELECT m_c.vocab_rowid as creator_id, COUNT(DISTINCT m_c.artwork_id) as df
+      FROM mappings m_q
+      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND m_c.field_id = ?
+      WHERE m_q.field_id = ? AND m_q.vocab_rowid IN (${placeholders})
+      GROUP BY m_c.vocab_rowid
+    `).all(creatorFieldId, qualFieldId, ...qualIds) as { creator_id: number; df: number }[];
+
+    for (const r of rows) this.lineageCreatorDf.set(r.creator_id, r.df);
+
+    // Total artworks with any visual-lineage qualifier
+    const countRow = this.db.prepare(`
+      SELECT COUNT(DISTINCT artwork_id) as n FROM mappings
+      WHERE field_id = ? AND vocab_rowid IN (${placeholders})
+    `).get(qualFieldId, ...qualIds) as { n: number };
+    this.lineageN = countRow.n;
+    // Cache the per-pair candidate lookup statement (called N times per query)
+    this.stmtLineageShared = this.db.prepare(`
+      SELECT DISTINCT m_q.artwork_id
+      FROM mappings m_q
+      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND m_c.field_id = ?
+      WHERE m_q.field_id = ? AND m_q.vocab_rowid = ? AND m_c.vocab_rowid = ?
+    `);
+    console.error(`[find_similar] Lineage IDF cache: ${this.lineageCreatorDf.size} creators, ${this.lineageN.toLocaleString()} artworks`);
+  }
+
+  /**
+   * Find artworks similar to a given artwork by shared visual-style lineage.
+   * Scores by qualifier-strength × creator-IDF.
+   */
+  findSimilarByLineage(objectNumber: string, maxResults: number): LineageSimilarResult | null {
+    if (!this.db || !this.hasIntMappings) return null;
+    this.ensureLineageCache();
+    if (!this.lineageQualifierMap || !this.lineageCreatorDf) return null;
+
+    const qualFieldId = this.requireFieldId("attribution_qualifier");
+    const creatorFieldId = this.requireFieldId("creator");
+
+    // 1. Resolve art_id
+    const artRow = this.db.prepare("SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?")
+      .get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+    if (!artRow) return null;
+    const queryArtId = artRow.art_id;
+
+    // 2. Get query artwork's (qualifier, creator) pairs
+    //    Only visual-similarity qualifiers (not "primary", "attributed to", etc.)
+    const qualIds = [...this.lineageQualifierMap.keys()];
+    const qualPlaceholders = qualIds.map(() => "?").join(", ");
+
+    const queryPairs = this.db.prepare(`
+      SELECT m_q.vocab_rowid as qualifier_id, m_c.vocab_rowid as creator_id,
+             COALESCE(v_c.label_en, v_c.label_nl, '') as creator_label
+      FROM mappings m_q
+      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND m_c.field_id = ?
+      JOIN vocabulary v_c ON v_c.vocab_int_id = m_c.vocab_rowid
+      WHERE m_q.artwork_id = ? AND m_q.field_id = ? AND m_q.vocab_rowid IN (${qualPlaceholders})
+    `).all(creatorFieldId, queryArtId, qualFieldId, ...qualIds) as {
+      qualifier_id: number; creator_id: number; creator_label: string;
+    }[];
+
+    if (queryPairs.length === 0) {
+      // Check if artwork has any qualifiers at all (to give informative message)
+      const anyQual = this.db.prepare(
+        "SELECT 1 FROM mappings WHERE artwork_id = ? AND field_id = ? LIMIT 1"
+      ).get(queryArtId, qualFieldId);
+      const msg = anyQual
+        ? "This artwork has direct attribution — no visual-lineage qualifiers to search by."
+        : "No attribution qualifiers found for this artwork.";
+      return {
+        queryObjectNumber: objectNumber,
+        queryTitle: artRow.title || "",
+        queryLineage: [],
+        results: [],
+        warnings: [msg],
+      };
+    }
+
+    // 3. For each (qualifier, creator) pair, find candidate artworks
+    const candidates = new Map<number, { totalWeight: number; sharedLineage: SharedLineage[] }>();
+    const warnings: string[] = [];
+
+    for (const pair of queryPairs) {
+      const qualInfo = this.lineageQualifierMap.get(pair.qualifier_id)!;
+      const creatorDf = this.lineageCreatorDf.get(pair.creator_id) ?? 1;
+      const creatorIdf = Math.log(this.lineageN / creatorDf);
+      const weight = qualInfo.strength * creatorIdf;
+      const lineage: SharedLineage = {
+        qualifierLabel: qualInfo.label,
+        creatorLabel: pair.creator_label,
+        strength: qualInfo.strength,
+      };
+
+      // Warn about anonymous/unknown creators with near-zero IDF
+      if (creatorIdf < 0.5 && pair.creator_label.toLowerCase().match(/^(anonymous|unknown|onbekend)/)) {
+        warnings.push(`"${qualInfo.label} ${pair.creator_label}" — anonymous creator, results may be less distinctive.`);
+      }
+
+      // Find artworks sharing this (qualifier, creator) pair
+      const rows = this.stmtLineageShared!.all(creatorFieldId, qualFieldId, pair.qualifier_id, pair.creator_id) as { artwork_id: number }[];
+
+      for (const r of rows) {
+        if (r.artwork_id === queryArtId) continue;
+        const entry = candidates.get(r.artwork_id);
+        if (entry) {
+          entry.totalWeight += weight;
+          entry.sharedLineage.push(lineage);
+        } else {
+          candidates.set(r.artwork_id, { totalWeight: weight, sharedLineage: [lineage] });
+        }
+      }
+    }
+
+    // 4. Sort by totalWeight, take top maxResults
+    const sorted = [...candidates.entries()]
+      .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
+      .slice(0, maxResults);
+
+    // 5. Batch-resolve metadata
+    const artIds = sorted.map(([artId]) => artId);
+    const metaMap = this.batchLookupByArtId(artIds);
+    const typeMap = this.batchLookupTypesByArtId(artIds);
+
+    const results = sorted.map(([artId, data]) => {
+      const meta = metaMap.get(artId);
+      const date = meta?.dateEarliest != null
+        ? (meta.dateEarliest === meta.dateLatest ? String(meta.dateEarliest) : `${meta.dateEarliest}–${meta.dateLatest}`)
+        : undefined;
+      data.sharedLineage.sort((a, b) => b.strength - a.strength);
+      return {
+        objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
+        title: meta?.title ?? "",
+        creator: meta?.creator ?? "",
+        ...(date && { date }),
+        ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
+        score: Math.round(data.totalWeight * 100) / 100, // 2dp — lineage IDF values are finer-grained
+        sharedLineage: data.sharedLineage,
+        url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
+      };
+    });
+
+    return {
+      queryObjectNumber: objectNumber,
+      queryTitle: artRow.title || "",
+      queryLineage: queryPairs.map(p => {
+        const qi = this.lineageQualifierMap!.get(p.qualifier_id)!;
+        return { qualifierLabel: qi.label, creatorLabel: p.creator_label, strength: qi.strength };
+      }),
+      results,
+      ...(warnings.length > 0 && { warnings }),
+    };
+  }
+
+  // ── find_similar: batch metadata helpers ───────────────────────────
+
+  /** Batch-lookup artwork metadata by art_id. Chunks at 500. */
+  private batchLookupByArtId(artIds: number[]): Map<number, { objectNumber: string; title: string; creator: string; dateEarliest: number | null; dateLatest: number | null }> {
+    const map = new Map<number, { objectNumber: string; title: string; creator: string; dateEarliest: number | null; dateLatest: number | null }>();
+    if (!this.db || artIds.length === 0) return map;
+    const CHUNK = 500;
+    for (let i = 0; i < artIds.length; i += CHUNK) {
+      const chunk = artIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = this.db.prepare(`
+        SELECT art_id, object_number, title, creator_label, date_earliest, date_latest
+        FROM artworks WHERE art_id IN (${placeholders})
+      `).all(...chunk) as { art_id: number; object_number: string; title: string; creator_label: string; date_earliest: number | null; date_latest: number | null }[];
+      for (const r of rows) {
+        map.set(r.art_id, {
+          objectNumber: r.object_number,
+          title: r.title || "",
+          creator: r.creator_label || "",
+          dateEarliest: r.date_earliest,
+          dateLatest: r.date_latest,
+        });
+      }
+    }
+    return map;
+  }
+
+  /** Batch-lookup artwork types by art_id. Chunks at 500. */
+  private batchLookupTypesByArtId(artIds: number[]): Map<number, string> {
+    const map = new Map<number, string>();
+    if (!this.db || !this.hasIntMappings || artIds.length === 0) return map;
+    const typeFieldId = this.requireFieldId("type");
+    const CHUNK = 500;
+    for (let i = 0; i < artIds.length; i += CHUNK) {
+      const chunk = artIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = this.db.prepare(`
+        SELECT m.artwork_id, COALESCE(v.label_en, v.label_nl, '') as label
+        FROM mappings m
+        JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+        WHERE m.artwork_id IN (${placeholders}) AND +m.field_id = ?
+      `).all(...chunk, typeFieldId) as { artwork_id: number; label: string }[];
+      for (const r of rows) {
+        if (r.label && !map.has(r.artwork_id)) map.set(r.artwork_id, r.label);
+      }
+    }
+    return map;
   }
 
   private tableExists(name: string): boolean {
