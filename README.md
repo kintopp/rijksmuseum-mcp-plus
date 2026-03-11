@@ -106,15 +106,6 @@ For samples of more complex questions, please see the [research scenarios](docs/
 
 ### Roadmap
 
-Recent ([v0.20](https://github.com/kintopp/rijksmuseum-mcp-plus/releases/tag/v0.20)):
-
-  - Search by creator gender, birth year range, and attribution qualifier (e.g. "works from Rembrandt's workshop")
-  - Place hierarchy expansion (searching for "Netherlands" now includes Amsterdam, Delft, Haarlem, etc. automatically)
-  - Artwork details now show creator biographical info: life dates, gender, biographical notes, Wikidata links
-  - 31,000 places now geocoded with lat/longs (up from 21,000) 
-  - Updated search parameter reference with all 37 filters documented
-  - Draw a region on the image viewer and ask the AI assistant about it
-
 Soon:
 
 - review capabilities of MCP clients besides Anthropic's Claude
@@ -127,9 +118,8 @@ Later:
 
 - investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 - create a [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file for exploring the collection
-- investigate adding `attributionQualifier`: "after", "possibly", and "circle of" (second type)
 - investigate exporting jpg/png from image viewer together with overlays
-- investigate adding RGB pixel analyses of images
+- investigate adding server-side tasks (e.g. pixel analyses of images)
 
 Maybe:
 
