@@ -715,7 +715,7 @@ export class VocabularyDb {
       SELECT m.vocab_rowid, v.notation, COALESCE(v.label_en, v.label_nl, '') as label
       FROM mappings m
       JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-      WHERE m.artwork_id = ? AND m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
+      WHERE m.artwork_id = ? AND +m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
     `).all(queryArtId, subjectFieldId) as { vocab_rowid: number; notation: string; label: string }[];
 
     // Filter noise labels
@@ -826,7 +826,7 @@ export class VocabularyDb {
     const rows = this.db.prepare(`
       SELECT m_c.vocab_rowid as creator_id, COUNT(DISTINCT m_c.artwork_id) as df
       FROM mappings m_q
-      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND m_c.field_id = ?
+      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND +m_c.field_id = ?
       WHERE m_q.field_id = ? AND m_q.vocab_rowid IN (${placeholders})
       GROUP BY m_c.vocab_rowid
     `).all(creatorFieldId, qualFieldId, ...qualIds) as { creator_id: number; df: number }[];
@@ -843,7 +843,7 @@ export class VocabularyDb {
     this.stmtLineageShared = this.db.prepare(`
       SELECT DISTINCT m_q.artwork_id
       FROM mappings m_q
-      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND m_c.field_id = ?
+      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND +m_c.field_id = ?
       WHERE m_q.field_id = ? AND m_q.vocab_rowid = ? AND m_c.vocab_rowid = ?
     `);
     console.error(`[find_similar] Lineage IDF cache: ${this.lineageCreatorDf.size} creators, ${this.lineageN.toLocaleString()} artworks`);
@@ -875,9 +875,9 @@ export class VocabularyDb {
       SELECT m_q.vocab_rowid as qualifier_id, m_c.vocab_rowid as creator_id,
              COALESCE(v_c.label_en, v_c.label_nl, '') as creator_label
       FROM mappings m_q
-      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND m_c.field_id = ?
+      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND +m_c.field_id = ?
       JOIN vocabulary v_c ON v_c.vocab_int_id = m_c.vocab_rowid
-      WHERE m_q.artwork_id = ? AND m_q.field_id = ? AND m_q.vocab_rowid IN (${qualPlaceholders})
+      WHERE m_q.artwork_id = ? AND +m_q.field_id = ? AND m_q.vocab_rowid IN (${qualPlaceholders})
     `).all(creatorFieldId, queryArtId, qualFieldId, ...qualIds) as {
       qualifier_id: number; creator_id: number; creator_label: string;
     }[];
@@ -885,7 +885,7 @@ export class VocabularyDb {
     if (queryPairs.length === 0) {
       // Check if artwork has any qualifiers at all (to give informative message)
       const anyQual = this.db.prepare(
-        "SELECT 1 FROM mappings WHERE artwork_id = ? AND field_id = ? LIMIT 1"
+        "SELECT 1 FROM mappings WHERE artwork_id = ? AND +field_id = ? LIMIT 1"
       ).get(queryArtId, qualFieldId);
       const msg = anyQual
         ? "This artwork has direct attribution — no visual-lineage qualifiers to search by."
@@ -1035,7 +1035,7 @@ export class VocabularyDb {
       SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label
       FROM mappings m
       JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-      WHERE m.artwork_id = ? AND m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
+      WHERE m.artwork_id = ? AND +m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
     `).all(queryArtId, subjectFieldId) as { vocab_rowid: number; label: string }[];
 
     // Filter noise
