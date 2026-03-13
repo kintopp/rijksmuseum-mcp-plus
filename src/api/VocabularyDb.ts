@@ -27,6 +27,7 @@ export interface IconclassSimilarResult {
   queryTitle: string;
   queryNotations: { notation: string; label: string; depth: number }[];
   results: {
+    artId: number;
     objectNumber: string;
     title: string;
     creator: string;
@@ -50,6 +51,7 @@ export interface LineageSimilarResult {
   queryTitle: string;
   queryLineage: { qualifierLabel: string; creatorLabel: string; strength: number }[];
   results: {
+    artId: number;
     objectNumber: string;
     title: string;
     creator: string;
@@ -72,6 +74,7 @@ export interface DepictedPersonSimilarResult {
   queryTitle: string;
   queryPersons: { label: string }[];
   results: {
+    artId: number;
     objectNumber: string;
     title: string;
     creator: string;
@@ -776,6 +779,7 @@ export class VocabularyDb {
       // Sort shared motifs by weight descending
       data.sharedMotifs.sort((a, b) => b.weight - a.weight);
       return {
+        artId,
         objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
         title: meta?.title ?? "",
         creator: meta?.creator ?? "",
@@ -949,6 +953,7 @@ export class VocabularyDb {
       const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
       data.sharedLineage.sort((a, b) => b.strength - a.strength);
       return {
+        artId,
         objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
         title: meta?.title ?? "",
         creator: meta?.creator ?? "",
@@ -1089,6 +1094,7 @@ export class VocabularyDb {
       const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
       data.sharedPersons.sort((a, b) => b.weight - a.weight);
       return {
+        artId,
         objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
         title: meta?.title ?? "",
         creator: meta?.creator ?? "",
@@ -1110,7 +1116,6 @@ export class VocabularyDb {
 
   // ── find_similar: batch metadata helpers ───────────────────────────
 
-  /** Batch-lookup artwork metadata by art_id. Chunks at 500. */
   /** Look up art_id, title, creator by object number. Returns null if not found. */
   lookupArtId(objectNumber: string): { artId: number; title: string; creator: string } | null {
     if (!this.stmtLookupArtId) return null;
@@ -1119,17 +1124,30 @@ export class VocabularyDb {
     return { artId: row.art_id, title: row.title || "", creator: row.creator_label || "" };
   }
 
-  batchLookupByArtId(artIds: number[]): Map<number, { objectNumber: string; title: string; creator: string; dateEarliest: number | null; dateLatest: number | null }> {
-    const map = new Map<number, { objectNumber: string; title: string; creator: string; dateEarliest: number | null; dateLatest: number | null }>();
+  /** Batch-lookup artwork metadata by art_id. Includes iiif_id when available. Chunks at 500. */
+  batchLookupByArtId(artIds: number[]): Map<number, {
+    objectNumber: string; title: string; creator: string;
+    dateEarliest: number | null; dateLatest: number | null; iiifId: string | null;
+  }> {
+    const map = new Map<number, {
+      objectNumber: string; title: string; creator: string;
+      dateEarliest: number | null; dateLatest: number | null; iiifId: string | null;
+    }>();
     if (!this.db || artIds.length === 0) return map;
+    const hasIiif = !!this.stmtLookupIiifId; // cached at init
+    const cols = hasIiif
+      ? "art_id, object_number, title, creator_label, date_earliest, date_latest, iiif_id"
+      : "art_id, object_number, title, creator_label, date_earliest, date_latest";
     const CHUNK = 500;
     for (let i = 0; i < artIds.length; i += CHUNK) {
       const chunk = artIds.slice(i, i + CHUNK);
       const placeholders = chunk.map(() => "?").join(", ");
-      const rows = this.db.prepare(`
-        SELECT art_id, object_number, title, creator_label, date_earliest, date_latest
-        FROM artworks WHERE art_id IN (${placeholders})
-      `).all(...chunk) as { art_id: number; object_number: string; title: string; creator_label: string; date_earliest: number | null; date_latest: number | null }[];
+      const rows = this.db.prepare(
+        `SELECT ${cols} FROM artworks WHERE art_id IN (${placeholders})`
+      ).all(...chunk) as {
+        art_id: number; object_number: string; title: string; creator_label: string;
+        date_earliest: number | null; date_latest: number | null; iiif_id?: string | null;
+      }[];
       for (const r of rows) {
         map.set(r.art_id, {
           objectNumber: r.object_number,
@@ -1137,6 +1155,7 @@ export class VocabularyDb {
           creator: r.creator_label || "",
           dateEarliest: r.date_earliest,
           dateLatest: r.date_latest,
+          iiifId: r.iiif_id ?? null,
         });
       }
     }
@@ -1160,44 +1179,6 @@ export class VocabularyDb {
       `).all(...chunk, typeFieldId) as { artwork_id: number; label: string }[];
       for (const r of rows) {
         if (r.label && !map.has(r.artwork_id)) map.set(r.artwork_id, r.label);
-      }
-    }
-    return map;
-  }
-
-  /** Batch-lookup artwork metadata + iiif_id by art_id. Chunks at 500. */
-  batchLookupWithIiifByArtId(artIds: number[]): Map<number, {
-    objectNumber: string; title: string; creator: string;
-    dateEarliest: number | null; dateLatest: number | null; iiifId: string | null;
-  }> {
-    const map = new Map<number, {
-      objectNumber: string; title: string; creator: string;
-      dateEarliest: number | null; dateLatest: number | null; iiifId: string | null;
-    }>();
-    if (!this.db || artIds.length === 0) return map;
-    const hasIiif = this.columnExists("artworks", "iiif_id");
-    const cols = hasIiif
-      ? "art_id, object_number, title, creator_label, date_earliest, date_latest, iiif_id"
-      : "art_id, object_number, title, creator_label, date_earliest, date_latest";
-    const CHUNK = 500;
-    for (let i = 0; i < artIds.length; i += CHUNK) {
-      const chunk = artIds.slice(i, i + CHUNK);
-      const placeholders = chunk.map(() => "?").join(", ");
-      const rows = this.db.prepare(
-        `SELECT ${cols} FROM artworks WHERE art_id IN (${placeholders})`
-      ).all(...chunk) as {
-        art_id: number; object_number: string; title: string; creator_label: string;
-        date_earliest: number | null; date_latest: number | null; iiif_id?: string | null;
-      }[];
-      for (const r of rows) {
-        map.set(r.art_id, {
-          objectNumber: r.object_number,
-          title: r.title || "",
-          creator: r.creator_label || "",
-          dateEarliest: r.date_earliest,
-          dateLatest: r.date_latest,
-          iiifId: r.iiif_id ?? null,
-        });
       }
     }
     return map;

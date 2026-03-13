@@ -47,7 +47,6 @@ export class EmbeddingsDb {
   // Description embedding statements (null if desc tables not present)
   private stmtDescLookup: Statement | null = null;
   private stmtDescKnn: Statement | null = null;
-  private stmtDescArtwork: Statement | null = null;
   private descAvailable_ = false;
   private descDimensions = 0;
   private descArtworkCount = 0;
@@ -109,9 +108,6 @@ export class EmbeddingsDb {
           WHERE embedding MATCH vec_int8(?) AND k = ?
           ORDER BY distance
         `);
-        this.stmtDescArtwork = this.db.prepare(
-          "SELECT art_id, object_number FROM desc_embeddings WHERE art_id = ?"
-        );
         this.descAvailable_ = true;
         console.error(`  Description embeddings: ${this.descArtworkCount.toLocaleString()} vectors (${this.descDimensions}d)`);
       } catch {
@@ -221,7 +217,7 @@ export class EmbeddingsDb {
    * then runs KNN on vec_desc_artworks. No model or PCA needed at runtime.
    */
   searchDescriptionSimilar(queryArtId: number, k: number): DescriptionSearchResult[] {
-    if (!this.stmtDescLookup || !this.stmtDescKnn || !this.stmtDescArtwork) return [];
+    if (!this.db || !this.stmtDescLookup || !this.stmtDescKnn) return [];
 
     // Look up the query artwork's pre-computed description embedding
     const row = this.stmtDescLookup.get(queryArtId) as { embedding: Buffer } | undefined;
@@ -232,21 +228,24 @@ export class EmbeddingsDb {
       artwork_id: number; distance: number;
     }[];
 
-    // Resolve details, excluding the query artwork itself
-    const results: DescriptionSearchResult[] = [];
-    for (const r of knnRows) {
-      if (r.artwork_id === queryArtId) continue;
-      if (results.length >= k) break;
-      const artwork = this.stmtDescArtwork.get(r.artwork_id) as {
-        art_id: number; object_number: string;
-      } | undefined;
-      if (!artwork) continue;
-      results.push({
-        artId: artwork.art_id,
-        objectNumber: artwork.object_number,
+    // Filter self-match and cap at k
+    const filtered = knnRows.filter(r => r.artwork_id !== queryArtId).slice(0, k);
+    if (filtered.length === 0) return [];
+
+    // Batch-resolve object_numbers in a single query
+    const placeholders = filtered.map(() => "?").join(", ");
+    const artIds = filtered.map(r => r.artwork_id);
+    const objRows = this.db.prepare(
+      `SELECT art_id, object_number FROM desc_embeddings WHERE art_id IN (${placeholders})`
+    ).all(...artIds) as { art_id: number; object_number: string }[];
+    const objMap = new Map(objRows.map(r => [r.art_id, r.object_number]));
+
+    return filtered
+      .filter(r => objMap.has(r.artwork_id))
+      .map(r => ({
+        artId: r.artwork_id,
+        objectNumber: objMap.get(r.artwork_id)!,
         similarity: Math.round((1 - r.distance) * 1000) / 1000,
-      });
-    }
-    return results;
+      }));
   }
 }

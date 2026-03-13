@@ -1993,14 +1993,13 @@ function registerTools(
         title: "Find Similar Artworks",
         description:
           "Find artworks similar to a given artwork. Generates a visual comparison page with IIIF thumbnails.\n\n" +
-          "Runs four independent similarity signals and presents them side by side:\n" +
+          "Runs three independent similarity signals and presents them side by side:\n" +
           "- **Iconclass**: shared subject classifications (scenes, motifs, iconographic themes). Coverage: ~658K (79%).\n" +
           "- **Lineage**: shared visual-style lineage (\"after\", \"workshop of\", \"circle of\"). Coverage: ~208K (25%).\n" +
-          "- **Depicted person**: shared historical/named persons. Coverage: ~217K (26%).\n" +
           "- **Description**: semantically similar catalogue descriptions (Dutch). Coverage: ~511K (61%).\n\n" +
-          "A **pooled** column shows artworks appearing in 3+ signals — the most robust similarity candidates.\n\n" +
+          "A **pooled** column shows artworks appearing in 2+ signals — the most robust similarity candidates.\n\n" +
           "Returns a URL to a self-contained HTML comparison page (HTTP mode) or an HTML file path (stdio mode). " +
-          "The page does not decide what 'similar' means — it presents all four readings and lets the user judge.",
+          "The page does not decide what 'similar' means — it presents all three readings and lets the user judge.",
         inputSchema: z.object({
           objectNumber: z.string().describe("Object number of the artwork to find similar works for (e.g. 'SK-A-1718')."),
           maxResults: z.preprocess(stripNull, z.number().int().min(1).max(RESULTS_MAX).default(20).optional())
@@ -2014,7 +2013,7 @@ function registerTools(
         // Resolve query artwork metadata + iiif_id
         const artRow = vocabDb!.lookupArtId(args.objectNumber);
         if (!artRow) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
-        const queryMeta = vocabDb!.batchLookupWithIiifByArtId([artRow.artId]);
+        const queryMeta = vocabDb!.batchLookupByArtId([artRow.artId]);
         const queryInfo = queryMeta.get(artRow.artId);
         const queryTypeMap = vocabDb!.batchLookupTypesByArtId([artRow.artId]);
         const queryDescMap = vocabDb!.batchLookupDescriptionsByArtId([artRow.artId]);
@@ -2023,31 +2022,24 @@ function registerTools(
 
         // ── Run all 4 signals ──────────────────────────────────────
 
-        /** Convert a mode's raw results into SimilarCandidate[] with iiif_ids. */
+        /** Convert a mode's raw results (which include artId) into SimilarCandidate[].
+         *  Single batch lookup for iiif_ids + types — no per-result queries. */
         function toCandidates(
-          artIds: number[],
-          rawResults: { objectNumber: string; title: string; creator: string; date?: string; score: number; url: string; detail?: string }[],
+          results: { artId: number; objectNumber: string; title: string; creator: string; date?: string; score: number; url: string; detail?: string }[],
         ): SimilarCandidate[] {
-          const meta = vocabDb!.batchLookupWithIiifByArtId(artIds);
+          if (results.length === 0) return [];
+          const artIds = results.map(r => r.artId);
+          const meta = vocabDb!.batchLookupByArtId(artIds);
           const types = vocabDb!.batchLookupTypesByArtId(artIds);
-          return rawResults.map((r, _i) => {
-            // Find the art_id for this result
-            let iiifId: string | undefined;
-            let type: string | undefined;
-            for (const [aid, m] of meta) {
-              if (m.objectNumber === r.objectNumber) {
-                iiifId = m.iiifId ?? undefined;
-                type = types.get(aid);
-                break;
-              }
-            }
+          return results.map(r => {
+            const m = meta.get(r.artId);
             return {
               objectNumber: r.objectNumber,
               title: r.title,
               creator: r.creator,
               ...(r.date && { date: r.date }),
-              ...(type && { type }),
-              iiifId,
+              ...(types.has(r.artId) && { type: types.get(r.artId) }),
+              iiifId: m?.iiifId ?? undefined,
               score: r.score,
               url: r.url,
               ...(r.detail && { detail: r.detail }),
@@ -2057,46 +2049,21 @@ function registerTools(
 
         // Iconclass
         const icResult = vocabDb!.findSimilarByIconclass(args.objectNumber, maxResults);
-        const icCandidates: SimilarCandidate[] = icResult?.results.length
-          ? toCandidates(
-              // We need art_ids but findSimilarByIconclass returns objectNumbers — re-lookup
-              icResult.results.map(r => {
-                const a = vocabDb!.lookupArtId(r.objectNumber);
-                return a?.artId ?? 0;
-              }).filter(id => id > 0),
-              icResult.results.map(r => ({
-                ...r,
-                url: r.url,
-                detail: r.sharedMotifs.map(m => `${m.notation} ${m.label}`).join(", "),
-              })),
-            )
-          : [];
+        const icCandidates = toCandidates(
+          (icResult?.results ?? []).map(r => ({
+            ...r,
+            detail: r.sharedMotifs.map(m => `${m.notation} ${m.label}`).join(", "),
+          })),
+        );
 
         // Lineage
         const liResult = vocabDb!.findSimilarByLineage(args.objectNumber, maxResults);
-        const liCandidates: SimilarCandidate[] = liResult?.results.length
-          ? toCandidates(
-              liResult.results.map(r => vocabDb!.lookupArtId(r.objectNumber)?.artId ?? 0).filter(id => id > 0),
-              liResult.results.map(r => ({
-                ...r,
-                url: r.url,
-                detail: r.sharedLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel}`).join(", "),
-              })),
-            )
-          : [];
-
-        // Depicted person
-        const dpResult = vocabDb!.findSimilarByDepictedPerson(args.objectNumber, maxResults);
-        const dpCandidates: SimilarCandidate[] = dpResult?.results.length
-          ? toCandidates(
-              dpResult.results.map(r => vocabDb!.lookupArtId(r.objectNumber)?.artId ?? 0).filter(id => id > 0),
-              dpResult.results.map(r => ({
-                ...r,
-                url: r.url,
-                detail: r.sharedPersons.map(p => p.label).join(", "),
-              })),
-            )
-          : [];
+        const liCandidates = toCandidates(
+          (liResult?.results ?? []).map(r => ({
+            ...r,
+            detail: r.sharedLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel}`).join(", "),
+          })),
+        );
 
         // Description
         let descCandidates: SimilarCandidate[] = [];
@@ -2104,7 +2071,7 @@ function registerTools(
           const descResults = embeddingsDb.searchDescriptionSimilar(artRow.artId, maxResults);
           if (descResults.length > 0) {
             const descArtIds = descResults.map(r => r.artId);
-            const descMeta = vocabDb!.batchLookupWithIiifByArtId(descArtIds);
+            const descMeta = vocabDb!.batchLookupByArtId(descArtIds);
             const descTypes = vocabDb!.batchLookupTypesByArtId(descArtIds);
             const descTexts = vocabDb!.batchLookupDescriptionsByArtId(descArtIds);
             descCandidates = descResults.map(r => {
@@ -2140,28 +2107,25 @@ function registerTools(
           modes: {
             iconclass: icCandidates,
             lineage: liCandidates,
-            depicted_person: dpCandidates,
             description: descCandidates,
           },
-          poolThreshold: 3,
+          poolThreshold: 2,
           generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
         };
 
         const html = generateSimilarHtml(pageData);
 
-        // Store for serving
-        const pageUUID = randomUUID();
-        similarPages.set(pageUUID, { html, lastAccess: Date.now() });
-
         // Build response URL or file path
         let pageLocation: string;
+        const pageUUID = randomUUID();
         if (httpPort) {
+          // HTTP mode — store in memory, serve at /similar/:uuid
+          similarPages.set(pageUUID, { html, lastAccess: Date.now() });
           const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
           pageLocation = `${baseUrl}/similar/${pageUUID}`;
         } else {
-          // stdio mode — write to OS temp directory
-          const tmpDir = os.tmpdir();
-          const filePath = path.join(tmpDir, `rijksmuseum-similar-${pageUUID}.html`);
+          // stdio mode — write to OS temp directory (no HTTP server to serve from)
+          const filePath = path.join(os.tmpdir(), `rijksmuseum-similar-${pageUUID}.html`);
           fs.writeFileSync(filePath, html, "utf-8");
           pageLocation = filePath;
         }
@@ -2170,22 +2134,21 @@ function registerTools(
         const counts = [
           `Iconclass: ${icCandidates.length}`,
           `Lineage: ${liCandidates.length}`,
-          `Persons: ${dpCandidates.length}`,
           `Description: ${descCandidates.length}`,
         ];
-        const pooledCount = pageData.poolThreshold;
+        const poolThreshold = pageData.poolThreshold;
         // Count pooled entries
         const allObjNums = new Map<string, number>();
-        for (const mode of [icCandidates, liCandidates, dpCandidates, descCandidates]) {
+        for (const mode of [icCandidates, liCandidates, descCandidates]) {
           for (const c of mode) {
             allObjNums.set(c.objectNumber, (allObjNums.get(c.objectNumber) ?? 0) + 1);
           }
         }
-        const pooledN = [...allObjNums.values()].filter(n => n >= pooledCount).length;
+        const pooledN = [...allObjNums.values()].filter(n => n >= poolThreshold).length;
 
         const textLines = [
           `Similar to "${artRow.title}" (${args.objectNumber})`,
-          counts.join(" | ") + ` | Pooled (${pooledCount}+): ${pooledN}`,
+          counts.join(" | ") + ` | Pooled (${poolThreshold}+): ${pooledN}`,
           "",
           pageLocation,
         ];
