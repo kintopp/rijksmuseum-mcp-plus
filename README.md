@@ -38,7 +38,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 10. **User image annotation** (experimental) - click inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now click and draw a rectangle around an area of interest to you. You may be asked for permission to allow a prompt (with the coordinates of the area you selected) to be written into the chat. Then add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
 
-11. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as spatial visualizations (see below) or other [AI-enabled analyses](https://claude.ai/public/artifacts/e0974cea-17a0-47c1-865e-120aae9d990f).
+11. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
 
 <br>
 <p align="center"><img src="docs/places-near-basel.png" alt="Artworks from the Rijksmuseum depicting places within 100km of Basel" width="500"></p>
