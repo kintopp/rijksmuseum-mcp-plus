@@ -13,7 +13,6 @@
 
 <br>
 <p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion with highlighted panels" width="500"></p>
-<p align="center"><img src="docs/radar-chart.png" alt="Radar chart of subject matter in the Rijksmuseum's  paintings collection" width="500"></p>
 
 ### Features
 
@@ -43,6 +42,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 <br>
 <p align="center"><img src="docs/places-near-basel.png" alt="Artworks from the Rijksmuseum depicting places within 100km of Basel" width="500"></p>
+<p align="center"><img src="docs/radar-chart.png" alt="Radar chart of subject matter in the Rijksmuseum's  paintings collection" width="500"></p>
 
 ## Quick Start
 
