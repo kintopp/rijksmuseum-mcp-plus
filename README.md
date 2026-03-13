@@ -13,6 +13,7 @@
 
 <br>
 <p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion with highlighted panels" width="500"></p>
+<p align="center"><img src="docs/radar-chart.png" alt="Radar chart of subject matter in the Rijksmuseum's  paintings collection" width="500"></p>
 
 ### Features
 
