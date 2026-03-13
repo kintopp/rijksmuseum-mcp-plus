@@ -1231,7 +1231,7 @@ export class VocabularyDb {
       const sql =
         `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT fm.artwork_id) AS cnt ` +
         `FROM artworks a ${ftsJoinClause} ` +
-        `JOIN mappings fm ON fm.artwork_id = a.art_id AND fm.field_id = ? ` +
+        `JOIN mappings fm ON fm.artwork_id = a.art_id AND +fm.field_id = ? ` +
         `JOIN vocabulary v ON fm.vocab_rowid = v.vocab_int_id ` +
         `WHERE ${where} AND v.label_en IS NOT NULL ` +
         `GROUP BY label ORDER BY cnt DESC LIMIT 5`;
@@ -1268,7 +1268,7 @@ export class VocabularyDb {
         const sql =
           `SELECT v.gender AS gender, COUNT(DISTINCT fm.artwork_id) AS cnt ` +
           `FROM artworks a ${ftsJoinClause} ` +
-          `JOIN mappings fm ON fm.artwork_id = a.art_id AND fm.field_id = ? ` +
+          `JOIN mappings fm ON fm.artwork_id = a.art_id AND +fm.field_id = ? ` +
           `JOIN vocabulary v ON fm.vocab_rowid = v.vocab_int_id ` +
           `WHERE ${where} AND v.gender IS NOT NULL ` +
           `GROUP BY gender ORDER BY cnt DESC`;
