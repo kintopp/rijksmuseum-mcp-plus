@@ -1970,9 +1970,9 @@ function registerTools(
     );
   }
 
-  // ── find_similar ──────────────────────────────────────────────────
+  // ── find_similar (feature-gated, set ENABLE_FIND_SIMILAR=true to register) ──
 
-  if (vocabAvailable && vocabDb!.available) {
+  if (vocabAvailable && vocabDb!.available && process.env.ENABLE_FIND_SIMILAR === "true") {
     server.registerTool(
       "find_similar",
       {
