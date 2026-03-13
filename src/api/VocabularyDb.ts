@@ -103,6 +103,12 @@ const ICONCLASS_NOISE_LABELS = new Set([
   "adult woman",
 ]);
 
+/** Format earliest/latest date integers into a display string (e.g. "1642" or "1640–1650"). */
+export function formatDateRange(earliest: number | null | undefined, latest: number | null | undefined): string | undefined {
+  if (earliest == null) return undefined;
+  return earliest === latest ? String(earliest) : `${earliest}–${latest}`;
+}
+
 export interface VocabSearchParams {
   subject?: StringOrArray;
   iconclass?: StringOrArray;
@@ -381,6 +387,8 @@ export class VocabularyDb {
   private stmtLookupIiifId: Statement | null = null;
   private stmtFilterArtIds = new Map<string, Statement>();
 
+  // ── find_similar shared ──
+  private stmtLookupArtId: Statement | null = null; // cached: art_id + title + creator_label by object_number
   // ── find_similar caches (initialised lazily on first call) ──
   private notationDf: Map<number, number> | null = null; // vocab_rowid → document frequency
   private iconclassN = 0; // total artworks with any Iconclass notation
@@ -472,6 +480,11 @@ export class VocabularyDb {
       this.stmtLookupArtwork = this.db.prepare(
         "SELECT title, title_all_text, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
       );
+      if (this.hasIntMappings) {
+        this.stmtLookupArtId = this.db.prepare(
+          "SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?"
+        );
+      }
 
       // Detect person enrichment columns (birth_year, death_year, gender, bio, wikidata_id)
       if (this.columnExists("vocabulary", "birth_year") && this.columnExists("vocabulary", "gender")) {
@@ -693,8 +706,7 @@ export class VocabularyDb {
     const subjectFieldId = this.requireFieldId("subject");
 
     // 1. Resolve art_id
-    const artRow = this.db.prepare("SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?")
-      .get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+    const artRow = this.stmtLookupArtId!.get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
     if (!artRow) return null;
     const queryArtId = artRow.art_id;
 
@@ -760,9 +772,7 @@ export class VocabularyDb {
 
     const results = sorted.map(([artId, data]) => {
       const meta = metaMap.get(artId);
-      const date = meta?.dateEarliest != null
-        ? (meta.dateEarliest === meta.dateLatest ? String(meta.dateEarliest) : `${meta.dateEarliest}–${meta.dateLatest}`)
-        : undefined;
+      const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
       // Sort shared motifs by weight descending
       data.sharedMotifs.sort((a, b) => b.weight - a.weight);
       return {
@@ -852,8 +862,7 @@ export class VocabularyDb {
     const creatorFieldId = this.requireFieldId("creator");
 
     // 1. Resolve art_id
-    const artRow = this.db.prepare("SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?")
-      .get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+    const artRow = this.stmtLookupArtId!.get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
     if (!artRow) return null;
     const queryArtId = artRow.art_id;
 
@@ -937,9 +946,7 @@ export class VocabularyDb {
 
     const results = sorted.map(([artId, data]) => {
       const meta = metaMap.get(artId);
-      const date = meta?.dateEarliest != null
-        ? (meta.dateEarliest === meta.dateLatest ? String(meta.dateEarliest) : `${meta.dateEarliest}–${meta.dateLatest}`)
-        : undefined;
+      const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
       data.sharedLineage.sort((a, b) => b.strength - a.strength);
       return {
         objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
@@ -972,33 +979,38 @@ export class VocabularyDb {
     if (this.personDf || !this.db || !this.hasIntMappings) return;
     const subjectFieldId = this.requireFieldId("subject");
 
-    // IDF: count artworks per depicted person
-    this.personDf = new Map();
+    // Single CTE scan: per-person DFs + total distinct artworks in one pass
     const rows = this.db.prepare(`
-      SELECT m.vocab_rowid, COUNT(DISTINCT m.artwork_id) as df
-      FROM mappings m
-      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-      WHERE m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
-      GROUP BY m.vocab_rowid
-    `).all(subjectFieldId) as { vocab_rowid: number; df: number }[];
+      WITH person_mappings AS (
+        SELECT m.vocab_rowid, m.artwork_id
+        FROM mappings m
+        JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+        WHERE m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
+      )
+      SELECT vocab_rowid, COUNT(DISTINCT artwork_id) as df,
+             (SELECT COUNT(DISTINCT artwork_id) FROM person_mappings) as n
+      FROM person_mappings
+      GROUP BY vocab_rowid
+    `).all(subjectFieldId) as { vocab_rowid: number; df: number; n: number }[];
+
+    // Build local state before assigning to instance fields (atomic init)
+    const df = new Map<number, number>();
+    let totalN = 0;
     for (const r of rows) {
+      totalN = r.n; // same on every row
       if (this.iconclassNoiseIds?.has(r.vocab_rowid)) continue;
-      this.personDf.set(r.vocab_rowid, r.df);
+      df.set(r.vocab_rowid, r.df);
     }
 
-    // Total artworks with at least one depicted person
-    const countRow = this.db.prepare(`
-      SELECT COUNT(DISTINCT m.artwork_id) as n
-      FROM mappings m
-      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-      WHERE m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
-    `).get(subjectFieldId) as { n: number };
-    this.personN = countRow.n;
-
-    this.stmtPersonShared = this.db.prepare(
+    const stmt = this.db.prepare(
       `SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?`
     );
-    console.error(`[find_similar] Person IDF cache: ${this.personDf.size} persons, ${this.personN.toLocaleString()} artworks`);
+
+    // Assign all fields atomically — personDf is the "initialized" sentinel, set last
+    this.personN = totalN;
+    this.stmtPersonShared = stmt;
+    this.personDf = df;
+    console.error(`[find_similar] Person IDF cache: ${df.size} persons, ${totalN.toLocaleString()} artworks`);
   }
 
   /**
@@ -1009,13 +1021,12 @@ export class VocabularyDb {
     if (!this.db || !this.hasIntMappings) return null;
     this.ensureIconclassCache(); // needed for noise IDs
     this.ensurePersonCache();
-    if (!this.personDf) return null;
+    if (!this.personDf || this.personN === 0) return null;
 
     const subjectFieldId = this.requireFieldId("subject");
 
     // 1. Resolve art_id
-    const artRow = this.db.prepare("SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?")
-      .get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+    const artRow = this.stmtLookupArtId!.get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
     if (!artRow) return null;
     const queryArtId = artRow.art_id;
 
@@ -1075,9 +1086,7 @@ export class VocabularyDb {
 
     const results = sorted.map(([artId, data]) => {
       const meta = metaMap.get(artId);
-      const date = meta?.dateEarliest != null
-        ? (meta.dateEarliest === meta.dateLatest ? String(meta.dateEarliest) : `${meta.dateEarliest}–${meta.dateLatest}`)
-        : undefined;
+      const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
       data.sharedPersons.sort((a, b) => b.weight - a.weight);
       return {
         objectNumber: meta?.objectNumber ?? `art_id:${artId}`,

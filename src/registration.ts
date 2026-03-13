@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -2256,11 +2256,7 @@ function registerTools(
             if (info) {
               title = info.title || "";
               creator = info.creator || "";
-              if (info.dateEarliest != null) {
-                date = info.dateEarliest === info.dateLatest
-                  ? String(info.dateEarliest)
-                  : `${info.dateEarliest}–${info.dateLatest}`;
-              }
+              date = formatDateRange(info.dateEarliest, info.dateLatest);
             }
           }
 
