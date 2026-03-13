@@ -17,6 +17,12 @@ export interface FilteredSearchResponse {
   warning?: string;
 }
 
+export interface DescriptionSearchResult {
+  artId: number;
+  objectNumber: string;
+  similarity: number; // 1 - distance (cosine similarity)
+}
+
 // ─── EmbeddingsDb ────────────────────────────────────────────────────
 
 /**
@@ -37,6 +43,14 @@ export class EmbeddingsDb {
   private stmtKnn: Statement | null = null;
   private stmtArtwork: Statement | null = null;
   private stmtFilteredKnn = new Map<number, Statement>(); // keyed by chunk size
+
+  // Description embedding statements (null if desc tables not present)
+  private stmtDescLookup: Statement | null = null;
+  private stmtDescKnn: Statement | null = null;
+  private stmtDescArtwork: Statement | null = null;
+  private descAvailable_ = false;
+  private descDimensions = 0;
+  private descArtworkCount = 0;
 
   constructor() {
     const dbPath = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db");
@@ -78,6 +92,31 @@ export class EmbeddingsDb {
       );
 
       console.error(`Embeddings DB: ${this.artworkCount.toLocaleString()} vectors (${this.dimensions}d)`);
+
+      // Description embedding tables (optional — added by generate-description-embeddings-modal.py)
+      try {
+        this.db.prepare("SELECT 1 FROM desc_embeddings LIMIT 1").get();
+        this.db.prepare("SELECT 1 FROM vec_desc_artworks LIMIT 1").get();
+
+        this.descDimensions = parseInt(metaMap.desc_dimensions ?? "256", 10);
+        this.descArtworkCount = parseInt(metaMap.desc_artwork_count ?? "0", 10);
+
+        this.stmtDescLookup = this.db.prepare(
+          "SELECT embedding FROM desc_embeddings WHERE art_id = ?"
+        );
+        this.stmtDescKnn = this.db.prepare(`
+          SELECT artwork_id, distance FROM vec_desc_artworks
+          WHERE embedding MATCH vec_int8(?) AND k = ?
+          ORDER BY distance
+        `);
+        this.stmtDescArtwork = this.db.prepare(
+          "SELECT art_id, object_number FROM desc_embeddings WHERE art_id = ?"
+        );
+        this.descAvailable_ = true;
+        console.error(`  Description embeddings: ${this.descArtworkCount.toLocaleString()} vectors (${this.descDimensions}d)`);
+      } catch {
+        // desc tables not present — description similarity disabled
+      }
     } catch (err) {
       console.error(`Failed to open embeddings DB: ${err instanceof Error ? err.message : err}`);
       this.db = null;
@@ -170,5 +209,44 @@ export class EmbeddingsDb {
       this.stmtFilteredKnn.set(chunkSize, stmt);
     }
     return stmt;
+  }
+
+  // ── Description similarity ──────────────────────────────────────────
+
+  get descriptionAvailable(): boolean { return this.descAvailable_; }
+
+  /**
+   * Find artworks with similar descriptions to a given artwork.
+   * Looks up the query artwork's pre-computed description embedding,
+   * then runs KNN on vec_desc_artworks. No model or PCA needed at runtime.
+   */
+  searchDescriptionSimilar(queryArtId: number, k: number): DescriptionSearchResult[] {
+    if (!this.stmtDescLookup || !this.stmtDescKnn || !this.stmtDescArtwork) return [];
+
+    // Look up the query artwork's pre-computed description embedding
+    const row = this.stmtDescLookup.get(queryArtId) as { embedding: Buffer } | undefined;
+    if (!row) return [];
+
+    // KNN scan — fetch k+1 to account for self-match
+    const knnRows = this.stmtDescKnn.all(row.embedding, Math.min(k + 1, 4096)) as {
+      artwork_id: number; distance: number;
+    }[];
+
+    // Resolve details, excluding the query artwork itself
+    const results: DescriptionSearchResult[] = [];
+    for (const r of knnRows) {
+      if (r.artwork_id === queryArtId) continue;
+      if (results.length >= k) break;
+      const artwork = this.stmtDescArtwork.get(r.artwork_id) as {
+        art_id: number; object_number: string;
+      } | undefined;
+      if (!artwork) continue;
+      results.push({
+        artId: artwork.art_id,
+        objectNumber: artwork.object_number,
+        similarity: Math.round((1 - r.distance) * 1000) / 1000,
+      });
+    }
+    return results;
   }
 }

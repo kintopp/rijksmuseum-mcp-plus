@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -17,6 +18,7 @@ import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
+import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import type { SearchParams, LinkedArtObject } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -512,7 +514,7 @@ const SemanticSearchOutput = {
 };
 
 const FindSimilarOutput = {
-  mode: z.enum(["iconclass", "lineage", "depicted_person"]),
+  mode: z.enum(["iconclass", "lineage", "depicted_person", "description"]),
   queryObjectNumber: z.string(),
   queryTitle: z.string(),
   querySignals: z.array(z.object({
@@ -544,8 +546,11 @@ const FindSimilarOutput = {
       label: z.string(),
       weight: z.number(),
     })).optional().describe("Shared depicted persons (depicted_person mode only)."),
+    descriptionExcerpt: z.string().optional().describe("Candidate's catalogue description in Dutch (description mode only). Use these to re-rank: discard candidates whose descriptions are similar only due to generic structural phrases."),
     url: z.string(),
   })),
+  queryDescription: z.string().optional().describe("Query artwork's catalogue description (description mode only)."),
+  rerankerNote: z.string().optional().describe("Instructions for LLM re-ranking (description mode only)."),
   warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 };
@@ -597,6 +602,15 @@ setInterval(() => {
   const now = Date.now();
   for (const [id, q] of viewerQueues) {
     if (now - q.lastAccess > 1_800_000) viewerQueues.delete(id);
+  }
+}, 60_000).unref();
+
+/** Module-scope storage for generated similar-artworks HTML pages. TTL 30 min. */
+export const similarPages = new Map<string, { html: string; lastAccess: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, page] of similarPages) {
+    if (now - page.lastAccess > 1_800_000) similarPages.delete(id);
   }
 }, 60_000).unref();
 
@@ -1978,159 +1992,205 @@ function registerTools(
       {
         title: "Find Similar Artworks",
         description:
-          "Find artworks similar to a given artwork based on how the museum classifies them or their visual-style lineage.\n\n" +
-          "Three independent modes:\n" +
-          "- **iconclass** (default): finds artworks sharing the same Iconclass subject classifications — scenes, motifs, " +
-          "iconographic themes. Results include the specific shared motifs. More specific shared codes (deeper in the " +
-          "Iconclass hierarchy, appearing on fewer artworks) contribute more to the similarity score. Coverage: ~658K artworks (79%).\n" +
-          "- **lineage**: finds artworks that share the same visual-style lineage — works \"after\" the same artist, from " +
-          "the same workshop, or in the same stylistic circle. This captures visual resemblance independent of subject matter: " +
-          "two prints \"after Rembrandt\" share a visual language even if they depict different scenes. Coverage: ~208K artworks (25%).\n" +
-          "- **depicted_person**: finds artworks depicting the same historical or named persons — portraits of the same ruler, " +
-          "saint, or notable figure. Rarer persons contribute more to the score. Coverage: ~217K artworks (26%).\n\n" +
-          "Use `iconclass` mode to find thematically related works (what is depicted). Use `lineage` mode to find visually " +
-          "related works (how it looks). Use `depicted_person` to find works about the same people. " +
-          "An artwork may appear in multiple modes — the three signals are independent.",
+          "Find artworks similar to a given artwork. Generates a visual comparison page with IIIF thumbnails.\n\n" +
+          "Runs four independent similarity signals and presents them side by side:\n" +
+          "- **Iconclass**: shared subject classifications (scenes, motifs, iconographic themes). Coverage: ~658K (79%).\n" +
+          "- **Lineage**: shared visual-style lineage (\"after\", \"workshop of\", \"circle of\"). Coverage: ~208K (25%).\n" +
+          "- **Depicted person**: shared historical/named persons. Coverage: ~217K (26%).\n" +
+          "- **Description**: semantically similar catalogue descriptions (Dutch). Coverage: ~511K (61%).\n\n" +
+          "A **pooled** column shows artworks appearing in 3+ signals — the most robust similarity candidates.\n\n" +
+          "Returns a URL to a self-contained HTML comparison page (HTTP mode) or an HTML file path (stdio mode). " +
+          "The page does not decide what 'similar' means — it presents all four readings and lets the user judge.",
         inputSchema: z.object({
           objectNumber: z.string().describe("Object number of the artwork to find similar works for (e.g. 'SK-A-1718')."),
-          mode: z.preprocess(stripNull, z.enum(["iconclass", "lineage", "depicted_person"]).default("iconclass").optional())
-            .describe("Similarity signal: 'iconclass' (shared motifs, default), 'lineage' (shared visual style), or 'depicted_person' (shared named persons)."),
-          maxResults: z.preprocess(stripNull, z.number().int().min(1).max(RESULTS_MAX).default(15).optional())
-            .describe("Number of results to return (default 15, max 50)."),
+          maxResults: z.preprocess(stripNull, z.number().int().min(1).max(RESULTS_MAX).default(20).optional())
+            .describe("Number of results per signal mode (default 20, max 50)."),
         }).strict(),
-        ...withOutputSchema(FindSimilarOutput),
+        // No outputSchema — returns a URL/path to an HTML comparison page, not structured data.
       },
       withLogging("find_similar", async (args) => {
-        const mode = args.mode ?? "iconclass";
-        const maxResults = args.maxResults ?? 15;
+        const maxResults = args.maxResults ?? 20;
 
-        if (mode === "iconclass") {
-          const result = vocabDb!.findSimilarByIconclass(args.objectNumber, maxResults);
-          if (!result) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
+        // Resolve query artwork metadata + iiif_id
+        const artRow = vocabDb!.lookupArtId(args.objectNumber);
+        if (!artRow) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
+        const queryMeta = vocabDb!.batchLookupWithIiifByArtId([artRow.artId]);
+        const queryInfo = queryMeta.get(artRow.artId);
+        const queryTypeMap = vocabDb!.batchLookupTypesByArtId([artRow.artId]);
+        const queryDescMap = vocabDb!.batchLookupDescriptionsByArtId([artRow.artId]);
 
-          // Text channel
-          const header = `${result.results.length} iconclass-similar to "${result.queryTitle}" (${result.queryObjectNumber})`;
-          const queryLine = `Query notations: ${result.queryNotations.map(n => `${n.notation} (${n.label})`).join(", ") || "none"}`;
-          const resultLines = result.results.map((r, i) => {
-            const motifs = r.sharedMotifs.map(m => `${m.notation} (${m.label})`).join(", ");
-            let line = `${i + 1}. [${r.score}] ${r.objectNumber}`;
-            if (r.type) line += ` | ${r.type}`;
-            if (r.date) line += ` | ${r.date}`;
-            line += ` | "${r.title}" — ${r.creator}`;
-            line += `\n   ${r.sharedMotifs.length} shared: ${motifs}`;
-            return line;
-          });
-          const textParts = [header, queryLine];
-          if (resultLines.length) textParts.push("", ...resultLines);
-          if (result.warnings?.length) textParts.push("", ...result.warnings.map(w => `[WARNING] ${w}`));
+        const queryDate = formatDateRange(queryInfo?.dateEarliest, queryInfo?.dateLatest);
 
-          // Structured channel
-          const data: InferOutput<typeof FindSimilarOutput> = {
-            mode: "iconclass",
-            queryObjectNumber: result.queryObjectNumber,
-            queryTitle: result.queryTitle,
-            querySignals: result.queryNotations.map(n => ({ label: n.label, notation: n.notation, depth: n.depth })),
-            returnedCount: result.results.length,
-            results: result.results.map((r, i) => ({
-              rank: i + 1,
+        // ── Run all 4 signals ──────────────────────────────────────
+
+        /** Convert a mode's raw results into SimilarCandidate[] with iiif_ids. */
+        function toCandidates(
+          artIds: number[],
+          rawResults: { objectNumber: string; title: string; creator: string; date?: string; score: number; url: string; detail?: string }[],
+        ): SimilarCandidate[] {
+          const meta = vocabDb!.batchLookupWithIiifByArtId(artIds);
+          const types = vocabDb!.batchLookupTypesByArtId(artIds);
+          return rawResults.map((r, _i) => {
+            // Find the art_id for this result
+            let iiifId: string | undefined;
+            let type: string | undefined;
+            for (const [aid, m] of meta) {
+              if (m.objectNumber === r.objectNumber) {
+                iiifId = m.iiifId ?? undefined;
+                type = types.get(aid);
+                break;
+              }
+            }
+            return {
               objectNumber: r.objectNumber,
               title: r.title,
               creator: r.creator,
               ...(r.date && { date: r.date }),
-              ...(r.type && { type: r.type }),
+              ...(type && { type }),
+              iiifId,
               score: r.score,
-              sharedMotifs: r.sharedMotifs,
               url: r.url,
-            })),
-            ...(result.warnings?.length && { warnings: result.warnings }),
-          };
-          return structuredResponse(data, textParts.join("\n"));
-
-        } else if (mode === "lineage") {
-          const result = vocabDb!.findSimilarByLineage(args.objectNumber, maxResults);
-          if (!result) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
-
-          // Text channel
-          const header = `${result.results.length} lineage-similar to "${result.queryTitle}" (${result.queryObjectNumber})`;
-          const queryLine = `Query lineage: ${result.queryLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel}`).join(", ") || "none"}`;
-          const resultLines = result.results.map((r, i) => {
-            const lineage = r.sharedLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel} [${l.strength}]`).join(", ");
-            let line = `${i + 1}. [${r.score}] ${r.objectNumber}`;
-            if (r.type) line += ` | ${r.type}`;
-            if (r.date) line += ` | ${r.date}`;
-            line += ` | "${r.title}" — ${r.creator}`;
-            line += `\n   shared: ${lineage}`;
-            return line;
+              ...(r.detail && { detail: r.detail }),
+            };
           });
-          const textParts = [header, queryLine];
-          if (resultLines.length) textParts.push("", ...resultLines);
-          if (result.warnings?.length) textParts.push("", ...result.warnings.map(w => `[WARNING] ${w}`));
-
-          // Structured channel
-          const data: InferOutput<typeof FindSimilarOutput> = {
-            mode: "lineage",
-            queryObjectNumber: result.queryObjectNumber,
-            queryTitle: result.queryTitle,
-            querySignals: result.queryLineage.map(l => ({ label: `${l.qualifierLabel} ${l.creatorLabel}`, strength: l.strength })),
-            returnedCount: result.results.length,
-            results: result.results.map((r, i) => ({
-              rank: i + 1,
-              objectNumber: r.objectNumber,
-              title: r.title,
-              creator: r.creator,
-              ...(r.date && { date: r.date }),
-              ...(r.type && { type: r.type }),
-              score: r.score,
-              sharedLineage: r.sharedLineage,
-              url: r.url,
-            })),
-            ...(result.warnings?.length && { warnings: result.warnings }),
-          };
-          return structuredResponse(data, textParts.join("\n"));
-
-        } else {
-          // depicted_person mode
-          const result = vocabDb!.findSimilarByDepictedPerson(args.objectNumber, maxResults);
-          if (!result) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
-
-          // Text channel
-          const header = `${result.results.length} person-similar to "${result.queryTitle}" (${result.queryObjectNumber})`;
-          const queryLine = `Query persons: ${result.queryPersons.map(p => p.label).join(", ") || "none"}`;
-          const resultLines = result.results.map((r, i) => {
-            const persons = r.sharedPersons.map(p => p.label).join(", ");
-            let line = `${i + 1}. [${r.score}] ${r.objectNumber}`;
-            if (r.type) line += ` | ${r.type}`;
-            if (r.date) line += ` | ${r.date}`;
-            line += ` | "${r.title}" — ${r.creator}`;
-            line += `\n   ${r.sharedPersons.length} shared: ${persons}`;
-            return line;
-          });
-          const textParts = [header, queryLine];
-          if (resultLines.length) textParts.push("", ...resultLines);
-          if (result.warnings?.length) textParts.push("", ...result.warnings.map(w => `[WARNING] ${w}`));
-
-          // Structured channel
-          const data: InferOutput<typeof FindSimilarOutput> = {
-            mode: "depicted_person",
-            queryObjectNumber: result.queryObjectNumber,
-            queryTitle: result.queryTitle,
-            querySignals: result.queryPersons.map(p => ({ label: p.label })),
-            returnedCount: result.results.length,
-            results: result.results.map((r, i) => ({
-              rank: i + 1,
-              objectNumber: r.objectNumber,
-              title: r.title,
-              creator: r.creator,
-              ...(r.date && { date: r.date }),
-              ...(r.type && { type: r.type }),
-              score: r.score,
-              sharedPersons: r.sharedPersons,
-              url: r.url,
-            })),
-            ...(result.warnings?.length && { warnings: result.warnings }),
-          };
-          return structuredResponse(data, textParts.join("\n"));
         }
+
+        // Iconclass
+        const icResult = vocabDb!.findSimilarByIconclass(args.objectNumber, maxResults);
+        const icCandidates: SimilarCandidate[] = icResult?.results.length
+          ? toCandidates(
+              // We need art_ids but findSimilarByIconclass returns objectNumbers — re-lookup
+              icResult.results.map(r => {
+                const a = vocabDb!.lookupArtId(r.objectNumber);
+                return a?.artId ?? 0;
+              }).filter(id => id > 0),
+              icResult.results.map(r => ({
+                ...r,
+                url: r.url,
+                detail: r.sharedMotifs.map(m => `${m.notation} ${m.label}`).join(", "),
+              })),
+            )
+          : [];
+
+        // Lineage
+        const liResult = vocabDb!.findSimilarByLineage(args.objectNumber, maxResults);
+        const liCandidates: SimilarCandidate[] = liResult?.results.length
+          ? toCandidates(
+              liResult.results.map(r => vocabDb!.lookupArtId(r.objectNumber)?.artId ?? 0).filter(id => id > 0),
+              liResult.results.map(r => ({
+                ...r,
+                url: r.url,
+                detail: r.sharedLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel}`).join(", "),
+              })),
+            )
+          : [];
+
+        // Depicted person
+        const dpResult = vocabDb!.findSimilarByDepictedPerson(args.objectNumber, maxResults);
+        const dpCandidates: SimilarCandidate[] = dpResult?.results.length
+          ? toCandidates(
+              dpResult.results.map(r => vocabDb!.lookupArtId(r.objectNumber)?.artId ?? 0).filter(id => id > 0),
+              dpResult.results.map(r => ({
+                ...r,
+                url: r.url,
+                detail: r.sharedPersons.map(p => p.label).join(", "),
+              })),
+            )
+          : [];
+
+        // Description
+        let descCandidates: SimilarCandidate[] = [];
+        if (embeddingsDb?.descriptionAvailable) {
+          const descResults = embeddingsDb.searchDescriptionSimilar(artRow.artId, maxResults);
+          if (descResults.length > 0) {
+            const descArtIds = descResults.map(r => r.artId);
+            const descMeta = vocabDb!.batchLookupWithIiifByArtId(descArtIds);
+            const descTypes = vocabDb!.batchLookupTypesByArtId(descArtIds);
+            const descTexts = vocabDb!.batchLookupDescriptionsByArtId(descArtIds);
+            descCandidates = descResults.map(r => {
+              const m = descMeta.get(r.artId);
+              const date = formatDateRange(m?.dateEarliest, m?.dateLatest);
+              return {
+                objectNumber: r.objectNumber,
+                title: m?.title ?? "",
+                creator: m?.creator ?? "",
+                ...(date && { date }),
+                ...(descTypes.has(r.artId) && { type: descTypes.get(r.artId) }),
+                iiifId: m?.iiifId ?? undefined,
+                score: r.similarity,
+                url: `https://www.rijksmuseum.nl/en/collection/${r.objectNumber}`,
+                detail: descTexts.get(r.artId)?.slice(0, 200),
+              };
+            });
+          }
+        }
+
+        // ── Generate HTML page ─────────────────────────────────────
+
+        const pageData: SimilarPageData = {
+          query: {
+            objectNumber: args.objectNumber,
+            title: artRow.title,
+            creator: artRow.creator,
+            date: queryDate,
+            type: queryTypeMap.get(artRow.artId),
+            iiifId: queryInfo?.iiifId ?? undefined,
+            description: queryDescMap.get(artRow.artId),
+          },
+          modes: {
+            iconclass: icCandidates,
+            lineage: liCandidates,
+            depicted_person: dpCandidates,
+            description: descCandidates,
+          },
+          poolThreshold: 3,
+          generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+        };
+
+        const html = generateSimilarHtml(pageData);
+
+        // Store for serving
+        const pageUUID = randomUUID();
+        similarPages.set(pageUUID, { html, lastAccess: Date.now() });
+
+        // Build response URL or file path
+        let pageLocation: string;
+        if (httpPort) {
+          const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
+          pageLocation = `${baseUrl}/similar/${pageUUID}`;
+        } else {
+          // stdio mode — write to OS temp directory
+          const tmpDir = os.tmpdir();
+          const filePath = path.join(tmpDir, `rijksmuseum-similar-${pageUUID}.html`);
+          fs.writeFileSync(filePath, html, "utf-8");
+          pageLocation = filePath;
+        }
+
+        // Summary counts
+        const counts = [
+          `Iconclass: ${icCandidates.length}`,
+          `Lineage: ${liCandidates.length}`,
+          `Persons: ${dpCandidates.length}`,
+          `Description: ${descCandidates.length}`,
+        ];
+        const pooledCount = pageData.poolThreshold;
+        // Count pooled entries
+        const allObjNums = new Map<string, number>();
+        for (const mode of [icCandidates, liCandidates, dpCandidates, descCandidates]) {
+          for (const c of mode) {
+            allObjNums.set(c.objectNumber, (allObjNums.get(c.objectNumber) ?? 0) + 1);
+          }
+        }
+        const pooledN = [...allObjNums.values()].filter(n => n >= pooledCount).length;
+
+        const textLines = [
+          `Similar to "${artRow.title}" (${args.objectNumber})`,
+          counts.join(" | ") + ` | Pooled (${pooledCount}+): ${pooledN}`,
+          "",
+          pageLocation,
+        ];
+
+        return { content: [{ type: "text" as const, text: textLines.join("\n") }] };
       })
     );
   }
