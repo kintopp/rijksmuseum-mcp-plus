@@ -1992,14 +1992,13 @@ function registerTools(
       {
         title: "Find Similar Artworks",
         description:
-          "Find artworks similar to a given artwork. Generates a visual comparison page with IIIF thumbnails.\n\n" +
-          "Runs three independent similarity signals and presents them side by side:\n" +
-          "- **Iconclass**: shared subject classifications (scenes, motifs, iconographic themes). Coverage: ~658K (79%).\n" +
-          "- **Lineage**: shared visual-style lineage (\"after\", \"workshop of\", \"circle of\"). Coverage: ~208K (25%).\n" +
-          "- **Description**: semantically similar catalogue descriptions (Dutch). Coverage: ~511K (61%).\n\n" +
-          "A **pooled** column shows artworks appearing in 2+ signals — the most robust similarity candidates.\n\n" +
-          "Returns a URL to a self-contained HTML comparison page (HTTP mode) or an HTML file path (stdio mode). " +
-          "The page does not decide what 'similar' means — it presents all three readings and lets the user judge.",
+          "Find artworks similar to a given artwork. Generates a visual comparison page with IIIF thumbnails " +
+          "showing three independent similarity signals (Iconclass, Lineage, Description) plus a pooled column.\n\n" +
+          "IMPORTANT: The result is a file path or URL to an HTML page. " +
+          "Your ONLY job is to show the user the path/URL so they can open it in a browser. " +
+          "Do NOT attempt to open, read, fetch, summarise, or characterise the page contents. " +
+          "Do NOT make additional tool calls to look up the same artworks. " +
+          "Simply present the link and explain that it contains a visual comparison page.",
         inputSchema: z.object({
           objectNumber: z.string().describe("Object number of the artwork to find similar works for (e.g. 'SK-A-1718')."),
           maxResults: z.preprocess(stripNull, z.number().int().min(1).max(RESULTS_MAX).default(20).optional())
