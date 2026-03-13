@@ -62,6 +62,28 @@ export interface LineageSimilarResult {
   warnings?: string[];
 }
 
+export interface SharedPerson {
+  label: string;
+  weight: number;
+}
+
+export interface DepictedPersonSimilarResult {
+  queryObjectNumber: string;
+  queryTitle: string;
+  queryPersons: { label: string }[];
+  results: {
+    objectNumber: string;
+    title: string;
+    creator: string;
+    date?: string;
+    type?: string;
+    score: number;
+    sharedPersons: SharedPerson[];
+    url: string;
+  }[];
+  warnings?: string[];
+}
+
 /** AAT qualifier URIs that carry visual-similarity signal, with strength weights.
  *  URI set is a subset of AAT_QUALIFIER_LABELS in types.ts — keep in sync. */
 const LINEAGE_QUALIFIERS: ReadonlyMap<string, number> = new Map([
@@ -110,6 +132,7 @@ export interface VocabSearchParams {
   maxWidth?: number;
   // Date and title filters (require vocabulary DB with date/title columns)
   creationDate?: string;
+  dateMatch?: "overlaps" | "within" | "midpoint";
   title?: string;
   // Geo proximity search (require geocoded vocabulary DB)
   nearPlace?: string;
@@ -127,7 +150,7 @@ export interface VocabSearchParams {
   // Place hierarchy expansion
   expandPlaceHierarchy?: boolean;
   maxResults?: number;
-  facets?: boolean;
+  facets?: string[];
 }
 
 export interface VocabSearchResult {
@@ -367,6 +390,10 @@ export class VocabularyDb {
   private lineageQualifierMap: Map<number, { label: string; strength: number }> | null = null; // vocab_rowid → info
   private stmtLineageShared: Statement | null = null; // cached: artwork_id by qualifier+creator pair
   private iconclassNoiseIds: Set<number> | null = null; // vocab_rowids to exclude
+  // ── depicted person caches ──
+  private personDf: Map<number, number> | null = null; // person vocab_rowid → df
+  private personN = 0; // total artworks with any depicted person
+  private stmtPersonShared: Statement | null = null;
 
   /** Look up a field_id by name, throwing if missing. */
   private requireFieldId(name: string): number {
@@ -713,6 +740,14 @@ export class VocabularyDb {
       }
     }
 
+    // 3b. Filter single-notation matches unless the notation is specific (depth ≥ 5)
+    const MIN_SOLO_NOTATION_DEPTH = 5;
+    for (const [artId, data] of candidates) {
+      if (data.sharedMotifs.length === 1 && data.sharedMotifs[0].notation.length < MIN_SOLO_NOTATION_DEPTH) {
+        candidates.delete(artId);
+      }
+    }
+
     // 4. Sort by totalWeight, take top maxResults
     const sorted = [...candidates.entries()]
       .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
@@ -930,6 +965,140 @@ export class VocabularyDb {
     };
   }
 
+  // ── find_similar: Depicted person ─────────────────────────────────
+
+  /** Lazily initialise depicted-person IDF cache. */
+  private ensurePersonCache(): void {
+    if (this.personDf || !this.db || !this.hasIntMappings) return;
+    const subjectFieldId = this.requireFieldId("subject");
+
+    // IDF: count artworks per depicted person
+    this.personDf = new Map();
+    const rows = this.db.prepare(`
+      SELECT m.vocab_rowid, COUNT(DISTINCT m.artwork_id) as df
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
+      GROUP BY m.vocab_rowid
+    `).all(subjectFieldId) as { vocab_rowid: number; df: number }[];
+    for (const r of rows) {
+      if (this.iconclassNoiseIds?.has(r.vocab_rowid)) continue;
+      this.personDf.set(r.vocab_rowid, r.df);
+    }
+
+    // Total artworks with at least one depicted person
+    const countRow = this.db.prepare(`
+      SELECT COUNT(DISTINCT m.artwork_id) as n
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
+    `).get(subjectFieldId) as { n: number };
+    this.personN = countRow.n;
+
+    this.stmtPersonShared = this.db.prepare(
+      `SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?`
+    );
+    console.error(`[find_similar] Person IDF cache: ${this.personDf.size} persons, ${this.personN.toLocaleString()} artworks`);
+  }
+
+  /**
+   * Find artworks similar to a given artwork by shared depicted persons.
+   * Scores by IDF-weighted person overlap.
+   */
+  findSimilarByDepictedPerson(objectNumber: string, maxResults: number): DepictedPersonSimilarResult | null {
+    if (!this.db || !this.hasIntMappings) return null;
+    this.ensureIconclassCache(); // needed for noise IDs
+    this.ensurePersonCache();
+    if (!this.personDf) return null;
+
+    const subjectFieldId = this.requireFieldId("subject");
+
+    // 1. Resolve art_id
+    const artRow = this.db.prepare("SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?")
+      .get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+    if (!artRow) return null;
+    const queryArtId = artRow.art_id;
+
+    // 2. Get query artwork's depicted persons
+    const queryPersons = this.db.prepare(`
+      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.artwork_id = ? AND m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
+    `).all(queryArtId, subjectFieldId) as { vocab_rowid: number; label: string }[];
+
+    // Filter noise
+    const filteredPersons = queryPersons.filter(p =>
+      !this.iconclassNoiseIds!.has(p.vocab_rowid) && this.personDf!.has(p.vocab_rowid)
+    );
+
+    if (filteredPersons.length === 0) {
+      return {
+        queryObjectNumber: objectNumber,
+        queryTitle: artRow.title || "",
+        queryPersons: [],
+        results: [],
+        warnings: ["This artwork has no depicted persons to search by."],
+      };
+    }
+
+    // 3. For each person, find candidate artworks and accumulate scores
+    const candidates = new Map<number, { totalWeight: number; sharedPersons: SharedPerson[] }>();
+
+    for (const qp of filteredPersons) {
+      const df = this.personDf.get(qp.vocab_rowid) ?? 1;
+      const weight = Math.log(this.personN / df);
+      const person: SharedPerson = { label: qp.label, weight };
+
+      const rows = this.stmtPersonShared!.all(subjectFieldId, qp.vocab_rowid) as { artwork_id: number }[];
+      for (const r of rows) {
+        if (r.artwork_id === queryArtId) continue;
+        const entry = candidates.get(r.artwork_id);
+        if (entry) {
+          entry.totalWeight += weight;
+          entry.sharedPersons.push(person);
+        } else {
+          candidates.set(r.artwork_id, { totalWeight: weight, sharedPersons: [person] });
+        }
+      }
+    }
+
+    // 4. Sort by totalWeight, take top maxResults
+    const sorted = [...candidates.entries()]
+      .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
+      .slice(0, maxResults);
+
+    // 5. Batch-resolve metadata
+    const artIds = sorted.map(([artId]) => artId);
+    const metaMap = this.batchLookupByArtId(artIds);
+    const typeMap = this.batchLookupTypesByArtId(artIds);
+
+    const results = sorted.map(([artId, data]) => {
+      const meta = metaMap.get(artId);
+      const date = meta?.dateEarliest != null
+        ? (meta.dateEarliest === meta.dateLatest ? String(meta.dateEarliest) : `${meta.dateEarliest}–${meta.dateLatest}`)
+        : undefined;
+      data.sharedPersons.sort((a, b) => b.weight - a.weight);
+      return {
+        objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
+        title: meta?.title ?? "",
+        creator: meta?.creator ?? "",
+        ...(date && { date }),
+        ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
+        score: Math.round(data.totalWeight * 100) / 100,
+        sharedPersons: data.sharedPersons,
+        url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
+      };
+    });
+
+    return {
+      queryObjectNumber: objectNumber,
+      queryTitle: artRow.title || "",
+      queryPersons: filteredPersons.map(p => ({ label: p.label })),
+      results,
+    };
+  }
+
   // ── find_similar: batch metadata helpers ───────────────────────────
 
   /** Batch-lookup artwork metadata by art_id. Chunks at 500. */
@@ -999,7 +1168,7 @@ export class VocabularyDb {
 
   /** Compact search: returns only object numbers and total count, no enrichment.
    *  Uses the same filter logic as search() but skips lookupTypes/distance enrichment. */
-  searchCompact(params: VocabSearchParams): { totalResults?: number; ids: string[]; source: "vocabulary"; warnings?: string[] } {
+  searchCompact(params: VocabSearchParams): { totalResults?: number; ids: string[]; source: "vocabulary"; warnings?: string[]; facets?: Record<string, Array<{ label: string; count: number }>> } {
     if (!this.db) return { ids: [], source: "vocabulary" };
     // Delegate to search with compact flag — the internal implementation checks this
     const result = this.searchInternal(params, true);
@@ -1008,6 +1177,7 @@ export class VocabularyDb {
       ids: result.results.map((r) => r.objectNumber),
       source: "vocabulary",
       ...(result.warnings && result.warnings.length > 0 && { warnings: result.warnings }),
+      ...(result.facets && { facets: result.facets }),
     };
   }
 
@@ -1017,16 +1187,16 @@ export class VocabularyDb {
   }
 
   /**
-   * Compute top-5 faceted counts across type, material, technique, and century.
+   * Compute top-5 faceted counts for requested dimensions.
    * Runs GROUP BY queries using the same WHERE clause as the main search.
-   * Skips dimensions the user already filtered on.
+   * Only computes dimensions present in `requestedFields`.
    */
   private computeFacets(
     conditions: string[],
     bindings: unknown[],
     ftsJoinClause: string,
     ftsJoinBinding: unknown | null,
-    excludeFields: Set<string>,
+    requestedFields: Set<string>,
   ): Record<string, Array<{ label: string; count: number }>> {
     if (!this.db || !this.hasIntMappings) return {};
     const result: Record<string, Array<{ label: string; count: number }>> = {};
@@ -1041,7 +1211,7 @@ export class VocabularyDb {
       ["technique", "technique"],
     ];
     for (const [label, fieldName] of VOCAB_FACETS) {
-      if (excludeFields.has(label)) continue;
+      if (!requestedFields.has(label)) continue;
       const fieldId = this.fieldIdMap.get(fieldName);
       if (fieldId === undefined) continue;
       // fieldId binding must come after ftsJoinBinding (if any) but before WHERE bindings,
@@ -1063,7 +1233,7 @@ export class VocabularyDb {
     }
 
     // Century facet (computed from date_earliest)
-    if (!excludeFields.has("century") && this.hasDates) {
+    if (requestedFields.has("century") && this.hasDates) {
       const sql =
         `SELECT (CASE WHEN a.date_earliest >= 0 THEN (a.date_earliest / 100 + 1) ELSE -((-a.date_earliest - 1) / 100 + 1) END) AS century, ` +
         `COUNT(*) AS cnt ` +
@@ -1076,6 +1246,60 @@ export class VocabularyDb {
           label: r.century > 0 ? `${ordinal(r.century)} century` : `${ordinal(-r.century)} century BCE`,
           count: r.cnt,
         }));
+      }
+    }
+
+    // Creator gender facet (computed from vocabulary.gender via creator mappings)
+    if (requestedFields.has("creatorGender") && this.stmtLookupPersonInfo && this.hasIntMappings) {
+      const creatorFieldId = this.fieldIdMap.get("creator");
+      if (creatorFieldId != null) {
+        const genderBindings = ftsJoinBinding != null
+          ? [ftsJoinBinding, creatorFieldId, ...bindings]
+          : [creatorFieldId, ...bindings];
+        const sql =
+          `SELECT v.gender AS gender, COUNT(DISTINCT fm.artwork_id) AS cnt ` +
+          `FROM artworks a ${ftsJoinClause} ` +
+          `JOIN mappings fm ON fm.artwork_id = a.art_id AND fm.field_id = ? ` +
+          `JOIN vocabulary v ON fm.vocab_rowid = v.vocab_int_id ` +
+          `WHERE ${where} AND v.gender IS NOT NULL ` +
+          `GROUP BY gender ORDER BY cnt DESC`;
+        const rows = this.db.prepare(sql).all(...genderBindings) as { gender: string; cnt: number }[];
+        if (rows.length > 0) {
+          result["creatorGender"] = rows.map(r => ({ label: r.gender, count: r.cnt }));
+        }
+      }
+    }
+
+    // Rights facet (direct column — no mapping JOIN)
+    if (requestedFields.has("rights") && this.hasRightsLookup) {
+      const rightsSql =
+        `SELECT rl.uri AS label, COUNT(*) AS cnt ` +
+        `FROM artworks a ${ftsJoinClause} ` +
+        `JOIN rights_lookup rl ON a.rights_id = rl.id ` +
+        `WHERE ${where} ` +
+        `GROUP BY rl.uri ORDER BY cnt DESC`;
+      const rows = this.db.prepare(rightsSql).all(...allBindings) as { label: string; cnt: number }[];
+      if (rows.length > 0) {
+        result["rights"] = rows.map(r => ({
+          label: r.label.includes("publicdomain/mark") ? "Public Domain"
+            : r.label.includes("publicdomain/zero") ? "CC0"
+            : r.label.includes("InC") ? "In Copyright"
+            : r.label,
+          count: r.cnt,
+        }));
+      }
+    }
+
+    // Image availability facet (direct column — no mapping JOIN)
+    if (requestedFields.has("imageAvailable") && this.hasImageColumn) {
+      const imgSql =
+        `SELECT CASE WHEN a.has_image = 1 THEN 'yes' ELSE 'no' END AS label, COUNT(*) AS cnt ` +
+        `FROM artworks a ${ftsJoinClause} ` +
+        `WHERE ${where} ` +
+        `GROUP BY label ORDER BY cnt DESC`;
+      const rows = this.db.prepare(imgSql).all(...allBindings) as { label: string; cnt: number }[];
+      if (rows.length > 0) {
+        result["imageAvailable"] = rows.map(r => ({ label: r.label, count: r.cnt }));
       }
     }
 
@@ -1233,16 +1457,6 @@ export class VocabularyDb {
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
     const limit = Math.min(effective.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP);
 
-    // COUNT is expensive for cross-filter queries (multiple IN-subquery intersections
-    // can scan tens of thousands of rows). Only compute it for single-filter queries
-    // (plus the optional FTS JOIN which is cheap).
-    const countFilterCount = conditions.length + (ftsJoinClause ? 1 : 0);
-    const totalResults = countFilterCount === 1
-      ? (this.db.prepare(`SELECT COUNT(*) as n FROM artworks a ${ftsJoinClause} WHERE ${where}`).get(
-          ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : bindings),
-        ) as { n: number }).n
-      : undefined;
-
     const orderBy = ftsRankOrder
       ? "ORDER BY fts.rank"
       : this.hasImportance
@@ -1259,6 +1473,17 @@ export class VocabularyDb {
       date_earliest: number | null;
       date_latest: number | null;
     }[];
+
+    // Compute total count only when results are truncated (rows.length === limit).
+    // When results fit within the limit, rows.length IS the total — no extra scan needed.
+    // Worst case (gender scans) adds ~850ms, but only when the count is informative.
+    const totalResults = rows.length < limit
+      ? rows.length
+      : (this.db.prepare(
+          `SELECT COUNT(*) as n FROM artworks a ${ftsJoinClause} WHERE ${where}`,
+        ).get(
+          ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : bindings),
+        ) as { n: number }).n;
 
     // When nearPlace is active, enrich results with nearest place + distance
     // Skip enrichment in compact mode (only IDs needed)
@@ -1308,16 +1533,22 @@ export class VocabularyDb {
       });
     }
 
-    // Faceted counts: compute when requested, results were truncated, and not compact
+    // Faceted counts: compute requested dimensions when results are truncated
     let facets: Record<string, Array<{ label: string; count: number }>> | undefined;
-    if (effective.facets && !compact && rows.length >= limit) {
-      const excludeFields = new Set<string>();
-      if (effective.type) excludeFields.add("type");
-      if (effective.material) excludeFields.add("material");
-      if (effective.technique) excludeFields.add("technique");
-      if (effective.creationDate) excludeFields.add("century");
-      facets = this.computeFacets(conditions, bindings, ftsJoinClause, ftsJoinBinding, excludeFields);
-      if (Object.keys(facets).length === 0) facets = undefined;
+    if (effective.facets && effective.facets.length > 0 && rows.length >= limit) {
+      // Only compute requested dimensions, minus those already filtered on
+      const requested = new Set(effective.facets);
+      if (effective.type) requested.delete("type");
+      if (effective.material) requested.delete("material");
+      if (effective.technique) requested.delete("technique");
+      if (effective.creationDate) requested.delete("century");
+      if (effective.creatorGender) requested.delete("creatorGender");
+      if (effective.license) requested.delete("rights");
+      if (effective.imageAvailable != null) requested.delete("imageAvailable");
+      if (requested.size > 0) {
+        facets = this.computeFacets(conditions, bindings, ftsJoinClause, ftsJoinBinding, requested);
+        if (Object.keys(facets).length === 0) facets = undefined;
+      }
     }
 
     // In compact mode, skip all enrichment — only IDs needed
@@ -1331,6 +1562,7 @@ export class VocabularyDb {
           url: "",
         })),
         source: "vocabulary" as const,
+        ...(facets && { facets }),
         ...(warnings.length > 0 && { warnings }),
       };
     }
@@ -1485,8 +1717,21 @@ export class VocabularyDb {
       if (this.hasDates) {
         const range = parseDateFilter(effective.creationDate as string);
         if (range) {
-          conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
-          bindings.push(range.earliest, range.latest);
+          const mode = (effective.dateMatch as string) || "overlaps";
+          if (mode === "within") {
+            // Artwork range must fall entirely within the query range
+            conditions.push("a.date_earliest IS NOT NULL AND a.date_earliest >= ? AND a.date_latest <= ?");
+            bindings.push(range.earliest, range.latest);
+          } else if (mode === "midpoint") {
+            // Midpoint of artwork range must fall within query range — each artwork in exactly one bin.
+            // Uses sum BETWEEN 2*lo AND 2*hi to evaluate the expression once per row (integer-exact).
+            conditions.push("a.date_earliest IS NOT NULL AND (a.date_earliest + a.date_latest) BETWEEN ? AND ?");
+            bindings.push(range.earliest * 2, range.latest * 2);
+          } else {
+            // "overlaps" (default): artwork range overlaps the query range
+            conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");
+            bindings.push(range.earliest, range.latest);
+          }
         } else {
           warnings?.push(`Could not parse creationDate "${effective.creationDate}". Expected a year ("1642") or wildcard ("164*", "16*").`);
         }

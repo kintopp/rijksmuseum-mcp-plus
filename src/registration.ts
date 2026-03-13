@@ -31,6 +31,9 @@ const RESULTS_MAX = 50;
 /** Params that narrow results but are too broad to stand alone as the only filter. */
 const MODIFIER_KEYS = new Set(["imageAvailable", "creatorGender", "creatorBornAfter", "creatorBornBefore", "expandPlaceHierarchy"]);
 
+/** Available facet dimensions for search_artwork. Single source of truth for preprocess + z.enum. */
+const FACET_DIMENSIONS = ["type", "material", "technique", "century", "creatorGender", "rights", "imageAvailable"] as const;
+
 /** Preprocess: strip JSON null / "null" string / "" → undefined BEFORE Zod validates.
  *  claude.ai sends actual JSON null for every optional string param the LLM omits.
  *  z.string().optional() rejects null (only accepts string | undefined), so the
@@ -320,7 +323,7 @@ const ResolvedTermShape = () => z.object({
 
 const SearchResultOutput = {
   totalResults: z.number().int().nullable().optional()
-    .describe("Total matching artworks. Null/absent for complex cross-filter queries."),
+    .describe("Total matching artworks (always present when vocabulary DB is available). Use with compact=true for efficient counting."),
   results: z.array(z.object({
     id: z.string().optional().describe("Linked Art URI (present only when vocabulary DB is unavailable)."),
     objectNumber: z.string(),
@@ -509,7 +512,7 @@ const SemanticSearchOutput = {
 };
 
 const FindSimilarOutput = {
-  mode: z.enum(["iconclass", "lineage"]),
+  mode: z.enum(["iconclass", "lineage", "depicted_person"]),
   queryObjectNumber: z.string(),
   queryTitle: z.string(),
   querySignals: z.array(z.object({
@@ -537,6 +540,10 @@ const FindSimilarOutput = {
       creatorLabel: z.string(),
       strength: z.number(),
     })).optional().describe("Shared (qualifier, creator) pairs (lineage mode only)."),
+    sharedPersons: z.array(z.object({
+      label: z.string(),
+      weight: z.number(),
+    })).optional().describe("Shared depicted persons (depicted_person mode only)."),
     url: z.string(),
   })),
   warnings: z.array(z.string()).optional(),
@@ -661,7 +668,7 @@ function registerTools(
   ] as const;
   // nearPlaceRadius excluded from routing key check: its Zod default (25) would trigger
   // on every query. Forwarded separately.
-  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius"] as const;
+  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", "dateMatch"] as const;
 
   server.registerTool(
     "search_artwork",
@@ -669,6 +676,8 @@ function registerTools(
       title: "Search Artwork",
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
+        "Every response includes totalResults (exact count of all matching artworks, not just the returned page). " +
+        "Use compact=true with facets=true for efficient counting and breakdowns (e.g. gender ratios by decade). " +
         "Results are ranked by relevance when text search (description, title, etc.) or geographic proximity is used; " +
         "otherwise results are ordered by importance (image availability, curatorial attention, metadata richness). " +
         "For concept-ranked results, use semantic_search. " +
@@ -728,6 +737,14 @@ function registerTools(
           .optional()
           .describe(
             "Filter by creation date. Exact year ('1642') or wildcard ('16*' for 1600s, '164*' for 1640s)."
+          ),
+        dateMatch: z.preprocess(stripNull,
+          z.enum(["overlaps", "within", "midpoint"]).optional(),
+        ).describe(
+            "How creationDate matches artwork date ranges. " +
+            "\"overlaps\" (default): artwork range overlaps query range — inclusive, but objects with broad ranges appear in multiple bins. " +
+            "\"within\": artwork range falls entirely within query range — exclusive bins, but drops broadly-dated objects (~43% of collection spans >1 decade). " +
+            "\"midpoint\": assigns each artwork to one bin by midpoint of its date range — every object counted exactly once with no data loss. Best for statistical comparisons and charts."
           ),
         description: optStr()
           .optional()
@@ -951,11 +968,19 @@ function registerTools(
           .max(RESULTS_MAX)
           .default(RESULTS_DEFAULT)
           .describe(`Maximum results to return (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}). All results include full metadata.`),
-        facets: z
-          .boolean()
-          .default(false)
-          .describe(
-            "When true and results are truncated, include top-5 counts per dimension (type, material, technique, century) to guide narrowing. Dimensions already filtered on are excluded."
+        facets: z.preprocess(
+          (v) => {
+            if (v === true) return [...FACET_DIMENSIONS];
+            if (v === false || v === null || v === undefined) return undefined;
+            return v;
+          },
+          z.array(z.enum(FACET_DIMENSIONS)).optional(),
+        ).describe(
+            "Facet dimensions to compute when results are truncated. " +
+            "Pass an array of dimension names (e.g. [\"creatorGender\", \"rights\"]) to compute only those, " +
+            "or true for all dimensions. " +
+            `Available: ${FACET_DIMENSIONS.join(", ")}. ` +
+            "Dimensions already filtered on are excluded automatically."
           ),
         compact: z
           .boolean()
@@ -991,7 +1016,7 @@ function registerTools(
         for (const k of allVocabKeys) {
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
         }
-        if (args.facets) vocabArgs["facets"] = true;
+        if (args.facets) vocabArgs["facets"] = args.facets;
         // Map query → title for vocab path (query searches by title)
         if (argsRecord["query"] && !vocabArgs["title"]) {
           vocabArgs["title"] = argsRecord["query"];
@@ -1013,6 +1038,7 @@ function registerTools(
             ? `${compactResult.totalResults} results`
             : `${compactResult.ids.length} results`) + " (compact)";
           const textParts: string[] = [header];
+          if (compactResult.facets) textParts.push(formatFacets(compactResult.facets));
           if (compactResult.ids.length) textParts.push(compactResult.ids.join(", "));
           if (compactResult.warnings?.length) textParts.push(...compactResult.warnings.map(w => `⚠ ${w}`));
           const data: InferOutput<typeof SearchResultOutput> = compactResult;
@@ -1953,20 +1979,22 @@ function registerTools(
         title: "Find Similar Artworks",
         description:
           "Find artworks similar to a given artwork based on how the museum classifies them or their visual-style lineage.\n\n" +
-          "Two independent modes:\n" +
+          "Three independent modes:\n" +
           "- **iconclass** (default): finds artworks sharing the same Iconclass subject classifications — scenes, motifs, " +
           "iconographic themes. Results include the specific shared motifs. More specific shared codes (deeper in the " +
           "Iconclass hierarchy, appearing on fewer artworks) contribute more to the similarity score. Coverage: ~658K artworks (79%).\n" +
           "- **lineage**: finds artworks that share the same visual-style lineage — works \"after\" the same artist, from " +
           "the same workshop, or in the same stylistic circle. This captures visual resemblance independent of subject matter: " +
-          "two prints \"after Rembrandt\" share a visual language even if they depict different scenes. Coverage: ~208K artworks (25%).\n\n" +
+          "two prints \"after Rembrandt\" share a visual language even if they depict different scenes. Coverage: ~208K artworks (25%).\n" +
+          "- **depicted_person**: finds artworks depicting the same historical or named persons — portraits of the same ruler, " +
+          "saint, or notable figure. Rarer persons contribute more to the score. Coverage: ~217K artworks (26%).\n\n" +
           "Use `iconclass` mode to find thematically related works (what is depicted). Use `lineage` mode to find visually " +
-          "related works (how it looks). An artwork may appear in both — similar theme AND similar style — but the two " +
-          "signals are independent.",
+          "related works (how it looks). Use `depicted_person` to find works about the same people. " +
+          "An artwork may appear in multiple modes — the three signals are independent.",
         inputSchema: z.object({
           objectNumber: z.string().describe("Object number of the artwork to find similar works for (e.g. 'SK-A-1718')."),
-          mode: z.preprocess(stripNull, z.enum(["iconclass", "lineage"]).default("iconclass").optional())
-            .describe("Similarity signal: 'iconclass' (shared motifs, default) or 'lineage' (shared visual style)."),
+          mode: z.preprocess(stripNull, z.enum(["iconclass", "lineage", "depicted_person"]).default("iconclass").optional())
+            .describe("Similarity signal: 'iconclass' (shared motifs, default), 'lineage' (shared visual style), or 'depicted_person' (shared named persons)."),
           maxResults: z.preprocess(stripNull, z.number().int().min(1).max(RESULTS_MAX).default(15).optional())
             .describe("Number of results to return (default 15, max 50)."),
         }).strict(),
@@ -2018,8 +2046,7 @@ function registerTools(
           };
           return structuredResponse(data, textParts.join("\n"));
 
-        } else {
-          // lineage mode
+        } else if (mode === "lineage") {
           const result = vocabDb!.findSimilarByLineage(args.objectNumber, maxResults);
           if (!result) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
 
@@ -2055,6 +2082,49 @@ function registerTools(
               ...(r.type && { type: r.type }),
               score: r.score,
               sharedLineage: r.sharedLineage,
+              url: r.url,
+            })),
+            ...(result.warnings?.length && { warnings: result.warnings }),
+          };
+          return structuredResponse(data, textParts.join("\n"));
+
+        } else {
+          // depicted_person mode
+          const result = vocabDb!.findSimilarByDepictedPerson(args.objectNumber, maxResults);
+          if (!result) return errorResponse(`Artwork "${args.objectNumber}" not found.`);
+
+          // Text channel
+          const header = `${result.results.length} person-similar to "${result.queryTitle}" (${result.queryObjectNumber})`;
+          const queryLine = `Query persons: ${result.queryPersons.map(p => p.label).join(", ") || "none"}`;
+          const resultLines = result.results.map((r, i) => {
+            const persons = r.sharedPersons.map(p => p.label).join(", ");
+            let line = `${i + 1}. [${r.score}] ${r.objectNumber}`;
+            if (r.type) line += ` | ${r.type}`;
+            if (r.date) line += ` | ${r.date}`;
+            line += ` | "${r.title}" — ${r.creator}`;
+            line += `\n   ${r.sharedPersons.length} shared: ${persons}`;
+            return line;
+          });
+          const textParts = [header, queryLine];
+          if (resultLines.length) textParts.push("", ...resultLines);
+          if (result.warnings?.length) textParts.push("", ...result.warnings.map(w => `[WARNING] ${w}`));
+
+          // Structured channel
+          const data: InferOutput<typeof FindSimilarOutput> = {
+            mode: "depicted_person",
+            queryObjectNumber: result.queryObjectNumber,
+            queryTitle: result.queryTitle,
+            querySignals: result.queryPersons.map(p => ({ label: p.label })),
+            returnedCount: result.results.length,
+            results: result.results.map((r, i) => ({
+              rank: i + 1,
+              objectNumber: r.objectNumber,
+              title: r.title,
+              creator: r.creator,
+              ...(r.date && { date: r.date }),
+              ...(r.type && { type: r.type }),
+              score: r.score,
+              sharedPersons: r.sharedPersons,
               url: r.url,
             })),
             ...(result.warnings?.length && { warnings: result.warnings }),
@@ -2102,6 +2172,9 @@ function registerTools(
           material: stringOrArray().optional().describe("Filter by material (e.g. 'canvas', 'paper')."),
           technique: stringOrArray().optional().describe("Filter by technique (e.g. 'etching', 'oil painting')."),
           creationDate: optStr().optional().describe("Filter by date — exact year ('1642') or wildcard ('16*')"),
+          dateMatch: z.preprocess(stripNull,
+            z.enum(["overlaps", "within", "midpoint"]).optional(),
+          ).describe("Date matching mode — see search_artwork for details."),
           creator: stringOrArray().optional().describe("Filter by artist name."),
           subject: stringOrArray().optional().describe("Pre-filter by subject before semantic ranking."),
           iconclass: stringOrArray().optional().describe("Pre-filter by Iconclass notation before semantic ranking."),
