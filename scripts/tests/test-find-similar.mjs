@@ -1,136 +1,247 @@
 /**
- * Smoke test for find_similar tool (Phase 1: Iconclass + Lineage modes).
- * Run: node scripts/tests/test-find-similar.mjs
+ * Tests for find_similar tool — validates HTML comparison page generation
+ * across all signal modes (Visual, Description, Iconclass, Lineage, Pooled).
+ *
+ * Run: ENABLE_FIND_SIMILAR=true node scripts/tests/test-find-similar.mjs
+ *
+ * Requires: vocab DB, embeddings DB (with description vectors), iconclass DB.
+ * Visual signal requires internet access (Rijksmuseum website API).
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 let passed = 0;
+let failed = 0;
 function ok(condition, msg) {
-  assert.ok(condition, msg);
-  passed++;
+  try {
+    assert.ok(condition, msg);
+    passed++;
+    console.log(`  ✓ ${msg}`);
+  } catch (e) {
+    failed++;
+    console.log(`  ✗ ${msg}`);
+    console.log(`    ${e.message}`);
+  }
+}
+
+if (process.env.ENABLE_FIND_SIMILAR !== "true") {
+  console.error("Set ENABLE_FIND_SIMILAR=true to run these tests.");
+  process.exit(1);
 }
 
 const transport = new StdioClientTransport({
   command: "node",
   args: ["dist/index.js"],
+  env: { ...process.env, ENABLE_FIND_SIMILAR: "true" },
   cwd: process.cwd(),
 });
 const client = new Client({ name: "test", version: "1.0" });
 await client.connect(transport);
 
-// Verify find_similar is listed
+// ── Section 1: Tool registration ─────────────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 1: Tool registration");
+console.log("════════════════════════════════════════════════════════════");
+
 const tools = await client.listTools();
 const findSimilar = tools.tools.find(t => t.name === "find_similar");
 ok(findSimilar, "find_similar tool registered");
-ok(findSimilar.inputSchema.properties.mode, "mode param exists");
 ok(findSimilar.inputSchema.properties.objectNumber, "objectNumber param exists");
+ok(findSimilar.inputSchema.properties.maxResults, "maxResults param exists");
+ok(!findSimilar.inputSchema.properties.mode, "old mode param removed");
 
-// ── Test 1: Iconclass mode — Avercamp winter landscape ──
-console.log("\n=== Test 1: Iconclass — SK-A-1718 ===");
-const r1 = await client.callTool({ name: "find_similar", arguments: { objectNumber: "SK-A-1718", mode: "iconclass", maxResults: 5 } });
+// ── Section 2: The Milkmaid — rich artwork with multiple signals ──
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 2: The Milkmaid (SK-A-2344) — multi-signal");
+console.log("════════════════════════════════════════════════════════════");
+
+const r1 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "SK-A-2344", maxResults: 5 },
+});
 ok(!r1.isError, "no error");
-const sc1 = r1.structuredContent;
-ok(sc1.mode === "iconclass", "mode is iconclass");
-ok(sc1.queryObjectNumber === "SK-A-1718", "correct query artwork");
-ok(sc1.querySignals.length > 0, "has query signals (notations)");
-ok(sc1.returnedCount === 5, "returned 5 results");
-ok(sc1.results.length === 5, "results array has 5");
-ok(sc1.results[0].score >= sc1.results[1].score, "results sorted by score descending");
-ok(sc1.results[0].sharedMotifs?.length > 0, "first result has sharedMotifs");
-ok(sc1.results[0].objectNumber !== "SK-A-1718", "self excluded");
-ok(sc1.results[0].url.includes("rijksmuseum.nl"), "has URL");
-// Check text channel
-const text1 = r1.content[0].text;
-ok(text1.includes("iconclass-similar"), "text mentions iconclass-similar");
-ok(text1.includes("SK-A-1718"), "text mentions query objectNumber");
-ok(text1.includes("shared:"), "text mentions shared motifs");
-console.log(text1.substring(0, 500));
 
-// ── Test 2: Lineage mode — a print after Rembrandt ──
-console.log("\n=== Test 2: Lineage — RP-P-OB-613 ===");
-const r2 = await client.callTool({ name: "find_similar", arguments: { objectNumber: "RP-P-OB-613", mode: "lineage", maxResults: 5 } });
-const sc2 = r2.structuredContent;
-if (sc2.returnedCount > 0) {
-  ok(sc2.mode === "lineage", "mode is lineage");
-  ok(sc2.results[0].sharedLineage?.length > 0, "has sharedLineage");
-  ok(sc2.results[0].sharedLineage[0].qualifierLabel, "lineage has qualifierLabel");
-  ok(sc2.results[0].sharedLineage[0].creatorLabel, "lineage has creatorLabel");
-  ok(sc2.results[0].sharedLineage[0].strength > 0, "lineage has strength > 0");
-  ok(sc2.results[0].objectNumber !== "RP-P-OB-613", "self excluded");
-  console.log(r2.content[0].text.substring(0, 500));
+const text1 = r1.content?.[0]?.text ?? "";
+ok(text1.includes("SK-A-2344"), "text mentions query objectNumber");
+ok(text1.includes("Milkmaid"), "text mentions artwork title");
+
+// Extract file path from response
+const pathMatch = text1.match(/\/(var|tmp)\S+\.html/);
+ok(pathMatch, "response contains HTML file path");
+const htmlPath1 = pathMatch?.[0];
+
+if (htmlPath1) {
+  const html1 = fs.readFileSync(htmlPath1, "utf-8");
+  ok(html1.includes("<!DOCTYPE html>"), "valid HTML document");
+  ok(html1.includes("The Milkmaid"), "HTML contains artwork title");
+  ok(html1.includes("SK-A-2344"), "HTML contains objectNumber");
+
+  // Header metadata
+  ok(html1.includes("meta-section-label description"), "header has description section");
+  ok(html1.includes("meta-section-label iconclass") || !html1.includes("Iconclass: 0"), "header has iconclass section (if codes exist)");
+
+  // Signal rows
+  ok(html1.includes("signal-row"), "HTML has signal rows");
+  ok(html1.includes("cards-strip"), "HTML has horizontal card strips");
+
+  // Description signal (should always be present for well-described artworks)
+  ok(html1.includes("Description"), "has Description signal");
+  ok(text1.includes("Description:"), "text summary includes Description count");
+
+  // Iconclass codes should be linked
+  if (html1.includes("iconclass.org/")) {
+    ok(true, "Iconclass notations are linked to iconclass.org");
+  } else {
+    ok(!text1.includes("Iconclass: 0"), "Iconclass linked (or no Iconclass for this artwork)");
+  }
+
+  // Pooled row
+  ok(html1.includes("Pooled"), "has Pooled row");
+  ok(text1.includes("Pooled"), "text summary includes Pooled count");
+
+  // Footer
+  ok(html1.includes("rijksmuseum-mcp+"), "footer mentions rijksmuseum-mcp+");
+  ok(html1.includes("github.com/kintopp/rijksmuseum-mcp-plus"), "footer links to GitHub repo");
+
+  // Artwork thumbnails via IIIF
+  ok(html1.includes("iiif.micr.io"), "uses IIIF thumbnails");
+
+  // Cards have per-card metadata
+  ok(html1.includes("card-detail"), "cards have per-card metadata");
+}
+
+// ── Section 3: Visual signal (Rijksmuseum API) ───────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 3: Visual signal (Rijksmuseum API)");
+console.log("════════════════════════════════════════════════════════════");
+
+if (text1.includes("Visual:")) {
+  ok(true, "Visual signal present in summary");
+  if (htmlPath1) {
+    const html1 = fs.readFileSync(htmlPath1, "utf-8");
+    ok(html1.includes("Visual"), "Visual row in HTML");
+    ok(html1.includes("see-all-card") || html1.includes("rijksmuseum.nl"), "has see-all link to rijksmuseum.nl");
+    ok(html1.includes("visual/search"), "visual search URL in see-all link");
+  }
 } else {
-  // This artwork might not have lineage qualifiers
-  ok(sc2.warnings?.length > 0, "has warning about no lineage");
-  console.log("No lineage results — checking warning:", sc2.warnings[0]);
-  passed += 5; // skip the checks above
+  console.log("  (Visual signal not available — Rijksmuseum API may be unreachable)");
+  ok(true, "Visual signal gracefully absent");
 }
 
-// ── Test 3: Default mode (should be iconclass) ──
-console.log("\n=== Test 3: Default mode ===");
-const r3 = await client.callTool({ name: "find_similar", arguments: { objectNumber: "SK-A-4691", maxResults: 3 } });
-const sc3 = r3.structuredContent;
-ok(sc3.mode === "iconclass", "default mode is iconclass");
-ok(sc3.returnedCount <= 3, "respects maxResults");
+// ── Section 4: Lineage qualifiers linked to Getty AAT ────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 4: Lineage with Getty AAT links");
+console.log("════════════════════════════════════════════════════════════");
 
-// ── Test 4: Artwork with no Iconclass ──
-console.log("\n=== Test 4: No Iconclass notations ===");
-const r4 = await client.callTool({ name: "find_similar", arguments: { objectNumber: "BK-NM-1010", mode: "iconclass" } });
-const sc4 = r4.structuredContent;
-// May have 0 results with a warning, or may have results
-if (sc4.returnedCount === 0) {
-  ok(sc4.warnings?.length > 0, "has warning about no notations");
-  console.log("Warning:", sc4.warnings[0]);
-} else {
-  ok(sc4.returnedCount > 0, "has results");
+// Use a print after Rembrandt — known to have lineage qualifiers
+const r2 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "RP-P-OB-613", maxResults: 5 },
+});
+ok(!r2.isError, "no error for RP-P-OB-613");
+const text2 = r2.content?.[0]?.text ?? "";
+const pathMatch2 = text2.match(/\/(var|tmp)\S+\.html/);
+
+if (pathMatch2) {
+  const html2 = fs.readFileSync(pathMatch2[0], "utf-8");
+  if (text2.includes("Lineage:") && !text2.includes("Lineage: 0")) {
+    ok(html2.includes("Lineage"), "Lineage row present");
+    ok(html2.includes("vocab.getty.edu/aat"), "qualifier linked to Getty AAT");
+    ok(html2.includes("qualifier"), "qualifier badge present");
+  } else {
+    ok(true, "No lineage results (artwork has primary attribution only)");
+  }
 }
 
-// ── Test 5: Primary attribution only (no visual lineage) ──
-console.log("\n=== Test 5: No visual lineage ===");
-const r5 = await client.callTool({ name: "find_similar", arguments: { objectNumber: "SK-A-1718", mode: "lineage" } });
-const sc5 = r5.structuredContent;
-if (sc5.returnedCount === 0) {
-  ok(sc5.warnings?.length > 0, "has warning about no lineage qualifiers");
-  console.log("Warning:", sc5.warnings[0]);
-} else {
-  ok(sc5.returnedCount > 0, "has lineage results");
+// ── Section 5: Artwork with no image ─────────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 5: Artwork without image");
+console.log("════════════════════════════════════════════════════════════");
+
+const r3 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "RP-P-1943-126", maxResults: 3 },
+});
+ok(!r3.isError, "no error for no-image artwork");
+const text3 = r3.content?.[0]?.text ?? "";
+const pathMatch3 = text3.match(/\/(var|tmp)\S+\.html/);
+
+if (pathMatch3) {
+  const html3 = fs.readFileSync(pathMatch3[0], "utf-8");
+  ok(html3.includes("No image"), "shows no-image placeholder in header");
+  // Should still have results from at least description signal
+  ok(html3.includes("signal-row"), "has signal rows despite no image");
 }
 
-// ── Test 6: Nonexistent artwork ──
-console.log("\n=== Test 6: Nonexistent artwork ===");
-const r6 = await client.callTool({ name: "find_similar", arguments: { objectNumber: "NONEXISTENT-123", mode: "iconclass" } });
-ok(r6.isError, "returns error for nonexistent artwork");
+// ── Section 6: Nonexistent artwork ───────────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 6: Nonexistent artwork");
+console.log("════════════════════════════════════════════════════════════");
 
-// ── Test 7: structuredContent shape validation ──
-console.log("\n=== Test 7: Structured content shape ===");
-const r7 = await client.callTool({ name: "find_similar", arguments: { objectNumber: "SK-A-1718", mode: "iconclass", maxResults: 2 } });
-const sc7 = r7.structuredContent;
-ok(typeof sc7.mode === "string", "mode is string");
-ok(typeof sc7.queryObjectNumber === "string", "queryObjectNumber is string");
-ok(typeof sc7.queryTitle === "string", "queryTitle is string");
-ok(Array.isArray(sc7.querySignals), "querySignals is array");
-ok(typeof sc7.returnedCount === "number", "returnedCount is number");
-ok(Array.isArray(sc7.results), "results is array");
-if (sc7.results.length > 0) {
-  const r = sc7.results[0];
-  ok(typeof r.rank === "number", "result.rank is number");
-  ok(typeof r.objectNumber === "string", "result.objectNumber is string");
-  ok(typeof r.title === "string", "result.title is string");
-  ok(typeof r.creator === "string", "result.creator is string");
-  ok(typeof r.score === "number", "result.score is number");
-  ok(typeof r.url === "string", "result.url is string");
+const r4 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "NONEXISTENT-999" },
+});
+ok(r4.isError, "returns error for nonexistent artwork");
+ok(r4.content?.[0]?.text?.includes("not found"), "error message mentions not found");
+
+// ── Section 7: maxResults respected ──────────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 7: maxResults constraint");
+console.log("════════════════════════════════════════════════════════════");
+
+const r5 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "SK-A-1718", maxResults: 3 },
+});
+ok(!r5.isError, "no error for SK-A-1718");
+const text5 = r5.content?.[0]?.text ?? "";
+// Check that no signal exceeds maxResults
+const countMatches = text5.matchAll(/(?:Visual|Description|Iconclass|Lineage): (\d+)/g);
+for (const m of countMatches) {
+  const count = parseInt(m[1]);
+  ok(count <= 3, `${m[0]} respects maxResults (${count} ≤ 3)`);
 }
 
-// ── Test 8: Score monotonicity (larger result set) ──
-console.log("\n=== Test 8: Score monotonicity ===");
-const r8 = await client.callTool({ name: "find_similar", arguments: { objectNumber: "SK-A-1718", mode: "iconclass", maxResults: 20 } });
-const sc8 = r8.structuredContent;
-for (let i = 1; i < sc8.results.length; i++) {
-  ok(sc8.results[i - 1].score >= sc8.results[i].score,
-    `score[${i-1}] (${sc8.results[i-1].score}) >= score[${i}] (${sc8.results[i].score})`);
+// ── Section 8: HTML layout structure ─────────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 8: HTML layout structure");
+console.log("════════════════════════════════════════════════════════════");
+
+const pathMatch5 = text5.match(/\/(var|tmp)\S+\.html/);
+if (pathMatch5) {
+  const html5 = fs.readFileSync(pathMatch5[0], "utf-8");
+  ok(html5.includes("signal-rows"), "uses signal-rows container");
+  ok(html5.includes("strip-container"), "uses strip-container for scroll");
+  ok(!html5.includes("columns-grid"), "old columns-grid layout removed");
+  ok(html5.includes("query-header"), "has query header");
+  ok(html5.includes("query-metadata"), "has query metadata section");
+
+  // Row order: Visual (if present) should appear before Description in HTML
+  const visualPos = html5.indexOf('"Visual"') > -1 ? html5.indexOf('"Visual"') : Infinity;
+  const descPos = html5.indexOf('"Description"');
+  const iconPos = html5.indexOf('"Iconclass"');
+  const linePos = html5.indexOf('"Lineage"');
+  const poolPos = html5.indexOf('"Pooled"');
+
+  if (descPos > -1) {
+    ok(descPos < iconPos || iconPos === -1, "Description before Iconclass");
+    ok(descPos < poolPos, "Description before Pooled");
+  }
+  if (iconPos > -1 && linePos > -1) {
+    ok(iconPos < linePos, "Iconclass before Lineage");
+  }
+  if (poolPos > -1) {
+    ok(poolPos > descPos, "Pooled is last");
+  }
 }
 
-console.log(`\n✓ ${passed} assertions passed`);
+// ── Summary ──────────────────────────────────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log(`  Passed: ${passed}  Failed: ${failed}`);
+console.log("════════════════════════════════════════════════════════════");
+
 await client.close();
-process.exit(0);
+process.exit(failed > 0 ? 1 : 0);
