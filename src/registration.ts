@@ -18,6 +18,7 @@ import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
+import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import type { SearchParams, LinkedArtObject } from "./types.js";
 
@@ -137,6 +138,73 @@ function truncateSnippet(s: string | undefined, maxLen: number): string | undefi
   if (s.length <= maxLen) return s;
   const cut = s.lastIndexOf(" ", maxLen);
   return (cut > 0 ? s.slice(0, cut) : s.slice(0, maxLen)) + " [\u2026]";
+}
+
+// ─── Rijksmuseum visual search (website API) ─────────────────────────
+
+interface VisualSearchArtObject {
+  objectNumber: string;
+  title: string;
+  makerSubtitleLine: string;
+  objectNodeId: string;
+  micrioImage?: { micrioId: string } | null;
+}
+
+/** Resolve an objectNumber to the Rijksmuseum website's objectNodeId (hex hash).
+ *  Returns null if the artwork is not in the website search index. */
+async function resolveObjectNodeId(objectNumber: string): Promise<string | null> {
+  try {
+    const resp = await axios.get("https://www.rijksmuseum.nl/api/v1/collection/search", {
+      params: { query: objectNumber, language: "en", pageSize: 5 },
+      timeout: 5000,
+    });
+    const objs: VisualSearchArtObject[] = resp.data?.artObjects ?? [];
+    const match = objs.find(o => o.objectNumber === objectNumber);
+    return match?.objectNodeId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch visual similarity results from the Rijksmuseum website API.
+ *  Returns candidates + total count + visual search URL, or empty on failure. */
+async function fetchVisualSimilar(
+  objectNodeId: string,
+  maxResults: number,
+): Promise<{ candidates: SimilarCandidate[]; totalResults: number; searchUrl: string }> {
+  const searchUrl = `https://www.rijksmuseum.nl/en/collection/visual/search?objectNodeId=${objectNodeId}`;
+  try {
+    const resp = await axios.get("https://www.rijksmuseum.nl/api/v1/collection/visualsearch", {
+      params: { objectNodeId, language: "en", page: 1, pageSize: maxResults },
+      timeout: 8000,
+    });
+    const objs: VisualSearchArtObject[] = resp.data?.artObjects ?? [];
+    const hasMore: boolean = resp.data?.hasMoreResults ?? false;
+    const totalResults = hasMore ? objs.length : objs.length; // API doesn't expose total count
+
+    const candidates: SimilarCandidate[] = objs.map((o, i) => {
+      // Extract creator from makerSubtitleLine (format: "Creator Name, date")
+      const creator = o.makerSubtitleLine?.split(",")[0]?.trim() ?? "";
+      // IIIF thumbnail via micrio — same pattern as our own thumbnails
+      const iiifId = o.micrioImage?.micrioId ?? undefined;
+      return {
+        objectNumber: o.objectNumber,
+        title: o.title ?? "",
+        creator,
+        iiifId,
+        score: maxResults - i, // rank-order score (no similarity scores from API)
+        url: `https://www.rijksmuseum.nl/en/collection/${o.objectNumber}`,
+      };
+    });
+
+    return {
+      candidates,
+      totalResults: hasMore ? maxResults + 1 : objs.length, // indicate "more available"
+      searchUrl,
+    };
+  } catch {
+    return { candidates: [], totalResults: 0, searchUrl };
+  }
 }
 
 /** Format artwork detail as a compact key-value summary for LLM content (Tier 3). */
@@ -2115,6 +2183,22 @@ function registerTools(
           }
         }
 
+        // Visual (Rijksmuseum website API — best-effort, never blocks other signals)
+        let visualCandidates: SimilarCandidate[] = [];
+        let visualSearchUrl: string | undefined;
+        let visualTotalResults: number | undefined;
+        try {
+          const nodeId = await resolveObjectNodeId(args.objectNumber);
+          if (nodeId) {
+            const visual = await fetchVisualSimilar(nodeId, maxResults);
+            visualCandidates = visual.candidates;
+            visualSearchUrl = visual.searchUrl;
+            visualTotalResults = visual.totalResults;
+          }
+        } catch {
+          // Visual search is best-effort — silently continue without it
+        }
+
         // ── Generate HTML page ─────────────────────────────────────
 
         const pageData: SimilarPageData = {
@@ -2137,9 +2221,12 @@ function registerTools(
             iconclass: icCandidates,
             lineage: liCandidates,
             description: descCandidates,
+            ...(visualCandidates.length > 0 && { visual: visualCandidates }),
           },
           poolThreshold: 2,
           generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+          ...(visualSearchUrl && { visualSearchUrl }),
+          ...(visualTotalResults && { visualTotalResults }),
         };
 
         const html = generateSimilarHtml(pageData);
@@ -2161,14 +2248,15 @@ function registerTools(
 
         // Summary counts
         const counts = [
+          ...(visualCandidates.length > 0 ? [`Visual: ${visualCandidates.length}`] : []),
+          `Description: ${descCandidates.length}`,
           `Iconclass: ${icCandidates.length}`,
           `Lineage: ${liCandidates.length}`,
-          `Description: ${descCandidates.length}`,
         ];
         const poolThreshold = pageData.poolThreshold;
         // Count pooled entries
         const allObjNums = new Map<string, number>();
-        for (const mode of [icCandidates, liCandidates, descCandidates]) {
+        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates]) {
           for (const c of mode) {
             allObjNums.set(c.objectNumber, (allObjNums.get(c.objectNumber) ?? 0) + 1);
           }
