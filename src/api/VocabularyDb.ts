@@ -65,28 +65,6 @@ export interface LineageSimilarResult {
   warnings?: string[];
 }
 
-export interface SharedPerson {
-  label: string;
-  weight: number;
-}
-
-export interface DepictedPersonSimilarResult {
-  queryObjectNumber: string;
-  queryTitle: string;
-  queryPersons: { label: string }[];
-  results: {
-    artId: number;
-    objectNumber: string;
-    title: string;
-    creator: string;
-    date?: string;
-    type?: string;
-    score: number;
-    sharedPersons: SharedPerson[];
-    url: string;
-  }[];
-  warnings?: string[];
-}
 
 /** AAT qualifier URIs that carry visual-similarity signal, with strength weights.
  *  URI set is a subset of AAT_QUALIFIER_LABELS in types.ts — keep in sync. */
@@ -403,9 +381,6 @@ export class VocabularyDb {
   private stmtLineageShared: Statement | null = null; // cached: artwork_id by qualifier+creator pair
   private iconclassNoiseIds: Set<number> | null = null; // vocab_rowids to exclude
   // ── depicted person caches ──
-  private personDf: Map<number, number> | null = null; // person vocab_rowid → df
-  private personN = 0; // total artworks with any depicted person
-  private stmtPersonShared: Statement | null = null;
 
   /** Look up a field_id by name, throwing if missing. */
   private requireFieldId(name: string): number {
@@ -976,143 +951,6 @@ export class VocabularyDb {
       }),
       results,
       ...(warnings.length > 0 && { warnings }),
-    };
-  }
-
-  // ── find_similar: Depicted person ─────────────────────────────────
-
-  /** Lazily initialise depicted-person IDF cache. */
-  private ensurePersonCache(): void {
-    if (this.personDf || !this.db || !this.hasIntMappings) return;
-    const subjectFieldId = this.requireFieldId("subject");
-
-    // Single CTE scan: per-person DFs + total distinct artworks in one pass
-    const rows = this.db.prepare(`
-      WITH person_mappings AS (
-        SELECT m.vocab_rowid, m.artwork_id
-        FROM mappings m
-        JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-        WHERE m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
-      )
-      SELECT vocab_rowid, COUNT(DISTINCT artwork_id) as df,
-             (SELECT COUNT(DISTINCT artwork_id) FROM person_mappings) as n
-      FROM person_mappings
-      GROUP BY vocab_rowid
-    `).all(subjectFieldId) as { vocab_rowid: number; df: number; n: number }[];
-
-    // Build local state before assigning to instance fields (atomic init)
-    const df = new Map<number, number>();
-    let totalN = 0;
-    for (const r of rows) {
-      totalN = r.n; // same on every row
-      if (this.iconclassNoiseIds?.has(r.vocab_rowid)) continue;
-      df.set(r.vocab_rowid, r.df);
-    }
-
-    const stmt = this.db.prepare(
-      `SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?`
-    );
-
-    // Assign all fields atomically — personDf is the "initialized" sentinel, set last
-    this.personN = totalN;
-    this.stmtPersonShared = stmt;
-    this.personDf = df;
-    console.error(`[find_similar] Person IDF cache: ${df.size} persons, ${totalN.toLocaleString()} artworks`);
-  }
-
-  /**
-   * Find artworks similar to a given artwork by shared depicted persons.
-   * Scores by IDF-weighted person overlap.
-   */
-  findSimilarByDepictedPerson(objectNumber: string, maxResults: number): DepictedPersonSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
-    this.ensureIconclassCache(); // needed for noise IDs
-    this.ensurePersonCache();
-    if (!this.personDf || this.personN === 0) return null;
-
-    const subjectFieldId = this.requireFieldId("subject");
-
-    // 1. Resolve art_id
-    const artRow = this.stmtLookupArtId!.get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
-    if (!artRow) return null;
-    const queryArtId = artRow.art_id;
-
-    // 2. Get query artwork's depicted persons
-    const queryPersons = this.db.prepare(`
-      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label
-      FROM mappings m
-      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-      WHERE m.artwork_id = ? AND +m.field_id = ? AND v.type = 'person' AND v.notation IS NULL
-    `).all(queryArtId, subjectFieldId) as { vocab_rowid: number; label: string }[];
-
-    // Filter noise
-    const filteredPersons = queryPersons.filter(p =>
-      !this.iconclassNoiseIds!.has(p.vocab_rowid) && this.personDf!.has(p.vocab_rowid)
-    );
-
-    if (filteredPersons.length === 0) {
-      return {
-        queryObjectNumber: objectNumber,
-        queryTitle: artRow.title || "",
-        queryPersons: [],
-        results: [],
-        warnings: ["This artwork has no depicted persons to search by."],
-      };
-    }
-
-    // 3. For each person, find candidate artworks and accumulate scores
-    const candidates = new Map<number, { totalWeight: number; sharedPersons: SharedPerson[] }>();
-
-    for (const qp of filteredPersons) {
-      const df = this.personDf.get(qp.vocab_rowid) ?? 1;
-      const weight = Math.log(this.personN / df);
-      const person: SharedPerson = { label: qp.label, weight };
-
-      const rows = this.stmtPersonShared!.all(subjectFieldId, qp.vocab_rowid) as { artwork_id: number }[];
-      for (const r of rows) {
-        if (r.artwork_id === queryArtId) continue;
-        const entry = candidates.get(r.artwork_id);
-        if (entry) {
-          entry.totalWeight += weight;
-          entry.sharedPersons.push(person);
-        } else {
-          candidates.set(r.artwork_id, { totalWeight: weight, sharedPersons: [person] });
-        }
-      }
-    }
-
-    // 4. Sort by totalWeight, take top maxResults
-    const sorted = [...candidates.entries()]
-      .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
-      .slice(0, maxResults);
-
-    // 5. Batch-resolve metadata
-    const artIds = sorted.map(([artId]) => artId);
-    const metaMap = this.batchLookupByArtId(artIds);
-    const typeMap = this.batchLookupTypesByArtId(artIds);
-
-    const results = sorted.map(([artId, data]) => {
-      const meta = metaMap.get(artId);
-      const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
-      data.sharedPersons.sort((a, b) => b.weight - a.weight);
-      return {
-        artId,
-        objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
-        title: meta?.title ?? "",
-        creator: meta?.creator ?? "",
-        ...(date && { date }),
-        ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
-        score: Math.round(data.totalWeight * 100) / 100,
-        sharedPersons: data.sharedPersons,
-        url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
-      };
-    });
-
-    return {
-      queryObjectNumber: objectNumber,
-      queryTitle: artRow.title || "",
-      queryPersons: filteredPersons.map(p => ({ label: p.label })),
-      results,
     };
   }
 

@@ -180,7 +180,6 @@ async function fetchVisualSimilar(
     });
     const objs: VisualSearchArtObject[] = resp.data?.artObjects ?? [];
     const hasMore: boolean = resp.data?.hasMoreResults ?? false;
-    const totalResults = hasMore ? objs.length : objs.length; // API doesn't expose total count
 
     const candidates: SimilarCandidate[] = objs.map((o, i) => {
       // Extract creator from makerSubtitleLine (format: "Creator Name, date")
@@ -2095,6 +2094,9 @@ function registerTools(
 
         const queryDate = formatDateRange(queryInfo?.dateEarliest, queryInfo?.dateLatest);
 
+        // Start visual search HTTP resolution concurrently with sync DB work
+        const nodeIdPromise = resolveObjectNodeId(args.objectNumber);
+
         // ── Run all 4 signals ──────────────────────────────────────
 
         /** Convert a mode's raw results (which include artId) into SimilarCandidate[].
@@ -2176,7 +2178,7 @@ function registerTools(
                 iiifId: m?.iiifId ?? undefined,
                 score: r.similarity,
                 url: `https://www.rijksmuseum.nl/en/collection/${r.objectNumber}`,
-                detail: descTexts.get(r.artId)?.slice(0, 200),
+                detail: truncate(descTexts.get(r.artId) ?? "", 200),
                 descSnippet: truncateSnippet(descTexts.get(r.artId), 80),
               };
             });
@@ -2184,11 +2186,12 @@ function registerTools(
         }
 
         // Visual (Rijksmuseum website API — best-effort, never blocks other signals)
+        // nodeIdPromise was started concurrently with the sync DB signals above
         let visualCandidates: SimilarCandidate[] = [];
         let visualSearchUrl: string | undefined;
         let visualTotalResults: number | undefined;
         try {
-          const nodeId = await resolveObjectNodeId(args.objectNumber);
+          const nodeId = await nodeIdPromise;
           if (nodeId) {
             const visual = await fetchVisualSimilar(nodeId, maxResults);
             visualCandidates = visual.candidates;
