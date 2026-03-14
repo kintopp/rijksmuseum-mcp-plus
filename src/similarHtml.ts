@@ -2,8 +2,8 @@
  * Server-side HTML generator for find_similar comparison pages.
  *
  * Produces a self-contained HTML page showing similarity results across
- * 3 independent signal modes (iconclass, lineage, description)
- * plus a pooled column for artworks appearing in ≥2 modes.
+ * up to 4 signal modes in horizontal scroll rows (Visual, Description,
+ * Iconclass, Lineage) plus a pooled row for artworks appearing in ≥2 modes.
  */
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -19,6 +19,16 @@ export interface SimilarCandidate {
   url: string;
   /** Mode-specific detail line (e.g. shared motifs, lineage pairs) */
   detail?: string;
+  /** Shared Iconclass notation codes (for per-card links) */
+  sharedNotations?: string[];
+  /** Lineage qualifier label for per-card display */
+  qualifierLabel?: string;
+  /** Getty AAT URI for the qualifier */
+  qualifierUri?: string;
+  /** Creator referenced by the lineage qualifier */
+  qualifierCreator?: string;
+  /** Truncated description snippet for description cards */
+  descSnippet?: string;
 }
 
 export interface SimilarQueryInfo {
@@ -29,6 +39,10 @@ export interface SimilarQueryInfo {
   type?: string;
   iiifId?: string;
   description?: string;
+  /** Iconclass codes assigned to the query artwork */
+  iconclassCodes?: { notation: string; label: string }[];
+  /** Lineage qualifiers on the query artwork */
+  lineageQualifiers?: { label: string; aatUri: string; creator: string }[];
 }
 
 export interface SimilarPageData {
@@ -37,15 +51,35 @@ export interface SimilarPageData {
     iconclass: SimilarCandidate[];
     lineage: SimilarCandidate[];
     description: SimilarCandidate[];
+    visual?: SimilarCandidate[];
   };
-  /** Minimum number of modes an artwork must appear in for the pooled column */
+  /** Minimum number of modes an artwork must appear in for the pooled row */
   poolThreshold: number;
   generatedAt: string;
+  /** URL to full visual search results on rijksmuseum.nl (if available) */
+  visualSearchUrl?: string;
+  /** Total visual results available (for "See all N+" link) */
+  visualTotalResults?: number;
 }
 
 // ─── HTML generation ────────────────────────────────────────────────
 
+/** Render order and styling for each signal mode */
 const MODE_INFO: Record<string, { label: string; color: string; methodology: string }> = {
+  visual: {
+    label: "Visual",
+    color: "#00838f",
+    methodology:
+      "Rijksmuseum&rsquo;s own image-based visual similarity. Pixel-level features via their internal model.",
+  },
+  description: {
+    label: "Description",
+    color: "#e65100",
+    methodology:
+      "Artworks with semantically similar Dutch catalogue descriptions. " +
+      "Beware generic structural phrases " +
+      "(&ldquo;Links een X, rechts een Y&rdquo;) that inflate scores for visually dissimilar works.",
+  },
   iconclass: {
     label: "Iconclass",
     color: "#1565c0",
@@ -63,14 +97,6 @@ const MODE_INFO: Record<string, { label: string; color: string; methodology: str
       "&ldquo;after&rdquo; (3&times;) and &ldquo;workshop of&rdquo; (2&times;) weigh more than &ldquo;circle of&rdquo; (1&times;); " +
       "rarer creators contribute more. Only ~25% of artworks have lineage qualifiers.",
   },
-  description: {
-    label: "Description",
-    color: "#e65100",
-    methodology:
-      "Artworks with semantically similar Dutch catalogue descriptions. " +
-      "Beware generic structural phrases " +
-      "(&ldquo;Links een X, rechts een Y&rdquo;) that inflate scores for visually dissimilar works.",
-  },
   pooled: {
     label: "Pooled",
     color: "#37474f",
@@ -78,73 +104,118 @@ const MODE_INFO: Record<string, { label: string; color: string; methodology: str
   },
 };
 
+/** Display order for signal rows */
+const MODE_ORDER = ["visual", "description", "iconclass", "lineage"] as const;
+
 function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function iiifThumbUrl(iiifId: string, width = 300): string {
+function iiifThumbUrl(iiifId: string, width = 250): string {
   return `https://iiif.micr.io/${iiifId}/full/${width},/0/default.jpg`;
 }
 
-function renderCard(c: SimilarCandidate, rank: number, modeSources?: string[]): string {
+function renderCardMetadata(c: SimilarCandidate, mode: string): string {
+  if (mode === "iconclass" && c.sharedNotations && c.sharedNotations.length > 0) {
+    const codes = c.sharedNotations.map(n =>
+      `<a href="https://iconclass.org/${escHtml(n)}" target="_blank"><code>${escHtml(n)}</code></a>`
+    ).join(" ");
+    return `<div class="card-detail">${codes}</div>`;
+  }
+  if (mode === "lineage" && c.qualifierLabel) {
+    const qualHtml = c.qualifierUri
+      ? `<a href="${escHtml(c.qualifierUri)}" target="_blank"><code class="qualifier">${escHtml(c.qualifierLabel)}</code></a>`
+      : `<code class="qualifier">${escHtml(c.qualifierLabel)}</code>`;
+    const creator = c.qualifierCreator ? ` ${escHtml(c.qualifierCreator)}` : "";
+    return `<div class="card-detail">${qualHtml}${creator}</div>`;
+  }
+  if (mode === "description" && c.descSnippet) {
+    return `<div class="card-detail"><div class="desc-snippet">${escHtml(c.descSnippet)}</div></div>`;
+  }
+  return "";
+}
+
+function renderCard(c: SimilarCandidate, rank: number, mode: string, modeSources?: string[]): string {
   const thumbHtml = c.iiifId
     ? `<a class="result-thumb-link" href="${escHtml(c.url)}" target="_blank">
          <img class="result-thumb" src="${escHtml(iiifThumbUrl(c.iiifId))}" alt="" loading="lazy"
               onerror="this.style.display='none'">
        </a>`
     : `<a class="result-thumb-link" href="${escHtml(c.url)}" target="_blank">
-         <div class="result-thumb no-image">No image available</div>
+         <div class="result-thumb no-image">No image</div>
        </a>`;
 
-  const dateLine = c.date ? `<span class="date">${escHtml(c.date)}</span>` : "";
-  const typeBadge = c.type ? `<span class="type-badge">${escHtml(c.type)}</span>` : "";
-  const detailHtml = c.detail
-    ? `<div class="detail">${escHtml(c.detail)}</div>`
-    : "";
+  const scoreStr = mode === "visual"
+    ? "" // Visual has no scores from the Rijksmuseum API
+    : ` &mdash; ${c.score.toFixed(2)}`;
   const sourcesBadges = modeSources
     ? modeSources.map(m => {
         const info = MODE_INFO[m] || { label: m, color: "#888" };
-        return `<span class="mode-badge" style="background:${info.color}">${escHtml(info.label)}</span>`;
-      }).join(" ")
+        return `<span class="mode-badge" style="background:${info.color}">${escHtml(info.label.charAt(0))}</span>`;
+      }).join("")
     : "";
+
+  const metaHtml = renderCardMetadata(c, mode);
 
   return `<div class="result-card">
     ${thumbHtml}
     <div class="result-info">
-      <div class="rank-sim">#${rank} &mdash; ${c.score.toFixed(2)}${sourcesBadges ? ` ${sourcesBadges}` : ""}</div>
-      <div class="title">${escHtml(c.title || "(untitled)")}${typeBadge}</div>
+      <div class="rank-sim">#${rank}${scoreStr}${sourcesBadges ? ` ${sourcesBadges}` : ""}</div>
+      <div class="title">${escHtml(c.title || "(untitled)")}</div>
       <div class="creator">${escHtml(c.creator || "unknown")}</div>
-      ${dateLine ? `<div class="date-line">${dateLine}</div>` : ""}
       <a class="obj-link" href="${escHtml(c.url)}" target="_blank">${escHtml(c.objectNumber)}</a>
-      ${detailHtml}
     </div>
+    ${metaHtml}
   </div>`;
 }
 
-function renderColumn(label: string, color: string, methodology: string, candidates: SimilarCandidate[], pooledSources?: Map<string, string[]>): string {
-  const isPooled = label === "Pooled";
+function renderRow(
+  mode: string,
+  label: string,
+  color: string,
+  methodology: string,
+  candidates: SimilarCandidate[],
+  options?: { seeAllUrl?: string; seeAllCount?: number; pooledSources?: Map<string, string[]> },
+): string {
+  const isPooled = mode === "pooled";
   const count = candidates.length;
+  if (count === 0 && !isPooled) return ""; // skip empty signal rows (except pooled which can be informative)
   const emptyMsg = count === 0
-    ? `<div class="empty-col">No results for this signal.</div>`
+    ? `<div class="empty-row">No results for this signal.</div>`
     : "";
 
-  // Methodology blurb (collapsible for signal columns, inline for pooled)
+  const countLabel = options?.seeAllCount
+    ? `${count} of ${options.seeAllCount}+ results`
+    : `${count} results`;
+
   const methodHtml = methodology
-    ? `<div class="col-method">${methodology}</div>`
+    ? `<div class="row-method">${methodology}</div>`
     : "";
 
   const cards = candidates.map((c, i) => {
-    const sources = isPooled ? pooledSources?.get(c.objectNumber) : undefined;
-    return renderCard(c, i + 1, sources);
+    const sources = isPooled ? options?.pooledSources?.get(c.objectNumber) : undefined;
+    return renderCard(c, i + 1, mode, sources);
   }).join("\n");
 
-  return `<div class="column">
-    <div class="col-header" style="border-bottom-color:${color}">
-      <span class="col-label" style="color:${color}">${escHtml(label)}</span>
-      <span class="col-count">${count}</span>
+  const seeAllCard = options?.seeAllUrl
+    ? `<a class="see-all-card" href="${escHtml(options.seeAllUrl)}" target="_blank">
+         See all ${options.seeAllCount ?? ""}+<br>visual matches<br>on rijksmuseum.nl &rarr;
+       </a>`
+    : "";
+
+  return `<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:${color}">${escHtml(label)}</span>
+      <span class="row-count">${countLabel}</span>
     </div>
     ${methodHtml}
-    ${emptyMsg}${cards}
+    ${emptyMsg}
+    <div class="strip-container">
+      <div class="cards-strip">
+        ${cards}
+        ${seeAllCard}
+      </div>
+    </div>
   </div>`;
 }
 
@@ -152,11 +223,12 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   const { query, modes, poolThreshold, generatedAt } = data;
 
   // Compute pooled: artworks appearing in ≥ poolThreshold modes
-  const modeNames = Object.keys(modes) as (keyof typeof modes)[];
+  const modeNames = MODE_ORDER.filter(m => m in modes && (modes as Record<string, SimilarCandidate[]>)[m]?.length > 0);
   const objectModes = new Map<string, { candidate: SimilarCandidate; sources: string[]; bestScore: number }>();
 
   for (const mode of modeNames) {
-    for (const c of modes[mode]) {
+    const candidates = (modes as Record<string, SimilarCandidate[]>)[mode] ?? [];
+    for (const c of candidates) {
       const existing = objectModes.get(c.objectNumber);
       if (existing) {
         existing.sources.push(mode);
@@ -182,32 +254,69 @@ export function generateSimilarHtml(data: SimilarPageData): string {
 
   // Query artwork header
   const queryThumb = query.iiifId
-    ? `<img class="query-thumb" src="${escHtml(iiifThumbUrl(query.iiifId, 400))}" alt="" loading="lazy"
+    ? `<img class="query-thumb" src="${escHtml(iiifThumbUrl(query.iiifId, 300))}" alt="" loading="lazy"
            onerror="this.style.display='none'">`
     : `<div class="query-thumb no-image">No image available</div>`;
 
   const queryType = query.type ? `<span class="type-badge">${escHtml(query.type)}</span>` : "";
   const queryDate = query.date ? ` (${escHtml(query.date)})` : "";
-  const queryDesc = query.description
-    ? `<div class="desc collapsed" onclick="this.classList.toggle('collapsed')" title="Click to expand">${escHtml(query.description)}</div>`
+
+  // Build metadata sections for header
+  let metaSections = "";
+
+  if (query.description) {
+    metaSections += `<div class="meta-section">
+      <div class="meta-section-label description">Description</div>
+      <div class="meta-desc">${escHtml(query.description)}</div>
+    </div>`;
+  }
+
+  if (query.iconclassCodes && query.iconclassCodes.length > 0) {
+    const codesHtml = query.iconclassCodes.map(c =>
+      `<a href="https://iconclass.org/${escHtml(c.notation)}" target="_blank"><code>${escHtml(c.notation)}</code></a> ${escHtml(c.label)}`
+    ).join(" &middot; ");
+    metaSections += `<div class="meta-section">
+      <div class="meta-section-label iconclass">Iconclass</div>
+      <div class="meta-content">${codesHtml}</div>
+    </div>`;
+  }
+
+  if (query.lineageQualifiers && query.lineageQualifiers.length > 0) {
+    const lineageHtml = query.lineageQualifiers.map(q =>
+      `<a href="${escHtml(q.aatUri)}" target="_blank"><code class="qualifier">${escHtml(q.label)}</code></a> ${escHtml(q.creator)}`
+    ).join(" &middot; ");
+    metaSections += `<div class="meta-section">
+      <div class="meta-section-label lineage">Lineage</div>
+      <div class="meta-content">${lineageHtml}</div>
+    </div>`;
+  }
+
+  const queryMetaHtml = metaSections
+    ? `<div class="query-metadata">${metaSections}</div>`
     : "";
 
-  // Signal columns
-  const columns = modeNames.map(mode => {
+  // Signal rows (ordered: Visual, Description, Iconclass, Lineage)
+  const rows: string[] = [];
+  for (const mode of MODE_ORDER) {
+    const candidates = (modes as Record<string, SimilarCandidate[] | undefined>)[mode] ?? [];
+    if (candidates.length === 0) continue;
     const info = MODE_INFO[mode];
-    return renderColumn(info.label, info.color, info.methodology, modes[mode]);
-  });
+    const rowOptions = mode === "visual"
+      ? { seeAllUrl: data.visualSearchUrl, seeAllCount: data.visualTotalResults }
+      : undefined;
+    rows.push(renderRow(mode, info.label, info.color, info.methodology, candidates, rowOptions));
+  }
 
-  // Pooled column
+  // Pooled row
   const pooledInfo = MODE_INFO.pooled;
-  const pooledMethodology = `Artworks appearing in <strong>${poolThreshold}+</strong> of the ${modeNames.length} signal columns. ` +
+  const pooledMethodology = `Artworks appearing in <strong>${poolThreshold}+</strong> of the ${modeNames.length} signal rows. ` +
     `The score shows the number of agreeing signals. These are the most robust similarity candidates &mdash; ` +
     `multiple independent methods agree they are related to the query artwork.`;
-  columns.push(renderColumn(pooledInfo.label, pooledInfo.color, pooledMethodology, pooled, pooledSources));
+  rows.push(renderRow("pooled", pooledInfo.label, pooledInfo.color, pooledMethodology, pooled, { pooledSources }));
 
   // Count totals
   const totalUnique = objectModes.size;
-  const modeCounts = modeNames.map(m => `${MODE_INFO[m].label}: ${modes[m].length}`).join(" | ");
+  const modeCounts = modeNames.map(m => `${MODE_INFO[m].label}: ${(modes as Record<string, SimilarCandidate[]>)[m]?.length ?? 0}`).join(" | ");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -223,64 +332,110 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   .subtitle { color: #666; font-size: 0.85em; margin-bottom: 20px; }
 
   .query-header { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                  padding: 16px; margin-bottom: 24px;
-                  display: flex; align-items: flex-start; gap: 16px; }
-  .query-thumb { width: 400px; max-height: 500px; object-fit: contain; border-radius: 4px;
+                  padding: 20px; margin-bottom: 24px;
+                  display: flex; align-items: flex-start; gap: 20px; }
+  .query-thumb { width: 300px; max-height: 420px; object-fit: contain; border-radius: 4px;
                  flex-shrink: 0; background: #eee; }
   .query-thumb.no-image { height: 200px; display: flex; align-items: center;
                           justify-content: center; color: #bbb; font-size: 0.9em; }
-  .query-info { flex: 1; }
+  .query-info { flex: 1; min-width: 0; }
   .query-info h2 { font-size: 1.2em; margin-bottom: 4px; }
   .query-info .obj-num { font-size: 0.85em; color: #0066cc; text-decoration: none; }
   .query-info .obj-num:hover { text-decoration: underline; }
   .query-info .creator { font-size: 0.9em; color: #555; margin-top: 2px; }
-  .query-info .desc { font-size: 0.8em; color: #555; margin-top: 8px; cursor: pointer;
-                      line-height: 1.4; }
-  .query-info .desc.collapsed { max-height: 3.6em; overflow: hidden; }
   .type-badge { display: inline-block; font-size: 0.7em; background: #e8e8e8;
                 padding: 1px 6px; border-radius: 3px; margin-left: 6px; color: #555; }
 
-  .columns-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-  @media (max-width: 1400px) { .columns-grid { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 900px) { .columns-grid { grid-template-columns: 1fr; } }
+  .query-metadata { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .meta-section { font-size: 0.8em; line-height: 1.5; }
+  .meta-section-label { font-weight: 600; font-size: 0.75em; text-transform: uppercase;
+                        letter-spacing: 0.03em; margin-bottom: 3px; }
+  .meta-section-label.iconclass { color: #1565c0; }
+  .meta-section-label.lineage { color: #6a1b9a; }
+  .meta-section-label.description { color: #e65100; }
+  .meta-section .meta-content { color: #555; }
+  .meta-section .meta-content a { text-decoration: none; }
+  .meta-section .meta-content a:hover code { text-decoration: underline; }
+  .meta-section .meta-content code { font-family: "SF Mono", "Menlo", monospace;
+                                      font-size: 0.88em; background: #f0f4f8;
+                                      padding: 1px 5px; border-radius: 3px; color: #1565c0; }
+  .meta-section .meta-content .qualifier { background: #f3e5f5; color: #6a1b9a; }
+  .meta-section .meta-content a:hover .qualifier { text-decoration: underline; }
+  .meta-desc { color: #555; font-size: 1em; line-height: 1.45; }
 
-  .column { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            padding: 12px; min-width: 0; }
-  .col-header { font-size: 0.9em; font-weight: 600; margin-bottom: 6px;
-                padding-bottom: 6px; border-bottom: 3px solid; display: flex;
-                align-items: baseline; gap: 6px; flex-wrap: wrap; }
-  .col-label { font-size: 1em; }
-  .col-count { font-size: 0.75em; color: #888; }
-  .col-method { font-size: 0.75em; color: #777; line-height: 1.4; margin-bottom: 12px;
-                padding: 8px 10px; background: #f8f8f8; border-radius: 4px; }
-  .col-method a { color: #0066cc; }
-  .col-method strong { font-weight: 600; color: #555; }
-  .col-method em { font-style: italic; }
-  .empty-col { font-size: 0.85em; color: #999; font-style: italic; padding: 12px 0; }
+  .signal-rows { display: flex; flex-direction: column; gap: 20px; }
 
-  .result-card { display: flex; flex-direction: column; gap: 6px; padding: 10px;
-                 border-radius: 6px; margin-bottom: 10px; border: 1px solid #f0f0f0; }
-  .result-card:hover { background: #fafafa; border-color: #ddd; }
-  .result-thumb { width: 100%; max-height: 280px; object-fit: contain; border-radius: 4px;
+  .signal-row { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                padding: 16px; overflow: hidden; }
+  .row-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .row-label { font-size: 0.95em; font-weight: 600; }
+  .row-count { font-size: 0.75em; color: #888; }
+  .row-method { font-size: 0.72em; color: #888; line-height: 1.3; margin-bottom: 12px;
+                max-width: 80ch; }
+  .row-method a { color: #0066cc; }
+  .row-method strong { font-weight: 600; color: #666; }
+  .empty-row { font-size: 0.85em; color: #999; font-style: italic; padding: 12px 0; }
+
+  .strip-container { position: relative; }
+  .strip-container::after { content: ''; position: absolute; top: 0; right: 0;
+                            width: 40px; height: 100%; pointer-events: none;
+                            background: linear-gradient(to right, transparent, rgba(255,255,255,0.8)); }
+  .cards-strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px;
+                 scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .cards-strip::-webkit-scrollbar { height: 6px; }
+  .cards-strip::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 3px; }
+  .cards-strip::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  .cards-strip::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+  .result-card { flex: 0 0 200px; scroll-snap-align: start; display: flex;
+                 flex-direction: column; gap: 6px; padding: 10px;
+                 border-radius: 6px; border: 1px solid #f0f0f0; }
+  .result-card:hover { border-color: #ddd; background: #fafafa; }
+  .result-thumb { width: 100%; aspect-ratio: 3/4; object-fit: contain; border-radius: 4px;
                   background: #f5f5f5; }
-  .result-thumb.no-image { width: 100%; height: 120px; display: flex; align-items: center;
-                           justify-content: center; background: #f0f0f0; color: #bbb;
-                           font-size: 0.8em; border-radius: 4px; }
+  .result-thumb.no-image { display: flex; align-items: center; justify-content: center;
+                           background: #f0f0f0; color: #bbb; font-size: 0.8em; }
   .result-thumb-link { display: block; }
-  .result-info { font-size: 0.8em; }
+  .result-info { font-size: 0.78em; }
   .result-info .rank-sim { font-weight: 600; color: #333; }
-  .result-info .title { margin-top: 2px; color: #444; }
-  .result-info .creator { color: #666; margin-top: 1px; }
-  .result-info .date-line { color: #888; font-size: 0.9em; }
+  .result-info .title { margin-top: 2px; color: #444; display: -webkit-box;
+                        -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .result-info .creator { color: #666; margin-top: 1px; white-space: nowrap;
+                          overflow: hidden; text-overflow: ellipsis; }
   .result-info .obj-link { font-size: 0.85em; color: #0066cc; text-decoration: none; }
   .result-info .obj-link:hover { text-decoration: underline; }
-  .result-info .detail { color: #777; font-size: 0.85em; margin-top: 4px; line-height: 1.3;
-                         max-height: 3.9em; overflow: hidden; }
-  .mode-badge { display: inline-block; font-size: 0.6em; color: #fff; padding: 1px 5px;
-                border-radius: 3px; margin-left: 3px; vertical-align: middle; }
+
+  .card-detail { font-size: 0.7em; margin-top: 4px; padding-top: 4px;
+                 border-top: 1px solid #f0f0f0; color: #888; line-height: 1.35; }
+  .card-detail a { text-decoration: none; }
+  .card-detail a:hover code { text-decoration: underline; }
+  .card-detail code { font-family: "SF Mono", "Menlo", monospace; font-size: 0.9em;
+                      background: #f0f4f8; padding: 0px 3px; border-radius: 2px; color: #1565c0; }
+  .card-detail .qualifier { background: #f3e5f5; color: #6a1b9a; }
+  .card-detail a:hover .qualifier { text-decoration: underline; }
+  .card-detail .desc-snippet { color: #777; display: -webkit-box;
+                               -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                               overflow: hidden; font-style: italic; }
+
+  .see-all-card { flex: 0 0 160px; scroll-snap-align: start; display: flex;
+                  align-items: center; justify-content: center; padding: 20px;
+                  border-radius: 6px; border: 1px dashed #ccc; background: #f8f8f8;
+                  text-decoration: none; color: #0066cc; font-size: 0.85em;
+                  text-align: center; line-height: 1.4; min-height: 200px; }
+  .see-all-card:hover { background: #f0f0f0; border-color: #aaa; }
+
+  .mode-badge { display: inline-block; font-size: 0.55em; color: #fff; padding: 1px 4px;
+                border-radius: 3px; margin-left: 2px; vertical-align: middle; }
 
   .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0;
             font-size: 0.75em; color: #999; }
+  .footer a { color: #999; text-decoration: underline; }
+  .footer a:hover { color: #666; }
+
+  @media (max-width: 700px) {
+    .query-header { flex-direction: column; }
+    .query-thumb { width: 100%; max-height: 300px; }
+  }
 </style>
 </head>
 <body>
@@ -294,16 +449,16 @@ export function generateSimilarHtml(data: SimilarPageData): string {
     <h2>${escHtml(query.title || "(untitled)")}${queryType}</h2>
     <div class="creator">${escHtml(query.creator || "unknown")}${queryDate}</div>
     <a class="obj-num" href="${escHtml(`https://www.rijksmuseum.nl/en/collection/${query.objectNumber}`)}" target="_blank">${escHtml(query.objectNumber)}</a>
-    ${queryDesc}
+    ${queryMetaHtml}
   </div>
 </div>
 
-<div class="columns-grid">
-  ${columns.join("\n")}
+<div class="signal-rows">
+  ${rows.join("\n")}
 </div>
 
 <div class="footer">
-  Generated by rijksmuseum-mcp+ find_similar | ${escHtml(generatedAt)}
+  Generated by <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" target="_blank">rijksmuseum-mcp+</a> find_similar | ${escHtml(generatedAt)}
 </div>
 
 </body>

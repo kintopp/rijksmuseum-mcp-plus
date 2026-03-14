@@ -42,6 +42,7 @@ export interface IconclassSimilarResult {
 
 export interface SharedLineage {
   qualifierLabel: string;
+  qualifierUri: string;
   creatorLabel: string;
   strength: number;
 }
@@ -49,7 +50,7 @@ export interface SharedLineage {
 export interface LineageSimilarResult {
   queryObjectNumber: string;
   queryTitle: string;
-  queryLineage: { qualifierLabel: string; creatorLabel: string; strength: number }[];
+  queryLineage: { qualifierLabel: string; qualifierUri: string; creatorLabel: string; strength: number }[];
   results: {
     artId: number;
     objectNumber: string;
@@ -398,7 +399,7 @@ export class VocabularyDb {
   private stmtIconclassShared: Statement | null = null; // cached: artwork_id by field_id+vocab_rowid
   private lineageCreatorDf: Map<number, number> | null = null; // creator vocab_rowid → df
   private lineageN = 0; // total artworks with any visual-lineage qualifier
-  private lineageQualifierMap: Map<number, { label: string; strength: number }> | null = null; // vocab_rowid → info
+  private lineageQualifierMap: Map<number, { label: string; strength: number; aatUri: string }> | null = null; // vocab_rowid → info
   private stmtLineageShared: Statement | null = null; // cached: artwork_id by qualifier+creator pair
   private iconclassNoiseIds: Set<number> | null = null; // vocab_rowids to exclude
   // ── depicted person caches ──
@@ -818,7 +819,7 @@ export class VocabularyDb {
         "SELECT vocab_int_id, COALESCE(label_en, label_nl, '') as label FROM vocabulary WHERE external_id = ?"
       ).get(uri) as { vocab_int_id: number; label: string } | undefined;
       if (row) {
-        this.lineageQualifierMap.set(row.vocab_int_id, { label: row.label, strength });
+        this.lineageQualifierMap.set(row.vocab_int_id, { label: row.label, strength, aatUri: uri });
       }
     }
     const qualIds = [...this.lineageQualifierMap.keys()];
@@ -914,6 +915,7 @@ export class VocabularyDb {
       const weight = qualInfo.strength * creatorIdf;
       const lineage: SharedLineage = {
         qualifierLabel: qualInfo.label,
+        qualifierUri: qualInfo.aatUri,
         creatorLabel: pair.creator_label,
         strength: qualInfo.strength,
       };
@@ -970,7 +972,7 @@ export class VocabularyDb {
       queryTitle: artRow.title || "",
       queryLineage: queryPairs.map(p => {
         const qi = this.lineageQualifierMap!.get(p.qualifier_id)!;
-        return { qualifierLabel: qi.label, creatorLabel: p.creator_label, strength: qi.strength };
+        return { qualifierLabel: qi.label, qualifierUri: qi.aatUri, creatorLabel: p.creator_label, strength: qi.strength };
       }),
       results,
       ...(warnings.length > 0 && { warnings }),

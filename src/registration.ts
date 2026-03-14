@@ -131,6 +131,14 @@ function truncate(s: string, maxLen: number): string {
   return s.length <= maxLen ? s : s.slice(0, maxLen - 3) + "...";
 }
 
+/** Truncate a description snippet to maxLen on a word boundary, appending " [\u2026]" if truncated. */
+function truncateSnippet(s: string | undefined, maxLen: number): string | undefined {
+  if (!s) return undefined;
+  if (s.length <= maxLen) return s;
+  const cut = s.lastIndexOf(" ", maxLen);
+  return (cut > 0 ? s.slice(0, cut) : s.slice(0, maxLen)) + " [\u2026]";
+}
+
 /** Format artwork detail as a compact key-value summary for LLM content (Tier 3). */
 function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string {
   const lines: string[] = [];
@@ -2054,6 +2062,11 @@ function registerTools(
             detail: r.sharedMotifs.map(m => `${m.notation} ${m.label}`).join(", "),
           })),
         );
+        // Enrich with per-card Iconclass notations
+        for (let i = 0; i < icCandidates.length; i++) {
+          const src = icResult?.results[i];
+          if (src) icCandidates[i].sharedNotations = src.sharedMotifs.map(m => m.notation);
+        }
 
         // Lineage
         const liResult = vocabDb!.findSimilarByLineage(args.objectNumber, maxResults);
@@ -2063,6 +2076,16 @@ function registerTools(
             detail: r.sharedLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel}`).join(", "),
           })),
         );
+        // Enrich with per-card qualifier metadata
+        for (let i = 0; i < liCandidates.length; i++) {
+          const src = liResult?.results[i];
+          if (src && src.sharedLineage.length > 0) {
+            const primary = src.sharedLineage[0]; // highest-strength qualifier
+            liCandidates[i].qualifierLabel = primary.qualifierLabel;
+            liCandidates[i].qualifierUri = primary.qualifierUri;
+            liCandidates[i].qualifierCreator = primary.creatorLabel;
+          }
+        }
 
         // Description
         let descCandidates: SimilarCandidate[] = [];
@@ -2086,6 +2109,7 @@ function registerTools(
                 score: r.similarity,
                 url: `https://www.rijksmuseum.nl/en/collection/${r.objectNumber}`,
                 detail: descTexts.get(r.artId)?.slice(0, 200),
+                descSnippet: truncateSnippet(descTexts.get(r.artId), 80),
               };
             });
           }
@@ -2102,6 +2126,12 @@ function registerTools(
             type: queryTypeMap.get(artRow.artId),
             iiifId: queryInfo?.iiifId ?? undefined,
             description: queryDescMap.get(artRow.artId),
+            iconclassCodes: icResult?.queryNotations.map(n => ({ notation: n.notation, label: n.label })),
+            lineageQualifiers: liResult?.queryLineage.map(q => ({
+              label: q.qualifierLabel,
+              aatUri: q.qualifierUri,
+              creator: q.creatorLabel,
+            })),
           },
           modes: {
             iconclass: icCandidates,
