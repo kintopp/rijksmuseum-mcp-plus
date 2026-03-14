@@ -92,7 +92,9 @@ function renderCard(c: SimilarCandidate, rank: number, modeSources?: string[]): 
          <img class="result-thumb" src="${escHtml(iiifThumbUrl(c.iiifId))}" alt="" loading="lazy"
               onerror="this.style.display='none'">
        </a>`
-    : `<div class="result-thumb no-image">No image</div>`;
+    : `<a class="result-thumb-link" href="${escHtml(c.url)}" target="_blank">
+         <div class="result-thumb no-image">No image available</div>
+       </a>`;
 
   const dateLine = c.date ? `<span class="date">${escHtml(c.date)}</span>` : "";
   const typeBadge = c.type ? `<span class="type-badge">${escHtml(c.type)}</span>` : "";
@@ -182,7 +184,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   const queryThumb = query.iiifId
     ? `<img class="query-thumb" src="${escHtml(iiifThumbUrl(query.iiifId, 400))}" alt="" loading="lazy"
            onerror="this.style.display='none'">`
-    : "";
+    : `<div class="query-thumb no-image">No image available</div>`;
 
   const queryType = query.type ? `<span class="type-badge">${escHtml(query.type)}</span>` : "";
   const queryDate = query.date ? ` (${escHtml(query.date)})` : "";
@@ -225,6 +227,8 @@ export function generateSimilarHtml(data: SimilarPageData): string {
                   display: flex; align-items: flex-start; gap: 16px; }
   .query-thumb { width: 400px; max-height: 500px; object-fit: contain; border-radius: 4px;
                  flex-shrink: 0; background: #eee; }
+  .query-thumb.no-image { height: 200px; display: flex; align-items: center;
+                          justify-content: center; color: #bbb; font-size: 0.9em; }
   .query-info { flex: 1; }
   .query-info h2 { font-size: 1.2em; margin-bottom: 4px; }
   .query-info .obj-num { font-size: 0.85em; color: #0066cc; text-decoration: none; }
