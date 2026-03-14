@@ -2,8 +2,9 @@
  * Server-side HTML generator for find_similar comparison pages.
  *
  * Produces a self-contained HTML page showing similarity results across
- * up to 4 signal modes in horizontal scroll rows (Visual, Description,
- * Iconclass, Lineage) plus a pooled row for artworks appearing in ≥2 modes.
+ * up to 6 signal modes in horizontal scroll rows (Visual, Lineage,
+ * Iconclass, Description, Depicted Person, Depicted Place) plus a pooled
+ * row for artworks appearing in ≥2 modes.
  */
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -29,6 +30,8 @@ export interface SimilarCandidate {
   qualifierCreator?: string;
   /** Truncated description snippet for description cards */
   descSnippet?: string;
+  /** Shared depicted person/place labels for per-card display */
+  sharedTermLabels?: string[];
 }
 
 export interface SimilarQueryInfo {
@@ -43,6 +46,10 @@ export interface SimilarQueryInfo {
   iconclassCodes?: { notation: string; label: string }[];
   /** Lineage qualifiers on the query artwork */
   lineageQualifiers?: { label: string; aatUri: string; creator: string }[];
+  /** Depicted persons on the query artwork */
+  depictedPersons?: string[];
+  /** Depicted places on the query artwork (after filtering) */
+  depictedPlaces?: string[];
 }
 
 export interface SimilarPageData {
@@ -52,6 +59,8 @@ export interface SimilarPageData {
     lineage: SimilarCandidate[];
     description: SimilarCandidate[];
     visual?: SimilarCandidate[];
+    depictedPerson?: SimilarCandidate[];
+    depictedPlace?: SimilarCandidate[];
   };
   /** Minimum number of modes an artwork must appear in for the pooled row */
   poolThreshold: number;
@@ -93,9 +102,28 @@ const MODE_INFO: Record<string, { label: string; color: string; methodology: str
     color: "#6a1b9a",
     methodology:
       "Artworks sharing visual-style lineage &mdash; works <em>after</em> the same artist, from the same " +
-      "<em>workshop</em>, or in the same <em>circle</em>. Scored by <strong>qualifier strength &times; creator IDF</strong>: " +
-      "&ldquo;after&rdquo; (3&times;) and &ldquo;workshop of&rdquo; (2&times;) weigh more than &ldquo;circle of&rdquo; (1&times;); " +
-      "rarer creators contribute more. Only ~25% of artworks have lineage qualifiers.",
+      "<em>workshop</em>, <em>attributed to</em> the same hand, or in the same <em>circle</em>. " +
+      "Scored by <strong>qualifier strength &times; creator IDF</strong>: " +
+      "&ldquo;after&rdquo;/&ldquo;copyist of&rdquo; (3&times;), &ldquo;workshop of&rdquo; (2&times;), " +
+      "&ldquo;attributed to&rdquo; (1.5&times;), &ldquo;circle of&rdquo;/&ldquo;follower of&rdquo; (1&times;); " +
+      "rarer creators contribute more. ~28% of artworks have lineage qualifiers.",
+  },
+  depictedPerson: {
+    label: "Depicted Person",
+    color: "#2e7d32",
+    methodology:
+      "Artworks depicting the same historical figures or named individuals. " +
+      "Scored by <strong>IDF</strong>: people appearing on fewer artworks contribute more. " +
+      "88% of depicted persons appear on &le;5 artworks, making shared persons a high-precision signal.",
+  },
+  depictedPlace: {
+    label: "Depicted Place",
+    color: "#4e342e",
+    methodology:
+      "Artworks depicting the same specific sites &mdash; streets, buildings, monuments, waterways. " +
+      "Scored by <strong>IDF</strong>: rarer places contribute more. " +
+      "Administrative regions (countries, provinces) and cities are excluded via " +
+      "TGN gazetteer filtering and vocabulary hierarchy breadth (&gt;20 sub-places).",
   },
   pooled: {
     label: "Pooled",
@@ -105,7 +133,7 @@ const MODE_INFO: Record<string, { label: string; color: string; methodology: str
 };
 
 /** Display order for signal rows */
-const MODE_ORDER = ["visual", "description", "iconclass", "lineage"] as const;
+const MODE_ORDER = ["visual", "lineage", "iconclass", "description", "depictedPerson", "depictedPlace"] as const;
 
 function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -131,6 +159,10 @@ function renderCardMetadata(c: SimilarCandidate, mode: string): string {
   }
   if (mode === "description" && c.descSnippet) {
     return `<div class="card-detail"><div class="desc-snippet">${escHtml(c.descSnippet)}</div></div>`;
+  }
+  if ((mode === "depictedPerson" || mode === "depictedPlace") && c.sharedTermLabels && c.sharedTermLabels.length > 0) {
+    const labels = c.sharedTermLabels.map(l => escHtml(l)).join(", ");
+    return `<div class="card-detail">${labels}</div>`;
   }
   return "";
 }
@@ -291,11 +323,27 @@ export function generateSimilarHtml(data: SimilarPageData): string {
     </div>`;
   }
 
+  if (query.depictedPersons && query.depictedPersons.length > 0) {
+    const personsHtml = query.depictedPersons.map(p => escHtml(p)).join(" &middot; ");
+    metaSections += `<div class="meta-section">
+      <div class="meta-section-label depicted-person">Depicted Persons</div>
+      <div class="meta-content">${personsHtml}</div>
+    </div>`;
+  }
+
+  if (query.depictedPlaces && query.depictedPlaces.length > 0) {
+    const placesHtml = query.depictedPlaces.map(p => escHtml(p)).join(" &middot; ");
+    metaSections += `<div class="meta-section">
+      <div class="meta-section-label depicted-place">Depicted Places</div>
+      <div class="meta-content">${placesHtml}</div>
+    </div>`;
+  }
+
   const queryMetaHtml = metaSections
     ? `<div class="query-metadata">${metaSections}</div>`
     : "";
 
-  // Signal rows (ordered: Visual, Description, Iconclass, Lineage)
+  // Signal rows (ordered: Visual, Lineage, Iconclass, Description, Depicted Person, Depicted Place)
   const rows: string[] = [];
   for (const mode of MODE_ORDER) {
     const candidates = (modes as Record<string, SimilarCandidate[] | undefined>)[mode] ?? [];
@@ -353,6 +401,8 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   .meta-section-label.iconclass { color: #1565c0; }
   .meta-section-label.lineage { color: #6a1b9a; }
   .meta-section-label.description { color: #e65100; }
+  .meta-section-label.depicted-person { color: #2e7d32; }
+  .meta-section-label.depicted-place { color: #4e342e; }
   .meta-section .meta-content { color: #555; }
   .meta-section .meta-content a { text-decoration: none; }
   .meta-section .meta-content a:hover code { text-decoration: underline; }

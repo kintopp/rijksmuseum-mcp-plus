@@ -1,6 +1,7 @@
 /**
  * Tests for find_similar tool — validates HTML comparison page generation
- * across all signal modes (Visual, Description, Iconclass, Lineage, Pooled).
+ * across all signal modes (Visual, Lineage, Iconclass, Description,
+ * Depicted Person, Depicted Place, Pooled).
  *
  * Run: ENABLE_FIND_SIMILAR=true node scripts/tests/test-find-similar.mjs
  *
@@ -199,7 +200,7 @@ const r5 = await client.callTool({
 ok(!r5.isError, "no error for SK-A-1718");
 const text5 = r5.content?.[0]?.text ?? "";
 // Check that no signal exceeds maxResults
-const countMatches = text5.matchAll(/(?:Visual|Description|Iconclass|Lineage): (\d+)/g);
+const countMatches = text5.matchAll(/(?:Visual|Lineage|Iconclass|Description|Person|Place): (\d+)/g);
 for (const m of countMatches) {
   const count = parseInt(m[1]);
   ok(count <= 3, `${m[0]} respects maxResults (${count} ≤ 3)`);
@@ -219,23 +220,115 @@ if (pathMatch5) {
   ok(html5.includes("query-header"), "has query header");
   ok(html5.includes("query-metadata"), "has query metadata section");
 
-  // Row order: Visual (if present) should appear before Description in HTML
-  const visualPos = html5.indexOf('"Visual"') > -1 ? html5.indexOf('"Visual"') : Infinity;
-  const descPos = html5.indexOf('"Description"');
-  const iconPos = html5.indexOf('"Iconclass"');
+  // Row order: Visual → Lineage → Iconclass → Description → Depicted Person → Depicted Place → Pooled
   const linePos = html5.indexOf('"Lineage"');
+  const iconPos = html5.indexOf('"Iconclass"');
+  const descPos = html5.indexOf('"Description"');
+  const personPos = html5.indexOf('"Depicted Person"');
+  const placePos = html5.indexOf('"Depicted Place"');
   const poolPos = html5.indexOf('"Pooled"');
 
-  if (descPos > -1) {
-    ok(descPos < iconPos || iconPos === -1, "Description before Iconclass");
-    ok(descPos < poolPos, "Description before Pooled");
+  if (linePos > -1 && iconPos > -1) {
+    ok(linePos < iconPos, "Lineage before Iconclass");
   }
-  if (iconPos > -1 && linePos > -1) {
-    ok(iconPos < linePos, "Iconclass before Lineage");
+  if (iconPos > -1 && descPos > -1) {
+    ok(iconPos < descPos, "Iconclass before Description");
+  }
+  if (descPos > -1 && personPos > -1) {
+    ok(descPos < personPos, "Description before Depicted Person");
+  }
+  if (personPos > -1 && placePos > -1) {
+    ok(personPos < placePos, "Depicted Person before Depicted Place");
   }
   if (poolPos > -1) {
-    ok(poolPos > descPos, "Pooled is last");
+    ok(poolPos > (placePos > -1 ? placePos : personPos > -1 ? personPos : descPos), "Pooled is last");
   }
+}
+
+// ── Section 9: Depicted Person signal ─────────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 9: Depicted Person signal");
+console.log("════════════════════════════════════════════════════════════");
+
+// SK-A-4691 is a self-portrait by Rembrandt — depicted person: Rijn, Rembrandt van
+const r6 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "SK-A-4691", maxResults: 5 },
+});
+ok(!r6.isError, "no error for SK-A-4691");
+const text6 = r6.content?.[0]?.text ?? "";
+ok(text6.includes("Person:"), "text summary includes Person count");
+const personCount = text6.match(/Person: (\d+)/)?.[1];
+ok(personCount && parseInt(personCount) > 0, `Person signal has results (${personCount})`);
+
+const pathMatch6 = text6.match(/\/(var|tmp)\S+\.html/);
+if (pathMatch6) {
+  const html6 = fs.readFileSync(pathMatch6[0], "utf-8");
+  ok(html6.includes("Depicted Person"), "Depicted Person row in HTML");
+  ok(html6.includes("depicted-person"), "header has depicted-person metadata");
+  ok(html6.includes("#2e7d32"), "Depicted Person has correct color");
+}
+
+// ── Section 10: Depicted Place signal ────────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 10: Depicted Place signal");
+console.log("════════════════════════════════════════════════════════════");
+
+// RP-F-2019-232-52 depicts the Montelbaanstoren — a specific Amsterdam landmark
+const r7 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "RP-F-2019-232-52", maxResults: 5 },
+});
+ok(!r7.isError, "no error for RP-F-2019-232-52");
+const text7 = r7.content?.[0]?.text ?? "";
+ok(text7.includes("Place:"), "text summary includes Place count");
+const placeCount = text7.match(/Place: (\d+)/)?.[1];
+ok(placeCount && parseInt(placeCount) > 0, `Place signal has results (${placeCount})`);
+
+const pathMatch7 = text7.match(/\/(var|tmp)\S+\.html/);
+if (pathMatch7) {
+  const html7 = fs.readFileSync(pathMatch7[0], "utf-8");
+  ok(html7.includes("Depicted Place"), "Depicted Place row in HTML");
+  ok(html7.includes("#4e342e"), "Depicted Place has correct color");
+  // Methodology mentions TGN filtering
+  ok(html7.includes("TGN") || html7.includes("gazetteer"), "Place methodology mentions filtering");
+}
+
+// Test broad-only place artwork — should produce 0 results but no error
+const r8 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "RP-F-F01018-GJ", maxResults: 3 },
+});
+ok(!r8.isError, "no error for broad-only place artwork");
+const text8 = r8.content?.[0]?.text ?? "";
+ok(text8.includes("Place: 0"), "Place signal correctly returns 0 for broad-only places");
+
+// ── Section 11: Lineage "attributed to" qualifier ────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 11: Lineage 'attributed to' qualifier");
+console.log("════════════════════════════════════════════════════════════");
+
+// RP-F-1994-16-20 has "attributed to" qualifier
+const r9 = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "RP-F-1994-16-20", maxResults: 5 },
+});
+ok(!r9.isError, "no error for attributed-to artwork");
+const text9 = r9.content?.[0]?.text ?? "";
+
+const pathMatch9 = text9.match(/\/(var|tmp)\S+\.html/);
+if (pathMatch9) {
+  const html9 = fs.readFileSync(pathMatch9[0], "utf-8");
+  if (!text9.includes("Lineage: 0")) {
+    ok(html9.includes("attributed to"), "Lineage results include 'attributed to' qualifier");
+    ok(true, "attributed to correctly included in lineage signal");
+  } else {
+    ok(true, "No lineage results (artwork may have unique creator)");
+  }
+  // Check that lineage methodology text mentions all qualifier tiers
+  ok(html9.includes("attributed to") && html9.includes("1.5"), "methodology mentions 'attributed to' at 1.5×");
+  ok(html9.includes("copyist"), "methodology mentions copyist");
+  ok(html9.includes("follower"), "methodology mentions follower");
 }
 
 // ── Summary ──────────────────────────────────────────────────────

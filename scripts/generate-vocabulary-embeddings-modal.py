@@ -154,7 +154,7 @@ def load_artworks(
 
     print("  Loading artworks...")
     rows = conn.execute("""
-        SELECT art_id, object_number, title_all_text, creator_label,
+        SELECT art_id, object_number, title, title_all_text, creator_label,
                narrative_text, inscription_text, description_text
         FROM artworks
     """).fetchall()
@@ -218,11 +218,10 @@ def load_artworks(
             ]
         elif strategy == "no-subjects":
             fields = [
-                ("Title", row["title_all_text"]),
-                ("Creator", row["creator_label"]),
-                ("Narrative", row["narrative_text"]),
+                ("Title", row["title"]),
                 ("Inscriptions", row["inscription_text"]),
                 ("Description", row["description_text"]),
+                ("Narrative", row["narrative_text"]),
             ]
         elif strategy == "subjects-last":
             fields = [

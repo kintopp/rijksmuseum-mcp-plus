@@ -72,7 +72,7 @@ def load_artworks(vocab_db: str) -> list[tuple[int, str, str]]:
 
     print("  Loading artworks...")
     rows = conn.execute("""
-        SELECT art_id, object_number, title_all_text, creator_label,
+        SELECT art_id, object_number, title,
                narrative_text, inscription_text, description_text
         FROM artworks
     """).fetchall()
@@ -84,11 +84,10 @@ def load_artworks(vocab_db: str) -> list[tuple[int, str, str]]:
     for row in rows:
         # Build composite text inline (field order = truncation priority)
         fields = [
-            ("Title", row["title_all_text"]),
-            ("Creator", row["creator_label"]),
-            ("Narrative", row["narrative_text"]),
+            ("Title", row["title"]),
             ("Inscriptions", row["inscription_text"]),
             ("Description", row["description_text"]),
+            ("Narrative", row["narrative_text"]),
         ]
         text = " ".join(f"[{label}] {val}" for label, val in fields if val)
         artworks.append((row["art_id"], row["object_number"], text))

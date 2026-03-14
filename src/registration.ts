@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, type DepictedSimilarResult } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -2068,7 +2068,7 @@ function registerTools(
         title: "Find Similar Artworks",
         description:
           "Find artworks similar to a given artwork. Generates a visual comparison page with IIIF thumbnails " +
-          "showing three independent similarity signals (Iconclass, Lineage, Description) plus a pooled column.\n\n" +
+          "showing five independent similarity signals (Lineage, Iconclass, Description, Depicted Person, Depicted Place) plus a pooled column.\n\n" +
           "IMPORTANT: The result is a file path or URL to an HTML page. " +
           "Your ONLY job is to show the user the path/URL so they can open it in a browser. " +
           "Do NOT attempt to open, read, fetch, summarise, or characterise the page contents. " +
@@ -2185,6 +2185,27 @@ function registerTools(
           }
         }
 
+        // Depicted Person & Place — shared enrichment pattern
+        function toDepictedCandidates(result: DepictedSimilarResult | null): SimilarCandidate[] {
+          const candidates = toCandidates(
+            (result?.results ?? []).map(r => ({
+              ...r,
+              detail: r.sharedTerms.map(t => t.label).join(", "),
+            })),
+          );
+          for (let i = 0; i < candidates.length; i++) {
+            const src = result?.results[i];
+            if (src) candidates[i].sharedTermLabels = src.sharedTerms.map(t => t.label);
+          }
+          return candidates;
+        }
+
+        const dpResult = vocabDb!.findSimilarByDepictedPerson(args.objectNumber, maxResults);
+        const dpCandidates = toDepictedCandidates(dpResult);
+
+        const dplResult = vocabDb!.findSimilarByDepictedPlace(args.objectNumber, maxResults);
+        const dplCandidates = toDepictedCandidates(dplResult);
+
         // Visual (Rijksmuseum website API — best-effort, never blocks other signals)
         // nodeIdPromise was started concurrently with the sync DB signals above
         let visualCandidates: SimilarCandidate[] = [];
@@ -2219,12 +2240,16 @@ function registerTools(
               aatUri: q.qualifierUri,
               creator: q.creatorLabel,
             })),
+            depictedPersons: dpResult?.queryTerms.map(t => t.label),
+            depictedPlaces: dplResult?.queryTerms.map(t => t.label),
           },
           modes: {
             iconclass: icCandidates,
             lineage: liCandidates,
             description: descCandidates,
             ...(visualCandidates.length > 0 && { visual: visualCandidates }),
+            ...(dpCandidates.length > 0 && { depictedPerson: dpCandidates }),
+            ...(dplCandidates.length > 0 && { depictedPlace: dplCandidates }),
           },
           poolThreshold: 2,
           generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
@@ -2252,14 +2277,16 @@ function registerTools(
         // Summary counts
         const counts = [
           ...(visualCandidates.length > 0 ? [`Visual: ${visualCandidates.length}`] : []),
-          `Description: ${descCandidates.length}`,
-          `Iconclass: ${icCandidates.length}`,
           `Lineage: ${liCandidates.length}`,
+          `Iconclass: ${icCandidates.length}`,
+          `Description: ${descCandidates.length}`,
+          `Person: ${dpCandidates.length}`,
+          `Place: ${dplCandidates.length}`,
         ];
         const poolThreshold = pageData.poolThreshold;
         // Count pooled entries
         const allObjNums = new Map<string, number>();
-        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates]) {
+        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates, dpCandidates, dplCandidates]) {
           for (const c of mode) {
             allObjNums.set(c.objectNumber, (allObjNums.get(c.objectNumber) ?? 0) + 1);
           }

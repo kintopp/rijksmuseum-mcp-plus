@@ -65,6 +65,23 @@ export interface LineageSimilarResult {
   warnings?: string[];
 }
 
+export interface DepictedSimilarResult {
+  queryObjectNumber: string;
+  queryTitle: string;
+  queryTerms: { label: string; artworks: number }[];
+  results: {
+    artId: number;
+    objectNumber: string;
+    title: string;
+    creator: string;
+    date?: string;
+    type?: string;
+    score: number;
+    sharedTerms: { label: string; weight: number }[];
+    url: string;
+  }[];
+  warnings?: string[];
+}
 
 /** AAT qualifier URIs that carry visual-similarity signal, with strength weights.
  *  URI set is a subset of AAT_QUALIFIER_LABELS in types.ts — keep in sync. */
@@ -72,6 +89,7 @@ const LINEAGE_QUALIFIERS: ReadonlyMap<string, number> = new Map([
   ["http://vocab.getty.edu/aat/300404286", 3.0],  // after
   ["http://vocab.getty.edu/aat/300404287", 3.0],  // copyist of
   ["http://vocab.getty.edu/aat/300404274", 2.0],  // workshop of
+  ["http://vocab.getty.edu/aat/300404269", 1.5],  // attributed to
   ["http://vocab.getty.edu/aat/300404283", 1.0],  // circle of (kring van)
   ["http://vocab.getty.edu/aat/300404284", 1.0],  // circle of (omgeving van) / school of
   ["http://vocab.getty.edu/aat/300404282", 1.0],  // follower of
@@ -371,22 +389,37 @@ export class VocabularyDb {
 
   // ── find_similar shared ──
   private stmtLookupArtId: Statement | null = null; // cached: art_id + title + creator_label by object_number
+  /** Shared prepared statement: SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ? */
+  private stmtMappingsByFieldVocab: Statement | null = null;
   // ── find_similar caches (initialised lazily on first call) ──
   private notationDf: Map<number, number> | null = null; // vocab_rowid → document frequency
   private iconclassN = 0; // total artworks with any Iconclass notation
-  private stmtIconclassShared: Statement | null = null; // cached: artwork_id by field_id+vocab_rowid
   private lineageCreatorDf: Map<number, number> | null = null; // creator vocab_rowid → df
   private lineageN = 0; // total artworks with any visual-lineage qualifier
   private lineageQualifierMap: Map<number, { label: string; strength: number; aatUri: string }> | null = null; // vocab_rowid → info
   private stmtLineageShared: Statement | null = null; // cached: artwork_id by qualifier+creator pair
   private iconclassNoiseIds: Set<number> | null = null; // vocab_rowids to exclude
-  // ── depicted person caches ──
+  // Depicted person cache
+  private personDf: Map<number, number> | null = null; // person vocab_rowid → document frequency
+  private personN = 0; // total artworks with depicted persons
+  // Depicted place cache
+  private placeDf: Map<number, number> | null = null; // place vocab_rowid → document frequency
+  private placeN = 0; // total artworks with depicted places (after filtering)
+  private placeExcluded: Set<number> | null = null; // vocab_rowids excluded (TGN + broad places)
 
   /** Look up a field_id by name, throwing if missing. */
   private requireFieldId(name: string): number {
     const id = this.fieldIdMap.get(name);
     if (id === undefined) throw new Error(`field_lookup missing entry for "${name}"`);
     return id;
+  }
+
+  /** Lazily prepare the shared mappings-lookup statement (used by Iconclass, Person, Place signals). */
+  private ensureMappingsStmt(): void {
+    if (this.stmtMappingsByFieldVocab || !this.db) return;
+    this.stmtMappingsByFieldVocab = this.db.prepare(
+      `SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?`
+    );
   }
 
   /**
@@ -599,12 +632,11 @@ export class VocabularyDb {
 
       // Query 1: artwork fields
       const artRows = this.db.prepare(
-        `SELECT art_id, title_all_text, creator_label, narrative_text, inscription_text, description_text
+        `SELECT art_id, title, narrative_text, inscription_text, description_text
          FROM artworks WHERE art_id IN (${placeholders})`
       ).all(...chunk) as {
         art_id: number;
-        title_all_text: string | null;
-        creator_label: string | null;
+        title: string | null;
         narrative_text: string | null;
         inscription_text: string | null;
         description_text: string | null;
@@ -613,11 +645,10 @@ export class VocabularyDb {
       // Assemble composite text in same format as embedding generation (no-subjects strategy)
       for (const row of artRows) {
         const fields: [string, string | null | undefined][] = [
-          ["Title", row.title_all_text],
-          ["Creator", row.creator_label],
-          ["Narrative", row.narrative_text],
+          ["Title", row.title],
           ["Inscriptions", row.inscription_text],
           ["Description", row.description_text],
+          ["Narrative", row.narrative_text],
         ];
         const text = fields
           .filter(([, v]) => v)
@@ -666,10 +697,7 @@ export class VocabularyDb {
       WHERE m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
     `).get(subjectFieldId) as { n: number };
     this.iconclassN = countRow.n;
-    // Cache the per-notation candidate lookup statement (called N times per query)
-    this.stmtIconclassShared = this.db.prepare(
-      `SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?`
-    );
+    this.ensureMappingsStmt();
     console.error(`[find_similar] Iconclass IDF cache: ${this.notationDf.size} notations, ${this.iconclassN.toLocaleString()} artworks`);
   }
 
@@ -718,7 +746,7 @@ export class VocabularyDb {
       const weight = depth * Math.log(this.iconclassN / df);
       const motif: SharedMotif = { notation: qn.notation, label: qn.label, weight };
 
-      const rows = this.stmtIconclassShared!.all(subjectFieldId, qn.vocab_rowid) as { artwork_id: number }[];
+      const rows = this.stmtMappingsByFieldVocab!.all(subjectFieldId, qn.vocab_rowid) as { artwork_id: number }[];
       for (const r of rows) {
         if (r.artwork_id === queryArtId) continue; // exclude self
         const entry = candidates.get(r.artwork_id);
@@ -952,6 +980,238 @@ export class VocabularyDb {
       results,
       ...(warnings.length > 0 && { warnings }),
     };
+  }
+
+  // ── find_similar: Depicted Person overlap ────────────────────────────
+
+  /** Lazily initialise the depicted person IDF cache. */
+  private ensurePersonCache(): void {
+    if (this.personDf || !this.db || !this.hasIntMappings) return;
+    const subjectFieldId = this.requireFieldId("subject");
+
+    // IDF: count artworks per depicted person
+    this.personDf = new Map();
+    const rows = this.db.prepare(`
+      SELECT m.vocab_rowid, COUNT(DISTINCT m.artwork_id) as df
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.field_id = ? AND v.type = 'person'
+      GROUP BY m.vocab_rowid
+    `).all(subjectFieldId) as { vocab_rowid: number; df: number }[];
+
+    for (const r of rows) this.personDf.set(r.vocab_rowid, r.df);
+
+    const countRow = this.db.prepare(`
+      SELECT COUNT(DISTINCT m.artwork_id) as n
+      FROM mappings m JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.field_id = ? AND v.type = 'person'
+    `).get(subjectFieldId) as { n: number };
+    this.personN = countRow.n;
+    this.ensureMappingsStmt();
+    console.error(`[find_similar] Person IDF cache: ${this.personDf.size} persons, ${this.personN.toLocaleString()} artworks`);
+  }
+
+  /**
+   * Shared implementation for depicted-person and depicted-place similarity.
+   * Scores by IDF-weighted overlap of query terms against candidates.
+   */
+  private findSimilarByDepictedTerms(
+    objectNumber: string,
+    maxResults: number,
+    queryTerms: { vocab_rowid: number; label: string }[],
+    dfMap: Map<number, number>,
+    N: number,
+    fieldId: number,
+    artRow: { art_id: number; title: string },
+    emptyWarning: string,
+  ): DepictedSimilarResult {
+    if (queryTerms.length === 0) {
+      return {
+        queryObjectNumber: objectNumber,
+        queryTitle: artRow.title || "",
+        queryTerms: [],
+        results: [],
+        warnings: [emptyWarning],
+      };
+    }
+
+    const queryArtId = artRow.art_id;
+    const candidates = new Map<number, { totalWeight: number; sharedTerms: { label: string; weight: number }[] }>();
+
+    for (const term of queryTerms) {
+      const df = dfMap.get(term.vocab_rowid) ?? 1;
+      const idf = Math.log(N / df);
+      const weight = Math.round(idf * 100) / 100;
+
+      const rows = this.stmtMappingsByFieldVocab!.all(fieldId, term.vocab_rowid) as { artwork_id: number }[];
+      for (const r of rows) {
+        if (r.artwork_id === queryArtId) continue;
+        const entry = candidates.get(r.artwork_id);
+        if (entry) {
+          entry.totalWeight += idf;
+          entry.sharedTerms.push({ label: term.label, weight });
+        } else {
+          candidates.set(r.artwork_id, { totalWeight: idf, sharedTerms: [{ label: term.label, weight }] });
+        }
+      }
+    }
+
+    const sorted = [...candidates.entries()]
+      .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
+      .slice(0, maxResults);
+
+    const artIds = sorted.map(([artId]) => artId);
+    const metaMap = this.batchLookupByArtId(artIds);
+    const typeMap = this.batchLookupTypesByArtId(artIds);
+
+    const results = sorted.map(([artId, data]) => {
+      const meta = metaMap.get(artId);
+      const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
+      data.sharedTerms.sort((a, b) => b.weight - a.weight);
+      return {
+        artId,
+        objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
+        title: meta?.title ?? "",
+        creator: meta?.creator ?? "",
+        ...(date && { date }),
+        ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
+        score: Math.round(data.totalWeight * 100) / 100,
+        sharedTerms: data.sharedTerms,
+        url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
+      };
+    });
+
+    return {
+      queryObjectNumber: objectNumber,
+      queryTitle: artRow.title || "",
+      queryTerms: queryTerms.map(t => ({ label: t.label, artworks: dfMap.get(t.vocab_rowid) ?? 0 })),
+      results,
+    };
+  }
+
+  /**
+   * Find artworks similar to a given artwork by shared depicted persons.
+   * Scores by IDF-weighted overlap.
+   */
+  findSimilarByDepictedPerson(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
+    if (!this.db || !this.hasIntMappings) return null;
+    this.ensurePersonCache();
+    if (!this.personDf) return null;
+
+    const subjectFieldId = this.requireFieldId("subject");
+    const artRow = this.stmtLookupArtId!.get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+    if (!artRow) return null;
+
+    const queryPersons = this.db.prepare(`
+      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.artwork_id = ? AND +m.field_id = ? AND v.type = 'person'
+    `).all(artRow.art_id, subjectFieldId) as { vocab_rowid: number; label: string }[];
+
+    return this.findSimilarByDepictedTerms(
+      objectNumber, maxResults, queryPersons,
+      this.personDf, this.personN, subjectFieldId, artRow,
+      "This artwork has no depicted persons to search by.",
+    );
+  }
+
+  // ── find_similar: Depicted Place overlap ─────────────────────────────
+
+  /** Maximum children count for a place to be included as a depicted-place signal. */
+  private static readonly PLACE_CHILDREN_THRESHOLD = 20;
+
+  /** Lazily initialise the depicted place IDF cache with TGN + children-count filtering. */
+  private ensurePlaceCache(): void {
+    if (this.placeDf || !this.db || !this.hasIntMappings) return;
+    const subjectFieldId = this.requireFieldId("subject");
+
+    // Build exclusion set: TGN places + places with >20 children (single-pass GROUP BY)
+    this.placeExcluded = new Set<number>();
+    const tgnRows = this.db.prepare(`
+      SELECT vocab_int_id FROM vocabulary
+      WHERE type = 'place' AND external_id LIKE '%tgn%'
+    `).all() as { vocab_int_id: number }[];
+    for (const r of tgnRows) this.placeExcluded.add(r.vocab_int_id);
+
+    const broadRows = this.db.prepare(`
+      SELECT v.vocab_int_id
+      FROM vocabulary v
+      JOIN (
+        SELECT broader_id, COUNT(*) as child_count
+        FROM vocabulary WHERE broader_id IS NOT NULL
+        GROUP BY broader_id
+      ) cc ON cc.broader_id = v.id
+      WHERE v.type = 'place' AND cc.child_count > ?
+    `).all(VocabularyDb.PLACE_CHILDREN_THRESHOLD) as { vocab_int_id: number }[];
+    for (const r of broadRows) this.placeExcluded.add(r.vocab_int_id);
+
+    // IDF: count artworks per depicted place (excluding noise)
+    this.placeDf = new Map();
+    const rows = this.db.prepare(`
+      SELECT m.vocab_rowid, COUNT(DISTINCT m.artwork_id) as df
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.field_id = ? AND v.type = 'place'
+      GROUP BY m.vocab_rowid
+    `).all(subjectFieldId) as { vocab_rowid: number; df: number }[];
+
+    for (const r of rows) {
+      if (this.placeExcluded.has(r.vocab_rowid)) continue;
+      this.placeDf.set(r.vocab_rowid, r.df);
+    }
+
+    // Count distinct artworks with at least one non-excluded place.
+    // We can't sum DFs (artworks have multiple places), so query with a temp table.
+    this.db.exec("CREATE TEMP TABLE IF NOT EXISTS _place_vocab_ids (id INTEGER PRIMARY KEY)");
+    this.db.exec("DELETE FROM _place_vocab_ids");
+    const insertStmt = this.db.prepare("INSERT INTO _place_vocab_ids (id) VALUES (?)");
+    const insertMany = this.db.transaction((ids: number[]) => { for (const id of ids) insertStmt.run(id); });
+    insertMany([...this.placeDf.keys()]);
+    const countRow = this.db.prepare(`
+      SELECT COUNT(DISTINCT m.artwork_id) as n
+      FROM mappings m
+      WHERE m.field_id = ? AND m.vocab_rowid IN (SELECT id FROM _place_vocab_ids)
+    `).get(subjectFieldId) as { n: number };
+    this.placeN = countRow.n;
+    this.db.exec("DROP TABLE IF EXISTS _place_vocab_ids");
+
+    this.ensureMappingsStmt();
+    console.error(`[find_similar] Place IDF cache: ${this.placeDf.size} places (${this.placeExcluded.size} excluded), ${this.placeN.toLocaleString()} artworks`);
+  }
+
+  /**
+   * Find artworks similar to a given artwork by shared depicted places.
+   * Scores by IDF-weighted overlap. Excludes TGN (administrative/geographic) places
+   * and places with >20 children in the vocabulary hierarchy.
+   */
+  findSimilarByDepictedPlace(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
+    if (!this.db || !this.hasIntMappings) return null;
+    this.ensurePlaceCache();
+    if (!this.placeDf) return null;
+
+    const subjectFieldId = this.requireFieldId("subject");
+    const artRow = this.stmtLookupArtId!.get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+    if (!artRow) return null;
+
+    const queryPlacesRaw = this.db.prepare(`
+      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.artwork_id = ? AND +m.field_id = ? AND v.type = 'place'
+    `).all(artRow.art_id, subjectFieldId) as { vocab_rowid: number; label: string }[];
+
+    const queryPlaces = queryPlacesRaw.filter(p => !this.placeExcluded!.has(p.vocab_rowid));
+
+    const emptyWarning = queryPlacesRaw.length > 0
+      ? "This artwork's depicted places are too broad (countries/regions) to search by."
+      : "This artwork has no depicted places to search by.";
+
+    return this.findSimilarByDepictedTerms(
+      objectNumber, maxResults, queryPlaces,
+      this.placeDf, this.placeN, subjectFieldId, artRow,
+      emptyWarning,
+    );
   }
 
   // ── find_similar: batch metadata helpers ───────────────────────────
