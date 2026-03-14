@@ -446,7 +446,7 @@ export class VocabularyDb {
 
     try {
       this.db = new Database(dbPath, { readonly: true });
-      this.db.pragma("mmap_size = 3221225472"); // 3 GB — eliminates double-buffering via OS page cache
+      this.db.pragma("mmap_size = 1610612736"); // 1.5 GB — vocab DB is ~1.1 GB, room for enrichment growth
       // Word-boundary matching for subject search (e.g. "cat" must not match "Catharijnekerk")
       this.db.function("regexp_word", (pattern: string, value: string) => {
         const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

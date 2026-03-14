@@ -77,7 +77,7 @@ export class IconclassDb {
 
     try {
       this.db = new Database(dbPath, { readonly: true });
-      this.db.pragma("mmap_size = 3221225472"); // 3 GB — eliminates double-buffering via OS page cache
+      this.db.pragma("mmap_size = 178257920"); // 170 MB — iconclass DB is ~130 MB
       const count = (this.db.prepare("SELECT COUNT(*) as n FROM notations").get() as { n: number }).n;
 
       // Read built_at for countsAsOf

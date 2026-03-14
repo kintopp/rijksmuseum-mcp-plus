@@ -60,7 +60,7 @@ export class EmbeddingsDb {
 
     try {
       this.db = new Database(dbPath, { readonly: true });
-      this.db.pragma("mmap_size = 3221225472"); // 3 GB — eliminates double-buffering
+      this.db.pragma("mmap_size = 1073741824"); // 1 GB — embeddings DB is ~700 MB mapped
 
       // Load sqlite-vec extension
       const sqliteVec = require("sqlite-vec");
