@@ -36,9 +36,11 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 9. **AI image annotation** (experimental) - the AI assistant can annotate images in the interactive image viewer with elements it has recognised (e.g. "highlight the biblical scenes depicted in the painting's panels").
 
-10. **User image annotation** (experimental) - click inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now click and draw a rectangle around an area of interest to you. You may be asked for permission to allow a prompt (with the coordinates of the area you selected) to be written into the chat. Then add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
+10. **User image annotation** - click inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now click and draw a rectangle around an area of interest to you. You may be asked for permission to allow a prompt (with the coordinates of the area you selected) to be written into the chat. Then add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
 
-11. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
+11. **Find Similar** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
+
+12. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
 
 <br>
 <p align="center"><img src="docs/places-near-basel.png" alt="Artworks from the Rijksmuseum depicting places within 100km of Basel" width="500"></p>
@@ -119,16 +121,15 @@ Later:
 - investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 - create a [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file for exploring the collection
 - investigate exporting jpg/png from image viewer together with overlays
-- investigate adding server-side tasks (e.g. pixel analyses of images)
+- investigate 'influenced by artistic lineage' feature
 
 Maybe:
 
 - investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after" 
 - investigate incorporating historical exhibition data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
-- investigate support for image similarity search (whole image, [image segments](https://engineering.q42.nl/visual-search/))
 - investigate browsing all related images in the image viewer
-- review remaining toponyms without geolocation data
+- review remaining places without geolocation data
 
 ### Authors
 
