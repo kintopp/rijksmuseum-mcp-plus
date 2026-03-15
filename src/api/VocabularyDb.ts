@@ -68,7 +68,7 @@ export interface LineageSimilarResult {
 export interface DepictedSimilarResult {
   queryObjectNumber: string;
   queryTitle: string;
-  queryTerms: { label: string; artworks: number }[];
+  queryTerms: { label: string; artworks: number; wikidataUri?: string }[];
   results: {
     artId: number;
     objectNumber: string;
@@ -77,7 +77,7 @@ export interface DepictedSimilarResult {
     date?: string;
     type?: string;
     score: number;
-    sharedTerms: { label: string; weight: number }[];
+    sharedTerms: { label: string; weight: number; wikidataUri?: string }[];
     url: string;
   }[];
   warnings?: string[];
@@ -1018,7 +1018,7 @@ export class VocabularyDb {
   private findSimilarByDepictedTerms(
     objectNumber: string,
     maxResults: number,
-    queryTerms: { vocab_rowid: number; label: string }[],
+    queryTerms: { vocab_rowid: number; label: string; external_id: string | null; wikidata_id: string | null }[],
     dfMap: Map<number, number>,
     N: number,
     fieldId: number,
@@ -1036,12 +1036,13 @@ export class VocabularyDb {
     }
 
     const queryArtId = artRow.art_id;
-    const candidates = new Map<number, { totalWeight: number; sharedTerms: { label: string; weight: number }[] }>();
+    const candidates = new Map<number, { totalWeight: number; sharedTerms: { label: string; weight: number; wikidataUri?: string }[] }>();
 
     for (const term of queryTerms) {
       const df = dfMap.get(term.vocab_rowid) ?? 1;
       const idf = Math.log(N / df);
       const weight = Math.round(idf * 100) / 100;
+      const wikidataUri = term.external_id ?? (term.wikidata_id ? `http://www.wikidata.org/entity/${term.wikidata_id}` : undefined);
 
       const rows = this.stmtMappingsByFieldVocab!.all(fieldId, term.vocab_rowid) as { artwork_id: number }[];
       for (const r of rows) {
@@ -1049,9 +1050,9 @@ export class VocabularyDb {
         const entry = candidates.get(r.artwork_id);
         if (entry) {
           entry.totalWeight += idf;
-          entry.sharedTerms.push({ label: term.label, weight });
+          entry.sharedTerms.push({ label: term.label, weight, ...(wikidataUri && { wikidataUri }) });
         } else {
-          candidates.set(r.artwork_id, { totalWeight: idf, sharedTerms: [{ label: term.label, weight }] });
+          candidates.set(r.artwork_id, { totalWeight: idf, sharedTerms: [{ label: term.label, weight, ...(wikidataUri && { wikidataUri }) }] });
         }
       }
     }
@@ -1084,7 +1085,10 @@ export class VocabularyDb {
     return {
       queryObjectNumber: objectNumber,
       queryTitle: artRow.title || "",
-      queryTerms: queryTerms.map(t => ({ label: t.label, artworks: dfMap.get(t.vocab_rowid) ?? 0 })),
+      queryTerms: queryTerms.map(t => {
+        const wikidataUri = t.external_id ?? (t.wikidata_id ? `http://www.wikidata.org/entity/${t.wikidata_id}` : undefined);
+        return { label: t.label, artworks: dfMap.get(t.vocab_rowid) ?? 0, ...(wikidataUri && { wikidataUri }) };
+      }),
       results,
     };
   }
@@ -1103,11 +1107,12 @@ export class VocabularyDb {
     if (!artRow) return null;
 
     const queryPersons = this.db.prepare(`
-      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label
+      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label,
+             v.external_id, v.wikidata_id
       FROM mappings m
       JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
       WHERE m.artwork_id = ? AND +m.field_id = ? AND v.type = 'person'
-    `).all(artRow.art_id, subjectFieldId) as { vocab_rowid: number; label: string }[];
+    `).all(artRow.art_id, subjectFieldId) as { vocab_rowid: number; label: string; external_id: string | null; wikidata_id: string | null }[];
 
     return this.findSimilarByDepictedTerms(
       objectNumber, maxResults, queryPersons,
@@ -1195,11 +1200,12 @@ export class VocabularyDb {
     if (!artRow) return null;
 
     const queryPlacesRaw = this.db.prepare(`
-      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label
+      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label,
+             v.external_id, v.wikidata_id
       FROM mappings m
       JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
       WHERE m.artwork_id = ? AND +m.field_id = ? AND v.type = 'place'
-    `).all(artRow.art_id, subjectFieldId) as { vocab_rowid: number; label: string }[];
+    `).all(artRow.art_id, subjectFieldId) as { vocab_rowid: number; label: string; external_id: string | null; wikidata_id: string | null }[];
 
     const queryPlaces = queryPlacesRaw.filter(p => !this.placeExcluded!.has(p.vocab_rowid));
 

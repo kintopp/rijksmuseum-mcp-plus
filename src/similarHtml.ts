@@ -32,6 +32,8 @@ export interface SimilarCandidate {
   descSnippet?: string;
   /** Shared depicted person/place labels for per-card display */
   sharedTermLabels?: string[];
+  /** Wikidata URIs corresponding to sharedTermLabels (same order, may contain undefined) */
+  sharedTermUris?: (string | undefined)[];
 }
 
 export interface SimilarQueryInfo {
@@ -47,9 +49,9 @@ export interface SimilarQueryInfo {
   /** Lineage qualifiers on the query artwork */
   lineageQualifiers?: { label: string; aatUri: string; creator: string }[];
   /** Depicted persons on the query artwork */
-  depictedPersons?: string[];
+  depictedPersons?: { label: string; wikidataUri?: string }[];
   /** Depicted places on the query artwork (after filtering) */
-  depictedPlaces?: string[];
+  depictedPlaces?: { label: string; wikidataUri?: string }[];
 }
 
 export interface SimilarPageData {
@@ -81,7 +83,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     color: "#00838f",
     methodology:
       "The Rijksmuseum&rsquo;s own image-based visual similarity model. " +
-      "87% of all artworks have digital images. Of these, ~99% have visually similar images.",
+      "87% of all artworks have digital images.",
   },
   description: {
     label: "Description",
@@ -90,8 +92,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     methodology:
       "Artworks with semantically similar Dutch catalogue descriptions. " +
       "Shared generic structural phrases, " +
-      "(&ldquo;Links een X, rechts een Y&rdquo;) can artificially inflate scores for visually dissimilar works. " +
-      "61% of all artworks have descriptions.",
+      "(&ldquo;Links een X, rechts een Y&rdquo;) can artificially inflate scores for visually dissimilar works.",
   },
   iconclass: {
     label: "Iconclass",
@@ -100,8 +101,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     methodology:
       "Artworks sharing the same <a href='https://iconclass.org' target='_blank'>Iconclass</a> subject codes. " +
       "Deeper codes (more specific scenes) that appear on fewer artworks " +
-      "contribute more. Single shallow matches are pruned. " +
-      "~81% of artworks have Iconclass codes.",
+      "contribute more. Single shallow matches are pruned.",
   },
   lineage: {
     label: "Lineage",
@@ -113,7 +113,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
       "Score weighted by <strong>qualifier strength</strong>: " +
       "&ldquo;after&rdquo;/&ldquo;copyist of&rdquo; (3&times;), &ldquo;workshop of&rdquo; (2&times;), " +
       "&ldquo;attributed to&rdquo; (1.5&times;), &ldquo;circle of&rdquo;/&ldquo;follower of&rdquo; (1&times;); " +
-      "rarer creators contribute more. ~28% of artworks have lineage qualifiers.",
+      "rarer creators contribute more.",
   },
   depictedPerson: {
     label: "Depicted Person",
@@ -121,8 +121,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     color: "#2e7d32",
     methodology:
       "Artworks depicting the same historical figures or named individuals. " +
-      "People appearing on fewer artworks contribute more. " +
-      "~88% of depicted persons appear on &le;5 artworks.",
+      "People appearing on fewer artworks contribute more.",
   },
   depictedPlace: {
     label: "Depicted Place",
@@ -131,8 +130,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     methodology:
       "Artworks depicting the same specific sites &mdash; streets, buildings, monuments, waterways. " +
       "Rarer places contribute more. " +
-      "Broader administrative regions (countries, provinces and cities) are excluded. " +
-      "~30% of all artworks have depicted places.",
+      "Broader administrative regions (countries, provinces and cities) are excluded.",
   },
   pooled: {
     label: "Pooled",
@@ -171,7 +169,12 @@ function renderCardMetadata(c: SimilarCandidate, mode: string): string {
     return `<div class="card-detail"><div class="desc-snippet">${escHtml(c.descSnippet)}</div></div>`;
   }
   if ((mode === "depictedPerson" || mode === "depictedPlace") && c.sharedTermLabels && c.sharedTermLabels.length > 0) {
-    const labels = c.sharedTermLabels.map(l => escHtml(l)).join(", ");
+    const labels = c.sharedTermLabels.map((l, i) => {
+      const uri = c.sharedTermUris?.[i];
+      return uri
+        ? `<a href="${escHtml(uri)}" target="_blank">${escHtml(l)}</a>`
+        : escHtml(l);
+    }).join(", ");
     return `<div class="card-detail">${labels}</div>`;
   }
   return "";
@@ -334,7 +337,11 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   }
 
   if (query.depictedPersons && query.depictedPersons.length > 0) {
-    const personsHtml = query.depictedPersons.map(p => escHtml(p)).join(" &middot; ");
+    const personsHtml = query.depictedPersons.map(p =>
+      p.wikidataUri
+        ? `<a href="${escHtml(p.wikidataUri)}" target="_blank">${escHtml(p.label)}</a>`
+        : escHtml(p.label)
+    ).join(" &middot; ");
     metaSections += `<div class="meta-section">
       <div class="meta-section-label depicted-person">Depicted Persons</div>
       <div class="meta-content">${personsHtml}</div>
@@ -342,7 +349,11 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   }
 
   if (query.depictedPlaces && query.depictedPlaces.length > 0) {
-    const placesHtml = query.depictedPlaces.map(p => escHtml(p)).join(" &middot; ");
+    const placesHtml = query.depictedPlaces.map(p =>
+      p.wikidataUri
+        ? `<a href="${escHtml(p.wikidataUri)}" target="_blank">${escHtml(p.label)}</a>`
+        : escHtml(p.label)
+    ).join(" &middot; ");
     metaSections += `<div class="meta-section">
       <div class="meta-section-label depicted-place">Depicted Places</div>
       <div class="meta-content">${placesHtml}</div>

@@ -2195,7 +2195,10 @@ function registerTools(
           );
           for (let i = 0; i < candidates.length; i++) {
             const src = result?.results[i];
-            if (src) candidates[i].sharedTermLabels = src.sharedTerms.map(t => t.label);
+            if (src) {
+              candidates[i].sharedTermLabels = src.sharedTerms.map(t => t.label);
+              candidates[i].sharedTermUris = src.sharedTerms.map(t => t.wikidataUri);
+            }
           }
           return candidates;
         }
@@ -2240,8 +2243,8 @@ function registerTools(
               aatUri: q.qualifierUri,
               creator: q.creatorLabel,
             })),
-            depictedPersons: dpResult?.queryTerms.map(t => t.label),
-            depictedPlaces: dplResult?.queryTerms.map(t => t.label),
+            depictedPersons: dpResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
+            depictedPlaces: dplResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
           },
           modes: {
             iconclass: icCandidates,
