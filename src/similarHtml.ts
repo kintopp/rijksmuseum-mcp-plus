@@ -74,59 +74,65 @@ export interface SimilarPageData {
 // ─── HTML generation ────────────────────────────────────────────────
 
 /** Render order and styling for each signal mode */
-const MODE_INFO: Record<string, { label: string; color: string; methodology: string }> = {
+const MODE_INFO: Record<string, { label: string; badge: string; color: string; methodology: string }> = {
   visual: {
     label: "Visual",
+    badge: "V",
     color: "#00838f",
     methodology:
-      "Rijksmuseum&rsquo;s own image-based visual similarity. Pixel-level features via their internal model.",
+      "The Rijksmuseum&rsquo;s own image-based visual similarity model.",
   },
   description: {
     label: "Description",
+    badge: "Desc",
     color: "#e65100",
     methodology:
       "Artworks with semantically similar Dutch catalogue descriptions. " +
-      "Beware generic structural phrases " +
-      "(&ldquo;Links een X, rechts een Y&rdquo;) that inflate scores for visually dissimilar works.",
+      "Generic structural phrases " +
+      "(&ldquo;Links een X, rechts een Y&rdquo;) can artificially inflate scores for visually dissimilar works.",
   },
   iconclass: {
     label: "Iconclass",
+    badge: "IC",
     color: "#1565c0",
     methodology:
       "Artworks sharing the same <a href='https://iconclass.org' target='_blank'>Iconclass</a> subject codes. " +
-      "Scored by <strong>depth &times; IDF</strong>: deeper codes (more specific scenes) that appear on fewer artworks " +
+      "Deeper codes (more specific scenes) that appear on fewer artworks " +
       "contribute more. Single shallow matches are pruned.",
   },
   lineage: {
     label: "Lineage",
+    badge: "Lin",
     color: "#6a1b9a",
     methodology:
       "Artworks sharing visual-style lineage &mdash; works <em>after</em> the same artist, from the same " +
       "<em>workshop</em>, <em>attributed to</em> the same hand, or in the same <em>circle</em>. " +
-      "Scored by <strong>qualifier strength &times; creator IDF</strong>: " +
+      "Score weighted by <strong>qualifier strength</strong>: " +
       "&ldquo;after&rdquo;/&ldquo;copyist of&rdquo; (3&times;), &ldquo;workshop of&rdquo; (2&times;), " +
       "&ldquo;attributed to&rdquo; (1.5&times;), &ldquo;circle of&rdquo;/&ldquo;follower of&rdquo; (1&times;); " +
       "rarer creators contribute more. ~28% of artworks have lineage qualifiers.",
   },
   depictedPerson: {
     label: "Depicted Person",
+    badge: "Per",
     color: "#2e7d32",
     methodology:
       "Artworks depicting the same historical figures or named individuals. " +
-      "Scored by <strong>IDF</strong>: people appearing on fewer artworks contribute more. " +
-      "88% of depicted persons appear on &le;5 artworks, making shared persons a high-precision signal.",
+      "People appearing on fewer artworks contribute more " +
+      "(88% of depicted persons appear on &le;5 artworks).",
   },
   depictedPlace: {
     label: "Depicted Place",
+    badge: "Pl",
     color: "#4e342e",
     methodology:
       "Artworks depicting the same specific sites &mdash; streets, buildings, monuments, waterways. " +
-      "Scored by <strong>IDF</strong>: rarer places contribute more. " +
-      "Administrative regions (countries, provinces) and cities are excluded via " +
-      "TGN gazetteer filtering and vocabulary hierarchy breadth (&gt;20 sub-places).",
+      "Rarer places contribute more. " +
+      "Broader administrative regions (countries, provinces and cities) are excluded.",
   },
   pooled: {
     label: "Pooled",
+    badge: "P",
     color: "#37474f",
     methodology: "",
   },
@@ -182,8 +188,8 @@ function renderCard(c: SimilarCandidate, rank: number, mode: string, modeSources
     : ` &mdash; ${c.score.toFixed(2)}`;
   const sourcesBadges = modeSources
     ? modeSources.map(m => {
-        const info = MODE_INFO[m] || { label: m, color: "#888" };
-        return `<span class="mode-badge" style="background:${info.color}">${escHtml(info.label.charAt(0))}</span>`;
+        const info = MODE_INFO[m] || { label: m, badge: m.charAt(0), color: "#888" };
+        return `<span class="mode-badge" style="background:${info.color}">${escHtml(info.badge)}</span>`;
       }).join("")
     : "";
 
@@ -213,7 +219,7 @@ function renderRow(
   const count = candidates.length;
   if (count === 0 && !isPooled) return ""; // skip empty signal rows (except pooled which can be informative)
   const emptyMsg = count === 0
-    ? `<div class="empty-row">No results for this signal.</div>`
+    ? `<div class="empty-row">No results for this type of similarity.</div>`
     : "";
 
   const countLabel = options?.seeAllCount
@@ -357,9 +363,8 @@ export function generateSimilarHtml(data: SimilarPageData): string {
 
   // Pooled row
   const pooledInfo = MODE_INFO.pooled;
-  const pooledMethodology = `Artworks appearing in <strong>${poolThreshold}+</strong> of the ${modeNames.length} signal rows. ` +
-    `The score shows the number of agreeing signals. These are the most robust similarity candidates &mdash; ` +
-    `multiple independent methods agree they are related to the query artwork.`;
+  const pooledMethodology = `Artworks appearing in <strong>${poolThreshold}+</strong> of the ${modeNames.length} forms of similarity above. ` +
+    `The scores and icons show which and how many forms agree.`;
   rows.push(renderRow("pooled", pooledInfo.label, pooledInfo.color, pooledMethodology, pooled, { pooledSources }));
 
   // Count totals
@@ -491,7 +496,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
 <body>
 
 <h1>Find Similar: ${escHtml(query.title || query.objectNumber)}</h1>
-<p class="subtitle">${modeCounts} | ${totalUnique} unique | pooled: ${poolThreshold}+ signals | ${escHtml(generatedAt)}</p>
+<p class="subtitle">${modeCounts} | ${totalUnique} unique | pooled: ${poolThreshold}+ types | ${escHtml(generatedAt)}</p>
 
 <div class="query-header">
   ${queryThumb}

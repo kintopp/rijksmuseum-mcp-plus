@@ -2251,7 +2251,7 @@ function registerTools(
             ...(dpCandidates.length > 0 && { depictedPerson: dpCandidates }),
             ...(dplCandidates.length > 0 && { depictedPlace: dplCandidates }),
           },
-          poolThreshold: 2,
+          poolThreshold: 3,
           generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
           ...(visualSearchUrl && { visualSearchUrl }),
           ...(visualTotalResults && { visualTotalResults }),
