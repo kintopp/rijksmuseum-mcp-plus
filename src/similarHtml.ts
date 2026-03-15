@@ -80,7 +80,8 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     badge: "V",
     color: "#00838f",
     methodology:
-      "The Rijksmuseum&rsquo;s own image-based visual similarity model.",
+      "The Rijksmuseum&rsquo;s own image-based visual similarity model. " +
+      "87% of all artworks have digital images. Of these, ~99% have visually similar images.",
   },
   description: {
     label: "Description",
@@ -88,8 +89,9 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     color: "#e65100",
     methodology:
       "Artworks with semantically similar Dutch catalogue descriptions. " +
-      "Generic structural phrases " +
-      "(&ldquo;Links een X, rechts een Y&rdquo;) can artificially inflate scores for visually dissimilar works.",
+      "Shared generic structural phrases, " +
+      "(&ldquo;Links een X, rechts een Y&rdquo;) can artificially inflate scores for visually dissimilar works. " +
+      "61% of all artworks have descriptions.",
   },
   iconclass: {
     label: "Iconclass",
@@ -98,7 +100,8 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     methodology:
       "Artworks sharing the same <a href='https://iconclass.org' target='_blank'>Iconclass</a> subject codes. " +
       "Deeper codes (more specific scenes) that appear on fewer artworks " +
-      "contribute more. Single shallow matches are pruned.",
+      "contribute more. Single shallow matches are pruned. " +
+      "~81% of artworks have Iconclass codes.",
   },
   lineage: {
     label: "Lineage",
@@ -118,8 +121,8 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     color: "#2e7d32",
     methodology:
       "Artworks depicting the same historical figures or named individuals. " +
-      "People appearing on fewer artworks contribute more " +
-      "(88% of depicted persons appear on &le;5 artworks).",
+      "People appearing on fewer artworks contribute more. " +
+      "~88% of depicted persons appear on &le;5 artworks.",
   },
   depictedPlace: {
     label: "Depicted Place",
@@ -128,7 +131,8 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     methodology:
       "Artworks depicting the same specific sites &mdash; streets, buildings, monuments, waterways. " +
       "Rarer places contribute more. " +
-      "Broader administrative regions (countries, provinces and cities) are excluded.",
+      "Broader administrative regions (countries, provinces and cities) are excluded. " +
+      "~30% of all artworks have depicted places.",
   },
   pooled: {
     label: "Pooled",
@@ -469,7 +473,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   .card-detail .qualifier { background: #f3e5f5; color: #6a1b9a; }
   .card-detail a:hover .qualifier { text-decoration: underline; }
   .card-detail .desc-snippet { color: #777; display: -webkit-box;
-                               -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                               -webkit-line-clamp: 4; -webkit-box-orient: vertical;
                                overflow: hidden; font-style: italic; }
 
   .see-all-card { flex: 0 0 160px; scroll-snap-align: start; display: flex;

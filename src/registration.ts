@@ -2179,7 +2179,7 @@ function registerTools(
                 score: r.similarity,
                 url: `https://www.rijksmuseum.nl/en/collection/${r.objectNumber}`,
                 detail: truncate(descTexts.get(r.artId) ?? "", 200),
-                descSnippet: truncateSnippet(descTexts.get(r.artId), 80),
+                descSnippet: truncateSnippet(descTexts.get(r.artId), 160),
               };
             });
           }
