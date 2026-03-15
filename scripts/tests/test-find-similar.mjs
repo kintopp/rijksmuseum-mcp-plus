@@ -290,8 +290,8 @@ if (pathMatch7) {
   const html7 = fs.readFileSync(pathMatch7[0], "utf-8");
   ok(html7.includes("Depicted Place"), "Depicted Place row in HTML");
   ok(html7.includes("#4e342e"), "Depicted Place has correct color");
-  // Methodology mentions TGN filtering
-  ok(html7.includes("TGN") || html7.includes("gazetteer"), "Place methodology mentions filtering");
+  // Methodology mentions place filtering
+  ok(html7.includes("excluded") || html7.includes("administrative"), "Place methodology mentions filtering");
 }
 
 // Test broad-only place artwork — should produce 0 results but no error

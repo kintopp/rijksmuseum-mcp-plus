@@ -115,7 +115,7 @@ sc = await call("search_artwork", { subject: "landscape", facets: true });
 check("Has facets", sc?.facets != null);
 if (sc?.facets) {
   const dims = Object.keys(sc.facets);
-  check("All 4 dimensions present", dims.length === 4);
+  check("All 7 dimensions present", dims.length === 7);
   check("Entries sorted descending", Object.values(sc.facets).every(
     entries => entries.every((e, i) => i === 0 || entries[i-1].count >= e.count)));
   console.log(`    → ${dims.join(", ")}: ${dims.map(d => sc.facets[d][0]?.label + " (" + sc.facets[d][0]?.count + ")").join(", ")}`);
