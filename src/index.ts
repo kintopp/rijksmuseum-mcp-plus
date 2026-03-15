@@ -130,7 +130,7 @@ async function ensureDb(spec: DbSpec): Promise<void> {
 
   const tmpPath = dbPath + ".tmp";
   const controller = new AbortController();
-  const downloadTimer = setTimeout(() => controller.abort(), 300_000);
+  const downloadTimer = setTimeout(() => controller.abort(), 330_000);
   try {
     const res = await fetch(url, { redirect: "follow", signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
