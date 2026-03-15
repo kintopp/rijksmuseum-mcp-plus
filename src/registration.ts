@@ -2196,8 +2196,10 @@ function registerTools(
           for (let i = 0; i < candidates.length; i++) {
             const src = result?.results[i];
             if (src) {
-              candidates[i].sharedTermLabels = src.sharedTerms.map(t => t.label);
-              candidates[i].sharedTermUris = src.sharedTerms.map(t => t.wikidataUri);
+              candidates[i].sharedTerms = src.sharedTerms.map(t => ({
+                label: t.label,
+                ...(t.wikidataUri && { wikidataUri: t.wikidataUri }),
+              }));
             }
           }
           return candidates;

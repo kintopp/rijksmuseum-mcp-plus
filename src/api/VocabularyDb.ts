@@ -95,6 +95,11 @@ const LINEAGE_QUALIFIERS: ReadonlyMap<string, number> = new Map([
   ["http://vocab.getty.edu/aat/300404282", 1.0],  // follower of
 ]);
 
+/** Resolve a Wikidata URI from external_id (harvest) or wikidata_id (enrichment). */
+function toWikidataUri(row: { external_id: string | null; wikidata_id: string | null }): string | undefined {
+  return row.external_id ?? (row.wikidata_id ? `http://www.wikidata.org/entity/${row.wikidata_id}` : undefined);
+}
+
 /** Iconclass noise labels to exclude — high-frequency categorical artefacts, not iconographic signals. */
 const ICONCLASS_NOISE_LABELS = new Set([
   "historical persons",
@@ -1042,7 +1047,7 @@ export class VocabularyDb {
       const df = dfMap.get(term.vocab_rowid) ?? 1;
       const idf = Math.log(N / df);
       const weight = Math.round(idf * 100) / 100;
-      const wikidataUri = term.external_id ?? (term.wikidata_id ? `http://www.wikidata.org/entity/${term.wikidata_id}` : undefined);
+      const wikidataUri = toWikidataUri(term);
 
       const rows = this.stmtMappingsByFieldVocab!.all(fieldId, term.vocab_rowid) as { artwork_id: number }[];
       for (const r of rows) {
@@ -1086,7 +1091,7 @@ export class VocabularyDb {
       queryObjectNumber: objectNumber,
       queryTitle: artRow.title || "",
       queryTerms: queryTerms.map(t => {
-        const wikidataUri = t.external_id ?? (t.wikidata_id ? `http://www.wikidata.org/entity/${t.wikidata_id}` : undefined);
+        const wikidataUri = toWikidataUri(t);
         return { label: t.label, artworks: dfMap.get(t.vocab_rowid) ?? 0, ...(wikidataUri && { wikidataUri }) };
       }),
       results,

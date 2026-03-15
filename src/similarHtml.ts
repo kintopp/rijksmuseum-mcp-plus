@@ -30,10 +30,8 @@ export interface SimilarCandidate {
   qualifierCreator?: string;
   /** Truncated description snippet for description cards */
   descSnippet?: string;
-  /** Shared depicted person/place labels for per-card display */
-  sharedTermLabels?: string[];
-  /** Wikidata URIs corresponding to sharedTermLabels (same order, may contain undefined) */
-  sharedTermUris?: (string | undefined)[];
+  /** Shared depicted person/place terms for per-card display */
+  sharedTerms?: { label: string; wikidataUri?: string }[];
 }
 
 export interface SimilarQueryInfo {
@@ -147,6 +145,13 @@ function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/** Render a label as a link (if URI present) or plain escaped text. */
+function renderOptionalLink(label: string, uri: string | undefined): string {
+  return uri
+    ? `<a href="${escHtml(uri)}" target="_blank">${escHtml(label)}</a>`
+    : escHtml(label);
+}
+
 function iiifThumbUrl(iiifId: string, width = 250): string {
   return `https://iiif.micr.io/${iiifId}/full/${width},/0/default.jpg`;
 }
@@ -168,13 +173,8 @@ function renderCardMetadata(c: SimilarCandidate, mode: string): string {
   if (mode === "description" && c.descSnippet) {
     return `<div class="card-detail"><div class="desc-snippet">${escHtml(c.descSnippet)}</div></div>`;
   }
-  if ((mode === "depictedPerson" || mode === "depictedPlace") && c.sharedTermLabels && c.sharedTermLabels.length > 0) {
-    const labels = c.sharedTermLabels.map((l, i) => {
-      const uri = c.sharedTermUris?.[i];
-      return uri
-        ? `<a href="${escHtml(uri)}" target="_blank">${escHtml(l)}</a>`
-        : escHtml(l);
-    }).join(", ");
+  if ((mode === "depictedPerson" || mode === "depictedPlace") && c.sharedTerms && c.sharedTerms.length > 0) {
+    const labels = c.sharedTerms.map(t => renderOptionalLink(t.label, t.wikidataUri)).join(", ");
     return `<div class="card-detail">${labels}</div>`;
   }
   return "";
@@ -337,11 +337,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   }
 
   if (query.depictedPersons && query.depictedPersons.length > 0) {
-    const personsHtml = query.depictedPersons.map(p =>
-      p.wikidataUri
-        ? `<a href="${escHtml(p.wikidataUri)}" target="_blank">${escHtml(p.label)}</a>`
-        : escHtml(p.label)
-    ).join(" &middot; ");
+    const personsHtml = query.depictedPersons.map(p => renderOptionalLink(p.label, p.wikidataUri)).join(" &middot; ");
     metaSections += `<div class="meta-section">
       <div class="meta-section-label depicted-person">Depicted Persons</div>
       <div class="meta-content">${personsHtml}</div>
@@ -349,11 +345,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   }
 
   if (query.depictedPlaces && query.depictedPlaces.length > 0) {
-    const placesHtml = query.depictedPlaces.map(p =>
-      p.wikidataUri
-        ? `<a href="${escHtml(p.wikidataUri)}" target="_blank">${escHtml(p.label)}</a>`
-        : escHtml(p.label)
-    ).join(" &middot; ");
+    const placesHtml = query.depictedPlaces.map(p => renderOptionalLink(p.label, p.wikidataUri)).join(" &middot; ");
     metaSections += `<div class="meta-section">
       <div class="meta-section-label depicted-place">Depicted Places</div>
       <div class="meta-content">${placesHtml}</div>
