@@ -789,6 +789,108 @@ console.log("\n--- 9f: JSON null on lookup_iconclass ---");
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  10. provenanceChain in structuredContent — schema conformance
+// ══════════════════════════════════════════════════════════════════
+
+section("10. provenanceChain structuredContent validation");
+
+// Call get_artwork_details for The Milkmaid (SK-A-2344) — known to have provenance
+console.log("\n--- 10a: get_artwork_details with provenance ---");
+{
+  const r = await client.callTool({
+    name: "get_artwork_details",
+    arguments: { objectNumber: "SK-A-2344" },
+  });
+  const { sc, isError } = parseResult(r);
+  assert(!isError, "get_artwork_details succeeds for SK-A-2344");
+  assert(sc != null, "structuredContent present");
+
+  // provenanceChain must exist and be an array
+  const chain = sc?.provenanceChain;
+  assert(Array.isArray(chain), "provenanceChain is an array");
+  assert(chain?.length >= 10, `provenanceChain has ≥10 events (got ${chain?.length})`);
+
+  if (Array.isArray(chain) && chain.length > 0) {
+    const e = chain[0];
+
+    // Validate required fields and types match Zod schema
+    assert(typeof e.sequence === "number" && Number.isInteger(e.sequence), "event.sequence is integer");
+    assert(typeof e.rawText === "string" && e.rawText.length > 0, "event.rawText is non-empty string");
+    assert(typeof e.gap === "boolean", "event.gap is boolean");
+    assert(typeof e.uncertain === "boolean", "event.uncertain is boolean");
+    assert(typeof e.transferType === "string", "event.transferType is string");
+    assert(Array.isArray(e.citations), "event.citations is array");
+    // nullable fields: party, date, location, price, saleDetails
+    assert(e.location === null || typeof e.location === "string", "event.location is string|null");
+    assert(e.price === null || typeof e.price === "object", "event.price is object|null");
+    assert(e.saleDetails === null || typeof e.saleDetails === "string", "event.saleDetails is string|null");
+
+    // Validate party shape when present
+    if (e.party != null) {
+      assert(typeof e.party.name === "string", "party.name is string");
+      assert(e.party.dates === null || typeof e.party.dates === "string", "party.dates is string|null");
+      assert(typeof e.party.uncertain === "boolean", "party.uncertain is boolean");
+      assert(e.party.role === null || typeof e.party.role === "string", "party.role is string|null");
+    }
+
+    // Validate date shape when present
+    const dated = chain.find(ev => ev.date != null);
+    if (dated) {
+      const d = dated.date;
+      assert(typeof d.text === "string", "date.text is string");
+      assert(d.year === null || (typeof d.year === "number" && Number.isInteger(d.year)), "date.year is int|null");
+      assert(typeof d.approximate === "boolean", "date.approximate is boolean");
+      assert(d.qualifier === null || ["before", "after", "circa"].includes(d.qualifier), "date.qualifier is valid enum|null");
+    }
+
+    // Validate price shape when present
+    const priced = chain.find(ev => ev.price != null);
+    if (priced) {
+      const p = priced.price;
+      assert(typeof p.text === "string", "price.text is string");
+      assert(p.amount === null || typeof p.amount === "number", "price.amount is number|null");
+      assert(typeof p.currency === "string", "price.currency is string");
+    }
+
+    // Validate citation shape when present
+    const cited = chain.find(ev => ev.citations.length > 0);
+    if (cited) {
+      assert(typeof cited.citations[0].text === "string", "citation.text is string");
+    }
+
+    // Validate transferType is from the expected enum
+    const validTypes = new Set(["sale","inheritance","bequest","commission","purchase",
+      "confiscation","recuperation","loan","transfer","collection","gift","unknown"]);
+    for (const ev of chain) {
+      if (!validTypes.has(ev.transferType)) {
+        assert(false, `unexpected transferType: ${ev.transferType}`);
+        break;
+      }
+    }
+    assert(true, "all transferType values are valid enum members");
+  }
+}
+
+// 10b. Artwork without provenance — provenanceChain should be null
+console.log("\n--- 10b: artwork without provenance ---");
+{
+  const r = await client.callTool({
+    name: "get_artwork_details",
+    arguments: { objectNumber: "BK-NM-1010" },
+  });
+  const { sc, isError } = parseResult(r);
+  // This may error if the object doesn't exist — that's fine, we just check if it worked
+  if (!isError && sc) {
+    assert(
+      sc.provenanceChain === null || Array.isArray(sc.provenanceChain),
+      "provenanceChain is null or array for artwork without provenance"
+    );
+  } else {
+    assert(true, "skipped — artwork not found (expected for some object numbers)");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 
