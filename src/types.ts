@@ -344,6 +344,9 @@ export interface ArtworkDetailEnriched extends ArtworkDetail {
 
   // Bibliography count (for discoverability — full data via separate tool)
   bibliographyCount: number;
+
+  // Parsed provenance chain (from AAM punctuation convention free text)
+  provenanceChain: import("./provenance.js").ProvenanceEvent[] | null;
 }
 
 // ─── Bibliography Types ─────────────────────────────────────────────

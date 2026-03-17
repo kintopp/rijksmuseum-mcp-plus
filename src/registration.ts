@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, type DepictedSimilarResult } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -249,6 +249,38 @@ function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string
   else if (d.curatorialNarrative.nl) lines.push(`[Narrative] ${d.curatorialNarrative.nl}`);
   if (d.inscriptions.length) lines.push(`[Inscriptions] ${d.inscriptions.join("; ")}`);
   if (d.provenance) lines.push(`[Provenance] ${d.provenance}`);
+  if (d.provenanceChain?.length) {
+    const evts = d.provenanceChain;
+    const count = evts.length;
+    const gaps = evts.filter(e => e.gap).length;
+    const first = evts[0];
+    const last = evts[count - 1];
+    const years = evts.map(e => e.date?.year).filter((y): y is number => y != null);
+    const span = years.length >= 2 ? `${Math.min(...years)}–${Math.max(...years)}` : years.length === 1 ? `${years[0]}` : "";
+    lines.push(`[Provenance parsed] ${count} events${gaps ? `, ${pluralize(gaps, "gap")}` : ""}${span ? ` (${span})` : ""}`);
+
+    // Acquisition: how the museum got it (last event)
+    if (last) {
+      const priceFmt = last.price ? `${last.price.currency} ${last.price.amount?.toLocaleString("en") ?? last.price.text}` : null;
+      const parts = [last.transferType !== "unknown" ? last.transferType : null, last.date?.text, priceFmt].filter(Boolean);
+      if (parts.length) lines.push(`  Acquired: ${parts.join(", ")}`);
+    }
+    // Chain shape: transfer type counts
+    const typeCounts = new Map<string, number>();
+    for (const e of evts) {
+      if (e.transferType !== "unknown") typeCounts.set(e.transferType, (typeCounts.get(e.transferType) ?? 0) + 1);
+    }
+    const notable = [...typeCounts.entries()].filter(([, n]) => n > 0).map(([t, n]) => n > 1 ? pluralize(n, t) : t);
+    if (gaps) notable.push(pluralize(gaps, "gap"));
+    if (notable.length) lines.push(`  Chain: ${notable.join(", ")}`);
+    // Earliest known owner
+    if (first?.party) {
+      let earliest = first.party.name;
+      if (first.location) earliest += `, ${first.location}`;
+      if (first.uncertain) earliest += " (uncertain)";
+      lines.push(`  Earliest: ${earliest}`);
+    }
+  }
   if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
 
   if (d.bibliographyCount) lines.push(`\nBibliography: ${d.bibliographyCount} entries`);
@@ -478,6 +510,34 @@ const ArtworkDetailOutput = {
     depictedPlaces: z.array(ResolvedTermShape()),
   }),
   bibliographyCount: z.number().int(),
+  provenanceChain: z.array(z.object({
+    sequence: z.number().int(),
+    rawText: z.string(),
+    gap: z.boolean(),
+    party: z.object({
+      name: z.string(),
+      dates: z.string().nullable(),
+      uncertain: z.boolean(),
+      role: z.string().nullable(),
+    }).nullable(),
+    transferType: z.enum(["sale", "inheritance", "bequest", "commission", "purchase",
+      "confiscation", "recuperation", "loan", "transfer", "collection", "gift", "unknown"]),
+    date: z.object({
+      text: z.string(),
+      year: z.number().int().nullable(),
+      approximate: z.boolean(),
+      qualifier: z.enum(["before", "after", "circa"]).nullable(),
+    }).nullable(),
+    location: z.string().nullable(),
+    price: z.object({
+      text: z.string(),
+      amount: z.number().nullable(),
+      currency: z.string(),
+    }).nullable(),
+    saleDetails: z.string().nullable(),
+    citations: z.array(z.object({ text: z.string() })),
+    uncertain: z.boolean(),
+  })).nullable(),
   error: z.string().optional(),
 };
 

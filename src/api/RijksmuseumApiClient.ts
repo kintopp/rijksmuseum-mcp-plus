@@ -25,6 +25,7 @@ import {
   DigitalObject,
   IIIFInfoResponse,
 } from "../types.js";
+import { parseProvenance } from "../provenance.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -891,6 +892,11 @@ export class RijksmuseumApiClient {
     const bibliographyCount =
       RijksmuseumApiClient.parseBibliographyCount(obj);
 
+    // Provenance chain: parse AAM punctuation convention free text
+    const provenanceChain = base.provenance
+      ? parseProvenance(base.provenance).events
+      : null;
+
     // Group B: vocabulary resolution
     const vocab = await this.resolveVocabulary(obj);
 
@@ -915,6 +921,7 @@ export class RijksmuseumApiClient {
       collectionSetLabels: vocab.collectionSetLabels,
       subjects: vocab.subjects,
       bibliographyCount,
+      provenanceChain,
     };
   }
 
