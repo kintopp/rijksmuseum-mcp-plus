@@ -249,6 +249,14 @@ function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string
   else if (d.curatorialNarrative.nl) lines.push(`[Narrative] ${d.curatorialNarrative.nl}`);
   if (d.inscriptions.length) lines.push(`[Inscriptions] ${d.inscriptions.join("; ")}`);
   if (d.provenance) lines.push(`[Provenance] ${d.provenance}`);
+  if (d.provenanceChain?.length) {
+    const count = d.provenanceChain.length;
+    const gaps = d.provenanceChain.filter(e => e.gap).length;
+    const first = d.provenanceChain[0];
+    const last = d.provenanceChain[count - 1];
+    const span = [first?.date?.text, last?.date?.text].filter(Boolean).join(" → ");
+    lines.push(`[Provenance parsed] ${count} events${gaps ? `, ${gaps} gaps` : ""}${span ? ` (${span})` : ""}`);
+  }
   if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
 
   if (d.bibliographyCount) lines.push(`\nBibliography: ${d.bibliographyCount} entries`);
@@ -478,6 +486,34 @@ const ArtworkDetailOutput = {
     depictedPlaces: z.array(ResolvedTermShape()),
   }),
   bibliographyCount: z.number().int(),
+  provenanceChain: z.array(z.object({
+    sequence: z.number().int(),
+    rawText: z.string(),
+    gap: z.boolean(),
+    party: z.object({
+      name: z.string(),
+      dates: z.string().nullable(),
+      uncertain: z.boolean(),
+      role: z.string().nullable(),
+    }).nullable(),
+    transferType: z.enum(["sale", "inheritance", "bequest", "commission", "purchase",
+      "confiscation", "recuperation", "loan", "transfer", "collection", "gift", "unknown"]),
+    date: z.object({
+      text: z.string(),
+      year: z.number().int().nullable(),
+      approximate: z.boolean(),
+      qualifier: z.enum(["before", "after", "circa"]).nullable(),
+    }).nullable(),
+    location: z.string().nullable(),
+    price: z.object({
+      text: z.string(),
+      amount: z.number().nullable(),
+      currency: z.string(),
+    }).nullable(),
+    saleDetails: z.string().nullable(),
+    citations: z.array(z.object({ text: z.string() })),
+    uncertain: z.boolean(),
+  })).nullable(),
   error: z.string().optional(),
 };
 
