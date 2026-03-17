@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, type DepictedSimilarResult } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -257,7 +257,7 @@ function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string
     const last = evts[count - 1];
     const years = evts.map(e => e.date?.year).filter((y): y is number => y != null);
     const span = years.length >= 2 ? `${Math.min(...years)}–${Math.max(...years)}` : years.length === 1 ? `${years[0]}` : "";
-    lines.push(`[Provenance parsed] ${count} events${gaps ? `, ${gaps} gap${gaps > 1 ? "s" : ""}` : ""}${span ? ` (${span})` : ""}`);
+    lines.push(`[Provenance parsed] ${count} events${gaps ? `, ${pluralize(gaps, "gap")}` : ""}${span ? ` (${span})` : ""}`);
 
     // Acquisition: how the museum got it (last event)
     if (last) {
@@ -270,8 +270,8 @@ function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string
     for (const e of evts) {
       if (e.transferType !== "unknown") typeCounts.set(e.transferType, (typeCounts.get(e.transferType) ?? 0) + 1);
     }
-    const notable = [...typeCounts.entries()].filter(([, n]) => n > 0).map(([t, n]) => n > 1 ? `${n} ${t}s` : t);
-    if (gaps) notable.push(`${gaps} gap${gaps > 1 ? "s" : ""}`);
+    const notable = [...typeCounts.entries()].filter(([, n]) => n > 0).map(([t, n]) => n > 1 ? pluralize(n, t) : t);
+    if (gaps) notable.push(pluralize(gaps, "gap"));
     if (notable.length) lines.push(`  Chain: ${notable.join(", ")}`);
     // Earliest known owner
     if (first?.party) {

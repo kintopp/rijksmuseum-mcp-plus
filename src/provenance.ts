@@ -248,7 +248,9 @@ export function parseDate(text: string): ProvenanceDate | null {
   const bareMatch = text.match(/(?:,\s*|\b)(\d{4})\b(?!\s*[-–]|\s*\))/);
   if (bareMatch) {
     // Verify it's not inside parenthetical life dates
-    const pos = text.indexOf(bareMatch[0]);
+    // Use bareMatch.index (not indexOf) — indexOf finds the first occurrence
+    // which may be inside a life-date span if the same year appears twice
+    const pos = bareMatch.index!;
     const before = text.slice(0, pos);
     const after = text.slice(pos + bareMatch[0].length);
     // Skip if it looks like life dates: "(1624-1674)"
@@ -471,8 +473,10 @@ export function parseEvent(
   // Clean up doubled spaces and trailing/leading punctuation
   working = working.replace(/\s{2,}/g, " ").trim();
 
-  // Detect and strip uncertainty marker so classifyTransfer/parseParty
-  // see clean text (e.g. "? Estate inventory" → "Estate inventory")
+  // Detect and strip uncertainty marker for classifyTransfer.
+  // Note: parseParty receives `working` (with `?`) because it strips `?`
+  // internally to set its own `uncertain` flag. Do NOT pass cleanedWorking
+  // to parseParty — that would skip the uncertainty detection.
   const uncertain = working.startsWith("?");
   const cleanedWorking = uncertain ? working.slice(1).trim() : working;
 
