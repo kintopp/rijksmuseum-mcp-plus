@@ -241,14 +241,14 @@ function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string
     });
     lines.push(`Production: ${parts.join("; ")}`);
     const primaryBio = d.production[0]?.personInfo?.bio;
-    if (primaryBio) lines.push(`Bio: ${truncate(primaryBio, 300)}`);
+    if (primaryBio) lines.push(`Bio: ${primaryBio}`);
   }
 
-  if (d.description) lines.push(`\n[Description] ${truncate(d.description, 200)}`);
-  if (d.curatorialNarrative.en) lines.push(`[Narrative] ${truncate(d.curatorialNarrative.en, 200)}`);
-  else if (d.curatorialNarrative.nl) lines.push(`[Narrative] ${truncate(d.curatorialNarrative.nl, 200)}`);
-  if (d.inscriptions.length) lines.push(`[Inscriptions] ${truncate(d.inscriptions.join("; "), 200)}`);
-  if (d.provenance) lines.push(`[Provenance] ${truncate(d.provenance, 200)}`);
+  if (d.description) lines.push(`\n[Description] ${d.description}`);
+  if (d.curatorialNarrative.en) lines.push(`[Narrative] ${d.curatorialNarrative.en}`);
+  else if (d.curatorialNarrative.nl) lines.push(`[Narrative] ${d.curatorialNarrative.nl}`);
+  if (d.inscriptions.length) lines.push(`[Inscriptions] ${d.inscriptions.join("; ")}`);
+  if (d.provenance) lines.push(`[Provenance] ${d.provenance}`);
   if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
 
   if (d.bibliographyCount) lines.push(`\nBibliography: ${d.bibliographyCount} entries`);
