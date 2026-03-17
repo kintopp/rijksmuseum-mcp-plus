@@ -269,61 +269,31 @@ export function parseDate(text: string): ProvenanceDate | null {
 
 // ─── 6. parsePrice ─────────────────────────────────────────────────
 
+/** Try matching a price pattern; return structured result or null. */
+function matchPrice(text: string, pattern: RegExp, currency: string): ProvenancePrice | null {
+  const m = text.match(pattern);
+  if (!m) return null;
+  return { text: m[0], amount: parseFloat(m[1].replace(/,/g, "")), currency };
+}
+
+// Price patterns: [regex with amount in group 1, currency label]
+const PRICE_RULES: [RegExp, string][] = [
+  [/fl\.\s*([\d,]+)/, "guilders"],
+  [/£\s*([\d,]+)/, "pounds"],
+  [/frs\.\s*([\d,]+)/, "francs"],
+  [/([\d,]+)\s*livres/i, "livres"],
+  [/([\d,]+)\s*Napol[eé]ons/i, "napoléons"],
+];
+
 /**
  * Extract price/currency from a provenance segment.
  * Handles: fl., £, frs., livres, Napoléons.
  */
 export function parsePrice(text: string): ProvenancePrice | null {
-  // Dutch guilders: "fl. 175", "fl. 550,000"
-  const flMatch = text.match(/fl\.\s*([\d,]+)/);
-  if (flMatch) {
-    return {
-      text: flMatch[0],
-      amount: parseFloat(flMatch[1].replace(/,/g, "")),
-      currency: "guilders",
-    };
+  for (const [pattern, currency] of PRICE_RULES) {
+    const result = matchPrice(text, pattern, currency);
+    if (result) return result;
   }
-
-  // British pounds: "£ 4,180,000" or "£4,180,000"
-  const poundMatch = text.match(/£\s*([\d,]+)/);
-  if (poundMatch) {
-    return {
-      text: poundMatch[0],
-      amount: parseFloat(poundMatch[1].replace(/,/g, "")),
-      currency: "pounds",
-    };
-  }
-
-  // French francs: "frs. 300,000"
-  const frsMatch = text.match(/frs\.\s*([\d,]+)/);
-  if (frsMatch) {
-    return {
-      text: frsMatch[0],
-      amount: parseFloat(frsMatch[1].replace(/,/g, "")),
-      currency: "francs",
-    };
-  }
-
-  // Livres: "24,000 livres"
-  const livresMatch = text.match(/([\d,]+)\s*livres/i);
-  if (livresMatch) {
-    return {
-      text: livresMatch[0],
-      amount: parseFloat(livresMatch[1].replace(/,/g, "")),
-      currency: "livres",
-    };
-  }
-
-  // Napoléons: "8,000 Napoléons"
-  const napMatch = text.match(/([\d,]+)\s*Napol[eé]ons/i);
-  if (napMatch) {
-    return {
-      text: napMatch[0],
-      amount: parseFloat(napMatch[1].replace(/,/g, "")),
-      currency: "napoléons",
-    };
-  }
-
   return null;
 }
 
@@ -332,6 +302,18 @@ export function parsePrice(text: string): ProvenancePrice | null {
 // Anaphoric role patterns: "his son", "her widower", "their sons", "his grandson", etc.
 const ANAPHORA_PATTERN =
   /^(?:\?\s*)?(his|her|their)\s+(sons?|daughters?|widower|widow|husband|nephew|niece|grandson|granddaughter)/i;
+
+/** Try extracting a party by matching a keyword prefix and extracting name+dates after it. */
+function tryKeywordParty(
+  working: string, pattern: RegExp, role: string, uncertain: boolean, anchored = true
+): ProvenanceParty | null {
+  const m = working.match(pattern);
+  if (!m) return null;
+  const offset = anchored ? m[0].length : m.index! + m[0].length;
+  const nameAndDates = extractNameAndDates(working.slice(offset));
+  if (!nameAndDates) return null;
+  return { ...nameAndDates, uncertain, role };
+}
 
 /**
  * Extract the owner/party from a provenance segment.
@@ -361,139 +343,53 @@ export function parseParty(text: string): ProvenanceParty | null {
     return { name: afterRole.split(",")[0].trim(), dates: null, uncertain, role };
   }
 
-  // "Commissioned by <Name>"
-  const commMatch = working.match(/^[Cc]ommissioned by\s+/);
-  if (commMatch) {
-    const afterKeyword = working.slice(commMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "patron" };
-    }
-  }
+  // Keyword-based extraction (anchored patterns — match at start of text)
+  const keywordResult =
+    tryKeywordParty(working, /^[Cc]ommissioned by\s+/, "patron", uncertain) ||
+    tryKeywordParty(working, /^sale\s+(?:\[(?:section\s+)?)?/i, "seller", uncertain) ||
+    tryKeywordParty(working, /^collection\s+/i, "collector", uncertain) ||
+    tryKeywordParty(working, /^estate inventory(?:\s+of(?:\s+(?:his|her|their))?)?,?\s*/i, "deceased", uncertain) ||
+    tryKeywordParty(working, /^by whom\s+(?:(?:probably\s+)?sold\s+)?to\s+/i, "buyer", uncertain) ||
+    tryKeywordParty(working, /^bought by\s+(?:the\s+)?(?:dealer\s+)?/i, "buyer", uncertain) ||
+    tryKeywordParty(working, /^(?:given|presented) by\s+(?:the\s+)?/i, "donor", uncertain);
+  if (keywordResult) return keywordResult;
 
-  // "from whom purchased by <Name>"
-  const fromWhomMatch = working.match(
-    /from whom(?:\s+purchased)?\s+by\s+(?:the\s+)?(?:dealer\s+)?/i
+  // "from whom purchased by <Name>" — non-anchored (may appear mid-text), with early return on failure
+  const fromWhomResult = tryKeywordParty(
+    working, /from whom(?:\s+purchased)?\s+by\s+(?:the\s+)?(?:dealer\s+)?/i, "buyer", uncertain, false
   );
-  if (fromWhomMatch) {
-    const afterKeyword = working.slice(fromWhomMatch.index! + fromWhomMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "buyer" };
-    }
-    // "from whom" matched but name extraction failed — don't fall through
-    // to the "purchased by" branch which would re-match at the wrong offset
-    return null;
-  }
+  if (fromWhomResult) return fromWhomResult;
+  if (/from whom(?:\s+purchased)?\s+by\b/i.test(working)) return null;
 
-  // "purchased by <Name>" (only when "from whom" didn't match)
-  const purchasedByMatch = working.match(/purchased by\s+(?:the\s+)?(?:museum|dealer\s+)?/i);
-  if (purchasedByMatch) {
-    const afterKeyword = working.slice(purchasedByMatch.index! + purchasedByMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "buyer" };
-    }
-  }
-
-  // "sale <Name>" or "sale [section <Name>]"
-  const saleMatch = working.match(
-    /^sale\s+(?:\[(?:section\s+)?)?/i
+  // "purchased by <Name>" — non-anchored (only when "from whom" didn't match above)
+  const purchasedResult = tryKeywordParty(
+    working, /purchased by\s+(?:the\s+)?(?:museum|dealer\s+)?/i, "buyer", uncertain, false
   );
-  if (saleMatch) {
-    const afterKeyword = working.slice(saleMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "seller" };
-    }
-  }
+  if (purchasedResult) return purchasedResult;
 
-  // "collection <Name>"
-  const collMatch = working.match(/^collection\s+/i);
-  if (collMatch) {
-    const afterKeyword = working.slice(collMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "collector" };
-    }
-  }
-
-  // "estate inventory ..." — extract the person
-  const estateMatch = working.match(
-    /^estate inventory(?:\s+of(?:\s+(?:his|her|their))?)?,?\s*/i
+  // "to <Name>" buyer at end after price — non-anchored
+  const toBuyerResult = tryKeywordParty(
+    working, /,\s+to\s+(?:the\s+)?(?:dealer[s]?\s+)?/i, "buyer", uncertain, false
   );
-  if (estateMatch) {
-    const afterKeyword = working.slice(estateMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "deceased" };
-    }
-  }
-
-  // "to <Name>" buyer at end after price — look for ", to <Name>"
-  const toBuyerMatch = working.match(/,\s+to\s+(?:the\s+)?(?:dealer[s]?\s+)?/i);
-  if (toBuyerMatch) {
-    const afterTo = working.slice(toBuyerMatch.index! + toBuyerMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterTo);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "buyer" };
-    }
-  }
-
-  // "by whom sold to <Name>" or "by whom to <Name>"
-  const byWhomMatch = working.match(/^by whom\s+(?:(?:probably\s+)?sold\s+)?to\s+/i);
-  if (byWhomMatch) {
-    const afterKeyword = working.slice(byWhomMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "buyer" };
-    }
-  }
+  if (toBuyerResult) return toBuyerResult;
 
   // "by whom sold, YEAR" (no explicit buyer)
   if (/^by whom\b/i.test(working)) return null;
 
-  // "from the dealer <Name>, to the museum"
-  const fromDealerMatch = working.match(/^from the (?:dealer\s+)?/i);
+  // "from the dealer <Name>, to ..." — require "dealer" or negative lookahead to avoid
+  // false matches on "from the collection of..." / "from the estate of..."
+  const fromDealerMatch = working.match(/^from the (?!collection\b|estate\b|heirs?\b)(?:dealer\s+)?/i);
   if (fromDealerMatch && /\bto\b/i.test(working)) {
-    const afterKeyword = working.slice(fromDealerMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
+    const nameAndDates = extractNameAndDates(working.slice(fromDealerMatch[0].length));
     if (nameAndDates) {
       return { ...nameAndDates, uncertain, role: "seller" };
     }
   }
 
-  // "bought by <Name>"
-  const boughtMatch = working.match(/^bought by\s+(?:the\s+)?(?:dealer\s+)?/i);
-  if (boughtMatch) {
-    const afterKeyword = working.slice(boughtMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "buyer" };
-    }
-  }
-
-  // "given by <Name>" / "presented by <Name>"
-  const givenMatch = working.match(/^(?:given|presented) by\s+(?:the\s+)?/i);
-  if (givenMatch) {
-    const afterKeyword = working.slice(givenMatch[0].length);
-    const nameAndDates = extractNameAndDates(afterKeyword);
-    if (nameAndDates) {
-      return { ...nameAndDates, uncertain, role: "donor" };
-    }
-  }
-
-  // "with an art dealer" / "with a dealer"
-  const withDealerMatch = working.match(/^with an?\s+(?:art\s+)?dealer\b/i);
-  if (withDealerMatch) return null;
-
-  // "war recuperation" — no person
+  // Patterns with no person to extract
+  if (/^with an?\s+(?:art\s+)?dealer\b/i.test(working)) return null;
   if (/^war recuperation/i.test(working)) return null;
-
-  // "on loan" — no specific person to extract as primary
   if (/^on loan/i.test(working)) return null;
-
-  // "transferred to" — no specific person
   if (/^transferred to/i.test(working)) return null;
 
   // Generic: first name with optional dates
