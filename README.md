@@ -40,7 +40,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 11. **Find Similar** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
 
-12. **Structured outputs** — As most of the data provided by rijksmuseum-mcp+ is in structured form, it's often straightforward for the AI assistant to also represent or export these in a structured manner (e.g. tabular formats) or draw on them for follow-up tasks, such as visualizations or other analyses.
+12. **Well-formatted text outputs** — rijksmuseum-mcp+ returns consistently structured text with labeled fields, numbered lists, and compact summaries. This makes it straightforward for the AI assistant to extract, reformat, or tabulate the data — for example, building comparison tables, exporting to CSV, or drawing on specific fields for follow-up analyses and visualizations.
 
 <br>
 <p align="center"><img src="docs/places-near-basel.png" alt="Artworks from the Rijksmuseum depicting places within 100km of Basel" width="500"></p>
