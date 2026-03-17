@@ -250,12 +250,36 @@ function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string
   if (d.inscriptions.length) lines.push(`[Inscriptions] ${d.inscriptions.join("; ")}`);
   if (d.provenance) lines.push(`[Provenance] ${d.provenance}`);
   if (d.provenanceChain?.length) {
-    const count = d.provenanceChain.length;
-    const gaps = d.provenanceChain.filter(e => e.gap).length;
-    const first = d.provenanceChain[0];
-    const last = d.provenanceChain[count - 1];
-    const span = [first?.date?.text, last?.date?.text].filter(Boolean).join(" → ");
-    lines.push(`[Provenance parsed] ${count} events${gaps ? `, ${gaps} gaps` : ""}${span ? ` (${span})` : ""}`);
+    const evts = d.provenanceChain;
+    const count = evts.length;
+    const gaps = evts.filter(e => e.gap).length;
+    const first = evts[0];
+    const last = evts[count - 1];
+    const years = evts.map(e => e.date?.year).filter((y): y is number => y != null);
+    const span = years.length >= 2 ? `${Math.min(...years)}–${Math.max(...years)}` : years.length === 1 ? `${years[0]}` : "";
+    lines.push(`[Provenance parsed] ${count} events${gaps ? `, ${gaps} gap${gaps > 1 ? "s" : ""}` : ""}${span ? ` (${span})` : ""}`);
+
+    // Acquisition: how the museum got it (last event)
+    if (last) {
+      const priceFmt = last.price ? `${last.price.currency} ${last.price.amount?.toLocaleString("en") ?? last.price.text}` : null;
+      const parts = [last.transferType !== "unknown" ? last.transferType : null, last.date?.text, priceFmt].filter(Boolean);
+      if (parts.length) lines.push(`  Acquired: ${parts.join(", ")}`);
+    }
+    // Chain shape: transfer type counts
+    const typeCounts = new Map<string, number>();
+    for (const e of evts) {
+      if (e.transferType !== "unknown") typeCounts.set(e.transferType, (typeCounts.get(e.transferType) ?? 0) + 1);
+    }
+    const notable = [...typeCounts.entries()].filter(([, n]) => n > 0).map(([t, n]) => n > 1 ? `${n} ${t}s` : t);
+    if (gaps) notable.push(`${gaps} gap${gaps > 1 ? "s" : ""}`);
+    if (notable.length) lines.push(`  Chain: ${notable.join(", ")}`);
+    // Earliest known owner
+    if (first?.party) {
+      let earliest = first.party.name;
+      if (first.location) earliest += `, ${first.location}`;
+      if (first.uncertain) earliest += " (uncertain)";
+      lines.push(`  Earliest: ${earliest}`);
+    }
   }
   if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
 
