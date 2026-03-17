@@ -25,6 +25,7 @@ import {
   DigitalObject,
   IIIFInfoResponse,
 } from "../types.js";
+import { parseProvenance } from "../provenance.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -892,7 +893,6 @@ export class RijksmuseumApiClient {
       RijksmuseumApiClient.parseBibliographyCount(obj);
 
     // Provenance chain: parse AAM punctuation convention free text
-    const { parseProvenance } = await import("../provenance.js");
     const provenanceChain = base.provenance
       ? parseProvenance(base.provenance).events
       : null;

@@ -169,11 +169,13 @@ const TRANSFER_RULES: [RegExp, TransferType][] = [
   [/on loan/i, "loan"],
   [/transferred to/i, "transfer"],
   [/bequest|bequeathed/i, "bequest"],
-  [/(?:his|her|their) sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[/i, "sale"],
-  [/purchased by|from whom purchased|from whose heirs.*to the museum/i, "purchase"],
-  [/\bhis son\b|\bher son\b|\btheir son\b|\bdaughter\b|\bwidower\b|\bwidow\b|\bby descent\b|\bher husband\b|\bher nephew\b/i, "inheritance"],
-  [/\bcollection\b/i, "collection"],
-  [/donated|gift\b/i, "gift"],
+  [/(?:his|her|their) sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
+  [/purchased by|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "purchase"],
+  [/from whom,.*\bto\b|by whom to\b|\bfrom the dealer\b|\bfrom (?:Count|Baron|Prince|Marchesa|Conte)\b.*\bto\b/i, "sale"],
+  [/\bhis sons?\b|\bher sons?\b|\btheir sons?\b|\bdaughter\b|\bwidower\b|\bwidow\b|\bby descent\b|\bher husband\b|\bher nephew\b|\bhis grandson\b|\bher grandson\b/i, "inheritance"],
+  [/\bcollection\b|\bwith an? (?:art )?dealer\b/i, "collection"],
+  [/\bdonated\b|\bgift\b|\bgiven by\b|\bpresented by\b/i, "gift"],
+  [/\bestate inventory\b/i, "collection"],
 ];
 
 /** Classify the transfer type of a provenance segment using keyword priority. */
@@ -186,9 +188,11 @@ export function classifyTransfer(text: string): TransferType {
 
 // ─── 5. parseDate ──────────────────────────────────────────────────
 
-// Months for date matching
+// Pre-compiled date patterns (avoid per-call RegExp construction)
 const MONTHS =
   "January|February|March|April|May|June|July|August|September|October|November|December";
+const RE_EXACT_DATE = new RegExp(`(\\d{1,2})\\s+(${MONTHS})\\s+(\\d{4})`);
+const RE_MONTH_YEAR = new RegExp(`(${MONTHS})\\s+(\\d{4})`);
 
 /**
  * Extract the most prominent date from a provenance segment.
@@ -196,9 +200,7 @@ const MONTHS =
  */
 export function parseDate(text: string): ProvenanceDate | null {
   // Exact date: "16 May 1696" or "8 July 1992"
-  const exactMatch = text.match(
-    new RegExp(`(\\d{1,2})\\s+(${MONTHS})\\s+(\\d{4})`)
-  );
+  const exactMatch = text.match(RE_EXACT_DATE);
   if (exactMatch) {
     return {
       text: exactMatch[0],
@@ -207,11 +209,6 @@ export function parseDate(text: string): ProvenanceDate | null {
       qualifier: null,
     };
   }
-
-  // Month + year without day: "November 1923", "June 1948", "December 1992"
-  const monthYearMatch = text.match(
-    new RegExp(`(${MONTHS})\\s+(\\d{4})`)
-  );
 
   // Before/after year: "before 1860", "after 1752"
   const qualMatch = text.match(/\b(before|after)\s+(\d{4})\b/i);
@@ -236,6 +233,7 @@ export function parseDate(text: string): ProvenanceDate | null {
   }
 
   // Month+year (after qualifiers to avoid false matches on ranges)
+  const monthYearMatch = text.match(RE_MONTH_YEAR);
   if (monthYearMatch) {
     return {
       text: monthYearMatch[0],
@@ -273,7 +271,7 @@ export function parseDate(text: string): ProvenanceDate | null {
 
 /**
  * Extract price/currency from a provenance segment.
- * Handles: fl. N, £ N, N Napoléons.
+ * Handles: fl., £, frs., livres, Napoléons.
  */
 export function parsePrice(text: string): ProvenancePrice | null {
   // Dutch guilders: "fl. 175", "fl. 550,000"
@@ -296,6 +294,26 @@ export function parsePrice(text: string): ProvenancePrice | null {
     };
   }
 
+  // French francs: "frs. 300,000"
+  const frsMatch = text.match(/frs\.\s*([\d,]+)/);
+  if (frsMatch) {
+    return {
+      text: frsMatch[0],
+      amount: parseFloat(frsMatch[1].replace(/,/g, "")),
+      currency: "francs",
+    };
+  }
+
+  // Livres: "24,000 livres"
+  const livresMatch = text.match(/([\d,]+)\s*livres/i);
+  if (livresMatch) {
+    return {
+      text: livresMatch[0],
+      amount: parseFloat(livresMatch[1].replace(/,/g, "")),
+      currency: "livres",
+    };
+  }
+
   // Napoléons: "8,000 Napoléons"
   const napMatch = text.match(/([\d,]+)\s*Napol[eé]ons/i);
   if (napMatch) {
@@ -311,9 +329,9 @@ export function parsePrice(text: string): ProvenancePrice | null {
 
 // ─── 7. parseParty ─────────────────────────────────────────────────
 
-// Anaphoric role patterns: "his son", "her widower", "their son", etc.
+// Anaphoric role patterns: "his son", "her widower", "their sons", "his grandson", etc.
 const ANAPHORA_PATTERN =
-  /^(?:\?\s*)?(his|her|their)\s+(son|daughter|widower|widow|husband|nephew)/i;
+  /^(?:\?\s*)?(his|her|their)\s+(sons?|daughters?|widower|widow|husband|nephew|niece|grandson|granddaughter)/i;
 
 /**
  * Extract the owner/party from a provenance segment.
@@ -363,11 +381,14 @@ export function parseParty(text: string): ProvenanceParty | null {
     if (nameAndDates) {
       return { ...nameAndDates, uncertain, role: "buyer" };
     }
+    // "from whom" matched but name extraction failed — don't fall through
+    // to the "purchased by" branch which would re-match at the wrong offset
+    return null;
   }
 
-  // "purchased by <Name>" (without "from whom")
+  // "purchased by <Name>" (only when "from whom" didn't match)
   const purchasedByMatch = working.match(/purchased by\s+(?:the\s+)?(?:museum|dealer\s+)?/i);
-  if (purchasedByMatch && !fromWhomMatch) {
+  if (purchasedByMatch) {
     const afterKeyword = working.slice(purchasedByMatch.index! + purchasedByMatch[0].length);
     const nameAndDates = extractNameAndDates(afterKeyword);
     if (nameAndDates) {
@@ -419,6 +440,53 @@ export function parseParty(text: string): ProvenanceParty | null {
     }
   }
 
+  // "by whom sold to <Name>" or "by whom to <Name>"
+  const byWhomMatch = working.match(/^by whom\s+(?:(?:probably\s+)?sold\s+)?to\s+/i);
+  if (byWhomMatch) {
+    const afterKeyword = working.slice(byWhomMatch[0].length);
+    const nameAndDates = extractNameAndDates(afterKeyword);
+    if (nameAndDates) {
+      return { ...nameAndDates, uncertain, role: "buyer" };
+    }
+  }
+
+  // "by whom sold, YEAR" (no explicit buyer)
+  if (/^by whom\b/i.test(working)) return null;
+
+  // "from the dealer <Name>, to the museum"
+  const fromDealerMatch = working.match(/^from the (?:dealer\s+)?/i);
+  if (fromDealerMatch && /\bto\b/i.test(working)) {
+    const afterKeyword = working.slice(fromDealerMatch[0].length);
+    const nameAndDates = extractNameAndDates(afterKeyword);
+    if (nameAndDates) {
+      return { ...nameAndDates, uncertain, role: "seller" };
+    }
+  }
+
+  // "bought by <Name>"
+  const boughtMatch = working.match(/^bought by\s+(?:the\s+)?(?:dealer\s+)?/i);
+  if (boughtMatch) {
+    const afterKeyword = working.slice(boughtMatch[0].length);
+    const nameAndDates = extractNameAndDates(afterKeyword);
+    if (nameAndDates) {
+      return { ...nameAndDates, uncertain, role: "buyer" };
+    }
+  }
+
+  // "given by <Name>" / "presented by <Name>"
+  const givenMatch = working.match(/^(?:given|presented) by\s+(?:the\s+)?/i);
+  if (givenMatch) {
+    const afterKeyword = working.slice(givenMatch[0].length);
+    const nameAndDates = extractNameAndDates(afterKeyword);
+    if (nameAndDates) {
+      return { ...nameAndDates, uncertain, role: "donor" };
+    }
+  }
+
+  // "with an art dealer" / "with a dealer"
+  const withDealerMatch = working.match(/^with an?\s+(?:art\s+)?dealer\b/i);
+  if (withDealerMatch) return null;
+
   // "war recuperation" — no person
   if (/^war recuperation/i.test(working)) return null;
 
@@ -468,18 +536,17 @@ function extractNameAndDates(
 
 // ─── 8. parseLocation ──────────────────────────────────────────────
 
+// Known city/region names that appear in Rijksmuseum provenance
+const RE_CITIES =
+  /\b(Amsterdam|Delft|The Hague|London|Paris|Venice|Rotterdam|Brussels|Wassenaar|Montreux|Buckinghamshire|Hertfordshire|Northampton|Edinburgh|Linz|Soho Square|Madrid|Rome|Florence|Berlin|Vienna|Munich|Stockholm|St Petersburg|New York|Hilversum|Aerdenhout|Haarlem|Leiden|Utrecht|Antwerp|Watergraafsmeer)\b/;
+
 /**
  * Extract location from a provenance segment.
  * Location typically follows name+dates, separated by comma.
  */
 export function parseLocation(text: string): string | null {
-  // Known city names that appear in Rijksmuseum provenance
-  const CITIES =
-    /\b(Amsterdam|Delft|The Hague|London|Paris|Venice|Rotterdam|Brussels|Wassenaar|Montreux|Buckinghamshire|Hertfordshire|Northampton|Edinburgh|Linz|Soho Square)\b/;
-
-  const match = text.match(CITIES);
-  if (match) return match[1];
-  return null;
+  const match = text.match(RE_CITIES);
+  return match ? match[1] : null;
 }
 
 // ─── 9. parseEvent ─────────────────────────────────────────────────
@@ -508,8 +575,10 @@ export function parseEvent(
   // Clean up doubled spaces and trailing/leading punctuation
   working = working.replace(/\s{2,}/g, " ").trim();
 
-  // Detect uncertainty marker
+  // Detect and strip uncertainty marker so classifyTransfer/parseParty
+  // see clean text (e.g. "? Estate inventory" → "Estate inventory")
   const uncertain = working.startsWith("?");
+  const cleanedWorking = uncertain ? working.slice(1).trim() : working;
 
   // Extract sale details (lot number, auction house)
   let saleDetails: string | null = null;
@@ -527,7 +596,7 @@ export function parseEvent(
     rawText: restoreCitations(rawText, citationMap),
     gap: segment.gap,
     party: parseParty(working),
-    transferType: classifyTransfer(working),
+    transferType: classifyTransfer(cleanedWorking),
     date: parseDate(working),
     location: parseLocation(working),
     price: parsePrice(working),

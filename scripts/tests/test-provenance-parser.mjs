@@ -456,6 +456,151 @@ section("11. Edge cases");
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  Section 12: Expanded transfer classification (audit-driven)
+// ══════════════════════════════════════════════════════════════════
+
+section("12. Expanded transfer classification");
+
+// "by whom sold" → sale
+assertEq(classifyTransfer("by whom sold to Edward Gray"), "sale", "by whom sold → sale");
+assertEq(classifyTransfer("by whom sold, 1883"), "sale", "by whom sold (no buyer) → sale");
+
+// "bought by" → purchase
+assertEq(classifyTransfer("bought by Mr Carter, for Henry Doetsch"), "purchase", "bought by → purchase");
+
+// "from whom, fl. X, to Y" → sale
+assertEq(classifyTransfer("from whom, fl. 4,000, to Jeronimo de Vries"), "sale", "from whom + price + to → sale");
+assertEq(classifyTransfer("from whom, fl. 1,800,000, to the museum"), "sale", "from whom + to museum → sale");
+
+// "given by" / "presented by" → gift
+assertEq(classifyTransfer("Given by the artist to Andries Bonger"), "gift", "given by → gift");
+assertEq(classifyTransfer("Presented by the artist to the sitter"), "gift", "presented by → gift");
+
+// "with an art dealer" → collection
+assertEq(classifyTransfer("with an art dealer, Paris"), "collection", "with art dealer → collection");
+
+// "estate inventory" → collection (after ? stripping)
+assertEq(classifyTransfer("Estate inventory, Eberhard Jabach"), "collection", "Estate inventory → collection");
+
+// "his grandson" → inheritance
+assertEq(classifyTransfer("his grandson, Count Sergei"), "inheritance", "his grandson → inheritance");
+
+// "his sons" (plural) → inheritance
+assertEq(classifyTransfer("his sons, Jonkheer Jan Pieter Six and Jonkheer Pieter Hendrik Six"), "inheritance", "his sons (plural) → inheritance");
+
+// ══════════════════════════════════════════════════════════════════
+//  Section 13: Expanded price parsing
+// ══════════════════════════════════════════════════════════════════
+
+section("13. Expanded price parsing");
+
+{
+  const p = parsePrice("frs. 300,000");
+  assertEq(p?.amount, 300000, "francs amount");
+  assertEq(p?.currency, "francs", "francs currency");
+}
+
+{
+  const p = parsePrice("24,000 livres");
+  assertEq(p?.amount, 24000, "livres amount");
+  assertEq(p?.currency, "livres", "livres currency");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  Section 14: Expanded party parsing
+// ══════════════════════════════════════════════════════════════════
+
+section("14. Expanded party parsing");
+
+{
+  const p = parseParty("by whom sold to Edward Gray (?-1838), Harrington");
+  assertEq(p?.role, "buyer", "by whom sold → buyer role");
+  assert(p?.name?.includes("Edward Gray"), "buyer name from 'by whom sold to'");
+  assertEq(p?.dates, "?-1838", "buyer dates");
+}
+
+{
+  const p = parseParty("bought by Mr Carter, for Henry Doetsch");
+  assertEq(p?.role, "buyer", "bought by → buyer role");
+  assert(p?.name?.includes("Mr Carter"), "bought by name");
+}
+
+{
+  const p = parseParty("Given by the artist to Andries Bonger (1861-1936), Hilversum");
+  assertEq(p?.role, "donor", "given by → donor role");
+  assert(p?.name?.includes("artist"), "donor name");
+}
+
+{
+  const p = parseParty("his grandson, Count Sergei Alexandrovich Stroganoff (1852-1923), St Petersburg");
+  assertEq(p?.role, "his grandson", "grandson anaphoric role");
+  assert(p?.name?.includes("Stroganoff"), "grandson name");
+  assertEq(p?.dates, "1852-1923", "grandson dates");
+}
+
+{
+  const p = parseParty("his sons, Jonkheer Jan Pieter Six (1824-1899), Lord of Hillegom");
+  assertEq(p?.role, "his sons", "sons (plural) anaphoric role");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  Section 15: Uncertainty stripping for classifyTransfer
+// ══════════════════════════════════════════════════════════════════
+
+section("15. Uncertainty + classification");
+
+{
+  // "? Estate inventory" — the ? should be stripped before classification
+  const chain = parseProvenance("? Estate inventory, Eberhard Jabach (1618-95), Paris, 17 July 1696");
+  assertEq(chain.events[0].uncertain, true, "? prefix → uncertain");
+  assertEq(chain.events[0].transferType, "collection", "? Estate inventory → collection (? stripped)");
+}
+
+{
+  // "? Presented by" — gift with uncertainty
+  const chain = parseProvenance("? Presented by the artist to Don Ramón Satué, Madrid, 1823");
+  assertEq(chain.events[0].transferType, "gift", "? Presented by → gift");
+  assertEq(chain.events[0].uncertain, true, "uncertain gift");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  Section 16: Expanded locations
+// ══════════════════════════════════════════════════════════════════
+
+section("16. Expanded locations");
+
+assertEq(parseLocation("Count Stroganoff, St Petersburg"), "St Petersburg", "St Petersburg");
+assertEq(parseLocation("Don Ramón Satué, Madrid, 1823"), "Madrid", "Madrid");
+assertEq(parseLocation("Duveen Brothers, London and New York"), "London", "London (first match)");
+assertEq(parseLocation("Andries Bonger, Hilversum"), "Hilversum", "Hilversum");
+assertEq(parseLocation("Palazzo Manfrin, Venice"), "Venice", "Venice unchanged");
+
+// ══════════════════════════════════════════════════════════════════
+//  Section 17: Additional transfer patterns (second audit round)
+// ══════════════════════════════════════════════════════════════════
+
+section("17. Additional transfer patterns");
+
+assertEq(classifyTransfer("by whom to Duveen Brothers, London and New York, 1919"), "sale", "by whom to → sale");
+assertEq(classifyTransfer("from the dealer Christian Josi, to the museum, fl. 600"), "sale", "from the dealer + to → sale");
+assertEq(
+  classifyTransfer("from Count Alexander Sergeievich Stroganoff, with two other paintings, 24,000 livres, to Count Alexander"),
+  "sale", "from Count + to Count → sale"
+);
+
+{
+  const p = parseParty("by whom to Duveen Brothers, London and New York, 1919");
+  assertEq(p?.role, "buyer", "by whom to → buyer");
+  assert(p?.name?.includes("Duveen"), "buyer name Duveen");
+}
+
+{
+  const p = parseParty("from the dealer Christian Josi, to the museum, fl. 600, 1824");
+  assertEq(p?.role, "seller", "from the dealer → seller");
+  assert(p?.name?.includes("Christian Josi"), "seller name Josi");
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 
