@@ -24,21 +24,17 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 3. **Spatial dimensions** — proximity radius searches on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable spatial queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters (`nearLat` and `nearLon`) to enable spatial queries from arbitrary locations ("find artworks depicting places near me").
 
-4. **Smart searching and ranking** — English subject-based queries use morphological stemming (plurals, gerunds, past tenses) to make search term more forgiving. Large result sets that need to be truncated include faceted counts to allow the AI assistant to suggest additional filters. Textual queries are ranked by relevance instead of catalogue order, while filter-only queries are ordered by their expected importance to most users (drawing on image availability, metadata richness, and `curatorialNarrative`). 
+4. **Smart searching and relevance ranking** — morphological stemming (e.g. singular/plural) to make subject searches more forgiving; automatic faceted counts on large search results to allow the AI assistant to suggest appropriate filters; textual queries ranked by relevance instead of catalogue order, and filter-only queries ranked by their expected importance to users. 
 
-5. **More metadata** — several metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection): `birthPlace` / `deathPlace`, `profession`, creator demographics (`gender`, `birth/death years`, `biographical notes`), title search across all 6 title variants (`title` — brief, full, former × EN/NL vs the website's brief titles only), and bibliography citations for individual artworks.
-
-6. **Iconclass** — access to its own [Iconclass](https://iconclass.org) database, cross-linked with the Rijksmuseum's metadata, which can be searched and explored not just by notation by also title, description, parent/child classes and semantically by concept.
+5. **More searchable metadata** — metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) including `creator` demographics, all 6 `title` variants (brief, full, former × EN/NL), bibliography citations for individual artworks, a linked [Iconclass](https://iconclass.org) database, cross-referenced with the Rijksmuseum's metadata, which can be explored by keyword, semantically, or by hierarchy.
 
 7. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (N.B. this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, rotate, flip horizontally or view the image full-screen.
 
-8. **AI image analysis** (experimental) — the AI assistant can analyse images visually in combination with its own background knowledge and the artwork's structured data (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?").
+8. **AI image analysis** — the AI assistant can analyse images visually in conjunction with the collection's metadata (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?").
 
-9. **AI image annotation** (experimental) - the AI assistant can annotate images in the interactive image viewer with elements it has recognised (e.g. "highlight the biblical scenes depicted in the painting's panels").
+9. **AI image annotation** - the AI assistant can zoom in and annotate images in the interactive image viewer (e.g. "highlight the biblical scenes depicted in the painting's panels"). Else, draw a rectangle around an area of interest to highlight it for the AI assistant (e.g. 'identify the species of butterfy highlighted in the still-life').
 
-10. **User image annotation** - draw a rectangle around an area of interest to highlight it for the AI assistant, then reference this in your query (e.g. 'identify the species of butterfy highlighted in the still-life').
-
-11. **Find similar artworks** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
+10. **Find similar artworks** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
 
 <br>
 <p align="center"><img src="docs/places-near-basel.png" alt="Artworks from the Rijksmuseum depicting places within 100km of Basel" width="500"></p>
@@ -55,7 +51,7 @@ Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it whatever
 
 Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector) - note: no authentication is required). It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local or cloud based LLMs, and agentic coding tools such as [Claude Code](https://github.com/anthropics/claude-code) or [OpenAI Codex](https://openai.com/codex/). In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
 
-However, **none can view and interact with images** from the Rijksmuseum's collections in the chat timeline. For this reason, the best way to use this MCP server remains [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). For complex object recognition tasks, switching to [Claude Opus](https://www.anthropic.com/claude/opus) with extended thinking will often produce better results.
+However, none of the above allow you to **view and interact with images** in the chat timeline. For this reason, the best way to use this MCP server remains [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). For complex object recognition tasks, switching to [Claude Opus](https://www.anthropic.com/claude/opus) with extended thinking will often produce better results.
 
 Note to developers: rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
 
@@ -86,29 +82,16 @@ For samples of more complex questions, please see the [research scenarios](docs/
 
 `to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo. 
 
-### Tips
+**Say what you are actually looking for, not how to find it.** The assistant generally does better when given a research question than a list of parameters. 
 
-**Say what you are actually looking for, not how to find it.** The assistant generally does better when given a research question than a list of parameters. "What prints were made after paintings by Rembrandt?" works better than "search for prints with technique etching by Rembrandt", because the first framing lets the assistant choose the right combination of tools and strategies.
+**Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. 
 
-**Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. This is especially useful for atmospheric or thematic queries. The assistant can also search Iconclass by concept — finding the right notation code by meaning rather than exact keyword — and then use that notation for a precise structured search.
-
-**The MCP server (rijksmuseum-mcp+) seems stuck**. If the server is not responding, it could be that it has been updated and the connection needs to be refreshed. To fix this, in your AI system's settings (e.g. in _Settings_ in Claude Desktop or claude.ai) disconnect and reconnect the server, and then click on _Configure_ to verify that all permissions are still correct. In other MCP clients, you may not be able to disconnect/reconnect. In that case, remove and add the server again.
-
-### Known Limitations
-
-**Text coverage and language vary by field.** About 61% of records include a cataloguer's description (in Dutch). Curatorial wall texts (in English) cover only about 14,000 artworks — mostly highlights and recent acquisitions. Because `description` is in Dutch, English search terms won't match — use `curatorialNarrative` for English full-text search, or `semantic_search` which works across languages. Structured vocabulary labels for subjects, types, materials, and techniques are bilingual for about 70% of terms (using [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) equivalents). Places, events, professions, and production roles are mostly Dutch-only — though major cities, countries, and common roles (e.g. "painter", "photographer") have English labels. The AI assistant knows to try the Dutch term when an English search returns no results (and vice versa).
-
-**Iconclass subject classification can be counterintuitive.** The Iconclass system assigns subjects to specific branches of a strict hierarchy that does not always match everyday expectations. However, the assistant can search Iconclass by concept as well as by keyword — describing what you're looking for in plain language (e.g. "domestic animals" or "religious suffering") will often find the right notation even when the exact vocabulary term is unknown.
-
-**Not all maker relation types are available.** The Rijksmuseum's [collection search](https://www.rijksmuseum.nl/en/collection) offers 16 maker sub-types (e.g. "Attributed to", "Made after", "Signed by", "Rejected maker"). rijksmuseum-mcp+ currently captures four of these as structured `attributionQualifier` values — "attributed to", "workshop of", "circle of", and "follower of". Three additional qualifiers ("after", "possibly", and a second "circle of" type) are present in the Linked Art data and will be added in a future update. The remaining sub-types ("Signed by", "Manner of", "Rejected maker", "Falsification after") are being looked at – these may not be available via the public Linked Art API. 
-
-**Image analysis works better than image annotation.** LLMs are generally more accurate at describing the contents of an image than annotating it. For example, the AI assistant will often correctly describe what it can 'see' (even drawing on the detailed `description` field for guidance) but struggle to place accurate bounding-boxes around this content.
+**Something isn't working right**. If the server is not responding or reporting an error, it could be that it has been updated and the connection needs to be refreshed. To fix this, either disconnect and reconnect the server or remove and add it again.
 
 ### Roadmap
 
 Soon:
 
-- review capabilities of MCP clients besides Anthropic's Claude
 - update documentation
 - fine-tune query strategies
 - v1.0 release
@@ -118,15 +101,16 @@ Later:
 
 - investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 - create a [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file for exploring the collection
+- review capabilities of MCP clients besides Anthropic's Claude
 - investigate exporting jpg/png from image viewer together with overlays
-- investigate 'influenced by artistic lineage' feature
 
 Maybe:
 
 - investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after" 
 - investigate incorporating historical exhibition data
+- investigate parsing provenance data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
-- investigate browsing all related images in the image viewer
+- investigate browsing related images in the image viewer
 - review remaining places without geolocation data
 
 ### Authors
