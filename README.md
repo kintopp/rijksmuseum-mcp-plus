@@ -36,7 +36,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 9. **AI image annotation** (experimental) - the AI assistant can annotate images in the interactive image viewer with elements it has recognised (e.g. "highlight the biblical scenes depicted in the painting's panels").
 
-10. **User image annotation** - click inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now click and draw a rectangle around an area of interest to you. You may be asked for permission to allow a prompt (with the coordinates of the area you selected) to be written into the chat. Then add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
+10. **User image annotation** - draw a rectangle around an area of interest to highlight it for the AI assistant, then reference this in your query (e.g. 'identify the species of butterfy highlighted in the still-life').
 
 11. **Find similar artworks** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
 
