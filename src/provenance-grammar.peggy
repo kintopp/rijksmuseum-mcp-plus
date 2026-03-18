@@ -185,8 +185,21 @@ EventBody
 // ─── Sale ───────────────────────────────────────────────────────────
 
 SaleEvent
-  = ("his"i / "her"i / "their"i) _ "sale" tail:Tail
+  = ("his"i / "her"i / "their"i) _ ("posthumous"i / "deceased"i)? _? "sale" tail:Tail
     { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest }; }
+  / "sold"i _ prep:("by"i / "to"i / "with"i) _ ("the"i _)? nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      const role = prep.toLowerCase() === "to" ? "buyer" : "seller";
+      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
+    }
+  / "through"i _ ("the"i _)? "mediation"i _ "of"i _ nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "intermediary" }, ...(rest.extraParties || [])] : [...(rest.extraParties || [])], ...rest, extraParties: undefined };
+    }
   / "sale"i _ "[" section:[^\]]* "]" tail:Tail
     { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest, saleSection: section.join("") }; }
   / "sale"i _ nameRaw:$([^,;]*) tail:Tail
@@ -222,19 +235,19 @@ ConfiscationEvent
 // ─── Loan ───────────────────────────────────────────────────────────
 
 LoanEvent
-  = "on"i _ "loan"i tail:Tail
+  = ("from"i _ ("which"i / "whom"i) _)? "on"i _ "loan"i tail:Tail
     { const rest = parseRest(tail); return { type: "loan", parties: [], ...rest }; }
 
 // ─── Transfer ───────────────────────────────────────────────────────
 
 TransferEvent
-  = "transferred"i _ "to"i tail:Tail
+  = "transfer"i "red"i? _ ("to"i / "from"i) tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
 
 // ─── Bequest ────────────────────────────────────────────────────────
 
 BequestEvent
-  = ("bequeathed"i _ "to"i / "bequest"i) _ nameRaw:$([^,;]*) tail:Tail
+  = ("bequeathed"i _ ("to"i / "by"i) / "by"i _ "bequest"i / "bequest"i) _ nameRaw:$([^,;]*) tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -264,11 +277,24 @@ PurchaseEvent
       const rest = parseRest(tail);
       return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
+  / "purchased"i _ "from"i _ nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
+      const rest = parseRest(tail);
+      const parties = nd && nd.name ? [{ ...nd, role: "seller" }] : [];
+      return { type: "purchase", parties: [...parties, ...(rest.extraParties || [])], ...rest, extraParties: undefined };
+    }
+  / "acquired"i _ ("by"i / "from"i / "in"i) _ ("the"i _)? nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
+      const rest = parseRest(tail);
+      return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
+    }
 
 // ─── Gift ───────────────────────────────────────────────────────────
 
 GiftEvent
-  = ("donated"i / "gift"i / "given"i / "presented"i) _ ("by"i _)? ("the"i _)? nameRaw:$([^,;]*) tail:Tail
+  = ("donated"i / "donation"i / "gift"i / "given"i / "presented"i / "dedicated"i / "schenking"i) _ ("by"i / "to"i / "of"i / "van"i)? _? ("the"i _)? nameRaw:$([^,;]*) tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -278,8 +304,12 @@ GiftEvent
 // ─── Exchange ───────────────────────────────────────────────────────
 
 ExchangeEvent
-  = "in"i _ "exchange"i _ "for"i tail:Tail
-    { const rest = parseRest(tail); return { type: "exchange", parties: [], ...rest }; }
+  = ("in"i _ "exchange"i / "exchanged"i) _ ("for"i / "with"i) _ nameRaw:$([^,;]*)? tail:Tail
+    {
+      const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
+      const rest = parseRest(tail);
+      return { type: "exchange", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+    }
 
 // ─── Restitution ────────────────────────────────────────────────────
 
@@ -294,7 +324,7 @@ RestitutionEvent
 // ─── Deposit ────────────────────────────────────────────────────────
 
 DepositEvent
-  = "on"i _ "deposit"i tail:Tail
+  = ("on"i _ "deposit"i / "stored"i / "deposited"i / "kept"i) tail:Tail
     { const rest = parseRest(tail); return { type: "deposit", parties: [], ...rest }; }
 
 // ─── Collection ─────────────────────────────────────────────────────
@@ -306,6 +336,14 @@ CollectionEvent
       const rest = parseRest(tail);
       return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "collector" }] : [], ...rest };
     }
+  / "ex"i "."? _ "coll"i "."? _ nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "collector" }] : [], ...rest };
+    }
+  / ("first"i / "last"i) _ ("recorded"i / "mentioned"i / "documented"i / "noted"i) tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
   / "with"i _ "an"i? _? ("art"i _)? "dealer"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
 
@@ -337,7 +375,18 @@ FromWhomEvent
       const rest = parseRest(tail);
       return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "seller" }] : [], ...rest };
     }
-  / "from"i _ ("the"i _)? !("collection"i / "estate"i / "heirs"i) nameRaw:$([^,;]*) tail:Tail
+  / "from"i _ ("the"i _)? "heirs"i _ ("of"i _)? nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role: "deceased" }, ...(rest.extraParties || [])] : [...(rest.extraParties || [])], ...rest, extraParties: undefined };
+    }
+  / "from"i _ "the"i _ "artist"i tail:Tail
+    {
+      const rest = parseRest(tail);
+      return { type: "sale", parties: [{ name: "the artist", dates: null, role: "seller" }, ...(rest.extraParties || [])], ...rest, extraParties: undefined };
+    }
+  / "from"i _ ("the"i _)? !("collection"i / "estate"i) nameRaw:$([^,;]*) tail:Tail
     &{ return /\bto\b/i.test(tail); }
     {
       const nd = extractNameAndDates(nameRaw);
@@ -362,7 +411,8 @@ AnaphoricEvent
 
 RelationWord "relation word"
   = $("sons"i / "son"i / "daughters"i / "daughter"i / "widower"i / "widow"i
-     / "husband"i / "nephew"i / "niece"i / "granddaughter"i / "grandson"i)
+     / "husband"i / "nephew"i / "niece"i / "granddaughter"i / "grandson"i
+     / "heirs"i / "heir"i)
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 

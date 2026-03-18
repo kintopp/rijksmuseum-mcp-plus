@@ -13,6 +13,7 @@ import {
   splitEvents,
   stripHtml,
   parseEvent,
+  classifyTransfer,
   type ProvenanceParty,
   type ProvenancePrice,
   type ProvenanceCitation,
@@ -57,12 +58,14 @@ export interface ParseProvenanceRawResult {
 // ─── Cross-reference detection ──────────────────────────────────────
 
 const CROSS_REF_PATTERN =
-  /(?:see|zie|see under|zie onder|same provenance as|dezelfde herkomst als)\s+(?:the provenance of\s+)?(?:inv\.\s*(?:no\.?\s*)?|cat\.\s*(?:no\.?\s*)?)?([A-Z]{1,3}[-\s]?[A-Z]?[-\s]?\d[\d\w.-]*)/i;
+  /(?:see|zie|see under|zie onder|same provenance as|dezelfde herkomst als)\s+(?:the provenance (?:of|for)\s+)?(?:inv\.\s*(?:no\.?\s*)?|cat\.\s*(?:no\.?\s*)?)?([A-Z]{1,3}[-\s]?[A-Z]?[-\s]?\d[\d\w.-]*)/i;
+const CROSS_REF_PATTERN_ALT =
+  /(?:for|voor)\s+the\s+provenance\s+(?:see|zie)\s+(?:inv\.\s*(?:no\.?\s*)?|cat\.\s*(?:no\.?\s*)?)?([A-Z]{1,3}[-\s]?[A-Z]?[-\s]?\d[\d\w.-]*)/i;
 
 function detectCrossReference(
   text: string
 ): { targetObjectNumber: string } | null {
-  const match = text.match(CROSS_REF_PATTERN);
+  const match = text.match(CROSS_REF_PATTERN) || text.match(CROSS_REF_PATTERN_ALT);
   if (match) return { targetObjectNumber: match[1].trim() };
   return null;
 }
@@ -253,6 +256,17 @@ export function parseProvenanceRaw(
       // PEG failed — fall back to regex parser
       event = regexFallbackToRawEvent(segment, sequence, citations);
       stats.fallback++;
+    }
+
+    // Post-PEG reclassification: when the PEG catch-all produces "unknown",
+    // try the regex classifier which matches keywords anywhere in the text
+    // (not just at the start). This catches mid-sentence keywords like
+    // "after closure... donated by..." that the prefix-only PEG grammar misses.
+    if (event.transferType === "unknown" && !event.isCrossRef && !event.gap) {
+      const reclassified = classifyTransfer(working);
+      if (reclassified !== "unknown") {
+        event.transferType = reclassified;
+      }
     }
 
     events.push(event);
