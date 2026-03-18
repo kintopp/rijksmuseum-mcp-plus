@@ -82,6 +82,8 @@ For samples of more complex questions, please see the [research scenarios](docs/
 
 `to be added` For now, please see [this file](docs/technical-guide.md) or consult the [DeepWiki entry](https://deepwiki.com/kintopp/rijksmuseum-mcp-plus) for this repo. 
 
+### Tips
+
 **Say what you are actually looking for, not how to find it.** The assistant generally does better when given a research question than a list of parameters. 
 
 **Try a concept search when structured filters return nothing useful.** If searching by subject, Iconclass, or description doesn't find what you're looking for, asking the assistant to try a concept search (semantic search) can find artworks by meaning rather than exact vocabulary terms. 
