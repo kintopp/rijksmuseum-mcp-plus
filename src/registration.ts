@@ -521,7 +521,8 @@ const ArtworkDetailOutput = {
       role: z.string().nullable(),
     }).nullable(),
     transferType: z.enum(["sale", "inheritance", "bequest", "commission", "purchase",
-      "confiscation", "recuperation", "loan", "transfer", "collection", "gift", "unknown"]),
+      "confiscation", "recuperation", "loan", "transfer", "collection", "gift",
+      "auction", "exchange", "deposit", "seizure", "restitution", "donation", "inventory", "unknown"]),
     date: z.object({
       text: z.string(),
       year: z.number().int().nullable(),

@@ -49,6 +49,13 @@ export type TransferType =
   | "transfer"
   | "collection"
   | "gift"
+  | "auction"
+  | "exchange"
+  | "deposit"
+  | "seizure"
+  | "restitution"
+  | "donation"
+  | "inventory"
   | "unknown";
 
 export interface ProvenanceEvent {
