@@ -134,20 +134,15 @@ const insertPeriod = (dryRun || layer1Only) ? null : db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
-// Fetch artworks with provenance (count for progress, iterate for memory efficiency)
-const countQuery = limit
-  ? `SELECT COUNT(*) AS cnt FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != '' LIMIT ?`
-  : `SELECT COUNT(*) AS cnt FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != ''`;
-const totalRows = limit
-  ? db.prepare(countQuery).get(limit).cnt
-  : db.prepare(countQuery).get().cnt;
-
-const dataQuery = limit
+// Fetch artworks with provenance
+// Using .all() not .iterate() — better-sqlite3 iterators hold an open cursor that
+// conflicts with transactions. 48K rows × short text ≈ 20MB, well within budget.
+const query = limit
   ? `SELECT art_id, provenance_text FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != '' LIMIT ?`
   : `SELECT art_id, provenance_text FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != ''`;
-const rows = limit ? db.prepare(dataQuery).iterate(limit) : db.prepare(dataQuery).iterate();
+const rows = limit ? db.prepare(query).all(limit) : db.prepare(query).all();
 
-console.log(`Found ${totalRows} artworks with provenance text\n`);
+console.log(`Found ${rows.length} artworks with provenance text\n`);
 
 // Stats
 let totalEvents = 0;
@@ -215,7 +210,7 @@ for (const row of rows) {
     batch = [];
     if (processed % 5000 < BATCH_SIZE) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`  ${processed}/${totalRows} (${elapsed}s)`);
+      console.log(`  ${processed}/${rows.length} (${elapsed}s)`);
     }
   }
 }
@@ -240,7 +235,7 @@ const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 console.log(`\n${"═".repeat(60)}`);
 console.log(`  Batch parse complete (${elapsed}s)`);
 console.log(`${"═".repeat(60)}`);
-console.log(`  Artworks:      ${processed}`);
+console.log(`  Artworks:      ${rows.length}`);
 console.log(`  Cross-refs:    ${crossRefs}`);
 console.log(`  Total events:  ${totalEvents}`);
 console.log(`  PEG parsed:    ${pegEvents} (${(100 * pegEvents / totalEvents).toFixed(1)}%)`);
