@@ -38,9 +38,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 10. **User image annotation** - click inside the image viewer to give it focus, then press `i` or click the rightmost button in the image viewer toolbar. This puts the viewer in `interactive` mode. Now click and draw a rectangle around an area of interest to you. You may be asked for permission to allow a prompt (with the coordinates of the area you selected) to be written into the chat. Then add your own prompt after it (e.g. 'what's inside the highlighted area' or simply 'what is that?').
 
-11. **Find Similar** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
-
-12. **Well-formatted text outputs** — rijksmuseum-mcp+ returns consistently structured text with labeled fields, numbered lists, and compact summaries. This makes it straightforward for the AI assistant to extract, reformat, or tabulate the data — for example, building comparison tables, exporting to CSV, or drawing on specific fields for follow-up analyses and visualizations.
+11. **Find similar artworks** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
 
 <br>
 <p align="center"><img src="docs/places-near-basel.png" alt="Artworks from the Rijksmuseum depicting places within 100km of Basel" width="500"></p>
