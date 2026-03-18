@@ -3,7 +3,7 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP_Protocol-2025--11--25-blue?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIzIi8+PC9zdmc+)](https://modelcontextprotocol.io/specification/2025-11-25)
 [![MCP Apps](https://img.shields.io/badge/MCP_Apps-v1.1.2-teal)](https://github.com/modelcontextprotocol/ext-apps)
 
-### Overview
+## Overview
 
 **rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). 
 
@@ -14,7 +14,7 @@
 <br>
 <p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion with highlighted panels" width="500"></p>
 
-### Features
+## Features
 
 You can explore artworks with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ provides the following additional features:
 
@@ -55,7 +55,7 @@ However, none of the above allow you to view and interact with images in the cha
 
 Note to developers: rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
 
-### Sample Queries
+## Sample Queries
 
 After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". 
 
@@ -74,11 +74,11 @@ After that, ask your own questions:
 
 For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
 
-### How it works
+## How it works
 
 `to be added`. Here are references to the available [search parameters](docs/search-parameters.md) and [metadata categories](docs/metadata-categories.md). These [diagrams](docs/mcp-workflow-diagram.md) illustrate the structure and flow of information when using rijksmuseum-mcp+.
 
-### Roadmap
+## Roadmap
 
 Soon:
 
@@ -103,11 +103,11 @@ Maybe:
 - investigate browsing related images in the image viewer
 - review remaining places without geolocation data
 
-### Authors
+## Authors
 
 [Arno Bosse](https://orcid.org/0000-0003-3681-1289) — [RISE](https://rise.unibas.ch/), University of Basel with [Claude Code](https://claude.com/product/claude-code), Anthropic.
 
-### Citation
+## Citation
 
 If you use rijksmuseum-mcp+ in your research, please cite it as follows. A `CITATION.cff` file is included for use with Zotero, GitHub's "Cite this repository" button, and other reference managers.
 
@@ -129,7 +129,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows. A `CITA
 }
 ```
 
-### Image and Data Credits
+## Image and Data Credits
 
 Collection data and images are provided by the **[Rijksmuseum, Amsterdam](https://www.rijksmuseum.nl/)** via their [Linked Open Data APIs](https://data.rijksmuseum.nl/).
 
@@ -139,6 +139,6 @@ Collection data and images are provided by the **[Rijksmuseum, Amsterdam](https:
 
 Please see the Rijksmuseum's [information and data policy](https://data.rijksmuseum.nl/policy/information-and-data-policy) for the full terms.
 
-### License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
