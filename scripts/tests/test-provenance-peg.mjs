@@ -558,6 +558,63 @@ section("Phase D: New grammar rules and reclassification");
   assertEq(raw.events[0].transferType, "deposit", "reclassify: mid-sentence 'stored' → deposit");
 }
 
+// ── Batch 2: RelationWord expansion, inventory, transferred, inherited ──
+
+{
+  // New relation words
+  const cases = [
+    ["his sister, Mathilde Anna Cohen Tervaert (1864-1945), The Hague", "sister"],
+    ["his brother jonkheer James Loudon (1824-1900), The Hague", "brother"],
+    ["his cousin, Jan de Wolff (1680-1735), Amsterdam", "cousin"],
+    ["his wife, Jonkvrouw Elizabeth Adriana de Jonge, The Hague", "wife"],
+    ["his uncle, Baron van Wassenaer, The Hague", "uncle"],
+    ["his great-grandson, Name (1800-1860)", "great-grandson"],
+    ["her sister-in-law, Name (1800-1860)", "sister-in-law"],
+    ["his sister's grandson, W.A.A.J. Schimmelpenninck (1834-1889)", "sister's grandson"],
+  ];
+  for (const [text, rel] of cases) {
+    const raw = parseProvenanceRaw(text);
+    assertEq(raw.events[0].transferType, "inheritance", `'his/her ${rel}' → inheritance`);
+  }
+}
+
+{
+  // Inventory / probate inventory
+  const raw1 = parseProvenanceRaw("inventory, Frisian Stadholder's Court, Leeuwarden, 16 August 1633");
+  assertEq(raw1.events[0].transferType, "collection", "'inventory' → collection");
+
+  const raw2 = parseProvenanceRaw("Probate inventory, Caesar van Everdingen, Alkmaar, after 13 October 1678");
+  assertEq(raw2.events[0].transferType, "collection", "'Probate inventory' → collection");
+
+  const raw3 = parseProvenanceRaw("their probate inventory, 1760");
+  assertEq(raw3.events[0].transferType, "collection", "'their probate inventory' → collection");
+}
+
+{
+  // Transferred variants (comma, in, with)
+  const raw1 = parseProvenanceRaw("transferred, with 15 other drawings, to the museum, 1934");
+  assertEq(raw1.events[0].transferType, "transfer", "'transferred, with...' → transfer");
+
+  const raw2 = parseProvenanceRaw("transferred in 1948");
+  assertEq(raw2.events[0].transferType, "transfer", "'transferred in' → transfer");
+
+  const raw3 = parseProvenanceRaw("transferred with this institution to the Armenhuis, Amsterdam, 1873");
+  assertEq(raw3.events[0].transferType, "transfer", "'transferred with...' → transfer");
+}
+
+{
+  // Inherited by / by inheritance
+  const raw1 = parseProvenanceRaw("inherited by Franciscus Johannes Hallo (1808-79), Kasteel Cannenburch");
+  assertEq(raw1.events[0].transferType, "inheritance", "'inherited by' → inheritance");
+  assert(raw1.events[0].parties[0]?.name?.includes("Franciscus"), "'inherited by': heir name");
+
+  const raw2 = parseProvenanceRaw("by inheritance to J.F. van Lennep (1819-1892), Amsterdam, 1892");
+  assertEq(raw2.events[0].transferType, "inheritance", "'by inheritance to' → inheritance");
+
+  const raw3 = parseProvenanceRaw("through inheritance to Johanna van der Hoop, Amsterdam");
+  assertEq(raw3.events[0].transferType, "inheritance", "'through inheritance' → inheritance");
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════

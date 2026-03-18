@@ -239,7 +239,7 @@ LoanEvent
 // ─── Transfer ───────────────────────────────────────────────────────
 
 TransferEvent
-  = "transfer"i "red"i? _ ("to"i / "from"i) tail:Tail
+  = "transfer"i "red"i? _ ("to"i / "from"i / "for"i / "with"i / "in"i)? tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
 
 // ─── Bequest ────────────────────────────────────────────────────────
@@ -349,6 +349,12 @@ EstateInventoryEvent
       const rest = parseRest(tail);
       return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "deceased" }] : [], ...rest };
     }
+  / ("probate"i _)? "inventory"i ","? _ nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+    }
 
 // ─── From whom ──────────────────────────────────────────────────────
 
@@ -390,10 +396,30 @@ AnaphoricEvent
     }
   / "by"i _ "descent"i tail:Tail
     { const rest = parseRest(tail); return { type: "inheritance", parties: [], ...rest }; }
+  / "inherited"i _ "by"i _ nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role: "heir" }] : [], ...rest };
+    }
+  / ("by"i / "through"i) _ "inheritance"i _ ("to"i _)? nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role: "heir" }] : [], ...rest };
+    }
 
 RelationWord "relation word"
   = $("sons"i / "son"i / "daughters"i / "daughter"i / "widower"i / "widow"i
-     / "husband"i / "nephew"i / "niece"i / "granddaughter"i / "grandson"i
+     / "husband"i / "wife"i / "nephew"i / "niece"i
+     / "great-great-granddaughter"i / "great-great-grandson"i
+     / "great-granddaughter"i / "great-grandson"i
+     / "granddaughter"i / "grandson"i
+     / "sister-in-law"i / "brother-in-law"i
+     / "sister's grandson"i / "sister's granddaughter"i
+     / "sisters"i / "sister"i / "brothers"i / "brother"i
+     / "cousins"i / "cousin"i / "uncle"i / "aunt"i
+     / "stepson"i / "stepdaughter"i
      / "heirs"i / "heir"i)
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
