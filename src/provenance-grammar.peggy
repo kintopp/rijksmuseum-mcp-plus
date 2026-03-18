@@ -211,7 +211,7 @@ SaleEvent
 // ─── Commission ─────────────────────────────────────────────────────
 
 CommissionEvent
-  = "commissioned"i _ "by"i _ nameRaw:$([^,;]*) tail:Tail
+  = "commissioned"i _ ("by"i / "for"i / "as"i / "and"i) _ nameRaw:$([^,;]*) tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -240,6 +240,8 @@ LoanEvent
 
 TransferEvent
   = "transfer"i "red"i? _ ("to"i / "from"i / "for"i / "with"i / "in"i)? tail:Tail
+    { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
+  / ("sent"i / "removed"i / "dispatched"i) _ ("to"i / "from"i / "by"i / "in"i / "when"i / "at"i / "and"i / "after"i)? tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
 
 // ─── Bequest ────────────────────────────────────────────────────────
@@ -277,12 +279,20 @@ PurchaseEvent
     }
   / "purchased"i _ "from"i _ nameRaw:$([^,;]*) tail:Tail
     { return buildResult("purchase", nameRaw ? extractNameAndDates(nameRaw) : null, "seller", parseRest(tail)); }
-  / "acquired"i _ ("by"i / "from"i / "in"i) _ ("the"i _)? nameRaw:$([^,;]*) tail:Tail
+  / ("acquired"i / "verwerving"i) _ ("by"i / "from"i / "in"i / "for"i / "with"i / "en"i)? _? ("the"i _)? nameRaw:$([^,;]*) tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
       const rest = parseRest(tail);
       return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
+  / "purchased"i _ ("for"i / "at"i) _ nameRaw:$([^,;]*) tail:Tail
+    {
+      const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
+      const rest = parseRest(tail);
+      return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
+    }
+  / "purchased"i ","? tail:Tail
+    { const rest = parseRest(tail); return { type: "purchase", parties: [...(rest.extraParties || [])], ...rest, extraParties: undefined }; }
 
 // ─── Gift ───────────────────────────────────────────────────────────
 
@@ -317,7 +327,7 @@ RestitutionEvent
 // ─── Deposit ────────────────────────────────────────────────────────
 
 DepositEvent
-  = ("on"i _ "deposit"i / "stored"i / "deposited"i / "kept"i) tail:Tail
+  = ("on"i _ "deposit"i / "stored"i / "deposited"i / "kept"i / "installed"i / "placed"i) tail:Tail
     { const rest = parseRest(tail); return { type: "deposit", parties: [], ...rest }; }
 
 // ─── Collection ─────────────────────────────────────────────────────

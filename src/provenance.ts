@@ -184,22 +184,22 @@ export function stripHtml(text: string): string {
 // ─── 4. classifyTransfer ───────────────────────────────────────────
 
 const TRANSFER_RULES: [RegExp, TransferType][] = [
-  [/commissioned by/i, "commission"],
+  [/\bcommissioned (?:by|for|as)\b/i, "commission"],
   [/war recuperation/i, "recuperation"],
   [/confiscat|Führermuseum/i, "confiscation"],
   [/\bfrom which on loan\b|on loan/i, "loan"],
-  [/\btransfer(?:red)?\b/i, "transfer"],
+  [/\btransfer(?:red)?\b|\bsent to\b|\bremoved\b/i, "transfer"],
   [/bequest|bequeathed/i, "bequest"],
   [/\bsold[, ]+(?:by|to|with)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
   [/(?:his|her|their) (?:posthumous |deceased )?sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
-  [/\bpurchased (?:by|from)\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "purchase"],
-  [/\bacquired (?:by|from)\b/i, "purchase"],
+  [/\bpurchased\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "purchase"],
+  [/\bacquired\b|\bverwerving\b/i, "purchase"],
   [/from whom,.*\bto\b|by whom to\b|\bfrom the dealer\b|\bfrom (?:Count|Baron|Prince|Marchesa|Conte)\b.*\bto\b/i, "sale"],
   [/\b(?:his|her|their) (?:sons?|heirs?|daughters?|sisters?|brothers?|cousins?|wife|uncle|aunt|nephew|niece|stepson|stepdaughter|grands?(?:on|daughter)|great-grands?(?:on|daughter)|sister's grands?(?:on|daughter))\b|\bwidow(?:er)?\b|\bby descent\b|\binherited by\b|\bby inheritance\b|\bthrough inheritance\b|\bfrom the heirs\b/i, "inheritance"],
   [/\bexchanged (?:with|for)\b/i, "exchange"],
   [/\bcollection\b|\bwith an? (?:art )?dealer\b|\bex\.?\s*coll\.?\b|\bfirst (?:recorded|mentioned)\b|\b(?:probate )?inventory\b/i, "collection"],
   [/\bdonated\b|\bdonation\b|\bgift\b|\bgiven by\b|\bpresented by\b|\bdedicated to\b|\bschenking\b/i, "gift"],
-  [/\bstored\b|\bdeposited\b/i, "deposit"],
+  [/\bstored\b|\bdeposited\b|\binstalled\b|\bplaced\b/i, "deposit"],
   [/\bestate inventory\b/i, "collection"],
 ];
 

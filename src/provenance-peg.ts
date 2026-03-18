@@ -58,14 +58,15 @@ export interface ParseProvenanceRawResult {
 // ─── Cross-reference detection ──────────────────────────────────────
 
 const CROSS_REF_PATTERN =
-  /(?:see|zie|see under|zie onder|same provenance as|dezelfde herkomst als)\s+(?:the provenance (?:of|for)\s+)?(?:inv\.\s*(?:no\.?\s*)?|cat\.\s*(?:no\.?\s*)?)?([A-Z]{1,3}[-\s]?[A-Z]?[-\s]?\d[\d\w.-]*)/i;
+  /(?:see|zie|see under|zie onder|same provenance as|dezelfde herkomst als)\s+(?:the\s+)?(?:provenance\s+)?(?:(?:of|for|fot|to)\s+)?(?:inv\.\s*(?:no\.?\s*)?|cat\.\s*(?:no\.?\s*)?)?([A-Z]{1,3}[-\s]?[A-Z]?[-\s]?\d[\d\w.-]*)/i;
 const CROSS_REF_PATTERN_ALT =
-  /(?:for|voor)\s+the\s+provenance\s+(?:see|zie)\s+(?:inv\.\s*(?:no\.?\s*)?|cat\.\s*(?:no\.?\s*)?)?([A-Z]{1,3}[-\s]?[A-Z]?[-\s]?\d[\d\w.-]*)/i;
+  /(?:for|voor)\s+(?:the\s+)?provenance\s+(?:see|zie)\s+(?:inv\.\s*(?:no\.?\s*)?|cat\.\s*(?:no\.?\s*)?)?([A-Z]{1,3}[-\s]?[A-Z]?[-\s]?\d[\d\w.-]*)/i;
 
 function detectCrossReference(
   text: string
 ): { targetObjectNumber: string } | null {
-  const match = text.match(CROSS_REF_PATTERN) || text.match(CROSS_REF_PATTERN_ALT);
+  const cleaned = text.replace(/^\*+\s*/, ""); // strip leading asterisks
+  const match = cleaned.match(CROSS_REF_PATTERN) || cleaned.match(CROSS_REF_PATTERN_ALT);
   if (match) return { targetObjectNumber: match[1].trim().replace(/\.$/, "") };
   return null;
 }

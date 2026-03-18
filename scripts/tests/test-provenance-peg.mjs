@@ -620,6 +620,65 @@ section("Phase D: New grammar rules and reclassification");
   assertEq(raw3.events[0].transferType, "inheritance", "'through inheritance' → inheritance");
 }
 
+// ── Batch 3: Commissioned for, purchased variants, cross-ref, installed, verwerving ──
+
+{
+  const raw = parseProvenanceRaw("Commissioned for the Maagdenhuis, Amsterdam, 1723");
+  assertEq(raw.events[0].transferType, "commission", "'Commissioned for' → commission");
+}
+
+{
+  const raw = parseProvenanceRaw("purchased, by Reijnier Flaes (Beijing), 1939-1965");
+  assertEq(raw.events[0].transferType, "purchase", "'purchased,' → purchase");
+}
+
+{
+  const raw = parseProvenanceRaw("purchased for the museum by the Commissie voor Fotoverkoop, 1977");
+  assertEq(raw.events[0].transferType, "purchase", "'purchased for' → purchase");
+}
+
+{
+  const raw = parseProvenanceRaw("Purchased at Maison Hirsch & Cie, Amsterdam");
+  assertEq(raw.events[0].transferType, "purchase", "'Purchased at' → purchase");
+}
+
+{
+  // Cross-ref edge cases
+  const r1 = parseProvenanceRaw("See provenance for BK-17437");
+  assert(r1.isCrossRef, "cross-ref: 'See provenance for' (no 'the')");
+
+  const r2 = parseProvenanceRaw("See the provenance fot BK-17040-A.");
+  assert(r2.isCrossRef, "cross-ref: typo 'fot'");
+
+  const r3 = parseProvenanceRaw("*See provenance for BK-15498-A");
+  assert(r3.isCrossRef, "cross-ref: asterisk prefix");
+}
+
+{
+  const raw = parseProvenanceRaw("installed in the Sint-Michielsabdij, Antwerp, 1476");
+  assertEq(raw.events[0].transferType, "deposit", "'installed in' → deposit");
+}
+
+{
+  const raw = parseProvenanceRaw("placed in the garden, 1904");
+  assertEq(raw.events[0].transferType, "deposit", "'placed in' → deposit");
+}
+
+{
+  const raw = parseProvenanceRaw("sent to the Ministerie van Marine, The Hague, October 1818");
+  assertEq(raw.events[0].transferType, "transfer", "'sent to' → transfer");
+}
+
+{
+  const raw = parseProvenanceRaw("removed from the facade, 1873");
+  assertEq(raw.events[0].transferType, "transfer", "'removed from' → transfer");
+}
+
+{
+  const raw = parseProvenanceRaw("verwerving 1921 volgens KOG jaarverslag");
+  assertEq(raw.events[0].transferType, "purchase", "'verwerving' → purchase");
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
