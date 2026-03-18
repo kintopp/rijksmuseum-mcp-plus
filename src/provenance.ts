@@ -162,14 +162,17 @@ export function splitEvents(
 
 // ─── 3. stripHtml ──────────────────────────────────────────────────
 
+/** Map of named HTML entities to their character equivalents. */
+const HTML_ENTITY_MAP: Record<string, string> = {
+  nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
+};
+
 /** Remove HTML tags, entities, leaked CSS, and Linked Art artifacts, preserving inner text. */
 export function stripHtml(text: string): string {
   return text
     .replace(/<\/?[a-z][a-z0-9]*[^>]*>/gi, "")              // HTML tags
-    .replace(/&(nbsp|amp|lt|gt|quot|apos);?/gi, (_m, e: string) => {
-      const map: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
-      return map[e.toLowerCase()] ?? "";
-    })
+    .replace(/&(nbsp|amp|lt|gt|quot|apos);?/gi, (_m, e: string) =>
+      HTML_ENTITY_MAP[e.toLowerCase()] ?? "")
     .replace(/&#\d+;?/g, "")                                  // numeric HTML entities
     .replace(/(?:font-family|mso-[\w-]+|font-size|color)\s*:[^;,]*[;,]?\s*/gi, "")  // leaked CSS
     .replace(/^"+>?\s*/, "")                                   // "> prefix (Linked Art artifact)
@@ -185,16 +188,14 @@ const TRANSFER_RULES: [RegExp, TransferType][] = [
   [/war recuperation/i, "recuperation"],
   [/confiscat|Führermuseum/i, "confiscation"],
   [/\bfrom which on loan\b|on loan/i, "loan"],
-  [/\btransferred (?:to|from)\b|\btransfer to\b/i, "transfer"],
+  [/\btransfer(?:red)? (?:to|from)\b/i, "transfer"],
   [/bequest|bequeathed/i, "bequest"],
-  [/\bsold (?:by|to|with)\b/i, "sale"],
+  [/\bsold (?:by|to|with)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
   [/(?:his|her|their) (?:posthumous |deceased )?sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
-  [/\bthrough the mediation\b/i, "sale"],
-  [/\bfrom the artist\b/i, "sale"],
   [/\bpurchased (?:by|from)\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "purchase"],
   [/\bacquired (?:by|from)\b/i, "purchase"],
   [/from whom,.*\bto\b|by whom to\b|\bfrom the dealer\b|\bfrom (?:Count|Baron|Prince|Marchesa|Conte)\b.*\bto\b/i, "sale"],
-  [/\bhis (?:sons?|heirs?)\b|\bher (?:sons?|heirs?)\b|\btheir (?:sons?|heirs?)\b|\bdaughter\b|\bwidower\b|\bwidow\b|\bby descent\b|\bher husband\b|\bher nephew\b|\bhis grandson\b|\bher grandson\b|\bfrom the heirs\b/i, "inheritance"],
+  [/\b(?:his|her|their) (?:sons?|heirs?)\b|\bdaughter\b|\bwidow(?:er)?\b|\bby descent\b|\bher (?:husband|nephew)\b|\b(?:his|her) grandson\b|\bfrom the heirs\b/i, "inheritance"],
   [/\bexchanged (?:with|for)\b/i, "exchange"],
   [/\bcollection\b|\bwith an? (?:art )?dealer\b|\bex\.?\s*coll\.?\b|\bfirst (?:recorded|mentioned)\b/i, "collection"],
   [/\bdonated\b|\bdonation\b|\bgift\b|\bgiven by\b|\bpresented by\b|\bdedicated to\b|\bschenking\b/i, "gift"],

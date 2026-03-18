@@ -155,6 +155,13 @@ function extractNameAndDates(text) {
   const name = text.split(",")[0].trim();
   return name ? { name: name.replace(/\]\s*$/, ""), dates: null } : null;
 }
+
+// Build a result merging named party (if any) with extraParties from parseRest,
+// then clearing extraParties from the spread rest to avoid downstream duplication.
+function buildResult(type, nd, role, rest) {
+  const parties = nd && nd.name ? [{ ...nd, role }] : [];
+  return { type, parties: [...parties, ...(rest.extraParties || [])], ...rest, extraParties: undefined };
+}
 }}
 
 // ─── Entry point ────────────────────────────────────────────────────
@@ -195,20 +202,11 @@ SaleEvent
       return { type: "sale", parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
     }
   / "through"i _ ("the"i _)? "mediation"i _ "of"i _ nameRaw:$([^,;]*) tail:Tail
-    {
-      const nd = extractNameAndDates(nameRaw);
-      const rest = parseRest(tail);
-      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "intermediary" }, ...(rest.extraParties || [])] : [...(rest.extraParties || [])], ...rest, extraParties: undefined };
-    }
+    { return buildResult("sale", extractNameAndDates(nameRaw), "intermediary", parseRest(tail)); }
   / "sale"i _ "[" section:[^\]]* "]" tail:Tail
     { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest, saleSection: section.join("") }; }
   / "sale"i _ nameRaw:$([^,;]*) tail:Tail
-    {
-      const nd = extractNameAndDates(nameRaw);
-      const rest = parseRest(tail);
-      const parties = nd && nd.name ? [{ ...nd, role: "seller" }] : [];
-      return { type: "sale", parties: [...parties, ...rest.extraParties], ...rest, extraParties: undefined };
-    }
+    { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
 
 // ─── Commission ─────────────────────────────────────────────────────
 
@@ -264,7 +262,7 @@ PurchaseEvent
       return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
   / "from"i _ "whose"i _ "heirs"i tail:Tail
-    { const rest = parseRest(tail); return { type: "purchase", parties: [...rest.extraParties], ...rest, extraParties: undefined }; }
+    { return buildResult("purchase", null, null, parseRest(tail)); }
   / "purchased"i _ "by"i _ ("the"i _)? ("museum"i / ("dealer"i _))? nameRaw:$([^,;]*)? tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
@@ -278,12 +276,7 @@ PurchaseEvent
       return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
   / "purchased"i _ "from"i _ nameRaw:$([^,;]*) tail:Tail
-    {
-      const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
-      const rest = parseRest(tail);
-      const parties = nd && nd.name ? [{ ...nd, role: "seller" }] : [];
-      return { type: "purchase", parties: [...parties, ...(rest.extraParties || [])], ...rest, extraParties: undefined };
-    }
+    { return buildResult("purchase", nameRaw ? extractNameAndDates(nameRaw) : null, "seller", parseRest(tail)); }
   / "acquired"i _ ("by"i / "from"i / "in"i) _ ("the"i _)? nameRaw:$([^,;]*) tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
@@ -361,7 +354,7 @@ EstateInventoryEvent
 
 FromWhomEvent
   = "from"i _ "whom"i tail:Tail
-    { const rest = parseRest(tail); return { type: "sale", parties: [...(rest.extraParties || [])], ...rest, extraParties: undefined }; }
+    { return buildResult("sale", null, null, parseRest(tail)); }
   / "by"i _ "whom"i _ ("probably"i _)? ("sold"i _)? ("to"i _)? nameRaw:$([^,;]*) tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
@@ -376,23 +369,12 @@ FromWhomEvent
       return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "seller" }] : [], ...rest };
     }
   / "from"i _ ("the"i _)? "heirs"i _ ("of"i _)? nameRaw:$([^,;]*) tail:Tail
-    {
-      const nd = extractNameAndDates(nameRaw);
-      const rest = parseRest(tail);
-      return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role: "deceased" }, ...(rest.extraParties || [])] : [...(rest.extraParties || [])], ...rest, extraParties: undefined };
-    }
+    { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ "the"i _ "artist"i tail:Tail
-    {
-      const rest = parseRest(tail);
-      return { type: "sale", parties: [{ name: "the artist", dates: null, role: "seller" }, ...(rest.extraParties || [])], ...rest, extraParties: undefined };
-    }
+    { return buildResult("sale", { name: "the artist", dates: null }, "seller", parseRest(tail)); }
   / "from"i _ ("the"i _)? !("collection"i / "estate"i) nameRaw:$([^,;]*) tail:Tail
     &{ return /\bto\b/i.test(tail); }
-    {
-      const nd = extractNameAndDates(nameRaw);
-      const rest = parseRest(tail);
-      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "seller" }, ...(rest.extraParties || [])] : [...(rest.extraParties || [])], ...rest, extraParties: undefined };
-    }
+    { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
 
 // ─── Anaphoric ──────────────────────────────────────────────────────
 

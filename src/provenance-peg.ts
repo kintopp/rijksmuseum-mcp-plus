@@ -258,10 +258,7 @@ export function parseProvenanceRaw(
       stats.fallback++;
     }
 
-    // Post-PEG reclassification: when the PEG catch-all produces "unknown",
-    // try the regex classifier which matches keywords anywhere in the text
-    // (not just at the start). This catches mid-sentence keywords like
-    // "after closure... donated by..." that the prefix-only PEG grammar misses.
+    // PEG catch-all → "unknown": try regex classifier (matches mid-sentence keywords)
     if (event.transferType === "unknown" && !event.isCrossRef && !event.gap) {
       const reclassified = classifyTransfer(working);
       if (reclassified !== "unknown") {
