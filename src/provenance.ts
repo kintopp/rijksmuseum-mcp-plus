@@ -174,7 +174,7 @@ export function stripHtml(text: string): string {
     .replace(/&(nbsp|amp|lt|gt|quot|apos);?/gi, (_m, e: string) =>
       HTML_ENTITY_MAP[e.toLowerCase()] ?? "")
     .replace(/&#\d+;?/g, "")                                  // numeric HTML entities
-    .replace(/(?:font-family|mso-[\w-]+|font-size|color)\s*:[^;,]*[;,]?\s*/gi, "")  // leaked CSS
+    .replace(/(?:font-family|mso-[\w-]+|font-size|color)\s*:[^;]*;?\s*/gi, "")  // leaked CSS
     .replace(/^"+>?\s*/, "")                                   // "> prefix (Linked Art artifact)
     .replace(/\*\*([^*]+)\*\*/g, "$1")                        // **bold** markdown
     .replace(/\s{2,}/g, " ")
@@ -190,7 +190,7 @@ const TRANSFER_RULES: [RegExp, TransferType][] = [
   [/\bfrom which on loan\b|on loan/i, "loan"],
   [/\btransfer(?:red)? (?:to|from)\b/i, "transfer"],
   [/bequest|bequeathed/i, "bequest"],
-  [/\bsold (?:by|to|with)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
+  [/\bsold[, ]+(?:by|to|with)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
   [/(?:his|her|their) (?:posthumous |deceased )?sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
   [/\bpurchased (?:by|from)\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "purchase"],
   [/\bacquired (?:by|from)\b/i, "purchase"],

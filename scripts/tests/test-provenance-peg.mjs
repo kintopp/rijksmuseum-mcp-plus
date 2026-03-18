@@ -353,6 +353,212 @@ section("Phase C: Layer 2 — interpretation");
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  Phase D: New grammar rules and reclassification
+// ══════════════════════════════════════════════════════════════════
+
+section("Phase D: New grammar rules and reclassification");
+
+// ── Commit 1: heirs in RelationWord ──
+
+{
+  const raw = parseProvenanceRaw("his heirs");
+  assertEq(raw.events[0].transferType, "inheritance", "bare 'his heirs' → inheritance");
+}
+
+{
+  const raw = parseProvenanceRaw("her heirs, Amsterdam");
+  assertEq(raw.events[0].transferType, "inheritance", "'her heirs, Amsterdam' → inheritance");
+  // Location is consumed into nameRaw by AnaphoricEvent (PEG prefix match),
+  // not extracted separately. This is expected for short anaphoric segments.
+}
+
+{
+  const raw = parseProvenanceRaw("their heirs");
+  assertEq(raw.events[0].transferType, "inheritance", "'their heirs' → inheritance");
+}
+
+{
+  const raw = parseProvenanceRaw("his heir and ex wife, Gerritje Gestel - Overtoom (1892-1960), Laren");
+  assertEq(raw.events[0].transferType, "inheritance", "'his heir and...' → inheritance");
+}
+
+// ── Commit 2: broadened keyword prefixes ──
+
+{
+  const raw = parseProvenanceRaw("bequeathed by his widow to King William I, 1814");
+  assertEq(raw.events[0].transferType, "bequest", "'bequeathed by' → bequest");
+  assertEq(raw.events[0].dateYear, 1814, "bequest date");
+}
+
+{
+  const raw = parseProvenanceRaw("by bequest to his father Ludwig Moritz Mainz, 1924");
+  assertEq(raw.events[0].transferType, "bequest", "'by bequest to' → bequest");
+}
+
+{
+  const raw = parseProvenanceRaw("purchased from Mendelssohn & Co. Bank, en bloc, to the Dienststelle Mühlmann, The Hague, 1940");
+  assertEq(raw.events[0].transferType, "purchase", "'purchased from' → purchase");
+  const seller = raw.events[0].parties.find(p => p.role === "seller");
+  assert(seller !== undefined, "'purchased from': seller extracted");
+}
+
+{
+  const raw = parseProvenanceRaw("acquired by the Vereniging van Vrienden der Aziatische Kunst, 1931");
+  assertEq(raw.events[0].transferType, "purchase", "'acquired by' → purchase");
+  assertEq(raw.events[0].dateYear, 1931, "acquired date");
+}
+
+{
+  const raw = parseProvenanceRaw("transferred from the Landvoogd-Galerij, Paleis Rijswijk, to the museum, 1950");
+  assertEq(raw.events[0].transferType, "transfer", "'transferred from' → transfer");
+}
+
+{
+  const raw = parseProvenanceRaw("transfer to the museum, 1935");
+  assertEq(raw.events[0].transferType, "transfer", "'transfer to' → transfer");
+}
+
+{
+  const raw = parseProvenanceRaw("his posthumous sale, Amsterdam, 29 March 1757, no. 20, fl. 560");
+  assertEq(raw.events[0].transferType, "sale", "'his posthumous sale' → sale");
+  assertEq(raw.events[0].price?.amount, 560, "posthumous sale price");
+}
+
+{
+  const raw = parseProvenanceRaw("sold by the Hessisches Landesmuseum, Darmstadt, after 1933");
+  assertEq(raw.events[0].transferType, "sale", "'sold by' → sale");
+  const seller = raw.events[0].parties.find(p => p.role === "seller");
+  assert(seller !== undefined, "'sold by': seller extracted");
+}
+
+{
+  const raw = parseProvenanceRaw("sold, with the house, to Vennootschap Bruns, 1954");
+  assertEq(raw.events[0].transferType, "sale", "'sold, with...' → sale (via reclassification)");
+}
+
+{
+  const raw = parseProvenanceRaw("from which on loan to the museum, since 1885");
+  assertEq(raw.events[0].transferType, "loan", "'from which on loan' → loan");
+}
+
+{
+  const raw = parseProvenanceRaw("from whom on loan to the museum, 1972");
+  assertEq(raw.events[0].transferType, "loan", "'from whom on loan' → loan");
+}
+
+{
+  const raw = parseProvenanceRaw("exchanged with the dealer A. Miedl, Amsterdam, 9 February 1944");
+  assertEq(raw.events[0].transferType, "exchange", "'exchanged with' → exchange");
+}
+
+{
+  const raw = parseProvenanceRaw("From the artist to the ICN, Rijswijk, 1989");
+  assertEq(raw.events[0].transferType, "sale", "'From the artist to' → sale");
+  const artist = raw.events[0].parties.find(p => p.name === "the artist");
+  assert(artist !== undefined, "'From the artist': artist party extracted");
+}
+
+{
+  const raw = parseProvenanceRaw("from the heirs of Paul Nijhoff (1868-1949), Amsterdam, to the museum, 1997");
+  assertEq(raw.events[0].transferType, "inheritance", "'from the heirs of' → inheritance");
+}
+
+{
+  const raw = parseProvenanceRaw("through the mediation of the dealer J.H.J. Mellaart, to the museum, 1940");
+  assertEq(raw.events[0].transferType, "sale", "'through the mediation' → sale");
+  const interm = raw.events[0].parties.find(p => p.role === "intermediary");
+  assert(interm !== undefined, "intermediary party extracted");
+}
+
+// ── Commit 3: minor keywords ──
+
+{
+  const raw = parseProvenanceRaw("ex. coll Kamerbeek, Utrecht");
+  assertEq(raw.events[0].transferType, "collection", "'ex. coll' → collection");
+  assertEq(raw.events[0].location, "Utrecht", "ex. coll location");
+}
+
+{
+  const raw = parseProvenanceRaw("ex coll. Baron Steengracht, The Hague");
+  assertEq(raw.events[0].transferType, "collection", "'ex coll.' → collection");
+}
+
+{
+  const raw = parseProvenanceRaw("first recorded in the museum, 1904");
+  assertEq(raw.events[0].transferType, "collection", "'first recorded' → collection");
+}
+
+{
+  const raw = parseProvenanceRaw("first mentioned in the Kloveniersdoelen, 1653");
+  assertEq(raw.events[0].transferType, "collection", "'first mentioned' → collection");
+}
+
+{
+  const raw = parseProvenanceRaw("stored at the Vleeshal, Haarlem, 1926");
+  assertEq(raw.events[0].transferType, "deposit", "'stored' → deposit");
+  assertEq(raw.events[0].location, "Haarlem", "stored: location");
+}
+
+{
+  const raw = parseProvenanceRaw("deposited at the museum, 1950");
+  assertEq(raw.events[0].transferType, "deposit", "'deposited' → deposit");
+}
+
+{
+  const raw = parseProvenanceRaw("dedicated to Jan Herman van Eeghen (1849-1918), Amsterdam, 1918");
+  assertEq(raw.events[0].transferType, "gift", "'dedicated to' → gift");
+}
+
+{
+  const raw = parseProvenanceRaw("schenking WKF Zwierzina, 1924");
+  assertEq(raw.events[0].transferType, "gift", "'schenking' → gift");
+}
+
+{
+  const raw = parseProvenanceRaw("donation to the Vereniging van Vrienden, 2017");
+  assertEq(raw.events[0].transferType, "gift", "'donation to' → gift");
+}
+
+// ── Commit 4: stripHtml hardening ──
+
+{
+  const { stripHtml } = await import("../../dist/provenance.js");
+
+  assertEq(stripHtml("&nbsp;Name&nbsp;"), "Name", "stripHtml: &nbsp → space + trim");
+  assertEq(stripHtml("&amp; Sons"), "& Sons", "stripHtml: &amp → &");
+  assertEq(stripHtml("\">? Commissioned by X"), "? Commissioned by X", "stripHtml: \"> prefix stripped");
+  assertEq(stripHtml("**SK-A-123** text"), "SK-A-123 text", "stripHtml: **bold** → plain");
+  assertEq(stripHtml("font-family:Aptos, sans-serif"), "", "stripHtml: CSS → empty");
+  assertEq(stripHtml("&#160;text"), "text", "stripHtml: numeric entity stripped");
+}
+
+// ── Cross-reference detection ──
+
+{
+  const raw = parseProvenanceRaw("See the provenance for SK-A-4753.");
+  assert(raw.isCrossRef, "cross-ref: 'See the provenance for' detected");
+  assertEq(raw.crossRefTarget, "SK-A-4753", "cross-ref: target extracted");
+}
+
+{
+  const raw = parseProvenanceRaw("For the provenance see SK-A-4756.");
+  assert(raw.isCrossRef, "cross-ref: 'For the provenance see' detected");
+  assertEq(raw.crossRefTarget, "SK-A-4756", "cross-ref: alt pattern target");
+}
+
+// ── Post-PEG reclassification (mid-sentence keywords) ──
+
+{
+  const raw = parseProvenanceRaw("after closure of the Museum Nusantara in 2013, donated by Erfgoed Delft, 2016");
+  assertEq(raw.events[0].transferType, "gift", "reclassify: mid-sentence 'donated' → gift");
+}
+
+{
+  const raw = parseProvenanceRaw("after the dissolvement of the museum stored at the Vleeshal, Haarlem, 1926");
+  assertEq(raw.events[0].transferType, "deposit", "reclassify: mid-sentence 'stored' → deposit");
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 

@@ -66,7 +66,7 @@ function detectCrossReference(
   text: string
 ): { targetObjectNumber: string } | null {
   const match = text.match(CROSS_REF_PATTERN) || text.match(CROSS_REF_PATTERN_ALT);
-  if (match) return { targetObjectNumber: match[1].trim() };
+  if (match) return { targetObjectNumber: match[1].trim().replace(/\.$/, "") };
   return null;
 }
 
