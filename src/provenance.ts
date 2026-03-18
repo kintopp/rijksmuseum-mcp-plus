@@ -442,8 +442,9 @@ function extractNameAndDates(
 // ─── 8. parseLocation ──────────────────────────────────────────────
 
 // Known city/region names that appear in Rijksmuseum provenance
+// City/place list — see also CITIES in provenance-grammar.peggy (superset with venue names)
 const RE_CITIES =
-  /\b(Amsterdam|Delft|The Hague|London|Paris|Venice|Rotterdam|Brussels|Wassenaar|Montreux|Buckinghamshire|Hertfordshire|Northampton|Edinburgh|Linz|Soho Square|Madrid|Rome|Florence|Berlin|Vienna|Munich|Stockholm|St Petersburg|New York|Hilversum|Aerdenhout|Haarlem|Leiden|Utrecht|Antwerp|Watergraafsmeer)\b/;
+  /\b(Amsterdam|Delft|The Hague|London|Paris|Venice|Rotterdam|Brussels|Wassenaar|Montreux|Buckinghamshire|Hertfordshire|Northampton|Edinburgh|Linz|Soho Square|Madrid|Rome|Florence|Berlin|Vienna|Munich|Stockholm|St Petersburg|New York|Hilversum|Aerdenhout|Haarlem|Leiden|Utrecht|Antwerp|Watergraafsmeer|Cheshunt Nunnery|Aynhoe Park|Dalmeny House)\b/;
 
 /**
  * Extract location from a provenance segment.

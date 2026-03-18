@@ -8,17 +8,35 @@
 
 {{
 // ─── Post-parse helpers (run in the generated parser) ───────────────
+// All regexes hoisted here to avoid per-call recompilation (parseRest called ~102K times)
 
 const MONTHS_RE = /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})$/;
 const EXACT_DATE_RE = /^(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})$/;
-const CITIES = new Set([
+const DIGIT_END_RE = /\d$/;
+const DIGITS_ONLY_RE = /^\d+$/;
+const TO_BUYER_RE = /^to\s+(?:the\s+)?(?:dealers?\s+)?(.+)/i;
+const HAS_UPPER_RE = /[A-Z]/;
+const LOT_NO_RE = /^no\.\s*\d+/i;
+const LOT_NUM_RE = /^lot\s+\d+/i;
+const PARENS_RE = /^\(([^)]+)\)/;
+const FL_RE = /^fl\.\s*([\d,]+)/;
+const POUND_RE = /^£\s*([\d,]+)/;
+const FRS_RE = /^frs\.\s*([\d,]+)/;
+const LIVRES_RE = /([\d,]+)\s*livres/i;
+const NAP_RE = /([\d,]+)\s*Napol[eé]ons/i;
+const QUAL_DATE_RE = /^\s*(before|after)\s+(\d{4})\b/i;
+const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
+const BARE_YEAR_RE = /^\s*(\d{4})\s*$/;
+const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)\)/;
+// City list — kept in sync with RE_CITIES in provenance.ts (+ 5 compound place names)
+const CITIES = [
   "Amsterdam","Delft","The Hague","London","Paris","Venice","Rotterdam","Brussels",
   "Wassenaar","Montreux","Buckinghamshire","Hertfordshire","Northampton","Edinburgh",
   "Linz","Soho Square","Madrid","Rome","Florence","Berlin","Vienna","Munich",
   "Stockholm","St Petersburg","New York","Hilversum","Aerdenhout","Haarlem",
   "Leiden","Utrecht","Antwerp","Watergraafsmeer","Cheshunt Nunnery","Aynhoe Park",
   "Palazzo Manfrin","Mentmore Towers","Dalmeny House",
-]);
+];
 
 function parseRest(tail) {
   // tail is the raw string after the keyword/name portion
@@ -28,7 +46,7 @@ function parseRest(tail) {
   for (let i = 0; i < rawParts.length; i++) {
     const curr = rawParts[i];
     // If current part ends with digits and next part is pure digits, rejoin (comma in number)
-    if (i + 1 < rawParts.length && /\d$/.test(curr) && /^\d+$/.test(rawParts[i + 1])) {
+    if (i + 1 < rawParts.length && DIGIT_END_RE.test(curr) && DIGITS_ONLY_RE.test(rawParts[i + 1])) {
       parts.push(curr + "," + rawParts[i + 1]);
       i++; // skip next
     } else {
@@ -47,10 +65,10 @@ function parseRest(tail) {
 
   for (const t of parts) {
     // "to (the dealer) Name" → buyer
-    const toBuyer = t.match(/^to\s+(?:the\s+)?(?:dealers?\s+)?(.+)/i);
+    const toBuyer = t.match(TO_BUYER_RE);
     if (toBuyer) {
       const buyerRaw = toBuyer[1].replace(/,\s*$/, "").trim();
-      if (buyerRaw && /[A-Z]/.test(buyerRaw)) {
+      if (buyerRaw && HAS_UPPER_RE.test(buyerRaw)) {
         const nd = extractNameAndDates(buyerRaw);
         if (nd) {
           extraParties.push({ name: nd.name, dates: nd.dates, role: "buyer" });
@@ -62,58 +80,54 @@ function parseRest(tail) {
     }
 
     // Lot number
-    if (/^no\.\s*\d+/i.test(t)) {
+    if (LOT_NO_RE.test(t)) {
       saleDetails = saleDetails ? saleDetails + ", " + t : t;
       continue;
     }
-    if (/^lot\s+\d+/i.test(t)) {
+    if (LOT_NUM_RE.test(t)) {
       saleDetails = saleDetails ? saleDetails + ", " + t : t;
       continue;
     }
 
     // Auctioneer in parens — add to saleDetails
-    const auctioneerMatch = t.match(/^\(([^)]+)\)/);
+    const auctioneerMatch = t.match(PARENS_RE);
     if (auctioneerMatch && saleDetails === null) {
       saleDetails = auctioneerMatch[1].trim();
       continue;
     }
 
-    // Price patterns
-    const flMatch = t.match(/^fl\.\s*([\d,]+)/);
+    // Price patterns (regexes hoisted to module scope)
+    const flMatch = t.match(FL_RE);
     if (flMatch) { priceAmount = parseFloat(flMatch[1].replace(/,/g, "")); priceCurrency = "guilders"; continue; }
-    const poundMatch = t.match(/^£\s*([\d,]+)/);
+    const poundMatch = t.match(POUND_RE);
     if (poundMatch) { priceAmount = parseFloat(poundMatch[1].replace(/,/g, "")); priceCurrency = "pounds"; continue; }
-    const frsMatch = t.match(/^frs\.\s*([\d,]+)/);
+    const frsMatch = t.match(FRS_RE);
     if (frsMatch) { priceAmount = parseFloat(frsMatch[1].replace(/,/g, "")); priceCurrency = "francs"; continue; }
-    const livresMatch = t.match(/([\d,]+)\s*livres/i);
+    const livresMatch = t.match(LIVRES_RE);
     if (livresMatch) { priceAmount = parseFloat(livresMatch[1].replace(/,/g, "")); priceCurrency = "livres"; continue; }
-    const napMatch = t.match(/([\d,]+)\s*Napol[eé]ons/i);
+    const napMatch = t.match(NAP_RE);
     if (napMatch) { priceAmount = parseFloat(napMatch[1].replace(/,/g, "")); priceCurrency = "napoléons"; continue; }
 
     // Date patterns (ordered by specificity)
     const exactDate = t.match(EXACT_DATE_RE);
     if (exactDate) { dateExpression = t; dateYear = parseInt(exactDate[3], 10); continue; }
 
-    const qualDate = t.match(/^\s*(before|after)\s+(\d{4})\b/i);
+    const qualDate = t.match(QUAL_DATE_RE);
     if (qualDate) { dateExpression = qualDate[0].trim(); dateYear = parseInt(qualDate[2], 10); dateQualifier = qualDate[1].toLowerCase(); continue; }
 
-    const approxDate = t.match(/^\s*c\.\s*(\d{4})\b/);
+    const approxDate = t.match(APPROX_DATE_RE);
     if (approxDate) { dateExpression = approxDate[0].trim(); dateYear = parseInt(approxDate[1], 10); dateQualifier = "circa"; continue; }
 
     const monthYear = t.match(MONTHS_RE);
     if (monthYear) { dateExpression = t; dateYear = parseInt(monthYear[2], 10); continue; }
 
-    const bareYear = t.match(/^\s*(\d{4})\s*$/);
+    const bareYear = t.match(BARE_YEAR_RE);
     if (bareYear && !dateYear) { dateExpression = bareYear[1]; dateYear = parseInt(bareYear[1], 10); continue; }
-
-    // Compound exact date split across tokens: "16 May" + "1696" — check if previous was partial
-    const partialDate = t.match(/^(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)$/);
-    // Store for next iteration — but since we're iterating simply, handle "DD Month YYYY" in one token
 
     // Location (known cities — check if t starts with a known city)
     if (!location) {
-      for (const city of CITIES) {
-        if (t.startsWith(city)) { location = city; break; }
+      for (let ci = 0; ci < CITIES.length; ci++) {
+        if (t.startsWith(CITIES[ci])) { location = CITIES[ci]; break; }
       }
     }
   }
@@ -133,7 +147,8 @@ function parseRest(tail) {
 }
 
 function extractNameAndDates(text) {
-  const m = text.match(/^([^(]+?)\s*\(([^)]+)\)/);
+  // Strict date pattern matching provenance.ts — avoids capturing "(Amsterdam)" as dates
+  const m = text.match(NAME_DATES_RE);
   if (m) {
     return { name: m[1].trim().replace(/,\s*$/, ""), dates: m[2].trim() };
   }

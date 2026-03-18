@@ -43,7 +43,7 @@ export interface RawProvenanceEvent {
   isCrossRef: boolean;
   crossRefTarget: string | null;
 
-  parseMethod: "peg" | "regex_fallback";
+  parseMethod: "peg" | "regex_fallback" | "cross_ref";
 }
 
 export interface ParseProvenanceRawResult {
@@ -72,7 +72,8 @@ function detectCrossReference(
 const VALID_TRANSFER_TYPES = new Set<TransferType>([
   "sale", "inheritance", "bequest", "commission", "purchase",
   "confiscation", "recuperation", "loan", "transfer", "collection",
-  "gift", "unknown",
+  "gift", "auction", "exchange", "deposit", "seizure", "restitution",
+  "donation", "inventory", "unknown",
 ]);
 
 function astToRawEvent(
@@ -94,13 +95,13 @@ function astToRawEvent(
       });
     }
   }
-  // Extra parties from RestOfSegment (e.g., buyer in "to Name")
+  // Extra parties from RestOfSegment (e.g., buyer in "to Name") — inherit event's uncertainty
   for (const p of ast.extraParties || []) {
     if (p.name) {
       parties.push({
         name: p.name,
         dates: p.dates ?? null,
-        uncertain: false,
+        uncertain: ast.uncertain,
         role: p.role ?? null,
       });
     }
@@ -217,12 +218,12 @@ export function parseProvenanceRaw(
         citations: [],
         isCrossRef: true,
         crossRefTarget: crossRef.targetObjectNumber,
-        parseMethod: "peg",
+        parseMethod: "cross_ref",
       }],
       isCrossRef: true,
       crossRefTarget: crossRef.targetObjectNumber,
       raw: text,
-      stats: { total: 1, peg: 1, fallback: 0 },
+      stats: { total: 1, peg: 0, fallback: 0 },
     };
   }
 

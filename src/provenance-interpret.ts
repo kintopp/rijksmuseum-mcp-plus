@@ -38,6 +38,10 @@ export interface ProvenancePeriod {
   sourceEvents: number[];
 }
 
+// ─── Pre-compiled patterns ──────────────────────────────────────────
+
+const BY_YEAR_RE = /\bby\s+(\d{4})\b/i;
+
 // ─── Temporal bound parsing ─────────────────────────────────────────
 
 /**
@@ -71,7 +75,7 @@ export function parseTemporalBounds(
 
   // "by YYYY" pattern (not captured as qualifier by Layer 1, but present in expression)
   if (expr) {
-    const byMatch = expr.match(/\bby\s+(\d{4})\b/i);
+    const byMatch = expr.match(BY_YEAR_RE);
     if (byMatch) {
       return { earliest: null, latest: parseInt(byMatch[1], 10), rule: "by_year" };
     }

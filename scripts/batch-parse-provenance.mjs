@@ -134,13 +134,20 @@ const insertPeriod = (dryRun || layer1Only) ? null : db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
-// Fetch artworks with provenance
-const query = limit
+// Fetch artworks with provenance (count for progress, iterate for memory efficiency)
+const countQuery = limit
+  ? `SELECT COUNT(*) AS cnt FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != '' LIMIT ?`
+  : `SELECT COUNT(*) AS cnt FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != ''`;
+const totalRows = limit
+  ? db.prepare(countQuery).get(limit).cnt
+  : db.prepare(countQuery).get().cnt;
+
+const dataQuery = limit
   ? `SELECT art_id, provenance_text FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != '' LIMIT ?`
   : `SELECT art_id, provenance_text FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != ''`;
-const rows = limit ? db.prepare(query).all(limit) : db.prepare(query).all();
+const rows = limit ? db.prepare(dataQuery).iterate(limit) : db.prepare(dataQuery).iterate();
 
-console.log(`Found ${rows.length} artworks with provenance text\n`);
+console.log(`Found ${totalRows} artworks with provenance text\n`);
 
 // Stats
 let totalEvents = 0;
@@ -203,18 +210,19 @@ for (const row of rows) {
   batch.push({ artId: row.art_id, events: result.events, periods });
 
   if (batch.length >= BATCH_SIZE) {
+    processed += batch.length;
     insertBatch(batch);
     batch = [];
-    processed += BATCH_SIZE;
-    if (processed % 5000 === 0) {
+    if (processed % 5000 < BATCH_SIZE) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`  ${processed}/${rows.length} (${elapsed}s)`);
+      console.log(`  ${processed}/${totalRows} (${elapsed}s)`);
     }
   }
 }
 
 // Final batch
 if (batch.length > 0) {
+  processed += batch.length;
   insertBatch(batch);
 }
 
@@ -232,7 +240,7 @@ const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 console.log(`\n${"═".repeat(60)}`);
 console.log(`  Batch parse complete (${elapsed}s)`);
 console.log(`${"═".repeat(60)}`);
-console.log(`  Artworks:      ${rows.length}`);
+console.log(`  Artworks:      ${processed}`);
 console.log(`  Cross-refs:    ${crossRefs}`);
 console.log(`  Total events:  ${totalEvents}`);
 console.log(`  PEG parsed:    ${pegEvents} (${(100 * pegEvents / totalEvents).toFixed(1)}%)`);
