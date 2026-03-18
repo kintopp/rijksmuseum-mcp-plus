@@ -170,7 +170,7 @@ const HTML_ENTITY_MAP: Record<string, string> = {
 /** Remove HTML tags, entities, leaked CSS, and Linked Art artifacts, preserving inner text. */
 export function stripHtml(text: string): string {
   return text
-    .replace(/<\/?[a-z][a-z0-9]*[^>]*>/gi, "")              // HTML tags
+    .replace(/<\/?[a-z][a-z0-9]*[^>]*>?/gi, "")             // HTML tags (including unclosed)
     .replace(/&(nbsp|amp|lt|gt|quot|apos);?/gi, (_m, e: string) =>
       HTML_ENTITY_MAP[e.toLowerCase()] ?? "")
     .replace(/&#\d+;?/g, "")                                  // numeric HTML entities

@@ -530,6 +530,11 @@ section("Phase D: New grammar rules and reclassification");
   assertEq(stripHtml("**SK-A-123** text"), "SK-A-123 text", "stripHtml: **bold** → plain");
   assertEq(stripHtml("font-family:Aptos, sans-serif"), "", "stripHtml: CSS → empty");
   assertEq(stripHtml("&#160;text"), "text", "stripHtml: numeric entity stripped");
+  assertEq(stripHtml('<span style="font-size:11pt'), "", "stripHtml: unclosed <span style=");
+  assertEq(stripHtml('<p style="margin:0cm'), "", "stripHtml: unclosed <p style=");
+  assertEq(stripHtml('<span lang="EN-US" style="'), "", "stripHtml: unclosed <span lang=");
+  assertEq(stripHtml('<span data-olk-copy-source="MessageBody" style="'), "", "stripHtml: unclosed data-olk");
+  assertEq(stripHtml("Normal <em>text</em> here"), "Normal text here", "stripHtml: closed tags still work");
 }
 
 // ── Cross-reference detection ──
