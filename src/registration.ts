@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult, type ProvenanceSearchParams } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -2116,6 +2116,152 @@ function registerTools(
         }
         const browseData: InferOutput<typeof LookupIconclassOutput> = result;
         return structuredResponse(browseData, sections.join("\n"));
+      })
+    );
+  }
+
+  // ── search_provenance (conditionally registered when provenance tables exist) ──
+
+  const PROVENANCE_TRANSFER_TYPES = [
+    "sale", "inheritance", "bequest", "commission", "purchase",
+    "confiscation", "recuperation", "restitution",
+    "loan", "transfer", "collection", "gift",
+    "deposit", "exchange", "auction", "seizure", "donation", "inventory",
+    "unknown",
+  ] as const;
+
+  const ProvenanceSearchOutput = {
+    totalArtworks: z.number().int()
+      .describe("Number of artworks with matching provenance events."),
+    results: z.array(z.object({
+      objectNumber: z.string(),
+      title: z.string(),
+      creator: z.string(),
+      date: z.string().optional(),
+      url: z.string(),
+      eventCount: z.number().int(),
+      matchedEventCount: z.number().int(),
+      events: z.array(z.object({
+        sequence: z.number().int(),
+        rawText: z.string(),
+        gap: z.boolean(),
+        transferType: z.string(),
+        uncertain: z.boolean(),
+        parties: z.array(z.object({
+          name: z.string(),
+          dates: z.string().nullable(),
+          uncertain: z.boolean(),
+          role: z.string().nullable(),
+        })),
+        dateExpression: z.string().nullable(),
+        dateYear: z.number().int().nullable(),
+        dateQualifier: z.string().nullable(),
+        location: z.string().nullable(),
+        price: z.object({
+          amount: z.number(),
+          currency: z.string(),
+        }).nullable(),
+        saleDetails: z.string().nullable(),
+        citations: z.array(z.object({ text: z.string() })),
+        isCrossRef: z.boolean(),
+        crossRefTarget: z.string().nullable(),
+        parseMethod: z.enum(["peg", "regex_fallback", "cross_ref"]),
+        matched: z.boolean().describe("True if this event matched the search criteria."),
+      })),
+    })),
+    warnings: z.array(z.string()).optional(),
+    error: z.string().optional(),
+  };
+
+  if (vocabAvailable && vocabDb!.hasProvenanceTables) {
+    server.registerTool(
+      "search_provenance",
+      {
+        title: "Search Provenance",
+        description:
+          "Search ownership and provenance history across ~48K artworks with parsed provenance records. " +
+          "Returns full provenance chains grouped by artwork, with matching events flagged. " +
+          "Each chain tells the complete ownership story: collectors, sales, inheritances, gifts, " +
+          "confiscations, and restitutions, with dates, locations, prices, and citations. " +
+          "Use objectNumber for a single artwork's chain (fast local lookup, no network). " +
+          "Use party to trace a collector or dealer across artworks (e.g. 'Six', 'Rothschild'). " +
+          "Use relatedTo for reverse cross-references — find all works sharing provenance with a given object " +
+          "(pendants, album sheets, dollhouse contents). " +
+          "Combine transferType, dateFrom/dateTo, location for pattern discovery " +
+          "(e.g. confiscations 1940–1945, sales in Paris). " +
+          "Each event includes parseMethod (peg, regex_fallback, cross_ref) indicating parse confidence. " +
+          "At least one filter is required.",
+        inputSchema: z.object({
+          party: optStr().describe("Owner, collector, or dealer name (partial match, e.g. 'Six', 'Rothschild', 'Westendorp')."),
+          transferType: z.preprocess(stripNull,
+            z.enum(PROVENANCE_TRANSFER_TYPES).optional(),
+          ).describe("Type of ownership transfer."),
+          location: optStr().describe("City or place name (partial match, e.g. 'Amsterdam', 'Paris', 'London')."),
+          dateFrom: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Earliest year (inclusive) for provenance event dates."),
+          dateTo: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Latest year (inclusive) for provenance event dates."),
+          objectNumber: optStr().describe("Get full provenance chain for a specific artwork (e.g. 'SK-A-2344'). Fast local lookup."),
+          creator: optStr().describe("Artist name (partial match on creator, e.g. 'Rembrandt', 'Vermeer')."),
+          currency: z.preprocess(stripNull,
+            z.enum(["guilders", "pounds", "francs", "livres", "napoléons"]).optional(),
+          ).describe("Price currency filter (exact match)."),
+          hasPrice: z.preprocess(stripNull, z.boolean().optional())
+            .describe("If true, only events with recorded prices."),
+          relatedTo: optStr().describe("Reverse cross-reference: find all artworks whose provenance references this object number (e.g. 'BK-14656')."),
+          maxResults: z.preprocess(stripNull,
+            z.number().int().min(1).max(50).default(10).optional(),
+          ).describe("Maximum artworks to return (1–50, default 10). Each artwork includes its full chain."),
+        }).strict(),
+        ...withOutputSchema(ProvenanceSearchOutput),
+      },
+      withLogging("search_provenance", async (args: Record<string, unknown>) => {
+        const params: ProvenanceSearchParams = { maxResults: (args.maxResults as number | undefined) ?? 10 };
+        if (args.party) params.party = args.party as string;
+        if (args.transferType) params.transferType = args.transferType as string;
+        if (args.location) params.location = args.location as string;
+        if (args.dateFrom != null) params.dateFrom = args.dateFrom as number;
+        if (args.dateTo != null) params.dateTo = args.dateTo as number;
+        if (args.objectNumber) params.objectNumber = args.objectNumber as string;
+        if (args.creator) params.creator = args.creator as string;
+        if (args.currency) params.currency = args.currency as string;
+        if (args.hasPrice != null) params.hasPrice = args.hasPrice as boolean;
+        if (args.relatedTo) params.relatedTo = args.relatedTo as string;
+
+        // At least one substantive filter required
+        const hasFilter = ["party", "transferType", "location", "dateFrom", "dateTo",
+          "objectNumber", "creator", "currency", "hasPrice", "relatedTo"]
+          .some(k => (params as Record<string, unknown>)[k] !== undefined);
+        if (!hasFilter) {
+          return errorResponse("At least one search filter is required.");
+        }
+
+        const result = vocabDb!.searchProvenance(params);
+
+        // Text channel
+        const lines: string[] = [];
+        lines.push(`${pluralize(result.totalArtworks, "artwork")} with matching provenance`);
+        for (const artwork of result.results) {
+          lines.push("");
+          lines.push(`${artwork.objectNumber} | "${artwork.title}" — ${artwork.creator}${artwork.date ? ` (${artwork.date})` : ""}`);
+          lines.push(`  ${artwork.url}`);
+          for (const e of artwork.events) {
+            const marker = e.matched ? ">>>" : "   ";
+            const partyNames = e.parties.map(p => p.name).join(", ");
+            const parts: string[] = [];
+            if (e.transferType !== "unknown") parts.push(e.transferType);
+            if (partyNames) parts.push(partyNames);
+            if (e.dateExpression) parts.push(e.dateExpression);
+            else if (e.dateYear) parts.push(String(e.dateYear));
+            if (e.location) parts.push(e.location);
+            if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}`);
+            if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
+            lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}`);
+          }
+        }
+
+        const data: InferOutput<typeof ProvenanceSearchOutput> = result;
+        return structuredResponse(data, lines.join("\n"));
       })
     );
   }

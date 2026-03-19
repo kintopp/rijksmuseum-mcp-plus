@@ -182,6 +182,87 @@ export interface VocabSearchResult {
   facets?: Record<string, Array<{ label: string; count: number }>>;
 }
 
+// ─── Provenance search types ────────────────────────────────────────
+
+export interface ProvenanceSearchParams {
+  party?: string;
+  transferType?: string;
+  location?: string;
+  dateFrom?: number;
+  dateTo?: number;
+  objectNumber?: string;
+  creator?: string;
+  currency?: string;
+  hasPrice?: boolean;
+  relatedTo?: string;
+  maxResults?: number;
+}
+
+/** Raw DB row shape from provenance_events JOIN artworks. */
+interface ProvenanceEventDbRow {
+  artwork_id: number;
+  sequence: number;
+  raw_text: string;
+  gap: number;
+  transfer_type: string;
+  uncertain: number;
+  parties: string;
+  date_expression: string | null;
+  date_year: number | null;
+  date_qualifier: string | null;
+  location: string | null;
+  price_amount: number | null;
+  price_currency: string | null;
+  sale_details: string | null;
+  citations: string;
+  is_cross_ref: number;
+  cross_ref_target: string | null;
+  parse_method: string;
+  // Joined from artworks
+  object_number: string;
+  title: string;
+  creator_label: string;
+  date_earliest: number | null;
+  date_latest: number | null;
+}
+
+export interface ProvenanceEventRow {
+  sequence: number;
+  rawText: string;
+  gap: boolean;
+  transferType: string;
+  uncertain: boolean;
+  parties: { name: string; dates: string | null; uncertain: boolean; role: string | null }[];
+  dateExpression: string | null;
+  dateYear: number | null;
+  dateQualifier: string | null;
+  location: string | null;
+  price: { amount: number; currency: string } | null;
+  saleDetails: string | null;
+  citations: { text: string }[];
+  isCrossRef: boolean;
+  crossRefTarget: string | null;
+  parseMethod: "peg" | "regex_fallback" | "cross_ref";
+  matched: boolean;
+}
+
+export interface ProvenanceArtworkResult {
+  objectNumber: string;
+  title: string;
+  creator: string;
+  date?: string;
+  url: string;
+  eventCount: number;
+  matchedEventCount: number;
+  events: ProvenanceEventRow[];
+}
+
+export interface ProvenanceSearchResult {
+  totalArtworks: number;
+  results: ProvenanceArtworkResult[];
+  warnings?: string[];
+}
+
 // ─── Filter definitions ─────────────────────────────────────────────
 // Each entry maps a VocabSearchParams key to the SQL constraints used
 // in a mapping subquery.  `fields` restricts m.field, `vocabType`
@@ -386,6 +467,7 @@ export class VocabularyDb {
   private hasPersonNames = false;
   private hasImageColumn = false;
   private hasImportance = false;
+  private hasProvenanceTables_ = false;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtLookupPersonInfo: Statement | null = null;
@@ -486,6 +568,7 @@ export class VocabularyDb {
       this.hasPersonNames = this.tableExists("person_names_fts");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
+      this.hasProvenanceTables_ = this.tableExists("provenance_events");
 
       // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
@@ -530,6 +613,7 @@ export class VocabularyDb {
         this.hasImportance && "importance",
         this.stmtLookupPersonInfo && "personEnrichment",
         this.stmtLookupIiifId && "iiifIds",
+        this.hasProvenanceTables_ && "provenance",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -540,6 +624,10 @@ export class VocabularyDb {
 
   get available(): boolean {
     return this.db !== null;
+  }
+
+  get hasProvenanceTables(): boolean {
+    return this.hasProvenanceTables_;
   }
 
   /** Check if an index exists and warn if missing. */
@@ -2449,6 +2537,209 @@ export class VocabularyDb {
     }
 
     return null;
+  }
+
+  // ── Provenance search ──────────────────────────────────────────────
+
+  /** Convert a raw provenance_events DB row into a ProvenanceEventRow. */
+  private buildProvenanceEvent(
+    row: ProvenanceEventDbRow,
+    matched: boolean,
+  ): ProvenanceEventRow {
+    let parties: ProvenanceEventRow["parties"] = [];
+    try { parties = JSON.parse(row.parties ?? "[]"); } catch { /* empty */ }
+    let citations: ProvenanceEventRow["citations"] = [];
+    try { citations = JSON.parse(row.citations ?? "[]"); } catch { /* empty */ }
+    return {
+      sequence: row.sequence,
+      rawText: row.raw_text,
+      gap: row.gap === 1,
+      transferType: row.transfer_type,
+      uncertain: row.uncertain === 1,
+      parties,
+      dateExpression: row.date_expression,
+      dateYear: row.date_year,
+      dateQualifier: row.date_qualifier,
+      location: row.location,
+      price: row.price_amount != null
+        ? { amount: row.price_amount, currency: row.price_currency! }
+        : null,
+      saleDetails: row.sale_details,
+      citations,
+      isCrossRef: row.is_cross_ref === 1,
+      crossRefTarget: row.cross_ref_target,
+      parseMethod: row.parse_method as ProvenanceEventRow["parseMethod"],
+      matched,
+    };
+  }
+
+  // SYNC: conditions here must mirror the SQL WHERE clauses in searchProvenance().
+  /** Check whether a single event matches the given provenance search filters. */
+  private eventMatchesFilters(
+    row: ProvenanceEventDbRow,
+    params: ProvenanceSearchParams,
+  ): boolean {
+    if (params.party) {
+      if (!row.parties.toLowerCase().includes(params.party.toLowerCase())) return false;
+    }
+    if (params.transferType && row.transfer_type !== params.transferType) return false;
+    if (params.location) {
+      if (!(row.location ?? "").toLowerCase().includes(params.location.toLowerCase())) return false;
+    }
+    if (params.dateFrom != null && (row.date_year == null || row.date_year < params.dateFrom)) return false;
+    if (params.dateTo != null && (row.date_year == null || row.date_year > params.dateTo)) return false;
+    if (params.currency && row.price_currency !== params.currency) return false;
+    if (params.hasPrice && row.price_amount == null) return false;
+    if (params.relatedTo && row.cross_ref_target !== params.relatedTo) return false;
+    return true;
+  }
+
+  /** Build a ProvenanceArtworkResult from grouped rows for one artwork. */
+  private buildProvenanceArtwork(
+    rows: ProvenanceEventDbRow[],
+    allMatched: boolean,
+    params?: ProvenanceSearchParams,
+  ): ProvenanceArtworkResult {
+    const first = rows[0];
+    let matchedCount = 0;
+    const events = rows.map(r => {
+      const matched = allMatched || (params ? this.eventMatchesFilters(r, params) : false);
+      if (matched) matchedCount++;
+      return this.buildProvenanceEvent(r, matched);
+    });
+    return {
+      objectNumber: first.object_number,
+      title: first.title ?? "",
+      creator: first.creator_label ?? "",
+      date: formatDateRange(first.date_earliest, first.date_latest),
+      url: `https://www.rijksmuseum.nl/en/collection/${first.object_number}`,
+      eventCount: events.length,
+      matchedEventCount: allMatched ? events.length : matchedCount,
+      events,
+    };
+  }
+
+  /**
+   * Search provenance events across artworks.
+   *
+   * Returns full provenance chains grouped by artwork, with matching events
+   * flagged via `matched: true`. At least one filter is required.
+   */
+  searchProvenance(params: ProvenanceSearchParams): ProvenanceSearchResult {
+    if (!this.db || !this.hasProvenanceTables_) {
+      return { totalArtworks: 0, results: [] };
+    }
+
+    const maxResults = Math.min(params.maxResults ?? 10, 50);
+
+    // ── objectNumber fast path ──
+    if (params.objectNumber) {
+      const rows = this.db.prepare(`
+        SELECT pe.*, a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest
+        FROM provenance_events pe
+        JOIN artworks a ON a.art_id = pe.artwork_id
+        WHERE a.object_number = ?
+        ORDER BY pe.sequence
+      `).all(params.objectNumber) as ProvenanceEventDbRow[];
+      if (rows.length === 0) return { totalArtworks: 0, results: [] };
+      return { totalArtworks: 1, results: [this.buildProvenanceArtwork(rows, true)] };
+    }
+
+    // SYNC: conditions here must mirror eventMatchesFilters() for matched-flag accuracy.
+    // ── Build WHERE conditions ──
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+
+    if (params.party) {
+      conditions.push("pe.parties LIKE '%' || ? || '%'");
+      bindings.push(params.party);
+    }
+    if (params.transferType) {
+      conditions.push("pe.transfer_type = ?");
+      bindings.push(params.transferType);
+    }
+    if (params.location) {
+      conditions.push("pe.location LIKE '%' || ? || '%'");
+      bindings.push(params.location);
+    }
+    if (params.dateFrom != null) {
+      conditions.push("pe.date_year >= ?");
+      bindings.push(params.dateFrom);
+    }
+    if (params.dateTo != null) {
+      conditions.push("pe.date_year <= ?");
+      bindings.push(params.dateTo);
+    }
+    if (params.creator) {
+      conditions.push("a.creator_label LIKE '%' || ? || '%'");
+      bindings.push(params.creator);
+    }
+    if (params.currency) {
+      conditions.push("pe.price_currency = ?");
+      bindings.push(params.currency);
+    }
+    if (params.hasPrice) {
+      conditions.push("pe.price_amount IS NOT NULL");
+    }
+    if (params.relatedTo) {
+      conditions.push("pe.cross_ref_target = ?");
+      bindings.push(params.relatedTo);
+    }
+
+    if (conditions.length === 0) {
+      return { totalArtworks: 0, results: [] };
+    }
+
+    const where = conditions.join(" AND ");
+
+    // Step 1: Find matching artwork_ids (limited)
+    const artworkIds = (this.db.prepare(`
+      SELECT DISTINCT pe.artwork_id
+      FROM provenance_events pe
+      JOIN artworks a ON a.art_id = pe.artwork_id
+      WHERE ${where}
+      LIMIT ?
+    `).all(...bindings, maxResults) as { artwork_id: number }[]).map(r => r.artwork_id);
+
+    if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
+
+    // Count total — capped at 10001 to avoid slow full scans on broad filters
+    const COUNT_CAP = 10001;
+    const totalArtworks = (this.db.prepare(`
+      SELECT COUNT(*) AS cnt FROM (
+        SELECT DISTINCT pe.artwork_id
+        FROM provenance_events pe
+        JOIN artworks a ON a.art_id = pe.artwork_id
+        WHERE ${where}
+        LIMIT ?
+      )
+    `).get(...bindings, COUNT_CAP) as { cnt: number }).cnt;
+
+    // Step 2: Fetch full chains for matched artworks
+    const placeholders = artworkIds.map(() => "?").join(", ");
+    const allRows = this.db.prepare(`
+      SELECT pe.*, a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest
+      FROM provenance_events pe
+      JOIN artworks a ON a.art_id = pe.artwork_id
+      WHERE pe.artwork_id IN (${placeholders})
+      ORDER BY pe.artwork_id, pe.sequence
+    `).all(...artworkIds) as ProvenanceEventDbRow[];
+
+    // Group by artwork_id, preserving the order from step 1
+    const grouped = new Map<number, ProvenanceEventDbRow[]>();
+    for (const row of allRows) {
+      if (!grouped.has(row.artwork_id)) grouped.set(row.artwork_id, []);
+      grouped.get(row.artwork_id)!.push(row);
+    }
+
+    const results: ProvenanceArtworkResult[] = [];
+    for (const artworkId of artworkIds) {
+      const rows = grouped.get(artworkId);
+      if (!rows) continue;
+      results.push(this.buildProvenanceArtwork(rows, false, params));
+    }
+
+    return { totalArtworks, results };
   }
 
 }
