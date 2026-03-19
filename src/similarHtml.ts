@@ -110,7 +110,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
       "<em>workshop</em>, <em>attributed to</em> the same hand, or in the same <em>circle</em>. " +
       "Score weighted by <strong>qualifier strength</strong>: " +
       "&ldquo;after&rdquo;/&ldquo;copyist of&rdquo; (3&times;), &ldquo;workshop of&rdquo; (2&times;), " +
-      "&ldquo;attributed to&rdquo; (1.5&times;), &ldquo;circle of&rdquo;/&ldquo;follower of&rdquo; (1&times;); " +
+      "&ldquo;attributed to&rdquo; (1.5&times;), &ldquo;circle of&rdquo;/&ldquo;school of&rdquo;/&ldquo;follower of&rdquo; (1&times;); " +
       "rarer creators contribute more.",
   },
   depictedPerson: {
