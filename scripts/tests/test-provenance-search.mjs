@@ -325,6 +325,29 @@ section("14. Currency filter");
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  15. hasGap filter (provenance gaps)
+// ══════════════════════════════════════════════════════════════════
+
+section("15. hasGap filter");
+
+{
+  const { sc, isError } = await call("search_provenance", { hasGap: true, maxResults: 5 });
+  assert(!isError, "No error for hasGap search");
+  assert(sc?.totalArtworks >= 1, `totalArtworks >= 1 (got ${sc?.totalArtworks})`);
+
+  // Each artwork should have at least one gap event
+  const allHaveGap = sc?.results?.every(a =>
+    a.events.some(e => e.gap === true)
+  );
+  assert(allHaveGap, "Every artwork has at least one gap event");
+
+  // Matched events should be the gap events specifically
+  const matchedEvents = sc?.results?.flatMap(a => a.events.filter(e => e.matched)) ?? [];
+  const allMatchedAreGaps = matchedEvents.every(e => e.gap === true);
+  assert(allMatchedAreGaps, "All matched events are gap events");
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 

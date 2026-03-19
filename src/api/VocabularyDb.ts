@@ -194,6 +194,7 @@ export interface ProvenanceSearchParams {
   creator?: string;
   currency?: string;
   hasPrice?: boolean;
+  hasGap?: boolean;
   relatedTo?: string;
   maxResults?: number;
 }
@@ -2590,6 +2591,7 @@ export class VocabularyDb {
     if (params.dateTo != null && (row.date_year == null || row.date_year > params.dateTo)) return false;
     if (params.currency && row.price_currency !== params.currency) return false;
     if (params.hasPrice && row.price_amount == null) return false;
+    if (params.hasGap && row.gap !== 1) return false;
     if (params.relatedTo && row.cross_ref_target !== params.relatedTo) return false;
     return true;
   }
@@ -2680,6 +2682,10 @@ export class VocabularyDb {
     }
     if (params.hasPrice) {
       conditions.push("pe.price_amount IS NOT NULL");
+    }
+    if (params.hasGap) {
+      // Artwork-level filter: at least one gap event exists in the chain
+      conditions.push("pe.artwork_id IN (SELECT artwork_id FROM provenance_events WHERE gap = 1)");
     }
     if (params.relatedTo) {
       conditions.push("pe.cross_ref_target = ?");

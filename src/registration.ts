@@ -2190,6 +2190,9 @@ function registerTools(
           "Combine transferType, dateFrom/dateTo, location for pattern discovery " +
           "(e.g. confiscations 1940–1945, sales in Paris). " +
           "Each event includes parseMethod (peg, regex_fallback, cross_ref) indicating parse confidence. " +
+          "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
+          "For collection-wide counting or keyword searches that don't map to structured fields, " +
+          "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
           "At least one filter is required.",
         inputSchema: z.object({
           party: optStr().describe("Owner, collector, or dealer name (partial match, e.g. 'Six', 'Rothschild', 'Westendorp')."),
@@ -2208,6 +2211,8 @@ function registerTools(
           ).describe("Price currency filter (exact match)."),
           hasPrice: z.preprocess(stripNull, z.boolean().optional())
             .describe("If true, only events with recorded prices."),
+          hasGap: z.preprocess(stripNull, z.boolean().optional())
+            .describe("If true, only artworks with provenance gaps (undocumented periods)."),
           relatedTo: optStr().describe("Reverse cross-reference: find all artworks whose provenance references this object number (e.g. 'BK-14656')."),
           maxResults: z.preprocess(stripNull,
             z.number().int().min(1).max(50).default(10).optional(),
@@ -2226,11 +2231,12 @@ function registerTools(
         if (args.creator) params.creator = args.creator as string;
         if (args.currency) params.currency = args.currency as string;
         if (args.hasPrice != null) params.hasPrice = args.hasPrice as boolean;
+        if (args.hasGap != null) params.hasGap = args.hasGap as boolean;
         if (args.relatedTo) params.relatedTo = args.relatedTo as string;
 
         // At least one substantive filter required
         const hasFilter = ["party", "transferType", "location", "dateFrom", "dateTo",
-          "objectNumber", "creator", "currency", "hasPrice", "relatedTo"]
+          "objectNumber", "creator", "currency", "hasPrice", "hasGap", "relatedTo"]
           .some(k => (params as Record<string, unknown>)[k] !== undefined);
         if (!hasFilter) {
           return errorResponse("At least one search filter is required.");
