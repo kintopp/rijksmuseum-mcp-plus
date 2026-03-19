@@ -18,13 +18,13 @@ The tool was developed as a technology demo at the [Research and Infrastructure 
 
 You can explore artworks with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ provides the following additional features:
 
-1. **More searchable metadata** — metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) including `creator` demographics, all `title` variants, bibliography citations for individual artworks, [Iconclass](https://iconclass.org) notations, cross-referenced with the Rijksmuseum's metadata, which can be explored by keyword, semantically, or by hierarchy, and full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`).
+1. **More searchable metadata** — metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) including `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), `title` variants, bibliography citations for individual artworks, [Iconclass](https://iconclass.org) descriptions, and full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`).
 
 2. **Semantic search** — multilingual, concept/meaning-based explorations across multiple metadata categories. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
 
-3. **Spatial dimensions** — proximity radius searches on the museum's (`nearPlace`) and size filters (`minWidth`/`maxHeight`) enable spatial queries like "artworks related to places within 25 km of Leiden" or "prints smaller than 10 cm wide" as well as two new parameters (`nearLat` and `nearLon`) to enable spatial queries from arbitrary locations ("find artworks depicting places near me").
+3. **Spatial dimensions** — proximity radius searches on physical locations and size filters for artworks enable various spatial qeuries (e.g. "artworks related to places within 25 km of Leiden", "prints smaller than 10 cm wide"). 
 
-4. **Smart searching and relevance ranking** — morphological stemming (e.g. singular/plural) to make subject searches more forgiving; automatic faceted counts on large search results to allow the AI assistant to suggest appropriate filters; textual queries ranked by relevance instead of catalogue order, and filter-only queries ranked by their expected importance to users. 
+4. **Smart searching and relevance ranking** — morphological stemming to make subject searches more forgiving (e.g. "castle" and "castles"); automatic faceted counts allow the AI assistant to suggest appropriate filters to narrow the search results; textual queries (e.g. on `inscription`) return artworks ranked by relevance instead of catalogue order, while filter-only queries get ranked by their expected importance to users. 
 
 5. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (N.B. this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, rotate, flip horizontally or view the image full-screen.
 
@@ -35,7 +35,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 8. **Find similar artworks** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
 
 <br>
-<p align="center"><img src="docs/places-near-basel.png" alt="Artworks from the Rijksmuseum depicting places within 100km of Basel" width="500"></p>
+<p align="center"><img src="docs/genre-analysis.png" alt="Fraction of paintings in each century by subject" width="500"></p>
 
 ## Quick Start
 
