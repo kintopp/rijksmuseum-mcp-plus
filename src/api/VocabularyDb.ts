@@ -315,6 +315,7 @@ export interface ProvenanceArtworkResult {
 
 export interface ProvenanceSearchResult {
   totalArtworks: number;
+  totalArtworksCapped?: boolean;
   results: ProvenanceArtworkResult[];
   warnings?: string[];
 }
@@ -2789,35 +2790,34 @@ export class VocabularyDb {
 
     const where = conditions.join(" AND ");
 
-    // Step 1: Build ORDER BY for sortBy
+    // Step 1: Build ORDER BY + CTEs for sortBy
     let orderBy = "";
+    let sortCte = "";
+    let sortJoin = "";
+    const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
     if (params.sortBy === "price") {
-      // Pre-aggregate max price per artwork to avoid correlated subquery per row
-      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
-      orderBy = `ORDER BY max_price ${dir} NULLS LAST`;
+      sortCte = "WITH sort_agg AS (SELECT artwork_id, MAX(price_amount) AS sort_val FROM provenance_events WHERE price_amount IS NOT NULL GROUP BY artwork_id)";
+      sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
+      orderBy = `ORDER BY sa.sort_val ${dir} NULLS LAST`;
+    } else if (params.sortBy === "eventCount") {
+      sortCte = "WITH sort_agg AS (SELECT artwork_id, COUNT(*) AS sort_val FROM provenance_events GROUP BY artwork_id)";
+      sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
+      orderBy = `ORDER BY sa.sort_val ${dir}`;
     } else if (params.sortBy === "dateYear") {
-      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
       orderBy = params.sortOrder === "asc"
         ? `ORDER BY COALESCE(pe.date_year, 9999) ${dir}`
         : `ORDER BY pe.date_year ${dir} NULLS LAST`;
     }
-    // eventCount sort is handled post-fetch in JS
 
     const offset = params.offset ?? 0;
 
     // Find matching artwork_ids (limited + offset)
-    const priceSortCte = params.sortBy === "price"
-      ? "WITH max_prices AS (SELECT artwork_id, MAX(price_amount) AS max_price FROM provenance_events WHERE price_amount IS NOT NULL GROUP BY artwork_id)"
-      : "";
-    const priceSortJoin = params.sortBy === "price"
-      ? "LEFT JOIN max_prices mp ON mp.artwork_id = pe.artwork_id"
-      : "";
     const artworkIds = (this.db.prepare(`
-      ${priceSortCte}
+      ${sortCte}
       SELECT DISTINCT pe.artwork_id
       FROM provenance_events pe
       JOIN artworks a ON a.art_id = pe.artwork_id
-      ${priceSortJoin}
+      ${sortJoin}
       WHERE ${where}
       ${orderBy}
       LIMIT ? OFFSET ?
@@ -2861,13 +2861,8 @@ export class VocabularyDb {
       results.push(this.buildProvenanceArtwork(rows, false, params));
     }
 
-    // Post-fetch sort for eventCount (requires full chain data)
-    if (params.sortBy === "eventCount") {
-      const dir = params.sortOrder === "asc" ? 1 : -1;
-      results.sort((a, b) => dir * (a.eventCount - b.eventCount));
-    }
-
-    return { totalArtworks, results };
+    const capped = totalArtworks >= COUNT_CAP;
+    return { totalArtworks, totalArtworksCapped: capped || undefined, results };
   }
 
   // ── Layer 2: Provenance Periods ───────────────────────────────────
@@ -3029,19 +3024,20 @@ export class VocabularyDb {
       }
     }
 
+    // Exclude negative durations (parsing artefacts) when sorting by duration
+    let orderBy = "";
+    if (params.sortBy === "duration") {
+      conditions.push("pp.end_year IS NOT NULL AND pp.begin_year IS NOT NULL AND (pp.end_year - pp.begin_year) >= 0");
+      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
+      orderBy = `ORDER BY (pp.end_year - pp.begin_year) ${dir}`;
+    }
+
     if (conditions.length === 0) {
       return { totalArtworks: 0, results: [] };
     }
 
     const where = conditions.join(" AND ");
     const offset = params.offset ?? 0;
-
-    // Build ORDER BY
-    let orderBy = "";
-    if (params.sortBy === "duration") {
-      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
-      orderBy = `ORDER BY (pp.end_year - pp.begin_year) ${dir} NULLS LAST`;
-    }
 
     // Find matching artwork_ids
     const artworkIds = (this.db.prepare(`
@@ -3091,7 +3087,8 @@ export class VocabularyDb {
       results.push(this.buildProvenanceArtworkPeriods(rows, false, params));
     }
 
-    return { totalArtworks, results };
+    const capped = totalArtworks >= COUNT_CAP;
+    return { totalArtworks, totalArtworksCapped: capped || undefined, results };
   }
 
 }

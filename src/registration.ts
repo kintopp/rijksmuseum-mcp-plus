@@ -2134,7 +2134,9 @@ function registerTools(
 
   const ProvenanceSearchOutput = {
     totalArtworks: z.number().int()
-      .describe("Number of artworks with matching provenance events/periods."),
+      .describe("Number of artworks with matching provenance events/periods. Capped at 10,001 — see totalArtworksCapped."),
+    totalArtworksCapped: z.boolean().optional()
+      .describe("True when the actual total exceeds 10,001. Use search_artwork with provenance parameter for exact collection-wide counts."),
     results: z.array(z.object({
       objectNumber: z.string(),
       title: z.string(),
@@ -2301,7 +2303,11 @@ function registerTools(
           "ownerName", "acquisitionMethod", "minDuration", "maxDuration"]
           .some(k => (params as Record<string, unknown>)[k] !== undefined);
         if (!hasFilter) {
-          return errorResponse("At least one search filter is required.");
+          return errorResponse(
+            "At least one search filter is required (e.g. party, transferType, location, dateFrom/dateTo, creator, objectNumber, " +
+            "ownerName, acquisitionMethod, minDuration). Modifiers like sortBy, sortOrder, maxResults, offset, and layer do not count. " +
+            "Tip: use a broad filter such as dateFrom: 1400 for collection-wide ranking.",
+          );
         }
 
         // Route on layer
