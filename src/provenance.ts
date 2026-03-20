@@ -114,7 +114,38 @@ export function splitEvents(
 ): { text: string; gap: boolean }[] {
   if (!text || !text.trim()) return [];
 
-  const raw = text.split(";");
+  // Split on semicolons, but not inside parentheses or brackets — catalogue
+  // descriptions in ('...') and ('[...]') often contain semicolons as French/
+  // Dutch clause separators that should not create event boundaries.
+  // Note: single-quote tracking is limited to opening `('` sequences to avoid
+  // false matches on possessive apostrophes like "Sotheby's".
+  const raw: string[] = [];
+  let depth = 0;
+  let inQuotedDesc = false;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotedDesc) {
+      // End quoted description: closing quote followed by closing paren
+      if (ch === "'" && i + 1 < text.length && text[i + 1] === ")") {
+        inQuotedDesc = false;
+        // Don't decrement depth here — the ')' will do it on next iteration
+      }
+    } else if (ch === "(" && i + 1 < text.length && text[i + 1] === "'") {
+      // Start of ('...') catalogue description — enter quoted mode
+      depth++;
+      inQuotedDesc = true;
+      i++; // skip the opening quote
+    } else if (ch === "(" || ch === "[") {
+      depth++;
+    } else if ((ch === ")" || ch === "]") && depth > 0) {
+      depth--;
+    } else if (ch === ";" && depth === 0) {
+      raw.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  raw.push(text.slice(start));
   const results: { text: string; gap: boolean }[] = [];
   let pendingGap = false;
 
