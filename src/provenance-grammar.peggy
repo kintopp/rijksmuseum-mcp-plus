@@ -27,7 +27,7 @@ const NAP_RE = /([\d,]+)\s*Napol[eé]ons/i;
 const QUAL_DATE_RE = /^\s*(before|after)\s+(\d{4})\b/i;
 const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
 const BARE_YEAR_RE = /^\s*(\d{4})\s*$/;
-const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)\)/;
+const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/;
 // City list — kept in sync with RE_CITIES in provenance.ts (+ 5 compound place names)
 const CITIES = [
   "Amsterdam","Delft","The Hague","London","Paris","Venice","Rotterdam","Brussels",
@@ -38,15 +38,46 @@ const CITIES = [
   "Palazzo Manfrin","Mentmore Towers","Dalmeny House",
 ];
 
+// Regex for digit-rejoin: next part starts with 3 digits (thousands group), optionally followed
+// by a space + currency word. Excludes 4-digit starts (years like "1824").
+const THOUSANDS_CONT_RE = /^\d{3}(?:\s|$)/;
+
+function splitCommaRespectingParens(str) {
+  // Split on commas, but not inside matched parentheses or single-quoted strings.
+  // Handles ('...'), ('[...]'), (YYYY-YYYY, City), and nested parens.
+  const result = [];
+  let depth = 0;
+  let inSingleQuote = false;
+  let start = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === "'" && depth > 0) {
+      inSingleQuote = !inSingleQuote;
+    } else if (!inSingleQuote) {
+      if (ch === "(" || ch === "[") depth++;
+      else if ((ch === ")" || ch === "]") && depth > 0) depth--;
+      else if (ch === "," && depth === 0) {
+        result.push(str.slice(start, i).trim());
+        start = i + 1;
+      }
+    }
+  }
+  const last = str.slice(start).trim();
+  if (last) result.push(last);
+  return result;
+}
+
 function parseRest(tail) {
   // tail is the raw string after the keyword/name portion
-  // Split on commas, then rejoin number-fragments (e.g. "fl. 550" + "000" → "fl. 550,000")
-  const rawParts = tail.split(",").map(s => s.trim()).filter(Boolean);
+  // Split on commas respecting paren/quote depth, then rejoin number-fragments
+  const rawParts = splitCommaRespectingParens(tail).filter(Boolean);
   const parts = [];
   for (let i = 0; i < rawParts.length; i++) {
     const curr = rawParts[i];
-    // If current part ends with digits and next part is pure digits, rejoin (comma in number)
-    if (i + 1 < rawParts.length && DIGIT_END_RE.test(curr) && DIGITS_ONLY_RE.test(rawParts[i + 1])) {
+    // Rejoin comma-separated thousands: "fl. 550" + "000" → "fl. 550,000"
+    // Only rejoin if next part starts with exactly 3 digits (thousands group),
+    // not 4 (which is a year). Also accept "000 livres" (digits + currency).
+    if (i + 1 < rawParts.length && DIGIT_END_RE.test(curr) && THOUSANDS_CONT_RE.test(rawParts[i + 1])) {
       parts.push(curr + "," + rawParts[i + 1]);
       i++; // skip next
     } else {
@@ -189,29 +220,35 @@ EventBody
   / AnaphoricEvent
   / GenericOwnerEvent
 
+// ─── Name capture (paren-aware) ─────────────────────────────────────
+// Matches text up to a comma or semicolon, but allows commas inside
+// balanced parentheses: "Name (1892-1937, Wassenaar)" stays intact.
+NameChars
+  = $(( "(" [^)]* ")" / [^,;(] )*)
+
 // ─── Sale ───────────────────────────────────────────────────────────
 
 SaleEvent
   = ("his"i / "her"i / "their"i) _ ("posthumous"i / "deceased"i)? _? "sale" tail:Tail
     { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest }; }
-  / "sold"i _ prep:("by"i / "to"i / "with"i) _ ("the"i _)? nameRaw:$([^,;]*) tail:Tail
+  / "sold"i _ prep:("by"i / "to"i / "with"i) _ ("the"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
       const role = prep.toLowerCase() === "to" ? "buyer" : "seller";
       return { type: "sale", parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
     }
-  / "through"i _ ("the"i _)? "mediation"i _ "of"i _ nameRaw:$([^,;]*) tail:Tail
+  / "through"i _ ("the"i _)? "mediation"i _ "of"i _ nameRaw:NameChars tail:Tail
     { return buildResult("sale", extractNameAndDates(nameRaw), "intermediary", parseRest(tail)); }
   / "sale"i _ "[" section:[^\]]* "]" tail:Tail
     { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest, saleSection: section.join("") }; }
-  / "sale"i _ nameRaw:$([^,;]*) tail:Tail
+  / "sale"i _ nameRaw:NameChars tail:Tail
     { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
 
 // ─── Commission ─────────────────────────────────────────────────────
 
 CommissionEvent
-  = "commissioned"i _ ("by"i / "for"i / "as"i / "and"i) _ nameRaw:$([^,;]*) tail:Tail
+  = "commissioned"i _ ("by"i / "for"i / "as"i / "and"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -247,7 +284,7 @@ TransferEvent
 // ─── Bequest ────────────────────────────────────────────────────────
 
 BequestEvent
-  = ("bequeathed"i _ ("to"i / "by"i) / "by"i _ "bequest"i / "bequest"i) _ nameRaw:$([^,;]*) tail:Tail
+  = ("bequeathed"i _ ("to"i / "by"i) / "by"i _ "bequest"i / "bequest"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -257,7 +294,7 @@ BequestEvent
 // ─── Purchase ───────────────────────────────────────────────────────
 
 PurchaseEvent
-  = "from"i _ "whom"i _ "purchased"i _ "by"i _ ("the"i _)? ("dealer"i _)? nameRaw:$([^,;]*) tail:Tail
+  = "from"i _ "whom"i _ "purchased"i _ "by"i _ ("the"i _)? ("dealer"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -265,27 +302,27 @@ PurchaseEvent
     }
   / "from"i _ "whose"i _ "heirs"i tail:Tail
     { return buildResult("purchase", null, null, parseRest(tail)); }
-  / "purchased"i _ "by"i _ ("the"i _)? ("museum"i / ("dealer"i _))? nameRaw:$([^,;]*)? tail:Tail
+  / "purchased"i _ "by"i _ ("the"i _)? ("museum"i / ("dealer"i _))? nameRaw:NameChars? tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
       const rest = parseRest(tail);
       return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
-  / "bought"i _ "by"i _ ("the"i _)? ("dealer"i _)? nameRaw:$([^,;]*) tail:Tail
+  / "bought"i _ "by"i _ ("the"i _)? ("dealer"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
       return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
-  / "purchased"i _ "from"i _ nameRaw:$([^,;]*) tail:Tail
+  / "purchased"i _ "from"i _ nameRaw:NameChars tail:Tail
     { return buildResult("purchase", nameRaw ? extractNameAndDates(nameRaw) : null, "seller", parseRest(tail)); }
-  / ("acquired"i / "verwerving"i) _ ("by"i / "from"i / "in"i / "for"i / "with"i / "en"i)? _? ("the"i _)? nameRaw:$([^,;]*) tail:Tail
+  / ("acquired"i / "verwerving"i) _ ("by"i / "from"i / "in"i / "for"i / "with"i / "en"i)? _? ("the"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
       const rest = parseRest(tail);
       return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
-  / "purchased"i _ ("for"i / "at"i) _ nameRaw:$([^,;]*) tail:Tail
+  / "purchased"i _ ("for"i / "at"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
       const rest = parseRest(tail);
@@ -297,7 +334,7 @@ PurchaseEvent
 // ─── Gift ───────────────────────────────────────────────────────────
 
 GiftEvent
-  = ("donated"i / "donation"i / "gift"i / "given"i / "presented"i / "dedicated"i / "schenking"i) _ ("by"i / "to"i / "of"i / "van"i)? _? ("the"i _)? nameRaw:$([^,;]*) tail:Tail
+  = ("donated"i / "donation"i / "gift"i / "given"i / "presented"i / "dedicated"i / "schenking"i) _ ("by"i / "to"i / "of"i / "van"i)? _? ("the"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -307,7 +344,7 @@ GiftEvent
 // ─── Exchange ───────────────────────────────────────────────────────
 
 ExchangeEvent
-  = ("in"i _ "exchange"i / "exchanged"i) _ ("for"i / "with"i) _ nameRaw:$([^,;]*)? tail:Tail
+  = ("in"i _ "exchange"i / "exchanged"i) _ ("for"i / "with"i) _ nameRaw:NameChars? tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
       const rest = parseRest(tail);
@@ -317,7 +354,7 @@ ExchangeEvent
 // ─── Restitution ────────────────────────────────────────────────────
 
 RestitutionEvent
-  = ("restituted"i / "returned"i) _ "to"i _ nameRaw:$([^,;]*) tail:Tail
+  = ("restituted"i / "returned"i) _ "to"i _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -333,13 +370,13 @@ DepositEvent
 // ─── Collection ─────────────────────────────────────────────────────
 
 CollectionEvent
-  = "collection"i _ nameRaw:$([^,;]*) tail:Tail
+  = "collection"i _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
       return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "collector" }] : [], ...rest };
     }
-  / "ex"i "."? _ "coll"i "."? _ nameRaw:$([^,;]*) tail:Tail
+  / "ex"i "."? _ "coll"i "."? _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -353,13 +390,13 @@ CollectionEvent
 // ─── Estate inventory ───────────────────────────────────────────────
 
 EstateInventoryEvent
-  = "estate"i _ "inventory"i (_ "of"i (_ ("his"i / "her"i / "their"i))?)? ","? _ nameRaw:$([^,;]*) tail:Tail
+  = "estate"i _ "inventory"i (_ "of"i (_ ("his"i / "her"i / "their"i))?)? ","? _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
       return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "deceased" }] : [], ...rest };
     }
-  / ("probate"i _)? "inventory"i ","? _ nameRaw:$([^,;]*) tail:Tail
+  / ("probate"i _)? "inventory"i ","? _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -371,24 +408,24 @@ EstateInventoryEvent
 FromWhomEvent
   = "from"i _ "whom"i tail:Tail
     { return buildResult("sale", null, null, parseRest(tail)); }
-  / "by"i _ "whom"i _ ("probably"i _)? ("sold"i _)? ("to"i _)? nameRaw:$([^,;]*) tail:Tail
+  / "by"i _ "whom"i _ ("probably"i _)? ("sold"i _)? ("to"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
       const parties = nd && nd.name ? [{ ...nd, role: "buyer" }] : [];
       return { type: "sale", parties, ...rest };
     }
-  / "from"i _ ("the"i _)? "dealer"i "s"i? _ nameRaw:$([^,;]*) tail:Tail
+  / "from"i _ ("the"i _)? "dealer"i "s"i? _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
       return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "seller" }] : [], ...rest };
     }
-  / "from"i _ ("the"i _)? "heirs"i _ ("of"i _)? nameRaw:$([^,;]*) tail:Tail
+  / "from"i _ ("the"i _)? "heirs"i _ ("of"i _)? nameRaw:NameChars tail:Tail
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ "the"i _ "artist"i tail:Tail
     { return buildResult("sale", { name: "the artist", dates: null }, "seller", parseRest(tail)); }
-  / "from"i _ ("the"i _)? !("collection"i / "estate"i) nameRaw:$([^,;]*) tail:Tail
+  / "from"i _ ("the"i _)? !("collection"i / "estate"i) nameRaw:NameChars tail:Tail
     &{ return /\bto\b/i.test(tail); }
     { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
 
@@ -397,7 +434,7 @@ FromWhomEvent
 AnaphoricEvent
   = poss:("his"i / "her"i / "their"i) _
     rel:RelationWord
-    ","? _ nameRaw:$([^,;]*) tail:Tail
+    ","? _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const role = poss.toLowerCase() + " " + rel.toLowerCase();
@@ -406,13 +443,13 @@ AnaphoricEvent
     }
   / "by"i _ "descent"i tail:Tail
     { const rest = parseRest(tail); return { type: "inheritance", parties: [], ...rest }; }
-  / "inherited"i _ "by"i _ nameRaw:$([^,;]*) tail:Tail
+  / "inherited"i _ "by"i _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
       return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role: "heir" }] : [], ...rest };
     }
-  / ("by"i / "through"i) _ "inheritance"i _ ("to"i _)? nameRaw:$([^,;]*) tail:Tail
+  / ("by"i / "through"i) _ "inheritance"i _ ("to"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);

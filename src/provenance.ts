@@ -438,7 +438,7 @@ function extractNameAndDates(
   if (!text.trim()) return null;
 
   // Match: Name (YYYY-YYYY) or Name (?-?)
-  const datesMatch = text.match(/^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??)\)/);
+  const datesMatch = text.match(/^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/);
   if (datesMatch) {
     const name = datesMatch[1].trim().replace(/,\s*$/, "");
     if (name) {
