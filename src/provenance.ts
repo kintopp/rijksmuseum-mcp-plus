@@ -114,6 +114,11 @@ export function splitEvents(
 ): { text: string; gap: boolean }[] {
   if (!text || !text.trim()) return [];
 
+  // Decode &amp; before splitting — the ';' in '&amp;' is a false event delimiter.
+  // Other entities (&lt; &gt; etc.) don't contain ';' at a position that causes splits,
+  // and full stripHtml() runs per-segment after splitting.
+  text = text.replace(/&amp;/gi, "&");
+
   // Split on semicolons, but not inside parentheses or brackets — catalogue
   // descriptions in ('...') and ('[...]') often contain semicolons as French/
   // Dutch clause separators that should not create event boundaries.

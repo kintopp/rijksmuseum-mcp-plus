@@ -24,6 +24,9 @@ const POUND_RE = /^£\s*([\d,]+)/;
 const FRS_RE = /^frs\.\s*([\d,]+)/;
 const LIVRES_RE = /([\d,]+)\s*livres/i;
 const NAP_RE = /([\d,]+)\s*Napol[eé]ons/i;
+const DM_RE = /^DM\s*([\d,]+)/;
+const RM_RE = /^RM\s*([\d,]+)/;
+const SFRS_RE = /^(?:SFrcs|CHF)\s*([\d,]+)/;
 const QUAL_DATE_RE = /^\s*(before|after)\s+(\d{4})\b/i;
 const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
 const BARE_YEAR_RE = /^\s*(\d{4})\s*$/;
@@ -138,6 +141,12 @@ function parseRest(tail) {
     if (livresMatch) { priceAmount = parseFloat(livresMatch[1].replace(/,/g, "")); priceCurrency = "livres"; continue; }
     const napMatch = t.match(NAP_RE);
     if (napMatch) { priceAmount = parseFloat(napMatch[1].replace(/,/g, "")); priceCurrency = "napoléons"; continue; }
+    const dmMatch = t.match(DM_RE);
+    if (dmMatch) { priceAmount = parseFloat(dmMatch[1].replace(/,/g, "")); priceCurrency = "deutschmarks"; continue; }
+    const rmMatch = t.match(RM_RE);
+    if (rmMatch) { priceAmount = parseFloat(rmMatch[1].replace(/,/g, "")); priceCurrency = "reichsmarks"; continue; }
+    const sfrsMatch = t.match(SFRS_RE);
+    if (sfrsMatch) { priceAmount = parseFloat(sfrsMatch[1].replace(/,/g, "")); priceCurrency = "swiss_francs"; continue; }
 
     // Date patterns (ordered by specificity)
     const exactDate = t.match(EXACT_DATE_RE);
@@ -235,6 +244,8 @@ NameChars
 
 SaleEvent
   = ("his"i / "her"i / "their"i) _ ("posthumous"i / "deceased"i)? _? "sale" tail:Tail
+    { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest }; }
+  / "anonymous"i _ "sale"i tail:Tail
     { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest }; }
   / "sold"i _ prep:("by"i / "to"i / "with"i) _ ("the"i _)? nameRaw:NameChars tail:Tail
     {
