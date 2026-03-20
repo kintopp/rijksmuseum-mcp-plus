@@ -490,10 +490,31 @@ RelationWord "relation word"
 StandardPhraseEvent
   = "the"i _ "artist"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [{ name: "the artist", dates: null, role: "creator" }], ...rest }; }
+  / "the"i _ "dealer"i "s"i? _ nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "dealer" }] : [], ...rest };
+    }
+  / "the"i _ "sitter"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [{ name: "the sitter", dates: null, role: "sitter" }], ...rest }; }
   / "private"i _ "collection"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
   / "anonymous"i _ "collection"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
+  / "whence"i tail:Tail
+    { return buildResult("purchase", null, null, parseRest(tail)); }
+  / "recorded"i _ "in"i _ nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+    }
+  / "description"i _ "of"i _ nameRaw:NameChars tail:Tail
+    {
+      const rest = parseRest(tail);
+      return { type: "collection", parties: [], ...rest };
+    }
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 
