@@ -154,6 +154,9 @@ export function splitEvents(
 
     if (!trimmed) continue;
 
+    // Skip standalone inventory-mark abbreviations (not provenance events)
+    if (/^Inv\.?\s*$/i.test(trimmed)) continue;
+
     results.push({ text: trimmed, gap });
   }
 

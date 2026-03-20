@@ -222,6 +222,7 @@ EventBody
   / EstateInventoryEvent
   / FromWhomEvent
   / AnaphoricEvent
+  / StandardPhraseEvent
   / GenericOwnerEvent
 
 // ─── Name capture (paren-aware) ─────────────────────────────────────
@@ -472,6 +473,16 @@ RelationWord "relation word"
      / "cousins"i / "cousin"i / "uncle"i / "aunt"i
      / "stepson"i / "stepdaughter"i
      / "heirs"i / "heir"i)
+
+// ─── Standard provenance phrases ────────────────────────────────────
+
+StandardPhraseEvent
+  = "the"i _ "artist"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [{ name: "the artist", dates: null, role: "creator" }], ...rest }; }
+  / "private"i _ "collection"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
+  / "anonymous"i _ "collection"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 
