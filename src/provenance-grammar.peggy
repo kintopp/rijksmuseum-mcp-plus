@@ -531,6 +531,38 @@ StandardPhraseEvent
     }
   / "moved"i _ "to"i tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
+  / "excavated"i _ ("at"i _ ("the"i _ "site"i _ "of"i _)?)? nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+    }
+  / "dredged"i _ ("from"i _)? nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+    }
+  / "discovered"i _ ("in"i / "at"i / "near"i)? _? nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+    }
+  / ("country"i _ "house"i / "garden"i) _ nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+    }
+  / "deaccessioned"i _ ("by"i _)? nameRaw:NameChars tail:Tail
+    { return buildResult("sale", extractNameAndDates(nameRaw), null, parseRest(tail)); }
+  / "dismantled"i tail:Tail
+    { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
+  / ("unknown"i / "unidentified"i) _ "collector"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
+  / ("stolen"i / "looted"i / "seized"i) tail:Tail
+    { const rest = parseRest(tail); return { type: "confiscation", parties: [], ...rest }; }
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 

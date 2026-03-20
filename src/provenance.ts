@@ -114,6 +114,9 @@ export function splitEvents(
 ): { text: string; gap: boolean }[] {
   if (!text || !text.trim()) return [];
 
+  // Normalize doubled articles ("the the dealer" → "the dealer")
+  text = text.replace(/\bthe\s+the\b/gi, "the");
+
   // Decode &amp; before splitting — the ';' in '&amp;' is a false event delimiter.
   // Other entities (&lt; &gt; etc.) don't contain ';' at a position that causes splits,
   // and full stripHtml() runs per-segment after splitting.
@@ -213,7 +216,7 @@ export function stripHtml(text: string): string {
     .replace(/&(nbsp|amp|lt|gt|quot|apos);?/gi, (_m, e: string) =>
       HTML_ENTITY_MAP[e.toLowerCase()] ?? "")
     .replace(/&#\d+;?/g, "")                                  // numeric HTML entities
-    .replace(/(?:font-family|mso-[\w-]+|font-size|color)\s*:[^;]*;?\s*/gi, "")  // leaked CSS
+    .replace(/(?:font-family|mso-[\w-]+|font-size|line-height|color|margin|padding|text-align|text-indent)\s*:[^;]*;?\s*/gi, "")  // leaked CSS
     .replace(/^"+>?\s*/, "")                                   // "> prefix (Linked Art artifact)
     .replace(/\*\*([^*]+)\*\*/g, "$1")                        // **bold** markdown
     .replace(/\s{2,}/g, " ")
