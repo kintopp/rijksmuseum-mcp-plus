@@ -348,6 +348,185 @@ section("15. hasGap filter");
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  16. Multi-value transferType
+// ══════════════════════════════════════════════════════════════════
+
+section("16. Multi-value transferType");
+
+{
+  const { sc, isError } = await call("search_provenance", {
+    transferType: ["sale", "gift"],
+    maxResults: 3,
+  });
+  assert(!isError, "No error for multi-value transferType");
+  assert(sc?.totalArtworks >= 1, `totalArtworks >= 1 (got ${sc?.totalArtworks})`);
+
+  const matchedEvents = sc?.results?.flatMap(a => a.events.filter(e => e.matched)) ?? [];
+  const allCorrectType = matchedEvents.every(e => e.transferType === "sale" || e.transferType === "gift");
+  assert(allCorrectType, "All matched events are sale or gift");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  17. excludeTransferType
+// ══════════════════════════════════════════════════════════════════
+
+section("17. excludeTransferType");
+
+{
+  const { sc, isError } = await call("search_provenance", {
+    transferType: "confiscation",
+    excludeTransferType: "restitution",
+    maxResults: 3,
+  });
+  assert(!isError, "No error for excludeTransferType");
+
+  // Every artwork should have confiscation but no restitution
+  for (const a of (sc?.results ?? [])) {
+    const hasConfiscation = a.events.some(e => e.transferType === "confiscation");
+    assert(hasConfiscation, `${a.objectNumber} has confiscation event`);
+    const hasRestitution = a.events.some(e => e.transferType === "restitution");
+    assert(!hasRestitution, `${a.objectNumber} has no restitution event`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  18. sortBy price
+// ══════════════════════════════════════════════════════════════════
+
+section("18. sortBy price");
+
+{
+  const { sc, isError } = await call("search_provenance", {
+    hasPrice: true,
+    sortBy: "price",
+    sortOrder: "desc",
+    maxResults: 5,
+  });
+  assert(!isError, "No error for sortBy=price");
+  assert(sc?.results?.length >= 2, `At least 2 results for price sort (got ${sc?.results?.length})`);
+
+  // Verify descending: max price of each artwork should be >= next
+  const maxPrices = (sc?.results ?? []).map(a => {
+    const prices = a.events.filter(e => e.price != null).map(e => e.price.amount);
+    return prices.length > 0 ? Math.max(...prices) : 0;
+  });
+  let isSorted = true;
+  for (let i = 1; i < maxPrices.length; i++) {
+    if (maxPrices[i] > maxPrices[i - 1]) { isSorted = false; break; }
+  }
+  assert(isSorted, "Results sorted by price descending");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  19. offset (pagination)
+// ══════════════════════════════════════════════════════════════════
+
+section("19. offset (pagination)");
+
+{
+  const { sc: page1 } = await call("search_provenance", {
+    transferType: "sale",
+    location: "Amsterdam",
+    maxResults: 3,
+    offset: 0,
+  });
+  const { sc: page2 } = await call("search_provenance", {
+    transferType: "sale",
+    location: "Amsterdam",
+    maxResults: 3,
+    offset: 3,
+  });
+
+  const ids1 = new Set((page1?.results ?? []).map(a => a.objectNumber));
+  const ids2 = new Set((page2?.results ?? []).map(a => a.objectNumber));
+
+  // Pages should not overlap
+  let hasOverlap = false;
+  for (const id of ids2) {
+    if (ids1.has(id)) { hasOverlap = true; break; }
+  }
+  assert(!hasOverlap, "Page 1 and page 2 have no overlapping artworks");
+  assert(page1?.totalArtworks === page2?.totalArtworks, "totalArtworks consistent across pages");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  20. Layer 2 periods (basic)
+// ══════════════════════════════════════════════════════════════════
+
+section("20. Layer 2 periods (basic)");
+
+{
+  // objectNumber fast path for periods
+  const { sc, isError } = await call("search_provenance", {
+    layer: "periods",
+    objectNumber: "SK-A-4050",
+  });
+  assert(!isError, "No error for periods objectNumber fast path");
+
+  if (sc?.results?.length > 0) {
+    const artwork = sc.results[0];
+    assert(artwork.objectNumber === "SK-A-4050", "Correct objectNumber returned");
+    assert(Array.isArray(artwork.periods), "periods array present");
+    assert(artwork.periods.length > 0, `Has periods (got ${artwork.periods?.length})`);
+
+    // Check period structure
+    const p = artwork.periods[0];
+    assert(typeof p.sequence === "number", "period.sequence is number");
+    assert("ownerName" in p, "period has ownerName");
+    assert("beginYear" in p, "period has beginYear");
+    assert("duration" in p, "period has duration");
+    assert(typeof p.matched === "boolean", "period.matched is boolean");
+  } else {
+    // periods table might not exist in test DB
+    assert(sc?.warnings?.length > 0, "Warning about missing periods table");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  21. Layer 2 periods — ownerName search
+// ══════════════════════════════════════════════════════════════════
+
+section("21. Layer 2 periods — ownerName search");
+
+{
+  const { sc, isError } = await call("search_provenance", {
+    layer: "periods",
+    ownerName: "Rothschild",
+    maxResults: 3,
+  });
+  assert(!isError, "No error for ownerName search");
+
+  if (sc?.results?.length > 0) {
+    // At least one matched period should contain Rothschild
+    const hasMatch = sc.results.some(a =>
+      (a.periods ?? []).some(p => p.matched && (p.ownerName ?? "").includes("Rothschild"))
+    );
+    assert(hasMatch, "At least one matched period has ownerName containing 'Rothschild'");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  22. Layer 2 periods — minDuration
+// ══════════════════════════════════════════════════════════════════
+
+section("22. Layer 2 periods — minDuration");
+
+{
+  const { sc, isError } = await call("search_provenance", {
+    layer: "periods",
+    minDuration: 100,
+    maxResults: 5,
+  });
+  assert(!isError, "No error for minDuration search");
+
+  if (sc?.results?.length > 0) {
+    const matchedPeriods = sc.results.flatMap(a => (a.periods ?? []).filter(p => p.matched));
+    const allLongEnough = matchedPeriods.every(p => p.duration != null && p.duration >= 100);
+    assert(allLongEnough, "All matched periods have duration >= 100 years");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 

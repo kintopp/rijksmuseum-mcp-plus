@@ -851,7 +851,9 @@ function registerTools(
           ? " All parameters can be freely combined with each other. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
-            "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
+            "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations. " +
+            "For provenance analytics: use provenance parameter for collection-wide keyword counts (e.g. provenance='Führermuseum' returns totalResults=843). " +
+            "Combine with facets for cross-tabulation. Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt')."
           : ""),
       inputSchema: z.object({
         query: optStr()
@@ -2132,7 +2134,7 @@ function registerTools(
 
   const ProvenanceSearchOutput = {
     totalArtworks: z.number().int()
-      .describe("Number of artworks with matching provenance events."),
+      .describe("Number of artworks with matching provenance events/periods."),
     results: z.array(z.object({
       objectNumber: z.string(),
       title: z.string(),
@@ -2168,6 +2170,25 @@ function registerTools(
         parseMethod: z.enum(["peg", "regex_fallback", "cross_ref"]),
         matched: z.boolean().describe("True if this event matched the search criteria."),
       })),
+      periods: z.array(z.object({
+        sequence: z.number().int(),
+        ownerName: z.string().nullable(),
+        ownerDates: z.string().nullable(),
+        location: z.string().nullable(),
+        acquisitionMethod: z.string().nullable(),
+        acquisitionFrom: z.string().nullable(),
+        beginYear: z.number().int().nullable(),
+        beginYearLatest: z.number().int().nullable(),
+        endYear: z.number().int().nullable(),
+        duration: z.number().int().nullable().describe("Ownership duration in years (endYear - beginYear), null if unknown."),
+        derivation: z.record(z.string()).describe("How each field was derived from source events."),
+        uncertain: z.boolean(),
+        citations: z.array(z.object({ text: z.string() })),
+        sourceEvents: z.array(z.number().int()),
+        matched: z.boolean().describe("True if this period matched the search criteria."),
+      })).optional().describe("Ownership periods (Layer 2 interpretation). Present when layer='periods'."),
+      periodCount: z.number().int().optional(),
+      matchedPeriodCount: z.number().int().optional(),
     })),
     warnings: z.array(z.string()).optional(),
     error: z.string().optional(),
@@ -2193,27 +2214,55 @@ function registerTools(
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "For collection-wide counting or keyword searches that don't map to structured fields, " +
           "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
+          "For collection-wide statistics, use search_artwork's provenance parameter (keyword search returning totalResults counts) " +
+          "combined with facets and creditLine for cross-tabulation by type, material, or century. " +
+          "The provenance + creditLine + compact + facets pattern enables collector profiling and acquisition channel analysis. " +
           "At least one filter is required.",
         inputSchema: z.object({
+          layer: z.preprocess(stripNull,
+            z.enum(["events", "periods"]).default("events").optional(),
+          ).describe("Data layer. 'events' (default): raw parsed provenance events (Layer 1). 'periods': interpreted ownership periods with durations (Layer 2)."),
           party: optStr().describe("Owner, collector, or dealer name (partial match, e.g. 'Six', 'Rothschild', 'Westendorp')."),
-          transferType: z.preprocess(stripNull,
+          transferType: z.preprocess(
+            normalizeStringOrArray,
+            z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
+          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: sale (24K), collection (17K), inheritance (17K), loan (6K), transfer (5K), gift (4K), purchase (2K). Rare: bequest, recuperation, commission, deposit, restitution, confiscation, exchange. Currently empty: auction, seizure, donation, inventory."),
+          excludeTransferType: z.preprocess(
+            normalizeStringOrArray,
+            z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
+          ).describe("Exclude artworks that have ANY event of this type. Artwork-level negation (e.g. confiscated but never restituted)."),
+          ownerName: optStr().describe("Owner name (partial match). Only used with layer='periods'."),
+          acquisitionMethod: z.preprocess(stripNull,
             z.enum(PROVENANCE_TRANSFER_TYPES).optional(),
-          ).describe("Type of ownership transfer."),
+          ).describe("Acquisition method filter (exact match). Only used with layer='periods'."),
           location: optStr().describe("City or place name (partial match, e.g. 'Amsterdam', 'Paris', 'London')."),
           dateFrom: z.preprocess(stripNull, z.number().int().optional())
-            .describe("Earliest year (inclusive) for provenance event dates."),
+            .describe("Earliest year (inclusive) for provenance event/period dates."),
           dateTo: z.preprocess(stripNull, z.number().int().optional())
-            .describe("Latest year (inclusive) for provenance event dates."),
+            .describe("Latest year (inclusive) for provenance event/period dates."),
           objectNumber: optStr().describe("Get full provenance chain for a specific artwork (e.g. 'SK-A-2344'). Fast local lookup."),
           creator: optStr().describe("Artist name (partial match on creator, e.g. 'Rembrandt', 'Vermeer')."),
           currency: z.preprocess(stripNull,
             z.enum(["guilders", "pounds", "francs", "livres", "napoléons"]).optional(),
-          ).describe("Price currency filter (exact match)."),
+          ).describe("Price currency filter (exact match). Only used with layer='events'."),
           hasPrice: z.preprocess(stripNull, z.boolean().optional())
-            .describe("If true, only events with recorded prices."),
+            .describe("If true, only events with recorded prices. Only used with layer='events'."),
           hasGap: z.preprocess(stripNull, z.boolean().optional())
-            .describe("If true, only artworks with provenance gaps (undocumented periods)."),
-          relatedTo: optStr().describe("Reverse cross-reference: find all artworks whose provenance references this object number (e.g. 'BK-14656')."),
+            .describe("If true, only artworks with provenance gaps (undocumented periods). Only used with layer='events'."),
+          relatedTo: optStr().describe("Reverse cross-reference: find all artworks whose provenance references this object number (e.g. 'BK-14656'). Only used with layer='events'."),
+          minDuration: z.preprocess(stripNull, z.number().int().min(1).optional())
+            .describe("Minimum ownership years. Only used with layer='periods'."),
+          maxDuration: z.preprocess(stripNull, z.number().int().min(1).optional())
+            .describe("Maximum ownership years. Only used with layer='periods'."),
+          sortBy: z.preprocess(stripNull,
+            z.enum(["price", "dateYear", "eventCount", "duration"]).optional(),
+          ).describe("Sort results by this dimension. Use sortBy to rank results (e.g. highest prices, longest ownership). 'duration' only works with layer='periods'."),
+          sortOrder: z.preprocess(stripNull,
+            z.enum(["asc", "desc"]).default("desc").optional(),
+          ).describe("Sort direction (default 'desc')."),
+          offset: z.preprocess(stripNull,
+            z.number().int().min(0).default(0).optional(),
+          ).describe("Skip this many artworks (for pagination). Use with maxResults."),
           maxResults: z.preprocess(stripNull,
             z.number().int().min(1).max(50).default(10).optional(),
           ).describe("Maximum artworks to return (1–50, default 10). Each artwork includes its full chain."),
@@ -2221,9 +2270,16 @@ function registerTools(
         ...withOutputSchema(ProvenanceSearchOutput),
       },
       withLogging("search_provenance", async (args: Record<string, unknown>) => {
-        const params: ProvenanceSearchParams = { maxResults: (args.maxResults as number | undefined) ?? 10 };
+        const layer = (args.layer as string | undefined) ?? "events";
+        const params: ProvenanceSearchParams = {
+          maxResults: (args.maxResults as number | undefined) ?? 10,
+          layer: layer as "events" | "periods",
+        };
         if (args.party) params.party = args.party as string;
-        if (args.transferType) params.transferType = args.transferType as string;
+        if (args.transferType) params.transferType = args.transferType as string | string[];
+        if (args.excludeTransferType) params.excludeTransferType = args.excludeTransferType as string | string[];
+        if (args.ownerName) params.ownerName = args.ownerName as string;
+        if (args.acquisitionMethod) params.acquisitionMethod = args.acquisitionMethod as string;
         if (args.location) params.location = args.location as string;
         if (args.dateFrom != null) params.dateFrom = args.dateFrom as number;
         if (args.dateTo != null) params.dateTo = args.dateTo as number;
@@ -2233,16 +2289,25 @@ function registerTools(
         if (args.hasPrice != null) params.hasPrice = args.hasPrice as boolean;
         if (args.hasGap != null) params.hasGap = args.hasGap as boolean;
         if (args.relatedTo) params.relatedTo = args.relatedTo as string;
+        if (args.minDuration != null) params.minDuration = args.minDuration as number;
+        if (args.maxDuration != null) params.maxDuration = args.maxDuration as number;
+        if (args.sortBy) params.sortBy = args.sortBy as ProvenanceSearchParams["sortBy"];
+        if (args.sortOrder) params.sortOrder = args.sortOrder as "asc" | "desc";
+        if (args.offset != null) params.offset = args.offset as number;
 
         // At least one substantive filter required
-        const hasFilter = ["party", "transferType", "location", "dateFrom", "dateTo",
-          "objectNumber", "creator", "currency", "hasPrice", "hasGap", "relatedTo"]
+        const hasFilter = ["party", "transferType", "excludeTransferType", "location", "dateFrom", "dateTo",
+          "objectNumber", "creator", "currency", "hasPrice", "hasGap", "relatedTo",
+          "ownerName", "acquisitionMethod", "minDuration", "maxDuration"]
           .some(k => (params as Record<string, unknown>)[k] !== undefined);
         if (!hasFilter) {
           return errorResponse("At least one search filter is required.");
         }
 
-        const result = vocabDb!.searchProvenance(params);
+        // Route on layer
+        const result = layer === "periods"
+          ? vocabDb!.searchProvenancePeriods(params)
+          : vocabDb!.searchProvenance(params);
 
         // Text channel
         const lines: string[] = [];
@@ -2251,18 +2316,39 @@ function registerTools(
           lines.push("");
           lines.push(`${artwork.objectNumber} | "${artwork.title}" — ${artwork.creator}${artwork.date ? ` (${artwork.date})` : ""}`);
           lines.push(`  ${artwork.url}`);
-          for (const e of artwork.events) {
-            const marker = e.matched ? ">>>" : "   ";
-            const partyNames = e.parties.map(p => p.name).join(", ");
-            const parts: string[] = [];
-            if (e.transferType !== "unknown") parts.push(e.transferType);
-            if (partyNames) parts.push(partyNames);
-            if (e.dateExpression) parts.push(e.dateExpression);
-            else if (e.dateYear) parts.push(String(e.dateYear));
-            if (e.location) parts.push(e.location);
-            if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}`);
-            if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
-            lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}`);
+
+          if (layer === "periods" && artwork.periods) {
+            // Format periods
+            for (const p of artwork.periods) {
+              const marker = p.matched ? ">>>" : "   ";
+              const parts: string[] = [];
+              if (p.ownerName) parts.push(p.ownerName);
+              if (p.acquisitionMethod) parts.push(p.acquisitionMethod);
+              const yearRange = p.beginYear != null || p.endYear != null
+                ? `${p.beginYear ?? "?"}–${p.endYear ?? "?"}`
+                : null;
+              if (yearRange) {
+                const durStr = p.duration != null ? ` (${p.duration} yrs)` : "";
+                parts.push(yearRange + durStr);
+              }
+              if (p.location) parts.push(p.location);
+              lines.push(`  ${marker} ${p.sequence}. ${parts.join(" | ")}`);
+            }
+          } else {
+            // Format events
+            for (const e of artwork.events) {
+              const marker = e.matched ? ">>>" : "   ";
+              const partyNames = e.parties.map(p => p.name).join(", ");
+              const parts: string[] = [];
+              if (e.transferType !== "unknown") parts.push(e.transferType);
+              if (partyNames) parts.push(partyNames);
+              if (e.dateExpression) parts.push(e.dateExpression);
+              else if (e.dateYear) parts.push(String(e.dateYear));
+              if (e.location) parts.push(e.location);
+              if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}`);
+              if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
+              lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}`);
+            }
           }
         }
 

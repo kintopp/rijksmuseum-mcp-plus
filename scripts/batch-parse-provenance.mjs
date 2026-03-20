@@ -95,6 +95,23 @@ const PERIODS_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_period_method ON provenance_periods(acquisition_method)`,
 ];
 
+const PARTIES_SCHEMA = `
+CREATE TABLE IF NOT EXISTS provenance_parties (
+  artwork_id   INTEGER NOT NULL,
+  sequence     INTEGER NOT NULL,
+  party_idx    INTEGER NOT NULL,
+  party_name   TEXT    NOT NULL,
+  party_dates  TEXT,
+  party_role   TEXT,
+  uncertain    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (artwork_id, sequence, party_idx)
+) WITHOUT ROWID;
+`;
+
+const PARTIES_INDEXES = [
+  `CREATE INDEX IF NOT EXISTS idx_party_name ON provenance_parties(party_name)`,
+];
+
 // ─── Main ───────────────────────────────────────────────────────────
 
 const db = new Database(dbPath);
@@ -104,12 +121,15 @@ db.pragma("journal_mode = WAL");
 if (!dryRun) {
   db.exec(EVENTS_SCHEMA);
   for (const idx of EVENTS_INDEXES) db.exec(idx);
+  db.exec(PARTIES_SCHEMA);
+  for (const idx of PARTIES_INDEXES) db.exec(idx);
   if (!layer1Only) {
     db.exec(PERIODS_SCHEMA);
     for (const idx of PERIODS_INDEXES) db.exec(idx);
   }
   // Clear existing data
   db.exec("DELETE FROM provenance_events");
+  db.exec("DELETE FROM provenance_parties");
   if (!layer1Only) {
     try { db.exec("DELETE FROM provenance_periods"); } catch { /* table may not exist */ }
   }
@@ -123,6 +143,12 @@ const insertEvent = dryRun ? null : db.prepare(`
     location, price_amount, price_currency, sale_details, citations,
     is_cross_ref, cross_ref_target, parse_method
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const insertParty = dryRun ? null : db.prepare(`
+  INSERT INTO provenance_parties (
+    artwork_id, sequence, party_idx, party_name, party_dates, party_role, uncertain
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 
 const insertPeriod = (dryRun || layer1Only) ? null : db.prepare(`
@@ -166,6 +192,16 @@ const insertBatch = dryRun ? () => {} : db.transaction((batch) => {
         JSON.stringify(e.citations),
         e.isCrossRef ? 1 : 0, e.crossRefTarget, e.parseMethod
       );
+      // Insert normalized parties
+      if (insertParty && e.parties) {
+        for (let i = 0; i < e.parties.length; i++) {
+          const p = e.parties[i];
+          insertParty.run(
+            artId, e.sequence, i,
+            p.name, p.dates ?? null, p.role ?? null, p.uncertain ? 1 : 0
+          );
+        }
+      }
     }
     if (insertPeriod && periods) {
       for (const p of periods) {

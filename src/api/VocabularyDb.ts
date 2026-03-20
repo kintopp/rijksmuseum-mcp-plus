@@ -186,7 +186,8 @@ export interface VocabSearchResult {
 
 export interface ProvenanceSearchParams {
   party?: string;
-  transferType?: string;
+  transferType?: string | string[];
+  excludeTransferType?: string | string[];
   location?: string;
   dateFrom?: number;
   dateTo?: number;
@@ -197,6 +198,15 @@ export interface ProvenanceSearchParams {
   hasGap?: boolean;
   relatedTo?: string;
   maxResults?: number;
+  offset?: number;
+  sortBy?: "price" | "dateYear" | "eventCount" | "duration";
+  sortOrder?: "asc" | "desc";
+  // Layer 2 (periods) params
+  layer?: "events" | "periods";
+  ownerName?: string;
+  acquisitionMethod?: string;
+  minDuration?: number;
+  maxDuration?: number;
 }
 
 /** Raw DB row shape from provenance_events JOIN artworks. */
@@ -247,6 +257,48 @@ export interface ProvenanceEventRow {
   matched: boolean;
 }
 
+/** Raw DB row shape from provenance_periods JOIN artworks. */
+interface ProvenancePeriodDbRow {
+  artwork_id: number;
+  sequence: number;
+  owner_name: string | null;
+  owner_dates: string | null;
+  location: string | null;
+  acquisition_method: string | null;
+  acquisition_from: string | null;
+  begin_year: number | null;
+  begin_year_latest: number | null;
+  end_year: number | null;
+  derivation: string;
+  uncertain: number;
+  citations: string;
+  source_events: string;
+  // Joined from artworks:
+  object_number: string;
+  title: string;
+  creator_label: string;
+  date_earliest: number | null;
+  date_latest: number | null;
+}
+
+export interface ProvenancePeriodRow {
+  sequence: number;
+  ownerName: string | null;
+  ownerDates: string | null;
+  location: string | null;
+  acquisitionMethod: string | null;
+  acquisitionFrom: string | null;
+  beginYear: number | null;
+  beginYearLatest: number | null;
+  endYear: number | null;
+  duration: number | null;
+  derivation: Record<string, string>;
+  uncertain: boolean;
+  citations: { text: string }[];
+  sourceEvents: number[];
+  matched: boolean;
+}
+
 export interface ProvenanceArtworkResult {
   objectNumber: string;
   title: string;
@@ -256,6 +308,9 @@ export interface ProvenanceArtworkResult {
   eventCount: number;
   matchedEventCount: number;
   events: ProvenanceEventRow[];
+  periods?: ProvenancePeriodRow[];
+  periodCount?: number;
+  matchedPeriodCount?: number;
 }
 
 export interface ProvenanceSearchResult {
@@ -469,6 +524,8 @@ export class VocabularyDb {
   private hasImageColumn = false;
   private hasImportance = false;
   private hasProvenanceTables_ = false;
+  private hasProvenancePeriods_ = false;
+  private hasPartyTable_ = false;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtLookupPersonInfo: Statement | null = null;
@@ -570,6 +627,8 @@ export class VocabularyDb {
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
+      this.hasProvenancePeriods_ = this.tableExists("provenance_periods");
+      this.hasPartyTable_ = this.tableExists("provenance_parties");
 
       // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
@@ -615,6 +674,8 @@ export class VocabularyDb {
         this.stmtLookupPersonInfo && "personEnrichment",
         this.stmtLookupIiifId && "iiifIds",
         this.hasProvenanceTables_ && "provenance",
+        this.hasProvenancePeriods_ && "provenancePeriods",
+        this.hasPartyTable_ && "provenanceParties",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -629,6 +690,10 @@ export class VocabularyDb {
 
   get hasProvenanceTables(): boolean {
     return this.hasProvenanceTables_;
+  }
+
+  get hasProvenancePeriods(): boolean {
+    return this.hasProvenancePeriods_;
   }
 
   /** Check if an index exists and warn if missing. */
@@ -2581,9 +2646,20 @@ export class VocabularyDb {
     params: ProvenanceSearchParams,
   ): boolean {
     if (params.party) {
-      if (!row.parties.toLowerCase().includes(params.party.toLowerCase())) return false;
+      if (this.hasPartyTable_) {
+        // Match on party name only (not dates/role) via parsed JSON
+        let parties: { name: string }[] = [];
+        try { parties = JSON.parse(row.parties ?? "[]"); } catch { /* empty */ }
+        if (!parties.some(p => p.name.toLowerCase().includes(params.party!.toLowerCase()))) return false;
+      } else {
+        if (!row.parties.toLowerCase().includes(params.party.toLowerCase())) return false;
+      }
     }
-    if (params.transferType && row.transfer_type !== params.transferType) return false;
+    if (params.transferType) {
+      const types = Array.isArray(params.transferType) ? params.transferType : [params.transferType];
+      if (!types.includes(row.transfer_type)) return false;
+    }
+    // excludeTransferType is an artwork-level filter, not per-event — handled in SQL
     if (params.location) {
       if (!(row.location ?? "").toLowerCase().includes(params.location.toLowerCase())) return false;
     }
@@ -2653,12 +2729,27 @@ export class VocabularyDb {
     const bindings: unknown[] = [];
 
     if (params.party) {
-      conditions.push("pe.parties LIKE '%' || ? || '%'");
+      if (this.hasPartyTable_) {
+        conditions.push("pe.artwork_id IN (SELECT pp2.artwork_id FROM provenance_parties pp2 WHERE pp2.party_name LIKE '%' || ? || '%')");
+      } else {
+        conditions.push("pe.parties LIKE '%' || ? || '%'");
+      }
       bindings.push(params.party);
     }
     if (params.transferType) {
-      conditions.push("pe.transfer_type = ?");
-      bindings.push(params.transferType);
+      const types = Array.isArray(params.transferType) ? params.transferType : [params.transferType];
+      if (types.length === 1) {
+        conditions.push("pe.transfer_type = ?");
+        bindings.push(types[0]);
+      } else {
+        conditions.push(`pe.transfer_type IN (${types.map(() => "?").join(", ")})`);
+        bindings.push(...types);
+      }
+    }
+    if (params.excludeTransferType) {
+      const excl = Array.isArray(params.excludeTransferType) ? params.excludeTransferType : [params.excludeTransferType];
+      conditions.push(`NOT EXISTS (SELECT 1 FROM provenance_events pe_excl WHERE pe_excl.artwork_id = pe.artwork_id AND pe_excl.transfer_type IN (${excl.map(() => "?").join(", ")}))`);
+      bindings.push(...excl);
     }
     if (params.location) {
       conditions.push("pe.location LIKE '%' || ? || '%'");
@@ -2698,14 +2789,39 @@ export class VocabularyDb {
 
     const where = conditions.join(" AND ");
 
-    // Step 1: Find matching artwork_ids (limited)
+    // Step 1: Build ORDER BY for sortBy
+    let orderBy = "";
+    if (params.sortBy === "price") {
+      // Pre-aggregate max price per artwork to avoid correlated subquery per row
+      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
+      orderBy = `ORDER BY max_price ${dir} NULLS LAST`;
+    } else if (params.sortBy === "dateYear") {
+      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
+      orderBy = params.sortOrder === "asc"
+        ? `ORDER BY COALESCE(pe.date_year, 9999) ${dir}`
+        : `ORDER BY pe.date_year ${dir} NULLS LAST`;
+    }
+    // eventCount sort is handled post-fetch in JS
+
+    const offset = params.offset ?? 0;
+
+    // Find matching artwork_ids (limited + offset)
+    const priceSortCte = params.sortBy === "price"
+      ? "WITH max_prices AS (SELECT artwork_id, MAX(price_amount) AS max_price FROM provenance_events WHERE price_amount IS NOT NULL GROUP BY artwork_id)"
+      : "";
+    const priceSortJoin = params.sortBy === "price"
+      ? "LEFT JOIN max_prices mp ON mp.artwork_id = pe.artwork_id"
+      : "";
     const artworkIds = (this.db.prepare(`
+      ${priceSortCte}
       SELECT DISTINCT pe.artwork_id
       FROM provenance_events pe
       JOIN artworks a ON a.art_id = pe.artwork_id
+      ${priceSortJoin}
       WHERE ${where}
-      LIMIT ?
-    `).all(...bindings, maxResults) as { artwork_id: number }[]).map(r => r.artwork_id);
+      ${orderBy}
+      LIMIT ? OFFSET ?
+    `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
 
     if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
 
@@ -2738,11 +2854,241 @@ export class VocabularyDb {
       grouped.get(row.artwork_id)!.push(row);
     }
 
-    const results: ProvenanceArtworkResult[] = [];
+    let results: ProvenanceArtworkResult[] = [];
     for (const artworkId of artworkIds) {
       const rows = grouped.get(artworkId);
       if (!rows) continue;
       results.push(this.buildProvenanceArtwork(rows, false, params));
+    }
+
+    // Post-fetch sort for eventCount (requires full chain data)
+    if (params.sortBy === "eventCount") {
+      const dir = params.sortOrder === "asc" ? 1 : -1;
+      results.sort((a, b) => dir * (a.eventCount - b.eventCount));
+    }
+
+    return { totalArtworks, results };
+  }
+
+  // ── Layer 2: Provenance Periods ───────────────────────────────────
+
+  /** Convert a raw provenance_periods DB row into a ProvenancePeriodRow. */
+  private buildProvenancePeriod(
+    row: ProvenancePeriodDbRow,
+    matched: boolean,
+  ): ProvenancePeriodRow {
+    let derivation: Record<string, string> = {};
+    try { derivation = JSON.parse(row.derivation ?? "{}"); } catch { /* empty */ }
+    let citations: { text: string }[] = [];
+    try { citations = JSON.parse(row.citations ?? "[]"); } catch { /* empty */ }
+    let sourceEvents: number[] = [];
+    try { sourceEvents = JSON.parse(row.source_events ?? "[]"); } catch { /* empty */ }
+    const duration = (row.begin_year != null && row.end_year != null)
+      ? row.end_year - row.begin_year
+      : null;
+    return {
+      sequence: row.sequence,
+      ownerName: row.owner_name,
+      ownerDates: row.owner_dates,
+      location: row.location,
+      acquisitionMethod: row.acquisition_method,
+      acquisitionFrom: row.acquisition_from,
+      beginYear: row.begin_year,
+      beginYearLatest: row.begin_year_latest,
+      endYear: row.end_year,
+      duration,
+      derivation,
+      uncertain: row.uncertain === 1,
+      citations,
+      sourceEvents,
+      matched,
+    };
+  }
+
+  /** Check whether a single period matches the given search filters. */
+  private periodMatchesFilters(
+    row: ProvenancePeriodDbRow,
+    params: ProvenanceSearchParams,
+  ): boolean {
+    const ownerFilter = params.ownerName ?? params.party;
+    if (ownerFilter) {
+      if (!(row.owner_name ?? "").toLowerCase().includes(ownerFilter.toLowerCase())) return false;
+    }
+    if (params.acquisitionMethod && row.acquisition_method !== params.acquisitionMethod) return false;
+    if (params.location) {
+      if (!(row.location ?? "").toLowerCase().includes(params.location.toLowerCase())) return false;
+    }
+    if (params.dateFrom != null && (row.begin_year == null || row.begin_year < params.dateFrom)) return false;
+    if (params.dateTo != null && (row.end_year == null || row.end_year > params.dateTo)) return false;
+    if (params.minDuration != null || params.maxDuration != null) {
+      if (row.begin_year == null || row.end_year == null) return false;
+      const dur = row.end_year - row.begin_year;
+      if (params.minDuration != null && dur < params.minDuration) return false;
+      if (params.maxDuration != null && dur > params.maxDuration) return false;
+    }
+    return true;
+  }
+
+  /** Build a ProvenanceArtworkResult (with periods) from grouped period rows. */
+  private buildProvenanceArtworkPeriods(
+    rows: ProvenancePeriodDbRow[],
+    allMatched: boolean,
+    params?: ProvenanceSearchParams,
+  ): ProvenanceArtworkResult {
+    const first = rows[0];
+    let matchedCount = 0;
+    const periods = rows.map(r => {
+      const matched = allMatched || (params ? this.periodMatchesFilters(r, params) : false);
+      if (matched) matchedCount++;
+      return this.buildProvenancePeriod(r, matched);
+    });
+    return {
+      objectNumber: first.object_number,
+      title: first.title ?? "",
+      creator: first.creator_label ?? "",
+      date: formatDateRange(first.date_earliest, first.date_latest),
+      url: `https://www.rijksmuseum.nl/en/collection/${first.object_number}`,
+      eventCount: 0,
+      matchedEventCount: 0,
+      events: [],
+      periods,
+      periodCount: periods.length,
+      matchedPeriodCount: allMatched ? periods.length : matchedCount,
+    };
+  }
+
+  /**
+   * Search provenance periods (Layer 2) across artworks.
+   *
+   * Same two-stage pattern as searchProvenance(): find artwork IDs, then
+   * fetch full period chains with matched flags.
+   */
+  searchProvenancePeriods(params: ProvenanceSearchParams): ProvenanceSearchResult {
+    if (!this.db || !this.hasProvenancePeriods_) {
+      return { totalArtworks: 0, results: [], warnings: ["Provenance periods table not available."] };
+    }
+
+    const maxResults = Math.min(params.maxResults ?? 10, 50);
+
+    // ── objectNumber fast path ──
+    if (params.objectNumber) {
+      const rows = this.db.prepare(`
+        SELECT pp.*, a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest
+        FROM provenance_periods pp
+        JOIN artworks a ON a.art_id = pp.artwork_id
+        WHERE a.object_number = ?
+        ORDER BY pp.sequence
+      `).all(params.objectNumber) as ProvenancePeriodDbRow[];
+      if (rows.length === 0) return { totalArtworks: 0, results: [] };
+      return { totalArtworks: 1, results: [this.buildProvenanceArtworkPeriods(rows, true)] };
+    }
+
+    // ── Build WHERE conditions ──
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+
+    // ownerName and party both target the same column — ownerName takes precedence
+    const ownerFilter = params.ownerName ?? params.party;
+    if (ownerFilter) {
+      if (this.hasPartyTable_) {
+        conditions.push("pp.artwork_id IN (SELECT pp2.artwork_id FROM provenance_parties pp2 WHERE pp2.party_name LIKE '%' || ? || '%')");
+      } else {
+        conditions.push("pp.owner_name LIKE '%' || ? || '%'");
+      }
+      bindings.push(ownerFilter);
+    }
+    if (params.acquisitionMethod) {
+      conditions.push("pp.acquisition_method = ?");
+      bindings.push(params.acquisitionMethod);
+    }
+    if (params.location) {
+      conditions.push("pp.location LIKE '%' || ? || '%'");
+      bindings.push(params.location);
+    }
+    if (params.dateFrom != null) {
+      conditions.push("pp.begin_year >= ?");
+      bindings.push(params.dateFrom);
+    }
+    if (params.dateTo != null) {
+      conditions.push("pp.end_year <= ?");
+      bindings.push(params.dateTo);
+    }
+    if (params.creator) {
+      conditions.push("a.creator_label LIKE '%' || ? || '%'");
+      bindings.push(params.creator);
+    }
+    if (params.minDuration != null || params.maxDuration != null) {
+      conditions.push("pp.end_year IS NOT NULL AND pp.begin_year IS NOT NULL");
+      if (params.minDuration != null) {
+        conditions.push("(pp.end_year - pp.begin_year) >= ?");
+        bindings.push(params.minDuration);
+      }
+      if (params.maxDuration != null) {
+        conditions.push("(pp.end_year - pp.begin_year) <= ?");
+        bindings.push(params.maxDuration);
+      }
+    }
+
+    if (conditions.length === 0) {
+      return { totalArtworks: 0, results: [] };
+    }
+
+    const where = conditions.join(" AND ");
+    const offset = params.offset ?? 0;
+
+    // Build ORDER BY
+    let orderBy = "";
+    if (params.sortBy === "duration") {
+      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
+      orderBy = `ORDER BY (pp.end_year - pp.begin_year) ${dir} NULLS LAST`;
+    }
+
+    // Find matching artwork_ids
+    const artworkIds = (this.db.prepare(`
+      SELECT DISTINCT pp.artwork_id
+      FROM provenance_periods pp
+      JOIN artworks a ON a.art_id = pp.artwork_id
+      WHERE ${where}
+      ${orderBy}
+      LIMIT ? OFFSET ?
+    `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
+
+    if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
+
+    // Count total
+    const COUNT_CAP = 10001;
+    const totalArtworks = (this.db.prepare(`
+      SELECT COUNT(*) AS cnt FROM (
+        SELECT DISTINCT pp.artwork_id
+        FROM provenance_periods pp
+        JOIN artworks a ON a.art_id = pp.artwork_id
+        WHERE ${where}
+        LIMIT ?
+      )
+    `).get(...bindings, COUNT_CAP) as { cnt: number }).cnt;
+
+    // Fetch full period chains
+    const placeholders = artworkIds.map(() => "?").join(", ");
+    const allRows = this.db.prepare(`
+      SELECT pp.*, a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest
+      FROM provenance_periods pp
+      JOIN artworks a ON a.art_id = pp.artwork_id
+      WHERE pp.artwork_id IN (${placeholders})
+      ORDER BY pp.artwork_id, pp.sequence
+    `).all(...artworkIds) as ProvenancePeriodDbRow[];
+
+    // Group by artwork_id
+    const grouped = new Map<number, ProvenancePeriodDbRow[]>();
+    for (const row of allRows) {
+      if (!grouped.has(row.artwork_id)) grouped.set(row.artwork_id, []);
+      grouped.get(row.artwork_id)!.push(row);
+    }
+
+    const results: ProvenanceArtworkResult[] = [];
+    for (const artworkId of artworkIds) {
+      const rows = grouped.get(artworkId);
+      if (!rows) continue;
+      results.push(this.buildProvenanceArtworkPeriods(rows, false, params));
     }
 
     return { totalArtworks, results };
