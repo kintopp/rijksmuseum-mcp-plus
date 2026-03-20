@@ -515,6 +515,22 @@ StandardPhraseEvent
       const rest = parseRest(tail);
       return { type: "collection", parties: [], ...rest };
     }
+  / "SNK"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [{ name: "Stichting Nederlandsch Kunstbezit", dates: null, role: null }], ...rest }; }
+  / "DRVK"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [{ name: "Dienst voor 's Rijks Verspreide Kunstvoorwerpen", dates: null, role: null }], ...rest }; }
+  / "as"i _ "security"i tail:Tail
+    { const rest = parseRest(tail); return { type: "deposit", parties: [], ...rest }; }
+  / "auction"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("sale", extractNameAndDates(nameRaw), "auctioneer", parseRest(tail)); }
+  / "found"i _ "in"i _ nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+    }
+  / "moved"i _ "to"i tail:Tail
+    { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 
