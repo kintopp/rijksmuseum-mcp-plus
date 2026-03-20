@@ -28,6 +28,7 @@ const QUAL_DATE_RE = /^\s*(before|after)\s+(\d{4})\b/i;
 const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
 const BARE_YEAR_RE = /^\s*(\d{4})\s*$/;
 const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/;
+const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
 // City list — kept in sync with RE_CITIES in provenance.ts (+ 5 compound place names)
 const CITIES = [
   "Amsterdam","Delft","The Hague","London","Paris","Venice","Rotterdam","Brussels",
@@ -73,16 +74,15 @@ function parseRest(tail) {
   const rawParts = splitCommaRespectingParens(tail).filter(Boolean);
   const parts = [];
   for (let i = 0; i < rawParts.length; i++) {
-    const curr = rawParts[i];
-    // Rejoin comma-separated thousands: "fl. 550" + "000" → "fl. 550,000"
+    let curr = rawParts[i];
+    // Rejoin comma-separated thousands greedily: "fl. 6" + "350" + "000" → "fl. 6,350,000"
     // Only rejoin if next part starts with exactly 3 digits (thousands group),
     // not 4 (which is a year). Also accept "000 livres" (digits + currency).
-    if (i + 1 < rawParts.length && DIGIT_END_RE.test(curr) && THOUSANDS_CONT_RE.test(rawParts[i + 1])) {
-      parts.push(curr + "," + rawParts[i + 1]);
-      i++; // skip next
-    } else {
-      parts.push(curr);
+    while (i + 1 < rawParts.length && DIGIT_END_RE.test(curr) && THOUSANDS_CONT_RE.test(rawParts[i + 1])) {
+      curr = curr + "," + rawParts[i + 1];
+      i++;
     }
+    parts.push(curr);
   }
 
   let location = null;
@@ -166,6 +166,9 @@ function parseRest(tail) {
   // Handle buyer life dates: if last extraParty has no dates and next-to-last part looks like "(YYYY-YYYY)"
   // This is handled downstream, not here.
 
+  // Detect "unsold" / "bought in" — suppresses sale classification
+  const unsold = UNSOLD_RE.test(tail);
+
   return {
     location,
     dateExpression,
@@ -174,6 +177,7 @@ function parseRest(tail) {
     price: priceAmount !== null ? { amount: priceAmount, currency: priceCurrency } : null,
     saleDetails,
     extraParties,
+    unsold,
   };
 }
 

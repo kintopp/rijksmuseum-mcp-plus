@@ -30,6 +30,7 @@ export interface PegAstNode {
   _hasTo?: boolean;
   _anaphoricRole?: string;
   saleSection?: string;
+  unsold?: boolean;
 }
 
 export function parse(input: string, options?: { startRule?: string }): PegAstNode;

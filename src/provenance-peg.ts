@@ -119,10 +119,13 @@ function astToRawEvent(
     if (citText) citations.push({ text: stripHtml(citText) });
   }
 
-  // Validate transfer type
-  const transferType: TransferType = VALID_TRANSFER_TYPES.has(ast.type as TransferType)
+  // Validate transfer type; reclassify "sale" → "unknown" when unsold/bought-in
+  let transferType: TransferType = VALID_TRANSFER_TYPES.has(ast.type as TransferType)
     ? (ast.type as TransferType)
     : "unknown";
+  if (transferType === "sale" && ast.unsold) {
+    transferType = "unknown";
+  }
 
   // Price
   let price: ProvenancePrice | null = null;
@@ -249,8 +252,9 @@ export function parseProvenanceRaw(
 
     // Try PEG parse
     let event: RawProvenanceEvent;
+    let ast: PegAstNode | null = null;
     try {
-      const ast = pegParse(working);
+      ast = pegParse(working);
       event = astToRawEvent(ast, sequence, rawText, segment.gap, citations);
       stats.peg++;
     } catch {
@@ -260,7 +264,8 @@ export function parseProvenanceRaw(
     }
 
     // PEG catch-all → "unknown": try regex classifier (matches mid-sentence keywords)
-    if (event.transferType === "unknown" && !event.isCrossRef && !event.gap) {
+    // Skip reclassification for unsold lots — they were intentionally set to "unknown"
+    if (event.transferType === "unknown" && !event.isCrossRef && !event.gap && !ast?.unsold) {
       const reclassified = classifyTransfer(working);
       if (reclassified !== "unknown") {
         event.transferType = reclassified;
