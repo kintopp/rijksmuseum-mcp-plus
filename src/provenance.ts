@@ -506,18 +506,33 @@ function extractNameAndDates(
 
 // ─── 8. parseLocation ──────────────────────────────────────────────
 
-// Known city/region names that appear in Rijksmuseum provenance
-// City/place list — see also CITIES in provenance-grammar.peggy (superset with venue names)
-const RE_CITIES =
-  /\b(Amsterdam|Delft|The Hague|London|Paris|Venice|Rotterdam|Brussels|Wassenaar|Montreux|Buckinghamshire|Hertfordshire|Northampton|Edinburgh|Linz|Soho Square|Madrid|Rome|Florence|Berlin|Vienna|Munich|Stockholm|St Petersburg|New York|Hilversum|Aerdenhout|Haarlem|Leiden|Utrecht|Antwerp|Watergraafsmeer|Arnhem|Zeist|Laren|Amersfoort|Deventer|Oosterbeek|Dordrecht|Rhoon|Rijswijk|Bussum|Voorburg|Muiden|Alkmaar|Darmstadt|Mainz|Kyoto|Nara|Ipswich)\b/;
+// Place names — shared with PEG grammar (src/places.json, 2,302 entries from vocab DB)
+import placesJson from "./places.json" with { type: "json" };
+const placesSet: Set<string> = new Set(placesJson as string[]);
 
 /**
  * Extract location from a provenance segment.
- * Location typically follows name+dates, separated by comma.
+ * Checks comma-separated parts against the places Set.
  */
 export function parseLocation(text: string): string | null {
-  const match = text.match(RE_CITIES);
-  return match ? match[1] : null;
+  // Split on comma and "and" to handle "London and New York"
+  const parts = text.split(/,|\band\b/).map(p => p.trim()).filter(Boolean);
+  for (const p of parts) {
+    if (placesSet.has(p)) return p;
+    // Try trimming parenthesized suffix: "Paris (Drouot)" → "Paris"
+    const parenIdx = p.indexOf("(");
+    if (parenIdx > 0) {
+      const candidate = p.slice(0, parenIdx).trim();
+      if (placesSet.has(candidate)) return candidate;
+    }
+    // Try first N words for compound names
+    const words = p.split(/\s+/);
+    for (let n = Math.min(3, words.length); n >= 1; n--) {
+      const prefix = words.slice(0, n).join(" ");
+      if (placesSet.has(prefix)) return prefix;
+    }
+  }
+  return null;
 }
 
 // ─── 9. parseEvent ─────────────────────────────────────────────────
