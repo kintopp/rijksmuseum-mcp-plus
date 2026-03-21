@@ -592,7 +592,7 @@ StandardPhraseEvent
     }
   / "moved"i _ "to"i tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
-  / "excavated"i _ ("at"i _ ("the"i _ "site"i _ "of"i _)?)? nameRaw:NameChars tail:Tail
+  / ("excavated"i / "excavation"i) _ ("at"i / "in"i / "near"i / "works"i)? _ ("the"i _ "site"i _ "of"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
