@@ -18,7 +18,8 @@
     "serve": "node dist/index.js --http",
     "dev:viewer": "vite dev -c apps/artwork-viewer/vite.config.ts",
     "lint": "eslint src/",
-    "test": "node scripts/tests/test-pure-functions.mjs"
+    "test": "node scripts/tests/test-pure-functions.mjs",
+    "test:all": "ENABLE_FIND_SIMILAR=true node scripts/tests/run-all.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
@@ -33,6 +34,7 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
