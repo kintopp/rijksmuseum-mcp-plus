@@ -1132,18 +1132,14 @@ export class VocabularyDb {
   /** Maximum children count for a place to be included as a depicted-place signal. */
   private static readonly PLACE_CHILDREN_THRESHOLD = 20;
 
-  /** Lazily initialise the depicted place IDF cache with TGN + children-count filtering. */
+  /** Lazily initialise the depicted place IDF cache with breadth-based filtering. */
   private ensurePlaceCache(): void {
     if (this.placeDf || !this.db || !this.hasIntMappings) return;
     const subjectFieldId = this.requireFieldId("subject");
 
-    // Build exclusion set: TGN places + places with >20 children (single-pass GROUP BY)
+    // Exclude broad regions (>20 children in vocabulary hierarchy).
+    // TGN-linked places are NOT blanket-excluded — only genuinely broad ones.
     this.placeExcluded = new Set<number>();
-    const tgnRows = this.db.prepare(`
-      SELECT vocab_int_id FROM vocabulary
-      WHERE type = 'place' AND external_id LIKE '%tgn%'
-    `).all() as { vocab_int_id: number }[];
-    for (const r of tgnRows) this.placeExcluded.add(r.vocab_int_id);
 
     const broadRows = this.db.prepare(`
       SELECT v.vocab_int_id
@@ -1193,8 +1189,7 @@ export class VocabularyDb {
 
   /**
    * Find artworks similar to a given artwork by shared depicted places.
-   * Scores by IDF-weighted overlap. Excludes TGN (administrative/geographic) places
-   * and places with >20 children in the vocabulary hierarchy.
+   * Scores by IDF-weighted overlap. Excludes broad regions (>20 children in hierarchy).
    */
   findSimilarByDepictedPlace(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
     if (!this.db || !this.hasIntMappings) return null;

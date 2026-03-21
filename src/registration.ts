@@ -463,7 +463,7 @@ async function drainOaiBuffer(
 function resolveOaiBuffer(
   token: string | undefined,
   expectedTool: string,
-): { buffered: OaiPageBuffer } | { error: ToolResponse | StructuredToolResponse } | undefined {
+): { buffered: OaiPageBuffer } | { error: ReturnType<typeof errorResponse> } | undefined {
   if (!token) return undefined;
   const buffered = oaiPageBuffers.get(token);
   if (!buffered) {
