@@ -27,19 +27,29 @@ const NAP_RE = /([\d,]+)\s*Napol[eé]ons/i;
 const DM_RE = /^DM\s*([\d,]+)/;
 const RM_RE = /^RM\s*([\d,]+)/;
 const SFRS_RE = /^(?:SFrcs|CHF)\s*([\d,]+)/;
-const QUAL_DATE_RE = /^\s*(before|after)\s+(\d{4})\b/i;
+const EUR_RE = /^[€]\s*([\d,.]+)/;
+const USD_RE = /^\$\s*([\d,]+)/;
+const QUAL_DATE_RE = /^\s*(before|after)\s+(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(\d{4})\b/i;
 const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
 const BARE_YEAR_RE = /^\s*(\d{4})\s*$/;
 const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/;
 const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
 // City list — kept in sync with RE_CITIES in provenance.ts (+ 5 compound place names)
 const CITIES = [
+  // Major auction/collection cities
   "Amsterdam","Delft","The Hague","London","Paris","Venice","Rotterdam","Brussels",
   "Wassenaar","Montreux","Buckinghamshire","Hertfordshire","Northampton","Edinburgh",
   "Linz","Soho Square","Madrid","Rome","Florence","Berlin","Vienna","Munich",
   "Stockholm","St Petersburg","New York","Hilversum","Aerdenhout","Haarlem",
-  "Leiden","Utrecht","Antwerp","Watergraafsmeer","Cheshunt Nunnery","Aynhoe Park",
-  "Palazzo Manfrin","Mentmore Towers","Dalmeny House",
+  "Leiden","Utrecht","Antwerp","Watergraafsmeer",
+  // Dutch towns (from silent-errors audit 2026-03-21)
+  "Arnhem","Zeist","Laren","Amersfoort","Deventer","Oosterbeek","Dordrecht",
+  "Rhoon","Rijswijk","Bussum","Voorburg","Muiden","Alkmaar",
+  // German/international
+  "Darmstadt","Mainz","Kyoto","Nara","Ipswich",
+  // Compound place names / estates
+  "Cheshunt Nunnery","Aynhoe Park","Palazzo Manfrin","Mentmore Towers","Dalmeny House",
+  "Kapelle op den Bosch",
 ];
 
 // Regex for digit-rejoin: next part starts with 3 digits (thousands group), optionally followed
@@ -147,6 +157,10 @@ function parseRest(tail) {
     if (rmMatch) { priceAmount = parseFloat(rmMatch[1].replace(/,/g, "")); priceCurrency = "reichsmarks"; continue; }
     const sfrsMatch = t.match(SFRS_RE);
     if (sfrsMatch) { priceAmount = parseFloat(sfrsMatch[1].replace(/,/g, "")); priceCurrency = "swiss_francs"; continue; }
+    const eurMatch = t.match(EUR_RE);
+    if (eurMatch) { priceAmount = parseFloat(eurMatch[1].replace(/,/g, "")); priceCurrency = "euros"; continue; }
+    const usdMatch = t.match(USD_RE);
+    if (usdMatch) { priceAmount = parseFloat(usdMatch[1].replace(/,/g, "")); priceCurrency = "dollars"; continue; }
 
     // Date patterns (ordered by specificity)
     const exactDate = t.match(EXACT_DATE_RE);
@@ -402,7 +416,7 @@ CollectionEvent
     }
   / ("first"i / "last"i) _ ("recorded"i / "mentioned"i / "documented"i / "noted"i) tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
-  / "with"i _ "an"i? _? ("art"i _)? "dealer"i tail:Tail
+  / "with"i _ ("an"i / "the"i)? _? ("art"i _)? "dealer"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
 
 // ─── Estate inventory ───────────────────────────────────────────────
@@ -424,7 +438,11 @@ EstateInventoryEvent
 // ─── From whom ──────────────────────────────────────────────────────
 
 FromWhomEvent
-  = "from"i _ "whom"i tail:Tail
+  = ("from"i / "by"i) _ "whom"i _ ("probably"i _)? "donated"i tail:Tail
+    { return buildResult("gift", null, null, parseRest(tail)); }
+  / ("from"i / "by"i) _ "whom"i _ ("probably"i _)? "transferred"i tail:Tail
+    { return buildResult("transfer", null, null, parseRest(tail)); }
+  / "from"i _ "whom"i tail:Tail
     { return buildResult("sale", null, null, parseRest(tail)); }
   / "by"i _ "whom"i _ ("probably"i _)? ("sold"i _)? ("to"i _)? nameRaw:NameChars tail:Tail
     {
@@ -569,6 +587,16 @@ StandardPhraseEvent
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
   / ("stolen"i / "looted"i / "seized"i) tail:Tail
     { const rest = parseRest(tail); return { type: "confiscation", parties: [], ...rest }; }
+  / "awarded"i _ "to"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("gift", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
+  / "reinstalled"i tail:Tail
+    { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
+  / "on"i _ "lease"i _ ("to"i / "from"i)? tail:Tail
+    { const rest = parseRest(tail); return { type: "loan", parties: [], ...rest }; }
+  / "veiling"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("sale", extractNameAndDates(nameRaw), "auctioneer", parseRest(tail)); }
+  / "gekocht"i _ ("door"i / "van"i / "bij"i) _ ("het"i / "de"i / "het"i)? _? nameRaw:NameChars tail:Tail
+    { return buildResult("purchase", extractNameAndDates(nameRaw), "buyer", parseRest(tail)); }
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 
