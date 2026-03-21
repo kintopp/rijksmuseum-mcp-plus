@@ -2216,9 +2216,10 @@ function registerTools(
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "For collection-wide counting or keyword searches that don't map to structured fields, " +
           "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
-          "For collection-wide statistics, use search_artwork's provenance parameter (keyword search returning totalResults counts) " +
-          "combined with facets and creditLine for cross-tabulation by type, material, or century. " +
-          "The provenance + creditLine + compact + facets pattern enables collector profiling and acquisition channel analysis. " +
+          "For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — " +
+          "also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) " +
+          "and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). " +
+          "Combine provenance + creditLine + facets for collector profiling and acquisition channel analysis. " +
           "At least one filter is required.",
         inputSchema: z.object({
           layer: z.preprocess(stripNull,
