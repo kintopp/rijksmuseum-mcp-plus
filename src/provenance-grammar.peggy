@@ -34,23 +34,11 @@ const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
 const BARE_YEAR_RE = /^\s*(\d{4})\s*$/;
 const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/;
 const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
-// City list — kept in sync with RE_CITIES in provenance.ts (+ 5 compound place names)
-const CITIES = [
-  // Major auction/collection cities
+// Place names — set by per-parse initializer from options.places, else hardcoded fallback.
+let PLACES = new Set([
   "Amsterdam","Delft","The Hague","London","Paris","Venice","Rotterdam","Brussels",
-  "Wassenaar","Montreux","Buckinghamshire","Hertfordshire","Northampton","Edinburgh",
-  "Linz","Soho Square","Madrid","Rome","Florence","Berlin","Vienna","Munich",
-  "Stockholm","St Petersburg","New York","Hilversum","Aerdenhout","Haarlem",
-  "Leiden","Utrecht","Antwerp","Watergraafsmeer",
-  // Dutch towns (from silent-errors audit 2026-03-21)
-  "Arnhem","Zeist","Laren","Amersfoort","Deventer","Oosterbeek","Dordrecht",
-  "Rhoon","Rijswijk","Bussum","Voorburg","Muiden","Alkmaar",
-  // German/international
-  "Darmstadt","Mainz","Kyoto","Nara","Ipswich",
-  // Compound place names / estates
-  "Cheshunt Nunnery","Aynhoe Park","Palazzo Manfrin","Mentmore Towers","Dalmeny House",
-  "Kapelle op den Bosch",
-];
+  "Haarlem","Utrecht","Antwerp","Rome","Berlin","Florence","Leiden","Vienna","Munich",
+]);
 
 // Regex for digit-rejoin: next part starts with 3 digits (thousands group), optionally followed
 // by a space + currency word. Excludes 4-digit starts (years like "1824").
@@ -191,10 +179,23 @@ function parseRest(tail) {
     const bareYear = t.match(BARE_YEAR_RE);
     if (bareYear && !dateYear) { dateExpression = bareYear[1]; dateYear = parseInt(bareYear[1], 10); continue; }
 
-    // Location (known cities — check if t starts with a known city)
+    // Location (known places — check if t matches or starts with a known place)
     if (!location) {
-      for (let ci = 0; ci < CITIES.length; ci++) {
-        if (t.startsWith(CITIES[ci])) { location = CITIES[ci]; break; }
+      // Try exact match first, then progressively shorter prefixes (for "City (details)")
+      if (PLACES.has(t)) { location = t; }
+      else {
+        // Try trimming parenthesized suffix: "Paris (Drouot)" → "Paris"
+        const parenIdx = t.indexOf("(");
+        const candidate = parenIdx > 0 ? t.slice(0, parenIdx).trim() : null;
+        if (candidate && PLACES.has(candidate)) { location = candidate; }
+        // Try first N words for compound names: "The Hague", "New York", "St Petersburg"
+        else {
+          const words = t.split(/[\s,]/);
+          for (let n = Math.min(3, words.length); n >= 1; n--) {
+            const prefix = words.slice(0, n).join(" ");
+            if (PLACES.has(prefix)) { location = prefix; break; }
+          }
+        }
       }
     }
   }
@@ -234,6 +235,11 @@ function buildResult(type, nd, role, rest) {
   return { type, parties: [...parties, ...(rest.extraParties || [])], ...rest, extraParties: undefined };
 }
 }}
+
+{
+  // Per-parse initializer: pick up places Set from options if provided
+  if (options.places) PLACES = options.places;
+}
 
 // ─── Entry point ────────────────────────────────────────────────────
 

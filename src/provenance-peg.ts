@@ -8,6 +8,7 @@
 
 import { parse as pegParse } from "./provenance-parser.generated.js";
 import type { PegAstNode } from "./provenance-parser.generated.js";
+import placesJson from "./places.json" with { type: "json" };
 import {
   extractCitations,
   splitEvents,
@@ -19,6 +20,9 @@ import {
   type ProvenanceCitation,
   type TransferType,
 } from "./provenance.js";
+
+// Place names for location matching (loaded once from places.json, 2,302 entries)
+const placesSet: Set<string> = new Set(placesJson as string[]);
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -257,7 +261,7 @@ export function parseProvenanceRaw(
     let event: RawProvenanceEvent;
     let ast: PegAstNode | null = null;
     try {
-      ast = pegParse(working);
+      ast = pegParse(working, { places: placesSet } as any);
       event = astToRawEvent(ast, sequence, rawText, segment.gap, citations);
       stats.peg++;
     } catch {
