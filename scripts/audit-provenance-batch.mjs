@@ -111,11 +111,16 @@ function sampleSilentErrors() {
       ) WHERE rn <= ?
     `).all(Math.ceil(sampleSize / 8)).map(r => r.artwork_id);
   } else {
+    // Bias toward complex records (3+ events) — where parsing errors cluster
     artworkIds = db.prepare(`
-      SELECT DISTINCT e.artwork_id FROM provenance_events e
-      WHERE e.parse_method IN ('peg','regex_fallback')
-        AND e.transfer_type != 'unknown' AND e.is_cross_ref = 0
-      ORDER BY RANDOM() LIMIT ?
+      SELECT artwork_id FROM (
+        SELECT e.artwork_id, COUNT(*) AS event_count
+        FROM provenance_events e
+        WHERE e.parse_method IN ('peg','regex_fallback')
+          AND e.transfer_type != 'unknown' AND e.is_cross_ref = 0
+        GROUP BY e.artwork_id
+        HAVING event_count >= 3
+      ) ORDER BY RANDOM() LIMIT ?
     `).all(sampleSize).map(r => r.artwork_id);
   }
   return fetchRecords(artworkIds, { periods: true });
@@ -123,9 +128,15 @@ function sampleSilentErrors() {
 
 function sampleUnknowns() {
   const db = openDb();
+  // Deduplicate: pick one artwork per unique unknown raw_text pattern,
+  // so high-frequency duplicates (e.g. Mensing "bought in") don't crowd out rarer patterns
   const artworkIds = db.prepare(`
-    SELECT DISTINCT e.artwork_id FROM provenance_events e
-    WHERE e.transfer_type = 'unknown' AND e.is_cross_ref = 0
+    SELECT DISTINCT artwork_id FROM (
+      SELECT artwork_id, raw_text,
+        ROW_NUMBER() OVER (PARTITION BY raw_text ORDER BY RANDOM()) AS rn
+      FROM provenance_events
+      WHERE transfer_type = 'unknown' AND is_cross_ref = 0
+    ) WHERE rn = 1
     ORDER BY RANDOM() LIMIT ?
   `).all(sampleSize).map(r => r.artwork_id);
   return fetchRecords(artworkIds, { periods: false });
@@ -439,7 +450,8 @@ function buildBatchRequests(records) {
   const { tool: toolDef, buildPrompt } = MODE_CONFIG[mode];
   const requests = [];
 
-  for (const record of records) {
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
     const prompt = buildPrompt(record);
     if (verbose) {
       console.log(`\n${"─".repeat(60)}`);
@@ -448,7 +460,7 @@ function buildBatchRequests(records) {
     }
 
     requests.push({
-      custom_id: `${mode}-${record.artworkId}-${record.objectNumber}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64),
+      custom_id: `${mode}-${i}-${record.artworkId}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64),
       params: {
         model,
         max_tokens: 4096,
