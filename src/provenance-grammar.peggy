@@ -10,8 +10,8 @@
 // ─── Post-parse helpers (run in the generated parser) ───────────────
 // All regexes hoisted here to avoid per-call recompilation (parseRest called ~102K times)
 
-const MONTHS_RE = /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})$/;
-const EXACT_DATE_RE = /^(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})$/;
+const MONTHS_RE = /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/;
+const EXACT_DATE_RE = /^(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/;
 const DIGIT_END_RE = /\d$/;
 const DIGITS_ONLY_RE = /^\d+$/;
 const TO_BUYER_RE = /^to\s+(?:the\s+)?(?:dealers?\s+)?(.+)/i;
