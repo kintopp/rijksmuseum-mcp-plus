@@ -29,7 +29,7 @@ const RM_RE = /^RM\.?\s*([\d,]+)/;
 const SFRS_RE = /^(?:SFrcs|CHF)\s*([\d,]+)/;
 const EUR_RE = /^[€]\s*([\d,.]+)/;
 const USD_RE = /^\$\s*([\d,]+)/;
-const QUAL_DATE_RE = /^\s*(before|after)\s+(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(\d{4})\b/i;
+const QUAL_DATE_RE = /^\s*(before|after|since)\s+(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(\d{4})\b/i;
 const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
 const BARE_YEAR_RE = /^\s*(\d{4})\s*$/;
 const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/;
@@ -461,11 +461,11 @@ EstateInventoryEvent
 // ─── From whom ──────────────────────────────────────────────────────
 
 FromWhomEvent
-  = ("from"i / "by"i) _ "whom"i _ ("probably"i _)? "donated"i tail:Tail
+  = ("from"i / "by"i) _ ("whom"i / "where"i / "which"i) _ ("probably"i _)? "donated"i tail:Tail
     { return buildResult("gift", null, null, parseRest(tail)); }
-  / ("from"i / "by"i) _ "whom"i _ ("probably"i _)? "bequeathed"i tail:Tail
+  / ("from"i / "by"i) _ ("whom"i / "where"i / "which"i) _ ("probably"i _)? "bequeathed"i tail:Tail
     { return buildResult("bequest", null, null, parseRest(tail)); }
-  / ("from"i / "by"i) _ "whom"i _ ("probably"i _)? "transferred"i tail:Tail
+  / ("from"i / "by"i) _ ("whom"i / "where"i / "which"i) _ ("probably"i _)? "transferred"i tail:Tail
     { return buildResult("transfer", null, null, parseRest(tail)); }
   / "from"i _ "whom"i tail:Tail
     { return buildResult("sale", null, null, parseRest(tail)); }
@@ -529,16 +529,17 @@ AnaphoricEvent
 
 RelationWord "relation word"
   = $("third cousin and godson"i
-     / "half-brother"i / "half-sister"i
+     / "heir and ex wife"i / "heir and ex-wife"i
+     / "half-brother"i / "half-sister"i / "half brother"i / "half sister"i
      / "younger brother"i / "eldest son"i / "eldest daughter"i
      / "grandnephew"i / "grandniece"i
      / "life companion"i
      / "sons"i / "son"i / "daughters"i / "daughter"i / "widower"i / "widow"i
      / "husband"i / "wife"i / "nephew"i / "niece"i
-     / "great-great-granddaughter"i / "great-great-grandson"i
-     / "great-granddaughter"i / "great-grandson"i
+     / "great-great-granddaughter"i / "great-great-grandson"i / "great great granddaughter"i / "great great grandson"i
+     / "great-granddaughter"i / "great-grandson"i / "great granddaughter"i / "great grandson"i
      / "granddaughter"i / "grandson"i
-     / "sister-in-law"i / "brother-in-law"i
+     / "sister-in-law"i / "brother-in-law"i / "sister in law"i / "brother in law"i
      / "sister's grandson"i / "sister's granddaughter"i
      / "sisters"i / "sister"i / "brothers"i / "brother"i
      / "mother"i / "father"i
