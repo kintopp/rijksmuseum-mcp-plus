@@ -257,6 +257,70 @@ if (batch.length > 0) {
   insertBatch(batch);
 }
 
+// ─── Credit-line enrichment (#121) ──────────────────────────────────
+// Infer transfer_type for bare-name unknowns from the artwork's credit_line.
+// Only applies when: (a) the unknown event is the last or second-to-last,
+// (b) if second-to-last, the last event is a museum acquisition (sale/gift/bequest/loan/transfer),
+// (c) the credit_line contains a recognizable transfer keyword.
+
+const CREDIT_LINE_RULES = [
+  [/Gift|Schenking|geschonken/i, "gift"],
+  [/urchas|Aankoop|ekocht|aangekocht|verworven/i, "purchase"],
+  [/loan|Bruikleen/i, "loan"],
+  [/equest|Legaat/i, "bequest"],
+  [/Transfer|Overdracht/i, "transfer"],
+];
+const MUSEUM_ACQUISITION_TYPES = new Set(["sale", "gift", "bequest", "loan", "transfer", "purchase"]);
+
+let creditLineEnriched = 0;
+
+if (!dryRun) {
+  // Find unknowns eligible for credit_line inference
+  const candidates = db.prepare(`
+    WITH ranked AS (
+      SELECT e.artwork_id, e.sequence, e.transfer_type, e.is_cross_ref, e.parties, e.raw_text,
+        ROW_NUMBER() OVER (PARTITION BY e.artwork_id ORDER BY e.sequence DESC) AS rn
+      FROM provenance_events e
+    )
+    SELECT r.artwork_id, r.sequence, r.rn, r.raw_text, a.credit_line,
+      (SELECT r2.transfer_type FROM ranked r2 WHERE r2.artwork_id = r.artwork_id AND r2.rn = 1) AS last_type
+    FROM ranked r
+    JOIN artworks a ON a.art_id = r.artwork_id
+    WHERE r.transfer_type = 'unknown' AND r.is_cross_ref = 0
+      AND r.parties IS NOT NULL AND r.parties <> '[]'
+      AND r.rn <= 2
+      AND a.credit_line IS NOT NULL AND a.credit_line <> ''
+  `).all();
+  const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
+
+  const updateType = db.prepare(
+    `UPDATE provenance_events SET transfer_type = ? WHERE artwork_id = ? AND sequence = ?`
+  );
+
+  const enrichBatch = db.transaction((rows) => {
+    for (const row of rows) {
+      // If second-to-last, only infer if last event is a museum acquisition
+      if (row.rn === 2 && !MUSEUM_ACQUISITION_TYPES.has(row.last_type)) continue;
+      // Skip events deliberately classified as unknown due to unsold detection
+      if (UNSOLD_RE.test(row.raw_text)) continue;
+
+      // Match credit_line against rules
+      for (const [re, type] of CREDIT_LINE_RULES) {
+        if (re.test(row.credit_line)) {
+          updateType.run(type, row.artwork_id, row.sequence);
+          creditLineEnriched++;
+          // Update stats
+          transferCounts["unknown"]--;
+          transferCounts[type] = (transferCounts[type] || 0) + 1;
+          break;
+        }
+      }
+    }
+  });
+
+  enrichBatch(candidates);
+}
+
 // Update version_info
 if (!dryRun) {
   db.exec(`CREATE TABLE IF NOT EXISTS version_info (key TEXT PRIMARY KEY, value TEXT)`);
@@ -278,6 +342,9 @@ console.log(`  PEG parsed:    ${pegEvents} (${(100 * pegEvents / totalEvents).to
 console.log(`  Regex fallback: ${fallbackEvents} (${(100 * fallbackEvents / totalEvents).toFixed(1)}%)`);
 if (!layer1Only) {
   console.log(`  Total periods: ${totalPeriods}`);
+}
+if (creditLineEnriched > 0) {
+  console.log(`  Credit-line enriched: ${creditLineEnriched}`);
 }
 console.log(`\n  Transfer type distribution:`);
 const sorted = Object.entries(transferCounts).sort((a, b) => b[1] - a[1]);
