@@ -15,7 +15,12 @@ const EXACT_DATE_RE = /^(\d{1,2})\s+(January|February|March|April|May|June|July|
 const DIGIT_END_RE = /\d$/;
 const DIGITS_ONLY_RE = /^\d+$/;
 const TO_BUYER_RE = /^to\s+(?:the\s+)?(?:dealers?\s+)?(.+)/i;
+const BY_PARTY_RE = /^by\s+(?:the\s+)?(?:dealers?\s+)?(.+)/i;
+// Negative lookahead words — "by descent", "by bequest", "by inheritance" etc. are not party names
+const BY_PARTY_EXCLUDE = /^(?:descent|bequest|inheritance|whom|which|where|order|request|exchange)\b/i;
 const HAS_UPPER_RE = /[A-Z]/;
+// Accept lowercase tail parties that are clearly institutions/roles, not stray text
+const KNOWN_RECIPIENT_RE = /^(?:the\s+)?(?:museum|state|nation|city|government|kingdom|republic|dealer|artist|sitter|church)\b/i;
 const LOT_NO_RE = /^no\.\s*\d+/i;
 const LOT_NUM_RE = /^lot\s+\d+/i;
 const PARENS_RE = /^\(([^)]+)\)/;
@@ -112,16 +117,31 @@ function parseRest(tail) {
   const extraParties = [];
 
   for (const t of parts) {
-    // "to (the dealer) Name" → buyer
+    // "to (the dealer) Name" → buyer/recipient
     const toBuyer = t.match(TO_BUYER_RE);
     if (toBuyer) {
       const buyerRaw = toBuyer[1].replace(/,\s*$/, "").trim();
-      if (buyerRaw && (HAS_UPPER_RE.test(buyerRaw) || /^(?:the\s+)?museum$/i.test(buyerRaw))) {
+      if (buyerRaw && (HAS_UPPER_RE.test(buyerRaw) || KNOWN_RECIPIENT_RE.test(buyerRaw))) {
         const nd = extractNameAndDates(buyerRaw);
         if (nd) {
           extraParties.push({ name: nd.name, dates: nd.dates, role: "buyer" });
         } else {
           extraParties.push({ name: buyerRaw, dates: null, role: "buyer" });
+        }
+        continue;
+      }
+    }
+
+    // "by (the dealer) Name" → buyer (but not "by descent", "by bequest", etc.)
+    const byParty = t.match(BY_PARTY_RE);
+    if (byParty) {
+      const partyRaw = byParty[1].replace(/,\s*$/, "").trim();
+      if (partyRaw && !BY_PARTY_EXCLUDE.test(partyRaw) && (HAS_UPPER_RE.test(partyRaw) || KNOWN_RECIPIENT_RE.test(partyRaw))) {
+        const nd = extractNameAndDates(partyRaw);
+        if (nd) {
+          extraParties.push({ name: nd.name, dates: nd.dates, role: "buyer" });
+        } else {
+          extraParties.push({ name: partyRaw, dates: null, role: "buyer" });
         }
         continue;
       }
@@ -330,8 +350,8 @@ CommissionEvent
 // ─── War recuperation ───────────────────────────────────────────────
 
 WarRecupEvent
-  = "war"i _ "recuperation"i tail:Tail
-    { const rest = parseRest(tail); return { type: "recuperation", parties: [], ...rest }; }
+  = "war"i _ "recuperation"i ","? _ nameRaw:NameChars tail:Tail
+    { return buildResult("recuperation", extractNameAndDates(nameRaw), null, parseRest(tail)); }
 
 // ─── Confiscation ───────────────────────────────────────────────────
 
@@ -342,15 +362,21 @@ ConfiscationEvent
 // ─── Loan ───────────────────────────────────────────────────────────
 
 LoanEvent
-  = ("from"i _ ("which"i / "whom"i) _)? "on"i _ ("long"i _ "term"i _)? "loan"i tail:Tail
+  = ("from"i _ ("which"i / "whom"i) _)? "on"i _ ("long"i _ "term"i _)? "loan"i _ "from"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("loan", extractNameAndDates(nameRaw), "lender", parseRest(tail)); }
+  / ("from"i _ ("which"i / "whom"i) _)? "on"i _ ("long"i _ "term"i _)? "loan"i tail:Tail
     { const rest = parseRest(tail); return { type: "loan", parties: [], ...rest }; }
 
 // ─── Transfer ───────────────────────────────────────────────────────
 
 TransferEvent
-  = "transfer"i "red"i? _ ("to"i / "from"i / "for"i / "with"i / "in"i)? tail:Tail
+  = "transfer"i "red"i? _ "to"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("transfer", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
+  / "transfer"i "red"i? _ ("from"i / "for"i / "with"i / "in"i)? tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
-  / ("sent"i / "removed"i / "dispatched"i) _ ("to"i / "from"i / "by"i / "in"i / "when"i / "at"i / "and"i / "after"i)? tail:Tail
+  / ("sent"i / "removed"i / "dispatched"i) _ "to"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("transfer", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
+  / ("sent"i / "removed"i / "dispatched"i) _ ("from"i / "by"i / "in"i / "when"i / "at"i / "and"i / "after"i)? tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
 
 // ─── Bequest ────────────────────────────────────────────────────────

@@ -171,11 +171,12 @@ section("Phase B: Layer 1 — PEG-specific");
 }
 
 {
-  // War recuperation (no party)
+  // War recuperation — SNK now captured as party
   const raw = parseProvenanceRaw("war recuperation, SNK, 9 November 1945");
   const e = raw.events[0];
   assertEq(e.transferType, "recuperation", "recuperation type");
-  assertEq(e.parties.length, 0, "no parties in recuperation");
+  assertEq(e.parties.length, 1, "SNK captured as party in recuperation");
+  assertEq(e.parties[0]?.name, "SNK", "recuperation party name = SNK");
 }
 
 {
@@ -927,11 +928,41 @@ section("Location matching (2026-03-21)");
   assertEq(r.events[0].location, "Frankfurt am Main", "compound city name");
 }
 
-section("Recipient extraction (2026-03-21)");
+section("Party extraction improvements (#116, 2026-03-21)");
 
 {
   const r = parseProvenanceRaw("from whom, €11,500, to the museum, 2022");
   assert(r.events[0].parties.some(p => /museum/i.test(p.name)), "'to the museum' captured as party");
+}
+{
+  // Sub-problem A: "by [Name]" as buyer
+  const r = parseProvenanceRaw("purchased from the dealer Hotei, Leiden, by J.H.W. Goslings, to the museum");
+  assert(r.events[0].parties.some(p => /Goslings/.test(p.name) && p.role === "buyer"), "'by Goslings' captured as buyer");
+}
+{
+  // Sub-problem B: institution in recuperation
+  const r = parseProvenanceRaw("war recuperation, SNK, 1945");
+  assertEq(r.events[0].parties[0]?.name, "SNK", "SNK captured in war recuperation");
+}
+{
+  // Sub-problem C: "transferred to [institution]"
+  const r = parseProvenanceRaw("transferred to the Royal Cabinet of Curiosities, The Hague, 1816");
+  assert(r.events[0].parties[0]?.name?.includes("Royal Cabinet"), "'transferred to' captures recipient");
+  assertEq(r.events[0].parties[0]?.role, "recipient", "transferred-to role = recipient");
+}
+{
+  const r = parseProvenanceRaw("sent to the Rijksmuseum, Amsterdam, 1885");
+  assert(r.events[0].parties[0]?.name?.includes("Rijksmuseum"), "'sent to' captures recipient");
+}
+{
+  // Loan with lender
+  const r = parseProvenanceRaw("on long term loan from the Nederlandse Maatschappij, Haarlem, to the Museum");
+  assert(r.events[0].parties[0]?.role === "lender", "'on loan from' captures lender");
+}
+{
+  // "by descent" NOT captured as party (regression)
+  const r = parseProvenanceRaw("by descent to Name");
+  assert(!r.events[0].parties.some(p => /descent/i.test(p.name)), "'by descent' not a party name");
 }
 
 // ══════════════════════════════════════════════════════════════════
