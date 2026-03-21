@@ -293,8 +293,8 @@ if (!dryRun) {
   `).all();
   const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
 
-  const updateType = db.prepare(
-    `UPDATE provenance_events SET transfer_type = ? WHERE artwork_id = ? AND sequence = ?`
+  const updateTypeAndMethod = db.prepare(
+    `UPDATE provenance_events SET transfer_type = ?, parse_method = 'credit_line' WHERE artwork_id = ? AND sequence = ?`
   );
 
   const enrichBatch = db.transaction((rows) => {
@@ -307,7 +307,7 @@ if (!dryRun) {
       // Match credit_line against rules
       for (const [re, type] of CREDIT_LINE_RULES) {
         if (re.test(row.credit_line)) {
-          updateType.run(type, row.artwork_id, row.sequence);
+          updateTypeAndMethod.run(type, row.artwork_id, row.sequence);
           creditLineEnriched++;
           // Update stats
           transferCounts["unknown"]--;
