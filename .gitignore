@@ -22,7 +22,9 @@ Thumbs.db
 
 # Local files
 offline/
+.claude/
 CLAUDE.md
+CLAUDE.md.bak
 
 # Vocabulary database (generated, ~1 GB)
 data/
