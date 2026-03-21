@@ -551,14 +551,23 @@ FromWhomEvent
   / "from"i _ ("the"i _)? "heirs"i _ ("of"i _)? nameRaw:NameChars tail:Tail
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ "the"i _ "artist"i tail:Tail
-    { return buildResult("sale", { name: "the artist", dates: null }, "seller", parseRest(tail)); }
+    {
+      const rest = parseRest(tail);
+      const type = /\btransferred\s+to\b/i.test(tail) ? "transfer" : "sale";
+      return buildResult(type, { name: "the artist", dates: null }, "seller", rest);
+    }
   / "from"i _ ("the"i _)? "collection"i _ nameRaw:NameChars tail:Tail
     { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
   / "from"i _ ("the"i _)? "estate"i _ ("of"i _)? nameRaw:NameChars tail:Tail
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ ("the"i _)? !("collection"i / "estate"i) nameRaw:NameChars tail:Tail
     &{ return /\bto\b/i.test(tail); }
-    { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
+    {
+      const rest = parseRest(tail);
+      // Reclassify: if tail contains "transferred to", this is a transfer not a sale
+      const type = /\btransferred\s+to\b/i.test(tail) ? "transfer" : "sale";
+      return buildResult(type, extractNameAndDates(nameRaw), "seller", rest);
+    }
 
 // ─── Anaphoric ──────────────────────────────────────────────────────
 

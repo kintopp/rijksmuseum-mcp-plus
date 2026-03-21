@@ -928,6 +928,22 @@ section("Location matching (2026-03-21)");
   assertEq(r.events[0].location, "Frankfurt am Main", "compound city name");
 }
 
+section("Transfer reclassification (#123) and date fallback (#124)");
+
+{
+  const r = parseProvenanceRaw("from the artist, transferred to the Town Hall, Amsterdam, 1664");
+  assertEq(r.events[0].transferType, "transfer", "'from artist, transferred to' → transfer (not sale)");
+}
+{
+  const r = parseProvenanceRaw("from the artist, to the museum, 1900");
+  assertEq(r.events[0].transferType, "sale", "'from artist, to museum' still sale (regression)");
+}
+{
+  // Post-parse date fallback for inline dates
+  const r = parseProvenanceRaw("first recorded in museum in 1904");
+  assertEq(r.events[0].dateYear, 1904, "inline 'in 1904' extracted by post-parse fallback");
+}
+
 section("Attribution date suppression (#88, 2026-03-21)");
 
 {

@@ -279,6 +279,17 @@ export function parseProvenanceRaw(
       }
     }
 
+    // Post-parse date fallback (#124): if no date was extracted, scan raw text
+    // for a bare year not inside parentheses (life dates) or citations
+    if (!event.dateYear && !event.isCrossRef) {
+      const stripped = working.replace(/\([^)]*\)/g, "").replace(/__CIT_\d+__/g, "");
+      const yearMatch = stripped.match(/\b(1[0-9]{3}|20[0-2]\d)\b/);
+      if (yearMatch) {
+        event.dateYear = parseInt(yearMatch[1], 10);
+        event.dateExpression = yearMatch[1];
+      }
+    }
+
     events.push(event);
   }
 
