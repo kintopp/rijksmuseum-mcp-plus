@@ -130,6 +130,22 @@ section("2. splitEvents");
   assert(bEvent?.gap === true, "unicode ellipsis marks gap");
 }
 
+// Fragment filtering (2026-03-21)
+{
+  const events = splitEvents("A; 1824; B");
+  assertEq(events.length, 2, "bare year '1824' filtered as fragment");
+  assertEq(events[0].text, "A", "fragment filter keeps A");
+  assertEq(events[1].text, "B", "fragment filter keeps B");
+}
+{
+  const events = splitEvents("A; et al.; B");
+  assertEq(events.length, 2, "'et al.' filtered as fragment");
+}
+{
+  const events = splitEvents("Inv.; A; B");
+  assertEq(events.length, 2, "'Inv.' still filtered");
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  Section 3: stripHtml
 // ══════════════════════════════════════════════════════════════════

@@ -680,6 +680,256 @@ section("Phase D: New grammar rules and reclassification");
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  Session 2026-03-21: automated batch audit fixes
+// ══════════════════════════════════════════════════════════════════
+
+section("PEG grammar rules (2026-03-21 batch audit)");
+
+// ── Sale patterns ──
+{
+  const r = parseProvenanceRaw("sale, Hendrik Muilman (1743-1812, Amsterdam), Amsterdam (P. van der Schley et al.), 12 April 1813 sqq., no. 192");
+  assertEq(r.events[0].transferType, "sale", "'sale, Name' → sale");
+  assert(r.events[0].parties[0]?.name?.includes("Hendrik Muilman"), "'sale, Name' captures consignor");
+  assertEq(r.events[0].parties[0]?.role, "consignor", "'sale, Name' role = consignor");
+}
+
+// ── Loan patterns ──
+{
+  const r = parseProvenanceRaw("on long term loan from the NMvNH, Haarlem, to the Museum");
+  assertEq(r.events[0].transferType, "loan", "'on long term loan' → loan");
+}
+{
+  const r = parseProvenanceRaw("on loan to the museum, 2000");
+  assertEq(r.events[0].transferType, "loan", "'on loan' still works (regression check)");
+}
+{
+  const r = parseProvenanceRaw("on lease to the museum, 2010");
+  assertEq(r.events[0].transferType, "loan", "'on lease to' → loan");
+}
+
+// ── FromWhomEvent ──
+{
+  const r = parseProvenanceRaw("from the collection A.P. Hermans-Smits (1822-1897), Eindhoven, fl. 4000, to the Rijksmuseum, 1880");
+  assertEq(r.events[0].transferType, "sale", "'from the collection' → sale");
+  assert(r.events[0].parties[0]?.name?.includes("Hermans-Smits"), "'from the collection' captures name");
+}
+{
+  const r = parseProvenanceRaw("from the estate of Jan van Goyen, The Hague, 1656");
+  assertEq(r.events[0].transferType, "inheritance", "'from the estate of' → inheritance");
+}
+{
+  const r = parseProvenanceRaw("from whom donated, with xx other objects, to the museum, 1990");
+  assertEq(r.events[0].transferType, "gift", "'from whom donated' → gift");
+}
+{
+  const r = parseProvenanceRaw("by whom donated to the museum, 1938");
+  assertEq(r.events[0].transferType, "gift", "'by whom donated' → gift");
+}
+{
+  const r = parseProvenanceRaw("from whom bequeathed, with xx other objects, to the museum, 1968");
+  assertEq(r.events[0].transferType, "bequest", "'from whom bequeathed' → bequest");
+}
+{
+  const r = parseProvenanceRaw("from whom transferred to the museum, 2008");
+  assertEq(r.events[0].transferType, "transfer", "'from whom transferred' → transfer");
+}
+{
+  const r = parseProvenanceRaw("from where transferred, on long term loan, to the museum, 1934");
+  assertEq(r.events[0].transferType, "transfer", "'from where transferred' → transfer");
+}
+
+// ── CollectionEvent expansions ──
+{
+  const r = parseProvenanceRaw("collection of the artist");
+  assertEq(r.events[0].transferType, "collection", "'collection of' → collection");
+  assertEq(r.events[0].parties[0]?.name, "the artist", "'collection of' strips preposition");
+}
+{
+  const r = parseProvenanceRaw("collectie Name, Amsterdam");
+  assertEq(r.events[0].transferType, "collection", "'collectie' (Dutch) → collection");
+}
+{
+  const r = parseProvenanceRaw("dealer Name, Paris");
+  assertEq(r.events[0].transferType, "collection", "'dealer Name' → collection");
+  assertEq(r.events[0].parties[0]?.role, "dealer", "'dealer Name' role = dealer");
+}
+{
+  const r = parseProvenanceRaw("art market, Paris, 2010");
+  assertEq(r.events[0].transferType, "sale", "'art market' → sale");
+}
+{
+  const r = parseProvenanceRaw("documented at Kasteel Popkensburg, 1800");
+  assertEq(r.events[0].transferType, "collection", "'documented at' → collection");
+}
+{
+  const r = parseProvenanceRaw("recorded at the palace, 1800");
+  assertEq(r.events[0].transferType, "collection", "'recorded at' → collection");
+}
+{
+  const r = parseProvenanceRaw("with the dealer D. Katz, Dieren, before May 1940");
+  assertEq(r.events[0].transferType, "collection", "'with the dealer' → collection");
+}
+
+// ── StandardPhraseEvent additions ──
+{
+  const r = parseProvenanceRaw("awarded to the museum, 1950");
+  assertEq(r.events[0].transferType, "gift", "'awarded to' → gift");
+}
+{
+  const r = parseProvenanceRaw("reinstalled in the Rijksmuseum, 1960");
+  assertEq(r.events[0].transferType, "transfer", "'reinstalled' → transfer");
+}
+{
+  const r = parseProvenanceRaw("veiling Amsterdam, 1850, kavel 12");
+  assertEq(r.events[0].transferType, "sale", "'veiling' (Dutch) → sale");
+}
+{
+  const r = parseProvenanceRaw("gekocht door het Rijksmuseum, 1880");
+  assertEq(r.events[0].transferType, "purchase", "'gekocht door' (Dutch) → purchase");
+}
+{
+  const r = parseProvenanceRaw("aangekocht door het museum, 1900");
+  assertEq(r.events[0].transferType, "purchase", "'aangekocht door' (Dutch) → purchase");
+}
+{
+  const r = parseProvenanceRaw("geschonken aan het museum, 1900");
+  assertEq(r.events[0].transferType, "gift", "'geschonken aan' (Dutch) → gift");
+}
+{
+  const r = parseProvenanceRaw("with the castle to Jonkheer Name, 1900");
+  assertEq(r.events[0].transferType, "inheritance", "'with the castle to' → inheritance");
+}
+{
+  const r = parseProvenanceRaw("through the family to Name");
+  assertEq(r.events[0].transferType, "inheritance", "'through the family' → inheritance");
+}
+{
+  const r = parseProvenanceRaw("excavation near Amsterdam, 1900");
+  assertEq(r.events[0].transferType, "collection", "'excavation' noun → collection");
+}
+{
+  const r = parseProvenanceRaw("comissioned by Name, 1800");
+  assertEq(r.events[0].transferType, "commission", "'comissioned' (misspelling) → commission");
+}
+
+// ── RelationWord expansions ──
+{
+  const r = parseProvenanceRaw("his great grandson, Arnold Hugo de Vries, Rhoon");
+  assertEq(r.events[0].transferType, "inheritance", "'great grandson' (no hyphen) → inheritance");
+  assert(r.events[0].parties[0]?.name?.includes("Arnold"), "great grandson party captured");
+}
+{
+  const r = parseProvenanceRaw("his third cousin and godson, Name (1794-1866), Rotterdam");
+  assertEq(r.events[0].transferType, "inheritance", "'third cousin and godson' → inheritance");
+  assert(r.events[0].parties.length > 0, "compound relation captures party");
+}
+{
+  const r = parseProvenanceRaw("his mother, Maria (1800-1870), City");
+  assertEq(r.events[0].transferType, "inheritance", "'his mother' → inheritance");
+  assert(r.events[0].parties[0]?.name?.includes("Maria"), "mother party captured");
+}
+{
+  const r = parseProvenanceRaw("his heir and ex wife, Gerritje Gestel - Overtoom (1892-1960), Laren");
+  assertEq(r.events[0].transferType, "inheritance", "'heir and ex wife' → inheritance");
+  assert(r.events[0].parties[0]?.name?.includes("Gerritje"), "heir and ex wife party captured");
+}
+{
+  const r = parseProvenanceRaw("by descent to his grandson, Jan van Oort (1921-2006), Arnhem");
+  assertEq(r.events[0].transferType, "inheritance", "'by descent to his [rel], Name' → inheritance");
+  assert(r.events[0].parties[0]?.name?.includes("Jan van Oort"), "by descent captures heir name");
+}
+
+section("Price patterns (2026-03-21)");
+
+{
+  const r = parseProvenanceRaw("from whom, €11,500, to the museum, 2022");
+  assertEq(r.events[0].price?.currency, "euros", "€ → euros");
+  assertEq(r.events[0].price?.amount, 11500, "€11,500 → 11500");
+}
+{
+  const r = parseProvenanceRaw("from whom, DM. 250, to the museum, 1978");
+  assertEq(r.events[0].price?.currency, "deutschmarks", "DM. → deutschmarks");
+  assertEq(r.events[0].price?.amount, 250, "DM. 250 → 250");
+}
+{
+  const r = parseProvenanceRaw("from whom, frs 10500, to the museum");
+  assertEq(r.events[0].price?.currency, "francs", "frs (no period) → francs");
+}
+{
+  const r = parseProvenanceRaw("sale, Name, fl. 2.000, Amsterdam");
+  assertEq(r.events[0].price?.amount, 2000, "fl. 2.000 (European decimal) → 2000");
+}
+{
+  const r = parseProvenanceRaw("sale, Name, fl. 600, Amsterdam");
+  assertEq(r.events[0].price?.amount, 600, "fl. 600 (no period) → 600 (regression check)");
+}
+
+section("Date patterns (2026-03-21)");
+
+{
+  const r = parseProvenanceRaw("sale, Name, 7 December 1932 sqq, no. 456");
+  assertEq(r.events[0].dateYear, 1932, "exact date with sqq → 1932");
+}
+{
+  const r = parseProvenanceRaw("transferred to convent, 1713-24");
+  assertEq(r.events[0].dateYear, 1713, "date range 1713-24 → 1713");
+}
+{
+  const r = parseProvenanceRaw("sold, 1792/93");
+  assertEq(r.events[0].dateYear, 1792, "date range 1792/93 → 1792");
+}
+{
+  const r = parseProvenanceRaw("on loan to museum, 1983-2005");
+  assertEq(r.events[0].dateYear, 1983, "date range 1983-2005 → 1983");
+}
+{
+  const r = parseProvenanceRaw("collection Name, before or in 1691");
+  assertEq(r.events[0].dateYear, 1691, "'before or in 1691' → 1691");
+  assertEq(r.events[0].dateQualifier, "before", "'before or in' qualifier → before");
+}
+{
+  const r = parseProvenanceRaw("collection Name, after 1800");
+  assertEq(r.events[0].dateYear, 1800, "'after 1800' → 1800");
+  assertEq(r.events[0].dateQualifier, "after", "after qualifier");
+}
+{
+  const r = parseProvenanceRaw("on loan to museum, since 1948");
+  assertEq(r.events[0].dateYear, 1948, "'since 1948' → 1948");
+  assertEq(r.events[0].dateQualifier, "since", "since qualifier");
+}
+{
+  const r = parseProvenanceRaw("with the dealer D. Katz, Dieren, before May 1940");
+  assertEq(r.events[0].dateYear, 1940, "'before May 1940' → 1940");
+  assertEq(r.events[0].dateQualifier, "before", "'before May' qualifier");
+}
+
+section("Location matching (2026-03-21)");
+
+{
+  const r = parseProvenanceRaw("collection Name, Middelburg");
+  assertEq(r.events[0].location, "Middelburg", "Middelburg (from places.json)");
+}
+{
+  const r = parseProvenanceRaw("collection Name, Leeuwarden");
+  assertEq(r.events[0].location, "Leeuwarden", "Leeuwarden");
+}
+{
+  const r = parseProvenanceRaw("sold to Name, Paris (Drouot), 1932");
+  assertEq(r.events[0].location, "Paris", "Paris (Drouot) → Paris");
+}
+{
+  const r = parseProvenanceRaw("collection Name, Frankfurt am Main");
+  assertEq(r.events[0].location, "Frankfurt am Main", "compound city name");
+}
+
+section("Recipient extraction (2026-03-21)");
+
+{
+  const r = parseProvenanceRaw("from whom, €11,500, to the museum, 2022");
+  assert(r.events[0].parties.some(p => /museum/i.test(p.name)), "'to the museum' captured as party");
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 
