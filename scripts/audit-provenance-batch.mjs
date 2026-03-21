@@ -448,7 +448,7 @@ function buildBatchRequests(records) {
     }
 
     requests.push({
-      custom_id: `${mode}-${record.artworkId}-${record.objectNumber}`,
+      custom_id: `${mode}-${record.artworkId}-${record.objectNumber}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64),
       params: {
         model,
         max_tokens: 4096,
