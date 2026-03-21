@@ -47,7 +47,7 @@ const stripNull = (v: unknown) =>
   (v === null || v === undefined || v === "null" || v === "") ? undefined : v;
 
 /** Normalize null/arrays into string | string[] | undefined. */
-function normalizeStringOrArray(v: unknown): string | string[] | undefined {
+function normalizeStringOrArray(v: unknown): unknown {
   if (v === null || v === undefined || v === "null" || v === "") return undefined;
   if (typeof v === "string") {
     const trimmed = v.trim();
@@ -58,7 +58,8 @@ function normalizeStringOrArray(v: unknown): string | string[] | undefined {
     const cleaned = v.filter((x): x is string => typeof x === "string" && x.trim() !== "").map(x => x.trim());
     return cleaned.length === 0 ? undefined : cleaned.length === 1 ? cleaned[0] : cleaned;
   }
-  return String(v);
+  // Unsupported types (numbers, booleans, objects) — return as-is so Zod rejects them
+  return v;
 }
 const stringOrArray = () => z.preprocess(
   normalizeStringOrArray,
@@ -353,6 +354,28 @@ function createLogger(stats?: UsageStats) {
   };
 }
 
+/**
+ * Server-side OAI page buffer. When `maxResults` truncates an upstream page,
+ * the remainder is stored here keyed by a server-generated token. The next
+ * continuation drains the buffer before fetching a new upstream page.
+ * TTL: 30 minutes, swept every 60s.
+ */
+interface OaiPageBuffer {
+  remainder: unknown[];
+  upstreamToken: string | null;
+  completeListSize: number | null;
+  identifiersOnly?: boolean;
+  toolName: string;
+  lastAccess: number;
+}
+const oaiPageBuffers = new Map<string, OaiPageBuffer>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, buf] of oaiPageBuffers) {
+    if (now - buf.lastAccess > 1_800_000) oaiPageBuffers.delete(id);
+  }
+}, 60_000).unref();
+
 /** Format an OAI-PMH paginated list result into a tool response. */
 function paginatedResponse(
   result: { records: unknown[]; completeListSize: number | null; resumptionToken: string | null },
@@ -363,15 +386,31 @@ function paginatedResponse(
   formatLine?: (record: Record<string, unknown>, index: number) => string
 ): ToolResponse | StructuredToolResponse {
   const records = result.records.slice(0, maxResults);
+  const overflow = result.records.slice(maxResults);
+
+  // Build server-side continuation token when there are buffered records or an upstream token
+  let serverToken: string | null = null;
+  const hasMore = overflow.length > 0 || result.resumptionToken;
+  if (hasMore) {
+    serverToken = randomUUID();
+    oaiPageBuffers.set(serverToken, {
+      remainder: overflow,
+      upstreamToken: result.resumptionToken,
+      completeListSize: result.completeListSize,
+      identifiersOnly: (extra as Record<string, unknown> | undefined)?.identifiersOnly === true ? true : undefined,
+      toolName,
+      lastAccess: Date.now(),
+    });
+  }
 
   const data: Record<string, unknown> = {
     ...(result.completeListSize != null ? { [totalLabel]: result.completeListSize } : {}),
     returnedCount: records.length,
     ...extra,
     records,
-    ...(result.resumptionToken
+    ...(serverToken
       ? {
-          resumptionToken: result.resumptionToken,
+          resumptionToken: serverToken,
           hint: `Pass this resumptionToken to ${toolName} to get the next page.`,
         }
       : {}),
@@ -384,10 +423,36 @@ function paginatedResponse(
       : `${records.length} records`;
     const lines = records.map((r, i) => formatLine(r as Record<string, unknown>, i));
     const parts = [header, ...lines];
-    if (result.resumptionToken) parts.push("[resumptionToken available for next page]");
+    if (serverToken) parts.push("[resumptionToken available for next page]");
     return structuredResponse(data, parts.join("\n"));
   }
   return structuredResponse(data);
+}
+
+/**
+ * Look up and validate a server-side OAI continuation token.
+ * Returns the buffer if valid, an error response if invalid, or undefined if not a server token.
+ * Does NOT delete the buffer entry — entries expire via TTL (#142: retry-safe).
+ */
+function resolveOaiBuffer(
+  token: string | undefined,
+  expectedTool: string,
+): { buffered: OaiPageBuffer } | { error: ToolResponse | StructuredToolResponse } | undefined {
+  if (!token) return undefined;
+  const buffered = oaiPageBuffers.get(token);
+  if (!buffered) {
+    // Token looks like a server UUID but isn't in the buffer — expired or wrong instance
+    // Only treat UUIDs as server tokens; raw OAI tokens are longer/different format
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
+      return { error: errorResponse("Continuation token expired or not found. Please start a new query.") };
+    }
+    return undefined; // Not a server token — let it pass through as upstream OAI token
+  }
+  if (buffered.toolName !== expectedTool) {
+    return { error: errorResponse(`This continuation token belongs to ${buffered.toolName}, not ${expectedTool}.`) };
+  }
+  buffered.lastAccess = Date.now(); // refresh TTL on access
+  return { buffered };
 }
 
 /**
@@ -749,6 +814,18 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
+/** Stdio-mode temp files for find_similar. Swept on same 30-min TTL. */
+const similarTempFiles = new Map<string, number>(); // path → createdAt
+setInterval(() => {
+  const now = Date.now();
+  for (const [filePath, createdAt] of similarTempFiles) {
+    if (now - createdAt > 1_800_000) {
+      try { fs.unlinkSync(filePath); } catch { /* already gone */ }
+      similarTempFiles.delete(filePath);
+    }
+  }
+}, 60_000).unref();
+
 // ─── Geometry helpers (pure) ─────────────────────────────────────────
 
 // Exported for testing
@@ -792,6 +869,13 @@ function registerTools(
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>
 ): void {
+  // Centralized public base URL — used by viewer, find_similar, and any tool that
+  // returns externally reachable links. Mirrors the 3-tier logic in index.ts.
+  const publicBaseUrl = httpPort
+    ? (process.env.PUBLIC_URL
+      || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${httpPort}`))
+    : undefined;
+
   // ── search_artwork ──────────────────────────────────────────────
 
   // Vocabulary-backed search params (require vocabulary DB)
@@ -1315,15 +1399,13 @@ function registerTools(
       const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, resolvedUri);
       // Enrich production entries with person info from vocab DB
       if (vocabDb?.available && detail.production.length > 0) {
-        const idToParticipant = new Map(
-          detail.production.flatMap(p => {
-            const id = p.actorUri.split("/").pop();
-            return id ? [[id, p] as const] : [];
-          })
+        const actorIds = new Set(
+          detail.production.map(p => p.actorUri.split("/").pop()).filter((id): id is string => !!id)
         );
-        const personMap = vocabDb.lookupPersonInfo([...idToParticipant.keys()]);
-        for (const [id, p] of idToParticipant) {
-          const info = personMap.get(id);
+        const personMap = vocabDb.lookupPersonInfo([...actorIds]);
+        for (const p of detail.production) {
+          const id = p.actorUri.split("/").pop();
+          const info = id ? personMap.get(id) : undefined;
           if (info) p.personInfo = info;
         }
       }
@@ -1416,9 +1498,8 @@ function registerTools(
       const title = RijksmuseumApiClient.parseTitle(object);
       const objectNumber = RijksmuseumApiClient.parseObjectNumber(object);
 
-      if (httpPort) {
-        const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
-        resolvedImageInfo.viewerUrl = `${baseUrl}/viewer?iiif=${encodeURIComponent(resolvedImageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
+      if (publicBaseUrl) {
+        resolvedImageInfo.viewerUrl = `${publicBaseUrl}/viewer?iiif=${encodeURIComponent(resolvedImageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
       }
 
       const viewUUID = randomUUID();
@@ -1513,6 +1594,9 @@ function registerTools(
           .boolean()
           .default(true)
           .describe("Auto-navigate the open viewer to the inspected region (default: true). Only effective when a viewer is open for this artwork."),
+        viewUUID: optStr()
+          .optional()
+          .describe("Target a specific viewer session (from get_artwork_image). When omitted, auto-discovers a viewer for this artwork."),
       }).strict(),
       ...withOutputSchema(InspectImageOutput),
     },
@@ -1541,13 +1625,27 @@ function registerTools(
         ]);
         const imageInfo = fastImageInfo ?? await api.getImageInfo(object);
 
-        // Find active viewer for this artwork and refresh TTL
+        // Find active viewer — prefer explicit viewUUID (validated), fall back to
+        // objectNumber scan only when there's exactly one unambiguous match.
         let activeViewUUID: string | undefined;
-        for (const [uuid, q] of viewerQueues) {
-          if (q.objectNumber === args.objectNumber) {
+        if (args.viewUUID) {
+          const q = viewerQueues.get(args.viewUUID);
+          if (q && q.objectNumber === args.objectNumber) {
+            activeViewUUID = args.viewUUID;
             q.lastAccess = Date.now();
-            activeViewUUID = uuid;
           }
+          // Mismatched or unknown viewUUID — silently skip (don't navigate wrong viewer)
+        } else {
+          // Auto-discover: only use if exactly one viewer exists for this artwork
+          let matchCount = 0;
+          for (const [uuid, q] of viewerQueues) {
+            if (q.objectNumber === args.objectNumber) {
+              activeViewUUID = uuid;
+              q.lastAccess = Date.now();
+              matchCount++;
+            }
+          }
+          if (matchCount > 1) activeViewUUID = undefined; // ambiguous — skip
         }
 
         if (!imageInfo) {
@@ -1564,7 +1662,7 @@ function registerTools(
           const pctMatch = args.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
           const pxMatch = args.region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
           if (pctMatch) {
-            regionWidth = Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 3;
+            regionWidth = Math.max(1, Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 3);
           } else if (pxMatch) {
             regionWidth = parseInt(pxMatch[3]);
           } else if (args.region === "square") {
@@ -1876,10 +1974,10 @@ function registerTools(
         "get_artwork_details, get_artwork_image, or get_artwork_bibliography for full Linked Art data. " +
         "Supports pagination via resumptionToken.",
       inputSchema: z.object({
-        setSpec: z
-          .string()
+        setSpec: optStr()
+          .optional()
           .describe(
-            "Set identifier from list_curated_sets (e.g. '26121')"
+            "Set identifier from list_curated_sets (e.g. '26121'). Required for initial request, ignored when resumptionToken is provided."
           ),
         maxResults: z
           .number()
@@ -1897,9 +1995,31 @@ function registerTools(
       ...withOutputSchema(BrowseSetOutput),
     },
     withLogging("browse_set", async (args) => {
+      if (!args.resumptionToken && !args.setSpec) {
+        return errorResponse("Either setSpec or resumptionToken is required.");
+      }
+
+      // Check server-side page buffer first
+      const resolved = resolveOaiBuffer(args.resumptionToken, "browse_set");
+      if (resolved && "error" in resolved) return resolved.error;
+
+      if (resolved) {
+        const { buffered } = resolved;
+        if (buffered.remainder.length >= args.maxResults || !buffered.upstreamToken) {
+          return paginatedResponse(
+            { records: buffered.remainder, completeListSize: buffered.completeListSize, resumptionToken: buffered.upstreamToken },
+            args.maxResults, "totalInSet", "browse_set", undefined, formatRecordLine,
+          );
+        }
+        // Buffer too small — fetch next upstream page and prepend remainder
+        const upstream = await oai.listRecords({ resumptionToken: buffered.upstreamToken });
+        const merged = { records: [...buffered.remainder, ...upstream.records], completeListSize: upstream.completeListSize ?? buffered.completeListSize, resumptionToken: upstream.resumptionToken };
+        return paginatedResponse(merged, args.maxResults, "totalInSet", "browse_set", undefined, formatRecordLine);
+      }
+
       const result = args.resumptionToken
         ? await oai.listRecords({ resumptionToken: args.resumptionToken })
-        : await oai.listRecords({ set: args.setSpec });
+        : await oai.listRecords({ set: args.setSpec! });
 
       return paginatedResponse(result, args.maxResults, "totalInSet", "browse_set", undefined, formatRecordLine);
     })
@@ -1917,10 +2037,10 @@ function registerTools(
         "listing (headers only, no full metadata). Each record includes an objectNumber for use with " +
         "get_artwork_details, get_artwork_image, or get_artwork_bibliography.",
       inputSchema: z.object({
-        from: z
-          .string()
+        from: optStr()
+          .optional()
           .describe(
-            "Start date in ISO 8601 format (e.g. '2026-02-01T00:00:00Z' or '2026-02-01')"
+            "Start date in ISO 8601 format (e.g. '2026-02-01T00:00:00Z' or '2026-02-01'). Required for initial request, ignored when resumptionToken is provided."
           ),
         until: optStr()
           .optional()
@@ -1934,7 +2054,7 @@ function registerTools(
           .boolean()
           .default(false)
           .describe(
-            "If true, returns only record headers (identifier, datestamp, set memberships) — much faster"
+            "If true, returns only record headers (identifier, datestamp, set memberships) — much faster. Preserved automatically across continuation pages."
           ),
         maxResults: z
           .number()
@@ -1952,6 +2072,33 @@ function registerTools(
       ...withOutputSchema(RecentChangesOutput),
     },
     withLogging("get_recent_changes", async (args) => {
+      if (!args.resumptionToken && !args.from) {
+        return errorResponse("Either from or resumptionToken is required.");
+      }
+
+      // Check server-side page buffer first
+      const resolved = resolveOaiBuffer(args.resumptionToken, "get_recent_changes");
+      if (resolved && "error" in resolved) return resolved.error;
+
+      if (resolved) {
+        const { buffered } = resolved;
+        const useIdentifiers = buffered.identifiersOnly ?? args.identifiersOnly;
+        const extra = useIdentifiers ? { identifiersOnly: true } : undefined;
+
+        if (buffered.remainder.length >= args.maxResults || !buffered.upstreamToken) {
+          return paginatedResponse(
+            { records: buffered.remainder, completeListSize: buffered.completeListSize, resumptionToken: buffered.upstreamToken },
+            args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine,
+          );
+        }
+        // Buffer too small — fetch next upstream page and prepend remainder
+        const upstream = useIdentifiers
+          ? await oai.listIdentifiers({ resumptionToken: buffered.upstreamToken })
+          : await oai.listRecords({ resumptionToken: buffered.upstreamToken });
+        const merged = { records: [...buffered.remainder, ...upstream.records], completeListSize: upstream.completeListSize ?? buffered.completeListSize, resumptionToken: upstream.resumptionToken };
+        return paginatedResponse(merged, args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine);
+      }
+
       const opts = {
         from: args.from,
         until: args.until,
@@ -1959,11 +2106,12 @@ function registerTools(
         resumptionToken: args.resumptionToken,
       };
 
-      const result = args.identifiersOnly
+      const useIdentifiers = args.identifiersOnly;
+      const result = useIdentifiers
         ? await oai.listIdentifiers(opts)
         : await oai.listRecords(opts);
 
-      const extra = args.identifiersOnly ? { identifiersOnly: true } : undefined;
+      const extra = useIdentifiers ? { identifiersOnly: true } : undefined;
       return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine);
     })
   );
@@ -2327,15 +2475,15 @@ function registerTools(
         // Build response URL or file path
         let pageLocation: string;
         const pageUUID = randomUUID();
-        if (httpPort) {
+        if (publicBaseUrl) {
           // HTTP mode — store in memory, serve at /similar/:uuid
           similarPages.set(pageUUID, { html, lastAccess: Date.now() });
-          const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
-          pageLocation = `${baseUrl}/similar/${pageUUID}`;
+          pageLocation = `${publicBaseUrl}/similar/${pageUUID}`;
         } else {
           // stdio mode — write to OS temp directory (no HTTP server to serve from)
           const filePath = path.join(os.tmpdir(), `rijksmuseum-similar-${pageUUID}.html`);
           fs.writeFileSync(filePath, html, "utf-8");
+          similarTempFiles.set(filePath, Date.now());
           pageLocation = filePath;
         }
 

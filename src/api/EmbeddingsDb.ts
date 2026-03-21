@@ -173,7 +173,7 @@ export class EmbeddingsDb {
 
     // Build parameterized IN list — batch in chunks to avoid SQLite variable limit.
     // Statements cached by chunk size (only 2 shapes: full 999 and remainder).
-    const CHUNK_SIZE = 999; // SQLite max variables per statement
+    const CHUNK_SIZE = 998; // SQLite max 999 variables; 1 reserved for query embedding
     const allResults: SemanticSearchResult[] = [];
 
     for (let i = 0; i < candidateArtIds.length; i += CHUNK_SIZE) {

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * Smoke test for find_similar(mode="description").
+ * Smoke test for find_similar description signal.
+ * Verifies that the Description column is populated in the generated HTML page.
  * Requires ENABLE_FIND_SIMILAR=true.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { readFileSync } from "fs";
 
 const transport = new StdioClientTransport({
   command: "node",
@@ -29,68 +31,61 @@ function assert(condition, label) {
   }
 }
 
-// ── Test 1: Description mode returns results with descriptions ──
+// ── Test 1: find_similar returns a comparison page with description results ──
 
-console.log("\n--- 1: Description mode basic ---");
+console.log("\n--- 1: find_similar basic (SK-A-1718) ---");
 const r1 = await client.callTool({
   name: "find_similar",
-  arguments: { objectNumber: "SK-A-1718", mode: "description", maxResults: 10 },
+  arguments: { objectNumber: "SK-A-1718", maxResults: 10 },
 });
-const d1 = r1.structuredContent ?? JSON.parse(r1.content[0].text);
-assert(d1.mode === "description", "mode is 'description'");
-assert(d1.queryObjectNumber === "SK-A-1718", "query object number correct");
-assert(d1.queryTitle?.length > 0, "query title present");
-assert(d1.queryDescription?.length > 0, "query description present");
-assert(d1.rerankerNote?.includes("RE-RANKING"), "reranker note present");
-assert(d1.returnedCount > 10, "over-fetches (3x) for re-ranking");
-assert(d1.results.length > 0, "has results");
-
-const first = d1.results[0];
-assert(first.objectNumber?.length > 0, "result has objectNumber");
-assert(typeof first.title === "string", "result has title field");
-assert(first.score > 0 && first.score <= 1, "score is cosine similarity (0-1)");
-assert(first.descriptionExcerpt?.length > 0, "result has descriptionExcerpt");
-assert(first.url?.includes("rijksmuseum.nl"), "result has collection URL");
-
-// Text channel should include descriptions
+assert(!r1.isError, "call succeeds");
 const text1 = r1.content[0].text;
-assert(text1.includes("DESC:"), "text channel includes description excerpts");
-assert(text1.includes("RE-RANKING"), "text channel includes reranker note");
+assert(text1.includes("Description:"), "text summary includes Description signal count");
+assert(text1.includes("Lineage:"), "text summary includes Lineage signal count");
+assert(text1.includes("Iconclass:"), "text summary includes Iconclass signal count");
+assert(text1.includes("Pooled"), "text summary includes Pooled count");
 
-// ── Test 2: Artwork without description ──
+// In stdio mode, the page is written to a temp file — verify it exists and has content
+const lines = text1.split("\n");
+const pagePath = lines[lines.length - 1].trim();
+assert(pagePath.includes("rijksmuseum-similar-"), "output contains temp file path");
 
-console.log("\n--- 2: Artwork with no description ---");
-// Find an artwork likely without a description — use a very obscure object number
+let html = "";
+try {
+  html = readFileSync(pagePath, "utf-8");
+  assert(html.length > 1000, `HTML page has content (${html.length} bytes)`);
+} catch {
+  assert(false, `could not read HTML page at ${pagePath}`);
+}
+
+// Verify the HTML page contains a Description column
+if (html) {
+  assert(html.includes("Description"), "HTML page contains Description column");
+}
+
+// ── Test 2: Nonexistent artwork returns error ──
+
+console.log("\n--- 2: Nonexistent artwork ---");
 const r2 = await client.callTool({
   name: "find_similar",
-  arguments: { objectNumber: "NONEXISTENT-12345", mode: "description" },
+  arguments: { objectNumber: "NONEXISTENT-12345" },
 });
 assert(r2.isError === true, "error for nonexistent artwork");
 
-// ── Test 3: Results are sorted by similarity ──
+// ── Test 3: Well-known painting (Night Watch) ──
 
-console.log("\n--- 3: Results sorted by similarity ---");
-if (d1.results.length >= 2) {
-  const scores = d1.results.map(r => r.score);
-  const sorted = [...scores].sort((a, b) => b - a);
-  assert(JSON.stringify(scores) === JSON.stringify(sorted), "results sorted by descending similarity");
-}
-
-// ── Test 4: Description mode with a painting ──
-
-console.log("\n--- 4: Description mode with a well-known painting ---");
-const r4 = await client.callTool({
+console.log("\n--- 3: Night Watch (SK-C-5) ---");
+const r3 = await client.callTool({
   name: "find_similar",
-  arguments: { objectNumber: "SK-C-5", mode: "description", maxResults: 5 },
+  arguments: { objectNumber: "SK-C-5", maxResults: 5 },
 });
-if (r4.isError) {
-  assert(false, `SK-C-5 (Night Watch) should have a description: ${r4.content[0].text}`);
+if (r3.isError) {
+  assert(false, `SK-C-5 should succeed: ${r3.content[0].text}`);
 } else {
-  const d4 = r4.structuredContent ?? JSON.parse(r4.content[0].text);
-  assert(d4.results.length > 0, "Night Watch has description-similar results");
-  assert(d4.queryDescription?.length > 0, "Night Watch description present");
-  console.log(`    Query: "${d4.queryDescription?.slice(0, 80)}…"`);
-  console.log(`    Top result: ${d4.results[0]?.objectNumber} (${d4.results[0]?.score}) — "${d4.results[0]?.title}"`);
+  const text3 = r3.content[0].text;
+  assert(text3.includes("Night Watch") || text3.includes("SK-C-5"), "response references the artwork");
+  assert(text3.includes("Description:"), "Night Watch has description results");
+  console.log(`    ${text3.split("\n")[1]}`);
 }
 
 // ── Summary ──

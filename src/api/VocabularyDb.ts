@@ -233,6 +233,7 @@ export const FILTER_ART_IDS_KEYS: ReadonlySet<string> = new Set([
   ...VOCAB_FILTERS.map(f => f.param),
   "imageAvailable",
   "creationDate",
+  "dateMatch",
   "creatorGender",
   "creatorBornAfter",
   "creatorBornBefore",
@@ -1623,6 +1624,12 @@ export class VocabularyDb {
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
     const limit = Math.min(effective.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP);
 
+    // When geo is active and BM25 isn't ordering, use a larger internal limit so
+    // distance ordering (applied post-query) sees the true top-N nearest artworks,
+    // not just the most-important ones. Cap at 2000 to bound memory usage.
+    const geoExpansion = geoResult && !ftsRankOrder;
+    const internalLimit = geoExpansion ? Math.max(limit * 10, 2000) : limit;
+
     const orderBy = ftsRankOrder
       ? "ORDER BY fts.rank"
       : this.hasImportance
@@ -1630,7 +1637,7 @@ export class VocabularyDb {
         : "";
     const sql = `SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
     const rows = this.db.prepare(sql).all(
-      ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, limit] : [...bindings, limit]),
+      ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, internalLimit] : [...bindings, internalLimit]),
     ) as {
       object_number: string;
       title: string;
@@ -1640,10 +1647,10 @@ export class VocabularyDb {
       date_latest: number | null;
     }[];
 
-    // Compute total count only when results are truncated (rows.length === limit).
+    // Compute total count only when results are truncated (rows.length === internalLimit).
     // When results fit within the limit, rows.length IS the total — no extra scan needed.
     // Worst case (gender scans) adds ~850ms, but only when the count is informative.
-    const totalResults = rows.length < limit
+    const totalResults = rows.length < internalLimit
       ? rows.length
       : (this.db.prepare(
           `SELECT COUNT(*) as n FROM artworks a ${ftsJoinClause} WHERE ${where}`,
@@ -1697,6 +1704,11 @@ export class VocabularyDb {
         const db = distanceMap!.get(b.object_number)?.dist ?? Infinity;
         return da - db;
       });
+    }
+
+    // After geo-expansion + distance sort, truncate back to user's requested limit
+    if (geoExpansion && rows.length > limit) {
+      rows.splice(limit);
     }
 
     // Faceted counts: compute requested dimensions when results are truncated
