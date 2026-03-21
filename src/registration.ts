@@ -2169,7 +2169,7 @@ function registerTools(
         citations: z.array(z.object({ text: z.string() })),
         isCrossRef: z.boolean(),
         crossRefTarget: z.string().nullable(),
-        parseMethod: z.enum(["peg", "regex_fallback", "cross_ref"]),
+        parseMethod: z.enum(["peg", "regex_fallback", "cross_ref", "credit_line"]),
         matched: z.boolean().describe("True if this event matched the search criteria."),
       })),
       periods: z.array(z.object({
@@ -2229,7 +2229,7 @@ function registerTools(
           transferType: z.preprocess(
             normalizeStringOrArray,
             z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
-          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: sale (24K), collection (17K), inheritance (17K), loan (6K), transfer (5K), gift (4K), purchase (2K). Rare: bequest, recuperation, commission, deposit, restitution, confiscation, exchange. Currently empty: auction, seizure, donation, inventory."),
+          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: collection (18K), inheritance (17K), sale (13K), gift (10K), transfer (6K), loan (6K), bequest (4K), purchase (2K). Rare: recuperation, commission, deposit, restitution, confiscation, exchange. Currently empty: auction, seizure, donation, inventory."),
           excludeTransferType: z.preprocess(
             normalizeStringOrArray,
             z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
@@ -2246,7 +2246,7 @@ function registerTools(
           objectNumber: optStr().describe("Get full provenance chain for a specific artwork (e.g. 'SK-A-2344'). Fast local lookup."),
           creator: optStr().describe("Artist name (partial match on creator, e.g. 'Rembrandt', 'Vermeer')."),
           currency: z.preprocess(stripNull,
-            z.enum(["guilders", "pounds", "francs", "livres", "napoléons", "deutschmarks", "reichsmarks", "swiss_francs"]).optional(),
+            z.enum(["guilders", "euros", "pounds", "francs", "dollars", "livres", "napoléons", "deutschmarks", "reichsmarks", "swiss_francs"]).optional(),
           ).describe("Price currency filter (exact match). Only used with layer='events'."),
           hasPrice: z.preprocess(stripNull, z.boolean().optional())
             .describe("If true, only events with recorded prices. Only used with layer='events'."),
