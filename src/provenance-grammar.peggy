@@ -21,11 +21,11 @@ const LOT_NUM_RE = /^lot\s+\d+/i;
 const PARENS_RE = /^\(([^)]+)\)/;
 const FL_RE = /^fl\.\s*([\d,]+)/;
 const POUND_RE = /^£\s*([\d,]+)/;
-const FRS_RE = /^frs\.\s*([\d,]+)/;
+const FRS_RE = /^frs\.?\s*([\d,]+)/;
 const LIVRES_RE = /([\d,]+)\s*livres/i;
 const NAP_RE = /([\d,]+)\s*Napol[eé]ons/i;
-const DM_RE = /^DM\s*([\d,]+)/;
-const RM_RE = /^RM\s*([\d,]+)/;
+const DM_RE = /^DM\.?\s*([\d,]+)/;
+const RM_RE = /^RM\.?\s*([\d,]+)/;
 const SFRS_RE = /^(?:SFrcs|CHF)\s*([\d,]+)/;
 const EUR_RE = /^[€]\s*([\d,.]+)/;
 const USD_RE = /^\$\s*([\d,]+)/;
@@ -440,6 +440,8 @@ EstateInventoryEvent
 FromWhomEvent
   = ("from"i / "by"i) _ "whom"i _ ("probably"i _)? "donated"i tail:Tail
     { return buildResult("gift", null, null, parseRest(tail)); }
+  / ("from"i / "by"i) _ "whom"i _ ("probably"i _)? "bequeathed"i tail:Tail
+    { return buildResult("bequest", null, null, parseRest(tail)); }
   / ("from"i / "by"i) _ "whom"i _ ("probably"i _)? "transferred"i tail:Tail
     { return buildResult("transfer", null, null, parseRest(tail)); }
   / "from"i _ "whom"i tail:Tail
