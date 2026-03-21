@@ -258,6 +258,8 @@ SaleEvent
     { return buildResult("sale", extractNameAndDates(nameRaw), "intermediary", parseRest(tail)); }
   / "sale"i _ "[" section:[^\]]* "]" tail:Tail
     { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest, saleSection: section.join("") }; }
+  / "sale"i "," _ nameRaw:NameChars tail:Tail
+    { return buildResult("sale", extractNameAndDates(nameRaw), "consignor", parseRest(tail)); }
   / "sale"i _ nameRaw:NameChars tail:Tail
     { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
 
@@ -286,7 +288,7 @@ ConfiscationEvent
 // ─── Loan ───────────────────────────────────────────────────────────
 
 LoanEvent
-  = ("from"i _ ("which"i / "whom"i) _)? "on"i _ "loan"i tail:Tail
+  = ("from"i _ ("which"i / "whom"i) _)? "on"i _ ("long"i _ "term"i _)? "loan"i tail:Tail
     { const rest = parseRest(tail); return { type: "loan", parties: [], ...rest }; }
 
 // ─── Transfer ───────────────────────────────────────────────────────
@@ -441,6 +443,10 @@ FromWhomEvent
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ "the"i _ "artist"i tail:Tail
     { return buildResult("sale", { name: "the artist", dates: null }, "seller", parseRest(tail)); }
+  / "from"i _ ("the"i _)? "collection"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
+  / "from"i _ ("the"i _)? "estate"i _ ("of"i _)? nameRaw:NameChars tail:Tail
+    { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ ("the"i _)? !("collection"i / "estate"i) nameRaw:NameChars tail:Tail
     &{ return /\bto\b/i.test(tail); }
     { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
