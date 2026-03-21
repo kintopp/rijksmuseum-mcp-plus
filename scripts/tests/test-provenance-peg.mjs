@@ -720,22 +720,27 @@ section("PEG grammar rules (2026-03-21 batch audit)");
 {
   const r = parseProvenanceRaw("from whom donated, with xx other objects, to the museum, 1990");
   assertEq(r.events[0].transferType, "gift", "'from whom donated' → gift");
+  assertEq(r.events[0].parseMethod, "peg", "'from whom donated' parsed via PEG (not regex fallback)");
 }
 {
   const r = parseProvenanceRaw("by whom donated to the museum, 1938");
   assertEq(r.events[0].transferType, "gift", "'by whom donated' → gift");
+  assertEq(r.events[0].parseMethod, "peg", "'by whom donated' parsed via PEG");
 }
 {
   const r = parseProvenanceRaw("from whom bequeathed, with xx other objects, to the museum, 1968");
   assertEq(r.events[0].transferType, "bequest", "'from whom bequeathed' → bequest");
+  assertEq(r.events[0].parseMethod, "peg", "'from whom bequeathed' parsed via PEG");
 }
 {
   const r = parseProvenanceRaw("from whom transferred to the museum, 2008");
   assertEq(r.events[0].transferType, "transfer", "'from whom transferred' → transfer");
+  assertEq(r.events[0].parseMethod, "peg", "'from whom transferred' parsed via PEG");
 }
 {
   const r = parseProvenanceRaw("from where transferred, on long term loan, to the museum, 1934");
   assertEq(r.events[0].transferType, "transfer", "'from where transferred' → transfer");
+  assertEq(r.events[0].parseMethod, "peg", "'from where transferred' parsed via PEG");
 }
 
 // ── CollectionEvent expansions ──
