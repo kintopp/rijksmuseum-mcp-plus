@@ -928,6 +928,30 @@ section("Location matching (2026-03-21)");
   assertEq(r.events[0].location, "Frankfurt am Main", "compound city name");
 }
 
+section("Attribution date suppression (#88, 2026-03-21)");
+
+{
+  // "as Haarlem school, c. 1510" should NOT override sale date 1919
+  const r = parseProvenanceRaw("her sale, Amsterdam (F. Muller), 16 December 1919, no. 24, as Haarlem school, c. 1510, fl. 11100");
+  assertEq(r.events[0].dateYear, 1919, "'as school, c. YYYY' doesn't override sale date");
+}
+{
+  // "as Brabant, c. 1500" in quoted form
+  const r = parseProvenanceRaw("anonymous sale, London (Sothebys), 12 July 1979, no. 74, as Brabant, c. 1500, £ 7480");
+  assertEq(r.events[0].dateYear, 1979, "attribution circa after 'as' suppressed");
+}
+{
+  // Legitimate circa date should still work
+  const r = parseProvenanceRaw("collection Name, Amsterdam, c. 1920");
+  assertEq(r.events[0].dateYear, 1920, "legitimate c. 1920 still extracted");
+  assertEq(r.events[0].dateQualifier, "circa", "legitimate circa qualifier preserved");
+}
+{
+  // Circa date NOT preceded by "as" — should still work
+  const r = parseProvenanceRaw("excavated at site, Maarssen, c. 1881");
+  assertEq(r.events[0].dateYear, 1881, "non-attribution circa preserved");
+}
+
 section("Party extraction improvements (#116, 2026-03-21)");
 
 {

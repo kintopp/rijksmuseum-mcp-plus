@@ -115,6 +115,7 @@ function parseRest(tail) {
   let priceCurrency = null;
   let saleDetails = null;
   const extraParties = [];
+  let prevWasAttribution = false;
 
   for (const t of parts) {
     // "to (the dealer) Name" → buyer/recipient
@@ -186,39 +187,51 @@ function parseRest(tail) {
     const usdMatch = t.match(USD_RE);
     if (usdMatch) { priceAmount = parsePrice(usdMatch[1]); priceCurrency = "dollars"; continue; }
 
+    // Skip catalogue attribution context: "as German school" / "as 'Brabant'" / "as Rembrandt"
+    // These introduce artwork dating, not event dates. Flag so the NEXT circa date is suppressed.
+    if (/^as\s+(?:'[^']*'|[A-Z])/i.test(t)) { prevWasAttribution = true; continue; }
+
     // Date patterns (ordered by specificity)
     const exactDate = t.match(EXACT_DATE_RE);
-    if (exactDate) { dateExpression = t; dateYear = parseInt(exactDate[3], 10); continue; }
+    if (exactDate) { dateExpression = t; dateYear = parseInt(exactDate[3], 10); prevWasAttribution = false; continue; }
 
     const qualDate = t.match(QUAL_DATE_RE);
     if (qualDate) {
       dateExpression = qualDate[0].trim();
       dateYear = parseInt(qualDate[4], 10);
-      // Qualifier is in group 1 ("before/after/since") or group 3 ("before/after" after "in or")
       dateQualifier = (qualDate[1] || qualDate[3] || "in").toLowerCase();
+      prevWasAttribution = false;
       continue;
     }
 
+    // Circa dates: skip if (a) we already have an exact date, or (b) previous part was "as [attribution]"
     const approxDate = t.match(APPROX_DATE_RE);
-    if (approxDate) { dateExpression = approxDate[0].trim(); dateYear = parseInt(approxDate[1], 10); dateQualifier = "circa"; continue; }
+    if (approxDate && !prevWasAttribution) {
+      if (!dateYear) { dateExpression = approxDate[0].trim(); dateYear = parseInt(approxDate[1], 10); dateQualifier = "circa"; }
+      prevWasAttribution = false;
+      continue;
+    }
+    if (approxDate && prevWasAttribution) { prevWasAttribution = false; continue; }
 
     const monthYear = t.match(MONTHS_RE);
-    if (monthYear) { dateExpression = t; dateYear = parseInt(monthYear[2], 10); continue; }
+    if (monthYear) { dateExpression = t; dateYear = parseInt(monthYear[2], 10); prevWasAttribution = false; continue; }
 
     // Date range: "1713-24", "1792/93", "1983-2005"
     const dateRange = t.match(DATE_RANGE_RE);
     if (dateRange && !dateYear) {
       const startYear = parseInt(dateRange[1], 10);
       let endPart = dateRange[2];
-      // Expand abbreviated end year: "1713-24" → 1724, "1792/93" → 1793
       if (endPart.length === 2) endPart = dateRange[1].slice(0, 2) + endPart;
       dateExpression = dateRange[0].trim();
       dateYear = startYear;
+      prevWasAttribution = false;
       continue;
     }
 
     const bareYear = t.match(BARE_YEAR_RE);
-    if (bareYear && !dateYear) { dateExpression = bareYear[1]; dateYear = parseInt(bareYear[1], 10); continue; }
+    if (bareYear && !dateYear) { dateExpression = bareYear[1]; dateYear = parseInt(bareYear[1], 10); prevWasAttribution = false; continue; }
+
+    prevWasAttribution = false;
 
     // Location (known places — check if t matches or starts with a known place)
     if (!location) {
