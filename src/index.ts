@@ -21,7 +21,7 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { TOP_100_SET } from "./types.js";
-import { registerAll, similarPages } from "./registration.js";
+import { registerAll, resolvePublicUrl, similarPages } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 import { StubOAuthProvider } from "./auth/StubOAuthProvider.js";
 
@@ -373,9 +373,7 @@ async function runHttp(): Promise<void> {
   // this server is fully public. The stub issues tokens but /mcp never
   // checks them.
 
-  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
-  const publicUrl = process.env.PUBLIC_URL
-    || (railwayDomain ? `https://${railwayDomain}` : `http://localhost:${port}`);
+  const publicUrl = resolvePublicUrl(port)!;
   app.use(mcpAuthRouter({
     provider: new StubOAuthProvider(),
     issuerUrl: new URL(publicUrl),

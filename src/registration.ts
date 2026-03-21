@@ -58,8 +58,7 @@ function normalizeStringOrArray(v: unknown): unknown {
     const cleaned = v.filter((x): x is string => typeof x === "string" && x.trim() !== "").map(x => x.trim());
     return cleaned.length === 0 ? undefined : cleaned.length === 1 ? cleaned[0] : cleaned;
   }
-  // Unsupported types (numbers, booleans, objects) — return as-is so Zod rejects them
-  return v;
+  return v; // let Zod reject unsupported types
 }
 const stringOrArray = () => z.preprocess(
   normalizeStringOrArray,
@@ -383,10 +382,11 @@ function paginatedResponse(
   totalLabel: string,
   toolName: string,
   extra?: Record<string, unknown>,
-  formatLine?: (record: Record<string, unknown>, index: number) => string
+  formatLine?: (record: Record<string, unknown>, index: number) => string,
+  identifiersOnly?: boolean,
 ): ToolResponse | StructuredToolResponse {
-  const records = result.records.slice(0, maxResults);
-  const overflow = result.records.slice(maxResults);
+  const records = result.records.splice(0, maxResults);
+  const overflow = result.records; // splice mutated: remainder is what's left
 
   // Build server-side continuation token when there are buffered records or an upstream token
   let serverToken: string | null = null;
@@ -397,7 +397,7 @@ function paginatedResponse(
       remainder: overflow,
       upstreamToken: result.resumptionToken,
       completeListSize: result.completeListSize,
-      identifiersOnly: (extra as Record<string, unknown> | undefined)?.identifiersOnly === true ? true : undefined,
+      identifiersOnly: identifiersOnly || undefined,
       toolName,
       lastAccess: Date.now(),
     });
@@ -430,6 +430,32 @@ function paginatedResponse(
 }
 
 /**
+ * Drain an OAI page buffer or fetch a fresh upstream page.
+ * Shared by browse_set and get_recent_changes to avoid duplicating buffer-drain logic.
+ */
+async function drainOaiBuffer(
+  buffered: OaiPageBuffer,
+  maxResults: number,
+  totalLabel: string,
+  toolName: string,
+  fetchUpstream: (token: string) => Promise<{ records: unknown[]; completeListSize: number | null; resumptionToken: string | null }>,
+  extra?: Record<string, unknown>,
+  formatLine?: (record: Record<string, unknown>, index: number) => string,
+): Promise<ToolResponse | StructuredToolResponse> {
+  const identifiers = buffered.identifiersOnly;
+  if (buffered.remainder.length >= maxResults || !buffered.upstreamToken) {
+    return paginatedResponse(
+      { records: buffered.remainder, completeListSize: buffered.completeListSize, resumptionToken: buffered.upstreamToken },
+      maxResults, totalLabel, toolName, extra, formatLine, identifiers,
+    );
+  }
+  // Buffer too small — fetch next upstream page and prepend remainder
+  const upstream = await fetchUpstream(buffered.upstreamToken);
+  const merged = { records: [...buffered.remainder, ...upstream.records], completeListSize: upstream.completeListSize ?? buffered.completeListSize, resumptionToken: upstream.resumptionToken };
+  return paginatedResponse(merged, maxResults, totalLabel, toolName, extra, formatLine, identifiers);
+}
+
+/**
  * Look up and validate a server-side OAI continuation token.
  * Returns the buffer if valid, an error response if invalid, or undefined if not a server token.
  * Does NOT delete the buffer entry — entries expire via TTL (#142: retry-safe).
@@ -459,6 +485,13 @@ function resolveOaiBuffer(
  * Register all tools, resources, and prompts on the given McpServer.
  * `httpPort` is provided when running in HTTP mode so viewer URLs can be generated.
  */
+/** Resolve the public base URL from environment. Used by both index.ts and registerTools. */
+export function resolvePublicUrl(httpPort?: number): string | undefined {
+  if (!httpPort) return undefined;
+  return process.env.PUBLIC_URL
+    || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${httpPort}`);
+}
+
 export function registerAll(
   server: McpServer,
   apiClient: RijksmuseumApiClient,
@@ -869,12 +902,7 @@ function registerTools(
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>
 ): void {
-  // Centralized public base URL — used by viewer, find_similar, and any tool that
-  // returns externally reachable links. Mirrors the 3-tier logic in index.ts.
-  const publicBaseUrl = httpPort
-    ? (process.env.PUBLIC_URL
-      || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${httpPort}`))
-    : undefined;
+  const publicBaseUrl = resolvePublicUrl(httpPort);
 
   // ── search_artwork ──────────────────────────────────────────────
 
@@ -1399,13 +1427,13 @@ function registerTools(
       const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, resolvedUri);
       // Enrich production entries with person info from vocab DB
       if (vocabDb?.available && detail.production.length > 0) {
-        const actorIds = new Set(
-          detail.production.map(p => p.actorUri.split("/").pop()).filter((id): id is string => !!id)
+        const actorIdByUri = new Map(
+          detail.production.map(p => [p.actorUri, p.actorUri.split("/").pop()] as const)
         );
-        const personMap = vocabDb.lookupPersonInfo([...actorIds]);
+        const uniqueIds = [...new Set([...actorIdByUri.values()].filter((id): id is string => !!id))];
+        const personMap = vocabDb.lookupPersonInfo(uniqueIds);
         for (const p of detail.production) {
-          const id = p.actorUri.split("/").pop();
-          const info = id ? personMap.get(id) : undefined;
+          const info = personMap.get(actorIdByUri.get(p.actorUri)!);
           if (info) p.personInfo = info;
         }
       }
@@ -1634,7 +1662,7 @@ function registerTools(
             activeViewUUID = args.viewUUID;
             q.lastAccess = Date.now();
           }
-          // Mismatched or unknown viewUUID — silently skip (don't navigate wrong viewer)
+          // don't navigate wrong viewer
         } else {
           // Auto-discover: only use if exactly one viewer exists for this artwork
           let matchCount = 0;
@@ -1999,22 +2027,14 @@ function registerTools(
         return errorResponse("Either setSpec or resumptionToken is required.");
       }
 
-      // Check server-side page buffer first
       const resolved = resolveOaiBuffer(args.resumptionToken, "browse_set");
       if (resolved && "error" in resolved) return resolved.error;
-
       if (resolved) {
-        const { buffered } = resolved;
-        if (buffered.remainder.length >= args.maxResults || !buffered.upstreamToken) {
-          return paginatedResponse(
-            { records: buffered.remainder, completeListSize: buffered.completeListSize, resumptionToken: buffered.upstreamToken },
-            args.maxResults, "totalInSet", "browse_set", undefined, formatRecordLine,
-          );
-        }
-        // Buffer too small — fetch next upstream page and prepend remainder
-        const upstream = await oai.listRecords({ resumptionToken: buffered.upstreamToken });
-        const merged = { records: [...buffered.remainder, ...upstream.records], completeListSize: upstream.completeListSize ?? buffered.completeListSize, resumptionToken: upstream.resumptionToken };
-        return paginatedResponse(merged, args.maxResults, "totalInSet", "browse_set", undefined, formatRecordLine);
+        return drainOaiBuffer(
+          resolved.buffered, args.maxResults, "totalInSet", "browse_set",
+          (token) => oai.listRecords({ resumptionToken: token }),
+          undefined, formatRecordLine,
+        );
       }
 
       const result = args.resumptionToken
@@ -2076,27 +2096,21 @@ function registerTools(
         return errorResponse("Either from or resumptionToken is required.");
       }
 
-      // Check server-side page buffer first
+      const fetchByMode = (token: string, identifiers?: boolean) =>
+        identifiers
+          ? oai.listIdentifiers({ resumptionToken: token })
+          : oai.listRecords({ resumptionToken: token });
+
       const resolved = resolveOaiBuffer(args.resumptionToken, "get_recent_changes");
       if (resolved && "error" in resolved) return resolved.error;
-
       if (resolved) {
-        const { buffered } = resolved;
-        const useIdentifiers = buffered.identifiersOnly ?? args.identifiersOnly;
+        const useIdentifiers = resolved.buffered.identifiersOnly ?? args.identifiersOnly;
         const extra = useIdentifiers ? { identifiersOnly: true } : undefined;
-
-        if (buffered.remainder.length >= args.maxResults || !buffered.upstreamToken) {
-          return paginatedResponse(
-            { records: buffered.remainder, completeListSize: buffered.completeListSize, resumptionToken: buffered.upstreamToken },
-            args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine,
-          );
-        }
-        // Buffer too small — fetch next upstream page and prepend remainder
-        const upstream = useIdentifiers
-          ? await oai.listIdentifiers({ resumptionToken: buffered.upstreamToken })
-          : await oai.listRecords({ resumptionToken: buffered.upstreamToken });
-        const merged = { records: [...buffered.remainder, ...upstream.records], completeListSize: upstream.completeListSize ?? buffered.completeListSize, resumptionToken: upstream.resumptionToken };
-        return paginatedResponse(merged, args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine);
+        return drainOaiBuffer(
+          resolved.buffered, args.maxResults, "totalChanges", "get_recent_changes",
+          (token) => fetchByMode(token, useIdentifiers),
+          extra, formatRecordLine,
+        );
       }
 
       const opts = {
@@ -2112,7 +2126,7 @@ function registerTools(
         : await oai.listRecords(opts);
 
       const extra = useIdentifiers ? { identifiersOnly: true } : undefined;
-      return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine);
+      return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine, useIdentifiers);
     })
   );
 
