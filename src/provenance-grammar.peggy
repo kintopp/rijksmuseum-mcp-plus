@@ -29,9 +29,12 @@ const RM_RE = /^RM\.?\s*([\d,]+)/;
 const SFRS_RE = /^(?:SFrcs|CHF)\s*([\d,]+)/;
 const EUR_RE = /^[€]\s*([\d,.]+)/;
 const USD_RE = /^\$\s*([\d,]+)/;
-const QUAL_DATE_RE = /^\s*(before|after|since)\s+(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(\d{4})\b/i;
+// Matches qualified dates: "before 1800", "after May 1940", "since 1948",
+// "before or in 1691", "in or shortly before 1660", "in 1904"
+const QUAL_DATE_RE = /^\s*(?:(before|after|since)(?:\s+or\s+in)?\s+|(in\s+or\s+(?:shortly\s+)?)(before|after)\s+|in\s+)(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(\d{4})\b/i;
 const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
-const BARE_YEAR_RE = /^\s*(\d{4})\s*$/;
+const DATE_RANGE_RE = /^\s*(\d{4})\s*[-–\/]\s*(\d{2,4})\b/;
+const BARE_YEAR_RE = /^\s*(\d{4})\b/;
 const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/;
 const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
 // Place names — set by per-parse initializer from options.places, else hardcoded fallback.
@@ -168,13 +171,31 @@ function parseRest(tail) {
     if (exactDate) { dateExpression = t; dateYear = parseInt(exactDate[3], 10); continue; }
 
     const qualDate = t.match(QUAL_DATE_RE);
-    if (qualDate) { dateExpression = qualDate[0].trim(); dateYear = parseInt(qualDate[2], 10); dateQualifier = qualDate[1].toLowerCase(); continue; }
+    if (qualDate) {
+      dateExpression = qualDate[0].trim();
+      dateYear = parseInt(qualDate[4], 10);
+      // Qualifier is in group 1 ("before/after/since") or group 3 ("before/after" after "in or")
+      dateQualifier = (qualDate[1] || qualDate[3] || "in").toLowerCase();
+      continue;
+    }
 
     const approxDate = t.match(APPROX_DATE_RE);
     if (approxDate) { dateExpression = approxDate[0].trim(); dateYear = parseInt(approxDate[1], 10); dateQualifier = "circa"; continue; }
 
     const monthYear = t.match(MONTHS_RE);
     if (monthYear) { dateExpression = t; dateYear = parseInt(monthYear[2], 10); continue; }
+
+    // Date range: "1713-24", "1792/93", "1983-2005"
+    const dateRange = t.match(DATE_RANGE_RE);
+    if (dateRange && !dateYear) {
+      const startYear = parseInt(dateRange[1], 10);
+      let endPart = dateRange[2];
+      // Expand abbreviated end year: "1713-24" → 1724, "1792/93" → 1793
+      if (endPart.length === 2) endPart = dateRange[1].slice(0, 2) + endPart;
+      dateExpression = dateRange[0].trim();
+      dateYear = startYear;
+      continue;
+    }
 
     const bareYear = t.match(BARE_YEAR_RE);
     if (bareYear && !dateYear) { dateExpression = bareYear[1]; dateYear = parseInt(bareYear[1], 10); continue; }
