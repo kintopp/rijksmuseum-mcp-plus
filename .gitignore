@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+*.generated.js
 
 # Environment variables
 .env
