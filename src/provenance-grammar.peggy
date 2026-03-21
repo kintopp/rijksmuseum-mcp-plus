@@ -280,7 +280,7 @@ SaleEvent
 // ─── Commission ─────────────────────────────────────────────────────
 
 CommissionEvent
-  = "commissioned"i _ ("by"i / "for"i / "as"i / "and"i) _ nameRaw:NameChars tail:Tail
+  = ("commissioned"i / "comissioned"i) _ ("by"i / "for"i / "as"i / "and"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -402,7 +402,7 @@ DepositEvent
 // ─── Collection ─────────────────────────────────────────────────────
 
 CollectionEvent
-  = "collection"i _ nameRaw:NameChars tail:Tail
+  = ("collection"i / "collectie"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -414,10 +414,14 @@ CollectionEvent
       const rest = parseRest(tail);
       return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "collector" }] : [], ...rest };
     }
-  / ("first"i / "last"i) _ ("recorded"i / "mentioned"i / "documented"i / "noted"i) tail:Tail
-    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
+  / ("first"i / "last"i)? _? ("recorded"i / "mentioned"i / "documented"i / "noted"i) _ ("at"i / "in"i / "by"i)? _? nameRaw:NameChars tail:Tail
+    { return buildResult("collection", extractNameAndDates(nameRaw), null, parseRest(tail)); }
   / "with"i _ ("an"i / "the"i)? _? ("art"i _)? "dealer"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
+  / "dealer"i ","? _ nameRaw:NameChars tail:Tail
+    { return buildResult("collection", extractNameAndDates(nameRaw), "dealer", parseRest(tail)); }
+  / ("art"i _)? "market"i tail:Tail
+    { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest }; }
 
 // ─── Estate inventory ───────────────────────────────────────────────
 
@@ -499,7 +503,12 @@ AnaphoricEvent
     }
 
 RelationWord "relation word"
-  = $("sons"i / "son"i / "daughters"i / "daughter"i / "widower"i / "widow"i
+  = $("third cousin and godson"i
+     / "half-brother"i / "half-sister"i
+     / "younger brother"i / "eldest son"i / "eldest daughter"i
+     / "grandnephew"i / "grandniece"i
+     / "life companion"i
+     / "sons"i / "son"i / "daughters"i / "daughter"i / "widower"i / "widow"i
      / "husband"i / "wife"i / "nephew"i / "niece"i
      / "great-great-granddaughter"i / "great-great-grandson"i
      / "great-granddaughter"i / "great-grandson"i
@@ -507,9 +516,10 @@ RelationWord "relation word"
      / "sister-in-law"i / "brother-in-law"i
      / "sister's grandson"i / "sister's granddaughter"i
      / "sisters"i / "sister"i / "brothers"i / "brother"i
+     / "mother"i / "father"i
      / "cousins"i / "cousin"i / "uncle"i / "aunt"i
      / "stepson"i / "stepdaughter"i
-     / "heirs"i / "heir"i)
+     / "children"i / "heirs"i / "heir"i)
 
 // ─── Standard provenance phrases ────────────────────────────────────
 
@@ -597,8 +607,16 @@ StandardPhraseEvent
     { const rest = parseRest(tail); return { type: "loan", parties: [], ...rest }; }
   / "veiling"i _ nameRaw:NameChars tail:Tail
     { return buildResult("sale", extractNameAndDates(nameRaw), "auctioneer", parseRest(tail)); }
-  / "gekocht"i _ ("door"i / "van"i / "bij"i) _ ("het"i / "de"i / "het"i)? _? nameRaw:NameChars tail:Tail
+  / "gekocht"i _ ("door"i / "van"i / "bij"i) _ ("het"i / "de"i)? _? nameRaw:NameChars tail:Tail
     { return buildResult("purchase", extractNameAndDates(nameRaw), "buyer", parseRest(tail)); }
+  / ("aangekocht"i / "verworven"i) _ ("door"i / "van"i / "bij"i)? _? ("het"i / "de"i)? _? nameRaw:NameChars tail:Tail
+    { return buildResult("purchase", extractNameAndDates(nameRaw), "buyer", parseRest(tail)); }
+  / "geschonken"i _ ("aan"i / "door"i) _ ("het"i / "de"i)? _? nameRaw:NameChars tail:Tail
+    { return buildResult("gift", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
+  / "with"i _ "the"i _ ("castle"i / "house"i / "estate"i) _ "to"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("inheritance", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
+  / "through"i _ "the"i _ "family"i _ ("to"i _)? nameRaw:NameChars tail:Tail
+    { return buildResult("inheritance", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 
