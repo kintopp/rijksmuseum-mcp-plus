@@ -19,7 +19,7 @@ const HAS_UPPER_RE = /[A-Z]/;
 const LOT_NO_RE = /^no\.\s*\d+/i;
 const LOT_NUM_RE = /^lot\s+\d+/i;
 const PARENS_RE = /^\(([^)]+)\)/;
-const FL_RE = /^fl\.\s*([\d,]+)/;
+const FL_RE = /^fl\.\s*([\d,.]+)/;
 const POUND_RE = /^£\s*([\d,]+)/;
 const FRS_RE = /^frs\.?\s*([\d,]+)/;
 const LIVRES_RE = /([\d,]+)\s*livres/i;
@@ -55,6 +55,19 @@ const CITIES = [
 // Regex for digit-rejoin: next part starts with 3 digits (thousands group), optionally followed
 // by a space + currency word. Excludes 4-digit starts (years like "1824").
 const THOUSANDS_CONT_RE = /^\d{3}(?:\s|$)/;
+
+// Parse price string handling European decimal notation (period = thousands, comma = decimal).
+// "2.000" → 2000, "3.253,50" → 3253.50, "600" → 600, "1,200" → 1200
+function parsePrice(raw) {
+  // If contains period followed by exactly 3 digits (thousands separator)
+  if (/\.\d{3}(?:[,.]|$)/.test(raw)) {
+    // European: periods are thousands, comma is decimal
+    const normalized = raw.replace(/\./g, "").replace(",", ".");
+    return parseFloat(normalized);
+  }
+  // Standard: commas are thousands, period is decimal
+  return parseFloat(raw.replace(/,/g, ""));
+}
 
 function splitCommaRespectingParens(str) {
   // Split on commas, but not inside matched parentheses or single-quoted strings.
@@ -112,7 +125,7 @@ function parseRest(tail) {
     const toBuyer = t.match(TO_BUYER_RE);
     if (toBuyer) {
       const buyerRaw = toBuyer[1].replace(/,\s*$/, "").trim();
-      if (buyerRaw && HAS_UPPER_RE.test(buyerRaw)) {
+      if (buyerRaw && (HAS_UPPER_RE.test(buyerRaw) || /^(?:the\s+)?museum$/i.test(buyerRaw))) {
         const nd = extractNameAndDates(buyerRaw);
         if (nd) {
           extraParties.push({ name: nd.name, dates: nd.dates, role: "buyer" });
@@ -142,25 +155,25 @@ function parseRest(tail) {
 
     // Price patterns (regexes hoisted to module scope)
     const flMatch = t.match(FL_RE);
-    if (flMatch) { priceAmount = parseFloat(flMatch[1].replace(/,/g, "")); priceCurrency = "guilders"; continue; }
+    if (flMatch) { priceAmount = parsePrice(flMatch[1]); priceCurrency = "guilders"; continue; }
     const poundMatch = t.match(POUND_RE);
-    if (poundMatch) { priceAmount = parseFloat(poundMatch[1].replace(/,/g, "")); priceCurrency = "pounds"; continue; }
+    if (poundMatch) { priceAmount = parsePrice(poundMatch[1]); priceCurrency = "pounds"; continue; }
     const frsMatch = t.match(FRS_RE);
-    if (frsMatch) { priceAmount = parseFloat(frsMatch[1].replace(/,/g, "")); priceCurrency = "francs"; continue; }
+    if (frsMatch) { priceAmount = parsePrice(frsMatch[1]); priceCurrency = "francs"; continue; }
     const livresMatch = t.match(LIVRES_RE);
-    if (livresMatch) { priceAmount = parseFloat(livresMatch[1].replace(/,/g, "")); priceCurrency = "livres"; continue; }
+    if (livresMatch) { priceAmount = parsePrice(livresMatch[1]); priceCurrency = "livres"; continue; }
     const napMatch = t.match(NAP_RE);
-    if (napMatch) { priceAmount = parseFloat(napMatch[1].replace(/,/g, "")); priceCurrency = "napoléons"; continue; }
+    if (napMatch) { priceAmount = parsePrice(napMatch[1]); priceCurrency = "napoléons"; continue; }
     const dmMatch = t.match(DM_RE);
-    if (dmMatch) { priceAmount = parseFloat(dmMatch[1].replace(/,/g, "")); priceCurrency = "deutschmarks"; continue; }
+    if (dmMatch) { priceAmount = parsePrice(dmMatch[1]); priceCurrency = "deutschmarks"; continue; }
     const rmMatch = t.match(RM_RE);
-    if (rmMatch) { priceAmount = parseFloat(rmMatch[1].replace(/,/g, "")); priceCurrency = "reichsmarks"; continue; }
+    if (rmMatch) { priceAmount = parsePrice(rmMatch[1]); priceCurrency = "reichsmarks"; continue; }
     const sfrsMatch = t.match(SFRS_RE);
-    if (sfrsMatch) { priceAmount = parseFloat(sfrsMatch[1].replace(/,/g, "")); priceCurrency = "swiss_francs"; continue; }
+    if (sfrsMatch) { priceAmount = parsePrice(sfrsMatch[1]); priceCurrency = "swiss_francs"; continue; }
     const eurMatch = t.match(EUR_RE);
-    if (eurMatch) { priceAmount = parseFloat(eurMatch[1].replace(/,/g, "")); priceCurrency = "euros"; continue; }
+    if (eurMatch) { priceAmount = parsePrice(eurMatch[1]); priceCurrency = "euros"; continue; }
     const usdMatch = t.match(USD_RE);
-    if (usdMatch) { priceAmount = parseFloat(usdMatch[1].replace(/,/g, "")); priceCurrency = "dollars"; continue; }
+    if (usdMatch) { priceAmount = parsePrice(usdMatch[1]); priceCurrency = "dollars"; continue; }
 
     // Date patterns (ordered by specificity)
     const exactDate = t.match(EXACT_DATE_RE);
@@ -402,7 +415,13 @@ DepositEvent
 // ─── Collection ─────────────────────────────────────────────────────
 
 CollectionEvent
-  = ("collection"i / "collectie"i) _ nameRaw:NameChars tail:Tail
+  = ("collection"i / "collectie"i) _ ("of"i / "van"i) _ nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "collector" }] : [], ...rest };
+    }
+  / ("collection"i / "collectie"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -486,6 +505,12 @@ AnaphoricEvent
       const role = poss.toLowerCase() + " " + rel.toLowerCase();
       const rest = parseRest(tail);
       return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
+    }
+  / "by"i _ "descent"i _ "to"i _ ("his"i / "her"i / "their"i) _ RelationWord ","? _ nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role: "heir" }] : [], ...rest };
     }
   / "by"i _ "descent"i tail:Tail
     { const rest = parseRest(tail); return { type: "inheritance", parties: [], ...rest }; }

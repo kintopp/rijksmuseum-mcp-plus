@@ -196,6 +196,11 @@ export function splitEvents(
     // Skip standalone inventory-mark abbreviations (not provenance events)
     if (/^Inv\.?\s*$/i.test(trimmed)) continue;
 
+    // Skip fragment artefacts: bare years, orphaned connectors
+    const fragStripped = trimmed.replace(/__CIT_\d+__/g, "").trim();
+    if (/^\d{4}$/.test(fragStripped)) continue;                    // bare year
+    if (/^(?:et al\.?|_ and _)$/i.test(fragStripped)) continue;    // orphaned connectors
+
     results.push({ text: trimmed, gap });
   }
 
