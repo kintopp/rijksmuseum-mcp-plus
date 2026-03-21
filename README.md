@@ -66,7 +66,7 @@ After that, ask your own questions:
 - _I'm looking for works with inscriptions mentioning 'luctor et emergo'_
 - _Show me sculptures in the collection by artists born in Leiden_
 - _Which paintings are wider than 3 meters?_
-- _Does the Rijksmuseum hold any works made in the manner of Hieronymus Bosch?_
+- _Which 16th-century paintings are workshop productions rather than by named artists?_
 - _What photographs does the collection have by artists born in Indonesia?_
 - _Show me the Roermond Passion and highlight the Betrayal of Judas_
 
