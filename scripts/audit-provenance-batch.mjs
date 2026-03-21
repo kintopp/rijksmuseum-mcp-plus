@@ -128,17 +128,27 @@ function sampleSilentErrors() {
 
 function sampleUnknowns() {
   const db = openDb();
-  // Deduplicate: pick one artwork per unique unknown raw_text pattern,
-  // so high-frequency duplicates (e.g. Mensing "bought in") don't crowd out rarer patterns
-  const artworkIds = db.prepare(`
-    SELECT DISTINCT artwork_id FROM (
-      SELECT artwork_id, raw_text,
-        ROW_NUMBER() OVER (PARTITION BY raw_text ORDER BY RANDOM()) AS rn
-      FROM provenance_events
-      WHERE transfer_type = 'unknown' AND is_cross_ref = 0
-    ) WHERE rn = 1
-    ORDER BY RANDOM() LIMIT ?
-  `).all(sampleSize).map(r => r.artwork_id);
+  // Deduplicate: pick one artwork per unique structural pattern.
+  // Strip {citations} before comparing so "text {A}" and "text {B}" count as the same.
+  // Done in JS because SQLite can't regex-replace multiple citation blocks.
+  const allUnknowns = db.prepare(`
+    SELECT artwork_id, raw_text FROM provenance_events
+    WHERE transfer_type = 'unknown' AND is_cross_ref = 0 AND raw_text != ''
+  `).all();
+  const seen = new Set();
+  const candidates = [];
+  for (const row of allUnknowns) {
+    const key = row.raw_text.replace(/\{[^}]*\}/g, "").trim().slice(0, 120);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push(row.artwork_id);
+  }
+  // Shuffle and take sampleSize
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const artworkIds = [...new Set(candidates.slice(0, sampleSize))];
   return fetchRecords(artworkIds, { periods: false });
 }
 
