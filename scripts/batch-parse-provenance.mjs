@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS provenance_events (
   is_cross_ref     INTEGER NOT NULL DEFAULT 0,
   cross_ref_target TEXT,
   parse_method   TEXT NOT NULL DEFAULT 'peg',
+  enrichment_reasoning TEXT,
   PRIMARY KEY (artwork_id, sequence)
 ) WITHOUT ROWID;
 `;
@@ -110,6 +111,7 @@ CREATE TABLE IF NOT EXISTS provenance_parties (
   party_position TEXT,
   position_method TEXT,
   uncertain    INTEGER NOT NULL DEFAULT 0,
+  enrichment_reasoning TEXT,
   PRIMARY KEY (artwork_id, sequence, party_idx)
 ) WITHOUT ROWID;
 `;

@@ -2160,6 +2160,10 @@ function registerTools(
           role: z.string().nullable(),
           position: z.enum(["sender", "receiver", "agent"]).nullable()
             .describe("Party's position in the transfer: sender (relinquishes), receiver (acquires), agent (facilitates)."),
+          positionMethod: z.string().nullable().optional()
+            .describe("How position was determined: role_mapping (parser), llm_enrichment (LLM-classified), llm_disambiguation (LLM-decomposed from merged text)."),
+          enrichmentReasoning: z.string().nullable().optional()
+            .describe("LLM reasoning for position assignment (only present for llm_enrichment/llm_disambiguation)."),
         })),
         dateExpression: z.string().nullable(),
         dateYear: z.number().int().nullable(),
@@ -2174,6 +2178,10 @@ function registerTools(
         isCrossRef: z.boolean(),
         crossRefTarget: z.string().nullable(),
         parseMethod: z.enum(["peg", "regex_fallback", "cross_ref", "credit_line"]),
+        categoryMethod: z.string().nullable().optional()
+          .describe("How transfer_category was determined: type_mapping (parser), llm_enrichment, rule:transfer_is_ownership."),
+        enrichmentReasoning: z.string().nullable().optional()
+          .describe("LLM reasoning for type/category classification (only present for llm_enrichment/rule methods)."),
         matched: z.boolean().describe("True if this event matched the search criteria."),
       })),
       periods: z.array(z.object({
@@ -2217,6 +2225,7 @@ function registerTools(
           "Combine transferType, dateFrom/dateTo, location for pattern discovery " +
           "(e.g. confiscations 1940–1945, sales in Paris). " +
           "Each event includes parseMethod (peg, regex_fallback, cross_ref) indicating parse confidence. " +
+          "Events and parties enriched by LLM include categoryMethod/positionMethod and enrichmentReasoning for transparency. " +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "For collection-wide counting or keyword searches that don't map to structured fields, " +
           "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +

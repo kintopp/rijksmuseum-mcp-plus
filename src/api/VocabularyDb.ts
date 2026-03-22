@@ -230,6 +230,8 @@ interface ProvenanceEventDbRow {
   is_cross_ref: number;
   cross_ref_target: string | null;
   parse_method: string;
+  category_method: string | null;
+  enrichment_reasoning: string | null;
   // Joined from artworks
   object_number: string;
   title: string;
@@ -245,7 +247,7 @@ export interface ProvenanceEventRow {
   transferType: string;
   transferCategory: "ownership" | "custody" | "ambiguous" | null;
   uncertain: boolean;
-  parties: { name: string; dates: string | null; uncertain: boolean; role: string | null; position: "sender" | "receiver" | "agent" | null }[];
+  parties: { name: string; dates: string | null; uncertain: boolean; role: string | null; position: "sender" | "receiver" | "agent" | null; positionMethod?: string | null; enrichmentReasoning?: string | null }[];
   dateExpression: string | null;
   dateYear: number | null;
   dateQualifier: string | null;
@@ -256,6 +258,8 @@ export interface ProvenanceEventRow {
   isCrossRef: boolean;
   crossRefTarget: string | null;
   parseMethod: "peg" | "regex_fallback" | "cross_ref";
+  categoryMethod: string | null;
+  enrichmentReasoning: string | null;
   matched: boolean;
 }
 
@@ -531,6 +535,8 @@ export class VocabularyDb {
   private hasPartyTable_ = false;
   private hasPartyPosition_ = false;
   private hasTransferCategory_ = false;
+  private hasPartyEnrichmentReasoning_ = false;
+  private stmtPartyEnrichment_: Statement | null = null;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtLookupPersonInfo: Statement | null = null;
@@ -636,6 +642,14 @@ export class VocabularyDb {
       this.hasPartyTable_ = this.tableExists("provenance_parties");
       this.hasPartyPosition_ = this.hasPartyTable_ && this.columnExists("provenance_parties", "party_position");
       this.hasTransferCategory_ = this.hasProvenanceTables_ && this.columnExists("provenance_events", "transfer_category");
+      this.hasPartyEnrichmentReasoning_ = this.hasPartyTable_ && this.columnExists("provenance_parties", "enrichment_reasoning");
+      if (this.hasPartyEnrichmentReasoning_) {
+        this.stmtPartyEnrichment_ = this.db.prepare(`
+          SELECT sequence, party_idx, position_method, enrichment_reasoning
+          FROM provenance_parties
+          WHERE artwork_id = ? AND position_method LIKE 'llm%'
+        `);
+      }
 
       // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
@@ -2654,6 +2668,8 @@ export class VocabularyDb {
       isCrossRef: row.is_cross_ref === 1,
       crossRefTarget: row.cross_ref_target,
       parseMethod: row.parse_method as ProvenanceEventRow["parseMethod"],
+      categoryMethod: row.category_method ?? null,
+      enrichmentReasoning: row.enrichment_reasoning ?? null,
       matched,
     };
   }
@@ -2704,6 +2720,22 @@ export class VocabularyDb {
       if (matched) matchedCount++;
       return this.buildProvenanceEvent(r, matched);
     });
+
+    // Enrich parties with provenance_parties reasoning if any event has LLM enrichment
+    const hasEnrichment = rows.some(r => r.category_method?.startsWith("llm") || r.category_method?.startsWith("rule"));
+    if (hasEnrichment && this.hasPartyTable_ && this.stmtPartyEnrichment_) {
+      const partyRows = this.stmtPartyEnrichment_.all(first.artwork_id) as {
+        sequence: number; party_idx: number; position_method: string | null; enrichment_reasoning: string | null;
+      }[];
+      for (const pr of partyRows) {
+        if (!pr.position_method?.startsWith("llm")) continue;
+        const event = events.find(e => e.sequence === pr.sequence);
+        if (!event || pr.party_idx >= event.parties.length) continue;
+        event.parties[pr.party_idx].positionMethod = pr.position_method;
+        event.parties[pr.party_idx].enrichmentReasoning = pr.enrichment_reasoning;
+      }
+    }
+
     return {
       objectNumber: first.object_number,
       title: first.title ?? "",

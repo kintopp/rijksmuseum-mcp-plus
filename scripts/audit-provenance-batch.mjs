@@ -30,7 +30,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // ─── Modes ──────────────────────────────────────────────────────────
 
-const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification"];
+const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification", "forced-sale"];
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -206,15 +206,11 @@ function samplePositionEnrichment() {
       `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
     ).all(...objectNumbers).map(r => r.art_id);
   } else {
-    // Sample artworks that have null-position parties or ambiguous transfer_category
+    // Sample artworks that have null-position parties
     artworkIds = db.prepare(`
-      SELECT DISTINCT artwork_id FROM (
-        SELECT pp.artwork_id FROM provenance_parties pp
-        WHERE pp.party_position IS NULL AND pp.position_method IS NULL
-        UNION
-        SELECT pe.artwork_id FROM provenance_events pe
-        WHERE pe.transfer_category = 'ambiguous' AND pe.is_cross_ref = 0
-      ) ORDER BY RANDOM() LIMIT ?
+      SELECT DISTINCT artwork_id FROM provenance_parties
+      WHERE party_position IS NULL AND position_method IS NULL
+      ORDER BY RANDOM() LIMIT ?
     `).all(sampleSize).map(r => r.artwork_id);
   }
   return fetchRecords(artworkIds, { periods: false });
@@ -840,91 +836,180 @@ Use the report_semantic_findings tool to submit your analysis.`;
 }
 
 function buildPromptPositionEnrichment(record) {
-  const eventsJson = record.events
+  const eventsXml = record.events
     .filter(e => !e.is_cross_ref)
-    .map(e => ({
-      sequence: e.sequence,
-      rawText: e.raw_text,
-      transferType: e.transfer_type,
-      transferCategory: e.transfer_category ?? null,
-      parties: safeJson(e.parties),
-    }));
+    .map(e => {
+      const parties = safeJson(e.parties) || [];
+      const partiesXml = parties.map((p, i) =>
+        `      <party idx="${i}" name="${(p.name || "").replace(/"/g, "&quot;")}" role="${p.role ?? "null"}" position="${p.position ?? "null"}" />`
+      ).join("\n");
+      return `    <event sequence="${e.sequence}" transfer_type="${e.transfer_type}" transfer_category="${e.transfer_category ?? "null"}">
+      <raw_text>${e.raw_text}</raw_text>
+${partiesXml}
+    </event>`;
+    }).join("\n");
 
   // Identify which events need enrichment
-  const needsWork = eventsJson.filter(e => {
-    const parties = e.parties || [];
+  const needsWork = record.events.filter(e => {
+    if (e.is_cross_ref) return false;
+    const parties = safeJson(e.parties) || [];
     const hasNullPosition = parties.some(p => p.position === null || p.position === undefined);
-    const isAmbiguous = e.transferCategory === "ambiguous";
+    const isAmbiguous = e.transfer_category === "ambiguous";
     return hasNullPosition || isAmbiguous;
   });
 
-  return `You are a provenance researcher classifying party positions and transfer categories in structured provenance data from a Rijksmuseum artwork.
+  const needsWorkXml = needsWork.map(e => {
+    const parties = safeJson(e.parties) || [];
+    const nullParties = parties
+      .map((p, i) => ({ ...p, idx: i }))
+      .filter(p => p.position === null || p.position === undefined);
+    const parts = [];
+    if (nullParties.length > 0) parts.push(`null_position_parties="${nullParties.map(p => `idx=${p.idx}:${p.name}`).join("; ")}"`);
+    if (e.transfer_category === "ambiguous") parts.push(`ambiguous_category="true"`);
+    return `    <target sequence="${e.sequence}" ${parts.join(" ")}>${(e.raw_text || "").slice(0, 120)}</target>`;
+  }).join("\n");
 
-## Background: provenance data standards
+  return `<role>You are a provenance researcher classifying party positions and transfer categories in structured provenance data from a Rijksmuseum artwork. A parser has already assigned positions to most parties using keyword rules and role inference. The remaining parties could not be positioned by any rule. Your job is to classify each one using the provenance chain context, AAM conventions, and art-historical knowledge.</role>
 
-### AAM notation (source format)
-The raw provenance text follows the AAM (American Alliance of Museums, 2001) punctuation convention:
-- **;** (semicolon) separates events where direct succession is known or assumed
-- **…** or **.** marks a gap — no direct transfer known between events
-- **?** prefix marks uncertain/conjectural attribution
-- **{…}** encloses inline bibliographic citations (not provenance data)
-- **(YYYY-YYYY)** life dates of the owner
-- Events are listed in chronological order: earliest known owner → present
+<background>
+<aam_standard>
+The provenance text follows the AAM (American Alliance of Museums, 2001) convention:
+- Semicolons (;) separate events in chronological order (earliest → present)
+- Each segment names the new holder (receiver); the previous segment's party is implicitly the sender
+- Question mark (?) prefix marks uncertain attribution
+- Curly braces ({…}) enclose bibliographic citations (not provenance data)
+- "from X to Y" = X is sender, Y is receiver
+- "whose sale" / "his sale" = the previous owner (sender) consigning at auction
+- "or his sale" / "possibly anonymous sale" = the previous owner as consignor (sender)
+- A bare name with dates and location = the person/institution held the artwork (receiver)
+</aam_standard>
 
-Key AAM principle: each semicolon-delimited segment typically represents one transfer event involving one or more parties. The segment names the new owner (receiver); the previous segment's party is implicitly the sender.
+<plod_model>
+We are structuring toward the PLOD (Provenance Linked Open Data) model:
+- Each event is a directed transfer: **Sender** → **Receiver**, optionally facilitated by an **Agent**
+- **Sender** — the party relinquishing the artwork (seller, consignor, donor, lender, deceased estate, confiscated-from)
+- **Receiver** — the party acquiring the artwork (buyer, heir, recipient, borrower, collector, museum)
+- **Agent** — facilitates without owning: a dealer buying "for" or "on behalf of" someone, an auction house conducting the sale, an intermediary
+- Transfer category: **ownership** (permanent: sale, gift, inheritance, confiscation, restitution) vs **custody** (temporary: loan, deposit, storage)
+</plod_model>
 
-### PLOD framework (target model)
-We are structuring this data toward the PLOD (Provenance Linked Open Data) model, where each provenance event is a directed transfer:
-- **Sender** → **Receiver**, optionally facilitated by an **Agent**
-- Every transfer is either an **ownership** change (permanent: sale, gift, inheritance, confiscation, restitution) or a **custody** change (temporary: loan, deposit, storage)
-- The sender/receiver distinction is the structural core — it enables cross-institutional provenance queries and authority linking
+<parser_artifacts>
+The parser sometimes creates parties from text fragments that are not real parties. Common patterns:
+- "whose sale" / "or his sale" → parsed as party name, but this is an anaphoric reference to the previous owner (sender)
+- "post-auction sale" / "sold after-sale" → parsed as party name, but this is a sale modifier (not a party — skip it)
+- "after closure of Museum X in YYYY" → contextual preamble (not a party — skip it)
+- "from his heirs to the museum" → "from his heirs" is the sender; "museum" is the receiver
+- "ffrom whom" → typo for "from whom" = the previous owner (sender)
+If a parsed "party" is actually a text fragment or modifier rather than a person/institution, report position as null with a reasoning note.
+</parser_artifacts>
+</background>
 
-## Artwork
+<artwork>
 Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
+</artwork>
 
-## Raw provenance text
+<raw_provenance>
 ${record.provenanceText}
+</raw_provenance>
 
-## Parser's structured output (non-cross-reference events only)
-${JSON.stringify(eventsJson, null, 2)}
+<all_events>
+${eventsXml}
+</all_events>
 
-## Events needing enrichment
-The following events have parties with null position or ambiguous transfer category:
-${needsWork.map(e => `- Sequence ${e.sequence}: ${e.rawText?.slice(0, 80)}`).join("\n")}
+<events_needing_enrichment>
+${needsWorkXml}
+</events_needing_enrichment>
 
-## Your task
-For EACH event listed above, provide:
+<examples>
+<example>
+<context>Bare-name event with no transfer verb</context>
+<event sequence="3" transfer_type="collection" transfer_category="null">
+  <raw_text>? Pieter van Ruijven (1624-1674), Delft</raw_text>
+  <party idx="0" name="Pieter van Ruijven" role="null" position="null" />
+</event>
+<enrichment>
+  <party_update idx="0" position="receiver" confidence="0.90" reasoning="AAM bare-name convention: named party with life dates is the holder/owner. No transfer verb — the party is the receiver (current possessor)." />
+</enrichment>
+</example>
 
-### Party position classification
-For parties with position=null, classify as:
-- **sender** — the party relinquishing the artwork (seller, donor, lender, deceased estate)
-- **receiver** — the party acquiring the artwork (buyer, heir, recipient, borrower, collector)
-- **agent** — the party facilitating without owning (dealer, auctioneer, intermediary)
+<example>
+<context>Sale with "whose sale" — anaphoric reference to previous owner as consignor</context>
+<event sequence="5" transfer_type="sale" transfer_category="ownership">
+  <raw_text>whose sale, London (Sotheby's, private treaty), €750,000, to the Rijksmuseum Fonds, 2011</raw_text>
+  <party idx="0" name="whose sale" role="null" position="null" />
+  <party idx="1" name="Rijksmuseum Fonds" role="buyer" position="receiver" />
+</event>
+<enrichment>
+  <party_update idx="0" position="sender" confidence="0.95" reasoning="'whose sale' is an anaphoric reference: 'whose' refers back to the previous event's party, who is consigning the artwork for sale. The consignor is the sender." />
+</enrichment>
+</example>
 
-Use the AAM sequential convention: in a bare-name event (no transfer verb), the named party is typically the **receiver** (current holder). The sender is implicitly the previous event's party. In sale events, the named seller is the sender; the "to [Name]" party is the receiver. A dealer buying "for" someone else is an **agent**, not a receiver.
+<example>
+<context>Sale with dealer acting as agent — "on behalf of"</context>
+<event sequence="4" transfer_type="sale" transfer_category="ownership">
+  <raw_text>from the dealer J. Goudstikker, Amsterdam, on behalf of Julius vom Rath</raw_text>
+  <party idx="0" name="J. Goudstikker" role="null" position="null" />
+  <party idx="1" name="Julius vom Rath" role="buyer" position="receiver" />
+</event>
+<enrichment>
+  <party_update idx="0" position="agent" confidence="0.90" reasoning="'on behalf of' signals that Goudstikker is facilitating the purchase for vom Rath, not acquiring the artwork himself. The dealer is the agent; vom Rath is the receiver." />
+</enrichment>
+</example>
 
-### Transfer category classification
-For events with transferCategory="ambiguous" (typically transfer_type "transfer" or "unknown"):
-- **ownership** — the artwork changes hands permanently (sale, gift, inheritance, confiscation, restitution)
-- **custody** — the artwork is held temporarily (loan, deposit, temporary storage)
+<example>
+<context>Administrative transfer — "transferred to the museum" (ambiguous category)</context>
+<event sequence="7" transfer_type="transfer" transfer_category="ambiguous">
+  <raw_text>{Note RMA.} transferred to the museum, 1960</raw_text>
+  <party idx="0" name="the museum" role="recipient" position="receiver" />
+</event>
+<enrichment>
+  <category_update category="ownership" confidence="0.85" reasoning="'Transferred to the museum' in Rijksmuseum provenance is a permanent institutional acquisition, not temporary custody. The phrasing mirrors 'accessioned by' — this is an ownership transfer." />
+</enrichment>
+</example>
 
-Consider context clues: "transferred to the museum" after a loan period suggests permanent acquisition (ownership). "Stored at" or "deposited with" suggests custody. Administrative transfers between government departments are typically ownership.
+<example>
+<context>Parser artifact — "post-auction sale" is not a party</context>
+<event sequence="16" transfer_type="sale" transfer_category="ownership">
+  <raw_text>post-auction sale, with BK-2013-9-1 to -4, $80,000, to the museum</raw_text>
+  <party idx="0" name="post-auction sale" role="null" position="null" />
+  <party idx="1" name="museum" role="buyer" position="receiver" />
+</event>
+<enrichment>
+  <party_update idx="0" position="null" confidence="0.95" reasoning="'post-auction sale' is a sale modifier, not a person or institution. This is a parser artifact — no position can be assigned because it is not a party." />
+</enrichment>
+</example>
 
-### Confidence calibration
-- **≥ 0.9** — structural certainty: a keyword or the AAM convention makes it unambiguous
-- **0.7–0.9** — contextual inference: position is clear from the chain but not explicitly stated
-- **0.5–0.7** — probable: requires some interpretation or world knowledge
-- **< 0.5** — genuinely ambiguous: multiple valid interpretations exist
+<example>
+<context>Genuinely ambiguous — bare location name, no context</context>
+<event sequence="1" transfer_type="gift" transfer_category="ownership">
+  <raw_text>Zierikzee</raw_text>
+  <party idx="0" name="Zierikzee" role="null" position="null" />
+</event>
+<enrichment>
+  <party_update idx="0" position="null" confidence="0.40" reasoning="'Zierikzee' is a city name. Without further context, it is unclear whether this refers to a person from Zierikzee, the town of Zierikzee (donor), or a location note. Genuinely ambiguous — skip." />
+</enrichment>
+</example>
+</examples>
 
-Only report enrichments where you have something to contribute. Skip events where the ambiguity is genuine and irreducible.
+<task>
+For EACH event in events_needing_enrichment, provide enrichments:
 
-## Example
+1. **Party positions** — for each party with position="null", classify as sender, receiver, or agent. If the parsed "party" is a text fragment or modifier (not a real person/institution), report position as null with an explanation.
 
-Given an event: \`? Pieter van Ruijven (1624-1674), Delft\` with transferType "unknown" and position null:
-- **position: receiver** (confidence 0.85) — bare-name AAM convention: the named party is the holder
-- **category: ownership** (confidence 0.80) — a named collector with life dates implies long-term ownership, not temporary custody
+2. **Transfer category** — for events with transfer_category="ambiguous", classify as ownership or custody.
 
-Use the report_position_enrichment tool to submit your classifications.`;
+Use the full provenance chain for context. The events before and after help determine direction: in AAM notation, the chain flows chronologically, so each event's party typically received the artwork from the previous event's party.
+
+Confidence calibration:
+- ≥ 0.9 — keyword or AAM convention makes it unambiguous ("whose sale" = sender)
+- 0.7–0.9 — clear from chain context but not explicitly stated
+- 0.5–0.7 — requires interpretation or world knowledge
+- < 0.5 — genuinely ambiguous, multiple valid readings exist
+
+Only report enrichments where you have confidence ≥ 0.5. Skip events where ambiguity is irreducible.
+
+Use the report_position_enrichment tool to submit your classifications.
+</task>`;
 }
 
 function buildPromptStructuralSignals(record) {
@@ -1274,6 +1359,295 @@ function printTypeClassificationReport(report) {
   for (const c of report.allClassifications.slice(0, 15)) {
     console.log(`- **${c.objectNumber}** seq ${c.sequence}: "${c.rawText}" → **${c.type}** (${(c.confidence * 100).toFixed(0)}%)`);
     console.log(`  _${c.reasoning}_`);
+  }
+}
+
+// ─── Forced sale ────────────────────────────────────────────────────
+
+function sampleForcedSale() {
+  const db = openDb();
+  let artworkIds;
+
+  if (recordsList) {
+    const objectNumbers = recordsList.split(",").map(s => s.trim());
+    artworkIds = db.prepare(
+      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
+    ).all(...objectNumbers).map(r => r.art_id);
+  } else {
+    // All artworks with sale events dated 1933–1945
+    artworkIds = db.prepare(`
+      SELECT DISTINCT artwork_id FROM provenance_events
+      WHERE transfer_type = 'sale' AND date_year BETWEEN 1933 AND 1945
+        AND is_cross_ref = 0
+      ORDER BY RANDOM() LIMIT ?
+    `).all(sampleSize).map(r => r.artwork_id);
+  }
+  return fetchRecords(artworkIds, { periods: false });
+}
+
+const TOOL_FORCED_SALE = {
+  name: "report_forced_sale_classification",
+  description: "Classify wartime sale events as forced_sale or voluntary sale",
+  input_schema: {
+    type: "object",
+    properties: {
+      artwork_id: { type: "integer" },
+      object_number: { type: "string" },
+      classifications: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            event_sequence: { type: "integer" },
+            classification: {
+              type: "string",
+              enum: ["forced_sale", "sale", "insufficient_evidence"],
+              description: "forced_sale: involuntary sale under persecution/duress; sale: voluntary transaction; insufficient_evidence: cannot determine from available text",
+            },
+            confidence: { type: "number", description: "0.0-1.0" },
+            indicators: {
+              type: "array",
+              items: { type: "string" },
+              description: "Specific evidence supporting the classification (e.g., 'buyer is Nazi apparatus', 'seller is known persecuted party', 'followed by war recuperation')",
+            },
+            reasoning: { type: "string", description: "Explanation of how indicators combine to support the classification" },
+          },
+          required: ["event_sequence", "classification", "confidence", "indicators", "reasoning"],
+        },
+      },
+    },
+    required: ["artwork_id", "object_number", "classifications"],
+  },
+};
+
+function buildPromptForcedSale(record) {
+  const eventsXml = record.events
+    .filter(e => !e.is_cross_ref)
+    .map(e => {
+      const parties = safeJson(e.parties) || [];
+      const partiesXml = parties.map((p, i) =>
+        `      <party idx="${i}" name="${esc(p.name || "")}" role="${p.role ?? "null"}" position="${p.position ?? "null"}" />`
+      ).join("\n");
+      return `    <event sequence="${e.sequence}" transfer_type="${e.transfer_type}" date_year="${e.date_year ?? "null"}" transfer_category="${e.transfer_category ?? "null"}">
+      <raw_text>${esc(e.raw_text)}</raw_text>
+${partiesXml}
+    </event>`;
+    }).join("\n");
+
+  // Identify sale events in the 1933–1945 window
+  const targetEvents = record.events.filter(
+    e => e.transfer_type === "sale" && e.date_year >= 1933 && e.date_year <= 1945 && !e.is_cross_ref
+  );
+  const targetsXml = targetEvents.map(e =>
+    `    <target sequence="${e.sequence}" date_year="${e.date_year}">${esc((e.raw_text || "").slice(0, 150))}</target>`
+  ).join("\n");
+
+  // Contextual signals: does the chain include recuperation?
+  const hasRecuperation = record.events.some(e => e.transfer_type === "recuperation");
+
+  return `<role>You are a provenance researcher specializing in Nazi-era forced transactions. You are classifying individual sale events from a Rijksmuseum artwork's provenance chain to determine whether they represent forced sales (involuntary transactions under persecution or duress) or voluntary sales.</role>
+
+<background>
+<historical_context>
+Between 1933 and 1945, the Nazi regime and its collaborators systematically looted, confiscated, and coerced the sale of art from Jewish collectors, dealers, and other persecuted groups across Europe. The Netherlands was occupied from May 1940 to May 1945. Key phases:
+- **1933–1939 (pre-occupation):** Jewish collectors in Germany and Austria fled or were forced to liquidate. Some sold through Dutch dealers.
+- **1940–1945 (occupation):** Direct confiscation by Nazi agencies (Dienststelle Mühlmann, ERR), forced sales by Jewish owners under anti-Jewish decrees, and purchases by Nazi officials (Göring, Posse/Führermuseum) and collaborating dealers.
+- **1945+ (post-war):** War recuperation by the Stichting Nederlands Kunstbezit (SNK), restitution proceedings.
+</historical_context>
+
+<cmoa_definition>
+The CMOA (Carnegie Museum of Art) Art Tracks thesaurus defines **Forced Sale** as:
+> "This object was purchased by the named party using involuntary pressure on the seller."
+
+A forced sale is a subcategory of **Sale** (not Confiscation) — it involves an exchange of value (money changed hands), but the seller acted under duress, persecution, or coercion. This distinguishes it from:
+- **Confiscation** — no exchange of value; legally seized by state authority
+- **Theft/Looting** — no exchange of value; illegally taken
+- **Voluntary sale** — seller acted freely, without external pressure
+</cmoa_definition>
+
+<indicators_forced>
+Strong indicators of a forced sale:
+1. **Nazi apparatus buyer:** Dienststelle Mühlmann, Hans Posse (Führermuseum/Linz), Hermann Göring, Erhard Göpel, Walter Andreas Hofer, Karl Haberstock, Alois Miedl, or other known Nazi art agents
+2. **Persecuted seller:** Known Jewish collector/dealer selling during 1933–1945, especially after occupation (1940). Key names in Rijksmuseum provenance: Fritz Mannheimer, Jacques Goudstikker, Nathan Katz, Adolphe Schloss, Gutmann family, Rothschild family, Lippmann-Rosenthal (Nazi-controlled looting bank)
+3. **"En bloc" liquidation:** Entire collections sold at once, often at below-market prices — characteristic of forced liquidation
+4. **Followed by recuperation:** A post-war "war recuperation, SNK" event strongly suggests the preceding sale was involuntary
+5. **Estate of persecuted party:** "purchased from his/the estate" of a person who died during persecution
+6. **Nazi-era keywords:** Feindvermögen (enemy property), Sichergestellt (secured/seized), Verwalter (administrator), Treuhänder (trustee), Beauftragter (commissioner)
+7. **Below-market pricing combined with wartime date and persecuted seller**
+</indicators_forced>
+
+<indicators_voluntary>
+Indicators of a voluntary sale:
+1. **Museum as buyer, artist as seller:** "from the artist, fl. X, to the museum" — direct purchase from a living artist
+2. **Known non-persecuted seller:** Dutch institutional sellers, auction houses operating normally, established dealers without known persecution history
+3. **Normal auction process:** Standard public auction with catalogue numbers, normal-looking prices, no subsequent recuperation
+4. **Pre-1940 Netherlands:** Before German occupation, Dutch sales were generally voluntary (though German/Austrian refugees may have been selling under duress from 1933)
+5. **No recuperation in the chain:** Absence of post-war SNK recuperation suggests the transaction was not considered problematic
+</indicators_voluntary>
+
+<important_nuance>
+Not all wartime sales are forced sales. The Rijksmuseum actively purchased art throughout the war years, often from dealers, artists, and estates in normal transactions. The presence of a 1940–1945 date alone is NOT sufficient to classify as forced_sale.
+
+Conversely, some sales before 1940 — particularly by German Jewish collectors fleeing Nazi Germany (1933–1939) — may be forced sales even though they occurred in the Netherlands before occupation.
+
+When evidence is ambiguous, use "insufficient_evidence" rather than guessing. The classification has legal and ethical implications for restitution claims.
+</important_nuance>
+</background>
+
+<artwork>
+Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
+Chain has recuperation event: ${hasRecuperation ? "YES" : "no"}
+</artwork>
+
+<full_provenance_chain>
+${eventsXml}
+</full_provenance_chain>
+
+<events_to_classify>
+${targetsXml}
+</events_to_classify>
+
+<examples>
+<example>
+<context>Sale to Nazi Führermuseum buyer, followed by war recuperation</context>
+<event sequence="4" date_year="1940">from whom, fl. 30,000, to Hans Posse (1879-1942), for Adolf Hitler's Führermuseum, Linz, 7 September 1940</event>
+<classification>
+  classification: forced_sale
+  confidence: 0.95
+  indicators: ["buyer is Hans Posse purchasing for Hitler's Führermuseum", "date during Dutch occupation (1940)", "followed by war recuperation SNK 1945"]
+  reasoning: Hans Posse was Hitler's chief art agent, acquiring works for the planned Führermuseum in Linz. The seller (a dealer consigned by an unknown collector) was operating under occupation conditions. The subsequent war recuperation by SNK confirms this was treated as an involuntary wartime transaction.
+</classification>
+</example>
+
+<example>
+<context>En bloc estate purchase by Dienststelle Mühlmann</context>
+<event sequence="3" date_year="1940">purchased from his estate, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940</event>
+<classification>
+  classification: forced_sale
+  confidence: 0.95
+  indicators: ["buyer is Dienststelle Mühlmann (Nazi art confiscation agency)", "en bloc estate purchase", "Fritz Mannheimer was a Jewish banker who died 1939", "followed by war recuperation"]
+  reasoning: The Dienststelle Mühlmann was the Nazi agency responsible for art acquisition in the Netherlands, operating under Seyss-Inquart. The "purchase" from Mannheimer's estate was conducted under occupation authority — the estate had no real choice. The en bloc nature and subsequent recuperation confirm forced character.
+</classification>
+</example>
+
+<example>
+<context>Normal museum purchase from an artist during wartime</context>
+<event sequence="5" date_year="1943">From the artist, fl. 20, to the museum, 1943</event>
+<classification>
+  classification: sale
+  confidence: 0.90
+  indicators: ["seller is the artist (not persecuted group)", "buyer is the Rijksmuseum (not Nazi apparatus)", "direct artist-to-museum sale", "no recuperation in chain"]
+  reasoning: A direct purchase from a living artist by the museum at a modest price. No indicators of duress — the artist is selling their own work voluntarily. The absence of any subsequent recuperation or restitution confirms this was a normal acquisition.
+</classification>
+</example>
+
+<example>
+<context>Standard auction sale, non-persecuted estate</context>
+<event sequence="3" date_year="1937">sale, A.W.M. Mensing (1866-1936, Amsterdam), Amsterdam (F. Muller), 27 April 1937 sqq., no. 869, fl. 210, with 44 other drawings, to the museum</event>
+<classification>
+  classification: sale
+  confidence: 0.85
+  indicators: ["standard public auction (F. Muller)", "seller died 1936 (pre-occupation)", "museum as buyer", "no recuperation in chain", "Mensing was a Dutch collector, not in persecuted category"]
+  reasoning: A.W.M. Mensing was a major Dutch art collector who died in 1936, before the German occupation. His estate sale at Frederik Muller was a normal posthumous auction. The museum purchased at public auction at normal prices. No indicators of duress.
+</classification>
+</example>
+
+<example>
+<context>Ambiguous — wartime sale with insufficient context</context>
+<event sequence="2" date_year="1943">acquired by Hubert W. Krantz (d. 1963), Aachen, 1943</event>
+<classification>
+  classification: insufficient_evidence
+  confidence: 0.60
+  indicators: ["buyer is in Aachen (Germany)", "date is 1943 (wartime)", "no information about seller or circumstances", "no recuperation in chain"]
+  reasoning: The bare acquisition note provides no information about who sold the artwork or under what circumstances. While the wartime date and German buyer raise questions, there is no evidence of a specific persecuted seller or Nazi involvement. Without more context, this cannot be classified as either forced or voluntary with confidence.
+</classification>
+</example>
+</examples>
+
+<task>
+For EACH sale event in events_to_classify, determine whether it was a forced sale, a voluntary sale, or has insufficient evidence to classify.
+
+Consider the FULL provenance chain — events before and after the sale provide critical context:
+- A recuperation event after the sale strongly suggests it was forced
+- The identity of the seller (previous event's party) matters: was this person/entity likely persecuted?
+- The identity of the buyer matters: was this a Nazi agency, official, or known collaborator?
+- En bloc sales of entire collections during wartime are suspicious
+
+Be conservative: if there is no clear evidence of duress, classify as "sale". Only use "forced_sale" when there are concrete indicators. Use "insufficient_evidence" when the text is too sparse to determine either way but the context raises questions.
+
+Use the report_forced_sale_classification tool to submit your classifications.
+</task>`;
+}
+
+function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+
+function aggregateForcedSale(results) {
+  const classDist = {};
+  let total = 0;
+  let highConf = 0;
+  const allClassifications = [];
+  const indicatorFreq = {};
+
+  for (const r of results) {
+    if (r.error || !r.data?.classifications) continue;
+    for (const c of r.data.classifications) {
+      total++;
+      classDist[c.classification] = (classDist[c.classification] || 0) + 1;
+      if (c.confidence >= 0.8) highConf++;
+      for (const ind of c.indicators || []) {
+        indicatorFreq[ind] = (indicatorFreq[ind] || 0) + 1;
+      }
+      allClassifications.push({
+        objectNumber: r.data.object_number,
+        sequence: c.event_sequence,
+        classification: c.classification,
+        confidence: c.confidence,
+        indicators: c.indicators || [],
+        reasoning: c.reasoning,
+      });
+    }
+  }
+
+  return { total, highConf, classDist, indicatorFreq, allClassifications };
+}
+
+function printForcedSaleReport(report) {
+  console.log(`\n## Forced Sale Classification (${report.total} events)\n`);
+  console.log(`| Metric | Value |`);
+  console.log(`|--------|-------|`);
+  console.log(`| Total classified | ${report.total} |`);
+  console.log(`| High confidence (≥0.8) | ${report.highConf} (${(100 * report.highConf / Math.max(report.total, 1)).toFixed(0)}%) |`);
+
+  console.log(`\n### Classification distribution\n`);
+  console.log(`| Classification | Count | % |`);
+  console.log(`|---------------|-------|---|`);
+  for (const [cls, count] of Object.entries(report.classDist).sort((a, b) => b[1] - a[1])) {
+    console.log(`| ${cls} | ${count} | ${(100 * count / Math.max(report.total, 1)).toFixed(1)}% |`);
+  }
+
+  console.log(`\n### Top indicators\n`);
+  const topInd = Object.entries(report.indicatorFreq).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  for (const [ind, count] of topInd) {
+    console.log(`- ${ind} (${count})`);
+  }
+
+  console.log(`\n### Forced sale samples\n`);
+  const forced = report.allClassifications.filter(c => c.classification === "forced_sale").slice(0, 10);
+  for (const c of forced) {
+    console.log(`- **${c.objectNumber}** seq ${c.sequence}: (${(c.confidence * 100).toFixed(0)}%) ${c.indicators.slice(0, 3).join("; ")}`);
+    console.log(`  _${c.reasoning.slice(0, 150)}_`);
+  }
+
+  console.log(`\n### Voluntary sale samples\n`);
+  const vol = report.allClassifications.filter(c => c.classification === "sale").slice(0, 5);
+  for (const c of vol) {
+    console.log(`- **${c.objectNumber}** seq ${c.sequence}: (${(c.confidence * 100).toFixed(0)}%) ${c.indicators.slice(0, 2).join("; ")}`);
+  }
+
+  console.log(`\n### Insufficient evidence samples\n`);
+  const insuff = report.allClassifications.filter(c => c.classification === "insufficient_evidence").slice(0, 5);
+  for (const c of insuff) {
+    console.log(`- **${c.objectNumber}** seq ${c.sequence}: (${(c.confidence * 100).toFixed(0)}%) ${c.reasoning.slice(0, 100)}`);
   }
 }
 
@@ -1741,6 +2115,13 @@ const MODE_CONFIG = {
     buildPrompt: buildPromptTypeClassification,
     aggregate: aggregateTypeClassification,
     report: printTypeClassificationReport,
+  },
+  "forced-sale": {
+    sample: sampleForcedSale,
+    tool: TOOL_FORCED_SALE,
+    buildPrompt: buildPromptForcedSale,
+    aggregate: aggregateForcedSale,
+    report: printForcedSaleReport,
   },
 };
 
