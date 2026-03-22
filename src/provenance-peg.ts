@@ -24,6 +24,9 @@ import {
 // Place names for location matching (loaded once from places.json, 2,302 entries)
 const placesSet: Set<string> = new Set(placesJson as string[]);
 
+// SYNC: keep in sync with UNSOLD_RE in provenance-grammar.peggy:44
+const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
+
 // ─── Types ──────────────────────────────────────────────────────────
 
 export interface RawProvenanceEvent {
@@ -288,7 +291,7 @@ export function parseProvenanceRaw(
 
     // PEG catch-all → "unknown": try regex classifier (matches mid-sentence keywords)
     // Skip reclassification for unsold lots — they were intentionally set to "unknown"
-    if (event.transferType === "unknown" && !event.isCrossRef && !event.gap && !ast?.unsold) {
+    if (event.transferType === "unknown" && !event.isCrossRef && !event.gap && !ast?.unsold && !UNSOLD_RE.test(working)) {
       const reclassified = classifyTransfer(working);
       if (reclassified !== "unknown") {
         event.transferType = reclassified;
@@ -298,7 +301,7 @@ export function parseProvenanceRaw(
     // Structural signal reclassification: if STILL unknown after regex classifier,
     // check for deterministic structural signals that indicate "collection".
     // This runs last so it doesn't override keyword-based reclassification (gift, deposit, etc.)
-    if (event.transferType === "unknown" && !event.isCrossRef && !ast?.unsold) {
+    if (event.transferType === "unknown" && !event.isCrossRef && !ast?.unsold && !UNSOLD_RE.test(working)) {
       if (
         /\(L\.\s*\d+\)/.test(working) ||                                  // Lugt collector mark
         /\(\d{4}[-–]\d{2,4}\??\)/.test(working) ||                        // Life dates (YYYY-YYYY)

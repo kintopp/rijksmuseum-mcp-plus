@@ -1037,6 +1037,21 @@ section("P1: GiftEvent preposition-aware role (#173)");
 }
 
 // ══════════════════════════════════════════════════════════════════
+section("P3: Unsold guard on regex fallback (#175)");
+// ══════════════════════════════════════════════════════════════════
+{
+  // Unsold event with a structural signal (museum name) should stay "unknown"
+  // even if PEG fails and regex fallback runs
+  const r = parseProvenanceRaw("unsold, Christie's, London, 1943");
+  assertEq(r.events[0].transferType, "unknown", "unsold event stays 'unknown'");
+}
+{
+  // "bought in" (unsold synonym) should also be protected
+  const r = parseProvenanceRaw("bought in at sale, Rijksmuseum, Amsterdam, 1900");
+  assert(r.events[0].transferType !== "collection", "'bought in' not reclassified to collection");
+}
+
+// ══════════════════════════════════════════════════════════════════
 section("P2: SaleEvent 'sold for/with' role fix (#174)");
 // ══════════════════════════════════════════════════════════════════
 {
