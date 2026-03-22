@@ -288,6 +288,10 @@ export function splitEvents(
     // Skip standalone inventory-mark abbreviations (not provenance events)
     if (/^Inv\.?\s*$/i.test(trimmed)) continue;
 
+    // Skip cross-reference preambles: "For both the present painting (SK-A-3857) and its pendant"
+    // These introduce shared provenance for multiple artworks — not events themselves.
+    if (/^For (?:both )?the present /i.test(trimmed)) continue;
+
     // Skip fragment artefacts: bare years, orphaned connectors
     const fragStripped = trimmed.replace(/__CIT_\d+__/g, "").trim();
     if (/^\d{4}$/.test(fragStripped)) continue;                    // bare year

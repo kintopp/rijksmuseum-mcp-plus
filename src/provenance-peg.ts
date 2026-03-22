@@ -253,7 +253,12 @@ export function parseProvenanceRaw(
   }
 
   const { cleaned, citations } = extractCitations(text);
-  const segments = splitEvents(cleaned);
+  // Strip HTML BEFORE splitting on semicolons — CSS properties in HTML tags
+  // contain semicolons (e.g. "font-size:medium;font-family:Aptos") that would
+  // create false event boundaries. Only 68 artworks have HTML-wrapped provenance,
+  // but they produce dozens of spurious segments each.
+  const htmlStripped = stripHtml(cleaned);
+  const segments = splitEvents(htmlStripped);
   const stats = { total: segments.length, peg: 0, fallback: 0 };
   const events: RawProvenanceEvent[] = [];
 
@@ -261,8 +266,8 @@ export function parseProvenanceRaw(
     const segment = segments[i];
     const sequence = i + 1;
 
-    // Prepare text for PEG: strip HTML, remove citation placeholders
-    const rawText = stripHtml(segment.text);
+    // Text is already HTML-stripped; just use segment text directly
+    const rawText = segment.text;
     let working = rawText
       .replace(/__CIT_\d+__/g, "")
       .replace(/\s{2,}/g, " ")
