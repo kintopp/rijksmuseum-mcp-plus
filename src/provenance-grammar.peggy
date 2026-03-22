@@ -341,6 +341,7 @@ EventBody
   / FromWhomEvent
   / AnaphoricEvent
   / StandardPhraseEvent
+  / PriceLeadEvent
   / GenericOwnerEvent
 
 // ─── Name capture (paren-aware) ─────────────────────────────────────
@@ -694,9 +695,11 @@ StandardPhraseEvent
     }
   / "the"i _ "sitter"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [{ name: "the sitter", dates: null, role: "sitter" }], ...rest }; }
-  / "private"i _ "collection"i tail:Tail
+  / ("Dutch"i / "German"i / "French"i / "English"i / "Italian"i / "American"i / "Belgian"i / "Swiss"i / "Austrian"i / "Spanish"i / "European"i / "unidentified"i)? _? "private"i _ "collection"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
   / "anonymous"i _ "collection"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
+  / "unidentified"i _ "collection"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
   / "whence"i tail:Tail
     { return buildResult("sale", null, null, parseRest(tail)); }
@@ -811,6 +814,16 @@ StandardPhraseEvent
     { return buildResult("by_descent", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
   / "studio"i _ "estate"i _ "of"i _ nameRaw:NameChars tail:Tail
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
+
+// ─── Price-led segments (#169) ──────────────────────────────────────
+// Segments starting with a price (fl., £, €) followed by "to the museum" are purchases.
+PriceLeadEvent
+  = nameRaw:$([^,;]+) tail:Tail
+    &{ return /^(?:fl\.|£|€|frs?\.|DM|¥)\s*[\d,.]+/i.test(nameRaw) && /\bto the (?:museum|Rijksmuseum)\b/i.test(tail); }
+    {
+      const rest = parseRest(tail);
+      return { type: "sale", parties: [], ...rest };
+    }
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 

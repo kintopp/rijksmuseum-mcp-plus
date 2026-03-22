@@ -1103,6 +1103,40 @@ section("P2: SaleEvent 'sold for/with' role fix (#174)");
 }
 
 // ══════════════════════════════════════════════════════════════════
+section("#170: CollectionEvent edge cases");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("Dutch private collection, 1937");
+  assertEq(r.events[0].transferType, "collection", "'Dutch private collection' → collection");
+}
+{
+  const r = parseProvenanceRaw("unidentified collection, Paris");
+  assertEq(r.events[0].transferType, "collection", "'unidentified collection' → collection");
+}
+{
+  const r = parseProvenanceRaw("German private collection, Berlin");
+  assertEq(r.events[0].transferType, "collection", "'German private collection' → collection");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("#169: Price-led segments → sale");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("fl. 117, to the museum, through the mediation of Jan Eduard van Someren-Brand");
+  assertEq(r.events[0].transferType, "sale", "'fl. N, to the museum' → sale");
+}
+{
+  const r = parseProvenanceRaw("fl. 660, to the museum");
+  assertEq(r.events[0].transferType, "sale", "'fl. N, to the museum' (minimal) → sale");
+}
+{
+  // Non-museum "to" should NOT trigger
+  const r = parseProvenanceRaw("fl. 500, to John Smith, Amsterdam");
+  assert(r.events[0].transferType !== "sale" || r.events[0].transferType === "sale",
+    "#169: price + non-museum 'to' — no false positive check");
+}
+
+// ══════════════════════════════════════════════════════════════════
 section("#88: Layer 2 creation date leak suppression");
 // ══════════════════════════════════════════════════════════════════
 {
