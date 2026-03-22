@@ -90,19 +90,40 @@ export const ROLE_TO_POSITION: Record<string, "sender" | "receiver" | "agent"> =
 };
 
 /**
- * Infer a party's transfer position from its role.
- * Falls back to regex for anaphoric roles ("his son", "her widow") → receiver.
+ * Infer a party's transfer position from its role and transfer type.
+ *
+ * Three-tier inference:
+ *   1. Explicit role mapping (ROLE_TO_POSITION)
+ *   2. Anaphoric roles ("his son", "her widow") → receiver
+ *   3. Null-role fallback by transfer type — when a party has no role
+ *      (GenericOwnerEvent catch-all), the transfer type often determines
+ *      position: in a collection/recuperation/commission the named party
+ *      is typically the receiver (holder of the artwork).
  */
 export function inferPosition(
   role: string | null,
-  _transferType: TransferType,
+  transferType: TransferType,
 ): "sender" | "receiver" | "agent" | null {
-  if (!role) return null;
-  const mapped = ROLE_TO_POSITION[role];
-  if (mapped) return mapped;
-  // Anaphoric roles: "his son", "her widow", "their grandson" — always inheritance receivers
-  if (/^(?:his|her|their)\s+/i.test(role)) return "receiver";
-  return null;
+  if (role) {
+    const mapped = ROLE_TO_POSITION[role];
+    if (mapped) return mapped;
+    // Anaphoric roles: "his son", "her widow", "their grandson" — always inheritance receivers
+    if (/^(?:his|her|their)\s+/i.test(role)) return "receiver";
+    return null;
+  }
+
+  // Null-role fallback: infer position from transfer type context.
+  // The named party in these event types is almost always the holder/receiver.
+  switch (transferType) {
+    case "collection":
+    case "recuperation":
+    case "restitution":
+    case "commission":
+    case "inventory":
+      return "receiver";
+    default:
+      return null;
+  }
 }
 
 // ─── Transfer category mapping ───────────────────────────────────────

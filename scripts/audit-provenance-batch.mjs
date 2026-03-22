@@ -49,6 +49,7 @@ const model = opt("--model", "claude-sonnet-4-20250514");
 const resumeBatchId = opt("--resume", null);
 const dryRun = flag("--dry-run");
 const stratify = flag("--stratify");
+const eraFilter = opt("--era", null); // e.g. "pre1800" — limits sampling to artworks with earliest event before this year
 const verbose = flag("--verbose");
 
 const today = new Date().toISOString().slice(0, 10);
@@ -75,6 +76,7 @@ console.log(`  Model:       ${model}`);
 console.log(`  Output:      ${outputPath}`);
 console.log(`  Dry run:     ${dryRun}`);
 if (stratify) console.log(`  Stratify:    yes`);
+if (eraFilter) console.log(`  Era filter:  ${eraFilter}`);
 if (resumeBatchId) console.log(`  Resume:      ${resumeBatchId}`);
 console.log();
 
@@ -92,32 +94,95 @@ function sampleSilentErrors() {
   const db = openDb();
   let artworkIds;
   if (stratify) {
-    artworkIds = db.prepare(`
-      WITH candidates AS (
-        SELECT DISTINCT e.artwork_id, e.parse_method,
-          CASE WHEN e.date_year < 1600 THEN 'pre1600'
-               WHEN e.date_year < 1800 THEN '1600-1800'
-               WHEN e.date_year < 1900 THEN '1800-1900'
-               ELSE 'post1900' END AS century_bin
-        FROM provenance_events e
-        WHERE e.parse_method IN ('peg','regex_fallback')
-          AND e.transfer_type != 'unknown' AND e.is_cross_ref = 0
-          AND e.date_year IS NOT NULL
-      )
-      SELECT artwork_id FROM (
+    // Weighted stratification: oversample early eras and complex chains.
+    // Era weights: pre1600 ×4, 1600-1800 ×3, 1800-1900 ×1.5, post1900 ×1, no_date ×1
+    // Complexity weights: 5+ events ×3, 3-4 ×2, 1-2 ×1
+    // Combined weight determines per-bin sample quota (proportional to weight × bin_size,
+    // capped at bin size). This ensures early/complex records are overrepresented while
+    // still including some modern/simple records for coverage.
+    const ERA_WEIGHT = { pre1600: 4, "1600-1800": 3, "1800-1900": 1.5, post1900: 1, no_date: 1 };
+    const COMPLEXITY_WEIGHT = { "5+": 3, "3-4": 2, "1-2": 1 };
+
+    const bins = db.prepare(`
+      WITH per_artwork AS (
         SELECT artwork_id,
-          ROW_NUMBER() OVER (PARTITION BY parse_method, century_bin ORDER BY RANDOM()) AS rn
-        FROM candidates
-      ) WHERE rn <= ?
-    `).all(Math.ceil(sampleSize / 8)).map(r => r.artwork_id);
+          MIN(date_year) AS earliest_year,
+          COUNT(*) AS event_count
+        FROM provenance_events
+        WHERE parse_method IN ('peg','regex_fallback')
+          AND transfer_type != 'unknown' AND is_cross_ref = 0
+        GROUP BY artwork_id
+      )
+      SELECT artwork_id,
+        CASE WHEN earliest_year < 1600 THEN 'pre1600'
+             WHEN earliest_year < 1800 THEN '1600-1800'
+             WHEN earliest_year < 1900 THEN '1800-1900'
+             WHEN earliest_year IS NOT NULL THEN 'post1900'
+             ELSE 'no_date' END AS era,
+        CASE WHEN event_count >= 5 THEN '5+'
+             WHEN event_count >= 3 THEN '3-4'
+             ELSE '1-2' END AS complexity
+      FROM per_artwork
+    `).all();
+
+    // Group by bin, compute weighted quotas
+    const binMap = new Map();
+    for (const row of bins) {
+      const key = `${row.era}::${row.complexity}`;
+      if (!binMap.has(key)) binMap.set(key, { era: row.era, complexity: row.complexity, ids: [] });
+      binMap.get(key).ids.push(row.artwork_id);
+    }
+
+    let totalWeight = 0;
+    for (const bin of binMap.values()) {
+      bin.weight = (ERA_WEIGHT[bin.era] || 1) * (COMPLEXITY_WEIGHT[bin.complexity] || 1);
+      totalWeight += bin.weight * bin.ids.length;
+    }
+
+    // Assign quotas proportional to weight, then shuffle and take
+    artworkIds = [];
+    for (const bin of binMap.values()) {
+      const quota = Math.min(
+        bin.ids.length,
+        Math.max(1, Math.round(sampleSize * bin.weight * bin.ids.length / totalWeight)),
+      );
+      // Fisher-Yates shuffle
+      for (let i = bin.ids.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bin.ids[i], bin.ids[j]] = [bin.ids[j], bin.ids[i]];
+      }
+      artworkIds.push(...bin.ids.slice(0, quota));
+    }
+
+    // If we overshot, trim randomly; if undershot (rounding), that's fine
+    if (artworkIds.length > sampleSize) {
+      for (let i = artworkIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [artworkIds[i], artworkIds[j]] = [artworkIds[j], artworkIds[i]];
+      }
+      artworkIds = artworkIds.slice(0, sampleSize);
+    }
+
+    // Log bin quotas for transparency
+    console.log(`  Stratified sampling (weighted by era × complexity):`);
+    for (const [key, bin] of [...binMap.entries()].sort()) {
+      const taken = artworkIds.filter(id => bin.ids.includes(id)).length;
+      if (taken > 0) console.log(`    ${key}: ${taken}/${bin.ids.length} (weight ${bin.weight})`);
+    }
   } else {
     // Bias toward complex records (3+ events) — where parsing errors cluster
+    // Optional era filter: "pre1800" → only artworks with earliest event date < 1800
+    const eraYear = eraFilter ? parseInt(eraFilter.replace(/\D/g, ""), 10) : null;
+    const eraClause = eraYear
+      ? `AND e.artwork_id IN (SELECT artwork_id FROM provenance_events WHERE date_year IS NOT NULL GROUP BY artwork_id HAVING MIN(date_year) < ${eraYear})`
+      : "";
     artworkIds = db.prepare(`
       SELECT artwork_id FROM (
         SELECT e.artwork_id, COUNT(*) AS event_count
         FROM provenance_events e
         WHERE e.parse_method IN ('peg','regex_fallback')
           AND e.transfer_type != 'unknown' AND e.is_cross_ref = 0
+          ${eraClause}
         GROUP BY e.artwork_id
         HAVING event_count >= 3
       ) ORDER BY RANDOM() LIMIT ?
@@ -215,7 +280,8 @@ const TOOL_SILENT_ERRORS = {
             },
             field: {
               type: "string",
-              enum: ["transfer_type", "parties", "date_year", "date_qualifier",
+              enum: ["transfer_type", "transfer_category", "parties", "party_position",
+                     "date_year", "date_qualifier",
                      "location", "price_amount", "price_currency", "sale_details", "n/a"],
             },
             raw_text_quote: { type: "string", description: "Relevant quote from raw provenance text" },
@@ -332,6 +398,7 @@ function buildPromptSilentErrors(record) {
     sequence: e.sequence,
     rawText: e.raw_text,
     transferType: e.transfer_type,
+    transferCategory: e.transfer_category ?? null,
     uncertain: !!e.uncertain,
     parties: safeJson(e.parties),
     dateExpression: e.date_expression,
@@ -360,22 +427,30 @@ ${JSON.stringify(eventsJson, null, 2)}
 ## Your task
 Compare the parser output against the raw text, event by event. For each event, check:
 1. **transfer_type** — Does the keyword in raw text match the classified type?
-2. **parties** — Are all names captured? Are roles correct? Any name truncation or fragmentation?
-3. **date_year / date_qualifier** — Does it match the date in raw text? Not confused with a price, catalogue number, or publication year?
-4. **location** — Correctly extracted, not a party name fragment?
-5. **price_amount / price_currency** — Amount and currency correct? Not concatenated with a year?
-6. **missing events** — Any ownership transfers in raw text with no corresponding parsed event?
-7. **phantom events** — Any parsed events that don't correspond to real provenance transfers?
-8. **merge/split errors** — Two events merged into one, or one event split into two?
+2. **transfer_category** — Is the category correct? "ownership" for sales/gifts/inheritance, "custody" for loans/deposits, "ambiguous" for unclear cases. Report if a loan is tagged "ownership" or a sale is tagged "custody".
+3. **parties** — Are all names captured? Are roles correct? Any name truncation or fragmentation?
+4. **party_position** — Each party has a "position" field (sender/receiver/agent/null). Check:
+   - In sale events: seller should be "sender", buyer should be "receiver", auctioneer/dealer should be "agent"
+   - In gift events: donor should be "sender", recipient should be "receiver"
+   - In inheritance/bequest events: heir should be "receiver", deceased should be "sender"
+   - In loan events: lender should be "sender", borrower should be "receiver"
+   - Are there parties with position=null that should have a position based on context?
+   - Are there parties with the WRONG position? (e.g., a buyer tagged as "sender")
+5. **date_year / date_qualifier** — Does it match the date in raw text? Not confused with a price, catalogue number, or publication year?
+6. **location** — Correctly extracted, not a party name fragment?
+7. **price_amount / price_currency** — Amount and currency correct? Not concatenated with a year?
+8. **missing events** — Any ownership transfers in raw text with no corresponding parsed event?
+9. **phantom events** — Any parsed events that don't correspond to real provenance transfers?
+10. **merge/split errors** — Two events merged into one, or one event split into two?
 
 ## DO NOT report as errors
 - Events correctly classified as "unknown" for genuinely ambiguous bare names (e.g. "Mathias Komor (Beijing)")
 - Cross-references (isCrossRef: true) classified as "unknown" — this is CORRECT by design
 - Minor whitespace or formatting differences in names
-- Missing buyer/seller distinction — the parser does not yet have separate buyer vs seller fields
 - Relational phrases kept as names (e.g. "his eldest son") — known limitation (#85)
 - Fractional prices (½, ¼) not parsed — known limitation (#89)
 - Pre-decimal British pounds (£0.13.0) — known limitation (#92)
+- Parties with position=null when their role is also null (bare-name unknowns) — this is EXPECTED, not an error
 
 Report ONLY genuine errors where the parser produced a wrong value or missed a real transfer.
 
