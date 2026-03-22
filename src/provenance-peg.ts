@@ -308,7 +308,11 @@ export function parseProvenanceRaw(
         /\b(?:Rijksmuseum|Mauritshuis|Hermitage|Louvre|Uffizi|Prado|National Gallery|British Museum|Metropolitan Museum|Albertina|Alte Pinakothek|Gemäldegalerie)\b/.test(working) || // Major museums
         /\b(?:[Mm]useum|[Mm]usée|[Kk]erk|[Cc]hurch|[Cc]hapel|[Kk]apel|[Cc]athedral|[Mm]onastery|[Kk]looster|[Mm]inisterie|[Mm]inistry|[Kk]abinet|[Cc]abinet|[Pp]aleis|[Pp]alace|[Ss]tichting|[Ff]oundation|[Gg]enootschap|[Vv]ereniging|[Ss]tadhuis|[Tt]own [Hh]all|[Rr]aadhuis|[Gg]asthuis|[Hh]ofje|[Ww]eeshuis|[Hh]ospital|[Gg]ewölbe|[Gg]ewolbe|[Ss]chloss|[Kk]unstkammer|[Kk]unstkabinett|[Ss]ammlung|[Gg]alería|[Pp]inacoteca|[Aa]ccademia|[Aa]bbey|[Aa]bdij|[Cc]onvent|[Rr]esidenz|[Ww]erf|[Ii]nstituut|[Ii]nstitute|[Dd]epartement|[Aa]dmiraliteit|[Dd]ockyard|[Cc]ompagnie|[Cc]ompany|[Cc]astle)\b/.test(working) || // Institution type keywords (NL/EN/DE/FR/IT)
         /'\s*s\s+(?:Lands|Rijks)\b/.test(working) || // Dutch "'s Lands" / "'s Rijks" institutional prefix
-        /\bart\s+market\b/i.test(working) // Art market reference
+        /\bart\s+market\b/i.test(working) || // Art market reference
+        /\bVOC\b/.test(working) || // Dutch East India Company
+        /kerk\b|huis\b.*(?:Amsterdam|Delft|Haarlem|Utrecht|Leiden|Rotterdam)/i.test(working) || // Dutch compound church/house names
+        /\b(?:private|unknown|unidentified)\s+(?:collector|dealer)\b/i.test(working) || // Generic collector/dealer
+        /\b(?:Palazzo|Kunstgewerbe|Landes)\b/.test(working) // Italian/German institution prefixes
       ) {
         event.transferType = "collection";
       }

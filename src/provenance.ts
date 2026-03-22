@@ -297,7 +297,7 @@ export function splitEvents(
     if (!trimmed) continue;
 
     // Skip standalone inventory-mark abbreviations (not provenance events)
-    if (/^Inv\.?\s*$/i.test(trimmed)) continue;
+    if (/^Inv\.?,?\s*$/i.test(trimmed)) continue;
 
     // Skip cross-reference preambles and provenance-redirect headers
     if (/^For (?:both )?the present /i.test(trimmed)) continue;
@@ -319,7 +319,7 @@ export function splitEvents(
     if (/^incorporated in\b/i.test(fragStripped)) continue;
     if (/^mounted on\b/i.test(fragStripped)) continue;
     if (/^application for a license\b/i.test(fragStripped)) continue;
-    if (/^part of the\b/i.test(fragStripped)) continue;              // object description, not transfer
+    if (/^part of the\b/i.test(fragStripped) && !/\bon lease\b/i.test(fragStripped)) continue; // object description (but not if contains "on lease")
     if (/^unknown$/i.test(fragStripped)) continue;                    // bare "unknown"
     if (/^unknown location\b/i.test(fragStripped)) continue;          // location note, not transfer
 
