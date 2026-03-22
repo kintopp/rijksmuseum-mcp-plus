@@ -1007,6 +1007,58 @@ section("Party extraction improvements (#116, 2026-03-21)");
 }
 
 // ══════════════════════════════════════════════════════════════════
+section("P1: GiftEvent preposition-aware role (#173)");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("donated to the Rijksmuseum, Amsterdam, 1905");
+  assertEq(r.events[0].parties[0]?.role, "recipient", "'donated to' → recipient");
+}
+{
+  const r = parseProvenanceRaw("gift of Jan de Groot (1800-1860), Amsterdam");
+  assertEq(r.events[0].parties[0]?.role, "donor", "'gift of' → donor");
+}
+{
+  const r = parseProvenanceRaw("presented by the artist to the museum, 1910");
+  assertEq(r.events[0].parties[0]?.role, "donor", "'presented by' → donor");
+}
+{
+  const r = parseProvenanceRaw("given to Pieter van Hoorn, Rotterdam, 1750");
+  assertEq(r.events[0].parties[0]?.role, "recipient", "'given to' → recipient");
+}
+{
+  const r = parseProvenanceRaw("donated by the heirs of Jan Smit, 1900");
+  assertEq(r.events[0].parties[0]?.role, "donor", "'donated by' → donor");
+}
+{
+  // Layer 2: recipient becomes owner in gift events
+  const r = parseProvenanceRaw("donated to the Rijksmuseum, Amsterdam, 1905");
+  const periods = interpretPeriods(r.events);
+  assert(periods[0]?.owner?.name?.includes("Rijksmuseum"), "P1 Layer 2: 'donated to' recipient becomes owner");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("P2: SaleEvent 'sold for/with' role fix (#174)");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("sold by Christie's, London, 1850");
+  assertEq(r.events[0].parties[0]?.role, "seller", "'sold by' → seller");
+}
+{
+  const r = parseProvenanceRaw("sold to Isaac Rooleeuw, Amsterdam, 1719");
+  assertEq(r.events[0].parties[0]?.role, "buyer", "'sold to' → buyer");
+}
+{
+  const r = parseProvenanceRaw("sold for fl. 500, Amsterdam, 1700");
+  const sellers = r.events[0].parties.filter(p => p.role === "seller");
+  assertEq(sellers.length, 0, "'sold for' does not assign seller role");
+}
+{
+  const r = parseProvenanceRaw("sold with Museum Het Broekerhuis, 1887");
+  const sellers = r.events[0].parties.filter(p => p.role === "seller");
+  assertEq(sellers.length, 0, "'sold with' does not assign seller role");
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 

@@ -360,7 +360,7 @@ SaleEvent
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
-      const role = prep.toLowerCase() === "to" ? "buyer" : "seller";
+      const role = prep.toLowerCase() === "to" ? "buyer" : prep.toLowerCase() === "by" ? "seller" : null;
       return { type: "sale", parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
     }
   / "through"i _ ("the"i _)? "mediation"i _ "of"i _ nameRaw:NameChars tail:Tail
@@ -488,11 +488,12 @@ PurchaseEvent
 // ─── Gift ───────────────────────────────────────────────────────────
 
 GiftEvent
-  = ("donated"i / "donation"i / "anonymous"i _ "donation"i / "gift"i / "given"i / "presented"i / "dedicated"i / "schenking"i / "send"i _ "by"i) _ ("by"i / "to"i / "of"i / "van"i)? _? ("the"i _)? nameRaw:NameChars tail:Tail
+  = ("donated"i / "donation"i / "anonymous"i _ "donation"i / "gift"i / "given"i / "presented"i / "dedicated"i / "schenking"i / "send"i _ "by"i) _ prep:("by"i / "to"i / "of"i / "van"i)? _? ("the"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
-      return { type: "gift", parties: nd && nd.name ? [{ ...nd, role: "donor" }] : [], ...rest };
+      const role = prep && prep.toLowerCase() === "to" ? "recipient" : "donor";
+      return { type: "gift", parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
     }
 
 // ─── Exchange ───────────────────────────────────────────────────────
