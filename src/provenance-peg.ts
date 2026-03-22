@@ -229,7 +229,7 @@ export function parseProvenanceRaw(
     return {
       events: [{
         sequence: 1,
-        rawText: text,
+        rawText: stripHtml(text),
         gap: false,
         transferType: "unknown",
         uncertain: false,
@@ -247,7 +247,7 @@ export function parseProvenanceRaw(
       }],
       isCrossRef: true,
       crossRefTarget: crossRef.targetObjectNumber,
-      raw: text,
+      raw: stripHtml(text),
       stats: { total: 1, peg: 0, fallback: 0 },
     };
   }
