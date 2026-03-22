@@ -76,7 +76,7 @@ section("Phase A: Compatibility gate");
 
   // Last event: purchase 1908
   const last = raw.events[raw.events.length - 1];
-  assertEq(last.transferType, "purchase", "SK-A-2344: last event is purchase");
+  assertEq(last.transferType, "sale", "SK-A-2344: last event is purchase");
   assertEq(last.dateYear, 1908, "SK-A-2344: museum purchase 1908");
 
   // Stats
@@ -183,7 +183,7 @@ section("Phase B: Layer 1 — PEG-specific");
   // Anaphoric: "his son, Name (dates)"
   const raw = parseProvenanceRaw("his son, Leendert Pieter de Neufville (1729-1774?), Amsterdam");
   const e = raw.events[0];
-  assertEq(e.transferType, "inheritance", "anaphoric → inheritance");
+  assertEq(e.transferType, "by_descent", "anaphoric → by_descent");
   assert(e.parties.length >= 1, "anaphoric party extracted");
   assertEq(e.parties[0]?.role, "his son", "anaphoric role");
 }
@@ -238,7 +238,7 @@ section("Phase B: Layer 1 — PEG-specific");
   // Purchase: "from whom purchased by dealer Name"
   const raw = parseProvenanceRaw("from whom purchased by the dealer Frederik Muller, Amsterdam, c. 1915");
   const e = raw.events[0];
-  assertEq(e.transferType, "purchase", "from whom purchased → purchase");
+  assertEq(e.transferType, "sale", "from whom purchased → sale");
   const buyer = e.parties.find(p => p.role === "buyer");
   assert(buyer !== undefined, "buyer extracted from 'from whom purchased'");
   assert(buyer?.name?.includes("Frederik Muller"), "buyer name Muller");
@@ -248,7 +248,7 @@ section("Phase B: Layer 1 — PEG-specific");
   // "from whose heirs" → purchase
   const raw = parseProvenanceRaw("from whose heirs, fl. 550,000, with 38 other paintings, to the museum, 1908");
   const e = raw.events[0];
-  assertEq(e.transferType, "purchase", "from whose heirs → purchase");
+  assertEq(e.transferType, "sale", "from whose heirs → sale");
   assertEq(e.price?.amount, 550000, "purchase price fl. 550,000");
 }
 
@@ -309,7 +309,7 @@ section("Phase C: Layer 2 — interpretation");
 
   // Last period: museum purchase 1908
   const lastP = periods[periods.length - 1];
-  assertEq(lastP.acquisitionMethod, "purchase", "last period: acquisition=purchase");
+  assertEq(lastP.acquisitionMethod, "sale", "last period: acquisition=purchase");
   assertEq(lastP.beginYear, 1908, "last period: beginYear=1908");
 }
 
@@ -363,24 +363,24 @@ section("Phase D: New grammar rules and reclassification");
 
 {
   const raw = parseProvenanceRaw("his heirs");
-  assertEq(raw.events[0].transferType, "inheritance", "bare 'his heirs' → inheritance");
+  assertEq(raw.events[0].transferType, "by_descent", "bare 'his heirs' → by_descent");
 }
 
 {
   const raw = parseProvenanceRaw("her heirs, Amsterdam");
-  assertEq(raw.events[0].transferType, "inheritance", "'her heirs, Amsterdam' → inheritance");
+  assertEq(raw.events[0].transferType, "by_descent", "'her heirs, Amsterdam' → by_descent");
   // Location is consumed into nameRaw by AnaphoricEvent (PEG prefix match),
   // not extracted separately. This is expected for short anaphoric segments.
 }
 
 {
   const raw = parseProvenanceRaw("their heirs");
-  assertEq(raw.events[0].transferType, "inheritance", "'their heirs' → inheritance");
+  assertEq(raw.events[0].transferType, "by_descent", "'their heirs' → by_descent");
 }
 
 {
   const raw = parseProvenanceRaw("his heir and ex wife, Gerritje Gestel - Overtoom (1892-1960), Laren");
-  assertEq(raw.events[0].transferType, "inheritance", "'his heir and...' → inheritance");
+  assertEq(raw.events[0].transferType, "by_descent", "'his heir and...' → by_descent");
 }
 
 // ── Commit 2: broadened keyword prefixes ──
@@ -398,14 +398,14 @@ section("Phase D: New grammar rules and reclassification");
 
 {
   const raw = parseProvenanceRaw("purchased from Mendelssohn & Co. Bank, en bloc, to the Dienststelle Mühlmann, The Hague, 1940");
-  assertEq(raw.events[0].transferType, "purchase", "'purchased from' → purchase");
+  assertEq(raw.events[0].transferType, "sale", "'purchased from' → sale");
   const seller = raw.events[0].parties.find(p => p.role === "seller");
   assert(seller !== undefined, "'purchased from': seller extracted");
 }
 
 {
   const raw = parseProvenanceRaw("acquired by the Vereniging van Vrienden der Aziatische Kunst, 1931");
-  assertEq(raw.events[0].transferType, "purchase", "'acquired by' → purchase");
+  assertEq(raw.events[0].transferType, "sale", "'acquired by' → sale");
   assertEq(raw.events[0].dateYear, 1931, "acquired date");
 }
 
@@ -461,7 +461,7 @@ section("Phase D: New grammar rules and reclassification");
 
 {
   const raw = parseProvenanceRaw("from the heirs of Paul Nijhoff (1868-1949), Amsterdam, to the museum, 1997");
-  assertEq(raw.events[0].transferType, "inheritance", "'from the heirs of' → inheritance");
+  assertEq(raw.events[0].transferType, "by_descent", "'from the heirs of' → by_descent");
 }
 
 {
@@ -580,7 +580,8 @@ section("Phase D: New grammar rules and reclassification");
   ];
   for (const [text, rel] of cases) {
     const raw = parseProvenanceRaw(text);
-    assertEq(raw.events[0].transferType, "inheritance", `'his/her ${rel}' → inheritance`);
+    const expected = /widow/i.test(rel) ? "widowhood" : "by_descent";
+    assertEq(raw.events[0].transferType, expected, `'his/her ${rel}' → ${expected}`);
   }
 }
 
@@ -590,10 +591,10 @@ section("Phase D: New grammar rules and reclassification");
   assertEq(raw1.events[0].transferType, "collection", "'inventory' → collection");
 
   const raw2 = parseProvenanceRaw("Probate inventory, Caesar van Everdingen, Alkmaar, after 13 October 1678");
-  assertEq(raw2.events[0].transferType, "collection", "'Probate inventory' → collection");
+  assertEq(raw2.events[0].transferType, "inventory", "'Probate inventory' → inventory");
 
   const raw3 = parseProvenanceRaw("their probate inventory, 1760");
-  assertEq(raw3.events[0].transferType, "collection", "'their probate inventory' → collection");
+  assertEq(raw3.events[0].transferType, "inventory", "'their probate inventory' → inventory");
 }
 
 {
@@ -611,7 +612,7 @@ section("Phase D: New grammar rules and reclassification");
 {
   // Inherited by / by inheritance
   const raw1 = parseProvenanceRaw("inherited by Franciscus Johannes Hallo (1808-79), Kasteel Cannenburch");
-  assertEq(raw1.events[0].transferType, "inheritance", "'inherited by' → inheritance");
+  assertEq(raw1.events[0].transferType, "by_descent", "'inherited by' → by_descent");
   assert(raw1.events[0].parties[0]?.name?.includes("Franciscus"), "'inherited by': heir name");
 
   const raw2 = parseProvenanceRaw("by inheritance to J.F. van Lennep (1819-1892), Amsterdam, 1892");
@@ -630,17 +631,17 @@ section("Phase D: New grammar rules and reclassification");
 
 {
   const raw = parseProvenanceRaw("purchased, by Reijnier Flaes (Beijing), 1939-1965");
-  assertEq(raw.events[0].transferType, "purchase", "'purchased,' → purchase");
+  assertEq(raw.events[0].transferType, "sale", "'purchased,' → sale");
 }
 
 {
   const raw = parseProvenanceRaw("purchased for the museum by the Commissie voor Fotoverkoop, 1977");
-  assertEq(raw.events[0].transferType, "purchase", "'purchased for' → purchase");
+  assertEq(raw.events[0].transferType, "sale", "'purchased for' → sale");
 }
 
 {
   const raw = parseProvenanceRaw("Purchased at Maison Hirsch & Cie, Amsterdam");
-  assertEq(raw.events[0].transferType, "purchase", "'Purchased at' → purchase");
+  assertEq(raw.events[0].transferType, "sale", "'Purchased at' → sale");
 }
 
 {
@@ -677,7 +678,7 @@ section("Phase D: New grammar rules and reclassification");
 
 {
   const raw = parseProvenanceRaw("verwerving 1921 volgens KOG jaarverslag");
-  assertEq(raw.events[0].transferType, "purchase", "'verwerving' → purchase");
+  assertEq(raw.events[0].transferType, "sale", "'verwerving' → sale");
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -791,11 +792,11 @@ section("PEG grammar rules (2026-03-21 batch audit)");
 }
 {
   const r = parseProvenanceRaw("gekocht door het Rijksmuseum, 1880");
-  assertEq(r.events[0].transferType, "purchase", "'gekocht door' (Dutch) → purchase");
+  assertEq(r.events[0].transferType, "sale", "'gekocht door' (Dutch) → sale");
 }
 {
   const r = parseProvenanceRaw("aangekocht door het museum, 1900");
-  assertEq(r.events[0].transferType, "purchase", "'aangekocht door' (Dutch) → purchase");
+  assertEq(r.events[0].transferType, "sale", "'aangekocht door' (Dutch) → sale");
 }
 {
   const r = parseProvenanceRaw("geschonken aan het museum, 1900");
@@ -803,11 +804,11 @@ section("PEG grammar rules (2026-03-21 batch audit)");
 }
 {
   const r = parseProvenanceRaw("with the castle to Jonkheer Name, 1900");
-  assertEq(r.events[0].transferType, "inheritance", "'with the castle to' → inheritance");
+  assertEq(r.events[0].transferType, "by_descent", "'with the castle to' → by_descent");
 }
 {
   const r = parseProvenanceRaw("through the family to Name");
-  assertEq(r.events[0].transferType, "inheritance", "'through the family' → inheritance");
+  assertEq(r.events[0].transferType, "by_descent", "'through the family' → by_descent");
 }
 {
   const r = parseProvenanceRaw("excavation near Amsterdam, 1900");
@@ -821,27 +822,27 @@ section("PEG grammar rules (2026-03-21 batch audit)");
 // ── RelationWord expansions ──
 {
   const r = parseProvenanceRaw("his great grandson, Arnold Hugo de Vries, Rhoon");
-  assertEq(r.events[0].transferType, "inheritance", "'great grandson' (no hyphen) → inheritance");
+  assertEq(r.events[0].transferType, "by_descent", "'great grandson' (no hyphen) → by_descent");
   assert(r.events[0].parties[0]?.name?.includes("Arnold"), "great grandson party captured");
 }
 {
   const r = parseProvenanceRaw("his third cousin and godson, Name (1794-1866), Rotterdam");
-  assertEq(r.events[0].transferType, "inheritance", "'third cousin and godson' → inheritance");
+  assertEq(r.events[0].transferType, "by_descent", "'third cousin and godson' → by_descent");
   assert(r.events[0].parties.length > 0, "compound relation captures party");
 }
 {
   const r = parseProvenanceRaw("his mother, Maria (1800-1870), City");
-  assertEq(r.events[0].transferType, "inheritance", "'his mother' → inheritance");
+  assertEq(r.events[0].transferType, "by_descent", "'his mother' → by_descent");
   assert(r.events[0].parties[0]?.name?.includes("Maria"), "mother party captured");
 }
 {
   const r = parseProvenanceRaw("his heir and ex wife, Gerritje Gestel - Overtoom (1892-1960), Laren");
-  assertEq(r.events[0].transferType, "inheritance", "'heir and ex wife' → inheritance");
+  assertEq(r.events[0].transferType, "by_descent", "'heir and ex wife' → by_descent");
   assert(r.events[0].parties[0]?.name?.includes("Gerritje"), "heir and ex wife party captured");
 }
 {
   const r = parseProvenanceRaw("by descent to his grandson, Jan van Oort (1921-2006), Arnhem");
-  assertEq(r.events[0].transferType, "inheritance", "'by descent to his [rel], Name' → inheritance");
+  assertEq(r.events[0].transferType, "by_descent", "'by descent to his [rel], Name' → by_descent");
   assert(r.events[0].parties[0]?.name?.includes("Jan van Oort"), "by descent captures heir name");
 }
 

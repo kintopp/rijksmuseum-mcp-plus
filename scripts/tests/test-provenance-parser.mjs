@@ -165,18 +165,18 @@ section("4. classifyTransfer");
 
 assertEq(classifyTransfer("his sale, Amsterdam, 16 May 1696"), "sale", "his sale → sale");
 assertEq(classifyTransfer("sale Jacob van Hoek"), "sale", "sale Name → sale");
-assertEq(classifyTransfer("his son, Leendert"), "inheritance", "his son → inheritance");
-assertEq(classifyTransfer("her widower, Jacob Dissius"), "inheritance", "her widower → inheritance");
-assertEq(classifyTransfer("their daughter, Magdalena"), "inheritance", "their daughter → inheritance (via daughter)");
+assertEq(classifyTransfer("his son, Leendert"), "by_descent", "his son → inheritance");
+assertEq(classifyTransfer("her widower, Jacob Dissius"), "widowhood", "her widower → inheritance");
+assertEq(classifyTransfer("their daughter, Magdalena"), "by_descent", "their daughter → inheritance (via daughter)");
 assertEq(classifyTransfer("collection Pieter Leendert"), "collection", "collection → collection");
 assertEq(classifyTransfer("Commissioned by Abraham"), "commission", "commissioned → commission");
 assertEq(classifyTransfer("war recuperation, SNK"), "recuperation", "war recuperation → recuperation");
 assertEq(classifyTransfer("to Dr. Erhard Göpel for Adolf Hitler's Führermuseum"), "confiscation", "Führermuseum → confiscation");
 assertEq(classifyTransfer("on loan from the SNK"), "loan", "on loan → loan");
 assertEq(classifyTransfer("transferred to the museum"), "transfer", "transferred → transfer");
-assertEq(classifyTransfer("from whom purchased by the dealer"), "purchase", "from whom purchased → purchase");
-assertEq(classifyTransfer("from whose heirs, fl. 550,000, to the museum, 1908"), "purchase", "from whose heirs to museum → purchase");
-assertEq(classifyTransfer("her nephew, William Ralph Cartwright"), "inheritance", "her nephew → inheritance");
+assertEq(classifyTransfer("from whom purchased by the dealer"), "sale", "from whom purchased → purchase");
+assertEq(classifyTransfer("from whose heirs, fl. 550,000, to the museum, 1908"), "sale", "from whose heirs to museum → purchase");
+assertEq(classifyTransfer("her nephew, William Ralph Cartwright"), "by_descent", "her nephew → inheritance");
 
 // ══════════════════════════════════════════════════════════════════
 //  Section 5: parseDate
@@ -345,7 +345,7 @@ section("8. parseProvenance — SK-A-2344 (The Milkmaid)");
 
   // Last event: purchase by museum, 1908
   const last = chain.events[chain.events.length - 1];
-  assertEq(last.transferType, "purchase", "last event is purchase");
+  assertEq(last.transferType, "sale", "last event is purchase");
   assertEq(last.date?.year, 1908, "museum purchase 1908");
   assertEq(last.price?.amount, 550000, "museum purchase price fl. 550,000");
 }
@@ -384,7 +384,7 @@ section("9. parseProvenance — SK-A-3981 (Still Life with Peacocks)");
   assert(!rawTexts.includes("<em>"), "no <em> tags in rawText (HTML stripped)");
 
   // Purchase event: from whom purchased by dealer
-  const purchEvent = chain.events.find(e => e.transferType === "purchase");
+  const purchEvent = chain.events.find(e => e.transferType === "sale");
   assert(purchEvent !== undefined, "purchase event found (dealer Muller)");
 }
 
@@ -418,8 +418,8 @@ section("10. parseProvenance — SK-A-4885 (Johannes Wtenbogaert)");
   assertEq(napEvent?.price?.amount, 8000, "8,000 Napoléons");
 
   // Inheritance events (Primrose family)
-  const inhEvents = chain.events.filter(e => e.transferType === "inheritance");
-  assert(inhEvents.length >= 4, `≥4 inheritance events (got ${inhEvents.length})`);
+  const inhEvents = chain.events.filter(e => ["inheritance", "by_descent", "widowhood"].includes(e.transferType));
+  assert(inhEvents.length >= 4, `≥4 inheritance/by_descent/widowhood events (got ${inhEvents.length})`);
 
   // Venice location
   const veniceEvent = chain.events.find(e => e.location === "Venice");
@@ -427,7 +427,7 @@ section("10. parseProvenance — SK-A-4885 (Johannes Wtenbogaert)");
 
   // Last event: museum purchase December 1992
   const last = chain.events[chain.events.length - 1];
-  assertEq(last.transferType, "purchase", "last event is purchase");
+  assertEq(last.transferType, "sale", "last event is purchase");
   assertEq(last.date?.year, 1992, "museum purchase December 1992");
 }
 
@@ -482,7 +482,7 @@ assertEq(classifyTransfer("by whom sold to Edward Gray"), "sale", "by whom sold 
 assertEq(classifyTransfer("by whom sold, 1883"), "sale", "by whom sold (no buyer) → sale");
 
 // "bought by" → purchase
-assertEq(classifyTransfer("bought by Mr Carter, for Henry Doetsch"), "purchase", "bought by → purchase");
+assertEq(classifyTransfer("bought by Mr Carter, for Henry Doetsch"), "sale", "bought by → purchase");
 
 // "from whom, fl. X, to Y" → sale
 assertEq(classifyTransfer("from whom, fl. 4,000, to Jeronimo de Vries"), "sale", "from whom + price + to → sale");
@@ -496,13 +496,13 @@ assertEq(classifyTransfer("Presented by the artist to the sitter"), "gift", "pre
 assertEq(classifyTransfer("with an art dealer, Paris"), "collection", "with art dealer → collection");
 
 // "estate inventory" → collection (after ? stripping)
-assertEq(classifyTransfer("Estate inventory, Eberhard Jabach"), "collection", "Estate inventory → collection");
+assertEq(classifyTransfer("Estate inventory, Eberhard Jabach"), "inventory", "Estate inventory → collection");
 
 // "his grandson" → inheritance
-assertEq(classifyTransfer("his grandson, Count Sergei"), "inheritance", "his grandson → inheritance");
+assertEq(classifyTransfer("his grandson, Count Sergei"), "by_descent", "his grandson → inheritance");
 
 // "his sons" (plural) → inheritance
-assertEq(classifyTransfer("his sons, Jonkheer Jan Pieter Six and Jonkheer Pieter Hendrik Six"), "inheritance", "his sons (plural) → inheritance");
+assertEq(classifyTransfer("his sons, Jonkheer Jan Pieter Six and Jonkheer Pieter Hendrik Six"), "by_descent", "his sons (plural) → inheritance");
 
 // ══════════════════════════════════════════════════════════════════
 //  Section 13: Expanded price parsing
@@ -569,7 +569,7 @@ section("15. Uncertainty + classification");
   // "? Estate inventory" — the ? should be stripped before classification
   const chain = parseProvenance("? Estate inventory, Eberhard Jabach (1618-95), Paris, 17 July 1696");
   assertEq(chain.events[0].uncertain, true, "? prefix → uncertain");
-  assertEq(chain.events[0].transferType, "collection", "? Estate inventory → collection (? stripped)");
+  assertEq(chain.events[0].transferType, "inventory", "? Estate inventory → inventory (? stripped)");
 }
 
 {

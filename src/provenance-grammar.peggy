@@ -301,6 +301,13 @@ function buildResult(type, nd, role, rest) {
   const parties = nd && nd.name ? [{ ...nd, role }] : [];
   return { type, parties: [...parties, ...(rest.extraParties || [])], ...rest, extraParties: undefined };
 }
+
+// Classify inheritance sub-type from relation word (CMOA alignment)
+const WIDOW_RE = /\b(?:widow|widower)\b/i;
+function inheritanceType(rel) {
+  if (WIDOW_RE.test(rel)) return "widowhood";
+  return "by_descent";  // son, daughter, heir, nephew, cousin, etc.
+}
 }}
 
 {
@@ -327,8 +334,8 @@ EventBody
   / ExchangeEvent
   / RestitutionEvent
   / DepositEvent
-  / CollectionEvent
   / EstateInventoryEvent
+  / CollectionEvent
   / FromWhomEvent
   / AnaphoricEvent
   / StandardPhraseEvent
@@ -442,38 +449,38 @@ PurchaseEvent
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
-      return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
+      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
   / "from"i _ "whose"i _ "heirs"i tail:Tail
-    { return buildResult("purchase", null, null, parseRest(tail)); }
+    { return buildResult("sale", null, null, parseRest(tail)); }
   / "purchased"i _ "by"i _ ("the"i _)? ("museum"i / ("dealer"i _))? nameRaw:NameChars? tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
       const rest = parseRest(tail);
-      return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
+      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
   / "bought"i _ "by"i _ ("the"i _)? ("dealer"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
-      return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
+      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
   / ("purchased"i / "puchased"i) _ "from"i _ nameRaw:NameChars tail:Tail
-    { return buildResult("purchase", nameRaw ? extractNameAndDates(nameRaw) : null, "seller", parseRest(tail)); }
+    { return buildResult("sale", nameRaw ? extractNameAndDates(nameRaw) : null, "seller", parseRest(tail)); }
   / ("acquired"i / "aqcuired"i / "verwerving"i / "aangekocht"i) _ ("by"i / "from"i / "in"i / "for"i / "with"i / "en"i / "bij"i / "door"i)? _? ("the"i / "het"i / "de"i)? _? nameRaw:NameChars tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
       const rest = parseRest(tail);
-      return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
+      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
   / "purchased"i _ ("for"i / "at"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
       const rest = parseRest(tail);
-      return { type: "purchase", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
+      return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "buyer" }] : [], ...rest };
     }
   / "purchased"i ","? tail:Tail
-    { const rest = parseRest(tail); return { type: "purchase", parties: [...(rest.extraParties || [])], ...rest, extraParties: undefined }; }
+    { const rest = parseRest(tail); return { type: "sale", parties: [...(rest.extraParties || [])], ...rest, extraParties: undefined }; }
 
 // ─── Gift ───────────────────────────────────────────────────────────
 
@@ -558,11 +565,11 @@ EstateInventoryEvent
       const rest = parseRest(tail);
       return { type: "inventory", parties: nd && nd.name ? [{ ...nd, role: "deceased" }] : [], ...rest };
     }
-  / ("probate"i _)? "inventory"i ","? _ nameRaw:NameChars tail:Tail
+  / "probate"i _ "inventory"i ","? _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
-      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: null }] : [], ...rest };
+      return { type: "inventory", parties: nd && nd.name ? [{ ...nd, role: "deceased" }] : [], ...rest };
     }
 
 // ─── From whom ──────────────────────────────────────────────────────
@@ -590,7 +597,7 @@ FromWhomEvent
       return { type: "sale", parties: nd && nd.name ? [{ ...nd, role: "seller" }] : [], ...rest };
     }
   / "from"i _ ("the"i _)? "heirs"i _ ("of"i _)? nameRaw:NameChars tail:Tail
-    { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
+    { return buildResult("by_descent", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ "the"i _ "artist"i tail:Tail
     {
       const rest = parseRest(tail);
@@ -602,7 +609,7 @@ FromWhomEvent
   / "from"i _ ("the"i _)? "estate"i _ ("of"i _)? nameRaw:NameChars tail:Tail
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / ("the"i _)? "heirs"i _ ("of"i _) nameRaw:NameChars tail:Tail
-    { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
+    { return buildResult("by_descent", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ ("the"i _)? !("collection"i / "estate"i) nameRaw:NameChars tail:Tail
     &{ return /\bto\b/i.test(tail); }
     {
@@ -622,21 +629,21 @@ AnaphoricEvent
       const nd = extractNameAndDates(nameRaw);
       const role = poss.toLowerCase() + " " + rel.toLowerCase();
       const rest = parseRest(tail);
-      return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
+      return { type: inheritanceType(rel), parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
     }
-  / "by"i _ "descent"i _ "to"i _ ("his"i / "her"i / "their"i) _ RelationWord ","? _ nameRaw:NameChars tail:Tail
+  / "by"i _ "descent"i _ "to"i _ ("his"i / "her"i / "their"i) _ rel:RelationWord ","? _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
-      return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role: "heir" }] : [], ...rest };
+      return { type: inheritanceType(rel), parties: nd && nd.name ? [{ ...nd, role: "heir" }] : [], ...rest };
     }
   / "by"i _ "descent"i tail:Tail
-    { const rest = parseRest(tail); return { type: "inheritance", parties: [], ...rest }; }
+    { const rest = parseRest(tail); return { type: "by_descent", parties: [], ...rest }; }
   / "inherited"i _ "by"i _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
-      return { type: "inheritance", parties: nd && nd.name ? [{ ...nd, role: "heir" }] : [], ...rest };
+      return { type: "by_descent", parties: nd && nd.name ? [{ ...nd, role: "heir" }] : [], ...rest };
     }
   / ("by"i / "through"i) _ "inheritance"i _ ("to"i _)? nameRaw:NameChars tail:Tail
     {
@@ -684,7 +691,7 @@ StandardPhraseEvent
   / "anonymous"i _ "collection"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
   / "whence"i tail:Tail
-    { return buildResult("purchase", null, null, parseRest(tail)); }
+    { return buildResult("sale", null, null, parseRest(tail)); }
   / "recorded"i _ "in"i _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
@@ -748,7 +755,11 @@ StandardPhraseEvent
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
   / ("unknown"i / "unidentified"i) _ "collector"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
-  / ("stolen"i / "looted"i / "seized"i) tail:Tail
+  / "stolen"i tail:Tail
+    { const rest = parseRest(tail); return { type: "theft", parties: [], ...rest }; }
+  / "looted"i tail:Tail
+    { const rest = parseRest(tail); return { type: "looting", parties: [], ...rest }; }
+  / "seized"i tail:Tail
     { const rest = parseRest(tail); return { type: "confiscation", parties: [], ...rest }; }
   / "awarded"i _ "to"i _ nameRaw:NameChars tail:Tail
     { return buildResult("gift", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
@@ -759,15 +770,15 @@ StandardPhraseEvent
   / "veiling"i _ nameRaw:NameChars tail:Tail
     { return buildResult("sale", extractNameAndDates(nameRaw), "auctioneer", parseRest(tail)); }
   / "gekocht"i _ ("door"i / "van"i / "bij"i) _ ("het"i / "de"i)? _? nameRaw:NameChars tail:Tail
-    { return buildResult("purchase", extractNameAndDates(nameRaw), "buyer", parseRest(tail)); }
+    { return buildResult("sale", extractNameAndDates(nameRaw), "buyer", parseRest(tail)); }
   / ("aangekocht"i / "verworven"i) _ ("door"i / "van"i / "bij"i)? _? ("het"i / "de"i)? _? nameRaw:NameChars tail:Tail
-    { return buildResult("purchase", extractNameAndDates(nameRaw), "buyer", parseRest(tail)); }
+    { return buildResult("sale", extractNameAndDates(nameRaw), "buyer", parseRest(tail)); }
   / "geschonken"i _ ("aan"i / "door"i) _ ("het"i / "de"i)? _? nameRaw:NameChars tail:Tail
     { return buildResult("gift", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
   / "with"i _ "the"i _ ("castle"i / "house"i / "estate"i) _ "to"i _ nameRaw:NameChars tail:Tail
-    { return buildResult("inheritance", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
+    { return buildResult("by_descent", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
   / "through"i _ "the"i _ "family"i _ ("to"i _)? nameRaw:NameChars tail:Tail
-    { return buildResult("inheritance", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
+    { return buildResult("by_descent", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
   / ("the"i _)? "estate"i _ "of"i _ nameRaw:NameChars tail:Tail
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "received"i _ "by"i _ nameRaw:NameChars tail:Tail
@@ -789,7 +800,7 @@ StandardPhraseEvent
   / "'s"i _ "Rijks"i _ "verzameling"i tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
   / "erven"i _ nameRaw:NameChars tail:Tail
-    { return buildResult("inheritance", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
+    { return buildResult("by_descent", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
   / "studio"i _ "estate"i _ "of"i _ nameRaw:NameChars tail:Tail
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
 

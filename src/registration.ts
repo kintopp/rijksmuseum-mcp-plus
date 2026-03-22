@@ -520,9 +520,9 @@ const ArtworkDetailOutput = {
       uncertain: z.boolean(),
       role: z.string().nullable(),
     }).nullable(),
-    transferType: z.enum(["sale", "inheritance", "bequest", "commission", "purchase",
-      "confiscation", "recuperation", "loan", "transfer", "collection", "gift",
-      "auction", "exchange", "deposit", "seizure", "restitution", "donation", "inventory", "unknown"]),
+    transferType: z.enum(["sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
+      "confiscation", "theft", "looting", "recuperation", "loan", "transfer", "collection", "gift",
+      "exchange", "deposit", "restitution", "inventory", "unknown"]),
     date: z.object({
       text: z.string(),
       year: z.number().int().nullable(),
@@ -2125,10 +2125,10 @@ function registerTools(
   // ── search_provenance (conditionally registered when provenance tables exist) ──
 
   const PROVENANCE_TRANSFER_TYPES = [
-    "sale", "inheritance", "bequest", "commission", "purchase",
-    "confiscation", "recuperation", "restitution",
+    "sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
+    "confiscation", "theft", "looting", "recuperation", "restitution",
     "loan", "transfer", "collection", "gift",
-    "deposit", "exchange", "auction", "seizure", "donation", "inventory",
+    "deposit", "exchange", "inventory",
     "unknown",
   ] as const;
 
@@ -2233,7 +2233,7 @@ function registerTools(
           transferType: z.preprocess(
             normalizeStringOrArray,
             z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
-          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: collection (18K), inheritance (17K), sale (13K), gift (10K), transfer (6K), loan (6K), bequest (4K), purchase (2K). Rare: recuperation, commission, deposit, restitution, confiscation, exchange. Currently empty: auction, seizure, donation, inventory."),
+          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: collection (18K), by_descent (13K), sale (15K), gift (10K), transfer (6K), loan (6K), bequest (4K), widowhood (3K). Rare: recuperation, commission, deposit, restitution, confiscation, exchange, inventory, theft, looting. Generic: inheritance (when specific relationship unknown)."),
           excludeTransferType: z.preprocess(
             normalizeStringOrArray,
             z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),

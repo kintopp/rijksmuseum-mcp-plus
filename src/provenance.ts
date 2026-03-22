@@ -41,21 +41,21 @@ export interface ProvenanceParty {
 export type TransferType =
   | "sale"
   | "inheritance"
+  | "by_descent"
+  | "widowhood"
   | "bequest"
   | "commission"
-  | "purchase"
   | "confiscation"
+  | "theft"
+  | "looting"
   | "recuperation"
   | "loan"
   | "transfer"
   | "collection"
   | "gift"
-  | "auction"
   | "exchange"
   | "deposit"
-  | "seizure"
   | "restitution"
-  | "donation"
   | "inventory"
   | "unknown";
 
@@ -130,18 +130,18 @@ export function inferPosition(
 
 export const TRANSFER_TYPE_TO_CATEGORY: Record<TransferType, TransferCategory> = {
   sale: "ownership",
-  purchase: "ownership",
   inheritance: "ownership",
+  by_descent: "ownership",
+  widowhood: "ownership",
   bequest: "ownership",
   gift: "ownership",
-  donation: "ownership",
   commission: "ownership",
   exchange: "ownership",
   confiscation: "ownership",
+  theft: "ownership",
+  looting: "ownership",
   recuperation: "ownership",
   restitution: "ownership",
-  seizure: "ownership",
-  auction: "ownership",
   collection: "ownership",
   inventory: "ownership",
   loan: "custody",
@@ -347,21 +347,26 @@ export function stripHtml(text: string): string {
 const TRANSFER_RULES: [RegExp, TransferType][] = [
   [/\bcommissioned (?:by|for|as)\b/i, "commission"],
   [/war recuperation/i, "recuperation"],
+  [/\bstolen\b/i, "theft"],
+  [/\blooted\b/i, "looting"],
   [/confiscat|Führermuseum/i, "confiscation"],
   [/\bfrom which on loan\b|on loan/i, "loan"],
   [/\btransfer(?:red)?\b|\bsent to\b|\bremoved\b/i, "transfer"],
-  [/bequest|bequeathed/i, "bequest"],
-  [/\bsold[, ]+(?:by|to|with)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
+  [/bequest|bequeathed|testament/i, "bequest"],
+  [/\bsold[, ]+(?:by|to|with|for)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
   [/(?:his|her|their) (?:posthumous |deceased )?sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
-  [/\bpurchased\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "purchase"],
-  [/\bacquired\b|\bverwerving\b/i, "purchase"],
+  [/\bpurchased\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "sale"],
+  [/\bacquired\b|\bverwerving\b/i, "sale"],
   [/from whom,.*\bto\b|by whom to\b|\bfrom the dealer\b|\bfrom (?:Count|Baron|Prince|Marchesa|Conte)\b.*\bto\b/i, "sale"],
-  [/\b(?:his|her|their) (?:sons?|heirs?|daughters?|sisters?|brothers?|cousins?|wife|uncle|aunt|nephew|niece|stepson|stepdaughter|grands?(?:on|daughter)|great-grands?(?:on|daughter)|sister's grands?(?:on|daughter))\b|\bwidow(?:er)?\b|\bby descent\b|\binherited by\b|\bby inheritance\b|\bthrough inheritance\b|\bfrom the heirs\b/i, "inheritance"],
+  [/\bwidow(?:er)?\b/i, "widowhood"],
+  [/\bby descent\b|\binherited by\b|\bfrom the heirs\b|\berven\b/i, "by_descent"],
+  [/\b(?:his|her|their) (?:sons?|heirs?|daughters?|sisters?|brothers?|cousins?|wife|uncle|aunt|nephew|niece|stepson|stepdaughter|grands?(?:on|daughter)|great-grands?(?:on|daughter)|sister's grands?(?:on|daughter))\b|\bby inheritance\b|\bthrough inheritance\b/i, "by_descent"],
   [/\bexchanged (?:with|for)\b/i, "exchange"],
-  [/\bcollection\b|\bwith an? (?:art )?dealer\b|\bex\.?\s*coll\.?\b|\bfirst (?:recorded|mentioned)\b|\b(?:probate )?inventory\b/i, "collection"],
+  [/\bcollection\b|\bwith an? (?:art )?dealer\b|\bex\.?\s*coll\.?\b|\bfirst (?:recorded|mentioned)\b/i, "collection"],
   [/\bdonated\b|\bdonation\b|\bgift\b|\bgiven by\b|\bpresented by\b|\bdedicated to\b|\bschenking\b/i, "gift"],
   [/\bstored\b|\bdeposited\b|\binstalled\b|\bplaced\b/i, "deposit"],
-  [/\bestate inventory\b/i, "collection"],
+  [/\b(?:estate|probate) inventory\b/i, "inventory"],
+  [/\binventory\b/i, "collection"],
 ];
 
 /** Classify the transfer type of a provenance segment using keyword priority. */

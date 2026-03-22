@@ -81,10 +81,10 @@ function detectCrossReference(
 // ─── AST → RawProvenanceEvent ───────────────────────────────────────
 
 const VALID_TRANSFER_TYPES = new Set<TransferType>([
-  "sale", "inheritance", "bequest", "commission", "purchase",
-  "confiscation", "recuperation", "loan", "transfer", "collection",
-  "gift", "auction", "exchange", "deposit", "seizure", "restitution",
-  "donation", "inventory", "unknown",
+  "sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
+  "confiscation", "theft", "looting", "recuperation", "loan", "transfer",
+  "collection", "gift", "exchange", "deposit", "restitution",
+  "inventory", "unknown",
 ]);
 
 function astToRawEvent(

@@ -128,13 +128,10 @@ function assignRoles(event: RawProvenanceEvent): RoleAssignment {
       return noParty;
     }
 
-    case "purchase": {
-      const buyer = parties.find(p => p.role === "buyer") || parties[0];
-      return { owner: buyer, acquisitionFrom: null, ownerRule: "purchase_buyer", fromRule: "no_seller" };
-    }
-
     case "bequest":
-    case "inheritance": {
+    case "inheritance":
+    case "by_descent":
+    case "widowhood": {
       const heir = parties.find(p => p.role === "heir" || p.role?.includes("son") || p.role?.includes("daughter")
         || p.role?.includes("widow") || p.role?.includes("nephew") || p.role?.includes("grandson")
         || p.role?.includes("granddaughter") || p.role?.includes("husband") || p.role?.includes("widower"));
