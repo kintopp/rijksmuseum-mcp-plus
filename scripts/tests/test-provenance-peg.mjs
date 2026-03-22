@@ -1052,6 +1052,32 @@ section("#147: buyer→borrower in loan contexts");
 }
 
 // ══════════════════════════════════════════════════════════════════
+section("#150: Loan 'from X to Y' party splitting");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("on loan from the Witsenhuis to the museum, 1964");
+  const lender = r.events[0].parties.find(p => p.role === "lender");
+  const borrower = r.events[0].parties.find(p => p.role === "borrower");
+  assert(lender !== undefined, "#150: lender extracted from 'from X to Y'");
+  assert(borrower !== undefined, "#150: borrower extracted from 'from X to Y'");
+  assert(/Witsenhuis/i.test(lender?.name), "#150: lender is Witsenhuis");
+  assert(/museum/i.test(borrower?.name), "#150: borrower is museum");
+}
+{
+  const r = parseProvenanceRaw("on loan, with 1,702 other objects, from the DRVK to the museum, 1952");
+  assertEq(r.events[0].parties.length, 2, "#150: comma-gap loan extracts both parties");
+  const lender = r.events[0].parties.find(p => p.role === "lender");
+  assert(/DRVK/i.test(lender?.name), "#150: DRVK is lender in comma-gap loan");
+}
+{
+  // "on loan from X" without "to" should still work (existing behavior)
+  const r = parseProvenanceRaw("on loan from the SNK, Amsterdam, 1960");
+  const lender = r.events[0].parties.find(p => p.role === "lender");
+  assert(lender !== undefined, "#150: simple 'from X' still works");
+  assert(/SNK/i.test(lender?.name), "#150: SNK is lender");
+}
+
+// ══════════════════════════════════════════════════════════════════
 section("#148: buyer→recipient in gift/bequest contexts");
 // ══════════════════════════════════════════════════════════════════
 {

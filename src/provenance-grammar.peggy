@@ -133,6 +133,22 @@ function parseRest(tail) {
       }
     }
 
+    // "from X to Y" — extract both parties (#150, for loan comma-gap tails)
+    const fromToMatch = t.match(/^from\s+(.+?)\s+to\s+(.+)$/i);
+    if (fromToMatch) {
+      const fromRaw = fromToMatch[1].replace(/,\s*$/, "").trim();
+      const toRaw = fromToMatch[2].replace(/,\s*$/, "").trim();
+      if (fromRaw && HAS_UPPER_RE.test(fromRaw)) {
+        const nd = extractNameAndDates(fromRaw);
+        extraParties.push(nd ? { name: nd.name, dates: nd.dates, role: "seller" } : { name: fromRaw, dates: null, role: "seller" });
+      }
+      if (toRaw && (HAS_UPPER_RE.test(toRaw) || KNOWN_RECIPIENT_RE.test(toRaw))) {
+        const nd = extractNameAndDates(toRaw);
+        extraParties.push(nd ? { name: nd.name, dates: nd.dates, role: "buyer" } : { name: toRaw, dates: null, role: "buyer" });
+      }
+      continue;
+    }
+
     // "by (the dealer) Name" → buyer (but not "by descent", "by bequest", etc.)
     const byParty = t.match(BY_PARTY_RE);
     if (byParty) {
@@ -410,7 +426,22 @@ ConfiscationEvent
 // ─── Loan ───────────────────────────────────────────────────────────
 
 LoanEvent
+  // "on loan from X to Y" — split lender/borrower at "to" (#150)
   = ("from"i _ ("which"i / "whom"i) _)? "on"i _ ("long"i _ "term"i _)? "loan"i _ "from"i _ nameRaw:NameChars tail:Tail
+    &{ return /\bto\b/i.test(nameRaw); }
+    {
+      const toIdx = nameRaw.search(/\s+to\s+/i);
+      const lenderText = nameRaw.slice(0, toIdx).trim();
+      const borrowerText = nameRaw.slice(toIdx).replace(/^\s*to\s+/i, "").trim();
+      const lender = extractNameAndDates(lenderText);
+      const borrower = extractNameAndDates(borrowerText);
+      const rest = parseRest(tail);
+      const parties = [];
+      if (lender && lender.name) parties.push({ ...lender, role: "lender" });
+      if (borrower && borrower.name) parties.push({ ...borrower, role: "borrower" });
+      return { type: "loan", parties, ...rest };
+    }
+  / ("from"i _ ("which"i / "whom"i) _)? "on"i _ ("long"i _ "term"i _)? "loan"i _ "from"i _ nameRaw:NameChars tail:Tail
     { return buildResult("loan", extractNameAndDates(nameRaw), "lender", parseRest(tail)); }
   / ("from"i _ ("which"i / "whom"i) _)? "on"i _ ("long"i _ "term"i _)? "loan"i tail:Tail
     { const rest = parseRest(tail); return { type: "loan", parties: [], ...rest }; }

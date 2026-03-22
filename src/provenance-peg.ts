@@ -148,17 +148,24 @@ function astToRawEvent(
     transferType = "gift";
   }
 
-  // Remap "buyer" roles from parseRest's TO_BUYER_RE to contextually correct roles.
-  // parseRest() always assigns "buyer" for "to [Name]"; for non-sale event types
-  // the correct role depends on the transfer type (#147, #148).
-  const BUYER_REMAP: Record<string, string> = {
-    loan: "borrower", gift: "recipient", bequest: "heir",
-    transfer: "recipient", restitution: "recipient", deposit: "recipient",
-  };
-  const remappedRole = BUYER_REMAP[transferType];
-  if (remappedRole) {
+  // Remap generic roles from parseRest (buyer/seller) to contextually correct roles.
+  // parseRest() assigns "buyer" for "to [Name]" and "seller" for "from [Name]";
+  // for non-sale event types the correct role depends on the transfer type (#147, #148, #150).
+  if (transferType === "loan") {
     for (const p of parties) {
-      if (p.role === "buyer") p.role = remappedRole;
+      if (p.role === "buyer") p.role = "borrower";
+      else if (p.role === "seller") p.role = "lender";
+    }
+  } else {
+    const BUYER_REMAP: Record<string, string> = {
+      gift: "recipient", bequest: "heir",
+      transfer: "recipient", restitution: "recipient", deposit: "recipient",
+    };
+    const remappedRole = BUYER_REMAP[transferType];
+    if (remappedRole) {
+      for (const p of parties) {
+        if (p.role === "buyer") p.role = remappedRole;
+      }
     }
   }
 
