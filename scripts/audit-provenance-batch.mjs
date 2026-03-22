@@ -30,7 +30,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // ─── Modes ──────────────────────────────────────────────────────────
 
-const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals"];
+const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification"];
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -216,6 +216,34 @@ function samplePositionEnrichment() {
         WHERE pe.transfer_category = 'ambiguous' AND pe.is_cross_ref = 0
       ) ORDER BY RANDOM() LIMIT ?
     `).all(sampleSize).map(r => r.artwork_id);
+  }
+  return fetchRecords(artworkIds, { periods: false });
+}
+
+function sampleTypeClassification() {
+  const db = openDb();
+  // Get all artworks with non-unsold unknown events (the true residual)
+  const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
+  let artworkIds;
+
+  if (recordsList) {
+    const objectNumbers = recordsList.split(",").map(s => s.trim());
+    artworkIds = db.prepare(
+      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
+    ).all(...objectNumbers).map(r => r.art_id);
+  } else {
+    // All artworks with non-unsold unknown events
+    const rows = db.prepare(`
+      SELECT DISTINCT pe.artwork_id, pe.raw_text
+      FROM provenance_events pe
+      WHERE pe.transfer_type = 'unknown' AND pe.is_cross_ref = 0
+    `).all();
+    // Filter out unsold in JS (complex regex not possible in SQLite)
+    const ids = new Set();
+    for (const row of rows) {
+      if (!UNSOLD_RE.test(row.raw_text)) ids.add(row.artwork_id);
+    }
+    artworkIds = [...ids].slice(0, sampleSize);
   }
   return fetchRecords(artworkIds, { periods: false });
 }
@@ -529,6 +557,41 @@ const TOOL_STRUCTURAL_SIGNALS = {
       },
     },
     required: ["artwork_id", "object_number", "segments"],
+  },
+};
+
+const TYPE_CLASSIFICATION_TYPES = [
+  "sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
+  "confiscation", "theft", "looting", "recuperation", "restitution",
+  "loan", "transfer", "collection", "gift", "exchange", "deposit",
+  "inventory", "non_provenance", "unknown",
+];
+
+const TOOL_TYPE_CLASSIFICATION = {
+  name: "report_type_classification",
+  description: "Classify transfer types for individual unknown provenance events that no parser rule can handle",
+  input_schema: {
+    type: "object",
+    properties: {
+      artwork_id: { type: "integer" },
+      object_number: { type: "string" },
+      classifications: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            event_sequence: { type: "integer" },
+            raw_text: { type: "string" },
+            transfer_type: { type: "string", enum: TYPE_CLASSIFICATION_TYPES },
+            transfer_category: { type: "string", enum: ["ownership", "custody", "ambiguous"] },
+            confidence: { type: "number", description: "0.0-1.0" },
+            reasoning: { type: "string", description: "Brief explanation of why this type was chosen" },
+          },
+          required: ["event_sequence", "raw_text", "transfer_type", "transfer_category", "confidence", "reasoning"],
+        },
+      },
+    },
+    required: ["artwork_id", "object_number", "classifications"],
   },
 };
 
@@ -1043,6 +1106,177 @@ function printStructuralSignalsReport(report) {
   }
 }
 
+function buildPromptTypeClassification(record) {
+  const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
+  const unknownEvents = record.events.filter(
+    e => e.transfer_type === "unknown" && !e.is_cross_ref && !UNSOLD_RE.test(e.raw_text)
+  );
+
+  const eventsJson = unknownEvents.map(e => ({
+    sequence: e.sequence,
+    rawText: e.raw_text,
+    parties: safeJson(e.parties),
+  }));
+
+  return `<role>You are a provenance researcher classifying individual ownership events from a Rijksmuseum artwork. A parser has already handled all keyword-based and structurally-detectable patterns. These remaining events could not be classified by any rule. Your job is to classify each one based on your understanding of the text, the provenance chain context, and art-historical knowledge.</role>
+
+<background>
+<aam_standard>
+The provenance text follows the AAM (American Alliance of Museums, 2001) convention:
+- Semicolons (;) separate events in chronological order (earliest → present)
+- Question mark (?) prefix marks uncertain attribution
+- Curly braces ({…}) enclose bibliographic citations
+- A bare name with optional dates and location implies the person/institution held the artwork
+</aam_standard>
+
+<transfer_types>
+Available transfer types (CMOA-aligned vocabulary):
+- **collection** — person or institution held the artwork (bare-name AAM convention)
+- **sale** — sold (includes auction purchases)
+- **by_descent** — inherited by a family member (son, daughter, nephew, cousin, etc.)
+- **widowhood** — inherited by surviving spouse
+- **inheritance** — generic inheritance (relationship unknown)
+- **bequest** — given through a will after death
+- **gift** — given voluntarily
+- **commission** — commissioned by the named party
+- **loan** — temporary custody (on loan, on display, on lease)
+- **deposit** — temporary storage
+- **transfer** — administrative/institutional transfer
+- **confiscation** — legally seized by authority
+- **theft** — stolen
+- **looting** — looted during conflict
+- **recuperation** — recovered by government after war/theft
+- **restitution** — legally returned to rightful owner
+- **exchange** — traded for another object
+- **inventory** — documentation/attestation of existing ownership (not a transfer)
+- **non_provenance** — text that is not a provenance event (citation leak, object description, editorial note)
+- **unknown** — genuinely unclassifiable even with context
+</transfer_types>
+</background>
+
+<artwork>
+Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
+</artwork>
+
+<raw_provenance>
+${record.provenanceText}
+</raw_provenance>
+
+<events_to_classify>
+${eventsJson.map(e => `<event sequence="${e.sequence}">
+  <raw_text>${e.rawText}</raw_text>
+  <parties>${JSON.stringify(e.parties)}</parties>
+</event>`).join("\n")}
+</events_to_classify>
+
+<examples>
+<example>
+<event>"Kvovinsky, St Petersburg, c. 1850"</event>
+<classification>
+- transfer_type: collection
+- transfer_category: ownership
+- confidence: 0.85
+- reasoning: Bare name with city and approximate date — AAM convention for a collector/owner holding the artwork.
+</classification>
+</example>
+
+<example>
+<event>"from Bouasse-Lebel to Paul Mallon"</event>
+<classification>
+- transfer_type: sale
+- transfer_category: ownership
+- confidence: 0.80
+- reasoning: "from X to Y" pattern indicates a directed transfer. Without further context (no price, no "gift"/"donated"), sale is the most likely interpretation for a commercial transfer between parties.
+</classification>
+</example>
+
+<example>
+<event>"{Note RMA.} (inv. no. SK-C-1404)"</event>
+<classification>
+- transfer_type: non_provenance
+- transfer_category: ambiguous
+- confidence: 0.95
+- reasoning: This is an inventory number cross-reference, not a provenance event. The citation and inventory number are administrative metadata.
+</classification>
+</example>
+
+<example>
+<event>"the Mechelen friary was suppressed in 1796"</event>
+<classification>
+- transfer_type: confiscation
+- transfer_category: ownership
+- confidence: 0.85
+- reasoning: "Suppressed" in the context of a religious institution means dissolved by state authority (typically French Revolutionary/Napoleonic confiscation). The artwork would have been seized as state property.
+</classification>
+</example>
+</examples>
+
+<task>
+For EACH event above, classify the transfer type. Use the full provenance chain for context — the events before and after can help determine what happened.
+
+Most of these will be "collection" (bare names) but look carefully — some contain contextual clues that suggest a specific transfer type. If genuinely unclassifiable even with art-historical knowledge, use "unknown".
+
+Use the report_type_classification tool to submit your classifications.
+</task>`;
+}
+
+function aggregateTypeClassification(results) {
+  const typeDist = {};
+  const categoryDist = {};
+  let totalClassified = 0;
+  let highConfidence = 0;
+  const allClassifications = [];
+
+  for (const r of results) {
+    if (r.error || !r.data?.classifications) continue;
+    for (const c of r.data.classifications) {
+      totalClassified++;
+      typeDist[c.transfer_type] = (typeDist[c.transfer_type] || 0) + 1;
+      categoryDist[c.transfer_category] = (categoryDist[c.transfer_category] || 0) + 1;
+      if (c.confidence >= 0.8) highConfidence++;
+      allClassifications.push({
+        objectNumber: r.data.object_number,
+        sequence: c.event_sequence,
+        rawText: (c.raw_text || "").slice(0, 80),
+        type: c.transfer_type,
+        category: c.transfer_category,
+        confidence: c.confidence,
+        reasoning: c.reasoning,
+      });
+    }
+  }
+
+  return { totalClassified, highConfidence, typeDist, categoryDist, allClassifications };
+}
+
+function printTypeClassificationReport(report) {
+  console.log(`\n## Type Classification (${report.totalClassified} events)\n`);
+  console.log(`| Metric | Value |`);
+  console.log(`|--------|-------|`);
+  console.log(`| Total classified | ${report.totalClassified} |`);
+  console.log(`| High confidence (≥0.8) | ${report.highConfidence} (${(100 * report.highConfidence / Math.max(report.totalClassified, 1)).toFixed(0)}%) |`);
+
+  console.log(`\n### Transfer type distribution\n`);
+  console.log(`| Type | Count | % |`);
+  console.log(`|------|-------|---|`);
+  for (const [type, count] of Object.entries(report.typeDist).sort((a, b) => b[1] - a[1])) {
+    console.log(`| ${type} | ${count} | ${(100 * count / Math.max(report.totalClassified, 1)).toFixed(1)}% |`);
+  }
+
+  console.log(`\n### Transfer category distribution\n`);
+  console.log(`| Category | Count |`);
+  console.log(`|----------|-------|`);
+  for (const [cat, count] of Object.entries(report.categoryDist).sort((a, b) => b[1] - a[1])) {
+    console.log(`| ${cat} | ${count} |`);
+  }
+
+  console.log(`\n### Sample classifications\n`);
+  for (const c of report.allClassifications.slice(0, 15)) {
+    console.log(`- **${c.objectNumber}** seq ${c.sequence}: "${c.rawText}" → **${c.type}** (${(c.confidence * 100).toFixed(0)}%)`);
+    console.log(`  _${c.reasoning}_`);
+  }
+}
+
 // ─── Batch construction ─────────────────────────────────────────────
 
 function safeJson(val) {
@@ -1500,6 +1734,13 @@ const MODE_CONFIG = {
     buildPrompt: buildPromptStructuralSignals,
     aggregate: aggregateStructuralSignals,
     report: printStructuralSignalsReport,
+  },
+  "type-classification": {
+    sample: sampleTypeClassification,
+    tool: TOOL_TYPE_CLASSIFICATION,
+    buildPrompt: buildPromptTypeClassification,
+    aggregate: aggregateTypeClassification,
+    report: printTypeClassificationReport,
   },
 };
 
