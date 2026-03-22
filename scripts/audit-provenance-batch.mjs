@@ -30,7 +30,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // ─── Modes ──────────────────────────────────────────────────────────
 
-const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment"];
+const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals"];
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -466,6 +466,72 @@ const TOOL_POSITION_ENRICHMENT = {
   },
 };
 
+const TOOL_STRUCTURAL_SIGNALS = {
+  name: "report_structural_signals",
+  description: "Report structural signals found in unknown provenance segments that could enable deterministic classification",
+  input_schema: {
+    type: "object",
+    properties: {
+      artwork_id: { type: "integer" },
+      object_number: { type: "string" },
+      segments: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            event_sequence: { type: "integer" },
+            raw_text: { type: "string" },
+            signals: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  signal_type: {
+                    type: "string",
+                    enum: [
+                      "life_dates",           // (YYYY-YYYY) pattern
+                      "noble_title",          // Baron, Jonkheer, Count, etc.
+                      "academic_title",       // Dr, Prof., Mr (Dutch)
+                      "institution_name",     // museum, church, gallery, etc.
+                      "lugt_mark",            // (L. NNNN)
+                      "city_location",        // known city name present
+                      "dutch_phrase",         // Dutch-language provenance phrase
+                      "french_phrase",        // French-language provenance phrase
+                      "dealer_indicator",     // "dealer", "gallery", "Galerie", etc.
+                      "auction_house",        // known auction house name
+                      "collection_mark",      // collector's stamp or mark reference
+                      "date_only",            // standalone date with no party
+                      "cross_ref_fragment",   // reference to another artwork
+                      "citation_leak",        // bibliographic text that leaked out of {}
+                      "other",
+                    ],
+                  },
+                  evidence: { type: "string", description: "The specific text that constitutes this signal" },
+                  implies_type: {
+                    type: "string",
+                    enum: ["collection", "sale", "loan", "deposit", "transfer", "inventory", "non_provenance", "uncertain"],
+                    description: "What transfer type this signal suggests",
+                  },
+                  deterministic: { type: "boolean", description: "Could a parser rule reliably detect this signal without world knowledge?" },
+                },
+                required: ["signal_type", "evidence", "implies_type", "deterministic"],
+              },
+            },
+            recommended_type: {
+              type: "string",
+              enum: ["collection", "sale", "loan", "deposit", "transfer", "inventory", "by_descent", "widowhood", "non_provenance", "unknown"],
+              description: "Recommended transfer type based on all signals combined",
+            },
+            confidence: { type: "number", description: "0.0-1.0 confidence in the recommendation" },
+          },
+          required: ["event_sequence", "raw_text", "signals", "recommended_type", "confidence"],
+        },
+      },
+    },
+    required: ["artwork_id", "object_number", "segments"],
+  },
+};
+
 // ─── Prompt builders ────────────────────────────────────────────────
 
 function buildPromptSilentErrors(record) {
@@ -796,6 +862,185 @@ Given an event: \`? Pieter van Ruijven (1624-1674), Delft\` with transferType "u
 - **category: ownership** (confidence 0.80) — a named collector with life dates implies long-term ownership, not temporary custody
 
 Use the report_position_enrichment tool to submit your classifications.`;
+}
+
+function buildPromptStructuralSignals(record) {
+  const unknownEvents = record.events.filter(
+    e => e.transfer_type === "unknown" && !e.is_cross_ref
+  );
+
+  return `<role>You are a computational linguist analysing provenance text segments that a parser could not classify. Your task is NOT to identify keywords — a previous analysis already found all keyword-based patterns. Instead, you are looking for STRUCTURAL signals: patterns in the text's form, formatting, or composition that could enable deterministic classification without world knowledge.</role>
+
+<background>
+<aam_standard>
+In AAM (American Alliance of Museums) provenance notation, a bare name with optional dates and location — e.g., "Frits Lugt (1884-1970), Paris" — is a valid entry meaning "held by this person." The parser classifies these as "unknown" because no transfer keyword is present. But many of these segments contain structural signals beyond the bare name that could help classify them.
+</aam_standard>
+
+<structural_signals>
+We are looking for these categories of deterministic signal:
+
+1. **life_dates** — "(YYYY-YYYY)" pattern indicates a person → likely "collection" (personal ownership)
+2. **noble_title** — "Baron", "Jonkheer", "Jonkvrouw", "Count", "Countess", "Graaf", "Gravin", "Lord", "Prince", "Princess", "Duke", "Marquis", "Sir", "Lady" preceding a name → person, likely "collection"
+3. **academic_title** — "Dr", "Prof.", "Mr" (Dutch honorific), "Mrs" preceding a name → person, likely "collection"
+4. **institution_name** — words like "museum", "church", "kerk", "chapel", "kapel", "cathedral", "monastery", "klooster", "gallery", "galerie", "society", "vereniging", "genootschap", "stichting", "foundation", "ministry", "ministerie", "cabinet", "kabinet", "palace", "paleis", "castle", "kasteel", "town hall", "stadhuis" → institution, likely "collection" or "loan"
+5. **lugt_mark** — "(L. NNNN)" or "(Lugt NNNN)" — collector's stamp reference → definitely "collection"
+6. **city_location** — a known city name (Amsterdam, Paris, London, etc.) present as the only content after the name → supports "collection" classification
+7. **dutch_phrase** — Dutch-language provenance text not yet handled by the parser
+8. **french_phrase** — French-language provenance text not yet handled
+9. **dealer_indicator** — "dealer", "gallery", "Galerie", "handel", "kunsthandel" in the name → dealer holding, likely "collection" with dealer role
+10. **auction_house** — known auction house name (Christie's, Sotheby's, Bonhams, etc.) → likely "sale"
+11. **collection_mark** — any collector's mark reference beyond Lugt
+12. **date_only** — standalone date or date range with no party name → fragment
+13. **cross_ref_fragment** — reference to another artwork (object number pattern like "SK-A-NNNN")
+14. **citation_leak** — bibliographic text (author names, page numbers, journal titles) that leaked out of {curly braces}
+</structural_signals>
+</background>
+
+<artwork>
+Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
+</artwork>
+
+<raw_provenance>
+${record.provenanceText}
+</raw_provenance>
+
+<unknown_segments>
+${unknownEvents.map(e => `<segment sequence="${e.sequence}">${e.raw_text}</segment>`).join("\n")}
+</unknown_segments>
+
+<examples>
+<example>
+<segment>"Jonkheer Pieter Hendrik Six (1827-1905), Lord of Vromade, Amsterdam"</segment>
+<analysis>
+- signal: noble_title — "Jonkheer" (evidence: "Jonkheer", deterministic: true)
+- signal: life_dates — "(1827-1905)" (evidence: "(1827-1905)", deterministic: true)
+- signal: noble_title — "Lord" (evidence: "Lord of Vromade", deterministic: true)
+- signal: city_location — "Amsterdam" (evidence: "Amsterdam", deterministic: true)
+- recommended_type: collection (confidence: 0.95)
+- reasoning: Multiple strong structural signals (noble title + life dates + city) make this unambiguously a person holding the artwork.
+</analysis>
+</example>
+
+<example>
+<segment>"Mauritshuis, The Hague, 1876"</segment>
+<analysis>
+- signal: institution_name — "Mauritshuis" (evidence: "Mauritshuis", deterministic: false — requires knowing this is a museum)
+- signal: city_location — "The Hague" (evidence: "The Hague", deterministic: true)
+- recommended_type: collection (confidence: 0.70)
+- reasoning: City location is structural; institution name recognition requires a curated list. If Mauritshuis were in an institution list, confidence would be 0.95.
+</analysis>
+</example>
+
+<example>
+<segment>"F. Scholten, 'The Larson Family of Statuary Founders', _Simiolus_ 31 (2004-05), pp. 54-89"</segment>
+<analysis>
+- signal: citation_leak — journal reference (evidence: "_Simiolus_ 31 (2004-05), pp. 54-89", deterministic: true)
+- recommended_type: non_provenance (confidence: 0.95)
+- reasoning: Journal title in italics, volume number, page range — unmistakably a bibliographic citation that should have been inside {curly braces}.
+</analysis>
+</example>
+
+<example>
+<segment>"collection William Pitcairn Knowles (1820-94), Rotterdam and Wiesbaden (L. 2643)"</segment>
+<analysis>
+- signal: lugt_mark — "(L. 2643)" (evidence: "(L. 2643)", deterministic: true)
+- signal: life_dates — "(1820-94)" (evidence: "(1820-94)", deterministic: true)
+- recommended_type: collection (confidence: 0.95)
+- reasoning: Lugt mark is a definitive collector signal.
+</analysis>
+</example>
+</examples>
+
+<task>
+For EACH unknown segment, identify ALL structural signals present. For each signal, report:
+- The signal type (from the list above)
+- The specific evidence text
+- What transfer type it implies
+- Whether a parser rule could detect it deterministically (without world knowledge)
+
+Then give your overall recommended transfer type and confidence.
+
+Focus on what's STRUCTURALLY detectable. "Baron van Swieten" has a noble title (structural). "Goudstikker" being a dealer requires world knowledge (not structural). A word like "Galerie" in a name IS structural.
+
+Use the report_structural_signals tool to submit your analysis.
+</task>`;
+}
+
+function aggregateStructuralSignals(results) {
+  const signalCounts = {};
+  const signalDeterministic = {};
+  const recommendedTypes = {};
+  let totalSegments = 0;
+  let segmentsWithSignals = 0;
+  const allSegments = [];
+
+  for (const r of results) {
+    if (r.error || !r.data?.segments) continue;
+    for (const seg of r.data.segments) {
+      totalSegments++;
+      const signals = seg.signals || [];
+      if (signals.length > 0) segmentsWithSignals++;
+      for (const s of signals) {
+        signalCounts[s.signal_type] = (signalCounts[s.signal_type] || 0) + 1;
+        if (s.deterministic) {
+          signalDeterministic[s.signal_type] = (signalDeterministic[s.signal_type] || 0) + 1;
+        }
+      }
+      recommendedTypes[seg.recommended_type] = (recommendedTypes[seg.recommended_type] || 0) + 1;
+      allSegments.push({
+        objectNumber: r.data.object_number,
+        sequence: seg.event_sequence,
+        rawText: (seg.raw_text || "").slice(0, 80),
+        signals: signals.map(s => s.signal_type),
+        deterministic: signals.filter(s => s.deterministic).map(s => s.signal_type),
+        recommendedType: seg.recommended_type,
+        confidence: seg.confidence,
+      });
+    }
+  }
+
+  return { totalSegments, segmentsWithSignals, signalCounts, signalDeterministic, recommendedTypes, allSegments };
+}
+
+function printStructuralSignalsReport(report) {
+  console.log(`\n## Structural Signals (${report.totalSegments} segments)\n`);
+  console.log(`| Metric | Value |`);
+  console.log(`|--------|-------|`);
+  console.log(`| Segments with ≥1 signal | ${report.segmentsWithSignals} (${(100 * report.segmentsWithSignals / Math.max(report.totalSegments, 1)).toFixed(1)}%) |`);
+  console.log(`| Segments with no signals | ${report.totalSegments - report.segmentsWithSignals} |`);
+
+  console.log(`\n### Signal frequency\n`);
+  console.log(`| Signal type | Total | Deterministic | % deterministic |`);
+  console.log(`|-------------|-------|---------------|-----------------|`);
+  for (const [type, count] of Object.entries(report.signalCounts).sort((a, b) => b[1] - a[1])) {
+    const det = report.signalDeterministic[type] || 0;
+    console.log(`| ${type} | ${count} | ${det} | ${(100 * det / Math.max(count, 1)).toFixed(0)}% |`);
+  }
+
+  console.log(`\n### Recommended type distribution\n`);
+  console.log(`| Type | Count | % |`);
+  console.log(`|------|-------|---|`);
+  for (const [type, count] of Object.entries(report.recommendedTypes).sort((a, b) => b[1] - a[1])) {
+    console.log(`| ${type} | ${count} | ${(100 * count / Math.max(report.totalSegments, 1)).toFixed(1)}% |`);
+  }
+
+  // High-confidence reclassifiable
+  const reclassifiable = report.allSegments.filter(s => s.confidence >= 0.8 && s.recommendedType !== "unknown");
+  console.log(`\n### Reclassifiable with high confidence (≥0.8): ${reclassifiable.length} segments\n`);
+  const byType = {};
+  for (const s of reclassifiable) {
+    byType[s.recommendedType] = (byType[s.recommendedType] || 0) + 1;
+  }
+  for (const [type, count] of Object.entries(byType).sort((a, b) => b[1] - a[1])) {
+    console.log(`- **${type}**: ${count}`);
+  }
+
+  console.log(`\n### Sample segments with strong signals\n`);
+  const highConf = report.allSegments.filter(s => s.confidence >= 0.8 && s.deterministic.length > 0).slice(0, 10);
+  for (const s of highConf) {
+    console.log(`- **${s.objectNumber}** seq ${s.sequence}: "${s.rawText}" → ${s.recommendedType} (${(s.confidence * 100).toFixed(0)}%)`);
+    console.log(`  signals: ${s.deterministic.join(", ")}`);
+  }
 }
 
 // ─── Batch construction ─────────────────────────────────────────────
@@ -1248,6 +1493,13 @@ const MODE_CONFIG = {
     buildPrompt: buildPromptPositionEnrichment,
     aggregate: aggregatePositionEnrichment,
     report: printPositionEnrichmentReport,
+  },
+  "structural-signals": {
+    sample: sampleUnknowns,
+    tool: TOOL_STRUCTURAL_SIGNALS,
+    buildPrompt: buildPromptStructuralSignals,
+    aggregate: aggregateStructuralSignals,
+    report: printStructuralSignalsReport,
   },
 };
 

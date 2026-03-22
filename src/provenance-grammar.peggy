@@ -431,6 +431,9 @@ TransferEvent
     { return buildResult("transfer", extractNameAndDates(nameRaw), "consignor", parseRest(tail)); }
   / "divided"i _ "with"i tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
+  / "to"i _ nameRaw:NameChars tail:Tail
+    &{ const nd = extractNameAndDates(nameRaw); return nd && nd.name && /^[A-Z]/.test(nd.name); }
+    { return buildResult("transfer", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
 
 // ─── Bequest ────────────────────────────────────────────────────────
 
@@ -549,10 +552,12 @@ CollectionEvent
     }
   / ("first"i / "last"i)? _? ("recorded"i / "mentioned"i / "documented"i / "noted"i) _ ("at"i / "in"i / "by"i)? _? nameRaw:NameChars tail:Tail
     { return buildResult("collection", extractNameAndDates(nameRaw), null, parseRest(tail)); }
-  / "with"i _ ("an"i / "the"i)? _? ("art"i _)? "dealer"i tail:Tail
-    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
-  / "dealer"i ","? _ nameRaw:NameChars tail:Tail
-    { return buildResult("collection", extractNameAndDates(nameRaw), "dealer", parseRest(tail)); }
+  / ("with"i _)? ("an"i / "the"i)? _? ("art"i _)? "dealer"i "s"i? ","? _ nameRaw:NameChars? tail:Tail
+    {
+      const nd = nameRaw ? extractNameAndDates(nameRaw) : null;
+      const rest = parseRest(tail);
+      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "dealer" }] : [], ...rest };
+    }
   / ("art"i _)? "market"i tail:Tail
     { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest }; }
 

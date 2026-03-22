@@ -306,7 +306,7 @@ export function parseProvenanceRaw(
         /\b(?:Dr|Prof)\b\.?\s/.test(working) ||                            // Academic title
         /\b(?:Kunsthandel|Galerie|Gallery|Galleria)\b/i.test(working) ||   // Dealer indicator
         /\b(?:Rijksmuseum|Mauritshuis|Hermitage|Louvre|Uffizi|Prado|National Gallery|British Museum|Metropolitan Museum|Albertina|Alte Pinakothek|Gemäldegalerie)\b/.test(working) || // Major museums
-        /\b(?:[Mm]useum|[Mm]usée|[Kk]erk|[Cc]hurch|[Cc]hapel|[Kk]apel|[Cc]athedral|[Mm]onastery|[Kk]looster|[Mm]inisterie|[Mm]inistry|[Kk]abinet|[Cc]abinet|[Pp]aleis|[Pp]alace|[Ss]tichting|[Ff]oundation|[Gg]enootschap|[Vv]ereniging|[Ss]tadhuis|[Tt]own [Hh]all|[Rr]aadhuis|[Gg]asthuis|[Hh]ofje|[Ww]eeshuis|[Hh]ospital)\b/.test(working) // Institution type keywords
+        /\b(?:[Mm]useum|[Mm]usée|[Kk]erk|[Cc]hurch|[Cc]hapel|[Kk]apel|[Cc]athedral|[Mm]onastery|[Kk]looster|[Mm]inisterie|[Mm]inistry|[Kk]abinet|[Cc]abinet|[Pp]aleis|[Pp]alace|[Ss]tichting|[Ff]oundation|[Gg]enootschap|[Vv]ereniging|[Ss]tadhuis|[Tt]own [Hh]all|[Rr]aadhuis|[Gg]asthuis|[Hh]ofje|[Ww]eeshuis|[Hh]ospital|[Gg]ewölbe|[Gg]ewolbe|[Ss]chloss|[Kk]unstkammer|[Kk]unstkabinett|[Ss]ammlung|[Gg]alería|[Pp]inacoteca|[Aa]ccademia)\b/.test(working) // Institution type keywords (NL/EN/DE/FR/IT)
       ) {
         event.transferType = "collection";
       }

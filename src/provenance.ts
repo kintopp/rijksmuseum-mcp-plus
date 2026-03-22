@@ -307,6 +307,8 @@ export function splitEvents(
     if (/^\[…\]$/.test(fragStripped)) continue;                    // bracketed ellipsis
     if (/^\^?\[Copy\b/i.test(fragStripped)) continue;             // "^[Copy RKD.]" artefacts
     if (/^,+$/.test(fragStripped)) continue;                       // bare commas
+    if (/^[¼½¾⅓⅔⅛⅜⅝⅞]$/.test(fragStripped)) continue;           // bare fractions
+    if (/^or$/i.test(fragStripped)) continue;                       // bare "or"
 
     // Skip non-provenance text
     if (/^whereabouts unknown$/i.test(fragStripped)) continue;
