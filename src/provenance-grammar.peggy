@@ -24,20 +24,30 @@ const KNOWN_RECIPIENT_RE = /^(?:the\s+)?(?:museum|state|nation|city|government|k
 const LOT_NO_RE = /^no\.\s*\d+/i;
 const LOT_NUM_RE = /^lot\s+\d+/i;
 const PARENS_RE = /^\(([^)]+)\)/;
-const FL_RE = /^fl\.\s*([\d,.]+)/;
-const POUND_RE = /^£\s*([\d,]+)/;
-const FRS_RE = /^frs\.?\s*([\d,]+)/;
-const LIVRES_RE = /([\d,]+)\s*livres/i;
-const NAP_RE = /([\d,]+)\s*Napol[eé]ons/i;
-const DM_RE = /^DM\.?\s*([\d,]+)/;
-const RM_RE = /^RM\.?\s*([\d,]+)/;
-const SFRS_RE = /^(?:SFrcs|CHF)\s*([\d,]+)/;
+const FL_RE = /^fl\.?\s*([\d,.]+)/;
+const FL_PRE_DECIMAL_RE = /^fl\.?\s*(\d+):(\d+):([-\d]*)/;  // #95: fl. 1:50:- (guilders:stuivers:penningen)
+const POUND_RE = /^£\s*([\d,.]+)/;
+const POUND_PRE_DECIMAL_RE = /^£\s*(\d+)\.(\d+)\.(\d+)/;  // #92: £0.13.0 (pounds.shillings.pence)
+const FRS_RE = /^(?:frs\.?|Ffrs\.?|fr\.)\s*([\d,.]+)/i;  // #153: frs, Ffrs, fr.
+const LIVRES_RE = /([\d,.]+)\s*livres/i;
+const NAP_RE = /([\d,.]+)\s*Napol[eé]ons/i;
+const DM_RE = /^DM\.?\s*([\d,.]+)/;
+const RM_RE = /^RM\.?\s*([\d,.]+)/;
+const SFRS_RE = /^(?:SFrcs|CHF)\s*([\d,.]+)/;
 const EUR_RE = /^[€]\s*([\d,.]+)/;
-const USD_RE = /^\$\s*([\d,]+)/;
+const USD_RE = /^\$\s*([\d,.]+)/;
+const GNS_RE = /([\d,.]+)\s*gns\.?/i;  // #153: guineas
+const BFR_RE = /^Bfr\.?\s*([\d,.]+)/;  // #153: Belgian francs
+const YEN_RE = /^[¥]\s*([\d,.]+)/;  // #153: yen
+const MARK_RE = /([\d,.]+)\s*mark\b/i;  // #153: marks
+const LOUIS_RE = /([\d,.]+)\s*louis\s+d'or/i;  // #153: louis d'or
 // Matches qualified dates: "before 1800", "after May 1940", "since 1948",
 // "before or in 1691", "in or shortly before 1660", "in 1904"
 const QUAL_DATE_RE = /^\s*(?:(before|after|since|by)(?:\s+or\s+in)?\s+|(in\s+or\s+(?:shortly\s+)?)(before|after)\s+|in\s+)(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(\d{4})\b/i;
-const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
+const APPROX_DATE_RE = /^\s*(?:c\.|ca\.?|circa)\s*(\d{4})\b/i;
+const POSSIBLY_DATE_RE = /^\s*(?:possibly|probably|perhaps)\s+(\d{4})\b/i;  // #159
+const OR_EARLIER_RE = /^\s*(\d{4})\s+or\s+earlier\b/i;  // #159
+const EARLY_DECADE_RE = /^\s*(?:early|late|mid[- ]?)\s*(\d{4})s\b/i;  // #159: "early 1880s"
 const DATE_RANGE_RE = /^\s*(\d{4})\s*[-–\/]\s*(\d{2,4})\b/;
 const BARE_YEAR_RE = /^\s*(\d{4})\b/;
 const NAME_DATES_RE = /^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/;
@@ -193,6 +203,11 @@ function parseRest(tail) {
     }
 
     // Price patterns (regexes hoisted to module scope)
+    // Pre-decimal notations checked first (#92, #95)
+    const flPreMatch = t.match(FL_PRE_DECIMAL_RE);
+    if (flPreMatch) { priceAmount = parseInt(flPreMatch[1], 10) + parseInt(flPreMatch[2], 10) / 20; priceCurrency = "guilders"; continue; }
+    const poundPreMatch = t.match(POUND_PRE_DECIMAL_RE);
+    if (poundPreMatch) { priceAmount = parseInt(poundPreMatch[1], 10) + parseInt(poundPreMatch[2], 10) / 20 + parseInt(poundPreMatch[3], 10) / 240; priceCurrency = "pounds"; continue; }
     const flMatch = t.match(FL_RE);
     if (flMatch) { priceAmount = parsePrice(flMatch[1]); priceCurrency = "guilders"; continue; }
     const poundMatch = t.match(POUND_RE);
@@ -203,16 +218,26 @@ function parseRest(tail) {
     if (livresMatch) { priceAmount = parsePrice(livresMatch[1]); priceCurrency = "livres"; continue; }
     const napMatch = t.match(NAP_RE);
     if (napMatch) { priceAmount = parsePrice(napMatch[1]); priceCurrency = "napoléons"; continue; }
+    const gnsMatch = t.match(GNS_RE);
+    if (gnsMatch) { priceAmount = parsePrice(gnsMatch[1]); priceCurrency = "guineas"; continue; }
     const dmMatch = t.match(DM_RE);
     if (dmMatch) { priceAmount = parsePrice(dmMatch[1]); priceCurrency = "deutschmarks"; continue; }
     const rmMatch = t.match(RM_RE);
     if (rmMatch) { priceAmount = parsePrice(rmMatch[1]); priceCurrency = "reichsmarks"; continue; }
+    const bfrMatch = t.match(BFR_RE);
+    if (bfrMatch) { priceAmount = parsePrice(bfrMatch[1]); priceCurrency = "belgian_francs"; continue; }
     const sfrsMatch = t.match(SFRS_RE);
     if (sfrsMatch) { priceAmount = parsePrice(sfrsMatch[1]); priceCurrency = "swiss_francs"; continue; }
     const eurMatch = t.match(EUR_RE);
     if (eurMatch) { priceAmount = parsePrice(eurMatch[1]); priceCurrency = "euros"; continue; }
     const usdMatch = t.match(USD_RE);
     if (usdMatch) { priceAmount = parsePrice(usdMatch[1]); priceCurrency = "dollars"; continue; }
+    const yenMatch = t.match(YEN_RE);
+    if (yenMatch) { priceAmount = parsePrice(yenMatch[1]); priceCurrency = "yen"; continue; }
+    const markMatch = t.match(MARK_RE);
+    if (markMatch) { priceAmount = parsePrice(markMatch[1]); priceCurrency = "marks"; continue; }
+    const louisMatch = t.match(LOUIS_RE);
+    if (louisMatch) { priceAmount = parsePrice(louisMatch[1]); priceCurrency = "louis_d_or"; continue; }
 
     // Skip catalogue attribution context: "as German school" / "as 'Brabant'" / "as Rembrandt"
     // These introduce artwork dating, not event dates. Flag so the NEXT circa date is suppressed.
@@ -228,6 +253,26 @@ function parseRest(tail) {
       dateYear = parseInt(qualDate[4], 10);
       const rawQual = (qualDate[1] || qualDate[3] || "in").toLowerCase();
       dateQualifier = rawQual === "by" ? "before" : rawQual;
+      prevWasAttribution = false;
+      continue;
+    }
+
+    // #159: "possibly 1767", "probably 1800" → circa
+    const possiblyDate = t.match(POSSIBLY_DATE_RE);
+    if (possiblyDate && !dateYear) { dateExpression = t; dateYear = parseInt(possiblyDate[1], 10); dateQualifier = "circa"; prevWasAttribution = false; continue; }
+
+    // #159: "1858 or earlier" → before
+    const orEarlierDate = t.match(OR_EARLIER_RE);
+    if (orEarlierDate && !dateYear) { dateExpression = t; dateYear = parseInt(orEarlierDate[1], 10); dateQualifier = "before"; prevWasAttribution = false; continue; }
+
+    // #159: "early 1880s" → circa with decade start, "late 1880s" → circa with decade end, "mid-1880s" → circa with midpoint
+    const earlyDecade = t.match(EARLY_DECADE_RE);
+    if (earlyDecade && !dateYear) {
+      const decadeStart = parseInt(earlyDecade[1], 10);
+      const prefix = t.trim().toLowerCase();
+      dateExpression = t;
+      dateYear = prefix.startsWith("late") ? decadeStart + 8 : prefix.startsWith("mid") ? decadeStart + 5 : decadeStart + 2;
+      dateQualifier = "circa";
       prevWasAttribution = false;
       continue;
     }
@@ -250,8 +295,10 @@ function parseRest(tail) {
       const startYear = parseInt(dateRange[1], 10);
       let endPart = dateRange[2];
       if (endPart.length === 2) endPart = dateRange[1].slice(0, 2) + endPart;
+      const endYear = parseInt(endPart, 10);
       dateExpression = dateRange[0].trim();
-      dateYear = startYear;
+      // #162: use midpoint for short ranges (e.g. "1560-70" → 1565)
+      dateYear = Math.round((startYear + endYear) / 2);
       prevWasAttribution = false;
       continue;
     }
@@ -318,7 +365,9 @@ function extractNameAndDates(text) {
   if (m) {
     return { name: m[1].trim().replace(/,\s*$/, ""), dates: m[2].trim() };
   }
-  const name = text.split(",")[0].trim();
+  let name = text.split(",")[0].trim();
+  // #163: strip trailing date patterns from party names ("the museum in 1800/01" → "the museum")
+  name = name.replace(/\s+in\s+\d{4}(?:\/\d{2,4})?\s*$/, "").trim();
   return name ? { name: name.replace(/\]\s*$/, ""), dates: null } : null;
 }
 

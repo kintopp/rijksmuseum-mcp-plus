@@ -879,15 +879,15 @@ section("Date patterns (2026-03-21)");
 }
 {
   const r = parseProvenanceRaw("transferred to convent, 1713-24");
-  assertEq(r.events[0].dateYear, 1713, "date range 1713-24 → 1713");
+  assertEq(r.events[0].dateYear, 1719, "date range 1713-24 → 1719 (midpoint)");
 }
 {
   const r = parseProvenanceRaw("sold, 1792/93");
-  assertEq(r.events[0].dateYear, 1792, "date range 1792/93 → 1792");
+  assertEq(r.events[0].dateYear, 1793, "date range 1792/93 → 1793 (midpoint)");
 }
 {
   const r = parseProvenanceRaw("on loan to museum, 1983-2005");
-  assertEq(r.events[0].dateYear, 1983, "date range 1983-2005 → 1983");
+  assertEq(r.events[0].dateYear, 1994, "date range 1983-2005 → 1994 (midpoint)");
 }
 {
   const r = parseProvenanceRaw("collection Name, before or in 1691");
@@ -1126,6 +1126,65 @@ section("P2: SaleEvent 'sold for/with' role fix (#174)");
   const r = parseProvenanceRaw("sold with Museum Het Broekerhuis, 1887");
   const sellers = r.events[0].parties.filter(p => p.role === "seller");
   assertEq(sellers.length, 0, "'sold with' does not assign seller role");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("#92/#95: Pre-decimal price notation");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("sale, London, 1850, £0.13.0");
+  assertEq(r.events[0].price?.currency, "pounds", "#92: £.s.d currency");
+  assertEq(r.events[0].price?.amount, 0.65, "#92: £0.13.0 → 0.65");
+}
+{
+  const r = parseProvenanceRaw("sale, Amsterdam, 1780, fl. 1:50:-");
+  assertEq(r.events[0].price?.currency, "guilders", "#95: fl. X:Y:- currency");
+  assertEq(r.events[0].price?.amount, 3.5, "#95: fl. 1:50:- → 3.5");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("#153: New currency abbreviations");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("sale, London, 1850, 1000 gns");
+  assertEq(r.events[0].price?.currency, "guineas", "#153: gns → guineas");
+  assertEq(r.events[0].price?.amount, 1000, "#153: 1000 gns amount");
+}
+{
+  const r = parseProvenanceRaw("sale, Brussels, 1920, Bfr. 400");
+  assertEq(r.events[0].price?.currency, "belgian_francs", "#153: Bfr → belgian_francs");
+}
+{
+  const r = parseProvenanceRaw("sale, Paris, 1900, Ffrs 8550");
+  assertEq(r.events[0].price?.currency, "francs", "#153: Ffrs → francs");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("#159: Date qualifier edge cases");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("collection Name, possibly 1767");
+  assertEq(r.events[0].dateYear, 1767, "#159: 'possibly YYYY' extracts year");
+  assertEq(r.events[0].dateQualifier, "circa", "#159: 'possibly' → circa");
+}
+{
+  const r = parseProvenanceRaw("collection Name, 1858 or earlier");
+  assertEq(r.events[0].dateYear, 1858, "#159: 'YYYY or earlier' extracts year");
+  assertEq(r.events[0].dateQualifier, "before", "#159: 'or earlier' → before");
+}
+{
+  const r = parseProvenanceRaw("collection Name, early 1880s");
+  assertEq(r.events[0].dateYear, 1882, "#159: 'early 1880s' → 1882");
+  assertEq(r.events[0].dateQualifier, "circa", "#159: 'early NNNNs' → circa");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("#163: Date-in-party-name cleanup");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("first recorded in the museum in 1800/01");
+  const party = r.events[0].parties[0];
+  assert(party && !/1800/.test(party.name), "#163: '1800/01' stripped from party name");
 }
 
 // ══════════════════════════════════════════════════════════════════

@@ -2259,7 +2259,7 @@ function registerTools(
           objectNumber: optStr().describe("Get full provenance chain for a specific artwork (e.g. 'SK-A-2344'). Fast local lookup."),
           creator: optStr().describe("Artist name (partial match on creator, e.g. 'Rembrandt', 'Vermeer')."),
           currency: z.preprocess(stripNull,
-            z.enum(["guilders", "euros", "pounds", "francs", "dollars", "livres", "napoléons", "deutschmarks", "reichsmarks", "swiss_francs"]).optional(),
+            z.enum(["guilders", "euros", "pounds", "francs", "dollars", "livres", "napoléons", "deutschmarks", "reichsmarks", "swiss_francs", "guineas", "belgian_francs", "yen", "marks", "louis_d_or"]).optional(),
           ).describe("Price currency filter (exact match). Only used with layer='events'."),
           hasPrice: z.preprocess(stripNull, z.boolean().optional())
             .describe("If true, only events with recorded prices. Only used with layer='events'."),
