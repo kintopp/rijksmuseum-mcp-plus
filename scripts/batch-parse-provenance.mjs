@@ -285,12 +285,12 @@ if (batch.length > 0) {
 
 const CREDIT_LINE_RULES = [
   [/Gift|Schenking|geschonken/i, "gift"],
-  [/urchas|Aankoop|ekocht|aangekocht|verworven/i, "purchase"],
+  [/urchas|Aankoop|ekocht|aangekocht|verworven/i, "sale"],
   [/loan|Bruikleen/i, "loan"],
   [/equest|Legaat/i, "bequest"],
   [/Transfer|Overdracht/i, "transfer"],
 ];
-const MUSEUM_ACQUISITION_TYPES = new Set(["sale", "gift", "bequest", "loan", "transfer", "purchase"]);
+const MUSEUM_ACQUISITION_TYPES = new Set(["sale", "gift", "bequest", "loan", "transfer"]);
 
 let creditLineEnriched = 0;
 

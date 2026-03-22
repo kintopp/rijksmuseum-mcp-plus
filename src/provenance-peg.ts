@@ -298,6 +298,16 @@ export function parseProvenanceRaw(
       .replace(/\s{2,}/g, " ")
       .trim();
 
+    // #98: Skip phantom segments — entirely citation placeholders, bare lot ranges, or parenthetical notes
+    if (!working || /^(?:no\.\s*\d[\d–-]*|lot\s+\d+|\([^)]*\))$/i.test(working)) {
+      stats.total--;
+      continue;
+    }
+
+    // #101: Strip inline object number cross-references before parsing to prevent
+    // SK-A-3137 being parsed as year 3137
+    working = working.replace(/\((?:SK|BK|RP|NG|AK|NK)-[A-Z]+-[\d]+(?:\/[^)]+)?\)/g, "").replace(/\s{2,}/g, " ").trim();
+
     // Try PEG parse
     let event: RawProvenanceEvent;
     let ast: PegAstNode | null = null;

@@ -1129,6 +1129,38 @@ section("P2: SaleEvent 'sold for/with' role fix (#174)");
 }
 
 // ══════════════════════════════════════════════════════════════════
+section("#98: Citation phantom events filtered");
+// ══════════════════════════════════════════════════════════════════
+{
+  // Bare lot range should not produce an event
+  const r = parseProvenanceRaw("sale, Name, 1800; no. 564-638");
+  assertEq(r.events.length, 1, "#98: bare lot range filtered out");
+}
+{
+  // Parenthetical note should not produce an event
+  const r = parseProvenanceRaw("sale, Name, 1800; (for the complete lot with 24 plates)");
+  assertEq(r.events.length, 1, "#98: parenthetical note filtered out");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("#101: ObjectNumber not parsed as date year");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("together with (SK-A-3137/no. XX), to the museum, 1933");
+  assertEq(r.events[0].dateYear, 1933, "#101: SK-A-3137 not parsed as year");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("#152: Commission 'by or for' prefix");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("Commissioned by or for Willem Lodewijk (1560-1620)");
+  assertEq(r.events[0].transferType, "commission", "#152: commission type");
+  assert(!/^or for/i.test(r.events[0].parties[0]?.name), "#152: 'or for' stripped from name");
+  assert(/Willem/i.test(r.events[0].parties[0]?.name), "#152: Willem in name");
+}
+
+// ══════════════════════════════════════════════════════════════════
 section("#92/#95: Pre-decimal price notation");
 // ══════════════════════════════════════════════════════════════════
 {

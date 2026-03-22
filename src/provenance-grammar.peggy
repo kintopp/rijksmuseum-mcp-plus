@@ -454,7 +454,7 @@ SaleEvent
 // ─── Commission ─────────────────────────────────────────────────────
 
 CommissionEvent
-  = ("commissioned"i / "comissioned"i / "commissoned"i) _ ("by"i / "for"i / "as"i / "and"i) _ nameRaw:NameChars tail:Tail
+  = ("commissioned"i / "comissioned"i / "commissoned"i) _ ("by or for"i / "by"i / "for"i / "as"i / "and"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
