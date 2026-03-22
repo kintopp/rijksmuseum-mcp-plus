@@ -368,7 +368,13 @@ SaleEvent
 // ─── Commission ─────────────────────────────────────────────────────
 
 CommissionEvent
-  = ("commissioned"i / "comissioned"i) _ ("by"i / "for"i / "as"i / "and"i) _ nameRaw:NameChars tail:Tail
+  = ("commissioned"i / "comissioned"i / "commissoned"i) _ ("by"i / "for"i / "as"i / "and"i) _ nameRaw:NameChars tail:Tail
+    {
+      const nd = extractNameAndDates(nameRaw);
+      const rest = parseRest(tail);
+      return { type: "commission", parties: nd ? [{ ...nd, role: "patron" }] : [], ...rest };
+    }
+  / "founded"i _ "by"i _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -400,6 +406,8 @@ LoanEvent
     { const rest = parseRest(tail); return { type: "loan", parties: [], ...rest }; }
   / "on"i _ "display"i _ ("in"i / "at"i)? _? nameRaw:NameChars tail:Tail
     { return buildResult("loan", extractNameAndDates(nameRaw), null, parseRest(tail)); }
+  / "exhibited"i _ ("by"i / "at"i / "in"i) _ nameRaw:NameChars tail:Tail
+    { return buildResult("loan", extractNameAndDates(nameRaw), null, parseRest(tail)); }
 
 // ─── Transfer ───────────────────────────────────────────────────────
 
@@ -412,11 +420,15 @@ TransferEvent
     { return buildResult("transfer", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
   / ("sent"i / "removed"i / "dispatched"i) _ ("from"i / "by"i / "in"i / "when"i / "at"i / "and"i / "after"i)? tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
+  / "consigned"i _ "by"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("transfer", extractNameAndDates(nameRaw), "consignor", parseRest(tail)); }
+  / "divided"i _ "with"i tail:Tail
+    { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
 
 // ─── Bequest ────────────────────────────────────────────────────────
 
 BequestEvent
-  = ("bequeathed"i _ ("to"i / "by"i) / "by"i _ "bequest"i / "bequest"i / ("his"i / "her"i) _ "will"i) _ nameRaw:NameChars tail:Tail
+  = ("bequeathed"i _ ("to"i / "by"i) / "by"i _ "bequest"i / "bequest"i / ("his"i / "her"i) _ "will"i / "testament"i) _ nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -466,7 +478,7 @@ PurchaseEvent
 // ─── Gift ───────────────────────────────────────────────────────────
 
 GiftEvent
-  = ("donated"i / "donation"i / "gift"i / "given"i / "presented"i / "dedicated"i / "schenking"i) _ ("by"i / "to"i / "of"i / "van"i)? _? ("the"i _)? nameRaw:NameChars tail:Tail
+  = ("donated"i / "donation"i / "anonymous"i _ "donation"i / "gift"i / "given"i / "presented"i / "dedicated"i / "schenking"i / "send"i _ "by"i) _ ("by"i / "to"i / "of"i / "van"i)? _? ("the"i _)? nameRaw:NameChars tail:Tail
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
@@ -498,13 +510,13 @@ RestitutionEvent
       const rest = parseRest(tail);
       return { type: "restitution", parties: nd && nd.name ? [{ ...nd, role: "recipient" }] : [], ...rest };
     }
-  / "returned"i tail:Tail
+  / ("returned"i / "retrieved"i / "temporarily"i _ "returned"i) tail:Tail
     { const rest = parseRest(tail); return { type: "restitution", parties: [], ...rest }; }
 
 // ─── Deposit ────────────────────────────────────────────────────────
 
 DepositEvent
-  = ("on"i _ "deposit"i / "stored"i / "deposited"i / "kept"i / "installed"i / "placed"i / "depot"i) tail:Tail
+  = ("on"i _ "deposit"i / "stored"i / "deposited"i / "kept"i / "installed"i / "placed"i / "depot"i / "buried"i) tail:Tail
     { const rest = parseRest(tail); return { type: "deposit", parties: [], ...rest }; }
 
 // ─── Collection ─────────────────────────────────────────────────────
@@ -589,6 +601,8 @@ FromWhomEvent
     { return buildResult("sale", extractNameAndDates(nameRaw), "seller", parseRest(tail)); }
   / "from"i _ ("the"i _)? "estate"i _ ("of"i _)? nameRaw:NameChars tail:Tail
     { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
+  / ("the"i _)? "heirs"i _ ("of"i _) nameRaw:NameChars tail:Tail
+    { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
   / "from"i _ ("the"i _)? !("collection"i / "estate"i) nameRaw:NameChars tail:Tail
     &{ return /\bto\b/i.test(tail); }
     {
@@ -639,6 +653,7 @@ RelationWord "relation word"
      / "grandnephew"i / "grandniece"i
      / "life companion"i
      / "sons"i / "son"i / "daughters"i / "daughter"i / "daugter"i / "daugther"i / "widower"i / "widow"i
+     / "distant cousin"i / "spouse"i / "relative"i / "successor"i / "descendants"i
      / "husband"i / "wife"i / "nephew"i / "niece"i
      / "great-great-granddaughter"i / "great-great-grandson"i / "great great granddaughter"i / "great great grandson"i
      / "great-granddaughter"i / "great-grandson"i / "great granddaughter"i / "great grandson"i
@@ -759,14 +774,24 @@ StandardPhraseEvent
     { return buildResult("transfer", extractNameAndDates(nameRaw), "recipient", parseRest(tail)); }
   / "lottery"i _ ("held"i _ "by"i _)? nameRaw:NameChars tail:Tail
     { return buildResult("sale", extractNameAndDates(nameRaw), "auctioneer", parseRest(tail)); }
-  / ("unidentified"i / "unknown"i) _ "collection"i tail:Tail
+  / ("unidentified"i / "unknown"i) _ ("collection"i / "collector"i) tail:Tail
     { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
   / ("property"i / "archives"i) _ "of"i _ nameRaw:NameChars tail:Tail
     { return buildResult("collection", extractNameAndDates(nameRaw), "collector", parseRest(tail)); }
   / "entered"i _ "the"i _ "museum"i tail:Tail
     { const rest = parseRest(tail); return { type: "transfer", parties: [], ...rest }; }
-  / ("commissoned"i / "comissioned"i) _ ("by"i / "for"i) _ nameRaw:NameChars tail:Tail
-    { return buildResult("commission", extractNameAndDates(nameRaw), "patron", parseRest(tail)); }
+  / ("also"i _)? ("recorded"i / "listed"i / "displayed"i) _ ("in"i / "at"i / "by"i)? _? nameRaw:NameChars tail:Tail
+    { return buildResult("collection", extractNameAndDates(nameRaw), null, parseRest(tail)); }
+  / "appraisal"i tail:Tail
+    { const rest = parseRest(tail); return { type: "inventory", parties: [], ...rest }; }
+  / ("possibly"i / "probably"i / "an"i / "a"i) _ ([a-zA-Z]+ _)? ("private"i _)? "collection"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
+  / "'s"i _ "Rijks"i _ "verzameling"i tail:Tail
+    { const rest = parseRest(tail); return { type: "collection", parties: [], ...rest }; }
+  / "erven"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("inheritance", extractNameAndDates(nameRaw), "heir", parseRest(tail)); }
+  / "studio"i _ "estate"i _ "of"i _ nameRaw:NameChars tail:Tail
+    { return buildResult("inheritance", extractNameAndDates(nameRaw), "deceased", parseRest(tail)); }
 
 // ─── Generic owner (catch-all) ──────────────────────────────────────
 

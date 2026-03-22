@@ -212,6 +212,11 @@ export function splitEvents(
   // Normalize broken words from line-break artefacts ("coll ection" → "collection")
   text = text.replace(/\bcoll\s+ection\b/gi, "collection");
 
+  // Normalize common provenance typos
+  text = text.replace(/\bprovance\b/gi, "provenance");
+  text = text.replace(/\brecoded\b/gi, "recorded");
+  text = text.replace(/\brecorderd\b/gi, "recorded");
+
   // Decode &amp; before splitting — the ';' in '&amp;' is a false event delimiter.
   // Other entities (&lt; &gt; etc.) don't contain ';' at a position that causes splits,
   // and full stripHtml() runs per-segment after splitting.
@@ -293,12 +298,22 @@ export function splitEvents(
 
     // Skip cross-reference preambles and provenance-redirect headers
     if (/^For (?:both )?the present /i.test(trimmed)) continue;
-    if (/^See (?:the )?provenance (?:for|of) /i.test(trimmed)) continue;
+    if (/^See (?:the )?proven?a?n?ce (?:for|of) /i.test(trimmed)) continue;  // includes "provance" typo
 
-    // Skip fragment artefacts: bare years, orphaned connectors
+    // Skip fragment artefacts: bare years, orphaned connectors, bracketed ellipsis
     const fragStripped = trimmed.replace(/__CIT_\d+__/g, "").trim();
     if (/^\d{4}$/.test(fragStripped)) continue;                    // bare year
     if (/^(?:et al\.?|_ and _)$/i.test(fragStripped)) continue;    // orphaned connectors
+    if (/^\[…\]$/.test(fragStripped)) continue;                    // bracketed ellipsis
+    if (/^\^?\[Copy\b/i.test(fragStripped)) continue;             // "^[Copy RKD.]" artefacts
+    if (/^,+$/.test(fragStripped)) continue;                       // bare commas
+
+    // Skip non-provenance text
+    if (/^whereabouts unknown$/i.test(fragStripped)) continue;
+    if (/^(?:was |the .+ was )demolished\b/i.test(fragStripped)) continue;
+    if (/^incorporated in\b/i.test(fragStripped)) continue;
+    if (/^mounted on\b/i.test(fragStripped)) continue;
+    if (/^application for a license\b/i.test(fragStripped)) continue;
 
     results.push({ text: trimmed, gap });
   }
