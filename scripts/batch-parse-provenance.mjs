@@ -172,8 +172,8 @@ const insertPeriod = (dryRun || layer1Only) ? null : db.prepare(`
 // Using .all() not .iterate() — better-sqlite3 iterators hold an open cursor that
 // conflicts with transactions. 48K rows × short text ≈ 20MB, well within budget.
 const query = limit
-  ? `SELECT art_id, provenance_text FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != '' LIMIT ?`
-  : `SELECT art_id, provenance_text FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != ''`;
+  ? `SELECT art_id, provenance_text, date_earliest, date_latest FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != '' LIMIT ?`
+  : `SELECT art_id, provenance_text, date_earliest, date_latest FROM artworks WHERE provenance_text IS NOT NULL AND provenance_text != ''`;
 const rows = limit ? db.prepare(query).all(limit) : db.prepare(query).all();
 
 console.log(`Found ${rows.length} artworks with provenance text\n`);
@@ -251,7 +251,10 @@ for (const row of rows) {
 
   let periods = null;
   if (!layer1Only && !result.isCrossRef) {
-    periods = interpretPeriods(result.events);
+    periods = interpretPeriods(result.events, {
+      creationDateEarliest: row.date_earliest ?? null,
+      creationDateLatest: row.date_latest ?? null,
+    });
     totalPeriods += periods.length;
   }
 

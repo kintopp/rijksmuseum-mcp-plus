@@ -174,11 +174,19 @@ function assignRoles(event: RawProvenanceEvent): RoleAssignment {
 
 // ─── Period reconstruction ──────────────────────────────────────────
 
+/** Options for period interpretation. */
+export interface InterpretOptions {
+  /** Artwork creation date range — used to suppress end-year inference
+   *  when next event's date is likely a creation date, not a transfer date. */
+  creationDateEarliest?: number | null;
+  creationDateLatest?: number | null;
+}
+
 /**
  * Transform Layer 1 events into Layer 2 ownership periods.
  * Skips cross-reference events.
  */
-export function interpretPeriods(events: RawProvenanceEvent[]): ProvenancePeriod[] {
+export function interpretPeriods(events: RawProvenanceEvent[], options?: InterpretOptions): ProvenancePeriod[] {
   const substantive = events.filter(e => !e.isCrossRef);
   const periods: ProvenancePeriod[] = [];
 
@@ -203,9 +211,28 @@ export function interpretPeriods(events: RawProvenanceEvent[]): ProvenancePeriod
     if (next) {
       const nextTemporal = parseTemporalBounds(next.dateExpression, next.dateYear, next.dateQualifier);
       if (nextTemporal.earliest !== null) {
-        endYear = nextTemporal.earliest;
-        endDate = next.dateExpression;
-        derivation.end_year = "inferred_from_next";
+        // Suppress if this looks like a creation date leak: the next event's year
+        // falls within the artwork's creation date range AND the next event has a
+        // weak transfer type (unknown/collection) with no substantive parties.
+        // A "weak" event is one with no parties, or only a single bare-name
+        // party with no role (typical of GenericOwnerEvent catch-all).
+        const isWeakEvent =
+          next.parties.length === 0 ||
+          (next.parties.length === 1 && !next.parties[0].role);
+
+        const isCreationDateLeak =
+          options?.creationDateEarliest != null &&
+          options?.creationDateLatest != null &&
+          nextTemporal.earliest >= options.creationDateEarliest &&
+          nextTemporal.earliest <= options.creationDateLatest &&
+          (next.transferType === "unknown" || next.transferType === "collection") &&
+          isWeakEvent;
+
+        if (!isCreationDateLeak) {
+          endYear = nextTemporal.earliest;
+          endDate = next.dateExpression;
+          derivation.end_year = "inferred_from_next";
+        }
       }
     }
 

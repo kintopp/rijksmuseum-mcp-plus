@@ -1074,6 +1074,74 @@ section("P2: SaleEvent 'sold for/with' role fix (#174)");
 }
 
 // ══════════════════════════════════════════════════════════════════
+section("#88: Layer 2 creation date leak suppression");
+// ══════════════════════════════════════════════════════════════════
+{
+  // Next event's year overlaps artwork creation date + weak type + no parties → suppress
+  const r = parseProvenanceRaw(
+    "collection Jan de Groot (1780-1830), Amsterdam, 1800; unknown, 1550"
+  );
+  const periods = interpretPeriods(r.events, {
+    creationDateEarliest: 1540,
+    creationDateLatest: 1560,
+  });
+  assert(periods[0].endYear !== 1550, "#88: creation date not used as period end year");
+  assertEq(periods[0].endYear, null, "#88: end year is null when suppressed");
+}
+{
+  // Normal case: no creation date overlap → end year inferred
+  const r = parseProvenanceRaw(
+    "collection A, Amsterdam, 1800; purchased by B, 1850"
+  );
+  const periods = interpretPeriods(r.events);
+  assertEq(periods[0].endYear, 1850, "#88: normal end year inference works without options");
+}
+{
+  // Options present but non-overlapping → end year still inferred
+  const r = parseProvenanceRaw(
+    "collection A, Amsterdam, 1800; purchased by B, 1850"
+  );
+  const periods = interpretPeriods(r.events, {
+    creationDateEarliest: 1700,
+    creationDateLatest: 1720,
+  });
+  assertEq(periods[0].endYear, 1850, "#88: non-overlapping creation dates don't suppress");
+}
+{
+  // Null creation dates → no suppression (safe default)
+  const r = parseProvenanceRaw(
+    "collection A, Amsterdam, 1800; unknown, 1550"
+  );
+  const periods = interpretPeriods(r.events, {
+    creationDateEarliest: null,
+    creationDateLatest: null,
+  });
+  assertEq(periods[0].endYear, 1550, "#88: null creation dates don't suppress");
+}
+{
+  // Next event has a party with a role → not suppressed even if date overlaps
+  const r = parseProvenanceRaw(
+    "collection A, Amsterdam, 1800; purchased by B, 1550"
+  );
+  const periods = interpretPeriods(r.events, {
+    creationDateEarliest: 1540,
+    creationDateLatest: 1560,
+  });
+  assertEq(periods[0].endYear, 1550, "#88: events with roled parties are not suppressed");
+}
+{
+  // Next event has strong transfer type → not suppressed even if date overlaps
+  const r = parseProvenanceRaw(
+    "collection A, Amsterdam, 1800; sale, 1550"
+  );
+  const periods = interpretPeriods(r.events, {
+    creationDateEarliest: 1540,
+    creationDateLatest: 1560,
+  });
+  assertEq(periods[0].endYear, 1550, "#88: strong transfer type not suppressed");
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 
