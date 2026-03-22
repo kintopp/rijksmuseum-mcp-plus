@@ -61,7 +61,7 @@ export function parseTemporalBounds(
   year: number | null,
   qualifier: string | null
 ): { earliest: number | null; latest: number | null; rule: string } {
-  if (!year && !expr) return { earliest: null, latest: null, rule: "no_date" };
+  if (year === null && !expr) return { earliest: null, latest: null, rule: "no_date" };
 
   if (qualifier === "before") {
     return { earliest: null, latest: year, rule: "before_year" };
@@ -69,7 +69,7 @@ export function parseTemporalBounds(
   if (qualifier === "after") {
     return { earliest: year, latest: null, rule: "after_year" };
   }
-  if (qualifier === "circa" && year) {
+  if (qualifier === "circa" && year !== null) {
     return { earliest: year - 10, latest: year + 10, rule: "circa_year" };
   }
 
@@ -82,7 +82,7 @@ export function parseTemporalBounds(
   }
 
   // Exact or bare year
-  if (year) {
+  if (year !== null) {
     return { earliest: year, latest: year, rule: "exact_year" };
   }
 

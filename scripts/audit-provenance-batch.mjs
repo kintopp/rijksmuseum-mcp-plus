@@ -177,9 +177,14 @@ function sampleSilentErrors() {
     // Bias toward complex records (3+ events) — where parsing errors cluster
     // Optional era filter: "pre1800" → only artworks with earliest event date < 1800
     const eraYear = eraFilter ? parseInt(eraFilter.replace(/\D/g, ""), 10) : null;
+    if (eraYear != null && !Number.isFinite(eraYear)) {
+      console.error(`Invalid --era value: ${eraFilter}`);
+      process.exit(1);
+    }
     const eraClause = eraYear
-      ? `AND e.artwork_id IN (SELECT artwork_id FROM provenance_events WHERE date_year IS NOT NULL GROUP BY artwork_id HAVING MIN(date_year) < ${eraYear})`
+      ? `AND e.artwork_id IN (SELECT artwork_id FROM provenance_events WHERE date_year IS NOT NULL GROUP BY artwork_id HAVING MIN(date_year) < ?)`
       : "";
+    const eraBindings = eraYear ? [eraYear] : [];
     artworkIds = db.prepare(`
       SELECT artwork_id FROM (
         SELECT e.artwork_id, COUNT(*) AS event_count
@@ -190,7 +195,7 @@ function sampleSilentErrors() {
         GROUP BY e.artwork_id
         HAVING event_count >= 3
       ) ORDER BY RANDOM() LIMIT ?
-    `).all(sampleSize).map(r => r.artwork_id);
+    `).all(...eraBindings, sampleSize).map(r => r.artwork_id);
   }
   return fetchRecords(artworkIds, { periods: true });
 }
@@ -2160,6 +2165,16 @@ async function main() {
     };
     writeFileSync(outputPath, JSON.stringify(output, null, 2));
     printReport(cfg, report, cost);
+
+    // Mark state file as complete (mirrors the normal path)
+    const stateFile = outputPath.replace(/\.json$/, ".state.json");
+    if (existsSync(stateFile)) {
+      try {
+        const state = JSON.parse(readFileSync(stateFile, "utf8"));
+        state.completedAt = new Date().toISOString();
+        writeFileSync(stateFile, JSON.stringify(state, null, 2));
+      } catch {}
+    }
     return;
   }
 

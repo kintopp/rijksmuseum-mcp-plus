@@ -257,7 +257,7 @@ export interface ProvenanceEventRow {
   citations: { text: string }[];
   isCrossRef: boolean;
   crossRefTarget: string | null;
-  parseMethod: "peg" | "regex_fallback" | "cross_ref";
+  parseMethod: "peg" | "regex_fallback" | "cross_ref" | "credit_line";
   categoryMethod: string | null;
   enrichmentReasoning: string | null;
   matched: boolean;
@@ -2661,7 +2661,7 @@ export class VocabularyDb {
       dateQualifier: row.date_qualifier,
       location: row.location,
       price: row.price_amount != null
-        ? { amount: row.price_amount, currency: row.price_currency! }
+        ? { amount: row.price_amount, currency: row.price_currency ?? "unknown" }
         : null,
       saleDetails: row.sale_details,
       citations,
@@ -2721,9 +2721,9 @@ export class VocabularyDb {
       return this.buildProvenanceEvent(r, matched);
     });
 
-    // Enrich parties with provenance_parties reasoning if any event has LLM enrichment
-    const hasEnrichment = rows.some(r => r.category_method?.startsWith("llm") || r.category_method?.startsWith("rule"));
-    if (hasEnrichment && this.hasPartyTable_ && this.stmtPartyEnrichment_) {
+    // Enrich parties with provenance_parties reasoning (position_method, enrichment_reasoning).
+    // The query self-filters on position_method LIKE 'llm%', so it's cheap for artworks without enrichment.
+    if (this.stmtPartyEnrichment_) {
       const partyRows = this.stmtPartyEnrichment_.all(first.artwork_id) as {
         sequence: number; party_idx: number; position_method: string | null; enrichment_reasoning: string | null;
       }[];
@@ -2760,6 +2760,12 @@ export class VocabularyDb {
     }
 
     const maxResults = Math.min(params.maxResults ?? 10, 50);
+    const warnings: string[] = [];
+
+    // sortBy=duration only applies to layer='periods'
+    if (params.sortBy === "duration") {
+      warnings.push("sortBy='duration' is only supported with layer='periods'. Sort ignored; results are in default order.");
+    }
 
     // ── objectNumber fast path ──
     if (params.objectNumber) {
@@ -2770,8 +2776,8 @@ export class VocabularyDb {
         WHERE a.object_number = ?
         ORDER BY pe.sequence
       `).all(params.objectNumber) as ProvenanceEventDbRow[];
-      if (rows.length === 0) return { totalArtworks: 0, results: [] };
-      return { totalArtworks: 1, results: [this.buildProvenanceArtwork(rows, true)] };
+      if (rows.length === 0) return { totalArtworks: 0, results: [], ...(warnings.length > 0 && { warnings }) };
+      return { totalArtworks: 1, results: [this.buildProvenanceArtwork(rows, false, params)], ...(warnings.length > 0 && { warnings }) };
     }
 
     // SYNC: conditions here must mirror eventMatchesFilters() for matched-flag accuracy.
@@ -2854,9 +2860,9 @@ export class VocabularyDb {
       sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
       orderBy = `ORDER BY sa.sort_val ${dir}`;
     } else if (params.sortBy === "dateYear") {
-      orderBy = params.sortOrder === "asc"
-        ? `ORDER BY COALESCE(pe.date_year, 9999) ${dir}`
-        : `ORDER BY pe.date_year ${dir} NULLS LAST`;
+      sortCte = "WITH sort_agg AS (SELECT artwork_id, MIN(date_year) AS sort_val FROM provenance_events WHERE date_year IS NOT NULL GROUP BY artwork_id)";
+      sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
+      orderBy = `ORDER BY sa.sort_val ${dir} NULLS LAST`;
     }
 
     const offset = params.offset ?? 0;
@@ -2912,7 +2918,7 @@ export class VocabularyDb {
     }
 
     const capped = totalArtworks >= COUNT_CAP;
-    return { totalArtworks, totalArtworksCapped: capped || undefined, results };
+    return { totalArtworks, totalArtworksCapped: capped || undefined, results, ...(warnings.length > 0 && { warnings }) };
   }
 
   // ── Layer 2: Provenance Periods ───────────────────────────────────
@@ -3025,21 +3031,19 @@ export class VocabularyDb {
         ORDER BY pp.sequence
       `).all(params.objectNumber) as ProvenancePeriodDbRow[];
       if (rows.length === 0) return { totalArtworks: 0, results: [] };
-      return { totalArtworks: 1, results: [this.buildProvenanceArtworkPeriods(rows, true)] };
+      return { totalArtworks: 1, results: [this.buildProvenanceArtworkPeriods(rows, false, params)] };
     }
 
     // ── Build WHERE conditions ──
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
-    // ownerName and party both target the same column — ownerName takes precedence
+    // ownerName and party both target the same column — ownerName takes precedence.
+    // Always filter on pp.owner_name (the period's inferred owner), not provenance_parties
+    // (event-level table), to avoid false-positive matches at the period layer.
     const ownerFilter = params.ownerName ?? params.party;
     if (ownerFilter) {
-      if (this.hasPartyTable_) {
-        conditions.push("pp.artwork_id IN (SELECT pp2.artwork_id FROM provenance_parties pp2 WHERE pp2.party_name LIKE '%' || ? || '%')");
-      } else {
-        conditions.push("pp.owner_name LIKE '%' || ? || '%'");
-      }
+      conditions.push("pp.owner_name LIKE '%' || ? || '%'");
       bindings.push(ownerFilter);
     }
     if (params.acquisitionMethod) {

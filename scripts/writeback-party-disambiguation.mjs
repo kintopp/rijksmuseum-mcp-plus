@@ -92,101 +92,101 @@ function positionToRole(position) {
 
 let splitsDone = 0, renamesDone = 0, deletesDone = 0, errors = 0;
 
+// Group items by event to avoid read-after-write conflicts when multiple
+// disambiguations target the same (artwork_id, sequence).
+const byEvent = new Map();
+for (const item of items) {
+  const key = `${item.artwork_id}:${item.event_sequence}`;
+  if (!byEvent.has(key)) byEvent.set(key, []);
+  byEvent.get(key).push(item);
+}
+
 const writeBatch = db.transaction(() => {
-  for (const item of items) {
-    const { artwork_id, event_sequence: seq, original_party_idx: origIdx, action, replacement_parties } = item;
+  for (const [, eventItems] of byEvent) {
+    const { artwork_id, event_sequence: seq } = eventItems[0];
 
-    // Get current parties for this event
-    const currentParties = getParties.all(artwork_id, seq);
+    // Read parties ONCE for this event
+    let currentParties = getParties.all(artwork_id, seq);
     if (currentParties.length === 0) {
-      console.warn(`  WARN: No parties for artwork ${artwork_id} seq ${seq} — skipping`);
-      errors++;
+      console.warn(`  WARN: No parties for artwork ${artwork_id} seq ${seq} — skipping ${eventItems.length} item(s)`);
+      errors += eventItems.length;
       continue;
     }
 
-    const origParty = currentParties.find(p => p.party_idx === origIdx);
-    if (!origParty) {
-      console.warn(`  WARN: No party at idx ${origIdx} for artwork ${artwork_id} seq ${seq} — skipping`);
-      errors++;
-      continue;
+    // Sort by descending origIdx so that splits/deletes don't shift indices
+    // of items processed later in the same event.
+    eventItems.sort((a, b) => b.original_party_idx - a.original_party_idx);
+
+    // Apply all actions to an in-memory party list, then write once
+    let partyList = currentParties.map(p => ({ ...p }));
+    let hadError = false;
+
+    for (const item of eventItems) {
+      const { original_party_idx: origIdx, action, replacement_parties } = item;
+      const origParty = partyList.find((_, i) => {
+        // Find the party that originally was at origIdx — we track by scanning
+        // the list since indices shift. Use the original party_idx stored in each entry.
+        return partyList[i]._origIdx === origIdx;
+      }) ?? partyList[origIdx]; // fallback to positional
+
+      // Tag parties with their original index on first pass
+      if (!partyList[0]?._origIdx && partyList[0]?._origIdx !== 0) {
+        partyList = partyList.map((p, i) => ({ ...p, _origIdx: p.party_idx ?? i }));
+      }
+
+      const origEntry = partyList.find(p => p._origIdx === origIdx);
+      if (!origEntry) {
+        console.warn(`  WARN: No party at idx ${origIdx} for artwork ${artwork_id} seq ${seq} — skipping`);
+        errors++;
+        hadError = true;
+        continue;
+      }
+
+      const entryPos = partyList.indexOf(origEntry);
+
+      if (action === "delete") {
+        partyList.splice(entryPos, 1);
+        deletesDone++;
+
+      } else if (action === "rename") {
+        const repl = replacement_parties[0];
+        if (!repl) { errors++; hadError = true; continue; }
+        partyList[entryPos] = {
+          ...origEntry,
+          party_name: repl.name,
+          party_role: repl.role_hint || positionToRole(repl.position),
+          party_position: repl.position,
+          position_method: "llm_disambiguation",
+        };
+        renamesDone++;
+
+      } else if (action === "split") {
+        const newParties = replacement_parties.map(repl => ({
+          party_name: repl.name,
+          party_dates: null,
+          party_role: repl.role_hint || positionToRole(repl.position),
+          party_position: repl.position,
+          position_method: "llm_disambiguation",
+          uncertain: origEntry.uncertain,
+          _origIdx: -1, // new parties have no original index
+        }));
+        partyList.splice(entryPos, 1, ...newParties);
+        splitsDone++;
+      }
     }
 
-    if (action === "delete") {
-      // Remove the party row, re-index remaining parties
-      const remaining = currentParties.filter(p => p.party_idx !== origIdx);
-      deleteAllPartiesForEvent.run(artwork_id, seq);
-      for (let i = 0; i < remaining.length; i++) {
-        const p = remaining[i];
-        insertParty.run(artwork_id, seq, i, p.party_name, p.party_dates, p.party_role, p.party_position, p.position_method, p.uncertain);
-      }
-      // Update JSON
-      const jsonParties = remaining.map(p => ({
-        name: p.party_name, dates: p.party_dates, uncertain: !!p.uncertain,
-        role: p.party_role, position: p.party_position,
-      }));
-      updatePartiesJson.run(JSON.stringify(jsonParties), artwork_id, seq);
-      deletesDone++;
-
-    } else if (action === "rename") {
-      // Replace the party with corrected name + position
-      const repl = replacement_parties[0];
-      if (!repl) { errors++; continue; }
-
-      const remaining = currentParties.filter(p => p.party_idx !== origIdx);
-      const newParty = {
-        party_name: repl.name,
-        party_dates: origParty.party_dates, // preserve dates
-        party_role: repl.role_hint || positionToRole(repl.position),
-        party_position: repl.position,
-        position_method: "llm_disambiguation",
-        uncertain: origParty.uncertain,
-      };
-
-      // Re-insert all parties with corrected one in place
-      deleteAllPartiesForEvent.run(artwork_id, seq);
-      const allParties = [...currentParties];
-      allParties[origIdx] = { ...origParty, ...newParty };
-      for (let i = 0; i < allParties.length; i++) {
-        const p = allParties[i];
-        insertParty.run(artwork_id, seq, i, p.party_name, p.party_dates, p.party_role ?? p.party_role, p.party_position, p.position_method, p.uncertain);
-      }
-      // Update JSON
-      const jsonParties = allParties.map(p => ({
-        name: p.party_name, dates: p.party_dates, uncertain: !!p.uncertain,
-        role: p.party_role, position: p.party_position,
-      }));
-      updatePartiesJson.run(JSON.stringify(jsonParties), artwork_id, seq);
-      renamesDone++;
-
-    } else if (action === "split") {
-      // Replace original party with N replacement parties, preserve other parties
-      const before = currentParties.filter(p => p.party_idx < origIdx);
-      const after = currentParties.filter(p => p.party_idx > origIdx);
-
-      const newParties = replacement_parties.map(repl => ({
-        party_name: repl.name,
-        party_dates: null,
-        party_role: repl.role_hint || positionToRole(repl.position),
-        party_position: repl.position,
-        position_method: "llm_disambiguation",
-        uncertain: origParty.uncertain,
-      }));
-
-      const allParties = [...before, ...newParties, ...after];
-
-      deleteAllPartiesForEvent.run(artwork_id, seq);
-      for (let i = 0; i < allParties.length; i++) {
-        const p = allParties[i];
-        insertParty.run(artwork_id, seq, i, p.party_name, p.party_dates, p.party_role, p.party_position, p.position_method, p.uncertain);
-      }
-      // Update JSON
-      const jsonParties = allParties.map(p => ({
-        name: p.party_name, dates: p.party_dates, uncertain: !!p.uncertain,
-        role: p.party_role, position: p.party_position,
-      }));
-      updatePartiesJson.run(JSON.stringify(jsonParties), artwork_id, seq);
-      splitsDone++;
+    // Write the final party list to DB
+    deleteAllPartiesForEvent.run(artwork_id, seq);
+    for (let i = 0; i < partyList.length; i++) {
+      const p = partyList[i];
+      insertParty.run(artwork_id, seq, i, p.party_name, p.party_dates, p.party_role, p.party_position, p.position_method, p.uncertain);
     }
+    // Update JSON column
+    const jsonParties = partyList.map(p => ({
+      name: p.party_name, dates: p.party_dates, uncertain: !!p.uncertain,
+      role: p.party_role, position: p.party_position,
+    }));
+    updatePartiesJson.run(JSON.stringify(jsonParties), artwork_id, seq);
   }
 });
 
