@@ -19,7 +19,7 @@
     "dev:viewer": "vite dev -c apps/artwork-viewer/vite.config.ts",
     "lint": "eslint src/",
     "test": "node scripts/tests/test-pure-functions.mjs",
-    "test:all": "ENABLE_FIND_SIMILAR=true node scripts/tests/run-all.mjs"
+    "test:all": "node scripts/tests/test-pure-functions.mjs && node scripts/tests/test-provenance-parser.mjs && node scripts/tests/test-provenance-peg.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
