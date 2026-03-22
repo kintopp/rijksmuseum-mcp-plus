@@ -525,7 +525,7 @@ export class VocabularyDb {
   private hasDates = false;
   private hasNormLabels = false;
   private hasCoordinates = false;
-  private hasIntMappings = false;
+
   private hasRightsLookup = false;
   private hasPersonNames = false;
   private hasImageColumn = false;
@@ -589,16 +589,11 @@ export class VocabularyDb {
    * look up a small set of artwork_ids across all fields.
    */
   private buildFieldClause(fields: string[], noFieldIndex = false): { clause: string; bindings: (string | number)[] } {
-    if (this.hasIntMappings) {
-      const fieldIds = fields.map((f) => this.requireFieldId(f));
-      const col = noFieldIndex ? "+m.field_id" : "m.field_id";
-      return fieldIds.length === 1
-        ? { clause: `${col} = ?`, bindings: fieldIds }
-        : { clause: `${col} IN (${fieldIds.map(() => "?").join(", ")})`, bindings: fieldIds };
-    }
-    return fields.length === 1
-      ? { clause: "m.field = ?", bindings: fields }
-      : { clause: `m.field IN (${fields.map(() => "?").join(", ")})`, bindings: fields };
+    const fieldIds = fields.map((f) => this.requireFieldId(f));
+    const col = noFieldIndex ? "+m.field_id" : "m.field_id";
+    return fieldIds.length === 1
+      ? { clause: `${col} = ?`, bindings: fieldIds }
+      : { clause: `${col} IN (${fieldIds.map(() => "?").join(", ")})`, bindings: fieldIds };
   }
 
   constructor() {
@@ -628,11 +623,9 @@ export class VocabularyDb {
       this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm")
         && this.columnExists("vocabulary", "label_nl_norm");
       this.hasCoordinates = this.columnExists("vocabulary", "lat") && this.hasGeocodedData();
-      this.hasIntMappings = this.tableExists("field_lookup") && this.columnExists("artworks", "art_id");
-      if (this.hasIntMappings) {
-        const fieldRows = this.db.prepare("SELECT id, name FROM field_lookup").all() as { id: number; name: string }[];
-        for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
-      }
+      // Integer-encoded mappings (field_lookup + art_id) — required since v0.13
+      const fieldRows = this.db.prepare("SELECT id, name FROM field_lookup").all() as { id: number; name: string }[];
+      for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
       this.hasRightsLookup = this.tableExists("rights_lookup");
       this.hasPersonNames = this.tableExists("person_names_fts");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
@@ -661,11 +654,9 @@ export class VocabularyDb {
       this.stmtLookupArtwork = this.db.prepare(
         "SELECT title, title_all_text, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
       );
-      if (this.hasIntMappings) {
-        this.stmtLookupArtId = this.db.prepare(
-          "SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?"
-        );
-      }
+      this.stmtLookupArtId = this.db.prepare(
+        "SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?"
+      );
 
       // Detect person enrichment columns (birth_year, death_year, gender, bio, wikidata_id)
       if (this.columnExists("vocabulary", "birth_year") && this.columnExists("vocabulary", "gender")) {
@@ -688,7 +679,7 @@ export class VocabularyDb {
         this.hasDates && "dates",
         this.hasNormLabels && "normLabels",
         this.hasCoordinates && "coordinates",
-        this.hasIntMappings && "intMappings",
+        "intMappings",
         this.hasPersonNames && "personNames",
         this.hasImageColumn && "hasImage",
         this.hasImportance && "importance",
@@ -743,15 +734,11 @@ export class VocabularyDb {
       const chunk = objectNumbers.slice(i, i + CHUNK);
       const placeholders = chunk.map(() => "?").join(", ");
 
-      const sql = this.hasIntMappings
-        ? `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+      const sql = `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
            FROM mappings m
            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
            JOIN artworks a ON m.artwork_id = a.art_id
-           WHERE a.object_number IN (${placeholders}) AND ${fieldClause}`
-        : `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
-           FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
-           WHERE m.object_number IN (${placeholders}) AND ${fieldClause}`;
+           WHERE a.object_number IN (${placeholders}) AND ${fieldClause}`;
 
       const rows = this.db.prepare(sql).all(...chunk, ...fieldBindings) as { object_number: string; label: string }[];
       for (const r of rows) {
@@ -804,7 +791,7 @@ export class VocabularyDb {
    */
   reconstructSourceText(artIds: number[]): Map<number, string> {
     const result = new Map<number, string>();
-    if (!this.db || !this.hasIntMappings || artIds.length === 0) return result;
+    if (!this.db || artIds.length === 0) return result;
 
     const CHUNK = 500;
 
@@ -847,7 +834,7 @@ export class VocabularyDb {
 
   /** Lazily initialise the Iconclass IDF cache. ~2s cold, <0.5s warm. */
   private ensureIconclassCache(): void {
-    if (this.notationDf || !this.db || !this.hasIntMappings) return;
+    if (this.notationDf || !this.db) return;
     const subjectFieldId = this.requireFieldId("subject");
 
     // Build noise ID set
@@ -888,7 +875,7 @@ export class VocabularyDb {
    * Scores by depth × IDF weighted overlap.
    */
   findSimilarByIconclass(objectNumber: string, maxResults: number): IconclassSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
+    if (!this.db) return null;
     this.ensureIconclassCache();
     if (!this.notationDf) return null;
 
@@ -993,7 +980,7 @@ export class VocabularyDb {
 
   /** Lazily initialise lineage qualifier map and creator IDF cache. */
   private ensureLineageCache(): void {
-    if (this.lineageQualifierMap || !this.db || !this.hasIntMappings) return;
+    if (this.lineageQualifierMap || !this.db) return;
     const qualFieldId = this.requireFieldId("attribution_qualifier");
     const creatorFieldId = this.requireFieldId("creator");
 
@@ -1044,7 +1031,7 @@ export class VocabularyDb {
    * Scores by qualifier-strength × creator-IDF.
    */
   findSimilarByLineage(objectNumber: string, maxResults: number): LineageSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
+    if (!this.db) return null;
     this.ensureLineageCache();
     if (!this.lineageQualifierMap || !this.lineageCreatorDf) return null;
 
@@ -1168,7 +1155,7 @@ export class VocabularyDb {
 
   /** Lazily initialise the depicted person IDF cache. */
   private ensurePersonCache(): void {
-    if (this.personDf || !this.db || !this.hasIntMappings) return;
+    if (this.personDf || !this.db) return;
     const subjectFieldId = this.requireFieldId("subject");
 
     // IDF: count artworks per depicted person
@@ -1280,7 +1267,7 @@ export class VocabularyDb {
    * Scores by IDF-weighted overlap.
    */
   findSimilarByDepictedPerson(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
+    if (!this.db) return null;
     this.ensurePersonCache();
     if (!this.personDf) return null;
 
@@ -1310,7 +1297,7 @@ export class VocabularyDb {
 
   /** Lazily initialise the depicted place IDF cache with TGN + children-count filtering. */
   private ensurePlaceCache(): void {
-    if (this.placeDf || !this.db || !this.hasIntMappings) return;
+    if (this.placeDf || !this.db) return;
     const subjectFieldId = this.requireFieldId("subject");
 
     // Build exclusion set: TGN places + places with >20 children (single-pass GROUP BY)
@@ -1373,7 +1360,7 @@ export class VocabularyDb {
    * and places with >20 children in the vocabulary hierarchy.
    */
   findSimilarByDepictedPlace(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
+    if (!this.db) return null;
     this.ensurePlaceCache();
     if (!this.placeDf) return null;
 
@@ -1453,7 +1440,7 @@ export class VocabularyDb {
   /** Batch-lookup artwork types by art_id. Chunks at 500. */
   batchLookupTypesByArtId(artIds: number[]): Map<number, string> {
     const map = new Map<number, string>();
-    if (!this.db || !this.hasIntMappings || artIds.length === 0) return map;
+    if (!this.db || artIds.length === 0) return map;
     const typeFieldId = this.requireFieldId("type");
     const CHUNK = 500;
     for (let i = 0; i < artIds.length; i += CHUNK) {
@@ -1541,7 +1528,7 @@ export class VocabularyDb {
     ftsJoinBinding: unknown | null,
     requestedFields: Set<string>,
   ): Record<string, Array<{ label: string; count: number }>> {
-    if (!this.db || !this.hasIntMappings) return {};
+    if (!this.db) return {};
     const result: Record<string, Array<{ label: string; count: number }>> = {};
 
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
@@ -1593,7 +1580,7 @@ export class VocabularyDb {
     }
 
     // Creator gender facet (computed from vocabulary.gender via creator mappings)
-    if (requestedFields.has("creatorGender") && this.stmtLookupPersonInfo && this.hasIntMappings) {
+    if (requestedFields.has("creatorGender") && this.stmtLookupPersonInfo) {
       const creatorFieldId = this.fieldIdMap.get("creator");
       if (creatorFieldId != null) {
         const genderBindings = ftsJoinBinding != null
@@ -1836,19 +1823,12 @@ export class VocabularyDb {
       const objPlaceholders = objNums.map(() => "?").join(", ");
       const { clause: geoFieldClause, bindings: geoFieldBindings } = this.buildFieldClause(["subject", "spatial"], true);
 
-      const distSql = this.hasIntMappings
-        ? `SELECT a.object_number, v.label_en, v.label_nl,
+      const distSql = `SELECT a.object_number, v.label_en, v.label_nl,
                   haversine_km(?, ?, v.lat, v.lon) AS dist
            FROM mappings m
            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
            JOIN artworks a ON m.artwork_id = a.art_id
            WHERE a.object_number IN (${objPlaceholders})
-             AND ${geoFieldClause} AND v.lat IS NOT NULL
-           ORDER BY dist`
-        : `SELECT m.object_number, v.label_en, v.label_nl,
-                  haversine_km(?, ?, v.lat, v.lon) AS dist
-           FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
-           WHERE m.object_number IN (${objPlaceholders})
              AND ${geoFieldClause} AND v.lat IS NOT NULL
            ORDER BY dist`;
 
@@ -2086,7 +2066,7 @@ export class VocabularyDb {
     // Creator demographic filters (gender, birth year range) — require person enrichment + integer mappings
     const hasCreatorDemographic = effective.creatorGender != null || effective.creatorBornAfter != null || effective.creatorBornBefore != null;
     if (hasCreatorDemographic) {
-      if (this.stmtLookupPersonInfo && this.hasIntMappings) {
+      if (this.stmtLookupPersonInfo) {
         const creatorFieldId = this.fieldIdMap.get("creator");
         if (creatorFieldId != null) {
           const vocabConds: string[] = ["v.type = 'person'"];
@@ -2152,7 +2132,7 @@ export class VocabularyDb {
    */
   filterArtIds(params: Partial<VocabSearchParams>): number[] | null {
     if (!this.db) return null;
-    if (!this.hasIntMappings) return null;
+    if (!this.db) return null;
 
     const vocabResult = this.buildVocabConditions(params as Record<string, unknown>);
     if (vocabResult === null) return []; // a filter matched zero vocab terms
@@ -2317,26 +2297,15 @@ export class VocabularyDb {
   ): { condition: string; bindings: unknown[] } {
     const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(fields);
 
-    if (this.hasIntMappings) {
-      const rowids = this.vocabIdsToRowids(vocabTextIds);
-      if (rowids.length === 0) return { condition: "0", bindings: [] };
-      const placeholders = rowids.map(() => "?").join(", ");
-      return {
-        condition: `a.art_id IN (
-          SELECT m.artwork_id FROM mappings m
-          WHERE ${fieldClause} AND m.vocab_rowid IN (${placeholders})
-        )`,
-        bindings: [...fieldBindings, ...rowids],
-      };
-    }
-
-    const placeholders = vocabTextIds.map(() => "?").join(", ");
+    const rowids = this.vocabIdsToRowids(vocabTextIds);
+    if (rowids.length === 0) return { condition: "0", bindings: [] };
+    const placeholders = rowids.map(() => "?").join(", ");
     return {
-      condition: `a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
+      condition: `a.art_id IN (
+        SELECT m.artwork_id FROM mappings m
+        WHERE ${fieldClause} AND m.vocab_rowid IN (${placeholders})
       )`,
-      bindings: [...fieldBindings, ...vocabTextIds],
+      bindings: [...fieldBindings, ...rowids],
     };
   }
 
@@ -2350,18 +2319,11 @@ export class VocabularyDb {
     vocabBindings: unknown[],
   ): { condition: string; bindings: unknown[] } {
     const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(fields);
-    const [artworkCol, vocabIdCol] = this.hasIntMappings
-      ? ["a.art_id", "vocab_int_id"]
-      : ["a.object_number", "id"];
-    const [mappingArtCol, mappingVocabCol] = this.hasIntMappings
-      ? ["m.artwork_id", "m.vocab_rowid"]
-      : ["m.object_number", "m.vocab_id"];
-
     return {
-      condition: `${artworkCol} IN (
-        SELECT ${mappingArtCol} FROM mappings m
-        WHERE ${fieldClause} AND ${mappingVocabCol} IN (
-          SELECT ${vocabIdCol} FROM vocabulary WHERE ${vocabWhere}
+      condition: `a.art_id IN (
+        SELECT m.artwork_id FROM mappings m
+        WHERE ${fieldClause} AND m.vocab_rowid IN (
+          SELECT vocab_int_id FROM vocabulary WHERE ${vocabWhere}
         )
       )`,
       bindings: [...fieldBindings, ...vocabBindings],
