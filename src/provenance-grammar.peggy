@@ -665,7 +665,7 @@ RelationWord "relation word"
      / "grandnephew"i / "grandniece"i
      / "life companion"i
      / "sons"i / "son"i / "daughters"i / "daughter"i / "daugter"i / "daugther"i / "widower"i / "widow"i
-     / "distant cousin"i / "spouse"i / "relative"i / "successor"i / "descendants"i
+     / "distant cousin"i / "spouse"i / "relative"i / "relatives"i / "successor"i / "descendants"i
      / "husband"i / "wife"i / "nephew"i / "niece"i
      / "great-great-granddaughter"i / "great-great-grandson"i / "great great granddaughter"i / "great great grandson"i
      / "great-granddaughter"i / "great-grandson"i / "great granddaughter"i / "great grandson"i

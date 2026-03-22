@@ -217,6 +217,9 @@ export function splitEvents(
   text = text.replace(/\brecoded\b/gi, "recorded");
   text = text.replace(/\brecorderd\b/gi, "recorded");
 
+  // Normalize "?Name" → "? Name" (no space after uncertainty marker)
+  text = text.replace(/^\?([A-Z])/gm, "? $1");
+
   // Decode &amp; before splitting — the ';' in '&amp;' is a false event delimiter.
   // Other entities (&lt; &gt; etc.) don't contain ';' at a position that causes splits,
   // and full stripHtml() runs per-segment after splitting.
@@ -316,6 +319,9 @@ export function splitEvents(
     if (/^incorporated in\b/i.test(fragStripped)) continue;
     if (/^mounted on\b/i.test(fragStripped)) continue;
     if (/^application for a license\b/i.test(fragStripped)) continue;
+    if (/^part of the\b/i.test(fragStripped)) continue;              // object description, not transfer
+    if (/^unknown$/i.test(fragStripped)) continue;                    // bare "unknown"
+    if (/^unknown location\b/i.test(fragStripped)) continue;          // location note, not transfer
 
     // Skip citation leaks: bibliographic text that escaped {curly braces}
     // Detected by journal-like patterns: "_Title_", "pp.", "vol.", "no." with page numbers
