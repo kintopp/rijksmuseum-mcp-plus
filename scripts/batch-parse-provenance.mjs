@@ -17,6 +17,7 @@
 import Database from "better-sqlite3";
 import { parseProvenanceRaw } from "../dist/provenance-peg.js";
 import { interpretPeriods } from "../dist/provenance-interpret.js";
+import { inferPosition, TRANSFER_TYPE_TO_CATEGORY } from "../dist/provenance.js";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -45,6 +46,8 @@ CREATE TABLE IF NOT EXISTS provenance_events (
   raw_text       TEXT    NOT NULL,
   gap            INTEGER NOT NULL DEFAULT 0,
   transfer_type  TEXT    NOT NULL,
+  transfer_category TEXT,
+  category_method TEXT,
   uncertain      INTEGER NOT NULL DEFAULT 0,
   parties        TEXT,
   date_expression TEXT,
@@ -66,6 +69,7 @@ const EVENTS_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_prov_transfer ON provenance_events(transfer_type)`,
   `CREATE INDEX IF NOT EXISTS idx_prov_year ON provenance_events(date_year) WHERE date_year IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS idx_prov_location ON provenance_events(location) WHERE location IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_prov_category ON provenance_events(transfer_category) WHERE transfer_category IS NOT NULL`,
 ];
 
 const PERIODS_SCHEMA = `
@@ -103,6 +107,8 @@ CREATE TABLE IF NOT EXISTS provenance_parties (
   party_name   TEXT    NOT NULL,
   party_dates  TEXT,
   party_role   TEXT,
+  party_position TEXT,
+  position_method TEXT,
   uncertain    INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (artwork_id, sequence, party_idx)
 ) WITHOUT ROWID;
@@ -110,6 +116,7 @@ CREATE TABLE IF NOT EXISTS provenance_parties (
 
 const PARTIES_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_party_name ON provenance_parties(party_name)`,
+  `CREATE INDEX IF NOT EXISTS idx_party_position ON provenance_parties(party_position) WHERE party_position IS NOT NULL`,
 ];
 
 // ─── Main ───────────────────────────────────────────────────────────
@@ -117,8 +124,11 @@ const PARTIES_INDEXES = [
 const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 
-// Create tables
+// Drop and recreate tables (schema may have changed — new columns like party_position, transfer_category)
 if (!dryRun) {
+  db.exec("DROP TABLE IF EXISTS provenance_events");
+  db.exec("DROP TABLE IF EXISTS provenance_parties");
+  if (!layer1Only) db.exec("DROP TABLE IF EXISTS provenance_periods");
   db.exec(EVENTS_SCHEMA);
   for (const idx of EVENTS_INDEXES) db.exec(idx);
   db.exec(PARTIES_SCHEMA);
@@ -127,28 +137,24 @@ if (!dryRun) {
     db.exec(PERIODS_SCHEMA);
     for (const idx of PERIODS_INDEXES) db.exec(idx);
   }
-  // Clear existing data
-  db.exec("DELETE FROM provenance_events");
-  db.exec("DELETE FROM provenance_parties");
-  if (!layer1Only) {
-    try { db.exec("DELETE FROM provenance_periods"); } catch { /* table may not exist */ }
-  }
 }
 
 // Prepare statements
 const insertEvent = dryRun ? null : db.prepare(`
   INSERT INTO provenance_events (
-    artwork_id, sequence, raw_text, gap, transfer_type, uncertain,
+    artwork_id, sequence, raw_text, gap, transfer_type,
+    transfer_category, category_method, uncertain,
     parties, date_expression, date_year, date_qualifier,
     location, price_amount, price_currency, sale_details, citations,
     is_cross_ref, cross_ref_target, parse_method
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const insertParty = dryRun ? null : db.prepare(`
   INSERT INTO provenance_parties (
-    artwork_id, sequence, party_idx, party_name, party_dates, party_role, uncertain
-  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    artwork_id, sequence, party_idx, party_name, party_dates, party_role,
+    party_position, position_method, uncertain
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const insertPeriod = (dryRun || layer1Only) ? null : db.prepare(`
@@ -185,9 +191,16 @@ const startTime = Date.now();
 const insertBatch = dryRun ? () => {} : db.transaction((batch) => {
   for (const { artId, events, periods } of batch) {
     for (const e of events) {
+      const category = TRANSFER_TYPE_TO_CATEGORY[e.transferType] ?? null;
+      // Enrich parties with position before serializing to JSON column
+      const enrichedParties = e.parties.map(p => ({
+        ...p,
+        position: inferPosition(p.role, e.transferType),
+      }));
       insertEvent.run(
-        artId, e.sequence, e.rawText, e.gap ? 1 : 0, e.transferType, e.uncertain ? 1 : 0,
-        JSON.stringify(e.parties), e.dateExpression, e.dateYear, e.dateQualifier,
+        artId, e.sequence, e.rawText, e.gap ? 1 : 0, e.transferType,
+        category, category ? "type_mapping" : null, e.uncertain ? 1 : 0,
+        JSON.stringify(enrichedParties), e.dateExpression, e.dateYear, e.dateQualifier,
         e.location, e.price?.amount ?? null, e.price?.currency ?? null, e.saleDetails,
         JSON.stringify(e.citations),
         e.isCrossRef ? 1 : 0, e.crossRefTarget, e.parseMethod
@@ -196,9 +209,11 @@ const insertBatch = dryRun ? () => {} : db.transaction((batch) => {
       if (insertParty && e.parties) {
         for (let i = 0; i < e.parties.length; i++) {
           const p = e.parties[i];
+          const pos = inferPosition(p.role, e.transferType);
           insertParty.run(
             artId, e.sequence, i,
-            p.name, p.dates ?? null, p.role ?? null, p.uncertain ? 1 : 0
+            p.name, p.dates ?? null, p.role ?? null,
+            pos, pos ? "role_mapping" : null, p.uncertain ? 1 : 0
           );
         }
       }
@@ -294,7 +309,7 @@ if (!dryRun) {
   const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
 
   const updateTypeAndMethod = db.prepare(
-    `UPDATE provenance_events SET transfer_type = ?, parse_method = 'credit_line' WHERE artwork_id = ? AND sequence = ?`
+    `UPDATE provenance_events SET transfer_type = ?, transfer_category = ?, category_method = 'type_mapping', parse_method = 'credit_line' WHERE artwork_id = ? AND sequence = ?`
   );
 
   const enrichBatch = db.transaction((rows) => {
@@ -307,7 +322,7 @@ if (!dryRun) {
       // Match credit_line against rules
       for (const [re, type] of CREDIT_LINE_RULES) {
         if (re.test(row.credit_line)) {
-          updateTypeAndMethod.run(type, row.artwork_id, row.sequence);
+          updateTypeAndMethod.run(type, TRANSFER_TYPE_TO_CATEGORY[type] ?? null, row.artwork_id, row.sequence);
           creditLineEnriched++;
           // Update stats
           transferCounts["unknown"]--;

@@ -35,6 +35,7 @@ export interface ProvenanceParty {
   dates: string | null;
   uncertain: boolean;
   role: string | null;
+  position?: "sender" | "receiver" | "agent" | null;
 }
 
 export type TransferType =
@@ -57,6 +58,76 @@ export type TransferType =
   | "donation"
   | "inventory"
   | "unknown";
+
+export type TransferCategory = "ownership" | "custody" | "ambiguous";
+
+// ─── Party position mapping ──────────────────────────────────────────
+// Maps party roles (assigned by PEG grammar) to transfer positions.
+// Position is relative to the transfer event:
+//   sender = relinquishes the artwork
+//   receiver = acquires the artwork
+//   agent = facilitates without owning
+
+export const ROLE_TO_POSITION: Record<string, "sender" | "receiver" | "agent"> = {
+  // Receivers
+  buyer: "receiver",
+  heir: "receiver",
+  recipient: "receiver",
+  patron: "receiver",
+  collector: "receiver",
+  creator: "receiver",
+  sitter: "receiver",
+  // Senders
+  seller: "sender",
+  consignor: "sender",
+  donor: "sender",
+  deceased: "sender",
+  lender: "sender",
+  // Agents
+  intermediary: "agent",
+  auctioneer: "agent",
+  dealer: "agent",
+};
+
+/**
+ * Infer a party's transfer position from its role.
+ * Falls back to regex for anaphoric roles ("his son", "her widow") → receiver.
+ */
+export function inferPosition(
+  role: string | null,
+  _transferType: TransferType,
+): "sender" | "receiver" | "agent" | null {
+  if (!role) return null;
+  const mapped = ROLE_TO_POSITION[role];
+  if (mapped) return mapped;
+  // Anaphoric roles: "his son", "her widow", "their grandson" — always inheritance receivers
+  if (/^(?:his|her|their)\s+/i.test(role)) return "receiver";
+  return null;
+}
+
+// ─── Transfer category mapping ───────────────────────────────────────
+
+export const TRANSFER_TYPE_TO_CATEGORY: Record<TransferType, TransferCategory> = {
+  sale: "ownership",
+  purchase: "ownership",
+  inheritance: "ownership",
+  bequest: "ownership",
+  gift: "ownership",
+  donation: "ownership",
+  commission: "ownership",
+  exchange: "ownership",
+  confiscation: "ownership",
+  recuperation: "ownership",
+  restitution: "ownership",
+  seizure: "ownership",
+  auction: "ownership",
+  collection: "ownership",
+  inventory: "ownership",
+  loan: "custody",
+  deposit: "custody",
+  transfer: "ambiguous",
+  unknown: "ambiguous",
+};
 
 export interface ProvenanceEvent {
   sequence: number;

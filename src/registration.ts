@@ -2150,12 +2150,16 @@ function registerTools(
         rawText: z.string(),
         gap: z.boolean(),
         transferType: z.string(),
+        transferCategory: z.enum(["ownership", "custody", "ambiguous"]).nullable()
+          .describe("Whether this transfer involves ownership change, custody change, or is ambiguous."),
         uncertain: z.boolean(),
         parties: z.array(z.object({
           name: z.string(),
           dates: z.string().nullable(),
           uncertain: z.boolean(),
           role: z.string().nullable(),
+          position: z.enum(["sender", "receiver", "agent"]).nullable()
+            .describe("Party's position in the transfer: sender (relinquishes), receiver (acquires), agent (facilitates)."),
         })),
         dateExpression: z.string().nullable(),
         dateYear: z.number().int().nullable(),

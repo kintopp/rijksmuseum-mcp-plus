@@ -39,6 +39,7 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 | `generate-embeddings-mps.py` | Python | Generates artwork embeddings locally using Apple MPS GPU. Streaming to SQLite. |
 | `generate-vocabulary-embeddings-modal.py` | Python | Generates artwork embeddings on Modal cloud GPUs (A10) under different source text strategies. Production script for `no-subjects` strategy. |
 | `generate-iconclass-embeddings-modal.py` | Python | Generates Iconclass notation embeddings on Modal cloud GPU. |
+| `generate-description-embeddings-modal.py` | Python | Generates description-only embeddings on Modal A10G. PCA dimensionality reduction (384→256), int8 quantisation. Writes `desc_embeddings` + `vec_desc_artworks` tables to embeddings DB. |
 | `generate-embeddings-outdated.py` | Python | **Superseded** by `generate-embeddings-mps.py`. Original non-streaming version. |
 
 ## Analysis & Probing
@@ -52,8 +53,17 @@ Read-only scripts that inspect data without modifying it.
 | `explore-embedding-clusters.py` | Python | UMAP + HDBSCAN clustering of sampled embeddings. Outputs to `offline/explorations/embedding-clusters/`. |
 | `explore-smell-clusters.py` | Python | Smell-focused embedding cluster analysis. Outputs interactive HTML. |
 | `generate-cluster-viz.py` | Python | Generates interactive Plotly HTML from pre-computed cluster data. |
+| `discover-linked-art-schema.py` | Python | Exhaustive Linked Art field-path analysis. Resolves sample artworks, walks JSON-LD trees, reports coverage/cardinality/anomalies. Run before harvests. |
+| `provenance-sample-analysis.mjs` | Node | Analyses 100 stratified provenance records from vocab DB to catalogue patterns for PEG grammar design. |
 | `survey-persons.mjs` | Node | Quick survey of `depictedPerson` vs `aboutActor` coverage. |
 | `survey-persons-comprehensive.mjs` | Node | Comprehensive 120-name survey across 12 categories. |
+
+## Provenance
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `batch-parse-provenance.mjs` | Node | Batch parse provenance records from vocab DB. Runs Layer 1 (PEG parser) + Layer 2 (interpretation), populates `provenance_events` + `provenance_periods`. Supports `--dry-run`, `--limit`, `--layer1-only`. |
+| `audit-provenance-batch.mjs` | Node | Automated parser audit via Anthropic Batches API. Three modes: `silent-errors`, `pattern-mining`, `semantic-catalogue`. Supports `--resume`, `--dry-run`, `--stratify`. |
 
 ## Profiling & Diagnostics
 
@@ -86,6 +96,16 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `test-pure-functions.mjs` | 87 | Unit tests for exported pure functions |
 | `test-fts-edge-cases.mjs` | — | FTS5 query escaping with tricky inputs |
 | `test-new-filters.mjs` | 19 | v0.20 filters: creatorGender, creatorBornAfter/Before, expandPlaceHierarchy |
+| `test-find-similar.mjs` | ~51 | All find_similar signal modes (Visual, Lineage, Iconclass, Description, Person, Place, Pooled). Requires `ENABLE_FIND_SIMILAR=true`. |
+| `test-description-similarity.mjs` | ~4 | Smoke test for find_similar description mode. Requires `ENABLE_FIND_SIMILAR=true`. |
+| `test-attribution-qualifiers.mjs` | ~5 | Verifies `attributionQualifier` extraction from Linked Art `assigned_by[].classified_as`. |
+| `test-provenance-parser.mjs` | ~39 | Unit tests for Layer 1 provenance parser functions (splitEvents, classifyTransfer, parseDate, parsePrice, etc.) |
+| `test-provenance-peg.mjs` | ~45 | Tests for PEG parser (Layer 1) + interpretation (Layer 2) + temporal bounds. |
+| `test-provenance-search.mjs` | ~76 | Integration tests for `search_provenance` tool: party lookup, transfer type filters, date ranges, cross-references, parse audit. |
+| `test-query-plans.mjs` | 200+ | EXPLAIN QUERY PLAN validation — asserts the optimizer never uses `idx_mappings_field_vocab` as a covering-scan driver. |
+| `test-totalcount.mjs` | ~16 | Smoke test: totalResults always present + selective/compact facets. |
 | `test-v019-features.mjs` | — | Targeted tests for all v0.19 features |
+| `validate-vocab-db.mjs` | — | Comprehensive vocab DB structure & integrity validation (13 checks: integrity, tables, FTS5, FK integrity, importance, server compat, etc.) |
+| `generate-similarity-review.mjs` | — | Generates HTML review pages for find_similar results (outputs `similarity-review.html`). |
 | `profile-cross-filters.mjs` | — | Cross-filter performance profiling |
 | `profile-db-space.mjs` | — | DB space analysis |

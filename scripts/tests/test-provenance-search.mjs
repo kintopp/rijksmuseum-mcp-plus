@@ -527,6 +527,61 @@ section("22. Layer 2 periods — minDuration");
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  23. Party position and transfer category (sender/receiver refactor)
+// ══════════════════════════════════════════════════════════════════
+
+section("23. Party position and transfer category");
+
+{
+  // SK-A-2344 = The Milkmaid (Vermeer) — rich provenance with sales, collections, inheritance
+  const { sc, isError } = await call("search_provenance", { objectNumber: "SK-A-2344" });
+  assert(!isError, "No error for Milkmaid objectNumber");
+
+  const artwork = sc?.results?.[0];
+  const events = artwork?.events ?? [];
+  assert(events.length > 0, "Milkmaid has events");
+
+  // Every event should have transferCategory
+  const validCategories = new Set(["ownership", "custody", "ambiguous", null]);
+  const allHaveCategory = events.every(e => validCategories.has(e.transferCategory));
+  assert(allHaveCategory, "All events have valid transferCategory (ownership/custody/ambiguous/null)");
+
+  // Sale events should be ownership
+  const saleEvents = events.filter(e => e.transferType === "sale");
+  const salesAreOwnership = saleEvents.every(e => e.transferCategory === "ownership");
+  assert(salesAreOwnership, `Sale events have transferCategory = 'ownership' (${saleEvents.length} sales)`);
+
+  // At least one event should have parties with position
+  const allParties = events.flatMap(e => e.parties ?? []);
+  const partiesWithPos = allParties.filter(p => p.position != null);
+  assert(partiesWithPos.length > 0, `At least some parties have position (${partiesWithPos.length}/${allParties.length})`);
+
+  // Parties with seller role should have sender position
+  const sellers = allParties.filter(p => p.role === "seller");
+  const sellersAreSenders = sellers.every(p => p.position === "sender");
+  assert(sellersAreSenders, `Seller-role parties have position = 'sender' (${sellers.length} sellers)`);
+
+  // Parties with buyer role should have receiver position
+  const buyers = allParties.filter(p => p.role === "buyer");
+  const buyersAreReceivers = buyers.every(p => p.position === "receiver");
+  assert(buyersAreReceivers, `Buyer-role parties have position = 'receiver' (${buyers.length} buyers)`);
+
+  // Collectors should be receivers
+  const collectors = allParties.filter(p => p.role === "collector");
+  const collectorsAreReceivers = collectors.every(p => p.position === "receiver");
+  assert(collectorsAreReceivers, `Collector-role parties have position = 'receiver' (${collectors.length} collectors)`);
+}
+
+{
+  // Find a loan event to verify custody category
+  const { sc } = await call("search_provenance", { transferType: "loan", maxResults: 1 });
+  if (sc?.results?.length > 0) {
+    const loanEvent = sc.results[0].events.find(e => e.transferType === "loan");
+    assert(loanEvent?.transferCategory === "custody", "Loan event has transferCategory = 'custody'");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 

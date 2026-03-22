@@ -216,6 +216,7 @@ interface ProvenanceEventDbRow {
   raw_text: string;
   gap: number;
   transfer_type: string;
+  transfer_category?: string | null;
   uncertain: number;
   parties: string;
   date_expression: string | null;
@@ -242,8 +243,9 @@ export interface ProvenanceEventRow {
   rawText: string;
   gap: boolean;
   transferType: string;
+  transferCategory: "ownership" | "custody" | "ambiguous" | null;
   uncertain: boolean;
-  parties: { name: string; dates: string | null; uncertain: boolean; role: string | null }[];
+  parties: { name: string; dates: string | null; uncertain: boolean; role: string | null; position: "sender" | "receiver" | "agent" | null }[];
   dateExpression: string | null;
   dateYear: number | null;
   dateQualifier: string | null;
@@ -527,6 +529,8 @@ export class VocabularyDb {
   private hasProvenanceTables_ = false;
   private hasProvenancePeriods_ = false;
   private hasPartyTable_ = false;
+  private hasPartyPosition_ = false;
+  private hasTransferCategory_ = false;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtLookupPersonInfo: Statement | null = null;
@@ -630,6 +634,8 @@ export class VocabularyDb {
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
       this.hasProvenancePeriods_ = this.tableExists("provenance_periods");
       this.hasPartyTable_ = this.tableExists("provenance_parties");
+      this.hasPartyPosition_ = this.hasPartyTable_ && this.columnExists("provenance_parties", "party_position");
+      this.hasTransferCategory_ = this.hasProvenanceTables_ && this.columnExists("provenance_events", "transfer_category");
 
       // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
@@ -677,6 +683,8 @@ export class VocabularyDb {
         this.hasProvenanceTables_ && "provenance",
         this.hasProvenancePeriods_ && "provenancePeriods",
         this.hasPartyTable_ && "provenanceParties",
+        this.hasPartyPosition_ && "partyPosition",
+        this.hasTransferCategory_ && "transferCategory",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -2614,7 +2622,16 @@ export class VocabularyDb {
     matched: boolean,
   ): ProvenanceEventRow {
     let parties: ProvenanceEventRow["parties"] = [];
-    try { parties = JSON.parse(row.parties ?? "[]"); } catch { /* empty */ }
+    try {
+      const raw = JSON.parse(row.parties ?? "[]") as { name: string; dates?: string | null; uncertain?: boolean; role?: string | null; position?: string | null }[];
+      parties = raw.map(p => ({
+        name: p.name,
+        dates: p.dates ?? null,
+        uncertain: p.uncertain ?? false,
+        role: p.role ?? null,
+        position: (p.position as "sender" | "receiver" | "agent" | null) ?? null,
+      }));
+    } catch { /* empty */ }
     let citations: ProvenanceEventRow["citations"] = [];
     try { citations = JSON.parse(row.citations ?? "[]"); } catch { /* empty */ }
     return {
@@ -2622,6 +2639,7 @@ export class VocabularyDb {
       rawText: row.raw_text,
       gap: row.gap === 1,
       transferType: row.transfer_type,
+      transferCategory: (row.transfer_category as "ownership" | "custody" | "ambiguous" | null) ?? null,
       uncertain: row.uncertain === 1,
       parties,
       dateExpression: row.date_expression,
