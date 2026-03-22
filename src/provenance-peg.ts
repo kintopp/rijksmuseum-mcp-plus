@@ -133,6 +133,15 @@ function astToRawEvent(
   if (transferType === "sale" && ast.unsold) {
     transferType = "unknown";
   }
+  // Post-parse reclassification: tail keywords override initial classification.
+  // "from whom, fl. 19,186, to the museum as a gift" → gift, not sale
+  // "from whom, with 21 other drawings, on loan to the museum" → loan, not sale
+  // "from where transferred, on long term loan" → loan, not transfer
+  if ((transferType === "sale" || transferType === "transfer") && /\bon\s+(?:long[- ]term\s+)?loan\b/i.test(rawText)) {
+    transferType = "loan";
+  } else if (transferType === "sale" && /\bas\s+a\s+gift\b|\bdonated\b/i.test(rawText)) {
+    transferType = "gift";
+  }
 
   // Price
   let price: ProvenancePrice | null = null;

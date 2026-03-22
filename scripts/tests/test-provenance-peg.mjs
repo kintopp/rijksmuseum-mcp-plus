@@ -740,7 +740,7 @@ section("PEG grammar rules (2026-03-21 batch audit)");
 }
 {
   const r = parseProvenanceRaw("from where transferred, on long term loan, to the museum, 1934");
-  assertEq(r.events[0].transferType, "transfer", "'from where transferred' → transfer");
+  assertEq(r.events[0].transferType, "loan", "'from where transferred, on long term loan' → loan (reclassified)");
   assertEq(r.events[0].parseMethod, "peg", "'from where transferred' parsed via PEG");
 }
 

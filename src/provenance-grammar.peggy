@@ -36,7 +36,7 @@ const EUR_RE = /^[€]\s*([\d,.]+)/;
 const USD_RE = /^\$\s*([\d,]+)/;
 // Matches qualified dates: "before 1800", "after May 1940", "since 1948",
 // "before or in 1691", "in or shortly before 1660", "in 1904"
-const QUAL_DATE_RE = /^\s*(?:(before|after|since)(?:\s+or\s+in)?\s+|(in\s+or\s+(?:shortly\s+)?)(before|after)\s+|in\s+)(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(\d{4})\b/i;
+const QUAL_DATE_RE = /^\s*(?:(before|after|since|by)(?:\s+or\s+in)?\s+|(in\s+or\s+(?:shortly\s+)?)(before|after)\s+|in\s+)(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+)?(\d{4})\b/i;
 const APPROX_DATE_RE = /^\s*c\.\s*(\d{4})\b/;
 const DATE_RANGE_RE = /^\s*(\d{4})\s*[-–\/]\s*(\d{2,4})\b/;
 const BARE_YEAR_RE = /^\s*(\d{4})\b/;
@@ -199,7 +199,8 @@ function parseRest(tail) {
     if (qualDate) {
       dateExpression = qualDate[0].trim();
       dateYear = parseInt(qualDate[4], 10);
-      dateQualifier = (qualDate[1] || qualDate[3] || "in").toLowerCase();
+      const rawQual = (qualDate[1] || qualDate[3] || "in").toLowerCase();
+      dateQualifier = rawQual === "by" ? "before" : rawQual;
       prevWasAttribution = false;
       continue;
     }
@@ -515,7 +516,7 @@ EstateInventoryEvent
     {
       const nd = extractNameAndDates(nameRaw);
       const rest = parseRest(tail);
-      return { type: "collection", parties: nd && nd.name ? [{ ...nd, role: "deceased" }] : [], ...rest };
+      return { type: "inventory", parties: nd && nd.name ? [{ ...nd, role: "deceased" }] : [], ...rest };
     }
   / ("probate"i _)? "inventory"i ","? _ nameRaw:NameChars tail:Tail
     {
