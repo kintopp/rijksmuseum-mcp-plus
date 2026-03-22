@@ -443,16 +443,40 @@ Compare the parser output against the raw text, event by event. For each event, 
 9. **phantom events** — Any parsed events that don't correspond to real provenance transfers?
 10. **merge/split errors** — Two events merged into one, or one event split into two?
 
-## DO NOT report as errors
-- Events correctly classified as "unknown" for genuinely ambiguous bare names (e.g. "Mathias Komor (Beijing)")
-- Cross-references (isCrossRef: true) classified as "unknown" — this is CORRECT by design
-- Minor whitespace or formatting differences in names
-- Relational phrases kept as names (e.g. "his eldest son") — known limitation (#85)
-- Fractional prices (½, ¼) not parsed — known limitation (#89)
-- Pre-decimal British pounds (£0.13.0) — known limitation (#92)
-- Parties with position=null when their role is also null (bare-name unknowns) — this is EXPECTED, not an error
+## DO NOT report as errors — design choices and known limitations
 
-Report ONLY genuine errors where the parser produced a wrong value or missed a real transfer.
+**Deliberate design choices (these are CORRECT, not errors):**
+- Unsold/bought-in auction events classified as "unknown" — deliberate reclassification. "bought in", "unsold", "withdrawn" events are NOT sales. Do not report unknown→sale for these.
+- Events correctly classified as "unknown" for genuinely ambiguous bare names (e.g. "Mathias Komor (Beijing)")
+- Cross-references (isCrossRef: true) classified as "unknown" — correct by design
+- "estate inventory" events classified as "inventory" (not "collection") — deliberate separation
+- Events reclassified from sale→gift when text contains "as a gift" or "donated" — correct
+- Events reclassified from sale/transfer→loan when text contains "on loan" — correct
+- "from the artist, transferred to [institution]" classified as "transfer" not "sale" — correct
+- Date qualifier "by [year]" mapped to "before" — "by 1800" means "no later than 1800"
+- Attribution dates suppressed: "as German school, c. 1500" does NOT produce a date — the date describes the attribution, not a provenance event. Do not report missing dates for attribution phrases.
+- Standalone "Inv." segments (bare inventory numbers) are skipped — they are not provenance events. Do not report these as missing events.
+- Parties with position=null when their role is also null (bare-name unknowns) — expected
+- Parties with position="receiver" and role=null in collection/recuperation/restitution/commission/inventory events — this is a deliberate context-based inference, not an error
+- Anaphoric references "where"/"whom" suppressed as party names (party set to null) — correct
+- Credit-line enriched events (parseMethod="credit_line") may have transfer types inferred from the artwork's credit line field rather than the provenance text — this is correct
+
+**Known limitations (do not report — already tracked):**
+- "to [Name]" in loan events tagged as role "buyer" instead of "borrower" — known (#147)
+- "to [Name]" in gift events tagged as role "buyer" instead of "recipient" — known (#148)
+- Multi-city locations truncated to first city ("Amsterdam and Paris" → "Amsterdam") — known (#149)
+- Loan "from X to Y" parties lost when comma separates keyword — known (#150)
+- "his heirs" bare phrase without proper name not captured as party — known (#151)
+- "by or for" prefix leaking into party name in commissions — known (#152)
+- Unrecognized currencies: gns (guineas), Bfr. (Belgian francs), DM, ¥, Ffrs, mark — known (#153)
+- fl. 2,000.00 parsed as 2 (European decimal suffix) — known (#154)
+- Pre-decimal guilder notation fl. 1:10:- parsed as 1 — known (#95)
+- Fractional prices (½, ¼) not parsed — known (#89)
+- Pre-decimal British pounds (£0.13.0) — known (#92)
+- Relational phrases kept as names (e.g. "his eldest son") — known (#85)
+- Minor whitespace or formatting differences in names
+
+Report ONLY genuine errors where the parser produced a wrong value or missed a real transfer, AND the error is not covered by the known limitations above.
 
 Use the report_audit_findings tool to submit your findings.`;
 }
