@@ -159,6 +159,7 @@ function astToRawEvent(
   } else {
     const BUYER_REMAP: Record<string, string> = {
       gift: "recipient", bequest: "heir",
+      inheritance: "heir", by_descent: "heir", widowhood: "heir",
       transfer: "recipient", restitution: "recipient", deposit: "recipient",
     };
     const remappedRole = BUYER_REMAP[transferType];

@@ -133,6 +133,17 @@ function parseRest(tail) {
       }
     }
 
+    // "and Name (dates)" — co-party, e.g. co-heirs "A and B" (#118)
+    const andMatch = t.match(/^and\s+([A-Z].*)$/);
+    if (andMatch) {
+      const andRaw = andMatch[1].replace(/,\s*$/, "").trim();
+      if (andRaw) {
+        const nd = extractNameAndDates(andRaw);
+        extraParties.push(nd ? { name: nd.name, dates: nd.dates, role: "buyer" } : { name: andRaw, dates: null, role: "buyer" });
+        continue;
+      }
+    }
+
     // "from X to Y" — extract both parties (#150, for loan comma-gap tails)
     const fromToMatch = t.match(/^from\s+(.+?)\s+to\s+(.+)$/i);
     if (fromToMatch) {
@@ -669,7 +680,14 @@ AnaphoricEvent
       const nd = extractNameAndDates(nameRaw);
       const role = poss.toLowerCase() + " " + rel.toLowerCase();
       const rest = parseRest(tail);
-      return { type: inheritanceType(rel), parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
+      const parties = nd && nd.name ? [{ ...nd, role }] : [];
+      // #118: extract co-heirs from "A and B" within nameRaw or tail
+      const andMatch = nameRaw.match(/\)\s+and\s+(.+)$/i) || nameRaw.match(/\band\s+([A-Z].+)$/);
+      if (andMatch) {
+        const coHeir = extractNameAndDates(andMatch[1]);
+        if (coHeir && coHeir.name) parties.push({ ...coHeir, role });
+      }
+      return { type: inheritanceType(rel), parties, ...rest };
     }
   / "by"i _ "descent"i _ "to"i _ ("his"i / "her"i / "their"i) _ rel:RelationWord ","? _ nameRaw:NameChars tail:Tail
     {

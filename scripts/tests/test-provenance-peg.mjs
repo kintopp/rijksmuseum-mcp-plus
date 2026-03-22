@@ -1129,6 +1129,20 @@ section("P2: SaleEvent 'sold for/with' role fix (#174)");
 }
 
 // ══════════════════════════════════════════════════════════════════
+section("#118: Multi-party 'A and B' co-heirs");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("his daughters, Johanna Maria (1792-1813) and Charlotta Constantia (1796-1813)");
+  assert(r.events[0].parties.length >= 2, "#118: two co-heir parties extracted");
+  assert(r.events[0].parties.some(p => /Johanna/i.test(p.name)), "#118: first heir name");
+  assert(r.events[0].parties.some(p => /Charlotta/i.test(p.name)), "#118: second heir name");
+}
+{
+  const r = parseProvenanceRaw("his sons, Jan and Pieter, Amsterdam, 1850");
+  assert(r.events[0].parties.length >= 2, "#118: two sons extracted");
+}
+
+// ══════════════════════════════════════════════════════════════════
 section("#170: CollectionEvent edge cases");
 // ══════════════════════════════════════════════════════════════════
 {
