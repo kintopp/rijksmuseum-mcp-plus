@@ -1037,6 +1037,35 @@ section("P1: GiftEvent preposition-aware role (#173)");
 }
 
 // ══════════════════════════════════════════════════════════════════
+section("#147: buyer→borrower in loan contexts");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("from whom on loan to the museum, 1964");
+  const museum = r.events[0].parties.find(p => /museum/i.test(p.name));
+  assertEq(museum?.role, "borrower", "loan 'to the museum' → borrower");
+}
+{
+  // "on loan" without "from" — "to the museum" extracted by parseRest
+  const r = parseProvenanceRaw("on loan, to the museum, 1964");
+  const museum = r.events[0].parties.find(p => /museum/i.test(p.name));
+  assertEq(museum?.role, "borrower", "bare loan 'to the museum' → borrower");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("#148: buyer→recipient in gift/bequest contexts");
+// ══════════════════════════════════════════════════════════════════
+{
+  const r = parseProvenanceRaw("donated by the August Allebé Fonds, to the museum, 1949");
+  const museum = r.events[0].parties.find(p => /museum/i.test(p.name));
+  assertEq(museum?.role, "recipient", "gift tail 'to the museum' → recipient");
+}
+{
+  const r = parseProvenanceRaw("bequeathed to Name, to the Rijksmuseum, 1900");
+  const museum = r.events[0].parties.find(p => /Rijksmuseum/i.test(p.name));
+  assertEq(museum?.role, "heir", "bequest tail 'to Rijksmuseum' → heir");
+}
+
+// ══════════════════════════════════════════════════════════════════
 section("P3: Unsold guard on regex fallback (#175)");
 // ══════════════════════════════════════════════════════════════════
 {

@@ -504,6 +504,13 @@ assertEq(classifyTransfer("his grandson, Count Sergei"), "by_descent", "his gran
 // "his sons" (plural) → inheritance
 assertEq(classifyTransfer("his sons, Jonkheer Jan Pieter Six and Jonkheer Pieter Hendrik Six"), "by_descent", "his sons (plural) → inheritance");
 
+// #172: bare "acquired" should NOT classify as sale
+assertEq(classifyTransfer("Otto Schäfer, Schweinfurt"), "unknown", "#172: bare name not classified as sale");
+assertEq(classifyTransfer("Jhr. J. Goll van Franckenstein (L.2987; 1750-1821)"), "unknown", "#172: collector mark not classified as sale");
+// But "acquired by/from" should still work
+assertEq(classifyTransfer("acquired by the museum, 1900"), "sale", "#172: 'acquired by' still classified as sale");
+assertEq(classifyTransfer("acquired from the dealer, 1850"), "sale", "#172: 'acquired from' still classified as sale");
+
 // ══════════════════════════════════════════════════════════════════
 //  Section 13: Expanded price parsing
 // ══════════════════════════════════════════════════════════════════

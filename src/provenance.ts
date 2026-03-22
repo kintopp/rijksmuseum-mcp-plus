@@ -71,6 +71,7 @@ export type TransferCategory = "ownership" | "custody" | "ambiguous";
 export const ROLE_TO_POSITION: Record<string, "sender" | "receiver" | "agent"> = {
   // Receivers
   buyer: "receiver",
+  borrower: "receiver",
   heir: "receiver",
   recipient: "receiver",
   patron: "receiver",
@@ -368,7 +369,7 @@ const TRANSFER_RULES: [RegExp, TransferType][] = [
   [/\bsold[, ]+(?:by|to|with|for)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
   [/(?:his|her|their) (?:posthumous |deceased )?sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
   [/\bpurchased\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "sale"],
-  [/\bacquired\b|\bverwerving\b/i, "sale"],
+  [/\bacquired\s+(?:by|from|for|in|with)\b|\bverwerving\b/i, "sale"],
   [/from whom,.*\bto\b|by whom to\b|\bfrom the dealer\b|\bfrom (?:Count|Baron|Prince|Marchesa|Conte)\b.*\bto\b/i, "sale"],
   [/\bwidow(?:er)?\b/i, "widowhood"],
   [/\bby descent\b|\binherited by\b|\bfrom the heirs\b|\berven\b/i, "by_descent"],

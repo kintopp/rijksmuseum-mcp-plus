@@ -308,6 +308,8 @@ function inheritanceType(rel) {
   if (WIDOW_RE.test(rel)) return "widowhood";
   return "by_descent";  // son, daughter, heir, nephew, cousin, etc.
 }
+
+
 }}
 
 {
