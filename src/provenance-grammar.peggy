@@ -235,22 +235,34 @@ function parseRest(tail) {
     prevWasAttribution = false;
 
     // Location (known places — check if t matches or starts with a known place)
-    if (!location) {
+    // Guard: skip noble title words that happen to be place names ("Heer van Soelen", "Baron van X")
+    const NOBLE_TITLE_RE = /^(?:Heer|Baron|Vrouwe|Graaf|Gravin)\s+(?:van|de|het|der)\s/i;
+    if (!location && !NOBLE_TITLE_RE.test(t)) {
       // Try exact match first, then progressively shorter prefixes (for "City (details)")
-      if (PLACES.has(t)) { location = t; }
+      let candidate_loc = null;
+      if (PLACES.has(t)) { candidate_loc = t; }
       else {
         // Try trimming parenthesized suffix: "Paris (Drouot)" → "Paris"
         const parenIdx = t.indexOf("(");
         const candidate = parenIdx > 0 ? t.slice(0, parenIdx).trim() : null;
-        if (candidate && PLACES.has(candidate)) { location = candidate; }
+        if (candidate && PLACES.has(candidate)) { candidate_loc = candidate; }
         // Try first N words for compound names: "The Hague", "New York", "St Petersburg"
         else {
           const words = t.split(/[\s,]/);
           for (let n = Math.min(3, words.length); n >= 1; n--) {
             const prefix = words.slice(0, n).join(" ");
-            if (PLACES.has(prefix)) { location = prefix; break; }
+            if (PLACES.has(prefix)) { candidate_loc = prefix; break; }
           }
         }
+      }
+      // Second guard: single-word match that looks like a title word in context
+      if (candidate_loc && /^(?:Heer|Baron|Vrouwe|Graaf|Gravin)$/i.test(candidate_loc)) {
+        // Only accept if there's no "van" after it in the original text
+        const afterLoc = t.slice(candidate_loc.length).trim();
+        if (!/^van\b/i.test(afterLoc)) { location = candidate_loc; }
+        // else: skip — "Baron van X" is a title, not a location
+      } else {
+        location = candidate_loc;
       }
     }
   }

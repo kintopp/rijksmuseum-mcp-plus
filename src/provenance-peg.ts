@@ -95,9 +95,11 @@ function astToRawEvent(
   citationMap: Map<string, string>
 ): RawProvenanceEvent {
   // Collect all parties from the AST
+  // Suppress anaphoric placeholders that aren't real names ("where", "whom" as literal party names)
+  const ANAPHORIC_PLACEHOLDERS = new Set(["where", "whom", "which", "whose"]);
   const parties: ProvenanceParty[] = [];
   for (const p of ast.parties || []) {
-    if (p.name) {
+    if (p.name && !ANAPHORIC_PLACEHOLDERS.has(p.name.toLowerCase().trim())) {
       parties.push({
         name: p.name,
         dates: p.dates ?? null,
