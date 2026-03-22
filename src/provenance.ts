@@ -315,6 +315,10 @@ export function splitEvents(
     if (/^mounted on\b/i.test(fragStripped)) continue;
     if (/^application for a license\b/i.test(fragStripped)) continue;
 
+    // Skip citation leaks: bibliographic text that escaped {curly braces}
+    // Detected by journal-like patterns: "_Title_", "pp.", "vol.", "no." with page numbers
+    if (/\b(?:pp|vol|no)\.\s*\d/.test(fragStripped) && /_[A-Z]/.test(fragStripped)) continue;
+
     results.push({ text: trimmed, gap });
   }
 

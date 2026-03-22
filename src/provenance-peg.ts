@@ -295,6 +295,23 @@ export function parseProvenanceRaw(
       }
     }
 
+    // Structural signal reclassification: if STILL unknown after regex classifier,
+    // check for deterministic structural signals that indicate "collection".
+    // This runs last so it doesn't override keyword-based reclassification (gift, deposit, etc.)
+    if (event.transferType === "unknown" && !event.isCrossRef && !ast?.unsold) {
+      if (
+        /\(L\.\s*\d+\)/.test(working) ||                                  // Lugt collector mark
+        /\(\d{4}[-–]\d{2,4}\??\)/.test(working) ||                        // Life dates (YYYY-YYYY)
+        /\b(?:Baron|Jonkheer|Jonkvrouw|Count|Countess|Graaf|Gravin|Lord|Prince|Princess|Duke|Duchess|Marquis|Marchesa|Conte|Comtesse|Vicomte|Sir|Lady|Freiherr|Freifrau|Herzog)\b/.test(working) || // Noble title
+        /\b(?:Dr|Prof)\b\.?\s/.test(working) ||                            // Academic title
+        /\b(?:Kunsthandel|Galerie|Gallery|Galleria)\b/i.test(working) ||   // Dealer indicator
+        /\b(?:Rijksmuseum|Mauritshuis|Hermitage|Louvre|Uffizi|Prado|National Gallery|British Museum|Metropolitan Museum|Albertina|Alte Pinakothek|Gemäldegalerie)\b/.test(working) || // Major museums
+        /\b(?:[Mm]useum|[Mm]usée|[Kk]erk|[Cc]hurch|[Cc]hapel|[Kk]apel|[Cc]athedral|[Mm]onastery|[Kk]looster|[Mm]inisterie|[Mm]inistry|[Kk]abinet|[Cc]abinet|[Pp]aleis|[Pp]alace|[Ss]tichting|[Ff]oundation|[Gg]enootschap|[Vv]ereniging|[Ss]tadhuis|[Tt]own [Hh]all|[Rr]aadhuis|[Gg]asthuis|[Hh]ofje|[Ww]eeshuis|[Hh]ospital)\b/.test(working) // Institution type keywords
+      ) {
+        event.transferType = "collection";
+      }
+    }
+
     // Post-parse date fallback (#124): if no date was extracted, scan raw text
     // for a bare year not inside parentheses (life dates) or citations
     if (!event.dateYear && !event.isCrossRef) {
