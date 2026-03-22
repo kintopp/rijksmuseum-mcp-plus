@@ -209,6 +209,9 @@ export function splitEvents(
   // Normalize doubled articles ("the the dealer" → "the dealer")
   text = text.replace(/\bthe\s+the\b/gi, "the");
 
+  // Normalize broken words from line-break artefacts ("coll ection" → "collection")
+  text = text.replace(/\bcoll\s+ection\b/gi, "collection");
+
   // Decode &amp; before splitting — the ';' in '&amp;' is a false event delimiter.
   // Other entities (&lt; &gt; etc.) don't contain ';' at a position that causes splits,
   // and full stripHtml() runs per-segment after splitting.
@@ -288,9 +291,9 @@ export function splitEvents(
     // Skip standalone inventory-mark abbreviations (not provenance events)
     if (/^Inv\.?\s*$/i.test(trimmed)) continue;
 
-    // Skip cross-reference preambles: "For both the present painting (SK-A-3857) and its pendant"
-    // These introduce shared provenance for multiple artworks — not events themselves.
+    // Skip cross-reference preambles and provenance-redirect headers
     if (/^For (?:both )?the present /i.test(trimmed)) continue;
+    if (/^See (?:the )?provenance (?:for|of) /i.test(trimmed)) continue;
 
     // Skip fragment artefacts: bare years, orphaned connectors
     const fragStripped = trimmed.replace(/__CIT_\d+__/g, "").trim();
