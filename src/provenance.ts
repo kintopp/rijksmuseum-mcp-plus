@@ -157,6 +157,7 @@ export interface ProvenanceEvent {
   gap: boolean;
   party: ProvenanceParty | null;
   transferType: TransferType;
+  unsold: boolean;
   date: ProvenanceDate | null;
   location: string | null;
   price: ProvenancePrice | null;
@@ -358,6 +359,7 @@ export function stripHtml(text: string): string {
 // ─── 4. classifyTransfer ───────────────────────────────────────────
 
 const TRANSFER_RULES: [RegExp, TransferType][] = [
+  [/\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i, "sale"],
   [/\bcommissioned (?:by|for|as)\b/i, "commission"],
   [/war recuperation/i, "recuperation"],
   [/\bstolen\b/i, "theft"],
@@ -711,12 +713,15 @@ export function parseEvent(
       : lotMatch[0];
   }
 
+  const transferType = classifyTransfer(cleanedWorking);
+
   return {
     sequence,
     rawText: restoreCitations(rawText, citationMap),
     gap: segment.gap,
     party: parseParty(working),
-    transferType: classifyTransfer(cleanedWorking),
+    transferType,
+    unsold: transferType === "sale" && /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i.test(working),
     date: parseDate(working),
     location: parseLocation(working),
     price: parsePrice(working),

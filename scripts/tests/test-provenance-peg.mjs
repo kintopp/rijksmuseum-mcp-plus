@@ -1095,15 +1095,22 @@ section("#148: buyer→recipient in gift/bequest contexts");
 section("P3: Unsold guard on regex fallback (#175)");
 // ══════════════════════════════════════════════════════════════════
 {
-  // Unsold event with a structural signal (museum name) should stay "unknown"
-  // even if PEG fails and regex fallback runs
-  const r = parseProvenanceRaw("unsold, Christie's, London, 1943");
-  assertEq(r.events[0].transferType, "unknown", "unsold event stays 'unknown'");
+  // Unsold sale event stays "sale" with unsold flag set
+  const r = parseProvenanceRaw("sale, Christie's, London, 1943, unsold");
+  assertEq(r.events[0].transferType, "sale", "unsold event is type 'sale'");
+  assertEq(r.events[0].unsold, true, "unsold flag is set");
 }
 {
-  // "bought in" (unsold synonym) should also be protected
-  const r = parseProvenanceRaw("bought in at sale, Rijksmuseum, Amsterdam, 1900");
-  assert(r.events[0].transferType !== "collection", "'bought in' not reclassified to collection");
+  // "bought in" (unsold synonym) → sale with unsold flag
+  const r = parseProvenanceRaw("sale, Rijksmuseum, Amsterdam, 1900, bought in at fl. 245");
+  assertEq(r.events[0].transferType, "sale", "'bought in' is type 'sale'");
+  assertEq(r.events[0].unsold, true, "'bought in' unsold flag is set");
+}
+{
+  // Normal sale should NOT have unsold flag
+  const r = parseProvenanceRaw("sale, Christie's, London, 1850, fl. 200, to Smith");
+  assertEq(r.events[0].transferType, "sale", "normal sale is type 'sale'");
+  assertEq(r.events[0].unsold, false, "normal sale unsold flag is false");
 }
 
 // ══════════════════════════════════════════════════════════════════

@@ -223,8 +223,7 @@ function samplePositionEnrichment() {
 
 function sampleTypeClassification() {
   const db = openDb();
-  // Get all artworks with non-unsold unknown events (the true residual)
-  const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
+  // Get all artworks with genuine unknown events (unsold events are now type 'sale' with unsold=1)
   let artworkIds;
 
   if (recordsList) {
@@ -233,18 +232,12 @@ function sampleTypeClassification() {
       `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
     ).all(...objectNumbers).map(r => r.art_id);
   } else {
-    // All artworks with non-unsold unknown events
     const rows = db.prepare(`
-      SELECT DISTINCT pe.artwork_id, pe.raw_text
+      SELECT DISTINCT pe.artwork_id
       FROM provenance_events pe
       WHERE pe.transfer_type = 'unknown' AND pe.is_cross_ref = 0
     `).all();
-    // Filter out unsold in JS (complex regex not possible in SQLite)
-    const ids = new Set();
-    for (const row of rows) {
-      if (!UNSOLD_RE.test(row.raw_text)) ids.add(row.artwork_id);
-    }
-    artworkIds = [...ids].slice(0, sampleSize);
+    artworkIds = rows.map(r => r.artwork_id).slice(0, sampleSize);
   }
   return fetchRecords(artworkIds, { periods: false });
 }
@@ -1197,9 +1190,9 @@ function printStructuralSignalsReport(report) {
 }
 
 function buildPromptTypeClassification(record) {
-  const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
+  // Unsold events are now type 'sale' with unsold=1, so no UNSOLD_RE filter needed
   const unknownEvents = record.events.filter(
-    e => e.transfer_type === "unknown" && !e.is_cross_ref && !UNSOLD_RE.test(e.raw_text)
+    e => e.transfer_type === "unknown" && !e.is_cross_ref
   );
 
   const eventsJson = unknownEvents.map(e => ({

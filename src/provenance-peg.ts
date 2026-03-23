@@ -35,6 +35,7 @@ export interface RawProvenanceEvent {
   gap: boolean;
 
   transferType: TransferType;
+  unsold: boolean;
   uncertain: boolean;
 
   parties: ProvenanceParty[];
@@ -131,13 +132,10 @@ function astToRawEvent(
     if (citText) citations.push({ text: stripHtml(citText) });
   }
 
-  // Validate transfer type; reclassify "sale" → "unknown" when unsold/bought-in
+  // Validate transfer type
   let transferType: TransferType = VALID_TRANSFER_TYPES.has(ast.type as TransferType)
     ? (ast.type as TransferType)
     : "unknown";
-  if (transferType === "sale" && ast.unsold) {
-    transferType = "unknown";
-  }
   // Post-parse reclassification: tail keywords override initial classification.
   // "from whom, fl. 19,186, to the museum as a gift" → gift, not sale
   // "from whom, with 21 other drawings, on loan to the museum" → loan, not sale
@@ -191,6 +189,7 @@ function astToRawEvent(
     rawText: restoredRawText,
     gap,
     transferType,
+    unsold: !!ast.unsold,
     uncertain: ast.uncertain,
     parties,
     dateExpression: ast.dateExpression ?? null,
@@ -219,6 +218,7 @@ function regexFallbackToRawEvent(
     rawText: event.rawText,
     gap: event.gap,
     transferType: event.transferType,
+    unsold: UNSOLD_RE.test(segment.text),
     uncertain: event.uncertain,
     parties: event.party ? [event.party] : [],
     dateExpression: event.date?.text ?? null,
@@ -257,6 +257,7 @@ export function parseProvenanceRaw(
         rawText: stripHtml(text),
         gap: false,
         transferType: "unknown",
+        unsold: false,
         uncertain: false,
         parties: [],
         dateExpression: null,
@@ -322,7 +323,6 @@ export function parseProvenanceRaw(
     }
 
     // PEG catch-all → "unknown": try regex classifier (matches mid-sentence keywords)
-    // Skip reclassification for unsold lots — they were intentionally set to "unknown"
     if (event.transferType === "unknown" && !event.isCrossRef && !event.gap && !ast?.unsold && !UNSOLD_RE.test(working)) {
       const reclassified = classifyTransfer(working);
       if (reclassified !== "unknown") {

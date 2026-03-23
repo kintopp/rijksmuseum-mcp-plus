@@ -2150,6 +2150,8 @@ function registerTools(
         rawText: z.string(),
         gap: z.boolean(),
         transferType: z.string(),
+        unsold: z.boolean()
+          .describe("True if this sale event was unsold, bought in, or withdrawn at auction. Only meaningful when transferType is 'sale'."),
         transferCategory: z.enum(["ownership", "custody", "ambiguous"]).nullable()
           .describe("Whether this transfer involves ownership change, custody change, or is ambiguous."),
         uncertain: z.boolean(),
@@ -2360,7 +2362,7 @@ function registerTools(
               const marker = e.matched ? ">>>" : "   ";
               const partyNames = e.parties.map(p => p.name).join(", ");
               const parts: string[] = [];
-              if (e.transferType !== "unknown") parts.push(e.transferType);
+              if (e.transferType !== "unknown") parts.push(e.unsold ? `${e.transferType} (unsold)` : e.transferType);
               if (partyNames) parts.push(partyNames);
               if (e.dateExpression) parts.push(e.dateExpression);
               else if (e.dateYear) parts.push(String(e.dateYear));

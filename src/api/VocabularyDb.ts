@@ -216,6 +216,7 @@ interface ProvenanceEventDbRow {
   raw_text: string;
   gap: number;
   transfer_type: string;
+  unsold: number;
   transfer_category?: string | null;
   uncertain: number;
   parties: string;
@@ -245,6 +246,7 @@ export interface ProvenanceEventRow {
   rawText: string;
   gap: boolean;
   transferType: string;
+  unsold: boolean;
   transferCategory: "ownership" | "custody" | "ambiguous" | null;
   uncertain: boolean;
   parties: { name: string; dates: string | null; uncertain: boolean; role: string | null; position: "sender" | "receiver" | "agent" | null; positionMethod?: string | null; enrichmentReasoning?: string | null }[];
@@ -2615,6 +2617,7 @@ export class VocabularyDb {
       rawText: row.raw_text,
       gap: row.gap === 1,
       transferType: row.transfer_type,
+      unsold: (row.unsold ?? 0) === 1,
       transferCategory: (row.transfer_category as "ownership" | "custody" | "ambiguous" | null) ?? null,
       uncertain: row.uncertain === 1,
       parties,
