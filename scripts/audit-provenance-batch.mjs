@@ -1,10 +1,13 @@
 /**
  * Automated provenance parser audit via Anthropic Message Batches API.
  *
- * Three audit modes:
- *   silent-errors       Sample clean parses, find what the parser silently missed
- *   pattern-mining      Sample unknowns, find recurring grammar-fixable patterns
- *   semantic-catalogue  Sample hard cases, classify what KIND of reasoning is needed
+ * Six audit modes:
+ *   silent-errors        Sample clean parses, find what the parser silently missed
+ *   pattern-mining       Sample unknowns, find recurring grammar-fixable patterns
+ *   semantic-catalogue   Sample hard cases, classify what KIND of reasoning is needed
+ *   position-enrichment  Enrich null-position parties with sender/receiver/agent
+ *   structural-signals   Detect deterministic signals in unknown events
+ *   type-classification  Classify residual unknown events into transfer types
  *
  * Usage:
  *   node scripts/audit-provenance-batch.mjs --mode <mode> [options]
@@ -30,7 +33,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // ─── Modes ──────────────────────────────────────────────────────────
 
-const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification", "forced-sale"];
+const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification"];
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -1360,294 +1363,9 @@ function printTypeClassificationReport(report) {
   }
 }
 
-// ─── Forced sale ────────────────────────────────────────────────────
+// ─── Forced sale (extracted to offline/explorations/provenance/) ────
 
-function sampleForcedSale() {
-  const db = openDb();
-  let artworkIds;
 
-  if (recordsList) {
-    const objectNumbers = recordsList.split(",").map(s => s.trim());
-    artworkIds = db.prepare(
-      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
-    ).all(...objectNumbers).map(r => r.art_id);
-  } else {
-    // All artworks with sale events dated 1933–1945
-    artworkIds = db.prepare(`
-      SELECT DISTINCT artwork_id FROM provenance_events
-      WHERE transfer_type = 'sale' AND date_year BETWEEN 1933 AND 1945
-        AND is_cross_ref = 0
-      ORDER BY RANDOM() LIMIT ?
-    `).all(sampleSize).map(r => r.artwork_id);
-  }
-  return fetchRecords(artworkIds, { periods: false });
-}
-
-const TOOL_FORCED_SALE = {
-  name: "report_forced_sale_classification",
-  description: "Classify wartime sale events as forced_sale or voluntary sale",
-  input_schema: {
-    type: "object",
-    properties: {
-      artwork_id: { type: "integer" },
-      object_number: { type: "string" },
-      classifications: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            event_sequence: { type: "integer" },
-            classification: {
-              type: "string",
-              enum: ["forced_sale", "sale", "insufficient_evidence"],
-              description: "forced_sale: involuntary sale under persecution/duress; sale: voluntary transaction; insufficient_evidence: cannot determine from available text",
-            },
-            confidence: { type: "number", description: "0.0-1.0" },
-            indicators: {
-              type: "array",
-              items: { type: "string" },
-              description: "Specific evidence supporting the classification (e.g., 'buyer is Nazi apparatus', 'seller is known persecuted party', 'followed by war recuperation')",
-            },
-            reasoning: { type: "string", description: "Explanation of how indicators combine to support the classification" },
-          },
-          required: ["event_sequence", "classification", "confidence", "indicators", "reasoning"],
-        },
-      },
-    },
-    required: ["artwork_id", "object_number", "classifications"],
-  },
-};
-
-function buildPromptForcedSale(record) {
-  const eventsXml = record.events
-    .filter(e => !e.is_cross_ref)
-    .map(e => {
-      const parties = safeJson(e.parties) || [];
-      const partiesXml = parties.map((p, i) =>
-        `      <party idx="${i}" name="${esc(p.name || "")}" role="${p.role ?? "null"}" position="${p.position ?? "null"}" />`
-      ).join("\n");
-      return `    <event sequence="${e.sequence}" transfer_type="${e.transfer_type}" date_year="${e.date_year ?? "null"}" transfer_category="${e.transfer_category ?? "null"}">
-      <raw_text>${esc(e.raw_text)}</raw_text>
-${partiesXml}
-    </event>`;
-    }).join("\n");
-
-  // Identify sale events in the 1933–1945 window
-  const targetEvents = record.events.filter(
-    e => e.transfer_type === "sale" && e.date_year >= 1933 && e.date_year <= 1945 && !e.is_cross_ref
-  );
-  const targetsXml = targetEvents.map(e =>
-    `    <target sequence="${e.sequence}" date_year="${e.date_year}">${esc((e.raw_text || "").slice(0, 150))}</target>`
-  ).join("\n");
-
-  // Contextual signals: does the chain include recuperation?
-  const hasRecuperation = record.events.some(e => e.transfer_type === "recuperation");
-
-  return `<role>You are a provenance researcher specializing in Nazi-era forced transactions. You are classifying individual sale events from a Rijksmuseum artwork's provenance chain to determine whether they represent forced sales (involuntary transactions under persecution or duress) or voluntary sales.</role>
-
-<background>
-<historical_context>
-Between 1933 and 1945, the Nazi regime and its collaborators systematically looted, confiscated, and coerced the sale of art from Jewish collectors, dealers, and other persecuted groups across Europe. The Netherlands was occupied from May 1940 to May 1945. Key phases:
-- **1933–1939 (pre-occupation):** Jewish collectors in Germany and Austria fled or were forced to liquidate. Some sold through Dutch dealers.
-- **1940–1945 (occupation):** Direct confiscation by Nazi agencies (Dienststelle Mühlmann, ERR), forced sales by Jewish owners under anti-Jewish decrees, and purchases by Nazi officials (Göring, Posse/Führermuseum) and collaborating dealers.
-- **1945+ (post-war):** War recuperation by the Stichting Nederlands Kunstbezit (SNK), restitution proceedings.
-</historical_context>
-
-<cmoa_definition>
-The CMOA (Carnegie Museum of Art) Art Tracks thesaurus defines **Forced Sale** as:
-> "This object was purchased by the named party using involuntary pressure on the seller."
-
-A forced sale is a subcategory of **Sale** (not Confiscation) — it involves an exchange of value (money changed hands), but the seller acted under duress, persecution, or coercion. This distinguishes it from:
-- **Confiscation** — no exchange of value; legally seized by state authority
-- **Theft/Looting** — no exchange of value; illegally taken
-- **Voluntary sale** — seller acted freely, without external pressure
-</cmoa_definition>
-
-<indicators_forced>
-Strong indicators of a forced sale:
-1. **Nazi apparatus buyer:** Dienststelle Mühlmann, Hans Posse (Führermuseum/Linz), Hermann Göring, Erhard Göpel, Walter Andreas Hofer, Karl Haberstock, Alois Miedl, or other known Nazi art agents
-2. **Persecuted seller:** Known Jewish collector/dealer selling during 1933–1945, especially after occupation (1940). Key names in Rijksmuseum provenance: Fritz Mannheimer, Jacques Goudstikker, Nathan Katz, Adolphe Schloss, Gutmann family, Rothschild family, Lippmann-Rosenthal (Nazi-controlled looting bank)
-3. **"En bloc" liquidation:** Entire collections sold at once, often at below-market prices — characteristic of forced liquidation
-4. **Followed by recuperation:** A post-war "war recuperation, SNK" event strongly suggests the preceding sale was involuntary
-5. **Estate of persecuted party:** "purchased from his/the estate" of a person who died during persecution
-6. **Nazi-era keywords:** Feindvermögen (enemy property), Sichergestellt (secured/seized), Verwalter (administrator), Treuhänder (trustee), Beauftragter (commissioner)
-7. **Below-market pricing combined with wartime date and persecuted seller**
-</indicators_forced>
-
-<indicators_voluntary>
-Indicators of a voluntary sale:
-1. **Museum as buyer, artist as seller:** "from the artist, fl. X, to the museum" — direct purchase from a living artist
-2. **Known non-persecuted seller:** Dutch institutional sellers, auction houses operating normally, established dealers without known persecution history
-3. **Normal auction process:** Standard public auction with catalogue numbers, normal-looking prices, no subsequent recuperation
-4. **Pre-1940 Netherlands:** Before German occupation, Dutch sales were generally voluntary (though German/Austrian refugees may have been selling under duress from 1933)
-5. **No recuperation in the chain:** Absence of post-war SNK recuperation suggests the transaction was not considered problematic
-</indicators_voluntary>
-
-<important_nuance>
-Not all wartime sales are forced sales. The Rijksmuseum actively purchased art throughout the war years, often from dealers, artists, and estates in normal transactions. The presence of a 1940–1945 date alone is NOT sufficient to classify as forced_sale.
-
-Conversely, some sales before 1940 — particularly by German Jewish collectors fleeing Nazi Germany (1933–1939) — may be forced sales even though they occurred in the Netherlands before occupation.
-
-When evidence is ambiguous, use "insufficient_evidence" rather than guessing. The classification has legal and ethical implications for restitution claims.
-</important_nuance>
-</background>
-
-<artwork>
-Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
-Chain has recuperation event: ${hasRecuperation ? "YES" : "no"}
-</artwork>
-
-<full_provenance_chain>
-${eventsXml}
-</full_provenance_chain>
-
-<events_to_classify>
-${targetsXml}
-</events_to_classify>
-
-<examples>
-<example>
-<context>Sale to Nazi Führermuseum buyer, followed by war recuperation</context>
-<event sequence="4" date_year="1940">from whom, fl. 30,000, to Hans Posse (1879-1942), for Adolf Hitler's Führermuseum, Linz, 7 September 1940</event>
-<classification>
-  classification: forced_sale
-  confidence: 0.95
-  indicators: ["buyer is Hans Posse purchasing for Hitler's Führermuseum", "date during Dutch occupation (1940)", "followed by war recuperation SNK 1945"]
-  reasoning: Hans Posse was Hitler's chief art agent, acquiring works for the planned Führermuseum in Linz. The seller (a dealer consigned by an unknown collector) was operating under occupation conditions. The subsequent war recuperation by SNK confirms this was treated as an involuntary wartime transaction.
-</classification>
-</example>
-
-<example>
-<context>En bloc estate purchase by Dienststelle Mühlmann</context>
-<event sequence="3" date_year="1940">purchased from his estate, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940</event>
-<classification>
-  classification: forced_sale
-  confidence: 0.95
-  indicators: ["buyer is Dienststelle Mühlmann (Nazi art confiscation agency)", "en bloc estate purchase", "Fritz Mannheimer was a Jewish banker who died 1939", "followed by war recuperation"]
-  reasoning: The Dienststelle Mühlmann was the Nazi agency responsible for art acquisition in the Netherlands, operating under Seyss-Inquart. The "purchase" from Mannheimer's estate was conducted under occupation authority — the estate had no real choice. The en bloc nature and subsequent recuperation confirm forced character.
-</classification>
-</example>
-
-<example>
-<context>Normal museum purchase from an artist during wartime</context>
-<event sequence="5" date_year="1943">From the artist, fl. 20, to the museum, 1943</event>
-<classification>
-  classification: sale
-  confidence: 0.90
-  indicators: ["seller is the artist (not persecuted group)", "buyer is the Rijksmuseum (not Nazi apparatus)", "direct artist-to-museum sale", "no recuperation in chain"]
-  reasoning: A direct purchase from a living artist by the museum at a modest price. No indicators of duress — the artist is selling their own work voluntarily. The absence of any subsequent recuperation or restitution confirms this was a normal acquisition.
-</classification>
-</example>
-
-<example>
-<context>Standard auction sale, non-persecuted estate</context>
-<event sequence="3" date_year="1937">sale, A.W.M. Mensing (1866-1936, Amsterdam), Amsterdam (F. Muller), 27 April 1937 sqq., no. 869, fl. 210, with 44 other drawings, to the museum</event>
-<classification>
-  classification: sale
-  confidence: 0.85
-  indicators: ["standard public auction (F. Muller)", "seller died 1936 (pre-occupation)", "museum as buyer", "no recuperation in chain", "Mensing was a Dutch collector, not in persecuted category"]
-  reasoning: A.W.M. Mensing was a major Dutch art collector who died in 1936, before the German occupation. His estate sale at Frederik Muller was a normal posthumous auction. The museum purchased at public auction at normal prices. No indicators of duress.
-</classification>
-</example>
-
-<example>
-<context>Ambiguous — wartime sale with insufficient context</context>
-<event sequence="2" date_year="1943">acquired by Hubert W. Krantz (d. 1963), Aachen, 1943</event>
-<classification>
-  classification: insufficient_evidence
-  confidence: 0.60
-  indicators: ["buyer is in Aachen (Germany)", "date is 1943 (wartime)", "no information about seller or circumstances", "no recuperation in chain"]
-  reasoning: The bare acquisition note provides no information about who sold the artwork or under what circumstances. While the wartime date and German buyer raise questions, there is no evidence of a specific persecuted seller or Nazi involvement. Without more context, this cannot be classified as either forced or voluntary with confidence.
-</classification>
-</example>
-</examples>
-
-<task>
-For EACH sale event in events_to_classify, determine whether it was a forced sale, a voluntary sale, or has insufficient evidence to classify.
-
-Consider the FULL provenance chain — events before and after the sale provide critical context:
-- A recuperation event after the sale strongly suggests it was forced
-- The identity of the seller (previous event's party) matters: was this person/entity likely persecuted?
-- The identity of the buyer matters: was this a Nazi agency, official, or known collaborator?
-- En bloc sales of entire collections during wartime are suspicious
-
-Be conservative: if there is no clear evidence of duress, classify as "sale". Only use "forced_sale" when there are concrete indicators. Use "insufficient_evidence" when the text is too sparse to determine either way but the context raises questions.
-
-Use the report_forced_sale_classification tool to submit your classifications.
-</task>`;
-}
-
-function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
-
-function aggregateForcedSale(results) {
-  const classDist = {};
-  let total = 0;
-  let highConf = 0;
-  const allClassifications = [];
-  const indicatorFreq = {};
-
-  for (const r of results) {
-    if (r.error || !r.data?.classifications) continue;
-    for (const c of r.data.classifications) {
-      total++;
-      classDist[c.classification] = (classDist[c.classification] || 0) + 1;
-      if (c.confidence >= 0.8) highConf++;
-      for (const ind of c.indicators || []) {
-        indicatorFreq[ind] = (indicatorFreq[ind] || 0) + 1;
-      }
-      allClassifications.push({
-        objectNumber: r.data.object_number,
-        sequence: c.event_sequence,
-        classification: c.classification,
-        confidence: c.confidence,
-        indicators: c.indicators || [],
-        reasoning: c.reasoning,
-      });
-    }
-  }
-
-  return { total, highConf, classDist, indicatorFreq, allClassifications };
-}
-
-function printForcedSaleReport(report) {
-  console.log(`\n## Forced Sale Classification (${report.total} events)\n`);
-  console.log(`| Metric | Value |`);
-  console.log(`|--------|-------|`);
-  console.log(`| Total classified | ${report.total} |`);
-  console.log(`| High confidence (≥0.8) | ${report.highConf} (${(100 * report.highConf / Math.max(report.total, 1)).toFixed(0)}%) |`);
-
-  console.log(`\n### Classification distribution\n`);
-  console.log(`| Classification | Count | % |`);
-  console.log(`|---------------|-------|---|`);
-  for (const [cls, count] of Object.entries(report.classDist).sort((a, b) => b[1] - a[1])) {
-    console.log(`| ${cls} | ${count} | ${(100 * count / Math.max(report.total, 1)).toFixed(1)}% |`);
-  }
-
-  console.log(`\n### Top indicators\n`);
-  const topInd = Object.entries(report.indicatorFreq).sort((a, b) => b[1] - a[1]).slice(0, 15);
-  for (const [ind, count] of topInd) {
-    console.log(`- ${ind} (${count})`);
-  }
-
-  console.log(`\n### Forced sale samples\n`);
-  const forced = report.allClassifications.filter(c => c.classification === "forced_sale").slice(0, 10);
-  for (const c of forced) {
-    console.log(`- **${c.objectNumber}** seq ${c.sequence}: (${(c.confidence * 100).toFixed(0)}%) ${c.indicators.slice(0, 3).join("; ")}`);
-    console.log(`  _${c.reasoning.slice(0, 150)}_`);
-  }
-
-  console.log(`\n### Voluntary sale samples\n`);
-  const vol = report.allClassifications.filter(c => c.classification === "sale").slice(0, 5);
-  for (const c of vol) {
-    console.log(`- **${c.objectNumber}** seq ${c.sequence}: (${(c.confidence * 100).toFixed(0)}%) ${c.indicators.slice(0, 2).join("; ")}`);
-  }
-
-  console.log(`\n### Insufficient evidence samples\n`);
-  const insuff = report.allClassifications.filter(c => c.classification === "insufficient_evidence").slice(0, 5);
-  for (const c of insuff) {
-    console.log(`- **${c.objectNumber}** seq ${c.sequence}: (${(c.confidence * 100).toFixed(0)}%) ${c.reasoning.slice(0, 100)}`);
-  }
-}
 
 // ─── Batch construction ─────────────────────────────────────────────
 
@@ -2113,13 +1831,6 @@ const MODE_CONFIG = {
     buildPrompt: buildPromptTypeClassification,
     aggregate: aggregateTypeClassification,
     report: printTypeClassificationReport,
-  },
-  "forced-sale": {
-    sample: sampleForcedSale,
-    tool: TOOL_FORCED_SALE,
-    buildPrompt: buildPromptForcedSale,
-    aggregate: aggregateForcedSale,
-    report: printForcedSaleReport,
   },
 };
 
