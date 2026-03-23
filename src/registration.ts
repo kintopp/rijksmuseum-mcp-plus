@@ -207,8 +207,18 @@ async function fetchVisualSimilar(
   }
 }
 
+// provenanceChain is excluded from ArtworkDetailOutput (schema too large for some clients)
+// but still available on the raw data for text channel formatting.
+interface ProvenanceChainEvent {
+  gap: boolean; party: { name: string; uncertain: boolean } | null;
+  transferType: string; date: { text: string; year: number | null } | null;
+  location: string | null; price: { currency: string; amount: number | null; text: string } | null;
+  uncertain: boolean;
+}
+type DetailWithChain = InferOutput<typeof ArtworkDetailOutput> & { provenanceChain?: ProvenanceChainEvent[] | null };
+
 /** Format artwork detail as a compact key-value summary for LLM content (Tier 3). */
-function formatDetailSummary(d: InferOutput<typeof ArtworkDetailOutput>): string {
+function formatDetailSummary(d: DetailWithChain): string {
   const lines: string[] = [];
   lines.push(`${d.objectNumber} — ${d.title}`);
   lines.push(`${d.creator}${d.date ? `, ${d.date}` : ""}`);
@@ -609,35 +619,6 @@ const ArtworkDetailOutput = {
     depictedPlaces: z.array(ResolvedTermShape()),
   }),
   bibliographyCount: z.number().int(),
-  provenanceChain: z.array(z.object({
-    sequence: z.number().int(),
-    rawText: z.string(),
-    gap: z.boolean(),
-    party: z.object({
-      name: z.string(),
-      dates: z.string().nullable(),
-      uncertain: z.boolean(),
-      role: z.string().nullable(),
-    }).nullable(),
-    transferType: z.enum(["sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
-      "confiscation", "theft", "looting", "recuperation", "loan", "transfer", "collection", "gift",
-      "exchange", "deposit", "restitution", "inventory", "unknown"]),
-    date: z.object({
-      text: z.string(),
-      year: z.number().int().nullable(),
-      approximate: z.boolean(),
-      qualifier: z.enum(["before", "after", "circa"]).nullable(),
-    }).nullable(),
-    location: z.string().nullable(),
-    price: z.object({
-      text: z.string(),
-      amount: z.number().nullable(),
-      currency: z.string(),
-    }).nullable(),
-    saleDetails: z.string().nullable(),
-    citations: z.array(z.object({ text: z.string() })),
-    uncertain: z.boolean(),
-  })).nullable(),
   error: z.string().optional(),
 };
 
@@ -1441,7 +1422,11 @@ function registerTools(
           if (info) p.personInfo = info;
         }
       }
-      return structuredResponse(detail, formatDetailSummary(detail));
+      const text = formatDetailSummary(detail);
+      // Strip provenanceChain from structuredContent — too large for some clients.
+      // The text channel still includes the provenance summary.
+      const { provenanceChain: _, ...structuredDetail } = detail as DetailWithChain & Record<string, unknown>;
+      return structuredResponse(structuredDetail, text);
     })
   );
 
