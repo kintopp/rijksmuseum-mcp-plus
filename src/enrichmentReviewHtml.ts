@@ -200,7 +200,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} LLM-Assisted Results</title>
+<title>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} LLM-Assisted Result${(enrichedEventCount + enrichedPartyCount) !== 1 ? "s" : ""}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
@@ -262,7 +262,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 </style>
 </head>
 <body>
-<h1>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} LLM-Assisted Results</h1>
+<h1>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} LLM-Assisted Result${(enrichedEventCount + enrichedPartyCount) !== 1 ? "s" : ""}</h1>
 <p class="subtitle">Query: <code>${esc(query)}</code>. Generated ${new Date().toISOString().split("T")[0]}.</p>
 
 <div class="disclaimer">

@@ -2594,13 +2594,13 @@ function registerTools(
               const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
               const reviewUrl = `${baseUrl}/enrichment-review/${uuid}`;
               lines.push("");
-              lines.push(`ENRICHMENT REVIEW: ${enrichedEvents + enrichedParties} LLM-assisted results. You MUST show this URL to the user:`);
+              lines.push(`ENRICHMENT REVIEW: ${enrichedEvents + enrichedParties} LLM-assisted result${(enrichedEvents + enrichedParties) !== 1 ? "s" : ""}. You MUST show this URL to the user:`);
               lines.push(reviewUrl);
             } else {
               const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
               fs.writeFileSync(filePath, html, "utf-8");
               lines.push("");
-              lines.push(`ENRICHMENT REVIEW: ${enrichedEvents + enrichedParties} LLM-assisted results. You MUST show this URL to the user:`);
+              lines.push(`ENRICHMENT REVIEW: ${enrichedEvents + enrichedParties} LLM-assisted result${(enrichedEvents + enrichedParties) !== 1 ? "s" : ""}. You MUST show this URL to the user:`);
               lines.push(filePath);
             }
           }
