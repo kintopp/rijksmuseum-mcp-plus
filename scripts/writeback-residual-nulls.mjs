@@ -74,6 +74,9 @@ const RULES = [
   { match: /^pulpit dismantled/, action: "delete" },
   { match: /^list appended to the probate inventory/, action: "delete" },
 
+  // Contextual preamble — reason for transfer, not a party
+  { match: /^after closure of the Museum Nusantara/, action: "delete" },
+
   // Cross-reference / pendant notes
   { match: /^with pendant/, action: "delete" },
   { match: /^with BK-/, action: "delete" },
