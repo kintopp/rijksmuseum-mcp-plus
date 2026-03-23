@@ -267,13 +267,13 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 
 <div class="disclaimer">
   <h2>About this page</h2>
-  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the deterministic parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision.</p>
-  <p style="margin-top:0.5rem;">These classifications are automated and have not been individually verified by a curator. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision.</p>
+  <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
 </div>
 
 <div class="summary">
   <h2>Task description</h2>
-  <p style="font-size:0.9rem;line-height:1.6;">The Rijksmuseum provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
+  <p style="font-size:0.9rem;line-height:1.6;">The provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
 </div>
 
 <div class="summary">
