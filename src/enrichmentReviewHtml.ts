@@ -273,7 +273,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 
 <div class="summary">
   <h2>Task description</h2>
-  <p style="font-size:0.9rem;line-height:1.6;">The Rijksmuseum provenance parser uses a 3-layer architecture (PEG grammar + regex fallback + interpretation) to extract structured ownership events from raw provenance text. When the parser cannot classify an event or assign a party position deterministically, an LLM (Claude Sonnet) is used with domain-specific prompts (AAM convention, CMOA vocabulary, Rijksmuseum-specific patterns) and few-shot examples to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
+  <p style="font-size:0.9rem;line-height:1.6;">The Rijksmuseum provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
 </div>
 
 <div class="summary">
