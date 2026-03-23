@@ -51,7 +51,7 @@ function methodLabel(method: string): string {
   switch (method) {
     case "llm_enrichment": return "LLM classified";
     case "llm_disambiguation": return "LLM disambiguated";
-    case "rule:transfer_is_ownership": return "Deterministic rule";
+    case "rule:transfer_is_ownership": return "Validated rule";
     default: return method;
   }
 }
@@ -267,7 +267,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 
 <div class="disclaimer">
   <h2>About this page</h2>
-  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the deterministic parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision. LLM-Assisted Results marked <code>llm_enrichment</code> were classified by the LLM; <code>llm_disambiguation</code> were decomposed from merged party text; <code>rule:transfer_is_ownership</code> were reclassified by a deterministic rule validated by LLM pilot.</p>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the deterministic parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision.</p>
   <p style="margin-top:0.5rem;">These classifications are automated and have not been individually verified by a curator. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
 </div>
 
