@@ -200,7 +200,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} Records</title>
+<title>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} LLM-Assisted Results</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
@@ -262,12 +262,12 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 </style>
 </head>
 <body>
-<h1>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} Records</h1>
+<h1>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} LLM-Assisted Results</h1>
 <p class="subtitle">Query: <code>${esc(query)}</code>. Generated ${new Date().toISOString().split("T")[0]}.</p>
 
 <div class="disclaimer">
   <h2>About this page</h2>
-  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the deterministic parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision. Records marked <code>llm_enrichment</code> were classified by the LLM; <code>llm_disambiguation</code> were decomposed from merged party text; <code>rule:transfer_is_ownership</code> were reclassified by a deterministic rule validated by LLM pilot.</p>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the deterministic parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision. LLM-Assisted Results marked <code>llm_enrichment</code> were classified by the LLM; <code>llm_disambiguation</code> were decomposed from merged party text; <code>rule:transfer_is_ownership</code> were reclassified by a deterministic rule validated by LLM pilot.</p>
   <p style="margin-top:0.5rem;">These classifications are automated and have not been individually verified by a curator. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
 </div>
 

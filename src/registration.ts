@@ -2608,12 +2608,12 @@ function registerTools(
               enrichmentReviewPages.set(uuid, { html, lastAccess: Date.now() });
               const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
               lines.push("");
-              lines.push(`${enrichedEvents + enrichedParties} records in these results were enriched by LLM — review methodology and reasoning at ${baseUrl}/enrichment-review/${uuid}`);
+              lines.push(`${enrichedEvents + enrichedParties} LLM-assisted results in this response — review methodology and reasoning at ${baseUrl}/enrichment-review/${uuid}`);
             } else {
               const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
               fs.writeFileSync(filePath, html, "utf-8");
               lines.push("");
-              lines.push(`${enrichedEvents + enrichedParties} records in these results were enriched by LLM — review methodology and reasoning at ${filePath}`);
+              lines.push(`${enrichedEvents + enrichedParties} LLM-assisted results in this response — review methodology and reasoning at ${filePath}`);
             }
           }
         }
