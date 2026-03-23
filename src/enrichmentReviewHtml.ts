@@ -267,7 +267,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 
 <div class="disclaimer">
   <h2>About this page</h2>
-  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision.</p>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision.</p>
   <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
 </div>
 
