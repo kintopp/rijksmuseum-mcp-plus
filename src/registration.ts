@@ -2221,22 +2221,29 @@ function registerTools(
           "Search ownership and provenance history across ~48K artworks with parsed provenance records. " +
           "Returns full provenance chains grouped by artwork, with matching events flagged. " +
           "Each chain tells the complete ownership story: collectors, sales, inheritances, gifts, " +
-          "confiscations, and restitutions, with dates, locations, prices, and citations. " +
+          "confiscations, and restitutions, with dates, locations, prices, and citations.\n\n" +
           "Use objectNumber for a single artwork's chain (fast local lookup, no network). " +
           "Use party to trace a collector or dealer across artworks (e.g. 'Six', 'Rothschild'). " +
           "Use relatedTo for reverse cross-references — find all works sharing provenance with a given object " +
           "(pendants, album sheets, dollhouse contents). " +
           "Combine transferType, dateFrom/dateTo, location for pattern discovery " +
-          "(e.g. confiscations 1940–1945, sales in Paris). " +
-          "Each event includes parseMethod (peg, regex_fallback, cross_ref) indicating parse confidence. " +
-          "Events and parties enriched by LLM include categoryMethod/positionMethod and enrichmentReasoning for transparency. " +
+          "(e.g. confiscations 1940–1945, sales in Paris).\n\n" +
+          "IMPORTANT flags on events:\n" +
+          "- unsold: true means this sale event was unsold/bought-in/withdrawn at auction — no ownership transfer occurred. " +
+          "Filter these when analysing actual sales.\n" +
+          "- batchPrice: true means the price is an en bloc/batch total for multiple artworks, not an individual price. " +
+          "Filter these when ranking or comparing prices — they massively distort rankings.\n\n" +
+          "Every record carries provenance-of-provenance metadata: parseMethod shows how the event was parsed " +
+          "(peg, regex_fallback, cross_ref, credit_line), categoryMethod/positionMethod show how classifications " +
+          "and party positions were determined (type_mapping, role_mapping, llm_enrichment, llm_disambiguation, " +
+          "rule:transfer_is_ownership), and enrichmentReasoning provides the LLM's reasoning for any non-deterministic decision. " +
+          "Parties have position (sender/receiver/agent) indicating their role in the transfer.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "For collection-wide counting or keyword searches that don't map to structured fields, " +
           "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
           "For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — " +
           "also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) " +
           "and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). " +
-          "Combine provenance + creditLine + facets for collector profiling and acquisition channel analysis. " +
           "At least one filter is required.",
         inputSchema: z.object({
           layer: z.preprocess(stripNull,
@@ -2246,7 +2253,7 @@ function registerTools(
           transferType: z.preprocess(
             normalizeStringOrArray,
             z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
-          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: collection (18K), by_descent (13K), sale (15K), gift (10K), transfer (6K), loan (6K), bequest (4K), widowhood (3K). Rare: recuperation, commission, deposit, restitution, confiscation, exchange, inventory, theft, looting. Generic: inheritance (when specific relationship unknown)."),
+          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: collection (18.5K), sale (15.6K — includes unsold, filter with unsold flag), by_descent (13.7K), gift (10.7K), transfer (6.2K), loan (6.3K), bequest (4.4K), widowhood (3.4K). Rare: recuperation, commission, deposit, restitution, confiscation, exchange, inventory, theft, looting. Generic: inheritance (when specific relationship unknown)."),
           excludeTransferType: z.preprocess(
             normalizeStringOrArray,
             z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
