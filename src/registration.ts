@@ -20,7 +20,7 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
-import { generateEnrichmentReviewHtml, isEnrichedEvent, isEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
+import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
 import type { SearchParams, LinkedArtObject } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2534,20 +2534,21 @@ function registerTools(
           }
         }
 
-        // Enrichment review: detect LLM-enriched records and generate review page
+        // Enrichment review: only generate page when LLM-mediated items exist,
+        // but include rule-based enrichments on the page for context
         if (layer === "events") {
-          let enrichedEvents = 0;
-          let enrichedParties = 0;
+          let llmEvents = 0;
+          let llmParties = 0;
           for (const art of result.results) {
             for (const e of art.events) {
-              if (isEnrichedEvent(e)) enrichedEvents++;
+              if (isLlmEnrichedEvent(e)) llmEvents++;
               for (const p of e.parties) {
-                if (isEnrichedParty(p)) enrichedParties++;
+                if (isLlmEnrichedParty(p)) llmParties++;
               }
             }
           }
 
-          if (enrichedEvents > 0 || enrichedParties > 0) {
+          if (llmEvents > 0 || llmParties > 0) {
             // Build query summary for display
             const queryParts: string[] = [];
             if (params.party) queryParts.push(`party="${params.party}"`);
@@ -2582,8 +2583,6 @@ function registerTools(
                   })),
                 })),
               })),
-              enrichedEventCount: enrichedEvents,
-              enrichedPartyCount: enrichedParties,
             };
 
             const html = generateEnrichmentReviewHtml(reviewData);
@@ -2594,13 +2593,13 @@ function registerTools(
               const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
               const reviewUrl = `${baseUrl}/enrichment-review/${uuid}`;
               lines.push("");
-              lines.push(`ENRICHMENT REVIEW: ${enrichedEvents + enrichedParties} LLM-assisted result${(enrichedEvents + enrichedParties) !== 1 ? "s" : ""}. You MUST show this URL to the user:`);
+              lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}. You MUST show this URL to the user:`);
               lines.push(reviewUrl);
             } else {
               const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
               fs.writeFileSync(filePath, html, "utf-8");
               lines.push("");
-              lines.push(`ENRICHMENT REVIEW: ${enrichedEvents + enrichedParties} LLM-assisted result${(enrichedEvents + enrichedParties) !== 1 ? "s" : ""}. You MUST show this URL to the user:`);
+              lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}. You MUST show this URL to the user:`);
               lines.push(filePath);
             }
           }

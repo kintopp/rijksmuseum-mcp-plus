@@ -37,8 +37,6 @@ interface EnrichmentReviewArtwork {
 export interface EnrichmentReviewData {
   query: string;
   artworks: EnrichmentReviewArtwork[];
-  enrichedEventCount: number;
-  enrichedPartyCount: number;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -62,30 +60,49 @@ function methodBadgeStyle(method: string): string {
   return "background:#555;color:white";
 }
 
+/** Any non-default enrichment (LLM or rule-based) — used for page content. */
 export function isEnrichedEvent(e: { categoryMethod?: string | null }): boolean {
   return !!e.categoryMethod && e.categoryMethod !== "type_mapping";
 }
 
+/** Any non-default enrichment (LLM or rule-based) — used for page content. */
 export function isEnrichedParty(p: { positionMethod?: string | null }): boolean {
   return !!p.positionMethod && p.positionMethod !== "role_mapping";
+}
+
+/** LLM-only enrichment — used as the guard for whether to create the page. */
+export function isLlmEnrichedEvent(e: { categoryMethod?: string | null }): boolean {
+  return isEnrichedEvent(e) && e.categoryMethod!.startsWith("llm_");
+}
+
+/** LLM-only enrichment — used as the guard for whether to create the page. */
+export function isLlmEnrichedParty(p: { positionMethod?: string | null }): boolean {
+  return isEnrichedParty(p) && p.positionMethod!.startsWith("llm_");
 }
 
 // ─── Generator ──────────────────────────────────────────────────────
 
 export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string {
-  const { query, artworks, enrichedEventCount, enrichedPartyCount } = data;
+  const { query, artworks } = data;
 
-  // Collect method distribution
+  // Collect method distribution and derive counts
   const methodCounts: Record<string, number> = {};
+  let enrichedEventCount = 0;
+  let enrichedPartyCount = 0;
+  let llmCount = 0;
   for (const art of artworks) {
     for (const e of art.events) {
       if (isEnrichedEvent(e)) {
+        enrichedEventCount++;
         const m = e.categoryMethod!;
+        if (m.startsWith("llm_")) llmCount++;
         methodCounts[m] = (methodCounts[m] || 0) + 1;
       }
       for (const p of e.parties) {
         if (isEnrichedParty(p)) {
+          enrichedPartyCount++;
           const m = p.positionMethod!;
+          if (m.startsWith("llm_")) llmCount++;
           methodCounts[m] = (methodCounts[m] || 0) + 1;
         }
       }
@@ -200,7 +217,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} LLM-Assisted Result${(enrichedEventCount + enrichedPartyCount) !== 1 ? "s" : ""}</title>
+<title>Enrichment Review — ${llmCount} LLM-Assisted Result${llmCount !== 1 ? "s" : ""}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
@@ -262,7 +279,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 </style>
 </head>
 <body>
-<h1>Enrichment Review — ${enrichedEventCount + enrichedPartyCount} LLM-Assisted Result${(enrichedEventCount + enrichedPartyCount) !== 1 ? "s" : ""}</h1>
+<h1>Enrichment Review — ${llmCount} LLM-Assisted Result${llmCount !== 1 ? "s" : ""}</h1>
 <p class="subtitle">Query: <code>${esc(query)}</code>. Generated ${new Date().toISOString().split("T")[0]}.</p>
 
 <div class="disclaimer">
