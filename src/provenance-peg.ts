@@ -26,6 +26,7 @@ const placesSet: Set<string> = new Set(placesJson as string[]);
 
 // SYNC: keep in sync with UNSOLD_RE in provenance-grammar.peggy:44
 const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
+const BATCH_PRICE_RE = /\b(?:en\s+bloc|with\s+\S+\s+other\s+(?:painting|drawing|object|work|model|piece|item)s?|for\s+(?:both|all)\b|with\s+(?:SK|BK|RP|AK|NG)-)/i;
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ export interface RawProvenanceEvent {
 
   transferType: TransferType;
   unsold: boolean;
+  batchPrice: boolean;
   uncertain: boolean;
 
   parties: ProvenanceParty[];
@@ -190,6 +192,7 @@ function astToRawEvent(
     gap,
     transferType,
     unsold: !!ast.unsold,
+    batchPrice: BATCH_PRICE_RE.test(rawText),
     uncertain: ast.uncertain,
     parties,
     dateExpression: ast.dateExpression ?? null,
@@ -219,6 +222,7 @@ function regexFallbackToRawEvent(
     gap: event.gap,
     transferType: event.transferType,
     unsold: UNSOLD_RE.test(segment.text),
+    batchPrice: BATCH_PRICE_RE.test(segment.text),
     uncertain: event.uncertain,
     parties: event.party ? [event.party] : [],
     dateExpression: event.date?.text ?? null,
@@ -258,6 +262,7 @@ export function parseProvenanceRaw(
         gap: false,
         transferType: "unknown",
         unsold: false,
+        batchPrice: false,
         uncertain: false,
         parties: [],
         dateExpression: null,

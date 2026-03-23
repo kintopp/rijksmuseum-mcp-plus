@@ -158,6 +158,7 @@ export interface ProvenanceEvent {
   party: ProvenanceParty | null;
   transferType: TransferType;
   unsold: boolean;
+  batchPrice: boolean;
   date: ProvenanceDate | null;
   location: string | null;
   price: ProvenancePrice | null;
@@ -722,6 +723,7 @@ export function parseEvent(
     party: parseParty(working),
     transferType,
     unsold: transferType === "sale" && /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i.test(working),
+    batchPrice: /\b(?:en\s+bloc|with\s+\S+\s+other\s+(?:painting|drawing|object|work|model|piece|item)s?|for\s+(?:both|all)\b|with\s+(?:SK|BK|RP|AK|NG)-)/i.test(working),
     date: parseDate(working),
     location: parseLocation(working),
     price: parsePrice(working),

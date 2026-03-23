@@ -2152,6 +2152,8 @@ function registerTools(
         transferType: z.string(),
         unsold: z.boolean()
           .describe("True if this sale event was unsold, bought in, or withdrawn at auction. Only meaningful when transferType is 'sale'."),
+        batchPrice: z.boolean()
+          .describe("True if the price is a batch/en bloc total for multiple artworks, not an individual price. Filter these out when ranking by price."),
         transferCategory: z.enum(["ownership", "custody", "ambiguous"]).nullable()
           .describe("Whether this transfer involves ownership change, custody change, or is ambiguous."),
         uncertain: z.boolean(),
@@ -2367,7 +2369,7 @@ function registerTools(
               if (e.dateExpression) parts.push(e.dateExpression);
               else if (e.dateYear) parts.push(String(e.dateYear));
               if (e.location) parts.push(e.location);
-              if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}`);
+              if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}${e.batchPrice ? " (batch)" : ""}`);
               if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
               lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}`);
             }

@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS provenance_events (
   gap            INTEGER NOT NULL DEFAULT 0,
   transfer_type  TEXT    NOT NULL,
   unsold         INTEGER NOT NULL DEFAULT 0,
+  batch_price    INTEGER NOT NULL DEFAULT 0,
   transfer_category TEXT,
   category_method TEXT,
   uncertain      INTEGER NOT NULL DEFAULT 0,
@@ -146,12 +147,12 @@ if (!dryRun) {
 // Prepare statements
 const insertEvent = dryRun ? null : db.prepare(`
   INSERT INTO provenance_events (
-    artwork_id, sequence, raw_text, gap, transfer_type, unsold,
+    artwork_id, sequence, raw_text, gap, transfer_type, unsold, batch_price,
     transfer_category, category_method, uncertain,
     parties, date_expression, date_year, date_qualifier,
     location, price_amount, price_currency, sale_details, citations,
     is_cross_ref, cross_ref_target, parse_method
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const insertParty = dryRun ? null : db.prepare(`
@@ -202,7 +203,7 @@ const insertBatch = dryRun ? () => {} : db.transaction((batch) => {
         position: inferPosition(p.role, e.transferType),
       }));
       insertEvent.run(
-        artId, e.sequence, e.rawText, e.gap ? 1 : 0, e.transferType, e.unsold ? 1 : 0,
+        artId, e.sequence, e.rawText, e.gap ? 1 : 0, e.transferType, e.unsold ? 1 : 0, e.batchPrice ? 1 : 0,
         category, category ? "type_mapping" : null, e.uncertain ? 1 : 0,
         JSON.stringify(enrichedParties), e.dateExpression, e.dateYear, e.dateQualifier,
         e.location, e.price?.amount ?? null, e.price?.currency ?? null, e.saleDetails,
