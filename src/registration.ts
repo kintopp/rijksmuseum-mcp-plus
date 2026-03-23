@@ -20,6 +20,7 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
+import { generateEnrichmentReviewHtml, isEnrichedEvent, isEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
 import type { SearchParams, LinkedArtObject } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -731,24 +732,24 @@ interface ViewerQueue {
   imageHeight?: number;
   activeOverlays: OverlayEntry[];
 }
+/** Start a 60s interval that deletes entries older than `ttlMs` from a Map. */
+function sweepTtlMap<T extends { lastAccess: number }>(map: Map<string, T>, ttlMs = 1_800_000): void {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [id, entry] of map) {
+      if (now - entry.lastAccess > ttlMs) map.delete(id);
+    }
+  }, 60_000).unref();
+}
+
 const viewerQueues = new Map<string, ViewerQueue>();
+sweepTtlMap(viewerQueues);
 
-// Sweep stale queues every 60s (viewers that disconnected without teardown)
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, q] of viewerQueues) {
-    if (now - q.lastAccess > 1_800_000) viewerQueues.delete(id);
-  }
-}, 60_000).unref();
-
-/** Module-scope storage for generated similar-artworks HTML pages. TTL 30 min. */
 export const similarPages = new Map<string, { html: string; lastAccess: number }>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, page] of similarPages) {
-    if (now - page.lastAccess > 1_800_000) similarPages.delete(id);
-  }
-}, 60_000).unref();
+sweepTtlMap(similarPages);
+
+export const enrichmentReviewPages = new Map<string, { html: string; lastAccess: number }>();
+sweepTtlMap(enrichmentReviewPages);
 
 // ─── Geometry helpers (pure) ─────────────────────────────────────────
 
@@ -2379,6 +2380,75 @@ function registerTools(
               if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}${e.batchPrice ? " (batch)" : ""}`);
               if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
               lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}`);
+            }
+          }
+        }
+
+        // Enrichment review: detect LLM-enriched records and generate review page
+        if (layer === "events") {
+          let enrichedEvents = 0;
+          let enrichedParties = 0;
+          for (const art of result.results) {
+            for (const e of art.events) {
+              if (isEnrichedEvent(e)) enrichedEvents++;
+              for (const p of e.parties) {
+                if (isEnrichedParty(p)) enrichedParties++;
+              }
+            }
+          }
+
+          if (enrichedEvents > 0 || enrichedParties > 0) {
+            // Build query summary for display
+            const queryParts: string[] = [];
+            if (params.party) queryParts.push(`party="${params.party}"`);
+            if (params.transferType) queryParts.push(`type=${Array.isArray(params.transferType) ? params.transferType.join(",") : params.transferType}`);
+            if (params.location) queryParts.push(`location="${params.location}"`);
+            if (params.dateFrom != null || params.dateTo != null) queryParts.push(`date=${params.dateFrom ?? "?"}–${params.dateTo ?? "?"}`);
+            if (params.objectNumber) queryParts.push(`objectNumber=${params.objectNumber}`);
+            if (params.creator) queryParts.push(`creator="${params.creator}"`);
+
+            const reviewData: EnrichmentReviewData = {
+              query: queryParts.join(", ") || "(all filters)",
+              artworks: result.results.map(art => ({
+                objectNumber: art.objectNumber,
+                title: art.title,
+                creator: art.creator,
+                events: art.events.map(e => ({
+                  sequence: e.sequence,
+                  rawText: e.rawText,
+                  gap: e.gap,
+                  transferType: e.transferType,
+                  unsold: e.unsold,
+                  batchPrice: e.batchPrice,
+                  dateYear: e.dateYear,
+                  categoryMethod: e.categoryMethod ?? null,
+                  enrichmentReasoning: e.enrichmentReasoning ?? null,
+                  parties: e.parties.map(p => ({
+                    name: p.name,
+                    role: p.role,
+                    position: p.position,
+                    positionMethod: p.positionMethod ?? null,
+                    enrichmentReasoning: p.enrichmentReasoning ?? null,
+                  })),
+                })),
+              })),
+              enrichedEventCount: enrichedEvents,
+              enrichedPartyCount: enrichedParties,
+            };
+
+            const html = generateEnrichmentReviewHtml(reviewData);
+            const uuid = randomUUID();
+
+            if (httpPort) {
+              enrichmentReviewPages.set(uuid, { html, lastAccess: Date.now() });
+              const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
+              lines.push("");
+              lines.push(`${enrichedEvents + enrichedParties} records in these results were enriched by LLM — review methodology and reasoning at ${baseUrl}/enrichment-review/${uuid}`);
+            } else {
+              const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
+              fs.writeFileSync(filePath, html, "utf-8");
+              lines.push("");
+              lines.push(`${enrichedEvents + enrichedParties} records in these results were enriched by LLM — review methodology and reasoning at ${filePath}`);
             }
           }
         }
