@@ -1,0 +1,22 @@
+table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning
+provenance_events,44310,1,,date_year,1346,,Lot number (no. 1346) parsed as year. Artwork created 1640-1649.
+provenance_events,44310,1,,date_expression,1346,,Same — lot number not a date.
+provenance_periods,44310,1,,begin_year,1346,,Derived from incorrect date_year on event 1.
+provenance_events,13609,11,,transfer_type,unknown,sale,Auction event at Gilhofer & Ranschburg with lot number — sale context despite missing 'sale' prefix. Unsold and returned to owner.
+provenance_events,13609,11,,transfer_category,,ownership,Sale → ownership.
+provenance_events,13609,11,,category_method,,llm_enrichment,Classified by Claude Opus 4.6.
+provenance_events,173085,2,,unsold,1,0,Unsold flag fired on 'bought in' buried deep in a long collection narrative. Not a sale event.
+provenance_events,190572,1,,unsold,1,0,Unsold flag fired on 'bought in' in early provenance of a loan event. Not a sale event.
+provenance_events,152446,3,,transfer_type,unknown,sale,"Reclassified: 'bought in by Cassirer from whom, RM. 800, to the Vereniging' is a post-auction sale."
+provenance_events,152446,3,,transfer_category,,ownership,Sale → ownership.
+provenance_events,152446,3,,category_method,,llm_enrichment,Classified by Claude Opus 4.6.
+provenance_events,277996,1,,enrichment_reasoning,,Bibliographic reference (De Gruyter 2010 p. 291) — not a provenance event.,Left as unknown with documentation.
+provenance_events,816454,1,,is_cross_ref,0,1,Object-part cross-reference label (BK-KOG-585 top section). Not a provenance event.
+provenance_events,118239,1,,transfer_type,unknown,collection,Bare name in AAM convention — E.C. Lorentz held the artwork before passing it to his niece P. van Gilst.
+provenance_events,118239,1,,transfer_category,,ownership,Collection → ownership.
+provenance_events,118239,1,,category_method,,llm_enrichment,Classified by Claude Opus 4.6.
+provenance_parties,10076,5,*,DELETE,,,"Charter Room in Leiden Town Hall — location within institution, not a receiver party."
+provenance_parties,10991,7,*,DELETE,,,"Charter Room in Leiden Town Hall — location within institution, not a receiver party."
+provenance_parties,199081,2,*,DELETE,,,"Charter Room in Leiden Town Hall — location within institution, not a receiver party."
+provenance_parties,204376,3,*,DELETE,,,"Charter Room in Leiden Town Hall — location within institution, not a receiver party."
+provenance_parties,8606,2,*,DELETE,,,"the Charter Room of this institution — location within institution, not a receiver party."

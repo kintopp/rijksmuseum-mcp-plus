@@ -35,21 +35,121 @@ export interface ProvenanceParty {
   dates: string | null;
   uncertain: boolean;
   role: string | null;
+  position?: "sender" | "receiver" | "agent" | null;
 }
 
 export type TransferType =
   | "sale"
   | "inheritance"
+  | "by_descent"
+  | "widowhood"
   | "bequest"
   | "commission"
-  | "purchase"
   | "confiscation"
+  | "theft"
+  | "looting"
   | "recuperation"
   | "loan"
   | "transfer"
   | "collection"
   | "gift"
+  | "exchange"
+  | "deposit"
+  | "restitution"
+  | "inventory"
   | "unknown";
+
+export type TransferCategory = "ownership" | "custody" | "ambiguous";
+
+// ─── Party position mapping ──────────────────────────────────────────
+// Maps party roles (assigned by PEG grammar) to transfer positions.
+// Position is relative to the transfer event:
+//   sender = relinquishes the artwork
+//   receiver = acquires the artwork
+//   agent = facilitates without owning
+
+export const ROLE_TO_POSITION: Record<string, "sender" | "receiver" | "agent"> = {
+  // Receivers
+  buyer: "receiver",
+  borrower: "receiver",
+  heir: "receiver",
+  recipient: "receiver",
+  patron: "receiver",
+  collector: "receiver",
+  creator: "receiver",
+  sitter: "receiver",
+  // Senders
+  seller: "sender",
+  consignor: "sender",
+  donor: "sender",
+  deceased: "sender",
+  lender: "sender",
+  // Agents
+  intermediary: "agent",
+  auctioneer: "agent",
+  dealer: "agent",
+};
+
+/**
+ * Infer a party's transfer position from its role and transfer type.
+ *
+ * Three-tier inference:
+ *   1. Explicit role mapping (ROLE_TO_POSITION)
+ *   2. Anaphoric roles ("his son", "her widow") → receiver
+ *   3. Null-role fallback by transfer type — when a party has no role
+ *      (GenericOwnerEvent catch-all), the transfer type often determines
+ *      position: in a collection/recuperation/commission the named party
+ *      is typically the receiver (holder of the artwork).
+ */
+export function inferPosition(
+  role: string | null,
+  transferType: TransferType,
+): "sender" | "receiver" | "agent" | null {
+  if (role) {
+    const mapped = ROLE_TO_POSITION[role];
+    if (mapped) return mapped;
+    // Anaphoric roles: "his son", "her widow", "their grandson" — always inheritance receivers
+    if (/^(?:his|her|their)\s+/i.test(role)) return "receiver";
+    return null;
+  }
+
+  // Null-role fallback: infer position from transfer type context.
+  // The named party in these event types is almost always the holder/receiver.
+  switch (transferType) {
+    case "collection":
+    case "recuperation":
+    case "restitution":
+    case "commission":
+    case "inventory":
+      return "receiver";
+    default:
+      return null;
+  }
+}
+
+// ─── Transfer category mapping ───────────────────────────────────────
+
+export const TRANSFER_TYPE_TO_CATEGORY: Record<TransferType, TransferCategory> = {
+  sale: "ownership",
+  inheritance: "ownership",
+  by_descent: "ownership",
+  widowhood: "ownership",
+  bequest: "ownership",
+  gift: "ownership",
+  commission: "ownership",
+  exchange: "ownership",
+  confiscation: "ownership",
+  theft: "ownership",
+  looting: "ownership",
+  recuperation: "ownership",
+  restitution: "ownership",
+  collection: "ownership",
+  inventory: "ownership",
+  loan: "custody",
+  deposit: "custody",
+  transfer: "ambiguous",
+  unknown: "ambiguous",
+};
 
 export interface ProvenanceEvent {
   sequence: number;
@@ -57,6 +157,8 @@ export interface ProvenanceEvent {
   gap: boolean;
   party: ProvenanceParty | null;
   transferType: TransferType;
+  unsold: boolean;
+  batchPrice: boolean;
   date: ProvenanceDate | null;
   location: string | null;
   price: ProvenancePrice | null;
@@ -107,7 +209,57 @@ export function splitEvents(
 ): { text: string; gap: boolean }[] {
   if (!text || !text.trim()) return [];
 
-  const raw = text.split(";");
+  // Normalize doubled articles ("the the dealer" → "the dealer")
+  text = text.replace(/\bthe\s+the\b/gi, "the");
+
+  // Normalize broken words from line-break artefacts ("coll ection" → "collection")
+  text = text.replace(/\bcoll\s+ection\b/gi, "collection");
+
+  // Normalize common provenance typos
+  text = text.replace(/\bprovance\b/gi, "provenance");
+  text = text.replace(/\brecoded\b/gi, "recorded");
+  text = text.replace(/\brecorderd\b/gi, "recorded");
+
+  // Normalize "?Name" → "? Name" (no space after uncertainty marker)
+  text = text.replace(/^\?([A-Z])/gm, "? $1");
+
+  // Decode &amp; before splitting — the ';' in '&amp;' is a false event delimiter.
+  // Other entities (&lt; &gt; etc.) don't contain ';' at a position that causes splits,
+  // and full stripHtml() runs per-segment after splitting.
+  text = text.replace(/&amp;/gi, "&");
+
+  // Split on semicolons, but not inside parentheses or brackets — catalogue
+  // descriptions in ('...') and ('[...]') often contain semicolons as French/
+  // Dutch clause separators that should not create event boundaries.
+  // Note: single-quote tracking is limited to opening `('` sequences to avoid
+  // false matches on possessive apostrophes like "Sotheby's".
+  const raw: string[] = [];
+  let depth = 0;
+  let inQuotedDesc = false;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotedDesc) {
+      // End quoted description: closing quote followed by closing paren
+      if (ch === "'" && i + 1 < text.length && text[i + 1] === ")") {
+        inQuotedDesc = false;
+        // Don't decrement depth here — the ')' will do it on next iteration
+      }
+    } else if (ch === "(" && i + 1 < text.length && text[i + 1] === "'") {
+      // Start of ('...') catalogue description — enter quoted mode
+      depth++;
+      inQuotedDesc = true;
+      i++; // skip the opening quote
+    } else if (ch === "(" || ch === "[") {
+      depth++;
+    } else if ((ch === ")" || ch === "]") && depth > 0) {
+      depth--;
+    } else if (ch === ";" && depth === 0) {
+      raw.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  raw.push(text.slice(start));
   const results: { text: string; gap: boolean }[] = [];
   let pendingGap = false;
 
@@ -147,6 +299,37 @@ export function splitEvents(
 
     if (!trimmed) continue;
 
+    // Skip standalone inventory-mark abbreviations (not provenance events)
+    if (/^Inv\.?,?\s*$/i.test(trimmed)) continue;
+
+    // Skip cross-reference preambles and provenance-redirect headers
+    if (/^For (?:both )?the present /i.test(trimmed)) continue;
+    if (/^See (?:the )?proven?a?n?ce (?:for|of) /i.test(trimmed)) continue;  // includes "provance" typo
+
+    // Skip fragment artefacts: bare years, orphaned connectors, bracketed ellipsis
+    const fragStripped = trimmed.replace(/__CIT_\d+__/g, "").trim();
+    if (/^\d{4}$/.test(fragStripped)) continue;                    // bare year
+    if (/^(?:et al\.?|_ and _)$/i.test(fragStripped)) continue;    // orphaned connectors
+    if (/^\[…\]$/.test(fragStripped)) continue;                    // bracketed ellipsis
+    if (/^\^?\[Copy\b/i.test(fragStripped)) continue;             // "^[Copy RKD.]" artefacts
+    if (/^,+$/.test(fragStripped)) continue;                       // bare commas
+    if (/^[¼½¾⅓⅔⅛⅜⅝⅞?]$/.test(fragStripped)) continue;          // bare fractions / bare question mark
+    if (/^or$/i.test(fragStripped)) continue;                       // bare "or"
+
+    // Skip non-provenance text
+    if (/^whereabouts unknown$/i.test(fragStripped)) continue;
+    if (/^(?:was |the .+ was )demolished\b/i.test(fragStripped)) continue;
+    if (/^incorporated in\b/i.test(fragStripped)) continue;
+    if (/^mounted on\b/i.test(fragStripped)) continue;
+    if (/^application for a license\b/i.test(fragStripped)) continue;
+    if (/^part of the\b/i.test(fragStripped) && !/\bon lease\b/i.test(fragStripped)) continue; // object description (but not if contains "on lease")
+    if (/^unknown$/i.test(fragStripped)) continue;                    // bare "unknown"
+    if (/^unknown location\b/i.test(fragStripped)) continue;          // location note, not transfer
+
+    // Skip citation leaks: bibliographic text that escaped {curly braces}
+    // Detected by journal-like patterns: "_Title_", "pp.", "vol.", "no." with page numbers
+    if (/\b(?:pp|vol|no)\.\s*\d/.test(fragStripped) && /_[A-Z]/.test(fragStripped)) continue;
+
     results.push({ text: trimmed, gap });
   }
 
@@ -155,27 +338,51 @@ export function splitEvents(
 
 // ─── 3. stripHtml ──────────────────────────────────────────────────
 
-/** Remove HTML tags (e.g. `<em>`, `</em>`, `<i>`, `</i>`), preserving inner text. */
+/** Map of named HTML entities to their character equivalents. */
+const HTML_ENTITY_MAP: Record<string, string> = {
+  nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
+};
+
+/** Remove HTML tags, entities, leaked CSS, and Linked Art artifacts, preserving inner text. */
 export function stripHtml(text: string): string {
-  return text.replace(/<\/?[a-z][a-z0-9]*[^>]*>/gi, "");
+  return text
+    .replace(/<\/?[a-z][a-z0-9]*[^>]*>?/gi, "")             // HTML tags (including unclosed)
+    .replace(/&(nbsp|amp|lt|gt|quot|apos);?/gi, (_m, e: string) =>
+      HTML_ENTITY_MAP[e.toLowerCase()] ?? "")
+    .replace(/&#\d+;?/g, "")                                  // numeric HTML entities
+    .replace(/(?:font-family|mso-[\w-]+|font-size|line-height|color|margin|padding|text-align|text-indent)\s*:[^;]*;?\s*/gi, "")  // leaked CSS
+    .replace(/^"+>?\s*/, "")                                   // "> prefix (Linked Art artifact)
+    .replace(/\*\*([^*]+)\*\*/g, "$1")                        // **bold** markdown
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 // ─── 4. classifyTransfer ───────────────────────────────────────────
 
 const TRANSFER_RULES: [RegExp, TransferType][] = [
-  [/commissioned by/i, "commission"],
+  [/\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i, "sale"],
+  [/\bcommissioned (?:by|for|as)\b/i, "commission"],
   [/war recuperation/i, "recuperation"],
+  [/\bstolen\b/i, "theft"],
+  [/\blooted\b/i, "looting"],
   [/confiscat|Führermuseum/i, "confiscation"],
-  [/on loan/i, "loan"],
-  [/transferred to/i, "transfer"],
-  [/bequest|bequeathed/i, "bequest"],
-  [/(?:his|her|their) sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
-  [/purchased by|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "purchase"],
+  [/\bfrom which on loan\b|on loan/i, "loan"],
+  [/\btransfer(?:red)?\b|\bsent to\b|\bremoved\b/i, "transfer"],
+  [/bequest|bequeathed|testament/i, "bequest"],
+  [/\bsold[, ]+(?:by|to|with|for)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
+  [/(?:his|her|their) (?:posthumous |deceased )?sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
+  [/\bpurchased\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "sale"],
+  [/\bacquired\s+(?:by|from|for|in|with)\b|\bverwerving\b/i, "sale"],
   [/from whom,.*\bto\b|by whom to\b|\bfrom the dealer\b|\bfrom (?:Count|Baron|Prince|Marchesa|Conte)\b.*\bto\b/i, "sale"],
-  [/\bhis sons?\b|\bher sons?\b|\btheir sons?\b|\bdaughter\b|\bwidower\b|\bwidow\b|\bby descent\b|\bher husband\b|\bher nephew\b|\bhis grandson\b|\bher grandson\b/i, "inheritance"],
-  [/\bcollection\b|\bwith an? (?:art )?dealer\b/i, "collection"],
-  [/\bdonated\b|\bgift\b|\bgiven by\b|\bpresented by\b/i, "gift"],
-  [/\bestate inventory\b/i, "collection"],
+  [/\bwidow(?:er)?\b/i, "widowhood"],
+  [/\bby descent\b|\binherited by\b|\bfrom the heirs\b|\berven\b/i, "by_descent"],
+  [/\b(?:his|her|their) (?:sons?|heirs?|daughters?|sisters?|brothers?|cousins?|wife|uncle|aunt|nephew|niece|stepson|stepdaughter|grands?(?:on|daughter)|great-grands?(?:on|daughter)|sister's grands?(?:on|daughter))\b|\bby inheritance\b|\bthrough inheritance\b/i, "by_descent"],
+  [/\bexchanged (?:with|for)\b/i, "exchange"],
+  [/\bcollection\b|\bwith an? (?:art )?dealer\b|\bex\.?\s*coll\.?\b|\bfirst (?:recorded|mentioned)\b/i, "collection"],
+  [/\bdonated\b|\bdonation\b|\bgift\b|\bgiven by\b|\bpresented by\b|\bdedicated to\b|\bschenking\b/i, "gift"],
+  [/\bstored\b|\bdeposited\b|\binstalled\b|\bplaced\b/i, "deposit"],
+  [/\b(?:estate|probate) inventory\b/i, "inventory"],
+  [/\binventory\b/i, "collection"],
 ];
 
 /** Classify the transfer type of a provenance segment using keyword priority. */
@@ -413,7 +620,7 @@ function extractNameAndDates(
   if (!text.trim()) return null;
 
   // Match: Name (YYYY-YYYY) or Name (?-?)
-  const datesMatch = text.match(/^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??)\)/);
+  const datesMatch = text.match(/^([^(]+?)\s*\((\d{4}[\/?]?\d{0,2}[-–]\d{0,4}\??|\?[-–]\?|\?[-–]\d{4}|\d{4}[-–]\??\s*)(?:,\s*[^)]+)?\)/);
   if (datesMatch) {
     const name = datesMatch[1].trim().replace(/,\s*$/, "");
     if (name) {
@@ -434,17 +641,33 @@ function extractNameAndDates(
 
 // ─── 8. parseLocation ──────────────────────────────────────────────
 
-// Known city/region names that appear in Rijksmuseum provenance
-const RE_CITIES =
-  /\b(Amsterdam|Delft|The Hague|London|Paris|Venice|Rotterdam|Brussels|Wassenaar|Montreux|Buckinghamshire|Hertfordshire|Northampton|Edinburgh|Linz|Soho Square|Madrid|Rome|Florence|Berlin|Vienna|Munich|Stockholm|St Petersburg|New York|Hilversum|Aerdenhout|Haarlem|Leiden|Utrecht|Antwerp|Watergraafsmeer)\b/;
+// Place names — shared with PEG grammar (src/places.json, 2,302 entries from vocab DB)
+import placesJson from "./places.json" with { type: "json" };
+const placesSet: Set<string> = new Set(placesJson as string[]);
 
 /**
  * Extract location from a provenance segment.
- * Location typically follows name+dates, separated by comma.
+ * Checks comma-separated parts against the places Set.
  */
 export function parseLocation(text: string): string | null {
-  const match = text.match(RE_CITIES);
-  return match ? match[1] : null;
+  // Split on comma and "and" to handle "London and New York"
+  const parts = text.split(/,|\band\b/).map(p => p.trim()).filter(Boolean);
+  for (const p of parts) {
+    if (placesSet.has(p)) return p;
+    // Try trimming parenthesized suffix: "Paris (Drouot)" → "Paris"
+    const parenIdx = p.indexOf("(");
+    if (parenIdx > 0) {
+      const candidate = p.slice(0, parenIdx).trim();
+      if (placesSet.has(candidate)) return candidate;
+    }
+    // Try first N words for compound names
+    const words = p.split(/\s+/);
+    for (let n = Math.min(3, words.length); n >= 1; n--) {
+      const prefix = words.slice(0, n).join(" ");
+      if (placesSet.has(prefix)) return prefix;
+    }
+  }
+  return null;
 }
 
 // ─── 9. parseEvent ─────────────────────────────────────────────────
@@ -491,12 +714,16 @@ export function parseEvent(
       : lotMatch[0];
   }
 
+  const transferType = classifyTransfer(cleanedWorking);
+
   return {
     sequence,
     rawText: restoreCitations(rawText, citationMap),
     gap: segment.gap,
     party: parseParty(working),
-    transferType: classifyTransfer(cleanedWorking),
+    transferType,
+    unsold: transferType === "sale" && /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i.test(working),
+    batchPrice: /\b(?:en\s+bloc|with\s+\S+\s+other\s+(?:painting|drawing|object|work|model|piece|item)s?|for\s+(?:both|all)\b|with\s+(?:SK|BK|RP|AK|NG)-)/i.test(working),
     date: parseDate(working),
     location: parseLocation(working),
     price: parsePrice(working),

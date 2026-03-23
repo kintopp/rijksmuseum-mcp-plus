@@ -182,6 +182,154 @@ export interface VocabSearchResult {
   facets?: Record<string, Array<{ label: string; count: number }>>;
 }
 
+// ─── Provenance search types ────────────────────────────────────────
+
+export interface ProvenanceSearchParams {
+  party?: string;
+  transferType?: string | string[];
+  excludeTransferType?: string | string[];
+  location?: string;
+  dateFrom?: number;
+  dateTo?: number;
+  objectNumber?: string;
+  creator?: string;
+  currency?: string;
+  hasPrice?: boolean;
+  hasGap?: boolean;
+  relatedTo?: string;
+  maxResults?: number;
+  offset?: number;
+  sortBy?: "price" | "dateYear" | "eventCount" | "duration";
+  sortOrder?: "asc" | "desc";
+  // Layer 2 (periods) params
+  layer?: "events" | "periods";
+  ownerName?: string;
+  acquisitionMethod?: string;
+  minDuration?: number;
+  maxDuration?: number;
+}
+
+/** Raw DB row shape from provenance_events JOIN artworks. */
+interface ProvenanceEventDbRow {
+  artwork_id: number;
+  sequence: number;
+  raw_text: string;
+  gap: number;
+  transfer_type: string;
+  unsold: number;
+  batch_price: number;
+  transfer_category?: string | null;
+  uncertain: number;
+  parties: string;
+  date_expression: string | null;
+  date_year: number | null;
+  date_qualifier: string | null;
+  location: string | null;
+  price_amount: number | null;
+  price_currency: string | null;
+  sale_details: string | null;
+  citations: string;
+  is_cross_ref: number;
+  cross_ref_target: string | null;
+  parse_method: string;
+  category_method: string | null;
+  enrichment_reasoning: string | null;
+  // Joined from artworks
+  object_number: string;
+  title: string;
+  creator_label: string;
+  date_earliest: number | null;
+  date_latest: number | null;
+}
+
+export interface ProvenanceEventRow {
+  sequence: number;
+  rawText: string;
+  gap: boolean;
+  transferType: string;
+  unsold: boolean;
+  batchPrice: boolean;
+  transferCategory: "ownership" | "custody" | "ambiguous" | null;
+  uncertain: boolean;
+  parties: { name: string; dates: string | null; uncertain: boolean; role: string | null; position: "sender" | "receiver" | "agent" | null; positionMethod?: string | null; enrichmentReasoning?: string | null }[];
+  dateExpression: string | null;
+  dateYear: number | null;
+  dateQualifier: string | null;
+  location: string | null;
+  price: { amount: number; currency: string } | null;
+  saleDetails: string | null;
+  citations: { text: string }[];
+  isCrossRef: boolean;
+  crossRefTarget: string | null;
+  parseMethod: "peg" | "regex_fallback" | "cross_ref" | "credit_line";
+  categoryMethod: string | null;
+  enrichmentReasoning: string | null;
+  matched: boolean;
+}
+
+/** Raw DB row shape from provenance_periods JOIN artworks. */
+interface ProvenancePeriodDbRow {
+  artwork_id: number;
+  sequence: number;
+  owner_name: string | null;
+  owner_dates: string | null;
+  location: string | null;
+  acquisition_method: string | null;
+  acquisition_from: string | null;
+  begin_year: number | null;
+  begin_year_latest: number | null;
+  end_year: number | null;
+  derivation: string;
+  uncertain: number;
+  citations: string;
+  source_events: string;
+  // Joined from artworks:
+  object_number: string;
+  title: string;
+  creator_label: string;
+  date_earliest: number | null;
+  date_latest: number | null;
+}
+
+export interface ProvenancePeriodRow {
+  sequence: number;
+  ownerName: string | null;
+  ownerDates: string | null;
+  location: string | null;
+  acquisitionMethod: string | null;
+  acquisitionFrom: string | null;
+  beginYear: number | null;
+  beginYearLatest: number | null;
+  endYear: number | null;
+  duration: number | null;
+  derivation: Record<string, string>;
+  uncertain: boolean;
+  citations: { text: string }[];
+  sourceEvents: number[];
+  matched: boolean;
+}
+
+export interface ProvenanceArtworkResult {
+  objectNumber: string;
+  title: string;
+  creator: string;
+  date?: string;
+  url: string;
+  eventCount: number;
+  matchedEventCount: number;
+  events: ProvenanceEventRow[];
+  periods?: ProvenancePeriodRow[];
+  periodCount?: number;
+  matchedPeriodCount?: number;
+}
+
+export interface ProvenanceSearchResult {
+  totalArtworks: number;
+  totalArtworksCapped?: boolean;
+  results: ProvenanceArtworkResult[];
+  warnings?: string[];
+}
+
 // ─── Filter definitions ─────────────────────────────────────────────
 // Each entry maps a VocabSearchParams key to the SQL constraints used
 // in a mapping subquery.  `fields` restricts m.field, `vocabType`
@@ -382,11 +530,18 @@ export class VocabularyDb {
   private hasDates = false;
   private hasNormLabels = false;
   private hasCoordinates = false;
-  private hasIntMappings = false;
+
   private hasRightsLookup = false;
   private hasPersonNames = false;
   private hasImageColumn = false;
   private hasImportance = false;
+  private hasProvenanceTables_ = false;
+  private hasProvenancePeriods_ = false;
+  private hasPartyTable_ = false;
+  private hasPartyPosition_ = false;
+  private hasTransferCategory_ = false;
+  private hasPartyEnrichmentReasoning_ = false;
+  private stmtPartyEnrichment_: Statement | null = null;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtLookupPersonInfo: Statement | null = null;
@@ -439,16 +594,11 @@ export class VocabularyDb {
    * look up a small set of artwork_ids across all fields.
    */
   private buildFieldClause(fields: string[], noFieldIndex = false): { clause: string; bindings: (string | number)[] } {
-    if (this.hasIntMappings) {
-      const fieldIds = fields.map((f) => this.requireFieldId(f));
-      const col = noFieldIndex ? "+m.field_id" : "m.field_id";
-      return fieldIds.length === 1
-        ? { clause: `${col} = ?`, bindings: fieldIds }
-        : { clause: `${col} IN (${fieldIds.map(() => "?").join(", ")})`, bindings: fieldIds };
-    }
-    return fields.length === 1
-      ? { clause: "m.field = ?", bindings: fields }
-      : { clause: `m.field IN (${fields.map(() => "?").join(", ")})`, bindings: fields };
+    const fieldIds = fields.map((f) => this.requireFieldId(f));
+    const col = noFieldIndex ? "+m.field_id" : "m.field_id";
+    return fieldIds.length === 1
+      ? { clause: `${col} = ?`, bindings: fieldIds }
+      : { clause: `${col} IN (${fieldIds.map(() => "?").join(", ")})`, bindings: fieldIds };
   }
 
   constructor() {
@@ -478,15 +628,26 @@ export class VocabularyDb {
       this.hasNormLabels = this.columnExists("vocabulary", "label_en_norm")
         && this.columnExists("vocabulary", "label_nl_norm");
       this.hasCoordinates = this.columnExists("vocabulary", "lat") && this.hasGeocodedData();
-      this.hasIntMappings = this.tableExists("field_lookup") && this.columnExists("artworks", "art_id");
-      if (this.hasIntMappings) {
-        const fieldRows = this.db.prepare("SELECT id, name FROM field_lookup").all() as { id: number; name: string }[];
-        for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
-      }
+      // Integer-encoded mappings (field_lookup + art_id) — required since v0.13
+      const fieldRows = this.db.prepare("SELECT id, name FROM field_lookup").all() as { id: number; name: string }[];
+      for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
       this.hasRightsLookup = this.tableExists("rights_lookup");
       this.hasPersonNames = this.tableExists("person_names_fts");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
+      this.hasProvenanceTables_ = this.tableExists("provenance_events");
+      this.hasProvenancePeriods_ = this.tableExists("provenance_periods");
+      this.hasPartyTable_ = this.tableExists("provenance_parties");
+      this.hasPartyPosition_ = this.hasPartyTable_ && this.columnExists("provenance_parties", "party_position");
+      this.hasTransferCategory_ = this.hasProvenanceTables_ && this.columnExists("provenance_events", "transfer_category");
+      this.hasPartyEnrichmentReasoning_ = this.hasPartyTable_ && this.columnExists("provenance_parties", "enrichment_reasoning");
+      if (this.hasPartyEnrichmentReasoning_) {
+        this.stmtPartyEnrichment_ = this.db.prepare(`
+          SELECT sequence, party_idx, position_method, enrichment_reasoning
+          FROM provenance_parties
+          WHERE artwork_id = ? AND position_method LIKE 'llm%'
+        `);
+      }
 
       // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
@@ -498,11 +659,9 @@ export class VocabularyDb {
       this.stmtLookupArtwork = this.db.prepare(
         "SELECT title, title_all_text, creator_label, date_earliest, date_latest FROM artworks WHERE object_number = ?"
       );
-      if (this.hasIntMappings) {
-        this.stmtLookupArtId = this.db.prepare(
-          "SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?"
-        );
-      }
+      this.stmtLookupArtId = this.db.prepare(
+        "SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?"
+      );
 
       // Detect person enrichment columns (birth_year, death_year, gender, bio, wikidata_id)
       if (this.columnExists("vocabulary", "birth_year") && this.columnExists("vocabulary", "gender")) {
@@ -525,12 +684,17 @@ export class VocabularyDb {
         this.hasDates && "dates",
         this.hasNormLabels && "normLabels",
         this.hasCoordinates && "coordinates",
-        this.hasIntMappings && "intMappings",
+        "intMappings",
         this.hasPersonNames && "personNames",
         this.hasImageColumn && "hasImage",
         this.hasImportance && "importance",
         this.stmtLookupPersonInfo && "personEnrichment",
         this.stmtLookupIiifId && "iiifIds",
+        this.hasProvenanceTables_ && "provenance",
+        this.hasProvenancePeriods_ && "provenancePeriods",
+        this.hasPartyTable_ && "provenanceParties",
+        this.hasPartyPosition_ && "partyPosition",
+        this.hasTransferCategory_ && "transferCategory",
       ].filter(Boolean).join(", ");
       console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
@@ -541,6 +705,14 @@ export class VocabularyDb {
 
   get available(): boolean {
     return this.db !== null;
+  }
+
+  get hasProvenanceTables(): boolean {
+    return this.hasProvenanceTables_;
+  }
+
+  get hasProvenancePeriods(): boolean {
+    return this.hasProvenancePeriods_;
   }
 
   /** Check if an index exists and warn if missing. */
@@ -567,15 +739,11 @@ export class VocabularyDb {
       const chunk = objectNumbers.slice(i, i + CHUNK);
       const placeholders = chunk.map(() => "?").join(", ");
 
-      const sql = this.hasIntMappings
-        ? `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+      const sql = `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
            FROM mappings m
            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
            JOIN artworks a ON m.artwork_id = a.art_id
-           WHERE a.object_number IN (${placeholders}) AND ${fieldClause}`
-        : `SELECT m.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
-           FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
-           WHERE m.object_number IN (${placeholders}) AND ${fieldClause}`;
+           WHERE a.object_number IN (${placeholders}) AND ${fieldClause}`;
 
       const rows = this.db.prepare(sql).all(...chunk, ...fieldBindings) as { object_number: string; label: string }[];
       for (const r of rows) {
@@ -628,7 +796,7 @@ export class VocabularyDb {
    */
   reconstructSourceText(artIds: number[]): Map<number, string> {
     const result = new Map<number, string>();
-    if (!this.db || !this.hasIntMappings || artIds.length === 0) return result;
+    if (!this.db || artIds.length === 0) return result;
 
     const CHUNK = 500;
 
@@ -671,7 +839,7 @@ export class VocabularyDb {
 
   /** Lazily initialise the Iconclass IDF cache. ~2s cold, <0.5s warm. */
   private ensureIconclassCache(): void {
-    if (this.notationDf || !this.db || !this.hasIntMappings) return;
+    if (this.notationDf || !this.db) return;
     const subjectFieldId = this.requireFieldId("subject");
 
     // Build noise ID set
@@ -712,7 +880,7 @@ export class VocabularyDb {
    * Scores by depth × IDF weighted overlap.
    */
   findSimilarByIconclass(objectNumber: string, maxResults: number): IconclassSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
+    if (!this.db) return null;
     this.ensureIconclassCache();
     if (!this.notationDf) return null;
 
@@ -817,7 +985,7 @@ export class VocabularyDb {
 
   /** Lazily initialise lineage qualifier map and creator IDF cache. */
   private ensureLineageCache(): void {
-    if (this.lineageQualifierMap || !this.db || !this.hasIntMappings) return;
+    if (this.lineageQualifierMap || !this.db) return;
     const qualFieldId = this.requireFieldId("attribution_qualifier");
     const creatorFieldId = this.requireFieldId("creator");
 
@@ -868,7 +1036,7 @@ export class VocabularyDb {
    * Scores by qualifier-strength × creator-IDF.
    */
   findSimilarByLineage(objectNumber: string, maxResults: number): LineageSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
+    if (!this.db) return null;
     this.ensureLineageCache();
     if (!this.lineageQualifierMap || !this.lineageCreatorDf) return null;
 
@@ -992,7 +1160,7 @@ export class VocabularyDb {
 
   /** Lazily initialise the depicted person IDF cache. */
   private ensurePersonCache(): void {
-    if (this.personDf || !this.db || !this.hasIntMappings) return;
+    if (this.personDf || !this.db) return;
     const subjectFieldId = this.requireFieldId("subject");
 
     // IDF: count artworks per depicted person
@@ -1104,7 +1272,7 @@ export class VocabularyDb {
    * Scores by IDF-weighted overlap.
    */
   findSimilarByDepictedPerson(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
+    if (!this.db) return null;
     this.ensurePersonCache();
     if (!this.personDf) return null;
 
@@ -1134,7 +1302,7 @@ export class VocabularyDb {
 
   /** Lazily initialise the depicted place IDF cache with breadth-based filtering. */
   private ensurePlaceCache(): void {
-    if (this.placeDf || !this.db || !this.hasIntMappings) return;
+    if (this.placeDf || !this.db) return;
     const subjectFieldId = this.requireFieldId("subject");
 
     // Exclude broad regions (>20 children in vocabulary hierarchy).
@@ -1192,7 +1360,7 @@ export class VocabularyDb {
    * Scores by IDF-weighted overlap. Excludes broad regions (>20 children in hierarchy).
    */
   findSimilarByDepictedPlace(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
-    if (!this.db || !this.hasIntMappings) return null;
+    if (!this.db) return null;
     this.ensurePlaceCache();
     if (!this.placeDf) return null;
 
@@ -1272,7 +1440,7 @@ export class VocabularyDb {
   /** Batch-lookup artwork types by art_id. Chunks at 500. */
   batchLookupTypesByArtId(artIds: number[]): Map<number, string> {
     const map = new Map<number, string>();
-    if (!this.db || !this.hasIntMappings || artIds.length === 0) return map;
+    if (!this.db || artIds.length === 0) return map;
     const typeFieldId = this.requireFieldId("type");
     const CHUNK = 500;
     for (let i = 0; i < artIds.length; i += CHUNK) {
@@ -1360,7 +1528,7 @@ export class VocabularyDb {
     ftsJoinBinding: unknown | null,
     requestedFields: Set<string>,
   ): Record<string, Array<{ label: string; count: number }>> {
-    if (!this.db || !this.hasIntMappings) return {};
+    if (!this.db) return {};
     const result: Record<string, Array<{ label: string; count: number }>> = {};
 
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
@@ -1412,7 +1580,7 @@ export class VocabularyDb {
     }
 
     // Creator gender facet (computed from vocabulary.gender via creator mappings)
-    if (requestedFields.has("creatorGender") && this.stmtLookupPersonInfo && this.hasIntMappings) {
+    if (requestedFields.has("creatorGender") && this.stmtLookupPersonInfo) {
       const creatorFieldId = this.fieldIdMap.get("creator");
       if (creatorFieldId != null) {
         const genderBindings = ftsJoinBinding != null
@@ -1661,19 +1829,12 @@ export class VocabularyDb {
       const objPlaceholders = objNums.map(() => "?").join(", ");
       const { clause: geoFieldClause, bindings: geoFieldBindings } = this.buildFieldClause(["subject", "spatial"], true);
 
-      const distSql = this.hasIntMappings
-        ? `SELECT a.object_number, v.label_en, v.label_nl,
+      const distSql = `SELECT a.object_number, v.label_en, v.label_nl,
                   haversine_km(?, ?, v.lat, v.lon) AS dist
            FROM mappings m
            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
            JOIN artworks a ON m.artwork_id = a.art_id
            WHERE a.object_number IN (${objPlaceholders})
-             AND ${geoFieldClause} AND v.lat IS NOT NULL
-           ORDER BY dist`
-        : `SELECT m.object_number, v.label_en, v.label_nl,
-                  haversine_km(?, ?, v.lat, v.lon) AS dist
-           FROM mappings m JOIN vocabulary v ON m.vocab_id = v.id
-           WHERE m.object_number IN (${objPlaceholders})
              AND ${geoFieldClause} AND v.lat IS NOT NULL
            ORDER BY dist`;
 
@@ -1916,7 +2077,7 @@ export class VocabularyDb {
     // Creator demographic filters (gender, birth year range) — require person enrichment + integer mappings
     const hasCreatorDemographic = effective.creatorGender != null || effective.creatorBornAfter != null || effective.creatorBornBefore != null;
     if (hasCreatorDemographic) {
-      if (this.stmtLookupPersonInfo && this.hasIntMappings) {
+      if (this.stmtLookupPersonInfo) {
         const creatorFieldId = this.fieldIdMap.get("creator");
         if (creatorFieldId != null) {
           const vocabConds: string[] = ["v.type = 'person'"];
@@ -1982,7 +2143,7 @@ export class VocabularyDb {
    */
   filterArtIds(params: Partial<VocabSearchParams>): number[] | null {
     if (!this.db) return null;
-    if (!this.hasIntMappings) return null;
+    if (!this.db) return null;
 
     const vocabResult = this.buildVocabConditions(params as Record<string, unknown>);
     if (vocabResult === null) return []; // a filter matched zero vocab terms
@@ -2147,26 +2308,15 @@ export class VocabularyDb {
   ): { condition: string; bindings: unknown[] } {
     const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(fields);
 
-    if (this.hasIntMappings) {
-      const rowids = this.vocabIdsToRowids(vocabTextIds);
-      if (rowids.length === 0) return { condition: "0", bindings: [] };
-      const placeholders = rowids.map(() => "?").join(", ");
-      return {
-        condition: `a.art_id IN (
-          SELECT m.artwork_id FROM mappings m
-          WHERE ${fieldClause} AND m.vocab_rowid IN (${placeholders})
-        )`,
-        bindings: [...fieldBindings, ...rowids],
-      };
-    }
-
-    const placeholders = vocabTextIds.map(() => "?").join(", ");
+    const rowids = this.vocabIdsToRowids(vocabTextIds);
+    if (rowids.length === 0) return { condition: "0", bindings: [] };
+    const placeholders = rowids.map(() => "?").join(", ");
     return {
-      condition: `a.object_number IN (
-        SELECT m.object_number FROM mappings m
-        WHERE ${fieldClause} AND m.vocab_id IN (${placeholders})
+      condition: `a.art_id IN (
+        SELECT m.artwork_id FROM mappings m
+        WHERE ${fieldClause} AND m.vocab_rowid IN (${placeholders})
       )`,
-      bindings: [...fieldBindings, ...vocabTextIds],
+      bindings: [...fieldBindings, ...rowids],
     };
   }
 
@@ -2180,18 +2330,11 @@ export class VocabularyDb {
     vocabBindings: unknown[],
   ): { condition: string; bindings: unknown[] } {
     const { clause: fieldClause, bindings: fieldBindings } = this.buildFieldClause(fields);
-    const [artworkCol, vocabIdCol] = this.hasIntMappings
-      ? ["a.art_id", "vocab_int_id"]
-      : ["a.object_number", "id"];
-    const [mappingArtCol, mappingVocabCol] = this.hasIntMappings
-      ? ["m.artwork_id", "m.vocab_rowid"]
-      : ["m.object_number", "m.vocab_id"];
-
     return {
-      condition: `${artworkCol} IN (
-        SELECT ${mappingArtCol} FROM mappings m
-        WHERE ${fieldClause} AND ${mappingVocabCol} IN (
-          SELECT ${vocabIdCol} FROM vocabulary WHERE ${vocabWhere}
+      condition: `a.art_id IN (
+        SELECT m.artwork_id FROM mappings m
+        WHERE ${fieldClause} AND m.vocab_rowid IN (
+          SELECT vocab_int_id FROM vocabulary WHERE ${vocabWhere}
         )
       )`,
       bindings: [...fieldBindings, ...vocabBindings],
@@ -2456,6 +2599,525 @@ export class VocabularyDb {
     }
 
     return null;
+  }
+
+  // ── Provenance search ──────────────────────────────────────────────
+
+  /** Convert a raw provenance_events DB row into a ProvenanceEventRow. */
+  private buildProvenanceEvent(
+    row: ProvenanceEventDbRow,
+    matched: boolean,
+  ): ProvenanceEventRow {
+    let parties: ProvenanceEventRow["parties"] = [];
+    try {
+      const raw = JSON.parse(row.parties ?? "[]") as { name: string; dates?: string | null; uncertain?: boolean; role?: string | null; position?: string | null }[];
+      parties = raw.map(p => ({
+        name: p.name,
+        dates: p.dates ?? null,
+        uncertain: p.uncertain ?? false,
+        role: p.role ?? null,
+        position: (p.position as "sender" | "receiver" | "agent" | null) ?? null,
+      }));
+    } catch { /* empty */ }
+    let citations: ProvenanceEventRow["citations"] = [];
+    try { citations = JSON.parse(row.citations ?? "[]"); } catch { /* empty */ }
+    return {
+      sequence: row.sequence,
+      rawText: row.raw_text,
+      gap: row.gap === 1,
+      transferType: row.transfer_type,
+      unsold: (row.unsold ?? 0) === 1,
+      batchPrice: (row.batch_price ?? 0) === 1,
+      transferCategory: (row.transfer_category as "ownership" | "custody" | "ambiguous" | null) ?? null,
+      uncertain: row.uncertain === 1,
+      parties,
+      dateExpression: row.date_expression,
+      dateYear: row.date_year,
+      dateQualifier: row.date_qualifier,
+      location: row.location,
+      price: row.price_amount != null
+        ? { amount: row.price_amount, currency: row.price_currency ?? "unknown" }
+        : null,
+      saleDetails: row.sale_details,
+      citations,
+      isCrossRef: row.is_cross_ref === 1,
+      crossRefTarget: row.cross_ref_target,
+      parseMethod: row.parse_method as ProvenanceEventRow["parseMethod"],
+      categoryMethod: row.category_method ?? null,
+      enrichmentReasoning: row.enrichment_reasoning ?? null,
+      matched,
+    };
+  }
+
+  // SYNC: conditions here must mirror the SQL WHERE clauses in searchProvenance().
+  /** Check whether a single event matches the given provenance search filters. */
+  private eventMatchesFilters(
+    row: ProvenanceEventDbRow,
+    params: ProvenanceSearchParams,
+  ): boolean {
+    if (params.party) {
+      if (this.hasPartyTable_) {
+        // Match on party name only (not dates/role) via parsed JSON
+        let parties: { name: string }[] = [];
+        try { parties = JSON.parse(row.parties ?? "[]"); } catch { /* empty */ }
+        if (!parties.some(p => p.name.toLowerCase().includes(params.party!.toLowerCase()))) return false;
+      } else {
+        if (!row.parties.toLowerCase().includes(params.party.toLowerCase())) return false;
+      }
+    }
+    if (params.transferType) {
+      const types = Array.isArray(params.transferType) ? params.transferType : [params.transferType];
+      if (!types.includes(row.transfer_type)) return false;
+    }
+    // excludeTransferType is an artwork-level filter, not per-event — handled in SQL
+    if (params.location) {
+      if (!(row.location ?? "").toLowerCase().includes(params.location.toLowerCase())) return false;
+    }
+    if (params.dateFrom != null && (row.date_year == null || row.date_year < params.dateFrom)) return false;
+    if (params.dateTo != null && (row.date_year == null || row.date_year > params.dateTo)) return false;
+    if (params.currency && row.price_currency !== params.currency) return false;
+    if (params.hasPrice && row.price_amount == null) return false;
+    if (params.hasGap && row.gap !== 1) return false;
+    if (params.relatedTo && row.cross_ref_target !== params.relatedTo) return false;
+    return true;
+  }
+
+  /** Build a ProvenanceArtworkResult from grouped rows for one artwork. */
+  private buildProvenanceArtwork(
+    rows: ProvenanceEventDbRow[],
+    allMatched: boolean,
+    params?: ProvenanceSearchParams,
+  ): ProvenanceArtworkResult {
+    const first = rows[0];
+    let matchedCount = 0;
+    const events = rows.map(r => {
+      const matched = allMatched || (params ? this.eventMatchesFilters(r, params) : false);
+      if (matched) matchedCount++;
+      return this.buildProvenanceEvent(r, matched);
+    });
+
+    // Enrich parties with provenance_parties reasoning (position_method, enrichment_reasoning).
+    // The query self-filters on position_method LIKE 'llm%', so it's cheap for artworks without enrichment.
+    if (this.stmtPartyEnrichment_) {
+      const partyRows = this.stmtPartyEnrichment_.all(first.artwork_id) as {
+        sequence: number; party_idx: number; position_method: string | null; enrichment_reasoning: string | null;
+      }[];
+      for (const pr of partyRows) {
+        if (!pr.position_method?.startsWith("llm")) continue;
+        const event = events.find(e => e.sequence === pr.sequence);
+        if (!event || pr.party_idx >= event.parties.length) continue;
+        event.parties[pr.party_idx].positionMethod = pr.position_method;
+        event.parties[pr.party_idx].enrichmentReasoning = pr.enrichment_reasoning;
+      }
+    }
+
+    return {
+      objectNumber: first.object_number,
+      title: first.title ?? "",
+      creator: first.creator_label ?? "",
+      date: formatDateRange(first.date_earliest, first.date_latest),
+      url: `https://www.rijksmuseum.nl/en/collection/${first.object_number}`,
+      eventCount: events.length,
+      matchedEventCount: allMatched ? events.length : matchedCount,
+      events,
+    };
+  }
+
+  /**
+   * Search provenance events across artworks.
+   *
+   * Returns full provenance chains grouped by artwork, with matching events
+   * flagged via `matched: true`. At least one filter is required.
+   */
+  searchProvenance(params: ProvenanceSearchParams): ProvenanceSearchResult {
+    if (!this.db || !this.hasProvenanceTables_) {
+      return { totalArtworks: 0, results: [] };
+    }
+
+    const maxResults = Math.min(params.maxResults ?? 10, 50);
+    const warnings: string[] = [];
+
+    // sortBy=duration only applies to layer='periods'
+    if (params.sortBy === "duration") {
+      warnings.push("sortBy='duration' is only supported with layer='periods'. Sort ignored; results are in default order.");
+    }
+
+    // ── objectNumber fast path ──
+    if (params.objectNumber) {
+      const rows = this.db.prepare(`
+        SELECT pe.*, a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest
+        FROM provenance_events pe
+        JOIN artworks a ON a.art_id = pe.artwork_id
+        WHERE a.object_number = ?
+        ORDER BY pe.sequence
+      `).all(params.objectNumber) as ProvenanceEventDbRow[];
+      if (rows.length === 0) return { totalArtworks: 0, results: [], ...(warnings.length > 0 && { warnings }) };
+      return { totalArtworks: 1, results: [this.buildProvenanceArtwork(rows, false, params)], ...(warnings.length > 0 && { warnings }) };
+    }
+
+    // SYNC: conditions here must mirror eventMatchesFilters() for matched-flag accuracy.
+    // ── Build WHERE conditions ──
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+
+    if (params.party) {
+      if (this.hasPartyTable_) {
+        conditions.push("pe.artwork_id IN (SELECT pp2.artwork_id FROM provenance_parties pp2 WHERE pp2.party_name LIKE '%' || ? || '%')");
+      } else {
+        conditions.push("pe.parties LIKE '%' || ? || '%'");
+      }
+      bindings.push(params.party);
+    }
+    if (params.transferType) {
+      const types = Array.isArray(params.transferType) ? params.transferType : [params.transferType];
+      if (types.length === 1) {
+        conditions.push("pe.transfer_type = ?");
+        bindings.push(types[0]);
+      } else {
+        conditions.push(`pe.transfer_type IN (${types.map(() => "?").join(", ")})`);
+        bindings.push(...types);
+      }
+    }
+    if (params.excludeTransferType) {
+      const excl = Array.isArray(params.excludeTransferType) ? params.excludeTransferType : [params.excludeTransferType];
+      conditions.push(`NOT EXISTS (SELECT 1 FROM provenance_events pe_excl WHERE pe_excl.artwork_id = pe.artwork_id AND pe_excl.transfer_type IN (${excl.map(() => "?").join(", ")}))`);
+      bindings.push(...excl);
+    }
+    if (params.location) {
+      conditions.push("pe.location LIKE '%' || ? || '%'");
+      bindings.push(params.location);
+    }
+    if (params.dateFrom != null) {
+      conditions.push("pe.date_year >= ?");
+      bindings.push(params.dateFrom);
+    }
+    if (params.dateTo != null) {
+      conditions.push("pe.date_year <= ?");
+      bindings.push(params.dateTo);
+    }
+    if (params.creator) {
+      conditions.push("a.creator_label LIKE '%' || ? || '%'");
+      bindings.push(params.creator);
+    }
+    if (params.currency) {
+      conditions.push("pe.price_currency = ?");
+      bindings.push(params.currency);
+    }
+    if (params.hasPrice) {
+      conditions.push("pe.price_amount IS NOT NULL");
+    }
+    if (params.hasGap) {
+      // Artwork-level filter: at least one gap event exists in the chain
+      conditions.push("pe.artwork_id IN (SELECT artwork_id FROM provenance_events WHERE gap = 1)");
+    }
+    if (params.relatedTo) {
+      conditions.push("pe.cross_ref_target = ?");
+      bindings.push(params.relatedTo);
+    }
+
+    if (conditions.length === 0) {
+      return { totalArtworks: 0, results: [] };
+    }
+
+    const where = conditions.join(" AND ");
+
+    // Step 1: Build ORDER BY + CTEs for sortBy
+    let orderBy = "";
+    let sortCte = "";
+    let sortJoin = "";
+    const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
+    if (params.sortBy === "price") {
+      sortCte = "WITH sort_agg AS (SELECT artwork_id, MAX(price_amount) AS sort_val FROM provenance_events WHERE price_amount IS NOT NULL GROUP BY artwork_id)";
+      sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
+      orderBy = `ORDER BY sa.sort_val ${dir} NULLS LAST`;
+    } else if (params.sortBy === "eventCount") {
+      sortCte = "WITH sort_agg AS (SELECT artwork_id, COUNT(*) AS sort_val FROM provenance_events GROUP BY artwork_id)";
+      sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
+      orderBy = `ORDER BY sa.sort_val ${dir}`;
+    } else if (params.sortBy === "dateYear") {
+      sortCte = "WITH sort_agg AS (SELECT artwork_id, MIN(date_year) AS sort_val FROM provenance_events WHERE date_year IS NOT NULL GROUP BY artwork_id)";
+      sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
+      orderBy = `ORDER BY sa.sort_val ${dir} NULLS LAST`;
+    }
+
+    const offset = params.offset ?? 0;
+
+    // Find matching artwork_ids (limited + offset)
+    const artworkIds = (this.db.prepare(`
+      ${sortCte}
+      SELECT DISTINCT pe.artwork_id
+      FROM provenance_events pe
+      JOIN artworks a ON a.art_id = pe.artwork_id
+      ${sortJoin}
+      WHERE ${where}
+      ${orderBy}
+      LIMIT ? OFFSET ?
+    `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
+
+    if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
+
+    // Count total — capped at 10001 to avoid slow full scans on broad filters
+    const COUNT_CAP = 10001;
+    const totalArtworks = (this.db.prepare(`
+      SELECT COUNT(*) AS cnt FROM (
+        SELECT DISTINCT pe.artwork_id
+        FROM provenance_events pe
+        JOIN artworks a ON a.art_id = pe.artwork_id
+        WHERE ${where}
+        LIMIT ?
+      )
+    `).get(...bindings, COUNT_CAP) as { cnt: number }).cnt;
+
+    // Step 2: Fetch full chains for matched artworks
+    const placeholders = artworkIds.map(() => "?").join(", ");
+    const allRows = this.db.prepare(`
+      SELECT pe.*, a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest
+      FROM provenance_events pe
+      JOIN artworks a ON a.art_id = pe.artwork_id
+      WHERE pe.artwork_id IN (${placeholders})
+      ORDER BY pe.artwork_id, pe.sequence
+    `).all(...artworkIds) as ProvenanceEventDbRow[];
+
+    // Group by artwork_id, preserving the order from step 1
+    const grouped = new Map<number, ProvenanceEventDbRow[]>();
+    for (const row of allRows) {
+      if (!grouped.has(row.artwork_id)) grouped.set(row.artwork_id, []);
+      grouped.get(row.artwork_id)!.push(row);
+    }
+
+    let results: ProvenanceArtworkResult[] = [];
+    for (const artworkId of artworkIds) {
+      const rows = grouped.get(artworkId);
+      if (!rows) continue;
+      results.push(this.buildProvenanceArtwork(rows, false, params));
+    }
+
+    const capped = totalArtworks >= COUNT_CAP;
+    return { totalArtworks, totalArtworksCapped: capped || undefined, results, ...(warnings.length > 0 && { warnings }) };
+  }
+
+  // ── Layer 2: Provenance Periods ───────────────────────────────────
+
+  /** Convert a raw provenance_periods DB row into a ProvenancePeriodRow. */
+  private buildProvenancePeriod(
+    row: ProvenancePeriodDbRow,
+    matched: boolean,
+  ): ProvenancePeriodRow {
+    let derivation: Record<string, string> = {};
+    try { derivation = JSON.parse(row.derivation ?? "{}"); } catch { /* empty */ }
+    let citations: { text: string }[] = [];
+    try { citations = JSON.parse(row.citations ?? "[]"); } catch { /* empty */ }
+    let sourceEvents: number[] = [];
+    try { sourceEvents = JSON.parse(row.source_events ?? "[]"); } catch { /* empty */ }
+    const duration = (row.begin_year != null && row.end_year != null)
+      ? row.end_year - row.begin_year
+      : null;
+    return {
+      sequence: row.sequence,
+      ownerName: row.owner_name,
+      ownerDates: row.owner_dates,
+      location: row.location,
+      acquisitionMethod: row.acquisition_method,
+      acquisitionFrom: row.acquisition_from,
+      beginYear: row.begin_year,
+      beginYearLatest: row.begin_year_latest,
+      endYear: row.end_year,
+      duration,
+      derivation,
+      uncertain: row.uncertain === 1,
+      citations,
+      sourceEvents,
+      matched,
+    };
+  }
+
+  /** Check whether a single period matches the given search filters. */
+  private periodMatchesFilters(
+    row: ProvenancePeriodDbRow,
+    params: ProvenanceSearchParams,
+  ): boolean {
+    const ownerFilter = params.ownerName ?? params.party;
+    if (ownerFilter) {
+      if (!(row.owner_name ?? "").toLowerCase().includes(ownerFilter.toLowerCase())) return false;
+    }
+    if (params.acquisitionMethod && row.acquisition_method !== params.acquisitionMethod) return false;
+    if (params.location) {
+      if (!(row.location ?? "").toLowerCase().includes(params.location.toLowerCase())) return false;
+    }
+    if (params.dateFrom != null && (row.begin_year == null || row.begin_year < params.dateFrom)) return false;
+    if (params.dateTo != null && (row.end_year == null || row.end_year > params.dateTo)) return false;
+    if (params.minDuration != null || params.maxDuration != null) {
+      if (row.begin_year == null || row.end_year == null) return false;
+      const dur = row.end_year - row.begin_year;
+      if (params.minDuration != null && dur < params.minDuration) return false;
+      if (params.maxDuration != null && dur > params.maxDuration) return false;
+    }
+    return true;
+  }
+
+  /** Build a ProvenanceArtworkResult (with periods) from grouped period rows. */
+  private buildProvenanceArtworkPeriods(
+    rows: ProvenancePeriodDbRow[],
+    allMatched: boolean,
+    params?: ProvenanceSearchParams,
+  ): ProvenanceArtworkResult {
+    const first = rows[0];
+    let matchedCount = 0;
+    const periods = rows.map(r => {
+      const matched = allMatched || (params ? this.periodMatchesFilters(r, params) : false);
+      if (matched) matchedCount++;
+      return this.buildProvenancePeriod(r, matched);
+    });
+    return {
+      objectNumber: first.object_number,
+      title: first.title ?? "",
+      creator: first.creator_label ?? "",
+      date: formatDateRange(first.date_earliest, first.date_latest),
+      url: `https://www.rijksmuseum.nl/en/collection/${first.object_number}`,
+      eventCount: 0,
+      matchedEventCount: 0,
+      events: [],
+      periods,
+      periodCount: periods.length,
+      matchedPeriodCount: allMatched ? periods.length : matchedCount,
+    };
+  }
+
+  /**
+   * Search provenance periods (Layer 2) across artworks.
+   *
+   * Same two-stage pattern as searchProvenance(): find artwork IDs, then
+   * fetch full period chains with matched flags.
+   */
+  searchProvenancePeriods(params: ProvenanceSearchParams): ProvenanceSearchResult {
+    if (!this.db || !this.hasProvenancePeriods_) {
+      return { totalArtworks: 0, results: [], warnings: ["Provenance periods table not available."] };
+    }
+
+    const maxResults = Math.min(params.maxResults ?? 10, 50);
+
+    // ── objectNumber fast path ──
+    if (params.objectNumber) {
+      const rows = this.db.prepare(`
+        SELECT pp.*, a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest
+        FROM provenance_periods pp
+        JOIN artworks a ON a.art_id = pp.artwork_id
+        WHERE a.object_number = ?
+        ORDER BY pp.sequence
+      `).all(params.objectNumber) as ProvenancePeriodDbRow[];
+      if (rows.length === 0) return { totalArtworks: 0, results: [] };
+      return { totalArtworks: 1, results: [this.buildProvenanceArtworkPeriods(rows, false, params)] };
+    }
+
+    // ── Build WHERE conditions ──
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+
+    // ownerName and party both target the same column — ownerName takes precedence.
+    // Always filter on pp.owner_name (the period's inferred owner), not provenance_parties
+    // (event-level table), to avoid false-positive matches at the period layer.
+    const ownerFilter = params.ownerName ?? params.party;
+    if (ownerFilter) {
+      conditions.push("pp.owner_name LIKE '%' || ? || '%'");
+      bindings.push(ownerFilter);
+    }
+    if (params.acquisitionMethod) {
+      conditions.push("pp.acquisition_method = ?");
+      bindings.push(params.acquisitionMethod);
+    }
+    if (params.location) {
+      conditions.push("pp.location LIKE '%' || ? || '%'");
+      bindings.push(params.location);
+    }
+    if (params.dateFrom != null) {
+      conditions.push("pp.begin_year >= ?");
+      bindings.push(params.dateFrom);
+    }
+    if (params.dateTo != null) {
+      conditions.push("pp.end_year <= ?");
+      bindings.push(params.dateTo);
+    }
+    if (params.creator) {
+      conditions.push("a.creator_label LIKE '%' || ? || '%'");
+      bindings.push(params.creator);
+    }
+    if (params.minDuration != null || params.maxDuration != null) {
+      conditions.push("pp.end_year IS NOT NULL AND pp.begin_year IS NOT NULL");
+      if (params.minDuration != null) {
+        conditions.push("(pp.end_year - pp.begin_year) >= ?");
+        bindings.push(params.minDuration);
+      }
+      if (params.maxDuration != null) {
+        conditions.push("(pp.end_year - pp.begin_year) <= ?");
+        bindings.push(params.maxDuration);
+      }
+    }
+
+    // Exclude negative durations (parsing artefacts) when sorting by duration
+    let orderBy = "";
+    if (params.sortBy === "duration") {
+      conditions.push("pp.end_year IS NOT NULL AND pp.begin_year IS NOT NULL AND (pp.end_year - pp.begin_year) >= 0");
+      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
+      orderBy = `ORDER BY (pp.end_year - pp.begin_year) ${dir}`;
+    }
+
+    if (conditions.length === 0) {
+      return { totalArtworks: 0, results: [] };
+    }
+
+    const where = conditions.join(" AND ");
+    const offset = params.offset ?? 0;
+
+    // Find matching artwork_ids
+    const artworkIds = (this.db.prepare(`
+      SELECT DISTINCT pp.artwork_id
+      FROM provenance_periods pp
+      JOIN artworks a ON a.art_id = pp.artwork_id
+      WHERE ${where}
+      ${orderBy}
+      LIMIT ? OFFSET ?
+    `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
+
+    if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
+
+    // Count total
+    const COUNT_CAP = 10001;
+    const totalArtworks = (this.db.prepare(`
+      SELECT COUNT(*) AS cnt FROM (
+        SELECT DISTINCT pp.artwork_id
+        FROM provenance_periods pp
+        JOIN artworks a ON a.art_id = pp.artwork_id
+        WHERE ${where}
+        LIMIT ?
+      )
+    `).get(...bindings, COUNT_CAP) as { cnt: number }).cnt;
+
+    // Fetch full period chains
+    const placeholders = artworkIds.map(() => "?").join(", ");
+    const allRows = this.db.prepare(`
+      SELECT pp.*, a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest
+      FROM provenance_periods pp
+      JOIN artworks a ON a.art_id = pp.artwork_id
+      WHERE pp.artwork_id IN (${placeholders})
+      ORDER BY pp.artwork_id, pp.sequence
+    `).all(...artworkIds) as ProvenancePeriodDbRow[];
+
+    // Group by artwork_id
+    const grouped = new Map<number, ProvenancePeriodDbRow[]>();
+    for (const row of allRows) {
+      if (!grouped.has(row.artwork_id)) grouped.set(row.artwork_id, []);
+      grouped.get(row.artwork_id)!.push(row);
+    }
+
+    const results: ProvenanceArtworkResult[] = [];
+    for (const artworkId of artworkIds) {
+      const rows = grouped.get(artworkId);
+      if (!rows) continue;
+      results.push(this.buildProvenanceArtworkPeriods(rows, false, params));
+    }
+
+    const capped = totalArtworks >= COUNT_CAP;
+    return { totalArtworks, totalArtworksCapped: capped || undefined, results };
   }
 
 }

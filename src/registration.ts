@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult, type ProvenanceSearchParams } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -618,8 +618,9 @@ const ArtworkDetailOutput = {
       uncertain: z.boolean(),
       role: z.string().nullable(),
     }).nullable(),
-    transferType: z.enum(["sale", "inheritance", "bequest", "commission", "purchase",
-      "confiscation", "recuperation", "loan", "transfer", "collection", "gift", "unknown"]),
+    transferType: z.enum(["sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
+      "confiscation", "theft", "looting", "recuperation", "loan", "transfer", "collection", "gift",
+      "exchange", "deposit", "restitution", "inventory", "unknown"]),
     date: z.object({
       text: z.string(),
       year: z.number().int().nullable(),
@@ -962,7 +963,9 @@ function registerTools(
           ? " All parameters can be freely combined with each other. " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
-            "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations."
+            "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations. " +
+            "For provenance analytics: use provenance parameter for collection-wide keyword counts (e.g. provenance='Führermuseum' returns totalResults=843). " +
+            "Combine with facets for cross-tabulation. Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt')."
           : ""),
       inputSchema: z.object({
         query: optStr()
@@ -2277,6 +2280,266 @@ function registerTools(
         }
         const browseData: InferOutput<typeof LookupIconclassOutput> = result;
         return structuredResponse(browseData, sections.join("\n"));
+      })
+    );
+  }
+
+  // ── search_provenance (conditionally registered when provenance tables exist) ──
+
+  const PROVENANCE_TRANSFER_TYPES = [
+    "sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
+    "confiscation", "theft", "looting", "recuperation", "restitution",
+    "loan", "transfer", "collection", "gift",
+    "deposit", "exchange", "inventory",
+    "unknown",
+  ] as const;
+
+  const ProvenanceSearchOutput = {
+    totalArtworks: z.number().int()
+      .describe("Number of artworks with matching provenance events/periods. Capped at 10,001 — see totalArtworksCapped."),
+    totalArtworksCapped: z.boolean().optional()
+      .describe("True when the actual total exceeds 10,001. Use search_artwork with provenance parameter for exact collection-wide counts."),
+    results: z.array(z.object({
+      objectNumber: z.string(),
+      title: z.string(),
+      creator: z.string(),
+      date: z.string().optional(),
+      url: z.string(),
+      eventCount: z.number().int(),
+      matchedEventCount: z.number().int(),
+      events: z.array(z.object({
+        sequence: z.number().int(),
+        rawText: z.string(),
+        gap: z.boolean(),
+        transferType: z.string(),
+        unsold: z.boolean()
+          .describe("True if this sale event was unsold, bought in, or withdrawn at auction. Only meaningful when transferType is 'sale'."),
+        batchPrice: z.boolean()
+          .describe("True if the price is a batch/en bloc total for multiple artworks, not an individual price. Filter these out when ranking by price."),
+        transferCategory: z.enum(["ownership", "custody", "ambiguous"]).nullable()
+          .describe("Whether this transfer involves ownership change, custody change, or is ambiguous."),
+        uncertain: z.boolean(),
+        parties: z.array(z.object({
+          name: z.string(),
+          dates: z.string().nullable(),
+          uncertain: z.boolean(),
+          role: z.string().nullable(),
+          position: z.enum(["sender", "receiver", "agent"]).nullable()
+            .describe("Party's position in the transfer: sender (relinquishes), receiver (acquires), agent (facilitates)."),
+          positionMethod: z.string().nullable().optional()
+            .describe("How position was determined: role_mapping (parser), llm_enrichment (LLM-classified), llm_disambiguation (LLM-decomposed from merged text)."),
+          enrichmentReasoning: z.string().nullable().optional()
+            .describe("LLM reasoning for position assignment (only present for llm_enrichment/llm_disambiguation)."),
+        })),
+        dateExpression: z.string().nullable(),
+        dateYear: z.number().int().nullable(),
+        dateQualifier: z.string().nullable(),
+        location: z.string().nullable(),
+        price: z.object({
+          amount: z.number(),
+          currency: z.string(),
+        }).nullable(),
+        saleDetails: z.string().nullable(),
+        citations: z.array(z.object({ text: z.string() })),
+        isCrossRef: z.boolean(),
+        crossRefTarget: z.string().nullable(),
+        parseMethod: z.enum(["peg", "regex_fallback", "cross_ref", "credit_line"]),
+        categoryMethod: z.string().nullable().optional()
+          .describe("How transfer_category was determined: type_mapping (parser), llm_enrichment, rule:transfer_is_ownership."),
+        enrichmentReasoning: z.string().nullable().optional()
+          .describe("LLM reasoning for type/category classification (only present for llm_enrichment/rule methods)."),
+        matched: z.boolean().describe("True if this event matched the search criteria."),
+      })),
+      periods: z.array(z.object({
+        sequence: z.number().int(),
+        ownerName: z.string().nullable(),
+        ownerDates: z.string().nullable(),
+        location: z.string().nullable(),
+        acquisitionMethod: z.string().nullable(),
+        acquisitionFrom: z.string().nullable(),
+        beginYear: z.number().int().nullable(),
+        beginYearLatest: z.number().int().nullable(),
+        endYear: z.number().int().nullable(),
+        duration: z.number().int().nullable().describe("Ownership duration in years (endYear - beginYear), null if unknown."),
+        derivation: z.record(z.string()).describe("How each field was derived from source events."),
+        uncertain: z.boolean(),
+        citations: z.array(z.object({ text: z.string() })),
+        sourceEvents: z.array(z.number().int()),
+        matched: z.boolean().describe("True if this period matched the search criteria."),
+      })).optional().describe("Ownership periods (Layer 2 interpretation). Present when layer='periods'."),
+      periodCount: z.number().int().optional(),
+      matchedPeriodCount: z.number().int().optional(),
+    })),
+    warnings: z.array(z.string()).optional(),
+    error: z.string().optional(),
+  };
+
+  if (vocabAvailable && vocabDb!.hasProvenanceTables) {
+    server.registerTool(
+      "search_provenance",
+      {
+        title: "Search Provenance",
+        description:
+          "Search ownership and provenance history across ~48K artworks with parsed provenance records. " +
+          "Returns full provenance chains grouped by artwork, with matching events flagged. " +
+          "Each chain tells the complete ownership story: collectors, sales, inheritances, gifts, " +
+          "confiscations, and restitutions, with dates, locations, prices, and citations. " +
+          "Use objectNumber for a single artwork's chain (fast local lookup, no network). " +
+          "Use party to trace a collector or dealer across artworks (e.g. 'Six', 'Rothschild'). " +
+          "Use relatedTo for reverse cross-references — find all works sharing provenance with a given object " +
+          "(pendants, album sheets, dollhouse contents). " +
+          "Combine transferType, dateFrom/dateTo, location for pattern discovery " +
+          "(e.g. confiscations 1940–1945, sales in Paris). " +
+          "Each event includes parseMethod (peg, regex_fallback, cross_ref) indicating parse confidence. " +
+          "Events and parties enriched by LLM include categoryMethod/positionMethod and enrichmentReasoning for transparency. " +
+          "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
+          "For collection-wide counting or keyword searches that don't map to structured fields, " +
+          "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
+          "For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — " +
+          "also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) " +
+          "and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). " +
+          "Combine provenance + creditLine + facets for collector profiling and acquisition channel analysis. " +
+          "At least one filter is required.",
+        inputSchema: z.object({
+          layer: z.preprocess(stripNull,
+            z.enum(["events", "periods"]).default("events").optional(),
+          ).describe("Data layer. 'events' (default): raw parsed provenance events (Layer 1). 'periods': interpreted ownership periods with durations (Layer 2)."),
+          party: optStr().describe("Owner, collector, or dealer name (partial match, e.g. 'Six', 'Rothschild', 'Westendorp')."),
+          transferType: z.preprocess(
+            normalizeStringOrArray,
+            z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
+          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: collection (18K), by_descent (13K), sale (15K), gift (10K), transfer (6K), loan (6K), bequest (4K), widowhood (3K). Rare: recuperation, commission, deposit, restitution, confiscation, exchange, inventory, theft, looting. Generic: inheritance (when specific relationship unknown)."),
+          excludeTransferType: z.preprocess(
+            normalizeStringOrArray,
+            z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
+          ).describe("Exclude artworks that have ANY event of this type. Artwork-level negation (e.g. confiscated but never restituted)."),
+          ownerName: optStr().describe("Owner name (partial match). Only used with layer='periods'."),
+          acquisitionMethod: z.preprocess(stripNull,
+            z.enum(PROVENANCE_TRANSFER_TYPES).optional(),
+          ).describe("Acquisition method filter (exact match). Only used with layer='periods'."),
+          location: optStr().describe("City or place name (partial match, e.g. 'Amsterdam', 'Paris', 'London')."),
+          dateFrom: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Earliest year (inclusive) for provenance event/period dates."),
+          dateTo: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Latest year (inclusive) for provenance event/period dates."),
+          objectNumber: optStr().describe("Get full provenance chain for a specific artwork (e.g. 'SK-A-2344'). Fast local lookup."),
+          creator: optStr().describe("Artist name (partial match on creator, e.g. 'Rembrandt', 'Vermeer')."),
+          currency: z.preprocess(stripNull,
+            z.enum(["guilders", "euros", "pounds", "francs", "dollars", "livres", "napoléons", "deutschmarks", "reichsmarks", "swiss_francs", "guineas", "belgian_francs", "yen", "marks", "louis_d_or"]).optional(),
+          ).describe("Price currency filter (exact match). Only used with layer='events'."),
+          hasPrice: z.preprocess(stripNull, z.boolean().optional())
+            .describe("If true, only events with recorded prices. Only used with layer='events'."),
+          hasGap: z.preprocess(stripNull, z.boolean().optional())
+            .describe("If true, only artworks with provenance gaps (undocumented periods). Only used with layer='events'."),
+          relatedTo: optStr().describe("Reverse cross-reference: find all artworks whose provenance references this object number (e.g. 'BK-14656'). Only used with layer='events'."),
+          minDuration: z.preprocess(stripNull, z.number().int().min(1).optional())
+            .describe("Minimum ownership years. Only used with layer='periods'."),
+          maxDuration: z.preprocess(stripNull, z.number().int().min(1).optional())
+            .describe("Maximum ownership years. Only used with layer='periods'."),
+          sortBy: z.preprocess(stripNull,
+            z.enum(["price", "dateYear", "eventCount", "duration"]).optional(),
+          ).describe("Sort results by this dimension. Use sortBy to rank results (e.g. highest prices, longest ownership). 'duration' only works with layer='periods'."),
+          sortOrder: z.preprocess(stripNull,
+            z.enum(["asc", "desc"]).default("desc").optional(),
+          ).describe("Sort direction (default 'desc')."),
+          offset: z.preprocess(stripNull,
+            z.number().int().min(0).default(0).optional(),
+          ).describe("Skip this many artworks (for pagination). Use with maxResults."),
+          maxResults: z.preprocess(stripNull,
+            z.number().int().min(1).max(50).default(10).optional(),
+          ).describe("Maximum artworks to return (1–50, default 10). Each artwork includes its full chain."),
+        }).strict(),
+        ...withOutputSchema(ProvenanceSearchOutput),
+      },
+      withLogging("search_provenance", async (args: Record<string, unknown>) => {
+        const layer = (args.layer as string | undefined) ?? "events";
+        const params: ProvenanceSearchParams = {
+          maxResults: (args.maxResults as number | undefined) ?? 10,
+          layer: layer as "events" | "periods",
+        };
+        if (args.party) params.party = args.party as string;
+        if (args.transferType) params.transferType = args.transferType as string | string[];
+        if (args.excludeTransferType) params.excludeTransferType = args.excludeTransferType as string | string[];
+        if (args.ownerName) params.ownerName = args.ownerName as string;
+        if (args.acquisitionMethod) params.acquisitionMethod = args.acquisitionMethod as string;
+        if (args.location) params.location = args.location as string;
+        if (args.dateFrom != null) params.dateFrom = args.dateFrom as number;
+        if (args.dateTo != null) params.dateTo = args.dateTo as number;
+        if (args.objectNumber) params.objectNumber = args.objectNumber as string;
+        if (args.creator) params.creator = args.creator as string;
+        if (args.currency) params.currency = args.currency as string;
+        if (args.hasPrice != null) params.hasPrice = args.hasPrice as boolean;
+        if (args.hasGap != null) params.hasGap = args.hasGap as boolean;
+        if (args.relatedTo) params.relatedTo = args.relatedTo as string;
+        if (args.minDuration != null) params.minDuration = args.minDuration as number;
+        if (args.maxDuration != null) params.maxDuration = args.maxDuration as number;
+        if (args.sortBy) params.sortBy = args.sortBy as ProvenanceSearchParams["sortBy"];
+        if (args.sortOrder) params.sortOrder = args.sortOrder as "asc" | "desc";
+        if (args.offset != null) params.offset = args.offset as number;
+
+        // At least one substantive filter required
+        const hasFilter = ["party", "transferType", "excludeTransferType", "location", "dateFrom", "dateTo",
+          "objectNumber", "creator", "currency", "hasPrice", "hasGap", "relatedTo",
+          "ownerName", "acquisitionMethod", "minDuration", "maxDuration"]
+          .some(k => (params as Record<string, unknown>)[k] !== undefined);
+        if (!hasFilter) {
+          return errorResponse(
+            "At least one search filter is required (e.g. party, transferType, location, dateFrom/dateTo, creator, objectNumber, " +
+            "ownerName, acquisitionMethod, minDuration). Modifiers like sortBy, sortOrder, maxResults, offset, and layer do not count. " +
+            "Tip: use a broad filter such as dateFrom: 1400 for collection-wide ranking.",
+          );
+        }
+
+        // Route on layer
+        const result = layer === "periods"
+          ? vocabDb!.searchProvenancePeriods(params)
+          : vocabDb!.searchProvenance(params);
+
+        // Text channel
+        const lines: string[] = [];
+        lines.push(`${pluralize(result.totalArtworks, "artwork")} with matching provenance`);
+        for (const artwork of result.results) {
+          lines.push("");
+          lines.push(`${artwork.objectNumber} | "${artwork.title}" — ${artwork.creator}${artwork.date ? ` (${artwork.date})` : ""}`);
+          lines.push(`  ${artwork.url}`);
+
+          if (layer === "periods" && artwork.periods) {
+            // Format periods
+            for (const p of artwork.periods) {
+              const marker = p.matched ? ">>>" : "   ";
+              const parts: string[] = [];
+              if (p.ownerName) parts.push(p.ownerName);
+              if (p.acquisitionMethod) parts.push(p.acquisitionMethod);
+              const yearRange = p.beginYear != null || p.endYear != null
+                ? `${p.beginYear ?? "?"}–${p.endYear ?? "?"}`
+                : null;
+              if (yearRange) {
+                const durStr = p.duration != null ? ` (${p.duration} yrs)` : "";
+                parts.push(yearRange + durStr);
+              }
+              if (p.location) parts.push(p.location);
+              lines.push(`  ${marker} ${p.sequence}. ${parts.join(" | ")}`);
+            }
+          } else {
+            // Format events
+            for (const e of artwork.events) {
+              const marker = e.matched ? ">>>" : "   ";
+              const partyNames = e.parties.map(p => p.name).join(", ");
+              const parts: string[] = [];
+              if (e.transferType !== "unknown") parts.push(e.unsold ? `${e.transferType} (unsold)` : e.transferType);
+              if (partyNames) parts.push(partyNames);
+              if (e.dateExpression) parts.push(e.dateExpression);
+              else if (e.dateYear) parts.push(String(e.dateYear));
+              if (e.location) parts.push(e.location);
+              if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}${e.batchPrice ? " (batch)" : ""}`);
+              if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
+              lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}`);
+            }
+          }
+        }
+
+        const data: InferOutput<typeof ProvenanceSearchOutput> = result;
+        return structuredResponse(data, lines.join("\n"));
       })
     );
   }
