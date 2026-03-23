@@ -21,7 +21,7 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { TOP_100_SET } from "./types.js";
-import { registerAll, resolvePublicUrl, similarPages } from "./registration.js";
+import { registerAll, resolvePublicUrl, similarPages, enrichmentReviewPages } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 import { StubOAuthProvider } from "./auth/StubOAuthProvider.js";
 
@@ -431,6 +431,16 @@ async function runHttp(): Promise<void> {
 
   app.get("/similar/:uuid", (req: express.Request, res: express.Response) => {
     const page = similarPages.get(req.params.uuid as string);
+    if (!page) {
+      res.status(404).json({ error: "Page not found or expired (30 min TTL)" });
+      return;
+    }
+    page.lastAccess = Date.now();
+    res.type("html").send(page.html);
+  });
+
+  app.get("/enrichment-review/:uuid", (req: express.Request, res: express.Response) => {
+    const page = enrichmentReviewPages.get(req.params.uuid as string);
     if (!page) {
       res.status(404).json({ error: "Page not found or expired (30 min TTL)" });
       return;

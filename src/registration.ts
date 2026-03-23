@@ -20,6 +20,7 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
+import { generateEnrichmentReviewHtml, isEnrichedEvent, isEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
 import type { SearchParams, LinkedArtObject } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -829,24 +830,24 @@ interface ViewerQueue {
   imageHeight?: number;
   activeOverlays: OverlayEntry[];
 }
+/** Start a 60s interval that deletes entries older than `ttlMs` from a Map. */
+function sweepTtlMap<T extends { lastAccess: number }>(map: Map<string, T>, ttlMs = 1_800_000): void {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [id, entry] of map) {
+      if (now - entry.lastAccess > ttlMs) map.delete(id);
+    }
+  }, 60_000).unref();
+}
+
 const viewerQueues = new Map<string, ViewerQueue>();
+sweepTtlMap(viewerQueues);
 
-// Sweep stale queues every 60s (viewers that disconnected without teardown)
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, q] of viewerQueues) {
-    if (now - q.lastAccess > 1_800_000) viewerQueues.delete(id);
-  }
-}, 60_000).unref();
-
-/** Module-scope storage for generated similar-artworks HTML pages. TTL 30 min. */
 export const similarPages = new Map<string, { html: string; lastAccess: number }>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, page] of similarPages) {
-    if (now - page.lastAccess > 1_800_000) similarPages.delete(id);
-  }
-}, 60_000).unref();
+sweepTtlMap(similarPages);
+
+export const enrichmentReviewPages = new Map<string, { html: string; lastAccess: number }>();
+sweepTtlMap(enrichmentReviewPages);
 
 /** Stdio-mode temp files for find_similar. Swept on same 30-min TTL. */
 const similarTempFiles = new Map<string, number>(); // path → createdAt
@@ -2383,22 +2384,32 @@ function registerTools(
           "Search ownership and provenance history across ~48K artworks with parsed provenance records. " +
           "Returns full provenance chains grouped by artwork, with matching events flagged. " +
           "Each chain tells the complete ownership story: collectors, sales, inheritances, gifts, " +
-          "confiscations, and restitutions, with dates, locations, prices, and citations. " +
+          "confiscations, and restitutions, with dates, locations, prices, and citations.\n\n" +
           "Use objectNumber for a single artwork's chain (fast local lookup, no network). " +
           "Use party to trace a collector or dealer across artworks (e.g. 'Six', 'Rothschild'). " +
           "Use relatedTo for reverse cross-references — find all works sharing provenance with a given object " +
           "(pendants, album sheets, dollhouse contents). " +
           "Combine transferType, dateFrom/dateTo, location for pattern discovery " +
-          "(e.g. confiscations 1940–1945, sales in Paris). " +
-          "Each event includes parseMethod (peg, regex_fallback, cross_ref) indicating parse confidence. " +
-          "Events and parties enriched by LLM include categoryMethod/positionMethod and enrichmentReasoning for transparency. " +
+          "(e.g. confiscations 1940–1945, sales in Paris).\n\n" +
+          "IMPORTANT flags on events:\n" +
+          "- unsold: true means this sale event was unsold/bought-in/withdrawn at auction — no ownership transfer occurred. " +
+          "Filter these when analysing actual sales.\n" +
+          "- batchPrice: true means the price is an en bloc/batch total for multiple artworks, not an individual price. " +
+          "Filter these when ranking or comparing prices — they massively distort rankings.\n\n" +
+          "Every record carries provenance-of-provenance metadata: parseMethod shows how the event was parsed " +
+          "(peg, regex_fallback, cross_ref, credit_line), categoryMethod/positionMethod show how classifications " +
+          "and party positions were determined (type_mapping, role_mapping, llm_enrichment, llm_disambiguation, " +
+          "rule:transfer_is_ownership), and enrichmentReasoning provides the LLM's reasoning for any non-deterministic decision. " +
+          "Parties have position (sender/receiver/agent) indicating their role in the transfer.\n\n" +
+          "IMPORTANT: When results contain LLM-enriched records, the response includes a URL to an enrichment review page. " +
+          "You MUST show this URL to the user — it is the only way they can inspect the LLM's methodology and reasoning. " +
+          "Do NOT paraphrase or summarise the enrichment information instead of showing the link.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "For collection-wide counting or keyword searches that don't map to structured fields, " +
           "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
           "For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — " +
           "also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) " +
           "and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). " +
-          "Combine provenance + creditLine + facets for collector profiling and acquisition channel analysis. " +
           "At least one filter is required.",
         inputSchema: z.object({
           layer: z.preprocess(stripNull,
@@ -2408,7 +2419,7 @@ function registerTools(
           transferType: z.preprocess(
             normalizeStringOrArray,
             z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
-          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: collection (18K), by_descent (13K), sale (15K), gift (10K), transfer (6K), loan (6K), bequest (4K), widowhood (3K). Rare: recuperation, commission, deposit, restitution, confiscation, exchange, inventory, theft, looting. Generic: inheritance (when specific relationship unknown)."),
+          ).describe("Type of ownership transfer (single or array). Use excludeTransferType for set difference (e.g. confiscated but never restituted). Well-populated: collection (18.5K), sale (15.6K — includes unsold, filter with unsold flag), by_descent (13.7K), gift (10.7K), transfer (6.2K), loan (6.3K), bequest (4.4K), widowhood (3.4K). Rare: recuperation, commission, deposit, restitution, confiscation, exchange, inventory, theft, looting. Generic: inheritance (when specific relationship unknown)."),
           excludeTransferType: z.preprocess(
             normalizeStringOrArray,
             z.union([z.enum(PROVENANCE_TRANSFER_TYPES), z.array(z.enum(PROVENANCE_TRANSFER_TYPES))]).optional(),
@@ -2534,6 +2545,75 @@ function registerTools(
               if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}${e.batchPrice ? " (batch)" : ""}`);
               if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
               lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}`);
+            }
+          }
+        }
+
+        // Enrichment review: detect LLM-enriched records and generate review page
+        if (layer === "events") {
+          let enrichedEvents = 0;
+          let enrichedParties = 0;
+          for (const art of result.results) {
+            for (const e of art.events) {
+              if (isEnrichedEvent(e)) enrichedEvents++;
+              for (const p of e.parties) {
+                if (isEnrichedParty(p)) enrichedParties++;
+              }
+            }
+          }
+
+          if (enrichedEvents > 0 || enrichedParties > 0) {
+            // Build query summary for display
+            const queryParts: string[] = [];
+            if (params.party) queryParts.push(`party="${params.party}"`);
+            if (params.transferType) queryParts.push(`type=${Array.isArray(params.transferType) ? params.transferType.join(",") : params.transferType}`);
+            if (params.location) queryParts.push(`location="${params.location}"`);
+            if (params.dateFrom != null || params.dateTo != null) queryParts.push(`date=${params.dateFrom ?? "?"}–${params.dateTo ?? "?"}`);
+            if (params.objectNumber) queryParts.push(`objectNumber=${params.objectNumber}`);
+            if (params.creator) queryParts.push(`creator="${params.creator}"`);
+
+            const reviewData: EnrichmentReviewData = {
+              query: queryParts.join(", ") || "(all filters)",
+              artworks: result.results.map(art => ({
+                objectNumber: art.objectNumber,
+                title: art.title,
+                creator: art.creator,
+                events: art.events.map(e => ({
+                  sequence: e.sequence,
+                  rawText: e.rawText,
+                  gap: e.gap,
+                  transferType: e.transferType,
+                  unsold: e.unsold,
+                  batchPrice: e.batchPrice,
+                  dateYear: e.dateYear,
+                  categoryMethod: e.categoryMethod ?? null,
+                  enrichmentReasoning: e.enrichmentReasoning ?? null,
+                  parties: e.parties.map(p => ({
+                    name: p.name,
+                    role: p.role,
+                    position: p.position,
+                    positionMethod: p.positionMethod ?? null,
+                    enrichmentReasoning: p.enrichmentReasoning ?? null,
+                  })),
+                })),
+              })),
+              enrichedEventCount: enrichedEvents,
+              enrichedPartyCount: enrichedParties,
+            };
+
+            const html = generateEnrichmentReviewHtml(reviewData);
+            const uuid = randomUUID();
+
+            if (httpPort) {
+              enrichmentReviewPages.set(uuid, { html, lastAccess: Date.now() });
+              const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
+              lines.push("");
+              lines.push(`${enrichedEvents + enrichedParties} records in these results were enriched by LLM — review methodology and reasoning at ${baseUrl}/enrichment-review/${uuid}`);
+            } else {
+              const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
+              fs.writeFileSync(filePath, html, "utf-8");
+              lines.push("");
+              lines.push(`${enrichedEvents + enrichedParties} records in these results were enriched by LLM — review methodology and reasoning at ${filePath}`);
             }
           }
         }
