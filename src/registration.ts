@@ -2239,6 +2239,9 @@ function registerTools(
           "and party positions were determined (type_mapping, role_mapping, llm_enrichment, llm_disambiguation, " +
           "rule:transfer_is_ownership), and enrichmentReasoning provides the LLM's reasoning for any non-deterministic decision. " +
           "Parties have position (sender/receiver/agent) indicating their role in the transfer.\n\n" +
+          "IMPORTANT: When results contain LLM-enriched records, the response includes a URL to an enrichment review page. " +
+          "You MUST show this URL to the user — it is the only way they can inspect the LLM's methodology and reasoning. " +
+          "Do NOT paraphrase or summarise the enrichment information instead of showing the link.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "For collection-wide counting or keyword searches that don't map to structured fields, " +
           "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
