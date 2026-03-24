@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult, type ProvenanceSearchParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -33,10 +33,13 @@ const RESULTS_DEFAULT = 25;
 const RESULTS_MAX = 50;
 
 /** Params that narrow results but are too broad to stand alone as the only filter. */
-const MODIFIER_KEYS = new Set(["imageAvailable", "creatorGender", "creatorBornAfter", "creatorBornBefore", "expandPlaceHierarchy"]);
+const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "creatorGender", "creatorBornAfter", "creatorBornBefore", "expandPlaceHierarchy"]);
 
 /** Available facet dimensions for search_artwork. Single source of truth for preprocess + z.enum. */
-const FACET_DIMENSIONS = ["type", "material", "technique", "century", "creatorGender", "rights", "imageAvailable"] as const;
+const FACET_DIMENSIONS = [
+  "type", "material", "technique", "century", "creatorGender", "rights", "imageAvailable",
+  "creator", "depictedPerson", "depictedPlace", "productionPlace",
+] as const;
 
 /** Preprocess: strip JSON null / "null" string / "" → undefined BEFORE Zod validates.
  *  claude.ai sends actual JSON null for every optional string param the LLM omits.
@@ -118,14 +121,29 @@ function formatSearchLine(r: { objectNumber: string; title: string; creator: str
 }
 
 /** Format faceted counts as a compact "Narrow by:" block for LLM content. */
-function formatFacets(facets: Record<string, Array<{ label: string; count: number }>>): string {
+function formatFacets(facets: Record<string, Array<{ label: string; count: number; percentage?: number }>>): string {
   const lines: string[] = ["Narrow by:"];
   for (const [dim, entries] of Object.entries(facets)) {
     const dimLabel = dim.charAt(0).toUpperCase() + dim.slice(1);
-    const items = entries.map(e => `${e.label} (${e.count.toLocaleString()})`).join(", ");
+    const items = entries.map(e => {
+      const pct = e.percentage != null ? `, ${e.percentage.toFixed(1)}%` : "";
+      return `${e.label} (${e.count.toLocaleString()}${pct})`;
+    }).join(", ");
     lines.push(`  ${dimLabel}: ${items}`);
   }
   return lines.join("\n");
+}
+
+/** Add percentage to each facet entry based on the sum of counts in that dimension. */
+function addPercentages(facets: Record<string, Array<{ label: string; count: number; percentage?: number }>>): void {
+  for (const entries of Object.values(facets)) {
+    const total = entries.reduce((sum, e) => sum + e.count, 0);
+    if (total > 0) {
+      for (const e of entries) {
+        e.percentage = Math.round((e.count / total) * 1000) / 10;
+      }
+    }
+  }
 }
 
 /** Truncate a string to maxLen, appending "..." if truncated. */
@@ -559,7 +577,8 @@ const SearchResultOutput = {
   facets: z.record(z.string(), z.array(z.object({
     label: z.string(),
     count: z.number().int(),
-  }))).optional().describe("Top-5 counts per dimension when results are truncated and facets=true."),
+    percentage: z.number().optional(),
+  }))).optional().describe("Counts per dimension (configurable via facetLimit, default top-5). Computed when results are truncated and facets is set."),
   warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 };
@@ -1006,6 +1025,14 @@ function registerTools(
             "If true, only return artworks that have a digital image available. " +
             "Cannot be used alone — combine with at least one other filter."
           ),
+        hasProvenance: z
+          .boolean()
+          .optional()
+          .describe(
+            "If true, only return artworks that have parsed provenance records (~48K of 832K). " +
+            "Combine with other filters for cross-domain queries (e.g. type='painting' + hasProvenance=true). " +
+            "Cannot be used alone — combine with at least one other filter."
+          ),
         // Vocabulary-backed params
         ...(vocabAvailable
           ? {
@@ -1228,6 +1255,8 @@ function registerTools(
             `Available: ${FACET_DIMENSIONS.join(", ")}. ` +
             "Dimensions already filtered on are excluded automatically."
           ),
+        facetLimit: z.preprocess(stripNull, z.number().int().min(1).max(50).default(5).optional())
+          .describe("Maximum entries per facet dimension (1–50, default 5)."),
         compact: z
           .boolean()
           .default(false)
@@ -1263,6 +1292,7 @@ function registerTools(
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
         }
         if (args.facets) vocabArgs["facets"] = args.facets;
+        if (args.facetLimit != null) vocabArgs["facetLimit"] = args.facetLimit;
         // Map query → title for vocab path (query searches by title)
         if (argsRecord["query"] && !vocabArgs["title"]) {
           vocabArgs["title"] = argsRecord["query"];
@@ -1284,7 +1314,10 @@ function registerTools(
             ? `${compactResult.totalResults} results`
             : `${compactResult.ids.length} results`) + " (compact)";
           const textParts: string[] = [header];
-          if (compactResult.facets) textParts.push(formatFacets(compactResult.facets));
+          if (compactResult.facets) {
+            addPercentages(compactResult.facets);
+            textParts.push(formatFacets(compactResult.facets));
+          }
           if (compactResult.ids.length) textParts.push(compactResult.ids.join(", "));
           if (compactResult.warnings?.length) textParts.push(...compactResult.warnings.map(w => `⚠ ${w}`));
           const data: InferOutput<typeof SearchResultOutput> = compactResult;
@@ -1307,7 +1340,10 @@ function registerTools(
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
           ` (vocabulary search)`;
         const textParts: string[] = [header];
-        if (result.facets) textParts.push(formatFacets(result.facets));
+        if (result.facets) {
+          addPercentages(result.facets);
+          textParts.push(formatFacets(result.facets));
+        }
         textParts.push(...result.results.map((r, i) => formatSearchLine(r, i)));
         const structured: InferOutput<typeof SearchResultOutput> = result;
         return structuredResponse(structured, textParts.join("\n"));
@@ -2356,6 +2392,11 @@ function registerTools(
       periodCount: z.number().int().optional(),
       matchedPeriodCount: z.number().int().optional(),
     })),
+    facets: z.record(z.string(), z.array(z.object({
+      label: z.string(),
+      count: z.number().int(),
+      percentage: z.number().optional(),
+    }))).optional().describe("Provenance facets when facets=true. Dimensions: transferType, decade, location, transferCategory, partyPosition."),
     warnings: z.array(z.string()).optional(),
     error: z.string().optional(),
   };
@@ -2428,6 +2469,16 @@ function registerTools(
           hasGap: z.preprocess(stripNull, z.boolean().optional())
             .describe("If true, only artworks with provenance gaps (undocumented periods). Only used with layer='events'."),
           relatedTo: optStr().describe("Reverse cross-reference: find all artworks whose provenance references this object number (e.g. 'BK-14656'). Only used with layer='events'."),
+          categoryMethod: optStr().describe(
+            "Filter events by how transfer_category was determined. Values: type_mapping (parser-assigned), " +
+            "llm_enrichment (LLM-classified), rule:transfer_is_ownership (deterministic rule). " +
+            "Use categoryMethod='llm_enrichment' to find artworks with LLM-mediated type classifications.",
+          ),
+          positionMethod: optStr().describe(
+            "Filter by how party positions (sender/receiver/agent) were determined. Values: role_mapping (parser), " +
+            "type_mapping (from transfer type), llm_enrichment (LLM-classified), llm_disambiguation (LLM-decomposed from merged text). " +
+            "Use positionMethod='llm_enrichment' to find artworks with LLM-mediated party positions.",
+          ),
           minDuration: z.preprocess(stripNull, z.number().int().min(1).optional())
             .describe("Minimum ownership years. Only used with layer='periods'."),
           maxDuration: z.preprocess(stripNull, z.number().int().min(1).optional())
@@ -2444,6 +2495,8 @@ function registerTools(
           maxResults: z.preprocess(stripNull,
             z.number().int().min(1).max(50).default(10).optional(),
           ).describe("Maximum artworks to return (1–50, default 10). Each artwork includes its full chain."),
+          facets: z.preprocess(stripNull, z.boolean().optional())
+            .describe("If true, compute provenance facets: transferType, decade, location, transferCategory, partyPosition."),
         }).strict(),
         ...withOutputSchema(ProvenanceSearchOutput),
       },
@@ -2467,15 +2520,19 @@ function registerTools(
         if (args.hasPrice != null) params.hasPrice = args.hasPrice as boolean;
         if (args.hasGap != null) params.hasGap = args.hasGap as boolean;
         if (args.relatedTo) params.relatedTo = args.relatedTo as string;
+        if (args.categoryMethod) params.categoryMethod = args.categoryMethod as string;
+        if (args.positionMethod) params.positionMethod = args.positionMethod as string;
         if (args.minDuration != null) params.minDuration = args.minDuration as number;
         if (args.maxDuration != null) params.maxDuration = args.maxDuration as number;
         if (args.sortBy) params.sortBy = args.sortBy as ProvenanceSearchParams["sortBy"];
         if (args.sortOrder) params.sortOrder = args.sortOrder as "asc" | "desc";
         if (args.offset != null) params.offset = args.offset as number;
+        if (args.facets) params.facets = true;
 
         // At least one substantive filter required
         const hasFilter = ["party", "transferType", "excludeTransferType", "location", "dateFrom", "dateTo",
           "objectNumber", "creator", "currency", "hasPrice", "hasGap", "relatedTo",
+          "categoryMethod", "positionMethod",
           "ownerName", "acquisitionMethod", "minDuration", "maxDuration"]
           .some(k => (params as Record<string, unknown>)[k] !== undefined);
         if (!hasFilter) {
@@ -2605,8 +2662,144 @@ function registerTools(
           }
         }
 
+        // Add percentages to provenance facets and format in text output
+        if (result.facets) {
+          addPercentages(result.facets);
+          lines.push("");
+          lines.push(formatFacets(result.facets));
+        }
+
         const data: InferOutput<typeof ProvenanceSearchOutput> = result;
         return structuredResponse(data, lines.join("\n"));
+      })
+    );
+  }
+
+  // ── collection_stats (analytics/aggregation) ──────────────────────
+
+  if (vocabAvailable) {
+    const STATS_DIMENSIONS = [
+      "type", "material", "technique", "creator", "depictedPerson", "depictedPlace", "productionPlace",
+      "century", "decade",
+      "transferType", "transferCategory", "provenanceDecade", "provenanceLocation",
+      "party", "partyPosition", "currency", "categoryMethod", "positionMethod", "parseMethod",
+    ] as const;
+
+    server.registerTool(
+      "collection_stats",
+      {
+        title: "Collection Statistics",
+        description:
+          "Compute aggregate statistics across the collection. Returns counts, percentages, and distributions " +
+          "as formatted text tables — no structured output schema.\n\n" +
+          "Use this for questions like:\n" +
+          "- \"What types of artworks have provenance?\" → dimension='type', hasProvenance=true\n" +
+          "- \"Transfer type distribution for Rembrandt\" → dimension='transferType', creator='Rembrandt'\n" +
+          "- \"Top 20 depicted persons\" → dimension='depictedPerson', topN=20\n" +
+          "- \"Sales by decade 1600–1900\" → dimension='provenanceDecade', transferType='sale', dateFrom=1600, dateTo=1900\n" +
+          "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n\n" +
+          "Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade.\n" +
+          "Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, " +
+          "currency, categoryMethod, positionMethod, parseMethod.\n\n" +
+          "Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters " +
+          "further restrict to artworks matching those provenance criteria.",
+        inputSchema: z.object({
+          dimension: z.enum(STATS_DIMENSIONS)
+            .describe("What to count/group by."),
+          topN: z.preprocess(stripNull, z.number().int().min(1).max(100).default(20).optional())
+            .describe("Maximum entries to return (1–100, default 20)."),
+          binWidth: z.preprocess(stripNull, z.number().int().min(1).default(10).optional())
+            .describe("Bin width for decade dimensions (default 10 = decades, use 50 for half-centuries, 100 for centuries)."),
+          // Artwork filters
+          type: optStr().describe("Filter to artworks of this type (e.g. 'painting', 'print')."),
+          material: optStr().describe("Filter to artworks with this material."),
+          technique: optStr().describe("Filter to artworks with this technique."),
+          creator: optStr().describe("Filter to artworks by this creator (partial match)."),
+          creationDateFrom: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Earliest creation year (inclusive)."),
+          creationDateTo: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Latest creation year (inclusive)."),
+          // Provenance filters
+          hasProvenance: z.preprocess(stripNull, z.boolean().optional())
+            .describe("If true, restrict to artworks with provenance records (~48K of 832K)."),
+          transferType: optStr().describe("Filter to artworks with this provenance transfer type (e.g. 'sale', 'confiscation')."),
+          location: optStr().describe("Filter to artworks with provenance events in this location (partial match)."),
+          party: optStr().describe("Filter to artworks involving this party/collector (partial match)."),
+          dateFrom: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Earliest provenance event year (inclusive)."),
+          dateTo: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Latest provenance event year (inclusive)."),
+          categoryMethod: optStr().describe("Filter by category method (e.g. 'llm_enrichment')."),
+          positionMethod: optStr().describe("Filter by position method (e.g. 'llm_enrichment')."),
+        }).strict(),
+        // No outputSchema — text-only output by design.
+      },
+      withLogging("collection_stats", async (args: Record<string, unknown>) => {
+        const params: CollectionStatsParams = {
+          dimension: args.dimension as string,
+        };
+        if (args.topN != null) params.topN = args.topN as number;
+        if (args.binWidth != null) params.binWidth = args.binWidth as number;
+        if (args.type) params.type = args.type as string;
+        if (args.material) params.material = args.material as string;
+        if (args.technique) params.technique = args.technique as string;
+        if (args.creator) params.creator = args.creator as string;
+        if (args.creationDateFrom != null) params.creationDateFrom = args.creationDateFrom as number;
+        if (args.creationDateTo != null) params.creationDateTo = args.creationDateTo as number;
+        if (args.hasProvenance != null) params.hasProvenance = args.hasProvenance as boolean;
+        if (args.transferType) params.transferType = args.transferType as string;
+        if (args.location) params.location = args.location as string;
+        if (args.party) params.party = args.party as string;
+        if (args.dateFrom != null) params.dateFrom = args.dateFrom as number;
+        if (args.dateTo != null) params.dateTo = args.dateTo as number;
+        if (args.categoryMethod) params.categoryMethod = args.categoryMethod as string;
+        if (args.positionMethod) params.positionMethod = args.positionMethod as string;
+
+        const result = vocabDb!.computeCollectionStats(params);
+
+        // Format as text table
+        const lines: string[] = [];
+        const filterParts: string[] = [];
+        if (params.type) filterParts.push(`type=${params.type}`);
+        if (params.material) filterParts.push(`material=${params.material}`);
+        if (params.technique) filterParts.push(`technique=${params.technique}`);
+        if (params.creator) filterParts.push(`creator=${params.creator}`);
+        if (params.creationDateFrom != null || params.creationDateTo != null) {
+          filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);
+        }
+        if (params.hasProvenance) filterParts.push("hasProvenance");
+        if (params.transferType) filterParts.push(`transferType=${params.transferType}`);
+        if (params.location) filterParts.push(`location=${params.location}`);
+        if (params.party) filterParts.push(`party=${params.party}`);
+        if (params.dateFrom != null || params.dateTo != null) {
+          filterParts.push(`provenance ${params.dateFrom ?? "..."}–${params.dateTo ?? "..."}`);
+        }
+        if (params.categoryMethod) filterParts.push(`categoryMethod=${params.categoryMethod}`);
+        if (params.positionMethod) filterParts.push(`positionMethod=${params.positionMethod}`);
+
+        const filterStr = filterParts.length > 0 ? ` (${filterParts.join(", ")})` : "";
+        lines.push(`${result.dimension} distribution${filterStr}:`);
+        lines.push(`Total artworks: ${result.total.toLocaleString()}`);
+        lines.push("");
+
+        if (result.entries.length === 0) {
+          lines.push("  (no data)");
+        } else {
+          // Determine column widths for alignment
+          const maxLabel = Math.max(...result.entries.map(e => e.label.length));
+          const maxCount = Math.max(...result.entries.map(e => e.count.toLocaleString().length));
+          for (const e of result.entries) {
+            const pct = e.percentage != null ? `  (${e.percentage.toFixed(1)}%)` : "";
+            lines.push(`  ${e.label.padEnd(maxLabel)}  ${e.count.toLocaleString().padStart(maxCount)}${pct}`);
+          }
+        }
+
+        if (result.warnings) {
+          lines.push("");
+          for (const w of result.warnings) lines.push(`Warning: ${w}`);
+        }
+
+        return { content: [{ type: "text" as const, text: lines.join("\n") }] };
       })
     );
   }

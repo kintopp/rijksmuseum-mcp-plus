@@ -74,6 +74,7 @@ const EVENTS_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_prov_location ON provenance_events(location) WHERE location IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS idx_prov_category ON provenance_events(transfer_category) WHERE transfer_category IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS idx_prov_unsold ON provenance_events(unsold) WHERE unsold = 1`,
+  `CREATE INDEX IF NOT EXISTS idx_prov_category_method ON provenance_events(category_method) WHERE category_method IS NOT NULL`,
 ];
 
 const PERIODS_SCHEMA = `
@@ -122,6 +123,7 @@ CREATE TABLE IF NOT EXISTS provenance_parties (
 const PARTIES_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_party_name ON provenance_parties(party_name)`,
   `CREATE INDEX IF NOT EXISTS idx_party_position ON provenance_parties(party_position) WHERE party_position IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_party_position_method ON provenance_parties(position_method) WHERE position_method IS NOT NULL`,
 ];
 
 // ─── Main ───────────────────────────────────────────────────────────
