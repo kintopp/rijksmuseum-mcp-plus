@@ -343,7 +343,6 @@ export interface ProvenanceSearchResult {
 
 export interface CollectionStatsParams {
   dimension: string;
-  groupBy?: string;
   topN?: number;
   binWidth?: number;
   // Artwork filters
@@ -368,16 +367,43 @@ export interface StatsEntry {
   label: string;
   count: number;
   percentage?: number;
-  groups?: StatsEntry[];
 }
 
 export interface CollectionStatsResult {
   dimension: string;
-  groupBy?: string;
   total: number;
   entries: StatsEntry[];
   warnings?: string[];
 }
+
+/** Vocab dimension → DB field + optional type filter. Shared by computeFacets and artworkDimensionSql. */
+const VOCAB_DIMENSION_DEFS: ReadonlyArray<{ label: string; field: string; vocabType?: string }> = [
+  { label: "type",           field: "type" },
+  { label: "material",       field: "material" },
+  { label: "technique",      field: "technique" },
+  { label: "creator",        field: "creator" },
+  { label: "depictedPerson", field: "subject", vocabType: "person" },
+  { label: "depictedPlace",  field: "subject", vocabType: "place" },
+  { label: "productionPlace",field: "spatial" },
+];
+
+/** Provenance dimension → table/column. Shared by provenanceDimensionSql and computeProvenanceFacets. */
+const PROV_DIMENSION_DEFS: ReadonlyArray<{
+  label: string;
+  table: "events" | "parties";
+  col: string;
+  notNull?: boolean;
+}> = [
+  { label: "transferType",      table: "events",  col: "transfer_type" },
+  { label: "transferCategory",  table: "events",  col: "transfer_category",  notNull: true },
+  { label: "provenanceLocation",table: "events",  col: "location",           notNull: true },
+  { label: "currency",          table: "events",  col: "price_currency",     notNull: true },
+  { label: "categoryMethod",    table: "events",  col: "category_method",    notNull: true },
+  { label: "parseMethod",       table: "events",  col: "parse_method" },
+  { label: "party",             table: "parties", col: "party_name" },
+  { label: "partyPosition",     table: "parties", col: "party_position",     notNull: true },
+  { label: "positionMethod",    table: "parties", col: "position_method",    notNull: true },
+];
 
 // ─── Filter definitions ─────────────────────────────────────────────
 // Each entry maps a VocabSearchParams key to the SQL constraints used
@@ -1595,20 +1621,7 @@ export class VocabularyDb {
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
     const allBindings = ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : [...bindings];
 
-    // Vocab-based facets.
-    // Simple facets: field_id alone selects the right vocab entries.
-    // Typed facets (depictedPerson, depictedPlace): field_id=subject, filtered by vocab.type.
-    // productionPlace: field_id=spatial (production places specifically).
-    const VOCAB_FACETS: { label: string; field: string; vocabType?: string }[] = [
-      { label: "type", field: "type" },
-      { label: "material", field: "material" },
-      { label: "technique", field: "technique" },
-      { label: "creator", field: "creator" },
-      { label: "depictedPerson", field: "subject", vocabType: "person" },
-      { label: "depictedPlace", field: "subject", vocabType: "place" },
-      { label: "productionPlace", field: "spatial" },
-    ];
-    for (const facetDef of VOCAB_FACETS) {
+    for (const facetDef of VOCAB_DIMENSION_DEFS) {
       if (!requestedFields.has(facetDef.label)) continue;
       const fieldId = this.fieldIdMap.get(facetDef.field);
       if (fieldId === undefined) continue;
@@ -1705,7 +1718,7 @@ export class VocabularyDb {
     return result;
   }
 
-  /** Compute provenance facets over matching events. Reuses the same WHERE conditions as the search. */
+  /** Compute provenance facets over matching events. Uses a CTE to avoid redundant JOINs. */
   computeProvenanceFacets(
     conditions: string[],
     bindings: unknown[],
@@ -1714,59 +1727,44 @@ export class VocabularyDb {
     const result: Record<string, Array<{ label: string; count: number }>> = {};
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
 
-    // Transfer type distribution
-    const typeRows = this.db.prepare(`
-      SELECT pe.transfer_type AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
+    // Single CTE materialises the matched event set; all facets read from it.
+    const cte = `WITH matched AS (
+      SELECT pe.artwork_id, pe.transfer_type, pe.date_year, pe.location, pe.transfer_category
       FROM provenance_events pe JOIN artworks a ON a.art_id = pe.artwork_id
       WHERE ${where}
-      GROUP BY pe.transfer_type ORDER BY cnt DESC
-    `).all(...bindings) as { label: string; cnt: number }[];
-    if (typeRows.length > 0) {
-      result["transferType"] = typeRows.map(r => ({ label: r.label, count: r.cnt }));
-    }
+    )`;
 
-    // Decade distribution
-    const decadeRows = this.db.prepare(`
-      SELECT (pe.date_year / 10) * 10 AS decade, COUNT(DISTINCT pe.artwork_id) AS cnt
-      FROM provenance_events pe JOIN artworks a ON a.art_id = pe.artwork_id
-      WHERE ${where} AND pe.date_year IS NOT NULL
-      GROUP BY decade ORDER BY decade
-    `).all(...bindings) as { decade: number; cnt: number }[];
-    if (decadeRows.length > 0) {
-      result["decade"] = decadeRows.map(r => ({ label: `${r.decade}s`, count: r.cnt }));
-    }
+    const unionRows = this.db.prepare(`${cte}
+      SELECT 'transferType' AS facet, transfer_type AS label, COUNT(DISTINCT artwork_id) AS cnt
+      FROM matched GROUP BY transfer_type
+      UNION ALL
+      SELECT 'decade', CAST((date_year / 10) * 10 AS TEXT), COUNT(DISTINCT artwork_id)
+      FROM matched WHERE date_year IS NOT NULL GROUP BY (date_year / 10) * 10
+      UNION ALL
+      SELECT 'location', location, COUNT(DISTINCT artwork_id)
+      FROM matched WHERE location IS NOT NULL GROUP BY location
+      UNION ALL
+      SELECT 'transferCategory', transfer_category, COUNT(DISTINCT artwork_id)
+      FROM matched WHERE transfer_category IS NOT NULL GROUP BY transfer_category
+    `).all(...bindings) as { facet: string; label: string; cnt: number }[];
 
-    // Location distribution (top 20)
-    const locRows = this.db.prepare(`
-      SELECT pe.location AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-      FROM provenance_events pe JOIN artworks a ON a.art_id = pe.artwork_id
-      WHERE ${where} AND pe.location IS NOT NULL
-      GROUP BY pe.location ORDER BY cnt DESC LIMIT 20
-    `).all(...bindings) as { label: string; cnt: number }[];
-    if (locRows.length > 0) {
-      result["location"] = locRows.map(r => ({ label: r.label, count: r.cnt }));
+    for (const row of unionRows) {
+      if (!result[row.facet]) result[row.facet] = [];
+      result[row.facet].push({ label: row.facet === "decade" ? `${row.label}s` : row.label, count: row.cnt });
     }
-
-    // Transfer category distribution
-    const catRows = this.db.prepare(`
-      SELECT pe.transfer_category AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-      FROM provenance_events pe JOIN artworks a ON a.art_id = pe.artwork_id
-      WHERE ${where} AND pe.transfer_category IS NOT NULL
-      GROUP BY pe.transfer_category ORDER BY cnt DESC
-    `).all(...bindings) as { label: string; cnt: number }[];
-    if (catRows.length > 0) {
-      result["transferCategory"] = catRows.map(r => ({ label: r.label, count: r.cnt }));
+    // Sort: decade chronologically, others by count desc; limit location to top 20
+    for (const [key, entries] of Object.entries(result)) {
+      entries.sort(key === "decade" ? (a, b) => a.label.localeCompare(b.label) : (a, b) => b.count - a.count);
     }
+    if (result["location"]?.length > 20) result["location"] = result["location"].slice(0, 20);
 
-    // Party position distribution (requires party table)
+    // Party position facet (uses CTE's artwork_ids)
     if (this.hasPartyTable_) {
-      const posRows = this.db.prepare(`
+      const posRows = this.db.prepare(`${cte}
         SELECT pp.party_position AS label, COUNT(DISTINCT pp.artwork_id) AS cnt
         FROM provenance_parties pp
-        WHERE pp.artwork_id IN (
-          SELECT DISTINCT pe.artwork_id FROM provenance_events pe
-          JOIN artworks a ON a.art_id = pe.artwork_id WHERE ${where}
-        ) AND pp.party_position IS NOT NULL
+        WHERE pp.artwork_id IN (SELECT DISTINCT artwork_id FROM matched)
+          AND pp.party_position IS NOT NULL
         GROUP BY pp.party_position ORDER BY cnt DESC
       `).all(...bindings) as { label: string; cnt: number }[];
       if (posRows.length > 0) {
@@ -1781,18 +1779,7 @@ export class VocabularyDb {
 
   /** Artwork-domain dimensions: count artworks grouped by a vocab field or date. */
   private artworkDimensionSql(dim: string, topN: number, binWidth: number): { sql: string; extraBindings: unknown[] } | null {
-    // Vocab-backed dimensions
-    const VOCAB_DIM_MAP: Record<string, { field: string; vocabType?: string }> = {
-      type: { field: "type" },
-      material: { field: "material" },
-      technique: { field: "technique" },
-      creator: { field: "creator" },
-      depictedPerson: { field: "subject", vocabType: "person" },
-      depictedPlace: { field: "subject", vocabType: "place" },
-      productionPlace: { field: "spatial" },
-    };
-
-    const vocabDef = VOCAB_DIM_MAP[dim];
+    const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
     if (vocabDef) {
       const fieldId = this.fieldIdMap.get(vocabDef.field);
       if (fieldId === undefined) return null;
@@ -1837,25 +1824,7 @@ export class VocabularyDb {
   private provenanceDimensionSql(dim: string, topN: number, binWidth: number): { sql: string; extraBindings: unknown[] } | null {
     if (!this.hasProvenanceTables_) return null;
 
-    if (dim === "transferType") {
-      return {
-        sql: `SELECT pe.transfer_type AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-          FROM provenance_events pe
-          WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-          GROUP BY pe.transfer_type ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
-    if (dim === "transferCategory") {
-      return {
-        sql: `SELECT pe.transfer_category AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-          FROM provenance_events pe
-          WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-            AND pe.transfer_category IS NOT NULL
-          GROUP BY pe.transfer_category ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
+    // Special case: provenanceDecade uses arithmetic binning
     if (dim === "provenanceDecade") {
       return {
         sql: `SELECT (pe.date_year / ?) * ? AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
@@ -1866,79 +1835,24 @@ export class VocabularyDb {
         extraBindings: [binWidth, binWidth, topN],
       };
     }
-    if (dim === "provenanceLocation") {
-      return {
-        sql: `SELECT pe.location AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-          FROM provenance_events pe
-          WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-            AND pe.location IS NOT NULL
-          GROUP BY pe.location ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
-    if (dim === "party") {
-      if (!this.hasPartyTable_) return null;
-      return {
-        sql: `SELECT pp.party_name AS label, COUNT(DISTINCT pp.artwork_id) AS cnt
-          FROM provenance_parties pp
-          WHERE pp.artwork_id IN (SELECT art_id FROM _stats_artworks)
-          GROUP BY pp.party_name ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
-    if (dim === "partyPosition") {
-      if (!this.hasPartyTable_) return null;
-      return {
-        sql: `SELECT pp.party_position AS label, COUNT(DISTINCT pp.artwork_id) AS cnt
-          FROM provenance_parties pp
-          WHERE pp.artwork_id IN (SELECT art_id FROM _stats_artworks)
-            AND pp.party_position IS NOT NULL
-          GROUP BY pp.party_position ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
-    if (dim === "currency") {
-      return {
-        sql: `SELECT pe.price_currency AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-          FROM provenance_events pe
-          WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-            AND pe.price_currency IS NOT NULL
-          GROUP BY pe.price_currency ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
-    if (dim === "categoryMethod") {
-      return {
-        sql: `SELECT pe.category_method AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-          FROM provenance_events pe
-          WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-            AND pe.category_method IS NOT NULL
-          GROUP BY pe.category_method ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
-    if (dim === "positionMethod") {
-      if (!this.hasPartyTable_) return null;
-      return {
-        sql: `SELECT pp.position_method AS label, COUNT(DISTINCT pp.artwork_id) AS cnt
-          FROM provenance_parties pp
-          WHERE pp.artwork_id IN (SELECT art_id FROM _stats_artworks)
-            AND pp.position_method IS NOT NULL
-          GROUP BY pp.position_method ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
-    if (dim === "parseMethod") {
-      return {
-        sql: `SELECT pe.parse_method AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-          FROM provenance_events pe
-          WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-          GROUP BY pe.parse_method ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
-      };
-    }
 
-    return null;
+    // Data-driven lookup for all other provenance dimensions
+    const def = PROV_DIMENSION_DEFS.find(d => d.label === dim);
+    if (!def) return null;
+    if (def.table === "parties" && !this.hasPartyTable_) return null;
+
+    const tbl = def.table === "events" ? "provenance_events" : "provenance_parties";
+    const alias = def.table === "events" ? "pe" : "pp";
+    const notNull = def.notNull ? `AND ${alias}.${def.col} IS NOT NULL` : "";
+
+    return {
+      sql: `SELECT ${alias}.${def.col} AS label, COUNT(DISTINCT ${alias}.artwork_id) AS cnt
+        FROM ${tbl} ${alias}
+        WHERE ${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)
+          ${notNull}
+        GROUP BY ${alias}.${def.col} ORDER BY cnt DESC LIMIT ?`,
+      extraBindings: [topN],
+    };
   }
 
   computeCollectionStats(params: CollectionStatsParams): CollectionStatsResult {
@@ -2022,27 +1936,40 @@ export class VocabularyDb {
       bindings.push(params.positionMethod);
     }
 
+    // SYNC: filter-building here parallels searchProvenance() conditions. Stats uses exact-match
+    // for type/material/technique (vs LIKE-word in search) — intentional for aggregation precision.
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
 
-    // Create a temp table with matching artwork IDs for efficient dimension queries
-    this.db.exec("DROP TABLE IF EXISTS _stats_artworks");
-    this.db.prepare(`CREATE TEMP TABLE _stats_artworks AS SELECT a.art_id FROM artworks a WHERE ${where}`)
-      .run(...bindings);
+    // Unique temp table name to avoid collisions if requests overlap
+    const tableId = `_stats_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    const totalRow = this.db.prepare("SELECT COUNT(*) AS cnt FROM _stats_artworks").get() as { cnt: number };
-    const total = totalRow.cnt;
+    // Unfiltered short-circuit: skip 832K-row temp table copy
+    let total: number;
+    if (conditions.length === 0) {
+      total = (this.db.prepare("SELECT COUNT(*) AS cnt FROM artworks").get() as { cnt: number }).cnt;
+      this.db.exec(`CREATE TEMP TABLE "${tableId}" AS SELECT art_id FROM artworks`);
+    } else {
+      this.db.prepare(`CREATE TEMP TABLE "${tableId}" AS SELECT a.art_id FROM artworks a WHERE ${where}`)
+        .run(...bindings);
+      total = (this.db.prepare(`SELECT COUNT(*) AS cnt FROM "${tableId}"`).get() as { cnt: number }).cnt;
+    }
 
     if (total === 0) {
-      this.db.exec("DROP TABLE IF EXISTS _stats_artworks");
+      this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
       return { dimension: params.dimension, total: 0, entries: [], ...(warnings.length > 0 && { warnings }) };
     }
 
-    // Resolve the dimension query
+    // Resolve the dimension query — _stats_artworks is referenced inside SQL fragments
+    // Temporarily create a view alias so dimension SQL can use the fixed name
+    this.db.exec(`DROP VIEW IF EXISTS _stats_artworks`);
+    this.db.exec(`CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM "${tableId}"`);
+
     const dimQuery = this.artworkDimensionSql(params.dimension, topN, binWidth)
       || this.provenanceDimensionSql(params.dimension, topN, binWidth);
 
     if (!dimQuery) {
-      this.db.exec("DROP TABLE IF EXISTS _stats_artworks");
+      this.db.exec(`DROP VIEW IF EXISTS _stats_artworks`);
+      this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
       return {
         dimension: params.dimension,
         total,
@@ -2058,7 +1985,8 @@ export class VocabularyDb {
       percentage: Math.round((r.cnt / total) * 1000) / 10,
     }));
 
-    this.db.exec("DROP TABLE IF EXISTS _stats_artworks");
+    this.db.exec(`DROP VIEW IF EXISTS _stats_artworks`);
+    this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
     return { dimension: params.dimension, total, entries, ...(warnings.length > 0 && { warnings }) };
   }
 
