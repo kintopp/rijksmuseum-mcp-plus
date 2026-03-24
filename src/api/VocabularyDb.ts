@@ -1478,6 +1478,16 @@ export class VocabularyDb {
     return map;
   }
 
+  /** Eagerly build all four IDF caches used by find_similar.
+   *  Safe to call multiple times — each ensure* method no-ops if already built. */
+  warmSimilarCaches(): void {
+    if (!this.db) return;
+    this.ensureIconclassCache();
+    this.ensureLineageCache();
+    this.ensurePersonCache();
+    this.ensurePlaceCache();
+  }
+
   private tableExists(name: string): boolean {
     try {
       this.db!.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();

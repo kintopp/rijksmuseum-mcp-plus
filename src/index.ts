@@ -341,8 +341,9 @@ async function runStdio(): Promise<void> {
   initSharedClients();
   initUsageStats();
   const server = createServer();
-  // Pre-warm HTTP caches in background (non-blocking)
+  // Pre-warm caches in background (non-blocking)
   warmVocabCache().then(() => warmTopArtworkVocab());
+  if (vocabDb?.available) vocabDb.warmSimilarCaches();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Rijksmuseum MCP server running on stdio");
@@ -464,6 +465,7 @@ async function runHttp(): Promise<void> {
     console.error(`  Health:       GET  /health`);
     // Pre-warm response caches in background after server is accepting connections.
     warmVocabCache().then(() => warmTopArtworkVocab());
+    if (vocabDb?.available) vocabDb.warmSimilarCaches();
   });
 }
 

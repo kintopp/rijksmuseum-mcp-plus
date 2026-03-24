@@ -30,6 +30,7 @@ from pathlib import Path
 
 TOOL_ORDER = [
     "search_artwork",
+    "search_provenance",
     "inspect_artwork_image",
     "get_artwork_image",
     "navigate_viewer",
@@ -37,6 +38,7 @@ TOOL_ORDER = [
     "get_artwork_details",
     "lookup_iconclass",
     "semantic_search",
+    "find_similar",
     "get_artist_timeline",
     "browse_set",
     "get_recent_changes",
@@ -237,6 +239,17 @@ def _extract_topics(calls):
             _add(f'semantic: "{q[:60]}"')
         if c["tool"] == "inspect_artwork_image" and "objectNumber" in inp:
             _add(f'inspected: {inp["objectNumber"]}')
+        if c["tool"] == "search_provenance":
+            for key in ("party", "location", "transferType", "creator"):
+                if key in inp:
+                    val = inp[key]
+                    if isinstance(val, list):
+                        val = "/".join(val)
+                    _add(f'provenance {key}: "{val}"')
+            if "objectNumber" in inp:
+                _add(f'provenance: {inp["objectNumber"]}')
+        if c["tool"] == "find_similar" and "objectNumber" in inp:
+            _add(f'find_similar: {inp["objectNumber"]}')
     return topics[:20]
 
 
@@ -289,6 +302,29 @@ def summarize_input(c):
         return inp.get("artist", "?")
     if tool == "browse_set":
         return f'set:{inp.get("setSpec", "?")}'
+    if tool == "search_provenance":
+        parts = []
+        if "objectNumber" in inp:
+            parts.append(inp["objectNumber"])
+        for key in ("party", "creator", "location", "transferType"):
+            if key in inp:
+                val = inp[key]
+                if isinstance(val, list):
+                    val = "/".join(val)
+                parts.append(f'{key}:"{val}"')
+        if "dateFrom" in inp or "dateTo" in inp:
+            parts.append(f'{inp.get("dateFrom", "")}-{inp.get("dateTo", "")}')
+        if inp.get("hasGap"):
+            parts.append("hasGap")
+        if inp.get("hasPrice"):
+            parts.append("hasPrice")
+        if inp.get("layer") == "periods":
+            parts.append("layer:periods")
+        return ", ".join(parts) or json.dumps(inp)[:100]
+    if tool == "find_similar":
+        on = inp.get("objectNumber", "?")
+        mr = inp.get("maxResults", 20)
+        return f"{on} (max:{mr})" if mr != 20 else on
     return json.dumps(inp)[:100]
 
 
@@ -671,6 +707,102 @@ def section_5(calls):
             f"- Keyword: {keyword}, semantic: {semantic}, "
             f"notation browse: {notation}"
         )
+        out.append("")
+
+    # search_provenance
+    prov = [c for c in calls if c["tool"] == "search_provenance"]
+    if prov:
+        out.append(f"### search_provenance ({len(prov)} calls)\n")
+        # Single-artwork lookups vs multi-artwork searches
+        single = [c for c in prov if c["input"].get("objectNumber")]
+        multi = [c for c in prov if not c["input"].get("objectNumber")]
+        out.append(
+            f"- Single-artwork lookups: {len(single)}, "
+            f"multi-artwork searches: {len(multi)}"
+        )
+        # Layer usage
+        layers = Counter(c["input"].get("layer", "events") for c in prov)
+        layer_str = ", ".join(f"{l} ({n})" for l, n in layers.most_common())
+        out.append(f"- Layer: {layer_str}")
+        # Transfer types queried
+        tt = Counter()
+        for c in prov:
+            t = c["input"].get("transferType")
+            if isinstance(t, list):
+                for v in t:
+                    tt[v] += 1
+            elif t:
+                tt[t] += 1
+        if tt:
+            out.append(
+                "- Transfer types queried: "
+                + ", ".join(f"{t} ({n})" for t, n in tt.most_common())
+            )
+        # Party searches
+        parties = [c["input"]["party"] for c in prov if c["input"].get("party")]
+        if parties:
+            pc = Counter(parties)
+            out.append(
+                "- Party searches: "
+                + ", ".join(f'"{p}" ({n})' for p, n in pc.most_common(10))
+            )
+        # Location searches
+        locs = [c["input"]["location"] for c in prov if c["input"].get("location")]
+        if locs:
+            lc = Counter(locs)
+            out.append(
+                "- Location searches: "
+                + ", ".join(f'"{l}" ({n})' for l, n in lc.most_common(10))
+            )
+        # Date range queries
+        dated = [c for c in prov if c["input"].get("dateFrom") or c["input"].get("dateTo")]
+        if dated:
+            out.append(f"- Date-filtered queries: {len(dated)}")
+        # Price queries
+        priced = [c for c in prov if c["input"].get("hasPrice") or c["input"].get("currency")]
+        if priced:
+            out.append(f"- Price-related queries: {len(priced)}")
+        # Gap queries
+        gapped = [c for c in prov if c["input"].get("hasGap")]
+        if gapped:
+            out.append(f"- Gap searches: {len(gapped)}")
+        # Creator filter
+        creators = [c["input"]["creator"] for c in prov if c["input"].get("creator")]
+        if creators:
+            cc = Counter(creators)
+            out.append(
+                "- Creator filter: "
+                + ", ".join(f'"{cr}" ({n})' for cr, n in cc.most_common(5))
+            )
+        # Latency
+        ms_vals = [c["ms"] for c in prov if c["ms"] > 0]
+        if ms_vals:
+            stats = latency_stats(ms_vals)
+            out.append(
+                f"- Latency: p50 = {stats['p50']:,}ms, "
+                f"p90 = {stats['p90']:,}ms, max = {stats['max']:,}ms"
+            )
+        out.append("")
+
+    # find_similar
+    fsim = [c for c in calls if c["tool"] == "find_similar"]
+    if fsim:
+        out.append(f"### find_similar ({len(fsim)} calls)\n")
+        arts = Counter(c["input"].get("objectNumber", "?") for c in fsim)
+        out.append(
+            "- Artworks: "
+            + ", ".join(f"{on} ({n})" for on, n in arts.most_common(10))
+        )
+        mr = Counter(c["input"].get("maxResults", 20) for c in fsim)
+        mr_str = ", ".join(f"{v} ({n})" for v, n in sorted(mr.items()))
+        out.append(f"- maxResults distribution: {mr_str}")
+        ms_vals = [c["ms"] for c in fsim]
+        if ms_vals:
+            stats = latency_stats(ms_vals)
+            out.append(
+                f"- Latency: p50 = {stats['p50']:,}ms, "
+                f"p90 = {stats['p90']:,}ms, max = {stats['max']:,}ms"
+            )
         out.append("")
 
     # get_artist_timeline
