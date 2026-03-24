@@ -55,15 +55,47 @@ Read-only scripts that inspect data without modifying it.
 | `generate-cluster-viz.py` | Python | Generates interactive Plotly HTML from pre-computed cluster data. |
 | `discover-linked-art-schema.py` | Python | Exhaustive Linked Art field-path analysis. Resolves sample artworks, walks JSON-LD trees, reports coverage/cardinality/anomalies. Run before harvests. |
 | `provenance-sample-analysis.mjs` | Node | Analyses 100 stratified provenance records from vocab DB to catalogue patterns for PEG grammar design. |
-| `survey-persons.mjs` | Node | Quick survey of `depictedPerson` vs `aboutActor` coverage. |
-| `survey-persons-comprehensive.mjs` | Node | Comprehensive 120-name survey across 12 categories. |
 
 ## Provenance
+
+### Parsing & Audit
 
 | Script | Lang | Description |
 |--------|------|-------------|
 | `batch-parse-provenance.mjs` | Node | Batch parse provenance records from vocab DB. Runs Layer 1 (PEG parser) + Layer 2 (interpretation), populates `provenance_events` + `provenance_periods`. Supports `--dry-run`, `--limit`, `--layer1-only`. |
-| `audit-provenance-batch.mjs` | Node | Automated parser audit via Anthropic Batches API. Three modes: `silent-errors`, `pattern-mining`, `semantic-catalogue`. Supports `--resume`, `--dry-run`, `--stratify`. |
+| `audit-provenance-batch.mjs` | Node | Automated parser audit via Anthropic Batches API. Six modes: `silent-errors`, `pattern-mining`, `semantic-catalogue`, `position-enrichment`, `structural-signals`, `type-classification`. Supports `--resume`, `--dry-run`, `--stratify`, `--model`, `--thinking`, `--records`. |
+| `audit-disambiguate-parties.mjs` | Node | LLM-based party disambiguation: decomposes merged party text (213+ records) into structured sender/receiver/agent names. Outputs audit JSON. |
+
+### Writebacks
+
+Deterministic and LLM-informed write-back scripts that update `provenance_events` and `provenance_parties` tables. All support `--dry-run` and `--db PATH`.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `writeback-type-classifications.mjs` | Node | Writes back LLM type classifications for previously-unknown events. Sets `transfer_type` + `transfer_category` with `category_method = "llm_enrichment"`. |
+| `writeback-position-enrichment.mjs` | Node | Writes back LLM position enrichment results: party positions and category updates. |
+| `writeback-party-disambiguation.mjs` | Node | Writes back party disambiguation results: splits, renames, and deletes on `provenance_parties`. Syncs `parties` JSON column on events. |
+| `writeback-transfer-category.mjs` | Node | Deterministic reclassification of 6,233 transfer/ambiguous events → ownership. |
+| `writeback-missing-receivers.mjs` | Node | Extracts missing receiver parties from event text (#116) via deterministic patterns ("to the [Name]"). |
+| `writeback-unsold-prices.mjs` | Node | Extracts prices from unsold/bought-in events (#161). Pattern: "bought in at fl. X". |
+| `writeback-residual-nulls.mjs` | Node | Deterministic cleanup of remaining null-position party artifacts after LLM enrichment passes. |
+| `backfill-enrichment-reasoning.mjs` | Node | Backfills `enrichment_reasoning` column from all audit JSON files (type classification, position enrichment, party disambiguation). |
+
+### Review & Collection
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `generate-position-review.mjs` | Node | Generates HTML review page for position-enrichment LLM results. |
+| `generate-disambig-review.mjs` | Node | Generates HTML review page for party-disambiguation LLM results. |
+| `review-long-duration-periods.mjs` | Node | Generates HTML review page for long-duration periods (>200 years), classifying as legitimate vs artifact (#178). |
+| `collect-round1-results.mjs` | Node | One-time: collects round 1 position-enrichment batch results from Anthropic API. |
+| `collect-disambig-results.mjs` | Node | One-time: collects party-disambiguation batch results from Anthropic API. |
+
+### Post-Reparse
+
+| File | Description |
+|------|-------------|
+| `POST-REPARSE-STEPS.md` | Step-by-step guide for restoring LLM enrichments + manual corrections after a full re-parse (6 steps, strict order). |
 
 ## Profiling & Diagnostics
 
@@ -86,10 +118,11 @@ Read-only scripts that inspect data without modifying it.
 
 ## Tests (`tests/`)
 
-Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTransport.
+Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTransport. Use `run-all.mjs` to run all stdio tests in sequence.
 
 | Script | Assertions | Description |
 |--------|-----------|-------------|
+| `run-all.mjs` | — | Test runner: executes all stdio test scripts in sequence (skips `test-http-viewer-queues.mjs`). |
 | `test-inspect-navigate.mjs` | 115 | Full inspect/navigate/poll viewer workflow |
 | `test-http-viewer-queues.mjs` | 16 | HTTP cross-request viewerQueue persistence (requires server on :3000) |
 | `smoke-v019.mjs` | 25 | v0.19 feature smoke tests |
@@ -107,5 +140,7 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `test-v019-features.mjs` | — | Targeted tests for all v0.19 features |
 | `validate-vocab-db.mjs` | — | Comprehensive vocab DB structure & integrity validation (13 checks: integrity, tables, FTS5, FK integrity, importance, server compat, etc.) |
 | `generate-similarity-review.mjs` | — | Generates HTML review pages for find_similar results (outputs `similarity-review.html`). |
+| `survey-persons.mjs` | — | Quick survey of `depictedPerson` vs `aboutActor` coverage. |
+| `survey-persons-comprehensive.mjs` | — | Comprehensive 120-name survey across 12 categories. |
 | `profile-cross-filters.mjs` | — | Cross-filter performance profiling |
 | `profile-db-space.mjs` | — | DB space analysis |

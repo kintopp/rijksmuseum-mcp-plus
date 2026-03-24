@@ -13,7 +13,7 @@
  *   node scripts/audit-provenance-batch.mjs --mode <mode> [options]
  *
  * Options:
- *   --mode MODE          Required. One of: silent-errors, pattern-mining, semantic-catalogue
+ *   --mode MODE          Required. One of the six modes listed above
  *   --sample-size N      Records to sample (default: 200)
  *   --db PATH            Vocab DB path (default: data/vocabulary.db)
  *   --output PATH        JSON output (default: data/audit-<mode>-<YYYY-MM-DD>.json)
