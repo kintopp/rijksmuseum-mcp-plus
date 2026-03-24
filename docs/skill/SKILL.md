@@ -1,5 +1,7 @@
 ---
 name: rijksmuseum-mcp
+version: "0.23.1"
+last_updated: 2026-03-24
 description: >
   Research workflows for the Rijksmuseum MCP+ server. Use this skill whenever
   the user wants to search the Rijksmuseum collection, look up artwork details,
@@ -27,7 +29,7 @@ Avoid jumping directly to RETRIEVE without a DISCOVER or QUANTIFY step unless th
 | "Find works about X" — clear vocabulary concept | `search_artwork` with `subject` |
 | "Find works about X" — interpretive / atmospheric | `semantic_search` |
 | "Find works depicting [iconographic scene]" | `lookup_iconclass` → `search_artwork` with `iconclass` |
-| "How many works match X?" | `search_artwork` with `compact: true` |
+| "How many works match X?" | `collection_stats` for counts/distributions; `search_artwork` with `compact: true` only when you need object numbers |
 | "Distribution of X across the collection" | `collection_stats` with `dimension` |
 | "Top N creators / depicted persons / places" | `collection_stats` with `dimension` + `topN` |
 | "Sales by decade" / time series | `collection_stats` with `dimension: "provenanceDecade"` |
@@ -154,26 +156,21 @@ These narrow results but **require at least one other content filter**:
 
 ### 1. Scope Before You Browse
 
-For any comparative, counting, or distributional question, run `compact: true`
-first to map the landscape before fetching full metadata.
+For any counting, distributional, or comparative question, **start with `collection_stats`** — it answers in one call what would otherwise require multiple `compact: true` loops.
 
 ```
-# Example: Rembrandt's output across media
-search_artwork(creator="Rembrandt van Rijn", compact=true)           # total
-search_artwork(creator="Rembrandt van Rijn", type="painting", compact=true)
-search_artwork(creator="Rembrandt van Rijn", type="print", compact=true)
-search_artwork(creator="Rembrandt van Rijn", type="drawing", compact=true)
-# Then: get_artwork_details on selected works from each category
-```
-
-This avoids fetching thousands of metadata records to answer what is
-essentially a counting question.
-
-**One-call alternative**: for distributional questions, `collection_stats` replaces the multi-call loop:
-```
+# Example: Rembrandt's output across media — one call
 collection_stats(dimension="type", creator="Rembrandt van Rijn")
 # → painting 314 (38.2%), print 289 (35.2%), drawing 218 (26.5%)
+
+# Cross-domain: what types of artworks have provenance events in Amsterdam?
+collection_stats(dimension="type", hasProvenance=true, location="Amsterdam")
+
+# Top 30 depicted persons
+collection_stats(dimension="depictedPerson", topN=30)
 ```
+
+Use `compact: true` on `search_artwork` only when you need the actual object numbers (e.g. to feed into `get_artwork_details`), not just the count or distribution. For pure counting, `collection_stats` is always more efficient.
 
 ### 2. Iconclass Two-Step
 
@@ -199,12 +196,21 @@ Check `rijksCount` in `lookup_iconclass` results before searching — a code wit
 
 ### 3. Century / Decade Wildcards
 
-Use `creationDate` wildcards for longitudinal analysis. Combine with `compact: true` to count across time ranges.
+For longitudinal analysis, prefer `collection_stats` with decade or century binning:
 
 ```
-search_artwork(technique="etching", creationDate="16*", compact=true)
-search_artwork(technique="etching", creationDate="17*", compact=true)
-# Reveals technique-adoption transitions at collection scale
+collection_stats(dimension="decade", technique="etching", creationDateFrom=1500, creationDateTo=1800)
+# → decade-by-decade etching counts in one call
+
+collection_stats(dimension="decade", technique="etching", creationDateFrom=1500, creationDateTo=1800, binWidth=50)
+# → half-century bins
+```
+
+For queries that need individual object numbers (not just counts), use `creationDate` wildcards with `search_artwork`:
+
+```
+search_artwork(technique="etching", creationDate="16*")
+search_artwork(technique="etching", creationDate="17*")
 ```
 
 Supported patterns: `"1642"` (exact year), `"164*"` (decade), `"16*"` (century), `"1*"` (millennium).
@@ -366,10 +372,15 @@ search_artwork(productionRole="after painting by", creator="Rembrandt van Rijn")
 For grant applications or scoping a research site:
 
 ```
-search_artwork(productionPlace="Japan", type="print", compact=true)  # total count
+collection_stats(dimension="creator", type="print", productionPlace="Japan", topN=20)
+# → top 20 print artists from Japan + total count, in one call
+
+collection_stats(dimension="decade", type="print", productionPlace="Japan")
+# → temporal distribution
+
 list_curated_sets(query="Japan")                                       # curatorial groupings
 browse_set(setId="...")                                                # range of artists/dates
-search_artwork(productionPlace="Japan", type="print", maxResults=10)  # leading artists
+search_artwork(productionPlace="Japan", type="print", maxResults=10)  # sample works for closer inspection
 ```
 
 ### 9. Gender and Demographic Analysis
@@ -400,7 +411,7 @@ collection_stats(dimension="creatorGender", type="painting", creationDateFrom=17
 | Inscription field empty in catalogue | Use `inspect_artwork_image` — AI vision can often read text directly from the image |
 | `facets` on `search_artwork` | 11 dimensions: type, material, technique, century, creatorGender, rights, imageAvailable, creator, depictedPerson, depictedPlace, productionPlace. Configure with `facetLimit` (1–50, default 5). Pass `facets=true` for all or `facets=["creator","type"]` for specific ones. All entries include percentage. |
 | `facets` on `search_provenance` | 5 dimensions: transferType, decade, location, transferCategory, partyPosition. Set `facets=true`. Percentages included. |
-| Collection-wide distributions | Use `collection_stats` instead of pagination loops — 19 dimensions across artwork and provenance domains with cross-domain filters. |
+| Collection-wide distributions | Use `collection_stats` instead of `compact=true` counting loops — 19 dimensions across artwork and provenance domains with cross-domain filters. One call replaces N iterations. |
 | `search_provenance` batch prices | *En bloc* prices: when a batch was sold together, the total price is attributed to every item. Events with `batchPrice: true` are batch totals — **always filter these out** when ranking or comparing prices (`batchPrice: false`). |
 | `search_provenance` unsold events | Sale events with `unsold: true` are auctions where the lot was not sold (bought in, withdrawn). No ownership transfer occurred. Filter these when analysing actual sales. |
 | `search_provenance` `sortBy: "eventCount"` | Ranking is unreliable — pendant pairs and contextual annotations inflate event counts. Use `sortBy: "price"`, `"duration"`, or `"dateYear"` for stable rankings. |

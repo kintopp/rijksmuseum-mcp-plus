@@ -940,6 +940,8 @@ function registerTools(
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "Every response includes totalResults (exact count of all matching artworks, not just the returned page). " +
+        "For aggregate counts and distributions (e.g. 'how many paintings?', 'top depicted persons'), prefer collection_stats — " +
+        "it answers in one call what would otherwise require compact=true loops. " +
         "Use compact=true with facets=true for efficient counting and breakdowns (e.g. gender ratios by decade). " +
         "Results are ranked by relevance when text search (description, title, etc.) or geographic proximity is used; " +
         "otherwise results are ordered by importance (image availability, curatorial attention, metadata richness). " +
