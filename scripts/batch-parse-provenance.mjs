@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS provenance_events (
   is_cross_ref     INTEGER NOT NULL DEFAULT 0,
   cross_ref_target TEXT,
   parse_method   TEXT NOT NULL DEFAULT 'peg',
+  correction_method TEXT,
   enrichment_reasoning TEXT,
   PRIMARY KEY (artwork_id, sequence)
 ) WITHOUT ROWID;

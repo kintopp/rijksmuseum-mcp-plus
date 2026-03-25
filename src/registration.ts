@@ -2182,11 +2182,13 @@ function registerTools(
         citations: z.array(z.object({ text: z.string() })),
         isCrossRef: z.boolean(),
         crossRefTarget: z.string().nullable(),
-        parseMethod: z.enum(["peg", "regex_fallback", "cross_ref", "credit_line"]),
+        parseMethod: z.enum(["peg", "regex_fallback", "cross_ref", "credit_line", "llm_structural"]),
         categoryMethod: z.string().nullable().optional()
           .describe("How transfer_category was determined: type_mapping (parser), llm_enrichment, rule:transfer_is_ownership."),
+        correctionMethod: z.string().nullable().optional()
+          .describe("LLM structural correction applied: llm_structural:#149 (location), llm_structural:#87 (reclassification), llm_structural:#125 (event split), etc."),
         enrichmentReasoning: z.string().nullable().optional()
-          .describe("LLM reasoning for type/category classification (only present for llm_enrichment/rule methods)."),
+          .describe("LLM reasoning for type/category classification or structural correction."),
         matched: z.boolean().describe("True if this event matched the search criteria."),
       })),
       periods: z.array(z.object({
@@ -2235,10 +2237,11 @@ function registerTools(
           "- batchPrice: true means the price is an en bloc/batch total for multiple artworks, not an individual price. " +
           "Filter these when ranking or comparing prices — they massively distort rankings.\n\n" +
           "Every record carries provenance-of-provenance metadata: parseMethod shows how the event was parsed " +
-          "(peg, regex_fallback, cross_ref, credit_line), categoryMethod/positionMethod show how classifications " +
+          "(peg, regex_fallback, cross_ref, credit_line, llm_structural), categoryMethod/positionMethod show how classifications " +
           "and party positions were determined (type_mapping, role_mapping, llm_enrichment, llm_disambiguation, " +
-          "rule:transfer_is_ownership), and enrichmentReasoning provides the LLM's reasoning for any non-deterministic decision. " +
-          "Parties have position (sender/receiver/agent) indicating their role in the transfer.\n\n" +
+          "rule:transfer_is_ownership), correctionMethod (llm_structural:#NNN) shows LLM structural corrections " +
+          "(location fixes, event reclassification, event splitting), and enrichmentReasoning provides the LLM's reasoning " +
+          "for any non-deterministic decision. Parties have position (sender/receiver/agent) indicating their role in the transfer.\n\n" +
           "IMPORTANT: When results contain LLM-enriched records, the response includes a URL to an enrichment review page. " +
           "You MUST show this URL to the user — it is the only way they can inspect the LLM's methodology and reasoning. " +
           "Do NOT paraphrase or summarise the enrichment information instead of showing the link.\n\n" +
@@ -2425,6 +2428,7 @@ function registerTools(
                   batchPrice: e.batchPrice,
                   dateYear: e.dateYear,
                   categoryMethod: e.categoryMethod ?? null,
+                  correctionMethod: e.correctionMethod ?? null,
                   enrichmentReasoning: e.enrichmentReasoning ?? null,
                   parties: e.parties.map(p => ({
                     name: p.name,

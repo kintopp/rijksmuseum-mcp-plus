@@ -17,6 +17,7 @@ interface EnrichmentReviewEvent {
   batchPrice: boolean;
   dateYear: number | null;
   categoryMethod: string | null;
+  correctionMethod: string | null;
   enrichmentReasoning: string | null;
   parties: {
     name: string;
@@ -47,23 +48,43 @@ function esc(s: string | null | undefined): string {
   return (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+const CORRECTION_LABELS: Record<string, string> = {
+  "#87": "phantom event",
+  "#99": "event merge",
+  "#102": "catalogue fragment",
+  "#103": "alternative acquisition",
+  "#104": "location as event",
+  "#116": "missing receiver",
+  "#117": "bequest chain",
+  "#119": "wrong location",
+  "#125": "multi-transfer merge",
+  "#149": "multi-city location",
+};
+
 function methodLabel(method: string): string {
   switch (method) {
     case "llm_enrichment": return "LLM classified";
     case "llm_disambiguation": return "LLM disambiguated";
     case "rule:transfer_is_ownership": return "Deterministic rule";
-    default: return method;
+    default:
+      if (method.startsWith("llm_structural:")) {
+        const issue = method.slice("llm_structural:".length);
+        const desc = CORRECTION_LABELS[issue];
+        return desc ? `LLM correction: ${desc}` : `LLM correction ${issue}`;
+      }
+      return method;
   }
 }
 
 function methodBadgeStyle(method: string): string {
+  if (method.startsWith("llm_structural")) return "background:#b85c00;color:white";
   if (method.startsWith("llm")) return "background:#6b4c9a;color:white";
   if (method.startsWith("rule:")) return "background:#2d6a4f;color:white";
   return "background:#555;color:white";
 }
 
-export function isEnrichedEvent(e: { categoryMethod?: string | null }): boolean {
-  return !!e.categoryMethod && e.categoryMethod !== "type_mapping";
+export function isEnrichedEvent(e: { categoryMethod?: string | null; correctionMethod?: string | null }): boolean {
+  return (!!e.categoryMethod && e.categoryMethod !== "type_mapping") || !!e.correctionMethod;
 }
 
 export function isEnrichedParty(p: { positionMethod?: string | null }): boolean {
@@ -80,7 +101,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
   for (const art of artworks) {
     for (const e of art.events) {
       if (isEnrichedEvent(e)) {
-        const m = e.categoryMethod!;
+        const m = e.correctionMethod ?? e.categoryMethod!;
         methodCounts[m] = (methodCounts[m] || 0) + 1;
       }
       for (const p of e.parties) {
@@ -107,7 +128,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
         eventEnrichments.push({
           seq: e.sequence,
           type: e.transferType,
-          method: e.categoryMethod!,
+          method: e.correctionMethod ?? e.categoryMethod!,
           reasoning: e.enrichmentReasoning || "(no reasoning recorded)",
         });
       }
@@ -267,7 +288,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 
 <div class="disclaimer">
   <h2>About this page</h2>
-  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the deterministic parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision. Records marked <code>llm_enrichment</code> were classified by the LLM; <code>llm_disambiguation</code> were decomposed from merged party text; <code>rule:transfer_is_ownership</code> were reclassified by a deterministic rule validated by LLM pilot.</p>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the deterministic parser could not resolve them from text alone. Each enrichment below shows the <strong>method</strong> used and the LLM's <strong>reasoning</strong> for its decision. Records marked <code>llm_enrichment</code> were classified by the LLM; <code>llm_disambiguation</code> were decomposed from merged party text; <code>rule:transfer_is_ownership</code> were reclassified by a deterministic rule validated by LLM pilot; <code>llm_structural</code> were corrected by LLM post-processing to fix structural parser limitations (location errors, phantom events, event splitting).</p>
   <p style="margin-top:0.5rem;">These classifications are automated and have not been individually verified by a curator. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
 </div>
 

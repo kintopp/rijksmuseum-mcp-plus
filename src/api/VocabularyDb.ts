@@ -233,6 +233,7 @@ interface ProvenanceEventDbRow {
   cross_ref_target: string | null;
   parse_method: string;
   category_method: string | null;
+  correction_method: string | null;
   enrichment_reasoning: string | null;
   // Joined from artworks
   object_number: string;
@@ -261,8 +262,9 @@ export interface ProvenanceEventRow {
   citations: { text: string }[];
   isCrossRef: boolean;
   crossRefTarget: string | null;
-  parseMethod: "peg" | "regex_fallback" | "cross_ref" | "credit_line";
+  parseMethod: "peg" | "regex_fallback" | "cross_ref" | "credit_line" | "llm_structural";
   categoryMethod: string | null;
+  correctionMethod: string | null;
   enrichmentReasoning: string | null;
   matched: boolean;
 }
@@ -2637,6 +2639,7 @@ export class VocabularyDb {
       crossRefTarget: row.cross_ref_target,
       parseMethod: row.parse_method as ProvenanceEventRow["parseMethod"],
       categoryMethod: row.category_method ?? null,
+      correctionMethod: row.correction_method ?? null,
       enrichmentReasoning: row.enrichment_reasoning ?? null,
       matched,
     };

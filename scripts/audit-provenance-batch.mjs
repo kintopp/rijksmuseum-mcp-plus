@@ -1,13 +1,16 @@
 /**
  * Automated provenance parser audit via Anthropic Message Batches API.
  *
- * Six audit modes:
+ * Nine audit modes:
  *   silent-errors        Sample clean parses, find what the parser silently missed
  *   pattern-mining       Sample unknowns, find recurring grammar-fixable patterns
  *   semantic-catalogue   Sample hard cases, classify what KIND of reasoning is needed
  *   position-enrichment  Enrich null-position parties with sender/receiver/agent
  *   structural-signals   Detect deterministic signals in unknown events
  *   type-classification  Classify residual unknown events into transfer types
+ *   field-correction     Correct truncated/wrong locations and missing receivers
+ *   event-reclassification  Reclassify phantom events, location labels, alternatives
+ *   event-splitting      Split merged multi-transfer events into atomic events
  *
  * Usage:
  *   node scripts/audit-provenance-batch.mjs --mode <mode> [options]
@@ -33,7 +36,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // ─── Modes ──────────────────────────────────────────────────────────
 
-const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification"];
+const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification", "field-correction", "event-reclassification", "event-splitting"];
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -268,6 +271,148 @@ function sampleUnknowns() {
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
   const artworkIds = [...new Set(candidates.slice(0, sampleSize))];
+  return fetchRecords(artworkIds, { periods: false });
+}
+
+// ─── Structural correction samplers ──────────────────────────────
+
+/** Check if correction_method column exists (backward compat with older DBs). Cached. */
+let _hasCorrectionColumn = null;
+function hasCorrectionColumn() {
+  if (_hasCorrectionColumn !== null) return _hasCorrectionColumn;
+  const db = openDb();
+  try {
+    db.prepare("SELECT correction_method FROM provenance_events LIMIT 0").run();
+    _hasCorrectionColumn = true;
+  } catch { _hasCorrectionColumn = false; }
+  return _hasCorrectionColumn;
+}
+
+function sampleFieldCorrection() {
+  const db = openDb();
+  let artworkIds;
+  const corrFilter = hasCorrectionColumn() ? "AND pe.correction_method IS NULL" : "";
+
+  if (recordsList) {
+    const objectNumbers = recordsList.split(",").map(s => s.trim());
+    artworkIds = db.prepare(
+      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
+    ).all(...objectNumbers).map(r => r.art_id);
+  } else {
+    // #149: multi-city locations truncated + #119: wrong location + #116: missing receivers
+    artworkIds = db.prepare(`
+      SELECT DISTINCT artwork_id FROM (
+        -- #149/#119: events with multiple city names in raw text
+        SELECT pe.artwork_id FROM provenance_events pe
+        WHERE pe.is_cross_ref = 0 AND pe.location IS NOT NULL
+          ${corrFilter}
+          AND (pe.raw_text LIKE '% and Amsterdam%' OR pe.raw_text LIKE '% and Paris%'
+            OR pe.raw_text LIKE '% and London%' OR pe.raw_text LIKE '% and The Hague%'
+            OR pe.raw_text LIKE '% and Rotterdam%' OR pe.raw_text LIKE '% and Berlin%'
+            OR pe.raw_text LIKE '% and Velzen%' OR pe.raw_text LIKE '% and Wiesbaden%'
+            OR pe.raw_text LIKE '% and Brussels%' OR pe.raw_text LIKE '% and New York%'
+            OR pe.raw_text LIKE '% and Laren%' OR pe.raw_text LIKE '% and Muri%'
+            OR pe.raw_text LIKE '% and Le V%')
+          AND pe.location NOT LIKE '%and%'
+        UNION
+        -- #116: complex receiver cases (sale/gift with "to" pattern but no receiver party)
+        SELECT pe.artwork_id FROM provenance_events pe
+        WHERE pe.transfer_type IN ('sale', 'gift', 'bequest', 'transfer', 'exchange')
+          AND pe.is_cross_ref = 0
+          ${corrFilter}
+          AND (pe.raw_text LIKE '%to the %' OR pe.raw_text LIKE '% by %')
+          AND NOT EXISTS (
+            SELECT 1 FROM provenance_parties pp
+            WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence
+              AND pp.party_position = 'receiver'
+          )
+      )
+      ORDER BY RANDOM() LIMIT ?
+    `).all(sampleSize).map(r => r.artwork_id);
+  }
+  return fetchRecords(artworkIds, { periods: false });
+}
+
+function sampleEventReclassification() {
+  const db = openDb();
+  let artworkIds;
+  const corrFilter = hasCorrectionColumn() ? "AND pe.correction_method IS NULL" : "";
+
+  if (recordsList) {
+    const objectNumbers = recordsList.split(",").map(s => s.trim());
+    artworkIds = db.prepare(
+      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
+    ).all(...objectNumbers).map(r => r.art_id);
+  } else {
+    artworkIds = db.prepare(`
+      SELECT DISTINCT artwork_id FROM (
+        -- #87: bibliographic references creating phantom events
+        SELECT pe.artwork_id FROM provenance_events pe
+        WHERE pe.is_cross_ref = 0 ${corrFilter}
+          AND (pe.raw_text LIKE '%pp.%' OR pe.raw_text LIKE '%vol.%'
+            OR pe.raw_text LIKE '%Simiolus%' OR pe.raw_text LIKE '%Oud Holland%')
+        UNION
+        -- #104: room/location names as standalone events
+        SELECT pe.artwork_id FROM provenance_events pe
+        WHERE pe.is_cross_ref = 0 ${corrFilter}
+          AND pe.transfer_type IN ('collection', 'unknown')
+          AND length(pe.raw_text) < 80
+          AND (pe.raw_text LIKE '%Room%' OR pe.raw_text LIKE '%Gallery%'
+            OR pe.raw_text LIKE '%Hall%' OR pe.raw_text LIKE '%Zaal%'
+            OR pe.raw_text LIKE '%Kamer%' OR pe.raw_text LIKE '%Cabinet%'
+            OR pe.raw_text LIKE '%consistory%')
+        UNION
+        -- #103: "? or" alternative acquisition
+        SELECT pe.artwork_id FROM provenance_events pe
+        WHERE pe.is_cross_ref = 0 ${corrFilter}
+          AND pe.raw_text LIKE '%? or %'
+      )
+      ORDER BY RANDOM() LIMIT ?
+    `).all(sampleSize).map(r => r.artwork_id);
+  }
+  return fetchRecords(artworkIds, { periods: false });
+}
+
+function sampleEventSplitting() {
+  const db = openDb();
+  let artworkIds;
+  const corrFilter = hasCorrectionColumn() ? "AND pe.correction_method IS NULL" : "";
+
+  if (recordsList) {
+    const objectNumbers = recordsList.split(",").map(s => s.trim());
+    artworkIds = db.prepare(
+      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
+    ).all(...objectNumbers).map(r => r.art_id);
+  } else {
+    artworkIds = db.prepare(`
+      SELECT DISTINCT artwork_id FROM (
+        -- #125: multi-event segments with conjunction + transfer verb
+        SELECT pe.artwork_id FROM provenance_events pe
+        WHERE pe.is_cross_ref = 0 ${corrFilter}
+          AND (pe.raw_text LIKE '%and transferred to%'
+            OR pe.raw_text LIKE '%and donated to%'
+            OR pe.raw_text LIKE '%and subsequently%'
+            OR pe.raw_text LIKE '%and then%sold%'
+            OR pe.raw_text LIKE '%and then%given%'
+            OR pe.raw_text LIKE '%ceded%and%transferred%')
+        UNION
+        -- #117: bequest chains
+        SELECT pe.artwork_id FROM provenance_events pe
+        WHERE pe.is_cross_ref = 0 ${corrFilter}
+          AND pe.transfer_type IN ('bequest', 'inheritance', 'by_descent')
+          AND (pe.raw_text LIKE '%bequeathed%to the%'
+            OR pe.raw_text LIKE '%by whom bequeathed%'
+            OR pe.raw_text LIKE '%inherited%transferred%')
+        UNION
+        -- #99/#102: embedded semicolons or very long events
+        SELECT pe.artwork_id FROM provenance_events pe
+        WHERE pe.is_cross_ref = 0 ${corrFilter}
+          AND pe.raw_text LIKE '%;%'
+          AND length(pe.raw_text) > 100
+      )
+      ORDER BY RANDOM() LIMIT ?
+    `).all(sampleSize).map(r => r.artwork_id);
+  }
   return fetchRecords(artworkIds, { periods: false });
 }
 
@@ -589,6 +734,173 @@ const TOOL_TYPE_CLASSIFICATION = {
       },
     },
     required: ["artwork_id", "object_number", "classifications"],
+  },
+};
+
+// ─── Structural correction tool schemas ──────────────────────────
+
+const TOOL_FIELD_CORRECTION = {
+  name: "report_field_corrections",
+  description: "Report field-level corrections for provenance events with wrong/truncated location or missing receiver parties",
+  input_schema: {
+    type: "object",
+    properties: {
+      artwork_id: { type: "integer" },
+      object_number: { type: "string" },
+      corrections: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            event_sequence: { type: "integer" },
+            issue_type: {
+              type: "string",
+              enum: ["truncated_location", "wrong_location", "missing_receiver"],
+            },
+            field: { type: "string", enum: ["location", "parties"] },
+            current_value: { type: "string", description: "Current parsed value" },
+            corrected_value: { type: "string", description: "Correct value from raw text" },
+            new_party: {
+              type: "object",
+              description: "For missing_receiver only: the party to add",
+              properties: {
+                name: { type: "string" },
+                role: { type: ["string", "null"], enum: ["buyer", "recipient", "borrower", "heir", "collector"] },
+                position: { type: "string", enum: ["sender", "receiver", "agent"] },
+              },
+              required: ["name", "position"],
+            },
+            raw_text_quote: { type: "string", description: "Relevant excerpt from raw text" },
+            confidence: { type: "number", description: "0.0-1.0" },
+            reasoning: { type: "string" },
+          },
+          required: ["event_sequence", "issue_type", "field", "current_value",
+                     "corrected_value", "raw_text_quote", "confidence", "reasoning"],
+        },
+      },
+      no_corrections_needed: {
+        type: "array",
+        items: { type: "integer" },
+        description: "Sequence numbers of events checked but found correct",
+      },
+    },
+    required: ["artwork_id", "object_number", "corrections", "no_corrections_needed"],
+  },
+};
+
+const TOOL_EVENT_RECLASSIFICATION = {
+  name: "report_event_reclassification",
+  description: "Report events that should be reclassified as non-provenance or merged with adjacent events",
+  input_schema: {
+    type: "object",
+    properties: {
+      artwork_id: { type: "integer" },
+      object_number: { type: "string" },
+      reclassifications: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            event_sequence: { type: "integer" },
+            issue_type: {
+              type: "string",
+              enum: ["phantom_event", "location_as_event", "alternative_acquisition"],
+            },
+            action: {
+              type: "string",
+              enum: ["mark_non_provenance", "merge_with_adjacent", "merge_alternatives"],
+            },
+            merge_target_sequence: {
+              type: ["integer", "null"],
+              description: "For merge actions: which event to merge into",
+            },
+            merge_field_updates: {
+              type: "object",
+              description: "For merge actions: fields to update on the target event",
+              properties: {
+                location: { type: ["string", "null"] },
+                transfer_type: { type: ["string", "null"] },
+                uncertain: { type: ["boolean", "null"] },
+              },
+            },
+            raw_text_quote: { type: "string" },
+            confidence: { type: "number" },
+            reasoning: { type: "string" },
+          },
+          required: ["event_sequence", "issue_type", "action", "raw_text_quote",
+                     "confidence", "reasoning"],
+        },
+      },
+      no_reclassification_needed: {
+        type: "array",
+        items: { type: "integer" },
+        description: "Sequence numbers of events checked but found correct",
+      },
+    },
+    required: ["artwork_id", "object_number", "reclassifications"],
+  },
+};
+
+const TOOL_EVENT_SPLITTING = {
+  name: "report_event_splits",
+  description: "Report events that should be split into multiple atomic provenance events",
+  input_schema: {
+    type: "object",
+    properties: {
+      artwork_id: { type: "integer" },
+      object_number: { type: "string" },
+      splits: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            original_sequence: { type: "integer", description: "Sequence of the event to split" },
+            issue_type: {
+              type: "string",
+              enum: ["multi_transfer", "bequest_chain", "gap_bridge", "catalogue_fragment"],
+            },
+            replacement_events: {
+              type: "array",
+              minItems: 2,
+              items: {
+                type: "object",
+                properties: {
+                  raw_text_segment: { type: "string", description: "The raw text portion for this sub-event" },
+                  transfer_type: { type: "string", enum: TYPE_CLASSIFICATION_TYPES },
+                  transfer_category: { type: "string", enum: ["ownership", "custody", "ambiguous"] },
+                  parties: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        role: { type: ["string", "null"] },
+                        position: { type: "string", enum: ["sender", "receiver", "agent"] },
+                      },
+                      required: ["name", "position"],
+                    },
+                  },
+                  date_year: { type: ["integer", "null"] },
+                  date_qualifier: { type: ["string", "null"] },
+                  location: { type: ["string", "null"] },
+                  gap: { type: "boolean", description: "True if gap marker before this sub-event" },
+                },
+                required: ["raw_text_segment", "transfer_type", "transfer_category", "parties", "gap"],
+              },
+            },
+            confidence: { type: "number" },
+            reasoning: { type: "string" },
+          },
+          required: ["original_sequence", "issue_type", "replacement_events", "confidence", "reasoning"],
+        },
+      },
+      no_split_needed: {
+        type: "array",
+        items: { type: "integer" },
+        description: "Sequence numbers checked but no split needed",
+      },
+    },
+    required: ["artwork_id", "object_number", "splits", "no_split_needed"],
   },
 };
 
@@ -1366,6 +1678,505 @@ function printTypeClassificationReport(report) {
 // ─── Forced sale (extracted to offline/explorations/provenance/) ────
 
 
+// ─── Structural correction prompt builders ──────────────────────────
+
+function buildEventsXml(record) {
+  return record.events
+    .filter(e => !e.is_cross_ref)
+    .map(e => {
+      const parties = safeJson(e.parties) || [];
+      const partiesXml = parties.map((p, i) =>
+        `      <party idx="${i}" name="${(p.name || "").replace(/"/g, "&quot;")}" role="${p.role ?? "null"}" position="${p.position ?? "null"}" />`
+      ).join("\n");
+      return `    <event sequence="${e.sequence}" transfer_type="${e.transfer_type}" location="${e.location ?? "null"}">
+      <raw_text>${e.raw_text}</raw_text>
+${partiesXml}
+    </event>`;
+    }).join("\n");
+}
+
+function buildPromptFieldCorrection(record) {
+  const eventsXml = buildEventsXml(record);
+
+  // Find candidate events
+  const candidates = record.events.filter(e => {
+    if (e.is_cross_ref) return false;
+    const parties = safeJson(e.parties) || [];
+    const hasMultiCity = /\band\s+[A-Z]/.test(e.raw_text) && e.location && !e.location.includes("and");
+    const hasNoReceiver = ["sale", "gift", "bequest", "transfer", "exchange"].includes(e.transfer_type) &&
+      !parties.some(p => p.position === "receiver") &&
+      (/\bto\s+the\b/i.test(e.raw_text) || /\bby\s+[A-Z]/.test(e.raw_text));
+    return hasMultiCity || hasNoReceiver;
+  });
+
+  const candidatesXml = candidates.map(e =>
+    `    <candidate sequence="${e.sequence}" location="${e.location ?? "null"}">${(e.raw_text || "").slice(0, 150)}</candidate>`
+  ).join("\n");
+
+  return `<role>You are a provenance researcher correcting field-level errors in structured provenance data from a Rijksmuseum artwork. A parser has already extracted events, but some fields contain errors: truncated multi-city locations, wrong locations (party residence captured instead of event location), or missing receiver parties.</role>
+
+<background>
+<aam_standard>
+The provenance text follows the AAM (American Alliance of Museums, 2001) convention:
+- Semicolons (;) separate events in chronological order (earliest → present)
+- Each segment names the new holder (receiver); the previous segment's party is implicitly the sender
+- "from X to Y" = X is sender, Y is receiver
+- A bare name with dates and location = the person/institution held the artwork (receiver)
+- Comma-separated tail: "Party, City, date" — the city is the party's location
+</aam_standard>
+
+<issue_patterns>
+1. **Truncated multi-city locations (#149):** The parser captures only the first city when text says "Amsterdam and Paris" or "Rotterdam and Wiesbaden". The full compound location should be preserved.
+2. **Wrong location (#119):** When multiple cities appear in the tail, the parser may pick the party's residence instead of the event location. E.g., "to Louis Napoléon, Amsterdam, for the Koninklijk Museum, The Hague" — Amsterdam is residence, The Hague is the event location.
+3. **Missing receiver (#116):** Complex tail patterns where "to the [Name]" or "by [Name]" indicates a buyer/recipient not captured by the parser.
+</issue_patterns>
+</background>
+
+<artwork>
+Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
+</artwork>
+
+<raw_provenance>
+${record.provenanceText}
+</raw_provenance>
+
+<all_events>
+${eventsXml}
+</all_events>
+
+<candidate_events>
+${candidatesXml}
+</candidate_events>
+
+<examples>
+<example>
+<context>Multi-city location truncated (#149)</context>
+<event sequence="3" location="Amsterdam">
+  <raw_text>? Pieter de la Court van der Voort (1664-1739), Amsterdam and Velzen</raw_text>
+</event>
+<correction>
+  <field_update field="location" current="Amsterdam" corrected="Amsterdam and Velzen" confidence="0.95" reasoning="Raw text explicitly says 'Amsterdam and Velzen'. The parser truncated to first city." />
+</correction>
+</example>
+
+<example>
+<context>Wrong location — party residence vs event location (#119)</context>
+<event sequence="5" location="Amsterdam">
+  <raw_text>purchased from the dealer J. Goudstikker, Amsterdam, for the Koninklijk Museum, The Hague</raw_text>
+</event>
+<correction>
+  <field_update field="location" current="Amsterdam" corrected="The Hague" confidence="0.85" reasoning="Amsterdam is the dealer's residence. The event location is The Hague (where the Koninklijk Museum is). The purchase was for The Hague, not in Amsterdam." />
+</correction>
+</example>
+
+<example>
+<context>Missing receiver party (#116)</context>
+<event sequence="4" transfer_type="sale">
+  <raw_text>sale, The Hague (Van Marle and Bignell), fl. 500, to the Vereniging Rembrandt</raw_text>
+  <party idx="0" name="Van Marle and Bignell" role="null" position="agent" />
+</event>
+<correction>
+  <field_update field="parties" current="no receiver" corrected="add receiver" confidence="0.90" reasoning="'to the Vereniging Rembrandt' clearly indicates the buyer. The parser extracted the auction house but missed the recipient." />
+  <new_party name="Vereniging Rembrandt" role="buyer" position="receiver" />
+</correction>
+</example>
+
+<example>
+<context>No correction needed — location is correct</context>
+<event sequence="2" location="Paris">
+  <raw_text>Edmond de Rothschild (1845-1934), Paris</raw_text>
+</event>
+<no_correction sequence="2" />
+</example>
+</examples>
+
+<task>
+For EACH event in candidate_events, check whether the location or parties need correction by comparing with the raw text and the full provenance chain.
+
+Report corrections using the report_field_corrections tool. For events that are already correct, include them in no_corrections_needed.
+
+The raw_text column is never modified — it is preserved as ground truth. You are correcting the parser's interpretation, not the source text.
+
+Confidence calibration:
+- ≥ 0.9 — raw text explicitly shows the correct value
+- 0.7–0.9 — clear from context but requires interpretation
+- 0.5–0.7 — ambiguous, multiple valid readings
+- < 0.5 — skip (do not report)
+</task>`;
+}
+
+function buildPromptEventReclassification(record) {
+  const eventsXml = buildEventsXml(record);
+
+  const candidates = record.events.filter(e => {
+    if (e.is_cross_ref) return false;
+    const isBiblio = /\bpp\.\s*\d|vol\.\s*\d|Simiolus|Oud Holland/i.test(e.raw_text);
+    const isLocation = e.transfer_type === "collection" && e.raw_text.length < 80 &&
+      /Room|Gallery|Hall|Zaal|Kamer|Cabinet|consistory/i.test(e.raw_text);
+    const isAlt = /\?\s*or\s/i.test(e.raw_text);
+    return isBiblio || isLocation || isAlt;
+  });
+
+  const candidatesXml = candidates.map(e =>
+    `    <candidate sequence="${e.sequence}" transfer_type="${e.transfer_type}">${(e.raw_text || "").slice(0, 150)}</candidate>`
+  ).join("\n");
+
+  return `<role>You are a provenance researcher identifying non-provenance events and misclassified entries in structured provenance data from a Rijksmuseum artwork. A parser has created events from raw text, but some entries are not real provenance events — they are bibliographic references, institutional location labels, or alternative acquisitions that should be merged.</role>
+
+<background>
+<aam_standard>
+The provenance text follows the AAM (American Alliance of Museums, 2001) convention:
+- Semicolons (;) separate events in chronological order
+- Curly braces ({…}) enclose bibliographic citations (not provenance data)
+- Question mark (?) prefix marks uncertain attribution
+</aam_standard>
+
+<issue_patterns>
+1. **Bibliographic phantom events (#87):** The parser created an event from text that is actually a scholarly reference (journal, page number, volume) that leaked out of curly braces or was never enclosed.
+2. **Institutional location as event (#104):** Entries like "new consistory chamber, Amsterdam, 1854" or "Charter Room" are location labels within continuing institutional ownership, not separate transfers.
+3. **Alternative acquisition (#103):** When text says "? purchased from X ? or, possibly his sale, Y", the parser creates two separate events. These should be merged into one uncertain event.
+</issue_patterns>
+</background>
+
+<artwork>
+Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
+</artwork>
+
+<raw_provenance>
+${record.provenanceText}
+</raw_provenance>
+
+<all_events>
+${eventsXml}
+</all_events>
+
+<candidate_events>
+${candidatesXml}
+</candidate_events>
+
+<examples>
+<example>
+<context>Bibliographic reference creating phantom event (#87)</context>
+<event sequence="4" transfer_type="collection">
+  <raw_text>Onze-Lieve-Vrouwe-Munsterkerk, Roermond, 1876</raw_text>
+</event>
+<reclassification action="mark_non_provenance" confidence="0.85" reasoning="1876 is the publication date of Havard's reference, not a transfer date. This is a bibliographic citation, not a provenance event." />
+</example>
+
+<example>
+<context>Institutional location record (#104)</context>
+<event sequence="8" transfer_type="collection">
+  <raw_text>new consistory chamber, Amsterdam, 1854</raw_text>
+</event>
+<reclassification action="merge_with_adjacent" merge_target="7" confidence="0.80" reasoning="This is a location update within continuing institutional ownership — the artwork moved rooms within the same institution. Merge as location update on the preceding event." />
+</example>
+
+<example>
+<context>Alternative acquisition (#103)</context>
+<event sequence="3" transfer_type="sale">
+  <raw_text>? or, possibly anonymous sale, Rotterdam, October 6, 1766</raw_text>
+</event>
+<reclassification action="merge_alternatives" merge_target="2" confidence="0.90" reasoning="'? or' introduces an alternative reading of the same acquisition event (seq 2). These are two possible interpretations of the same transfer, not two separate events. Merge into seq 2 and set uncertain=true." />
+</example>
+</examples>
+
+<task>
+For EACH event in candidate_events, determine whether it is a real provenance event or should be reclassified.
+
+Actions:
+- **mark_non_provenance**: The event is not a provenance transfer (bibliographic noise, editorial note). Update transfer_type to non_provenance.
+- **merge_with_adjacent**: The event is a location/room label within continuing ownership. Specify merge_target_sequence (which adjacent event to merge into) and any field_updates for the target.
+- **merge_alternatives**: The event is an alternative reading of another event. Specify merge_target_sequence. The target should have uncertain=true.
+
+For events that are actually valid provenance events, include them in no_reclassification_needed.
+
+The raw_text column is never modified.
+
+Confidence calibration:
+- ≥ 0.9 — clearly not a provenance event (bibliographic text, citation leak)
+- 0.7–0.9 — strong contextual evidence (room label, alternative reading)
+- 0.5–0.7 — ambiguous
+- < 0.5 — skip
+</task>`;
+}
+
+function buildPromptEventSplitting(record) {
+  const eventsXml = buildEventsXml(record);
+
+  const candidates = record.events.filter(e => {
+    if (e.is_cross_ref) return false;
+    const hasConjunction = /\band\s+(transferred|donated|subsequently|then\b|later\b)/i.test(e.raw_text) ||
+      /ceded.*and.*transferred/i.test(e.raw_text);
+    const hasBequest = ["bequest", "inheritance", "by_descent"].includes(e.transfer_type) &&
+      /bequeathed.*to\s+the|by whom bequeathed|inherited.*transferred/i.test(e.raw_text);
+    const hasSemicolon = e.raw_text.includes(";") && e.raw_text.length > 100;
+    return hasConjunction || hasBequest || hasSemicolon;
+  });
+
+  const candidatesXml = candidates.map(e =>
+    `    <candidate sequence="${e.sequence}" transfer_type="${e.transfer_type}" length="${e.raw_text.length}">${e.raw_text}</candidate>`
+  ).join("\n");
+
+  return `<role>You are a provenance researcher splitting merged provenance events into atomic transfers. Each provenance event should represent exactly one transfer of ownership or custody. The parser sometimes merges multiple transfers into a single event when the original text describes them in one semicolon-delimited segment.</role>
+
+<background>
+<aam_standard>
+The provenance text follows the AAM (American Alliance of Museums, 2001) convention:
+- Semicolons (;) separate events in chronological order (earliest → present)
+- Each segment should describe ONE transfer
+- "from X to Y" = one transfer (X→Y)
+- "ceded to the State and transferred to the museum" = TWO transfers (original→State, State→museum)
+</aam_standard>
+
+<event_atomicity>
+A provenance event is ATOMIC if it describes exactly one change of hands:
+- One sender, one receiver (optionally via an agent)
+- One transfer type (sale, gift, bequest, etc.)
+- If the text describes A giving to B, then B giving to C, that is two events
+
+Common merged patterns:
+- "inherited by widow, by whom bequeathed to the Vereniging" = inheritance (→widow) + bequest (widow→Vereniging)
+- "ceded to the State and transferred to the museum" = cession (→State) + transfer (State→museum)
+- "on loan to X; transferred to Y" = loan (→X) + transfer (→Y)
+</event_atomicity>
+</background>
+
+<artwork>
+Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
+</artwork>
+
+<raw_provenance>
+${record.provenanceText}
+</raw_provenance>
+
+<all_events>
+${eventsXml}
+</all_events>
+
+<candidate_events>
+${candidatesXml}
+</candidate_events>
+
+<examples>
+<example>
+<context>Bequest chain merged into single event (#117)</context>
+<event sequence="6" transfer_type="bequest">
+  <raw_text>his widow Betsy, by whom bequeathed to the Vereniging Rembrandt, 1968</raw_text>
+</event>
+<split>
+  <replacement_event>
+    <raw_text_segment>his widow Betsy</raw_text_segment>
+    <transfer_type>by_descent</transfer_type>
+    <transfer_category>ownership</transfer_category>
+    <party name="Betsy" position="receiver" />
+    <gap>false</gap>
+  </replacement_event>
+  <replacement_event>
+    <raw_text_segment>by whom bequeathed to the Vereniging Rembrandt, 1968</raw_text_segment>
+    <transfer_type>bequest</transfer_type>
+    <transfer_category>ownership</transfer_category>
+    <party name="Betsy" position="sender" />
+    <party name="Vereniging Rembrandt" position="receiver" />
+    <date_year>1968</date_year>
+    <gap>false</gap>
+  </replacement_event>
+  <confidence>0.90</confidence>
+  <reasoning>The text describes two transfers: (1) inheritance from husband to widow Betsy, (2) bequest from Betsy to the Vereniging. "by whom" refers back to Betsy as the new sender.</reasoning>
+</split>
+</example>
+
+<example>
+<context>Multi-transfer with conjunction (#125)</context>
+<event sequence="3" transfer_type="transfer">
+  <raw_text>ceded to the State and transferred to the Rijksmuseum, Amsterdam, 1808</raw_text>
+</event>
+<split>
+  <replacement_event>
+    <raw_text_segment>ceded to the State</raw_text_segment>
+    <transfer_type>confiscation</transfer_type>
+    <transfer_category>ownership</transfer_category>
+    <party name="the State" position="receiver" />
+    <gap>false</gap>
+  </replacement_event>
+  <replacement_event>
+    <raw_text_segment>transferred to the Rijksmuseum, Amsterdam, 1808</raw_text_segment>
+    <transfer_type>transfer</transfer_type>
+    <transfer_category>ownership</transfer_category>
+    <party name="the State" position="sender" />
+    <party name="Rijksmuseum" position="receiver" />
+    <date_year>1808</date_year>
+    <location>Amsterdam</location>
+    <gap>false</gap>
+  </replacement_event>
+  <confidence>0.90</confidence>
+  <reasoning>"Ceded" and "transferred" are two distinct actions: confiscation by the State, then institutional transfer to the Rijksmuseum.</reasoning>
+</split>
+</example>
+
+<example>
+<context>No split needed — single atomic event</context>
+<event sequence="2" transfer_type="sale">
+  <raw_text>sale, Amsterdam (de Vries, Roos, Brondgeest, and Engelberts), February 16, 1829, lot 15</raw_text>
+</event>
+<no_split sequence="2" />
+</example>
+</examples>
+
+<task>
+For EACH event in candidate_events, determine whether it describes more than one transfer.
+
+If yes: decompose into individual atomic events, providing for each:
+- raw_text_segment: the portion of the original text that corresponds to this sub-event
+- transfer_type, transfer_category, parties (with positions), date_year, location, gap
+- The raw_text_segments should collectively cover the full original text
+
+If no (single atomic event): include in no_split_needed.
+
+The original raw_text column is never modified. The raw_text_segment values are excerpts for attribution.
+
+Confidence calibration:
+- ≥ 0.9 — clear multi-transfer pattern ("A and then B", "by whom bequeathed")
+- 0.7–0.9 — likely multi-transfer but boundary is interpretive
+- 0.5–0.7 — ambiguous
+- < 0.5 — skip
+</task>`;
+}
+
+// ─── Structural correction aggregators & reporters ───────────────────
+
+function aggregateFieldCorrection(results) {
+  const byIssue = {};
+  let totalCorrections = 0;
+  let totalChecked = 0;
+  let highConfidence = 0;
+  const allCorrections = [];
+
+  for (const r of results) {
+    if (r.error || !r.data) continue;
+    const { corrections = [], no_corrections_needed = [] } = r.data;
+    totalChecked += corrections.length + no_corrections_needed.length;
+    for (const c of corrections) {
+      totalCorrections++;
+      byIssue[c.issue_type] = (byIssue[c.issue_type] || 0) + 1;
+      if (c.confidence >= 0.8) highConfidence++;
+      allCorrections.push({
+        objectNumber: r.data.object_number,
+        ...c,
+      });
+    }
+  }
+  return { totalCorrections, totalChecked, highConfidence, byIssue, allCorrections };
+}
+
+function printFieldCorrectionReport(report) {
+  console.log(`\n## Field Corrections (${report.totalCorrections} corrections from ${report.totalChecked} candidates)\n`);
+  console.log(`| Metric | Value |`);
+  console.log(`|--------|-------|`);
+  console.log(`| Total corrections | ${report.totalCorrections} |`);
+  console.log(`| High confidence (≥0.8) | ${report.highConfidence} |`);
+  console.log(`| Events checked | ${report.totalChecked} |`);
+
+  console.log(`\n### By issue type\n`);
+  for (const [type, count] of Object.entries(report.byIssue).sort((a, b) => b[1] - a[1])) {
+    console.log(`- **${type}**: ${count}`);
+  }
+
+  console.log(`\n### Sample corrections\n`);
+  for (const c of report.allCorrections.slice(0, 15)) {
+    console.log(`- **${c.objectNumber}** seq ${c.event_sequence} [${c.issue_type}]: "${c.current_value}" → "${c.corrected_value}" (${(c.confidence * 100).toFixed(0)}%)`);
+    console.log(`  _${c.reasoning}_`);
+  }
+}
+
+function aggregateEventReclassification(results) {
+  const byAction = {};
+  const byIssue = {};
+  let total = 0;
+  let highConfidence = 0;
+  const allReclass = [];
+
+  for (const r of results) {
+    if (r.error || !r.data) continue;
+    const { reclassifications = [] } = r.data;
+    for (const rc of reclassifications) {
+      total++;
+      byAction[rc.action] = (byAction[rc.action] || 0) + 1;
+      byIssue[rc.issue_type] = (byIssue[rc.issue_type] || 0) + 1;
+      if (rc.confidence >= 0.8) highConfidence++;
+      allReclass.push({ objectNumber: r.data.object_number, ...rc });
+    }
+  }
+  return { total, highConfidence, byAction, byIssue, allReclass };
+}
+
+function printEventReclassificationReport(report) {
+  console.log(`\n## Event Reclassification (${report.total} reclassifications)\n`);
+  console.log(`| Metric | Value |`);
+  console.log(`|--------|-------|`);
+  console.log(`| Total reclassifications | ${report.total} |`);
+  console.log(`| High confidence (≥0.8) | ${report.highConfidence} |`);
+
+  console.log(`\n### By action\n`);
+  for (const [action, count] of Object.entries(report.byAction).sort((a, b) => b[1] - a[1])) {
+    console.log(`- **${action}**: ${count}`);
+  }
+
+  console.log(`\n### By issue type\n`);
+  for (const [type, count] of Object.entries(report.byIssue).sort((a, b) => b[1] - a[1])) {
+    console.log(`- **${type}**: ${count}`);
+  }
+
+  console.log(`\n### Sample reclassifications\n`);
+  for (const rc of report.allReclass.slice(0, 15)) {
+    console.log(`- **${rc.objectNumber}** seq ${rc.event_sequence} [${rc.issue_type}]: ${rc.action}${rc.merge_target_sequence != null ? ` → merge into seq ${rc.merge_target_sequence}` : ""} (${(rc.confidence * 100).toFixed(0)}%)`);
+    console.log(`  _${rc.reasoning}_`);
+  }
+}
+
+function aggregateEventSplitting(results) {
+  const byIssue = {};
+  let totalSplits = 0;
+  let totalNewEvents = 0;
+  let highConfidence = 0;
+  const allSplits = [];
+
+  for (const r of results) {
+    if (r.error || !r.data) continue;
+    const { splits = [] } = r.data;
+    for (const s of splits) {
+      totalSplits++;
+      totalNewEvents += (s.replacement_events?.length ?? 0);
+      byIssue[s.issue_type] = (byIssue[s.issue_type] || 0) + 1;
+      if (s.confidence >= 0.8) highConfidence++;
+      allSplits.push({ objectNumber: r.data.object_number, ...s });
+    }
+  }
+  return { totalSplits, totalNewEvents, highConfidence, byIssue, allSplits };
+}
+
+function printEventSplittingReport(report) {
+  console.log(`\n## Event Splitting (${report.totalSplits} splits → ${report.totalNewEvents} new events)\n`);
+  console.log(`| Metric | Value |`);
+  console.log(`|--------|-------|`);
+  console.log(`| Total splits | ${report.totalSplits} |`);
+  console.log(`| New events created | ${report.totalNewEvents} |`);
+  console.log(`| High confidence (≥0.8) | ${report.highConfidence} |`);
+
+  console.log(`\n### By issue type\n`);
+  for (const [type, count] of Object.entries(report.byIssue).sort((a, b) => b[1] - a[1])) {
+    console.log(`- **${type}**: ${count}`);
+  }
+
+  console.log(`\n### Sample splits\n`);
+  for (const s of report.allSplits.slice(0, 10)) {
+    console.log(`- **${s.objectNumber}** seq ${s.original_sequence} [${s.issue_type}] → ${s.replacement_events?.length ?? 0} events (${(s.confidence * 100).toFixed(0)}%)`);
+    console.log(`  _${s.reasoning}_`);
+    for (const re of (s.replacement_events || []).slice(0, 3)) {
+      console.log(`    - ${re.transfer_type}: "${(re.raw_text_segment || "").slice(0, 80)}"`);
+    }
+  }
+}
+
 
 // ─── Batch construction ─────────────────────────────────────────────
 
@@ -1831,6 +2642,27 @@ const MODE_CONFIG = {
     buildPrompt: buildPromptTypeClassification,
     aggregate: aggregateTypeClassification,
     report: printTypeClassificationReport,
+  },
+  "field-correction": {
+    sample: sampleFieldCorrection,
+    tool: TOOL_FIELD_CORRECTION,
+    buildPrompt: buildPromptFieldCorrection,
+    aggregate: aggregateFieldCorrection,
+    report: printFieldCorrectionReport,
+  },
+  "event-reclassification": {
+    sample: sampleEventReclassification,
+    tool: TOOL_EVENT_RECLASSIFICATION,
+    buildPrompt: buildPromptEventReclassification,
+    aggregate: aggregateEventReclassification,
+    report: printEventReclassificationReport,
+  },
+  "event-splitting": {
+    sample: sampleEventSplitting,
+    tool: TOOL_EVENT_SPLITTING,
+    buildPrompt: buildPromptEventSplitting,
+    aggregate: aggregateEventSplitting,
+    report: printEventSplittingReport,
   },
 };
 
