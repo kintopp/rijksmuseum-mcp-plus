@@ -60,6 +60,13 @@ function methodBadgeStyle(method: string): string {
   return "background:#555;color:white";
 }
 
+/** Strip internal methodology references (LLM pilot batch details) from reasoning shown to reviewers. */
+function cleanReasoning(raw: string): string {
+  return raw
+    .replace(/\s*Verified via LLM pilot batch\s*\([^)]*\)\s*(and keyword analysis\s*\([^)]*\))?\.\s*/g, " ")
+    .trim();
+}
+
 /** Any non-default enrichment (LLM or rule-based) — used for page content. */
 export function isEnrichedEvent(e: { categoryMethod?: string | null }): boolean {
   return !!e.categoryMethod && e.categoryMethod !== "type_mapping";
@@ -85,24 +92,26 @@ export function isLlmEnrichedParty(p: { positionMethod?: string | null }): boole
 export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string {
   const { query, artworks } = data;
 
-  // Collect method distribution and derive counts
+  // Collect method distribution — LLM-only (rule-based counts as deterministic)
   const methodCounts: Record<string, number> = {};
-  let enrichedEventCount = 0;
-  let enrichedPartyCount = 0;
-  let llmCount = 0;
+  let totalEventCount = 0;
+  let deterministicEventCount = 0;
+  let llmEventCount = 0;
+  let llmPartyCount = 0;
   for (const art of artworks) {
     for (const e of art.events) {
-      if (isEnrichedEvent(e)) {
-        enrichedEventCount++;
+      totalEventCount++;
+      if (isLlmEnrichedEvent(e)) {
+        llmEventCount++;
         const m = e.categoryMethod!;
-        if (m.startsWith("llm_")) llmCount++;
         methodCounts[m] = (methodCounts[m] || 0) + 1;
+      } else {
+        deterministicEventCount++;
       }
       for (const p of e.parties) {
-        if (isEnrichedParty(p)) {
-          enrichedPartyCount++;
+        if (isLlmEnrichedParty(p)) {
+          llmPartyCount++;
           const m = p.positionMethod!;
-          if (m.startsWith("llm_")) llmCount++;
           methodCounts[m] = (methodCounts[m] || 0) + 1;
         }
       }
@@ -120,22 +129,22 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
     const partyEnrichments: { seq: number; name: string; position: string; method: string; reasoning: string }[] = [];
 
     for (const e of art.events) {
-      if (isEnrichedEvent(e)) {
+      if (isLlmEnrichedEvent(e)) {
         eventEnrichments.push({
           seq: e.sequence,
           type: e.transferType,
           method: e.categoryMethod!,
-          reasoning: e.enrichmentReasoning || "(no reasoning recorded)",
+          reasoning: cleanReasoning(e.enrichmentReasoning || "(no reasoning recorded)"),
         });
       }
       for (const p of e.parties) {
-        if (isEnrichedParty(p)) {
+        if (isLlmEnrichedParty(p)) {
           partyEnrichments.push({
             seq: e.sequence,
             name: p.name,
             position: p.position || "unknown",
             method: p.positionMethod!,
-            reasoning: p.enrichmentReasoning || "(no reasoning recorded)",
+            reasoning: cleanReasoning(p.enrichmentReasoning || "(no reasoning recorded)"),
           });
         }
       }
@@ -143,16 +152,25 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 
     if (eventEnrichments.length === 0 && partyEnrichments.length === 0) continue;
 
-    const enrichedSeqs = new Set([
-      ...eventEnrichments.map(e => e.seq),
-      ...partyEnrichments.map(p => p.seq),
-    ]);
+    // Resolution summary: count deterministic vs LLM-touched events.
+    // An event is "LLM-touched" if the event itself OR any of its parties
+    // were resolved by LLM. Everything else (parser + rule) is deterministic.
+    const totalEvents = art.events.length;
+    const llmTouchedSeqs = new Set<number>();
+    for (const e of art.events) {
+      if (isLlmEnrichedEvent(e)) llmTouchedSeqs.add(e.sequence);
+      for (const p of e.parties) {
+        if (isLlmEnrichedParty(p)) llmTouchedSeqs.add(e.sequence);
+      }
+    }
+    const llmTouchedCount = llmTouchedSeqs.size;
+    const deterministicCount = totalEvents - llmTouchedCount;
 
     tocLinks.push(`<a class="toc-link" href="#card-${cardIdx}">${esc(art.objectNumber)}</a>`);
 
-    // Event list (left panel)
+    // Event list (left panel) — highlight only LLM-touched events
     const eventListItems = art.events.map(e => {
-      const cls = enrichedSeqs.has(e.sequence) ? "highlight" : "context";
+      const cls = llmTouchedSeqs.has(e.sequence) ? "highlight" : "context";
       const typeTag = e.transferType !== "unknown"
         ? ` <span class="type-tag">[${esc(e.transferType)}${e.unsold ? " unsold" : ""}${e.batchPrice ? " batch" : ""}]</span>`
         : "";
@@ -193,11 +211,12 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
   </div>
   <div class="card-body">
     <div class="left">
-      <div class="section-label">Provenance chain (enriched events highlighted)</div>
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
       <ul class="event-list">${eventListItems}</ul>
     </div>
     <div class="right">
       <div class="section-label">Enrichments (${eventEnrichments.length} event${eventEnrichments.length !== 1 ? "s" : ""}, ${partyEnrichments.length} part${partyEnrichments.length !== 1 ? "ies" : "y"})</div>
+      <div class="resolution-summary">${deterministicCount} of ${totalEvents} resolved deterministically, ${llmTouchedCount} with LLM enrichment</div>
       ${enrichmentDetails.join("\n")}
     </div>
   </div>
@@ -217,7 +236,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enrichment Review — ${llmCount} LLM-Assisted Result${llmCount !== 1 ? "s" : ""}</title>
+<title>Enrichment Review — ${llmEventCount + llmPartyCount} LLM-Assisted Result${(llmEventCount + llmPartyCount) !== 1 ? "s" : ""}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
@@ -269,6 +288,8 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
   .event-list .highlight { background: var(--highlight); padding: 2px 4px; border-radius: 3px; }
   .event-list .context { opacity: 0.6; }
 
+  .resolution-summary { font-size: 0.8rem; color: var(--text-muted); font-family: var(--mono); margin-bottom: 0.75rem; padding: 4px 8px; background: #eee8d8; border-radius: 4px; }
+
   .enrichment-item { margin-bottom: 1rem; }
   .enrichment-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
   .enrichment-target { font-size: 0.82rem; font-family: var(--mono); }
@@ -279,7 +300,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 </style>
 </head>
 <body>
-<h1>Enrichment Review — ${llmCount} LLM-Assisted Result${llmCount !== 1 ? "s" : ""}</h1>
+<h1>Enrichment Review — ${llmEventCount + llmPartyCount} LLM-Assisted Result${(llmEventCount + llmPartyCount) !== 1 ? "s" : ""}</h1>
 <p class="subtitle">Query: <code>${esc(query)}</code>. Generated ${new Date().toISOString().split("T")[0]}.</p>
 
 <div class="disclaimer">
@@ -296,8 +317,10 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 <div class="summary">
   <h2>Distribution</h2>
   <div class="summary-grid">
-    <span class="summary-item">Enriched events: ${enrichedEventCount}</span>
-    <span class="summary-item">Enriched parties: ${enrichedPartyCount}</span>
+    <span class="summary-item">Total events: ${totalEventCount}</span>
+    <span class="summary-item">Deterministic: ${deterministicEventCount}</span>
+    <span class="summary-item">LLM events: ${llmEventCount}</span>
+    <span class="summary-item">LLM parties: ${llmPartyCount}</span>
     <span class="summary-item">Artworks: ${cards.length}</span>
   </div>
   <div class="summary-grid" style="margin-top:0.5rem">

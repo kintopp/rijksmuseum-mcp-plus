@@ -2455,9 +2455,10 @@ function registerTools(
           "and party positions were determined (type_mapping, role_mapping, llm_enrichment, llm_disambiguation, " +
           "rule:transfer_is_ownership), and enrichmentReasoning provides the LLM's reasoning for any non-deterministic decision. " +
           "Parties have position (sender/receiver/agent) indicating their role in the transfer.\n\n" +
-          "IMPORTANT: When results contain LLM-enriched records, the response text ends with 'ENRICHMENT REVIEW:' followed by a URL. " +
-          "You MUST include this exact URL in your response to the user as a clickable link. " +
-          "Do NOT omit, paraphrase, or summarise it. The URL is the only way users can inspect the LLM's methodology and reasoning.\n\n" +
+          "IMPORTANT: When results contain LLM-enriched records, the response text ends with a REVIEW_URL or REVIEW_FILE line. " +
+          "You MUST copy this URL or file path verbatim into your response as a clickable link or openable path. " +
+          "Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). " +
+          "The user cannot see tool output — if you do not include the path, they have no way to find the review page.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "For collection-wide counting or keyword searches that don't map to structured fields, " +
           "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
@@ -2678,14 +2679,16 @@ function registerTools(
               const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
               const reviewUrl = `${baseUrl}/enrichment-review/${uuid}`;
               lines.push("");
-              lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}. You MUST show this URL to the user:`);
-              lines.push(reviewUrl);
+              lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);
+              lines.push(`REVIEW_URL: ${reviewUrl}`);
+              lines.push("INSTRUCTION: You MUST include the REVIEW_URL above as a clickable link in your response. Do NOT omit it, summarize it, or refer to it indirectly. Copy the full URL verbatim.");
             } else {
               const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
               fs.writeFileSync(filePath, html, "utf-8");
               lines.push("");
-              lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}. You MUST show this URL to the user:`);
-              lines.push(filePath);
+              lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);
+              lines.push(`REVIEW_FILE: ${filePath}`);
+              lines.push("INSTRUCTION: You MUST include the REVIEW_FILE path above in your response so the user can open it. Do NOT omit it, summarize it, or refer to it indirectly. Copy the full path verbatim.");
             }
           }
         }
