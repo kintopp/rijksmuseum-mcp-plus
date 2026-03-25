@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, formatDateRange, pluralize, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, pluralize, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
 import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
@@ -28,9 +28,31 @@ const __dirname = path.dirname(__filename);
 
 const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
-/** Shared limits for maxResults across search_artwork, lookup_iconclass, and semantic_search. */
-const RESULTS_DEFAULT = 25;
-const RESULTS_MAX = 50;
+/**
+ * Per-tool result limits. Defaults reflect payload weight:
+ * - 25: lightweight per-result data (title, creator, date, score)
+ * -  1: very heavy per-result data (full provenance chains with events, parties, prices)
+ * - 10: heavy per-result data (full OAI-PMH records)
+ * - 15: medium (semantic scores plateau ~15)
+ * - 20: enriched comparisons (similarity signals)
+ *
+ * collection_stats returns compact text tables — high default + max for comprehensive distributions.
+ * search_provenance defaults to 1 because each artwork's full chain is large;
+ *   totalArtworks in the response + offset enables paging when more are needed.
+ *
+ * Max caps: 50 for individual results, 100 for vocabulary, 500 for stats.
+ */
+const TOOL_LIMITS = {
+  search_artwork:     { max: 50,  default: 25 },
+  lookup_iconclass:   { max: 50,  default: 25 },
+  search_vocabulary:  { max: 100, default: 25 },
+  semantic_search:    { max: 50,  default: 15 },
+  search_provenance:  { max: 50,  default: 1 },
+  browse_set:         { max: 50,  default: 10 },
+  list_changes:       { max: 50,  default: 10 },
+  find_similar:       { max: 50,  default: 20 },
+  collection_stats:   { max: 500, default: 25 },
+} as const;
 
 /** Params that narrow results but are too broad to stand alone as the only filter. */
 const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "creatorGender", "creatorBornAfter", "creatorBornBefore", "expandPlaceHierarchy"]);
@@ -1240,9 +1262,11 @@ function registerTools(
           .number()
           .int()
           .min(1)
-          .max(RESULTS_MAX)
-          .default(RESULTS_DEFAULT)
-          .describe(`Maximum results to return (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}). All results include full metadata.`),
+          .max(TOOL_LIMITS.search_artwork.max)
+          .default(TOOL_LIMITS.search_artwork.default)
+          .describe(`Maximum results to return (1-${TOOL_LIMITS.search_artwork.max}, default ${TOOL_LIMITS.search_artwork.default}). All results include full metadata.`),
+        offset: z.preprocess(stripNull, z.number().int().min(0).default(0).optional())
+          .describe("Skip this many results (for pagination). Use with maxResults."),
         facets: z.preprocess(
           (v) => {
             if (v === true) return [...FACET_DIMENSIONS];
@@ -1289,7 +1313,7 @@ function registerTools(
           );
         }
 
-        const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults };
+        const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults, offset: args.offset };
         for (const k of allVocabKeys) {
           if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
         }
@@ -2038,9 +2062,9 @@ function registerTools(
           .number()
           .int()
           .min(1)
-          .max(50)
-          .default(10)
-          .describe("Maximum records to return (1-50, default 10)"),
+          .max(TOOL_LIMITS.browse_set.max)
+          .default(TOOL_LIMITS.browse_set.default)
+          .describe(`Maximum records to return (1-${TOOL_LIMITS.browse_set.max}, default ${TOOL_LIMITS.browse_set.default})`),
         resumptionToken: optStr()
           .optional()
           .describe(
@@ -2107,9 +2131,9 @@ function registerTools(
           .number()
           .int()
           .min(1)
-          .max(50)
-          .default(10)
-          .describe("Maximum records to return (1-50, default 10)"),
+          .max(TOOL_LIMITS.list_changes.max)
+          .default(TOOL_LIMITS.list_changes.default)
+          .describe(`Maximum records to return (1-${TOOL_LIMITS.list_changes.max}, default ${TOOL_LIMITS.list_changes.default})`),
         resumptionToken: optStr()
           .optional()
           .describe(
@@ -2216,9 +2240,11 @@ function registerTools(
             .number()
             .int()
             .min(1)
-            .max(RESULTS_MAX)
-            .default(RESULTS_DEFAULT)
-            .describe(`Maximum results for search mode (1-${RESULTS_MAX}, default ${RESULTS_DEFAULT}).`),
+            .max(TOOL_LIMITS.lookup_iconclass.max)
+            .default(TOOL_LIMITS.lookup_iconclass.default)
+            .describe(`Maximum results for search mode (1-${TOOL_LIMITS.lookup_iconclass.max}, default ${TOOL_LIMITS.lookup_iconclass.default}).`),
+          offset: z.number().int().min(0).default(0).optional()
+            .describe("Skip this many results (for pagination). Use with maxResults."),
         }).strict(),
         ...withOutputSchema(LookupIconclassOutput),
       },
@@ -2269,7 +2295,7 @@ function registerTools(
 
         // FTS search mode
         if (args.query !== undefined) {
-          const result = db.search(args.query, args.maxResults, args.lang);
+          const result = db.search(args.query, args.maxResults, args.lang, args.offset);
 
           const header = `${result.results.length} of ${result.totalResults} Iconclass matches for "${args.query}"`;
           const lines = result.results.map((e, i) => {
@@ -2495,8 +2521,8 @@ function registerTools(
             z.number().int().min(0).default(0).optional(),
           ).describe("Skip this many artworks (for pagination). Use with maxResults."),
           maxResults: z.preprocess(stripNull,
-            z.number().int().min(1).max(50).default(10).optional(),
-          ).describe("Maximum artworks to return (1–50, default 10). Each artwork includes its full chain."),
+            z.number().int().min(1).max(TOOL_LIMITS.search_provenance.max).default(TOOL_LIMITS.search_provenance.default).optional(),
+          ).describe(`Maximum artworks to return (1–${TOOL_LIMITS.search_provenance.max}, default ${TOOL_LIMITS.search_provenance.default}). Each artwork includes its full chain.`),
           facets: z.preprocess(stripNull, z.boolean().optional())
             .describe("If true, compute provenance facets: transferType, decade, location, transferCategory, partyPosition."),
         }).strict(),
@@ -2505,7 +2531,7 @@ function registerTools(
       withLogging("search_provenance", async (args: Record<string, unknown>) => {
         const layer = (args.layer as string | undefined) ?? "events";
         const params: ProvenanceSearchParams = {
-          maxResults: (args.maxResults as number | undefined) ?? 10,
+          maxResults: (args.maxResults as number | undefined) ?? TOOL_LIMITS.search_provenance.default,
           layer: layer as "events" | "periods",
         };
         if (args.party) params.party = args.party as string;
@@ -2680,12 +2706,7 @@ function registerTools(
   // ── collection_stats (analytics/aggregation) ──────────────────────
 
   if (vocabAvailable) {
-    const STATS_DIMENSIONS = [
-      "type", "material", "technique", "creator", "depictedPerson", "depictedPlace", "productionPlace",
-      "century", "decade",
-      "transferType", "transferCategory", "provenanceDecade", "provenanceLocation",
-      "party", "partyPosition", "currency", "categoryMethod", "positionMethod", "parseMethod",
-    ] as const;
+    const STATS_DIMENSIONS = STATS_DIMENSION_NAMES;
 
     server.registerTool(
       "collection_stats",
@@ -2706,10 +2727,12 @@ function registerTools(
           "Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters " +
           "further restrict to artworks matching those provenance criteria.",
         inputSchema: z.object({
-          dimension: z.enum(STATS_DIMENSIONS)
+          dimension: z.enum(STATS_DIMENSIONS as unknown as [string, ...string[]])
             .describe("What to count/group by."),
-          topN: z.preprocess(stripNull, z.number().int().min(1).max(100).default(20).optional())
-            .describe("Maximum entries to return (1–100, default 20)."),
+          topN: z.preprocess(stripNull, z.number().int().min(1).max(TOOL_LIMITS.collection_stats.max).default(TOOL_LIMITS.collection_stats.default).optional())
+            .describe(`Maximum entries to return (1–${TOOL_LIMITS.collection_stats.max}, default ${TOOL_LIMITS.collection_stats.default}).`),
+          offset: z.preprocess(stripNull, z.number().int().min(0).default(0).optional())
+            .describe("Skip this many entries (for pagination). Use with topN."),
           binWidth: z.preprocess(stripNull, z.number().int().min(1).default(10).optional())
             .describe("Bin width for decade dimensions (default 10 = decades, use 50 for half-centuries, 100 for centuries)."),
           // Artwork filters
@@ -2741,6 +2764,7 @@ function registerTools(
           dimension: args.dimension as string,
         };
         if (args.topN != null) params.topN = args.topN as number;
+        if (args.offset != null) params.offset = args.offset as number;
         if (args.binWidth != null) params.binWidth = args.binWidth as number;
         if (args.type) params.type = args.type as string;
         if (args.material) params.material = args.material as string;
@@ -2782,6 +2806,11 @@ function registerTools(
         const filterStr = filterParts.length > 0 ? ` (${filterParts.join(", ")})` : "";
         lines.push(`${result.dimension} distribution${filterStr}:`);
         lines.push(`Total artworks: ${result.total.toLocaleString()}`);
+        if (result.totalDistinct > result.entries.length + result.offset) {
+          const from = result.offset + 1;
+          const to = result.offset + result.entries.length;
+          lines.push(`Showing entries ${from}–${to} of ${result.totalDistinct} distinct values`);
+        }
         lines.push("");
 
         if (result.entries.length === 0) {
@@ -2806,9 +2835,9 @@ function registerTools(
     );
   }
 
-  // ── find_similar (feature-gated, set ENABLE_FIND_SIMILAR=true to register) ──
+  // ── find_similar (on by default; set ENABLE_FIND_SIMILAR=false to disable) ──
 
-  if (vocabAvailable && vocabDb!.available && process.env.ENABLE_FIND_SIMILAR === "true") {
+  if (vocabAvailable && vocabDb!.available && process.env.ENABLE_FIND_SIMILAR !== "false") {
     server.registerTool(
       "find_similar",
       {
@@ -2823,7 +2852,7 @@ function registerTools(
           "Simply present the link and explain that it contains a visual comparison page.",
         inputSchema: z.object({
           objectNumber: z.string().describe("Object number of the artwork to find similar works for (e.g. 'SK-A-1718')."),
-          maxResults: z.preprocess(stripNull, z.number().int().min(1).max(RESULTS_MAX).default(20).optional())
+          maxResults: z.preprocess(stripNull, z.number().int().min(1).max(TOOL_LIMITS.find_similar.max).default(TOOL_LIMITS.find_similar.default).optional())
             .describe("Number of results per signal mode (default 20, max 50)."),
         }).strict(),
         // No outputSchema — returns a URL/path to an HTML comparison page, not structured data.
@@ -3106,13 +3135,17 @@ function registerTools(
           collectionSet: stringOrArray().optional().describe("Pre-filter by collection set before semantic ranking."),
           aboutActor: optStr().optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
           imageAvailable: z.boolean().optional().describe("Pre-filter to artworks with images"),
-          maxResults: z.number().int().min(1).max(RESULTS_MAX).default(15).optional()
+          maxResults: z.number().int().min(1).max(TOOL_LIMITS.semantic_search.max).default(TOOL_LIMITS.semantic_search.default).optional()
             .describe("Number of results to return (default 15). Similarity scores plateau after ~15 results; request more only if needed."),
+          offset: z.number().int().min(0).default(0).optional()
+            .describe("Skip this many results (for pagination). Use with maxResults."),
         }).strict(),
         ...withOutputSchema(SemanticSearchOutput),
       },
       withLogging("semantic_search", async (args) => {
-        const maxResults = args.maxResults ?? 15;
+        const maxResults = args.maxResults ?? TOOL_LIMITS.semantic_search.default;
+        const userOffset = args.offset ?? 0;
+        const fetchLimit = maxResults + userOffset;
 
         // 1. Embed query text
         const queryVec = await embeddingModel!.embed(args.query);
@@ -3134,7 +3167,7 @@ function registerTools(
           const candidateArtIds = vocabDb.filterArtIds(filterParams);
           if (candidateArtIds === null) {
             // DB lacks integer mappings (text-schema) — fall back to pure KNN
-            candidates = embeddingsDb!.search(queryVec, maxResults);
+            candidates = embeddingsDb!.search(queryVec, fetchLimit);
             warnings.push("Metadata filters ignored: vocabulary DB does not support filtered search. Results ranked by semantic similarity only.");
           } else if (candidateArtIds.length === 0) {
             const emptyData: InferOutput<typeof SemanticSearchOutput> = {
@@ -3146,18 +3179,22 @@ function registerTools(
               `0 semantic matches for "${args.query}" (no filter matches)`
             );
           } else {
-            const filtered = embeddingsDb!.searchFiltered(queryVec, candidateArtIds, maxResults);
+            const filtered = embeddingsDb!.searchFiltered(queryVec, candidateArtIds, fetchLimit);
             candidates = filtered.results;
             filtersApplied = true;
             if (filtered.warning) warnings.push(filtered.warning);
           }
         } else {
           // PURE KNN PATH: vec0 virtual table
-          candidates = embeddingsDb!.search(queryVec, maxResults);
+          candidates = embeddingsDb!.search(queryVec, fetchLimit);
           if (hasFilters) {
             warnings.push("Metadata filters ignored: vocabulary DB is not available. Results ranked by semantic similarity only.");
           }
         }
+
+        // Apply offset + truncate to user's requested page
+        if (userOffset > 0) candidates.splice(0, userOffset);
+        if (candidates.length > maxResults) candidates.splice(maxResults);
 
         // 3. Batch-resolve metadata from vocab DB (single query, not per-result)
         const objectNumbers = candidates.map(c => c.objectNumber);
@@ -3304,7 +3341,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
         maxWorks: z
           .string()
           .optional()
-          .describe(`Maximum number of works to include (1-${RESULTS_MAX}, default: ${RESULTS_DEFAULT})`),
+          .describe(`Maximum number of works to include (1-${TOOL_LIMITS.search_artwork.max}, default: ${TOOL_LIMITS.search_artwork.default})`),
       },
     },
     async (args) => ({
@@ -3318,7 +3355,7 @@ function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
               `${args.maxWorks ? ` (limited to ${args.maxWorks} works)` : ""}.\n\n` +
               `Use search_artwork with creator="${args.artist}"` +
               `${args.maxWorks ? ` and maxResults=${args.maxWorks}` : ""} to get the data, then sort by date.\n\n` +
-              `Note: search returns at most ${RESULTS_MAX} works. For prolific artists, this is a small sample of their collection.\n\n` +
+              `Note: search returns at most ${TOOL_LIMITS.search_artwork.max} works. For prolific artists, this is a small sample of their collection.\n\n` +
               `For each work, include:\n` +
               `- Year of creation\n` +
               `- Title of the work\n` +

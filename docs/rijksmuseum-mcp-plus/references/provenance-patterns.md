@@ -4,6 +4,18 @@ Reference material for `search_provenance`. Consult this file when you need to
 interpret raw provenance text, understand the data model, or construct
 specialised query patterns beyond the examples in the main skill.
 
+## Contents
+
+1. [Provenance Text Format (AAM Standard)](#provenance-text-format-aam-standard)
+2. [Transfer Types (CMOA/PLOD-aligned Vocabulary)](#transfer-types-cmoaplod-aligned-vocabulary)
+3. [Party Roles and Positions](#party-roles-and-positions)
+4. [Date Representation](#date-representation)
+5. [Historical Currencies](#historical-currencies)
+6. [Enrichment Provenance](#enrichment-provenance)
+7. [Parse Method Values](#parse-method-values)
+8. [Provenance Facets](#provenance-facets)
+9. [Tested Query Patterns](#tested-query-patterns)
+
 ---
 
 ## Provenance Text Format (AAM Standard)

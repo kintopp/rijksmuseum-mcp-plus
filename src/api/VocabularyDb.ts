@@ -163,6 +163,7 @@ export interface VocabSearchParams {
   // Cross-domain
   hasProvenance?: boolean;
   maxResults?: number;
+  offset?: number;
   facets?: string[];
   facetLimit?: number;
 }
@@ -344,6 +345,7 @@ export interface ProvenanceSearchResult {
 export interface CollectionStatsParams {
   dimension: string;
   topN?: number;
+  offset?: number;
   binWidth?: number;
   // Artwork filters
   type?: string;
@@ -372,6 +374,8 @@ export interface StatsEntry {
 export interface CollectionStatsResult {
   dimension: string;
   total: number;
+  totalDistinct: number;
+  offset: number;
   entries: StatsEntry[];
   warnings?: string[];
 }
@@ -405,6 +409,14 @@ const PROV_DIMENSION_DEFS: ReadonlyArray<{
   { label: "positionMethod",    table: "parties", col: "position_method",    notNull: true },
 ];
 
+/** All valid dimension names for collection_stats. Derived from the data-driven defs above + special cases. */
+export const STATS_DIMENSION_NAMES = [
+  ...VOCAB_DIMENSION_DEFS.map(d => d.label),
+  "century", "decade",                    // artwork date-based
+  "provenanceDecade",                     // provenance date-based
+  ...PROV_DIMENSION_DEFS.map(d => d.label),
+] as const;
+
 // ─── Filter definitions ─────────────────────────────────────────────
 // Each entry maps a VocabSearchParams key to the SQL constraints used
 // in a mapping subquery.  `fields` restricts m.field, `vocabType`
@@ -417,8 +429,8 @@ const ALLOWED_FIELDS = new Set([
 ]);
 const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
-const DEFAULT_MAX_RESULTS = 25;
-const MAX_RESULTS_CAP = 100;
+/** Safety cap — actual per-tool limits are defined in TOOL_LIMITS (registration.ts). */
+const INTERNAL_MAX_RESULTS_CAP = 100;
 
 interface VocabFilter {
   param: keyof VocabSearchParams;
@@ -1719,7 +1731,7 @@ export class VocabularyDb {
   }
 
   /** Compute provenance facets over matching events. Uses a CTE to avoid redundant JOINs. */
-  computeProvenanceFacets(
+  private computeProvenanceFacets(
     conditions: string[],
     bindings: unknown[],
   ): Record<string, Array<{ label: string; count: number }>> {
@@ -1734,6 +1746,16 @@ export class VocabularyDb {
       WHERE ${where}
     )`;
 
+    // Single query: all facets in one UNION ALL so the CTE is evaluated once.
+    const partyBranch = this.hasPartyTable_
+      ? `UNION ALL
+      SELECT 'partyPosition', pp.party_position, COUNT(DISTINCT pp.artwork_id)
+      FROM provenance_parties pp
+      WHERE pp.artwork_id IN (SELECT artwork_id FROM matched)
+        AND pp.party_position IS NOT NULL
+      GROUP BY pp.party_position`
+      : "";
+
     const unionRows = this.db.prepare(`${cte}
       SELECT 'transferType' AS facet, transfer_type AS label, COUNT(DISTINCT artwork_id) AS cnt
       FROM matched GROUP BY transfer_type
@@ -1746,6 +1768,7 @@ export class VocabularyDb {
       UNION ALL
       SELECT 'transferCategory', transfer_category, COUNT(DISTINCT artwork_id)
       FROM matched WHERE transfer_category IS NOT NULL GROUP BY transfer_category
+      ${partyBranch}
     `).all(...bindings) as { facet: string; label: string; cnt: number }[];
 
     for (const row of unionRows) {
@@ -1758,27 +1781,13 @@ export class VocabularyDb {
     }
     if (result["location"]?.length > 20) result["location"] = result["location"].slice(0, 20);
 
-    // Party position facet (uses CTE's artwork_ids)
-    if (this.hasPartyTable_) {
-      const posRows = this.db.prepare(`${cte}
-        SELECT pp.party_position AS label, COUNT(DISTINCT pp.artwork_id) AS cnt
-        FROM provenance_parties pp
-        WHERE pp.artwork_id IN (SELECT DISTINCT artwork_id FROM matched)
-          AND pp.party_position IS NOT NULL
-        GROUP BY pp.party_position ORDER BY cnt DESC
-      `).all(...bindings) as { label: string; cnt: number }[];
-      if (posRows.length > 0) {
-        result["partyPosition"] = posRows.map(r => ({ label: r.label, count: r.cnt }));
-      }
-    }
-
     return result;
   }
 
   // ── Collection-wide stats ─────────────────────────────────────────
 
   /** Artwork-domain dimensions: count artworks grouped by a vocab field or date. */
-  private artworkDimensionSql(dim: string, topN: number, binWidth: number): { sql: string; extraBindings: unknown[] } | null {
+  private artworkDimensionSql(dim: string, topN: number, offset: number, binWidth: number): { sql: string; extraBindings: unknown[] } | null {
     const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
     if (vocabDef) {
       const fieldId = this.fieldIdMap.get(vocabDef.field);
@@ -1788,10 +1797,10 @@ export class VocabularyDb {
         sql: `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT m.artwork_id) AS cnt
           FROM mappings m
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE m.field_id = ? AND v.label_en IS NOT NULL${typeFilter}
+          WHERE +m.field_id = ? AND v.label_en IS NOT NULL${typeFilter}
           AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)
-          GROUP BY label ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [fieldId, topN],
+          GROUP BY label ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+        extraBindings: [fieldId, topN, offset],
       };
     }
 
@@ -1802,8 +1811,8 @@ export class VocabularyDb {
               COUNT(*) AS cnt
           FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
           WHERE a.date_earliest IS NOT NULL
-          GROUP BY label ORDER BY cnt DESC LIMIT ?`,
-        extraBindings: [topN],
+          GROUP BY label ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+        extraBindings: [topN, offset],
       };
     }
 
@@ -1812,8 +1821,8 @@ export class VocabularyDb {
         sql: `SELECT (a.date_earliest / ?) * ? AS label, COUNT(*) AS cnt
           FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
           WHERE a.date_earliest IS NOT NULL
-          GROUP BY label ORDER BY label LIMIT ?`,
-        extraBindings: [binWidth, binWidth, topN],
+          GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
+        extraBindings: [binWidth, binWidth, topN, offset],
       };
     }
 
@@ -1821,7 +1830,7 @@ export class VocabularyDb {
   }
 
   /** Provenance-domain dimensions: count artworks grouped by event/party attribute. */
-  private provenanceDimensionSql(dim: string, topN: number, binWidth: number): { sql: string; extraBindings: unknown[] } | null {
+  private provenanceDimensionSql(dim: string, topN: number, offset: number, binWidth: number): { sql: string; extraBindings: unknown[] } | null {
     if (!this.hasProvenanceTables_) return null;
 
     // Special case: provenanceDecade uses arithmetic binning
@@ -1831,8 +1840,8 @@ export class VocabularyDb {
           FROM provenance_events pe
           WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
             AND pe.date_year IS NOT NULL
-          GROUP BY label ORDER BY label LIMIT ?`,
-        extraBindings: [binWidth, binWidth, topN],
+          GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
+        extraBindings: [binWidth, binWidth, topN, offset],
       };
     }
 
@@ -1850,15 +1859,16 @@ export class VocabularyDb {
         FROM ${tbl} ${alias}
         WHERE ${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)
           ${notNull}
-        GROUP BY ${alias}.${def.col} ORDER BY cnt DESC LIMIT ?`,
-      extraBindings: [topN],
+        GROUP BY ${alias}.${def.col} ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+      extraBindings: [topN, offset],
     };
   }
 
   computeCollectionStats(params: CollectionStatsParams): CollectionStatsResult {
-    if (!this.db) return { dimension: params.dimension, total: 0, entries: [] };
+    if (!this.db) return { dimension: params.dimension, total: 0, totalDistinct: 0, offset: 0, entries: [] };
 
-    const topN = Math.min(params.topN ?? 20, 100);
+    const topN = Math.min(params.topN ?? 25, 500);
+    const offset = params.offset ?? 0;
     const binWidth = params.binWidth ?? 10;
     const warnings: string[] = [];
 
@@ -1866,33 +1876,21 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
-    if (params.type) {
-      const fieldId = this.fieldIdMap.get("type");
-      if (fieldId !== undefined) {
-        conditions.push(`a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id WHERE m.field_id = ? AND v.label_en = ?)`);
-        bindings.push(fieldId, params.type);
-      }
-    }
-    if (params.material) {
-      const fieldId = this.fieldIdMap.get("material");
-      if (fieldId !== undefined) {
-        conditions.push(`a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id WHERE m.field_id = ? AND v.label_en = ?)`);
-        bindings.push(fieldId, params.material);
-      }
-    }
-    if (params.technique) {
-      const fieldId = this.fieldIdMap.get("technique");
-      if (fieldId !== undefined) {
-        conditions.push(`a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id WHERE m.field_id = ? AND v.label_en = ?)`);
-        bindings.push(fieldId, params.technique);
-      }
-    }
-    if (params.creator) {
-      const fieldId = this.fieldIdMap.get("creator");
-      if (fieldId !== undefined) {
-        conditions.push(`a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id WHERE m.field_id = ? AND v.label_en LIKE '%' || ? || '%')`);
-        bindings.push(fieldId, params.creator);
-      }
+    // Artwork vocab filters — data-driven to avoid copy-paste
+    const STATS_VOCAB_FILTERS: { key: keyof CollectionStatsParams; field: string; like?: boolean }[] = [
+      { key: "type",      field: "type" },
+      { key: "material",  field: "material" },
+      { key: "technique", field: "technique" },
+      { key: "creator",   field: "creator", like: true },
+    ];
+    for (const { key, field, like } of STATS_VOCAB_FILTERS) {
+      const val = params[key];
+      if (val == null || typeof val !== "string") continue;
+      const fieldId = this.fieldIdMap.get(field);
+      if (fieldId === undefined) continue;
+      const op = like ? "LIKE '%' || ? || '%'" : "= ?";
+      conditions.push(`a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id WHERE m.field_id = ? AND v.label_en ${op})`);
+      bindings.push(fieldId, val);
     }
     if (params.creationDateFrom != null) {
       conditions.push("a.date_earliest >= ?");
@@ -1903,91 +1901,99 @@ export class VocabularyDb {
       bindings.push(params.creationDateTo);
     }
 
-    // Provenance-domain filters
-    if (params.hasProvenance && this.hasProvenanceTables_) {
-      conditions.push("EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
-    }
-    if (params.transferType && this.hasProvenanceTables_) {
-      conditions.push("a.art_id IN (SELECT pe.artwork_id FROM provenance_events pe WHERE pe.transfer_type = ?)");
-      bindings.push(params.transferType);
-    }
-    if (params.location && this.hasProvenanceTables_) {
-      conditions.push("a.art_id IN (SELECT pe.artwork_id FROM provenance_events pe WHERE pe.location LIKE '%' || ? || '%')");
-      bindings.push(params.location);
-    }
-    if (params.party && this.hasProvenanceTables_ && this.hasPartyTable_) {
-      conditions.push("a.art_id IN (SELECT pp.artwork_id FROM provenance_parties pp WHERE pp.party_name LIKE '%' || ? || '%')");
-      bindings.push(params.party);
-    }
-    if (params.dateFrom != null && this.hasProvenanceTables_) {
-      conditions.push("a.art_id IN (SELECT pe.artwork_id FROM provenance_events pe WHERE pe.date_year >= ?)");
-      bindings.push(params.dateFrom);
-    }
-    if (params.dateTo != null && this.hasProvenanceTables_) {
-      conditions.push("a.art_id IN (SELECT pe.artwork_id FROM provenance_events pe WHERE pe.date_year <= ?)");
-      bindings.push(params.dateTo);
-    }
-    if (params.categoryMethod && this.hasProvenanceTables_) {
-      conditions.push("a.art_id IN (SELECT pe.artwork_id FROM provenance_events pe WHERE pe.category_method = ?)");
-      bindings.push(params.categoryMethod);
-    }
-    if (params.positionMethod && this.hasProvenanceTables_ && this.hasPartyTable_) {
-      conditions.push("a.art_id IN (SELECT pp.artwork_id FROM provenance_parties pp WHERE pp.position_method = ?)");
-      bindings.push(params.positionMethod);
-    }
+    // Provenance-domain filters — merge event conditions into a single EXISTS to avoid N separate scans
+    if (this.hasProvenanceTables_) {
+      const evConds: string[] = [];
+      const evBindings: unknown[] = [];
+      if (params.transferType) { evConds.push("pe.transfer_type = ?"); evBindings.push(params.transferType); }
+      if (params.location) { evConds.push("pe.location LIKE '%' || ? || '%'"); evBindings.push(params.location); }
+      if (params.dateFrom != null) { evConds.push("pe.date_year >= ?"); evBindings.push(params.dateFrom); }
+      if (params.dateTo != null) { evConds.push("pe.date_year <= ?"); evBindings.push(params.dateTo); }
+      if (params.categoryMethod) { evConds.push("pe.category_method = ?"); evBindings.push(params.categoryMethod); }
 
-    // SYNC: filter-building here parallels searchProvenance() conditions. Stats uses exact-match
-    // for type/material/technique (vs LIKE-word in search) — intentional for aggregation precision.
+      if (evConds.length > 0) {
+        conditions.push(`EXISTS (SELECT 1 FROM provenance_events pe WHERE pe.artwork_id = a.art_id AND ${evConds.join(" AND ")})`);
+        bindings.push(...evBindings);
+      } else if (params.hasProvenance) {
+        conditions.push("EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
+      }
+
+      if (params.party && this.hasPartyTable_) {
+        conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = a.art_id AND pp.party_name LIKE '%' || ? || '%')");
+        bindings.push(params.party);
+      }
+      if (params.positionMethod && this.hasPartyTable_) {
+        conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = a.art_id AND pp.position_method = ?)");
+        bindings.push(params.positionMethod);
+      }
+    }
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
 
     // Unique temp table name to avoid collisions if requests overlap
     const tableId = `_stats_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const filtered = conditions.length > 0;
 
-    // Unfiltered short-circuit: skip 832K-row temp table copy
     let total: number;
-    if (conditions.length === 0) {
-      total = (this.db.prepare("SELECT COUNT(*) AS cnt FROM artworks").get() as { cnt: number }).cnt;
-      this.db.exec(`CREATE TEMP TABLE "${tableId}" AS SELECT art_id FROM artworks`);
-    } else {
+    if (filtered) {
       this.db.prepare(`CREATE TEMP TABLE "${tableId}" AS SELECT a.art_id FROM artworks a WHERE ${where}`)
         .run(...bindings);
       total = (this.db.prepare(`SELECT COUNT(*) AS cnt FROM "${tableId}"`).get() as { cnt: number }).cnt;
+    } else {
+      // Unfiltered: skip 832K-row temp table copy — use artworks directly
+      total = (this.db.prepare("SELECT COUNT(*) AS cnt FROM artworks").get() as { cnt: number }).cnt;
     }
 
     if (total === 0) {
-      this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
-      return { dimension: params.dimension, total: 0, entries: [], ...(warnings.length > 0 && { warnings }) };
+      if (filtered) this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
+      return { dimension: params.dimension, total: 0, totalDistinct: 0, offset, entries: [], ...(warnings.length > 0 && { warnings }) };
     }
 
-    // Resolve the dimension query — _stats_artworks is referenced inside SQL fragments
-    // Temporarily create a view alias so dimension SQL can use the fixed name
+    // _stats_artworks is referenced inside dimension SQL fragments.
+    // For unfiltered queries, alias artworks directly (no temp table needed).
+    // Wrap in try/finally so temp table + view are always cleaned up, even on SQL errors.
     this.db.exec(`DROP VIEW IF EXISTS _stats_artworks`);
-    this.db.exec(`CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM "${tableId}"`);
+    this.db.exec(filtered
+      ? `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM "${tableId}"`
+      : `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM artworks`);
+    try {
+      const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth)
+        || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth);
 
-    const dimQuery = this.artworkDimensionSql(params.dimension, topN, binWidth)
-      || this.provenanceDimensionSql(params.dimension, topN, binWidth);
+      if (!dimQuery) {
+        return {
+          dimension: params.dimension,
+          total,
+          totalDistinct: 0,
+          offset,
+          entries: [],
+          warnings: [`Unknown dimension: '${params.dimension}'. Available: ${STATS_DIMENSION_NAMES.join(", ")}.`],
+        };
+      }
 
-    if (!dimQuery) {
+      // Run the dimension query (with LIMIT/OFFSET)
+      const rows = this.db.prepare(dimQuery.sql).all(...dimQuery.extraBindings) as { label: string | number; cnt: number }[];
+      const entries: StatsEntry[] = rows.map(r => ({
+        label: String(r.label),
+        count: r.cnt,
+        percentage: Math.round((r.cnt / total) * 1000) / 10,
+      }));
+
+      // Count total distinct values (only when paging, to avoid unnecessary work)
+      let totalDistinct = entries.length + offset;
+      if (entries.length === topN) {
+        // There may be more — run a count query (reuse the same SQL shape without LIMIT/OFFSET)
+        const countSql = dimQuery.sql.replace(/\sORDER BY.*$/s, "");
+        const countResult = this.db.prepare(`SELECT COUNT(*) AS cnt FROM (${countSql})`).get(
+          ...dimQuery.extraBindings.slice(0, -2),  // strip topN + offset bindings
+        ) as { cnt: number };
+        totalDistinct = countResult.cnt;
+      }
+
+      return { dimension: params.dimension, total, totalDistinct, offset, entries, ...(warnings.length > 0 && { warnings }) };
+    } finally {
       this.db.exec(`DROP VIEW IF EXISTS _stats_artworks`);
-      this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
-      return {
-        dimension: params.dimension,
-        total,
-        entries: [],
-        warnings: [`Unknown dimension: '${params.dimension}'. Available: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, currency, categoryMethod, positionMethod, parseMethod.`],
-      };
+      if (filtered) this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
     }
-
-    const rows = this.db.prepare(dimQuery.sql).all(...dimQuery.extraBindings) as { label: string | number; cnt: number }[];
-    const entries: StatsEntry[] = rows.map(r => ({
-      label: String(r.label),
-      count: r.cnt,
-      percentage: Math.round((r.cnt / total) * 1000) / 10,
-    }));
-
-    this.db.exec(`DROP VIEW IF EXISTS _stats_artworks`);
-    this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
-    return { dimension: params.dimension, total, entries, ...(warnings.length > 0 && { warnings }) };
   }
 
   private searchInternal(params: VocabSearchParams, compact: boolean): VocabSearchResult {
@@ -2139,13 +2145,15 @@ export class VocabularyDb {
     }
 
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
-    const limit = Math.min(effective.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP);
+    const limit = Math.min(effective.maxResults ?? 25, INTERNAL_MAX_RESULTS_CAP);
+    const userOffset = effective.offset ?? 0;
 
     // When geo is active and BM25 isn't ordering, use a larger internal limit so
     // distance ordering (applied post-query) sees the true top-N nearest artworks,
     // not just the most-important ones. Cap at 2000 to bound memory usage.
+    // Always fetch limit + offset rows so post-query offset works correctly.
     const geoExpansion = geoResult && !ftsRankOrder;
-    const internalLimit = geoExpansion ? Math.max(limit * 10, 2000) : limit;
+    const fetchLimit = geoExpansion ? Math.max((limit + userOffset) * 10, 2000) : limit + userOffset;
 
     const orderBy = ftsRankOrder
       ? "ORDER BY fts.rank"
@@ -2154,7 +2162,7 @@ export class VocabularyDb {
         : "";
     const sql = `SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
     const rows = this.db.prepare(sql).all(
-      ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, internalLimit] : [...bindings, internalLimit]),
+      ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, fetchLimit] : [...bindings, fetchLimit]),
     ) as {
       object_number: string;
       title: string;
@@ -2164,10 +2172,10 @@ export class VocabularyDb {
       date_latest: number | null;
     }[];
 
-    // Compute total count only when results are truncated (rows.length === internalLimit).
+    // Compute total count only when results are truncated (rows.length === fetchLimit).
     // When results fit within the limit, rows.length IS the total — no extra scan needed.
     // Worst case (gender scans) adds ~850ms, but only when the count is informative.
-    const totalResults = rows.length < internalLimit
+    const totalResults = rows.length < fetchLimit
       ? rows.length
       : (this.db.prepare(
           `SELECT COUNT(*) as n FROM artworks a ${ftsJoinClause} WHERE ${where}`,
@@ -2216,10 +2224,9 @@ export class VocabularyDb {
       });
     }
 
-    // After geo-expansion + distance sort, truncate back to user's requested limit
-    if (geoExpansion && rows.length > limit) {
-      rows.splice(limit);
-    }
+    // Apply offset then truncate to user's requested limit (post-query for geo-expansion + distance sort)
+    if (userOffset > 0) rows.splice(0, userOffset);
+    if (rows.length > limit) rows.splice(limit);
 
     // Faceted counts: compute requested dimensions when results are truncated
     let facets: Record<string, Array<{ label: string; count: number }>> | undefined;

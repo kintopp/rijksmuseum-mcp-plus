@@ -184,7 +184,7 @@ export class IconclassDb {
    * FTS5 UNION across texts + keywords (with JOIN for rijks_count),
    * deduplicated, ordered by rijks_count DESC.
    */
-  search(query: string, maxResults: number = 25, lang: string = "en"): IconclassSearchResult {
+  search(query: string, maxResults: number = 25, lang: string = "en", offset: number = 0): IconclassSearchResult {
     const emptyResult = (): IconclassSearchResult => ({
       query, totalResults: 0, results: [], countsAsOf: this._countsAsOf,
     });
@@ -214,7 +214,7 @@ export class IconclassDb {
     });
 
     const totalResults = sorted.length;
-    const limited = sorted.slice(0, maxResults);
+    const limited = sorted.slice(offset, offset + maxResults);
 
     // Resolve full entries
     const results = limited

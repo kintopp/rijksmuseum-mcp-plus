@@ -2,7 +2,7 @@
 /**
  * Run all stdio test scripts in scripts/tests/.
  * Skips test-http-viewer-queues.mjs (requires a running HTTP server).
- * Usage: ENABLE_FIND_SIMILAR=true node scripts/tests/run-all.mjs
+ * Usage: node scripts/tests/run-all.mjs
  */
 import { readdirSync } from "fs";
 import { execSync } from "child_process";

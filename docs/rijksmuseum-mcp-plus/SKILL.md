@@ -254,104 +254,39 @@ publisher seals, and poem cartouches that the catalogue has not transcribed.
 
 ### 6. Provenance and Acquisition Research
 
-Provenance research typically moves through three levels of detail. Use
-`search_artwork` for fast counting and profiling, `search_provenance` for
-structured chain analysis, and `get_artwork_details` for a single work's
-full narrative.
+Provenance research moves through three levels of detail:
 
-**Step 1 — Scope and profile** (fast counts + facets via `search_artwork`)
-```
-search_artwork(provenance="Mannheimer", compact=true,
-               facets=["type", "century", "material"], maxResults=1)
-# → 792 artworks. Mostly porcelain, gold, 18th century.
-```
-Combine `provenance` with `productionPlace` + `expandPlaceHierarchy` for
-geographic cross-tabulation. For acquisition channel analysis, use `creditLine`
-— it covers ~358K artworks (far more than the ~48K with parsed provenance)
-and captures the last link: how the museum acquired the work.
+1. **Scope and profile** — `search_artwork` with `provenance` (keyword) or
+   `creditLine` for fast counts and facets. `creditLine` covers ~358K artworks
+   (vs ~48K with parsed provenance) and captures the last link: how the museum
+   acquired the work. Combine with `productionPlace` + `expandPlaceHierarchy`
+   for geographic cross-tabulation.
 
-**Enrichment transparency:** `categoryMethod` and `positionMethod` are both visible in output *and* queryable as input filters:
-```
-search_provenance(categoryMethod="llm_enrichment", maxResults=10)
-# → artworks where transfer type was classified by LLM
+2. **Structured chain analysis** — `search_provenance` for parsed chains with
+   dates, prices, transfer types, and ownership periods. Add `facets: true`
+   for quick distributional context alongside chain results.
 
-search_provenance(positionMethod="llm_enrichment", maxResults=10)
-# → artworks where party position was assigned by LLM
-```
-When results contain LLM-enriched records, the response includes a URL to an enrichment review page. **Always show this URL to the user.**
+3. **Single-object deep dive** — `search_provenance(objectNumber=...)` for the
+   full chain, then `get_artwork_details` for narrative text and
+   `get_artwork_bibliography` for scholarly references. Use `bibliographyCount`
+   in `get_artwork_details` to triage before committing to full citation fetches.
 
-**Cross-domain queries** with `hasProvenance` on `search_artwork`:
-```
-search_artwork(type="painting", hasProvenance=true, compact=true, facets=true)
-# → 2,039 paintings with provenance, faceted by creator, century, etc.
+**Cross-domain queries**: `hasProvenance: true` on `search_artwork` or
+`collection_stats` bridges the two systems — e.g.
+`collection_stats(dimension="type", hasProvenance=true)`.
 
-collection_stats(dimension="type", hasProvenance=true)
-# → type distribution across all 48K artworks with provenance
-```
+**Enrichment transparency:** `categoryMethod` and `positionMethod` are
+queryable input filters on `search_provenance`, not just output fields. When
+results contain LLM-enriched records, the response includes a review URL.
+**Always show this URL to the user.**
 
-**Provenance facets** — add `facets: true` to any `search_provenance` call for quick distributional context:
-```
-search_provenance(party="Goudstikker", facets=true, maxResults=5)
-# → chains + facets: transferType, decade, location, transferCategory, partyPosition
-```
+**Pagination**: when `totalResults` exceeds 50, paginate with `offset`
+(increments of 50 until offset ≥ totalResults).
 
-**Step 2 — Structured chain analysis** (via `search_provenance`)
-```
-search_provenance(party="Mannheimer", transferType="confiscation", maxResults=10)
-
-# Anti-join: confiscated but never restituted
-search_provenance(transferType="confiscation",
-                  excludeTransferType="restitution", maxResults=20)
-
-# Inheritance patterns — find works that passed through widows
-search_provenance(transferType="widowhood", sortBy="dateYear",
-                  sortOrder="asc", maxResults=20)
-
-# Dealer network — find works where Goupil appears as sender (seller)
-search_provenance(party="Goupil", maxResults=20)
-# Then inspect party roles: role="seller" + position="sender" vs "buyer"/"receiver"
-
-# Ownership durations
-search_provenance(layer="periods", ownerName="Six",
-                  sortBy="duration", sortOrder="desc", maxResults=20)
-
-# Price history — most expensive recorded transactions
-# IMPORTANT: filter batchPrice to exclude en bloc totals
-search_provenance(hasPrice=true, currency="guilders",
-                  sortBy="price", sortOrder="desc", maxResults=20)
-# Then: check batchPrice flag on results — true means the price
-# is a batch total for multiple artworks, not an individual price
-
-# Wartime gaps — hasGap is artwork-level (any gap in the chain);
-# dateFrom/dateTo filter on event date_year. Inspect the returned chain
-# to confirm the gap falls within the target period.
-search_provenance(hasGap=true, creator="Rembrandt",
-                  dateFrom=1933, dateTo=1945, maxResults=20)
-
-# Multi-generation family collections
-search_provenance(transferType=["by_descent", "widowhood"],
-                  layer="periods", minDuration=50,
-                  sortBy="duration", sortOrder="desc", maxResults=20)
-```
-
-**Step 3 — Single-object deep dive**
-```
-search_provenance(objectNumber="SK-A-2344")
-# → Full Milkmaid chain: Van Ruijven → Dissius → ... → Six → museum.
-# Follow up with get_artwork_details for narrative text,
-# and get_artwork_bibliography for scholarly references.
-```
-
-`bibliographyCount` in `get_artwork_details` gives you a count without the
-cost of fetching full citations — use it to triage a result set before
-committing to `get_artwork_bibliography` calls.
-
-**Pagination**: when `totalResults` exceeds 50, paginate with `offset` (e.g.
-`offset=0`, `offset=50`, `offset=100` until offset ≥ totalResults).
-
-For the complete catalogue of tested provenance query patterns — including
-collector profiling, acquisition channel analysis, and decade-level time series
-construction — see `references/provenance-patterns.md`.
+For the complete data model (AAM text format, transfer type vocabulary, party
+roles, date and currency representations), tested query patterns (collector
+profiling, wartime provenance, price history, acquisition channels, decade-level
+time series), and enrichment methodology, see `references/provenance-patterns.md`.
 
 ### 7. Source–Copy Navigation
 
@@ -412,14 +347,7 @@ collection_stats(dimension="creatorGender", type="painting", creationDateFrom=17
 | `facets` on `search_artwork` | 11 dimensions: type, material, technique, century, creatorGender, rights, imageAvailable, creator, depictedPerson, depictedPlace, productionPlace. Configure with `facetLimit` (1–50, default 5). Pass `facets=true` for all or `facets=["creator","type"]` for specific ones. All entries include percentage. |
 | `facets` on `search_provenance` | 5 dimensions: transferType, decade, location, transferCategory, partyPosition. Set `facets=true`. Percentages included. |
 | Collection-wide distributions | Use `collection_stats` instead of `compact=true` counting loops — 19 dimensions across artwork and provenance domains with cross-domain filters. One call replaces N iterations. |
-| `search_provenance` batch prices | *En bloc* prices: when a batch was sold together, the total price is attributed to every item. Events with `batchPrice: true` are batch totals — **always filter these out** when ranking or comparing prices (`batchPrice: false`). |
-| `search_provenance` unsold events | Sale events with `unsold: true` are auctions where the lot was not sold (bought in, withdrawn). No ownership transfer occurred. Filter these when analysing actual sales. |
-| `search_provenance` `sortBy: "eventCount"` | Ranking is unreliable — pendant pairs and contextual annotations inflate event counts. Use `sortBy: "price"`, `"duration"`, or `"dateYear"` for stable rankings. |
-| `search_provenance` historical currencies | Prices are stored in their original currency — no inflation adjustment or cross-currency conversion. Pre-decimal notations (£.s.d, fl. X:Y:-) are converted to decimal equivalents. |
-| `search_provenance` `hasGap: true` too broad | The gap flag is very liberal. Always combine with `creator`, `dateFrom`/`dateTo`, or another filter to produce manageable result sets. |
-| `search_provenance` 0-year durations | Same-year transactions (e.g. "1904–1904") yield 0-year ownership periods — not errors, they reflect rapid resale or same-day transfers. |
-| `search_provenance` `parseMethod` values | Four values: `peg` (~80%, highest confidence), `cross_ref` (~20%), `credit_line` (~0.1%, inferred from credit line field), `regex_fallback` (legacy, unused). |
-| `search_provenance` party coverage | ~86K parties across ~101K events. Not all events have named parties — bare-name `collection` events and cross-references often lack structured party data. |
+| `search_provenance` data model details | Batch prices, unsold lots, historical currencies, gap flags, parse methods, party coverage, 0-year durations, and `sortBy: "eventCount"` unreliability — see `references/provenance-patterns.md` |
 | `attributionQualifier` + `creator` | Does not work — use `aboutActor` instead. See Critical Parameter Distinctions above. |
 | `attributionQualifier: "manner of"` | Not a valid value — returns zero results. Use `aboutActor`. |
 | Canonical artist name forms | Some artists use historical spellings (e.g. "Jheronimus Bosch"). If a known artist returns no results, check the canonical form via `get_artwork_details` on a known work. |

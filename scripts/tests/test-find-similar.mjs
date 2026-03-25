@@ -27,9 +27,9 @@ function ok(condition, msg) {
   }
 }
 
-if (process.env.ENABLE_FIND_SIMILAR !== "true") {
-  console.error("Set ENABLE_FIND_SIMILAR=true to run these tests.");
-  process.exit(1);
+if (process.env.ENABLE_FIND_SIMILAR === "false") {
+  console.error("ENABLE_FIND_SIMILAR=false — skipping find_similar tests.");
+  process.exit(0);
 }
 
 const transport = new StdioClientTransport({
