@@ -19,7 +19,7 @@ import {
   applyHostFonts,
 } from 'https://unpkg.com/@modelcontextprotocol/ext-apps@1.1.2/app-with-deps';
 
-declare const OpenSeadragon: typeof import('openseadragon');
+import OpenSeadragon from 'openseadragon';
 
 // Data structure matching the JSON returned by get_artwork_image tool
 interface ArtworkImageData {
@@ -470,8 +470,7 @@ function initializeViewer(iiifInfoUrl: string): void {
   // Use IIIF3 tile source — iiif.micr.io fully supports IIIF Image API 3
   viewer = OpenSeadragon({
     element: container,
-    prefixUrl:
-      'https://cdn.jsdelivr.net/npm/openseadragon@6.0.2/build/openseadragon/images/',
+    prefixUrl: '',
     tileSources: iiifInfoUrl,
     crossOriginPolicy: 'Anonymous' as const,
     showNavigationControl: false,
