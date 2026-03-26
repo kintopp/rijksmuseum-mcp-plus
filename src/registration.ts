@@ -3311,7 +3311,6 @@ function registerAppViewerResource(server: McpServer): void {
               csp: {
                 resourceDomains: [
                   "https://iiif.micr.io",
-                  "https://unpkg.com",
                 ],
                 connectDomains: [
                   "https://iiif.micr.io",

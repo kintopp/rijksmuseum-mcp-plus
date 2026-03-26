@@ -19,10 +19,4 @@ export default defineConfig({
     assetsInlineLimit: 100000000,
     cssCodeSplit: false,
   },
-  resolve: {
-    alias: {
-      '@modelcontextprotocol/ext-apps':
-        'https://unpkg.com/@modelcontextprotocol/ext-apps@1.0.1/app-with-deps',
-    },
-  },
 });

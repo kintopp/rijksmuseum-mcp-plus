@@ -17,7 +17,7 @@ import {
   applyDocumentTheme,
   applyHostStyleVariables,
   applyHostFonts,
-} from 'https://unpkg.com/@modelcontextprotocol/ext-apps@1.1.2/app-with-deps';
+} from '@modelcontextprotocol/ext-apps/app-with-deps';
 
 import OpenSeadragon from 'openseadragon';
 
