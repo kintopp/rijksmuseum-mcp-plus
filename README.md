@@ -19,7 +19,7 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
 Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it as you like and paste the URL into the _Remote MCP Server URL_ field. You can ignore the Authentication section. Once the connector is configured, optionally set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) for more details.
 
-Technically speaking, rijksmuseum-mcp+ is based on the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) standard. As such, it also works with other generative large language models (LLMs) in browser based chatbots and applications which support the MCP standard, including those LLMs which can be used **without a paid subscription**. However, to date (April, 2026) none beside [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) support viewing and interacting with images in the chat timeline. For more details, please see the [Choosing an AI System] section below.
+Technically speaking, rijksmuseum-mcp+ is based on the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) standard. As such, it also works with other generative large language models (LLMs) in chatbots and applications which support the MCP standard, including several which can be used **without a paid subscription**. However, none beside [Claude Desktop](https://claude.com/download) and [claude.ai](https://claude.ai) support viewing and interacting with images and visualisations in the chat timeline. For more details, please see the [Choosing an AI system](#choosing-an-ai-system) section below.
 
 ## Sample Queries
 
@@ -31,6 +31,7 @@ After you've connected rijksmuseum-mcp+ to your AI system, you can explore the c
 - _Which artworks have a provenance linked to Emperor Bonaparte?_
 - _I'm looking for works with inscriptions mentioning 'luctor et emergo'_
 - _Find artworks similar to The Little Street, by Vermeer_
+- _Which work in the collection had previously been held for the longest time by the same family?_
 - _Show me sculptures in the collection by artists born in Leiden_
 - _Are there paintings in the collection wider than 3 meters?_
 - _Which 16th-century paintings are listed as Italian workshop productions?_
@@ -64,7 +65,7 @@ You can explore artworks with the same (with minor exceptions) search filters of
 <br>
 <p align="center"><img src="docs/genre-analysis.png" alt="Fraction of paintings in each century by subject" width="500"></p>
 
-#### Choosing an AI system
+## Choosing an AI system
 
 Technically speaking, rijksmuseum-mcp+ works with any chatbot or application supporting the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) and [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) standards. In practice, however, the extent and quality of support of these standards vary widely.
 
