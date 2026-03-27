@@ -9,9 +9,36 @@
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
-The tool was developed as a technology demo at the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and complements our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks carried out by large language models (LLMs). We are particularly interested in exploring the [research opportunities](docs/research-scenarios.md) and technical challenges posed by retrieving and analysing structured data with LLMs. If you are an interested in collaborating with us in this area, please [get in touch](mailto:rise@unibas.ch).
+The tool was developed as a technology demo by the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and complements our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks carried out by large language models (LLMs). We are particularly interested in exploring the [research opportunities](docs/research-scenarios.md) and technical challenges posed by retrieving and analysing structured data with LLMs. If you are an interested in collaborating with us in this area, please [get in touch](mailto:rise@unibas.ch).
 
-<br>
+## Quick Start
+
+The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding rijksmuseum-mcp+ as a custom 'Connector' to Claude using the URL below. This currently requires a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic.
+```
+https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
+```
+Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it as you like and paste the URL into the _Remote MCP Server URL_ field. You can ignore the Authentication section. Once the connector is configured, optionally set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) for more details.
+
+Technically speaking, rijksmuseum-mcp+ is based on the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) standard. As such, it also works with other generative large language models (LLMs) in browser based chatbots and applications which support the MCP standard, including those LLMs which can be used **without a paid subscription**. However, to date (April, 2026) none beside [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) support viewing and interacting with images in the chat timeline. For more details, please see the [Choosing an AI System] section below.
+
+## Sample Queries
+
+After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. For example:
+
+- _Show me Avercamp's Winter Landscape with Skaters_
+- _What German artworks evoke vanitas and mortality?_
+- _List images by female photographers depicting places near the Eiffel Tower_
+- _Which artworks have a provenance linked to Emperor Bonaparte?_
+- _I'm looking for works with inscriptions mentioning 'luctor et emergo'_
+- _Find artworks similar to The Little Street, by Vermeer_
+- _Show me sculptures in the collection by artists born in Leiden_
+- _Are there paintings in the collection wider than 3 meters?_
+- _Which 16th-century paintings are listed as Italian workshop productions?_
+- _What types of works does the collection have from Indonesia?_
+- _Show me the Roermondse passie and highlight the Betrayal of Judas_
+
+For samples of more complex queries, please see the [research scenarios](docs/research-scenarios.md).
+
 <p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion with highlighted panels" width="500"></p>
 
 ## Features
@@ -37,40 +64,15 @@ You can explore artworks with the same (with minor exceptions) search filters of
 <br>
 <p align="center"><img src="docs/genre-analysis.png" alt="Fraction of paintings in each century by subject" width="500"></p>
 
-## Quick Start
-
-The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding a custom 'Connector' to Claude using the URL below. This currently requires a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic.
-```
-https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
-```
-Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it whatever you like and paste the URL shown above into the _Remote MCP Server URL_ field. You can ignore the Authentication section. Once the connector is configured, set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) for more details. 
-
 #### Choosing an AI system
 
-Technically speaking, rijksmuseum-mcp+ is a [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) server. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector) - note: no authentication is required). It's also compatible with many open-source desktop 'LLM client' applications such as [Jan.ai](https://jan.ai) that are able to make use of local or cloud based LLMs. In comparison, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
+Technically speaking, rijksmuseum-mcp+ works with any chatbot or application supporting the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) and [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) standards. In practice, however, the extent and quality of support of these standards vary widely.
 
-However, none of the above allow you to view and interact with images in the chat timeline. For this reason, the best way to use this MCP server remains [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). 
+As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector)) of a browser based chatbot with good, basic support of the MCP standard. In addition, many desktop 'LLM client' applications, such as [Jan.ai](https://jan.ai), are also MCP-compatible, and can be used with many many different LLM models. In contrast, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers, and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
 
-Note to developers: rijksmuseum-mcp+ can also be run as a local MCP server in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
+Moreover, none of these alteratives allow you to view and interact with images and visualisations drawn from the responses to queries directly in the chat timeline. For this reason, despite the existence of partially adequate substitutes, are present (April, 2026) the best way to use rijksmuseum-mcp+ remains beside [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). 
 
-## Sample Queries
-
-After you've added the rijksmuseum-mcp+ 'connector' (aka custom MCP server) to your AI system, test that everything is working correctly by asking your AI assistant to confirm its access: "Which MCP tools can you use to explore the Rijksmuseum's collections?". 
-
-After that, ask your own questions:
-
-- _What artworks evoke vanitas and mortality?_
-- _A list of works of the interior of the Nieuwe Kerk in Amsterdam_
-- _Is there an iconclass code for mythical creatures?_
-- _Which artworks have a provenance linked to Napoleon Bonaparte?_
-- _I'm looking for works with inscriptions mentioning 'luctor et emergo'_
-- _Show me sculptures in the collection by artists born in Leiden_
-- _Which paintings are wider than 3 meters?_
-- _Which 16th-century paintings are workshop productions rather than by named artists?_
-- _What photographs does the collection have by artists born in Indonesia?_
-- _Show me the Roermond Passion and highlight the Betrayal of Judas_
-
-For samples of more complex questions, please see the [research scenarios](docs/research-scenarios.md). 
+Note to developers: the rijksmuseum-mcp+ server can also be run locally in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
 
 ## How it works
 
@@ -82,24 +84,26 @@ Soon:
 
 - update documentation
 - fine-tune query strategies
+- fix bugs
 - v1.0 release
 - paper/presentation
 
 Later:
 
-- investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 - create a [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file for exploring the collection
 - review capabilities of MCP clients besides Anthropic's Claude
 - investigate exporting jpg/png from image viewer together with overlays
+- add provenance metadata for geolocated places
 
 Maybe:
 
 - investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after" 
+- investigate separate windows for chat and image viewer
 - investigate incorporating historical exhibition data
-- investigate parsing provenance data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - investigate browsing related images in the image viewer
-- review remaining places without geolocation data
+- review places without geolocation data
+- investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 
 ## Authors
 
