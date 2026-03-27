@@ -124,7 +124,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
       totalEventCount++;
       if (isLlmEnrichedEvent(e)) {
         llmEventCount++;
-        const m = e.correctionMethod ?? e.categoryMethod!;
+        const m = e.correctionMethod ?? e.categoryMethod ?? "(unknown)";
         methodCounts[m] = (methodCounts[m] || 0) + 1;
       } else {
         deterministicEventCount++;
@@ -154,7 +154,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
         eventEnrichments.push({
           seq: e.sequence,
           type: e.transferType,
-          method: e.correctionMethod ?? e.categoryMethod!,
+          method: e.correctionMethod ?? e.categoryMethod ?? "(unknown)",
           reasoning: cleanReasoning(e.enrichmentReasoning || "(no reasoning recorded)"),
         });
       }
