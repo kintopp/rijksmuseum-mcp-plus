@@ -211,11 +211,7 @@ function samplePositionEnrichment() {
   let artworkIds;
 
   if (recordsList) {
-    // Targeted: specific object numbers
-    const objectNumbers = recordsList.split(",").map(s => s.trim());
-    artworkIds = db.prepare(
-      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
-    ).all(...objectNumbers).map(r => r.art_id);
+    artworkIds = lookupArtworkIds(recordsList);
   } else {
     // Sample artworks that have null-position parties
     artworkIds = db.prepare(`
@@ -233,10 +229,7 @@ function sampleTypeClassification() {
   let artworkIds;
 
   if (recordsList) {
-    const objectNumbers = recordsList.split(",").map(s => s.trim());
-    artworkIds = db.prepare(
-      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
-    ).all(...objectNumbers).map(r => r.art_id);
+    artworkIds = lookupArtworkIds(recordsList);
   } else {
     const rows = db.prepare(`
       SELECT DISTINCT pe.artwork_id
@@ -274,6 +267,15 @@ function sampleUnknowns() {
   return fetchRecords(artworkIds, { periods: false });
 }
 
+/** Resolve comma-separated object numbers to artwork IDs. */
+function lookupArtworkIds(objectNumbersCsv) {
+  const db = openDb();
+  const objectNumbers = objectNumbersCsv.split(",").map(s => s.trim());
+  return db.prepare(
+    `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
+  ).all(...objectNumbers).map(r => r.art_id);
+}
+
 // ─── Structural correction samplers ──────────────────────────────
 
 /** Check if correction_method column exists (backward compat with older DBs). Cached. */
@@ -294,10 +296,7 @@ function sampleFieldCorrection() {
   const corrFilter = hasCorrectionColumn() ? "AND pe.correction_method IS NULL" : "";
 
   if (recordsList) {
-    const objectNumbers = recordsList.split(",").map(s => s.trim());
-    artworkIds = db.prepare(
-      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
-    ).all(...objectNumbers).map(r => r.art_id);
+    artworkIds = lookupArtworkIds(recordsList);
   } else {
     // #149: multi-city locations truncated + #119: wrong location + #116: missing receivers
     artworkIds = db.prepare(`
@@ -339,10 +338,7 @@ function sampleEventReclassification() {
   const corrFilter = hasCorrectionColumn() ? "AND pe.correction_method IS NULL" : "";
 
   if (recordsList) {
-    const objectNumbers = recordsList.split(",").map(s => s.trim());
-    artworkIds = db.prepare(
-      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
-    ).all(...objectNumbers).map(r => r.art_id);
+    artworkIds = lookupArtworkIds(recordsList);
   } else {
     artworkIds = db.prepare(`
       SELECT DISTINCT artwork_id FROM (
@@ -379,10 +375,7 @@ function sampleEventSplitting() {
   const corrFilter = hasCorrectionColumn() ? "AND pe.correction_method IS NULL" : "";
 
   if (recordsList) {
-    const objectNumbers = recordsList.split(",").map(s => s.trim());
-    artworkIds = db.prepare(
-      `SELECT art_id FROM artworks WHERE object_number IN (${objectNumbers.map(() => "?").join(",")})`
-    ).all(...objectNumbers).map(r => r.art_id);
+    artworkIds = lookupArtworkIds(recordsList);
   } else {
     artworkIds = db.prepare(`
       SELECT DISTINCT artwork_id FROM (
@@ -837,7 +830,7 @@ const TOOL_EVENT_RECLASSIFICATION = {
         description: "Sequence numbers of events checked but found correct",
       },
     },
-    required: ["artwork_id", "object_number", "reclassifications"],
+    required: ["artwork_id", "object_number", "reclassifications", "no_reclassification_needed"],
   },
 };
 

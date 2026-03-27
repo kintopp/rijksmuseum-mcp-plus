@@ -173,16 +173,16 @@ const processArtwork = db.transaction((artworkId, splits) => {
   }
 
   // Build sequence map for splits
-  const splitSeqs = new Set(splits.map(s => s.original_sequence));
+  const splitBySeq = new Map(splits.map(s => [s.original_sequence, s]));
 
   // 2. Build new event list with clean sequences
   const newEvents = [];   // { event, parties[] }
   const seqMap = {};      // old_seq → [new_seq, ...]
 
   for (const evt of existingEvents) {
-    if (splitSeqs.has(evt.sequence)) {
+    if (splitBySeq.has(evt.sequence)) {
       // Replace with split events
-      const split = splits.find(s => s.original_sequence === evt.sequence);
+      const split = splitBySeq.get(evt.sequence);
       const method = ISSUE_TO_METHOD[split.issue_type] ?? `llm_structural:${split.issue_type}`;
       const startIdx = newEvents.length;
 
@@ -309,12 +309,14 @@ for (const [artworkId, { object_number, splits }] of splitsByArtwork) {
 
 // ─── Update version_info ────────────────────────────────────────────
 
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_splitting_at', ?)`)
-  .run(new Date().toISOString());
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_splitting_batch', ?)`)
-  .run(data.meta?.batchId ?? "manual");
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_splitting_count', ?)`)
-  .run(String(totalSplits));
+db.transaction(() => {
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_splitting_at', ?)`)
+    .run(new Date().toISOString());
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_splitting_batch', ?)`)
+    .run(data.meta?.batchId ?? "manual");
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_splitting_count', ?)`)
+    .run(String(totalSplits));
+})();
 
 db.close();
 

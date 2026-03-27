@@ -191,12 +191,14 @@ writeBatch(updates);
 
 // ─── Update version_info ────────────────────────────────────────────
 
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('field_correction_at', ?)`)
-  .run(new Date().toISOString());
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('field_correction_batch', ?)`)
-  .run(data.meta?.batchId ?? "manual");
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('field_correction_count', ?)`)
-  .run(String(locationUpdated + partyInserted));
+db.transaction(() => {
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('field_correction_at', ?)`)
+    .run(new Date().toISOString());
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('field_correction_batch', ?)`)
+    .run(data.meta?.batchId ?? "manual");
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('field_correction_count', ?)`)
+    .run(String(locationUpdated + partyInserted));
+})();
 
 db.close();
 

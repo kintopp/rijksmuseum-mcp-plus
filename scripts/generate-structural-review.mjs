@@ -61,53 +61,23 @@ const ISSUE_LABELS = {
   catalogue_fragment: "Catalogue fragment",
 };
 
-// ─── Field correction cards ─────────────────────────────────────────
+// ─── Extract cards from audit JSON ──────────────────────────────────
 
-const fieldCards = [];
-if (fieldData) {
-  for (const result of fieldData.results) {
-    if (result.error || !result.data?.corrections) continue;
-    for (const c of result.data.corrections) {
-      fieldCards.push({
-        objectNumber: result.data.object_number,
-        artworkId: result.data.artwork_id,
-        ...c,
-      });
+function extractCards(data, key) {
+  if (!data) return [];
+  const cards = [];
+  for (const result of data.results) {
+    if (result.error || !result.data?.[key]) continue;
+    for (const item of result.data[key]) {
+      cards.push({ objectNumber: result.data.object_number, artworkId: result.data.artwork_id, ...item });
     }
   }
+  return cards;
 }
 
-// ─── Reclassification cards ─────────────────────────────────────────
-
-const reclassCards = [];
-if (reclassData) {
-  for (const result of reclassData.results) {
-    if (result.error || !result.data?.reclassifications) continue;
-    for (const rc of result.data.reclassifications) {
-      reclassCards.push({
-        objectNumber: result.data.object_number,
-        artworkId: result.data.artwork_id,
-        ...rc,
-      });
-    }
-  }
-}
-
-// ─── Splitting cards ────────────────────────────────────────────────
-
-const splitCards = [];
-if (splitData) {
-  for (const result of splitData.results) {
-    if (result.error || !result.data?.splits) continue;
-    for (const s of result.data.splits) {
-      splitCards.push({
-        objectNumber: result.data.object_number,
-        artworkId: result.data.artwork_id,
-        ...s,
-      });
-    }
-  }
-}
+const fieldCards = extractCards(fieldData, "corrections");
+const reclassCards = extractCards(reclassData, "reclassifications");
+const splitCards = extractCards(splitData, "splits");
 
 const totalItems = fieldCards.length + reclassCards.length + splitCards.length;
 

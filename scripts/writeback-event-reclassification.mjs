@@ -174,12 +174,14 @@ writeBatch(updates);
 
 // ─── Update version_info ────────────────────────────────────────────
 
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_reclass_at', ?)`)
-  .run(new Date().toISOString());
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_reclass_batch', ?)`)
-  .run(data.meta?.batchId ?? "manual");
-db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_reclass_count', ?)`)
-  .run(String(marked + merged));
+db.transaction(() => {
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_reclass_at', ?)`)
+    .run(new Date().toISOString());
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_reclass_batch', ?)`)
+    .run(data.meta?.batchId ?? "manual");
+  db.prepare(`INSERT OR REPLACE INTO version_info (key, value) VALUES ('event_reclass_count', ?)`)
+    .run(String(marked + merged));
+})();
 
 db.close();
 
