@@ -138,6 +138,25 @@ DELETE FROM provenance_parties WHERE party_name IN ('Charter Room in Leiden Town
 -- 194553 seq 8-11 (Huys te Nigtevegt / Reaelen-eiland corrections)
 ```
 
+## Step 7: LLM structural corrections
+
+These restore LLM-based structural corrections from audit JSON files.
+Order within: field corrections first (don't depend on sequence numbers),
+then reclassifications (may delete events), then splits (renumber sequences).
+
+```bash
+# 7a. Field corrections: locations + missing receivers (~55 events)
+node scripts/writeback-field-corrections.mjs --input data/audit-field-correction-YYYY-MM-DD.json
+
+# 7b. Event reclassifications: phantoms, location-as-event, alternatives (~25 events)
+node scripts/writeback-event-reclassification.mjs --input data/audit-event-reclassification-YYYY-MM-DD.json
+
+# 7c. Event splits: multi-transfer, bequest chain, gap bridge (~50 events)
+node scripts/writeback-event-splitting.mjs --input data/audit-event-splitting-YYYY-MM-DD.json
+```
+
+**Order rationale:** 7a modifies fields on existing events (safe). 7b deletes/merges events (may affect event counts but not sequences used by 7c). 7c renumbers sequences per artwork (must run last because it rebuilds the sequence space).
+
 ## Verification
 
 After all steps, verify:
@@ -157,5 +176,25 @@ SELECT COUNT(*) FROM provenance_events WHERE batch_price = 1;
 
 -- Enrichment reasoning coverage should be full
 SELECT COUNT(*) FROM provenance_parties WHERE position_method LIKE 'llm%' AND enrichment_reasoning IS NULL;
+-- Should be 0
+
+-- Structural corrections applied (Step 7)
+SELECT correction_method, COUNT(*) FROM provenance_events
+WHERE correction_method IS NOT NULL GROUP BY 1;
+
+-- No orphaned parties after event deletions/splits
+SELECT COUNT(*) FROM provenance_parties pp
+WHERE NOT EXISTS (SELECT 1 FROM provenance_events pe
+  WHERE pe.artwork_id = pp.artwork_id AND pe.sequence = pp.sequence);
+-- Should be 0
+
+-- Sequence integrity (no duplicates after splits)
+SELECT artwork_id FROM provenance_events
+GROUP BY artwork_id, sequence HAVING COUNT(*) > 1;
+-- Should be 0
+
+-- All corrected events have reasoning
+SELECT COUNT(*) FROM provenance_events
+WHERE correction_method IS NOT NULL AND enrichment_reasoning IS NULL;
 -- Should be 0
 ```

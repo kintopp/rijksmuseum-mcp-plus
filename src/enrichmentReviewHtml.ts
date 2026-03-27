@@ -17,6 +17,7 @@ interface EnrichmentReviewEvent {
   batchPrice: boolean;
   dateYear: number | null;
   categoryMethod: string | null;
+  correctionMethod: string | null;
   enrichmentReasoning: string | null;
   parties: {
     name: string;
@@ -45,16 +46,36 @@ function esc(s: string | null | undefined): string {
   return (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+const CORRECTION_LABELS: Record<string, string> = {
+  "#87": "phantom event",
+  "#99": "event merge",
+  "#102": "catalogue fragment",
+  "#103": "alternative acquisition",
+  "#104": "location as event",
+  "#116": "missing receiver",
+  "#117": "bequest chain",
+  "#119": "wrong location",
+  "#125": "multi-transfer merge",
+  "#149": "multi-city location",
+};
+
 function methodLabel(method: string): string {
   switch (method) {
     case "llm_enrichment": return "LLM classified";
     case "llm_disambiguation": return "LLM disambiguated";
     case "rule:transfer_is_ownership": return "Validated rule";
-    default: return method;
+    default:
+      if (method.startsWith("llm_structural:")) {
+        const issue = method.slice("llm_structural:".length);
+        const desc = CORRECTION_LABELS[issue];
+        return desc ? `LLM correction: ${desc}` : `LLM correction ${issue}`;
+      }
+      return method;
   }
 }
 
 function methodBadgeStyle(method: string): string {
+  if (method.startsWith("llm_structural")) return "background:#b85c00;color:white";
   if (method.startsWith("llm")) return "background:#6b4c9a;color:white";
   if (method.startsWith("rule:")) return "background:#2d6a4f;color:white";
   return "background:#555;color:white";
@@ -67,9 +88,9 @@ function cleanReasoning(raw: string): string {
     .trim();
 }
 
-/** Any non-default enrichment (LLM or rule-based) — used for page content. */
-export function isEnrichedEvent(e: { categoryMethod?: string | null }): boolean {
-  return !!e.categoryMethod && e.categoryMethod !== "type_mapping";
+/** Any non-default enrichment (LLM, rule-based, or structural correction) — used for page content. */
+export function isEnrichedEvent(e: { categoryMethod?: string | null; correctionMethod?: string | null }): boolean {
+  return (!!e.categoryMethod && e.categoryMethod !== "type_mapping") || !!e.correctionMethod;
 }
 
 /** Any non-default enrichment (LLM or rule-based) — used for page content. */
@@ -78,8 +99,8 @@ export function isEnrichedParty(p: { positionMethod?: string | null }): boolean 
 }
 
 /** LLM-only enrichment — used as the guard for whether to create the page. */
-export function isLlmEnrichedEvent(e: { categoryMethod?: string | null }): boolean {
-  return isEnrichedEvent(e) && e.categoryMethod!.startsWith("llm_");
+export function isLlmEnrichedEvent(e: { categoryMethod?: string | null; correctionMethod?: string | null }): boolean {
+  return !!e.correctionMethod || (isEnrichedEvent(e) && !!e.categoryMethod && e.categoryMethod.startsWith("llm_"));
 }
 
 /** LLM-only enrichment — used as the guard for whether to create the page. */
@@ -103,7 +124,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
       totalEventCount++;
       if (isLlmEnrichedEvent(e)) {
         llmEventCount++;
-        const m = e.categoryMethod!;
+        const m = e.correctionMethod ?? e.categoryMethod!;
         methodCounts[m] = (methodCounts[m] || 0) + 1;
       } else {
         deterministicEventCount++;
@@ -133,7 +154,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
         eventEnrichments.push({
           seq: e.sequence,
           type: e.transferType,
-          method: e.categoryMethod!,
+          method: e.correctionMethod ?? e.categoryMethod!,
           reasoning: cleanReasoning(e.enrichmentReasoning || "(no reasoning recorded)"),
         });
       }
@@ -305,7 +326,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
 
 <div class="disclaimer">
   <h2>About this page</h2>
-  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision.</p>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision. Methods include type/category classification, party disambiguation, validated deterministic rules, and structural corrections (location fixes, phantom event removal, event splitting).</p>
   <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
 </div>
 
