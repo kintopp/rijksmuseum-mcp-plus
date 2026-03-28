@@ -428,6 +428,7 @@ const PROV_DIMENSION_DEFS: ReadonlyArray<{
 export const STATS_DIMENSION_NAMES = [
   ...VOCAB_DIMENSION_DEFS.map(d => d.label),
   "century", "decade",                    // artwork date-based
+  "height", "width",                      // artwork physical dimensions (cm, binned by binWidth)
   "provenanceDecade",                     // provenance date-based
   ...PROV_DIMENSION_DEFS.map(d => d.label),
 ] as const;
@@ -1863,6 +1864,18 @@ export class VocabularyDb {
         sql: `SELECT (a.date_earliest / ?) * ? AS label, COUNT(*) AS cnt
           FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
           WHERE a.date_earliest IS NOT NULL
+          GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
+        extraBindings: [binWidth, binWidth, topN, offset],
+      };
+    }
+
+    // Physical dimension binning (cm) — excludes 0.0 sentinels
+    const dimCol = dim === "height" ? "a.height_cm" : dim === "width" ? "a.width_cm" : null;
+    if (dimCol && this.hasDimensions) {
+      return {
+        sql: `SELECT CAST((${dimCol} / ?) * ? AS INTEGER) AS label, COUNT(*) AS cnt
+          FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+          WHERE ${dimCol} > 0
           GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, topN, offset],
       };

@@ -108,7 +108,7 @@ Aggregate statistics, counts, and distributions across the collection. Returns f
 
 | Parameter | Description |
 |---|---|
-| `dimension` | What to count/group by. Artwork: `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `century`, `decade`. Provenance: `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod` |
+| `dimension` | What to count/group by. Artwork: `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `century`, `decade`, `height`, `width`. Provenance: `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod` |
 | `topN` | Maximum entries to return (1–500, default 25) |
 | `offset` | Skip this many entries (for pagination) |
 | `binWidth` | Bin width for decade dimensions (default 10; use 50 or 100 for half-centuries or centuries) |
