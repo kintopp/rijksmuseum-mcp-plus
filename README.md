@@ -43,7 +43,7 @@ For samples of more complex queries, please see the [research scenarios](docs/re
 
 ## Features
 
-You can explore artworks with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ provides the following additional features:
+You can use rijksmuseum-mcp+ to explore artworks with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ provides the following additional features:
 
 1. **More searchable metadata**
 
