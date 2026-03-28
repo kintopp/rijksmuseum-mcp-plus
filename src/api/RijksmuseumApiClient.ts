@@ -177,12 +177,25 @@ export class RijksmuseumApiClient {
     objectNumber: string
   ): Promise<{ uri: string; object: LinkedArtObject }> {
     const searchResult = await this.search({ objectNumber });
-    const item = searchResult.orderedItems[0];
-    if (!item) {
+    if (searchResult.orderedItems.length === 0) {
       throw new Error(`No object found with objectNumber: ${objectNumber}`);
     }
-    const object = await this.resolveObject(item.id);
-    return { uri: item.id, object };
+    // The Search API uses prefix matching ("NG-696" can match "NG-696-A", "NG-696-B", etc.).
+    // Resolve candidates until we find an exact object number match.
+    let firstResolved: string | undefined;
+    for (const item of searchResult.orderedItems) {
+      const object = await this.resolveObject(item.id);
+      const resolved = RijksmuseumApiClient.parseObjectNumber(object);
+      firstResolved ??= resolved;
+      if (resolved === objectNumber) {
+        return { uri: item.id, object };
+      }
+    }
+    // None matched exactly — report the mismatch
+    throw new Error(
+      `Object number mismatch: requested "${objectNumber}" but Search API returned "${firstResolved}" ` +
+      `(and ${searchResult.orderedItems.length - 1} other prefix matches). Verify the object number is correct.`
+    );
   }
 
   // ── Image Chain ─────────────────────────────────────────────────
