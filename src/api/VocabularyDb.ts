@@ -33,6 +33,7 @@ export interface IconclassSimilarResult {
     creator: string;
     date?: string;
     type?: string;
+    iiifId?: string;
     score: number;
     sharedMotifs: SharedMotif[];
     url: string;
@@ -58,6 +59,7 @@ export interface LineageSimilarResult {
     creator: string;
     date?: string;
     type?: string;
+    iiifId?: string;
     score: number;
     sharedLineage: SharedLineage[];
     url: string;
@@ -76,6 +78,7 @@ export interface DepictedSimilarResult {
     creator: string;
     date?: string;
     type?: string;
+    iiifId?: string;
     score: number;
     sharedTerms: { label: string; weight: number; wikidataUri?: string }[];
     url: string;
@@ -1052,6 +1055,7 @@ export class VocabularyDb {
         creator: meta?.creator ?? "",
         ...(date && { date }),
         ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
+        ...(meta?.iiifId && { iiifId: meta.iiifId }),
         score: Math.round(data.totalWeight * 10) / 10, // 1dp — iconclass scores are coarse (depth × IDF)
         sharedMotifs: data.sharedMotifs,
         url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
@@ -1227,6 +1231,7 @@ export class VocabularyDb {
         creator: meta?.creator ?? "",
         ...(date && { date }),
         ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
+        ...(meta?.iiifId && { iiifId: meta.iiifId }),
         score: Math.round(data.totalWeight * 100) / 100, // 2dp — lineage IDF values are finer-grained
         sharedLineage: data.sharedLineage,
         url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
@@ -1339,6 +1344,7 @@ export class VocabularyDb {
         creator: meta?.creator ?? "",
         ...(date && { date }),
         ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
+        ...(meta?.iiifId && { iiifId: meta.iiifId }),
         score: Math.round(data.totalWeight * 100) / 100,
         sharedTerms: data.sharedTerms,
         url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,

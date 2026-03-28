@@ -142,6 +142,28 @@ function formatSearchLine(r: { objectNumber: string; title: string; creator: str
   return line;
 }
 
+/**
+ * Detect component-record clustering in search results.
+ * When ≥3 results share an object number prefix before '(' (e.g. folio records
+ * from the same sketchbook), return a warning string. Returns undefined otherwise.
+ */
+function detectComponentClustering(objectNumbers: string[]): string | undefined {
+  const groups = new Map<string, number>();
+  for (const on of objectNumbers) {
+    const parenIdx = on.indexOf("(");
+    if (parenIdx > 0) {
+      const prefix = on.slice(0, parenIdx).replace(/-$/, ""); // trim trailing dash
+      groups.set(prefix, (groups.get(prefix) ?? 0) + 1);
+    }
+  }
+  const clusters: string[] = [];
+  for (const [prefix, count] of groups) {
+    if (count >= 3) clusters.push(`${count} results are folios/components of ${prefix}`);
+  }
+  if (clusters.length === 0) return undefined;
+  return "Note: " + clusters.join("; ") + ". Add filters to narrow, or inspect the parent object directly.";
+}
+
 /** Format faceted counts as a compact "Narrow by:" block for LLM content. */
 function formatFacets(facets: Record<string, Array<{ label: string; count: number; percentage?: number }>>): string {
   const lines: string[] = ["Narrow by:"];
@@ -1361,6 +1383,10 @@ function registerTools(
             `depictedPerson:"${argsRecord.depictedPerson}" matched no results. ` +
             `Try aboutActor for broader person matching (searches both depicted persons and creators).`];
         }
+
+        // Detect component-record clustering (sketchbook folios, album pages, etc.)
+        const clusterNote = detectComponentClustering(result.results.map(r => r.objectNumber));
+        if (clusterNote) result.warnings = [...(result.warnings || []), clusterNote];
 
         const header = `${result.results.length} results` +
           (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
@@ -2882,65 +2908,44 @@ function registerTools(
 
         // ── Run all 4 signals ──────────────────────────────────────
 
-        /** Convert a mode's raw results (which include artId) into SimilarCandidate[].
-         *  Single batch lookup for iiif_ids + types — no per-result queries. */
-        function toCandidates(
-          results: { artId: number; objectNumber: string; title: string; creator: string; date?: string; score: number; url: string; detail?: string }[],
-        ): SimilarCandidate[] {
-          if (results.length === 0) return [];
-          const artIds = results.map(r => r.artId);
-          const meta = vocabDb!.batchLookupByArtId(artIds);
-          const types = vocabDb!.batchLookupTypesByArtId(artIds);
-          return results.map(r => {
-            const m = meta.get(r.artId);
-            return {
-              objectNumber: r.objectNumber,
-              title: r.title,
-              creator: r.creator,
-              ...(r.date && { date: r.date }),
-              ...(types.has(r.artId) && { type: types.get(r.artId) }),
-              iiifId: m?.iiifId ?? undefined,
-              score: r.score,
-              url: r.url,
-              ...(r.detail && { detail: r.detail }),
-            };
-          });
-        }
-
         // Iconclass
         const icResult = vocabDb!.findSimilarByIconclass(args.objectNumber, maxResults);
-        const icCandidates = toCandidates(
-          (icResult?.results ?? []).map(r => ({
-            ...r,
-            detail: r.sharedMotifs.map(m => `${m.notation} ${m.label}`).join(", "),
-          })),
-        );
-        // Enrich with per-card Iconclass notations
-        for (let i = 0; i < icCandidates.length; i++) {
-          const src = icResult?.results[i];
-          if (src) icCandidates[i].sharedNotations = src.sharedMotifs.map(m => m.notation);
-        }
+        const icCandidates: SimilarCandidate[] = (icResult?.results ?? []).map(r => ({
+          objectNumber: r.objectNumber,
+          title: r.title,
+          creator: r.creator,
+          ...(r.date && { date: r.date }),
+          ...(r.type && { type: r.type }),
+          iiifId: r.iiifId,
+          score: r.score,
+          url: r.url,
+          detail: r.sharedMotifs.map(m => `${m.notation} ${m.label}`).join(", "),
+          sharedNotations: r.sharedMotifs.map(m => m.notation),
+        }));
 
         // Lineage
         const liResult = vocabDb!.findSimilarByLineage(args.objectNumber, maxResults);
-        const liCandidates = toCandidates(
-          (liResult?.results ?? []).map(r => ({
-            ...r,
+        const liCandidates: SimilarCandidate[] = (liResult?.results ?? []).map(r => {
+          const primary = r.sharedLineage[0]; // highest-strength qualifier (sorted by VocabularyDb)
+          return {
+            objectNumber: r.objectNumber,
+            title: r.title,
+            creator: r.creator,
+            ...(r.date && { date: r.date }),
+            ...(r.type && { type: r.type }),
+            iiifId: r.iiifId,
+            score: r.score,
+            url: r.url,
             detail: r.sharedLineage.map(l => `${l.qualifierLabel} ${l.creatorLabel}`).join(", "),
-          })),
-        );
-        // Enrich with per-card qualifier metadata
-        for (let i = 0; i < liCandidates.length; i++) {
-          const src = liResult?.results[i];
-          if (src && src.sharedLineage.length > 0) {
-            const primary = src.sharedLineage[0]; // highest-strength qualifier
-            liCandidates[i].qualifierLabel = primary.qualifierLabel;
-            liCandidates[i].qualifierUri = primary.qualifierUri;
-            liCandidates[i].qualifierCreator = primary.creatorLabel;
-          }
-        }
+            ...(primary && {
+              qualifierLabel: primary.qualifierLabel,
+              qualifierUri: primary.qualifierUri,
+              qualifierCreator: primary.creatorLabel,
+            }),
+          };
+        });
 
-        // Description
+        // Description — needs its own batch lookups (descriptions not in findSimilarBy* results)
         let descCandidates: SimilarCandidate[] = [];
         if (embeddingsDb?.descriptionAvailable) {
           const descResults = embeddingsDb.searchDescriptionSimilar(artRow.artId, maxResults);
@@ -2968,24 +2973,23 @@ function registerTools(
           }
         }
 
-        // Depicted Person & Place — shared enrichment pattern
+        // Depicted Person & Place — map directly from enriched findSimilarBy* results
         function toDepictedCandidates(result: DepictedSimilarResult | null): SimilarCandidate[] {
-          const candidates = toCandidates(
-            (result?.results ?? []).map(r => ({
-              ...r,
-              detail: r.sharedTerms.map(t => t.label).join(", "),
+          return (result?.results ?? []).map(r => ({
+            objectNumber: r.objectNumber,
+            title: r.title,
+            creator: r.creator,
+            ...(r.date && { date: r.date }),
+            ...(r.type && { type: r.type }),
+            iiifId: r.iiifId,
+            score: r.score,
+            url: r.url,
+            detail: r.sharedTerms.map(t => t.label).join(", "),
+            sharedTerms: r.sharedTerms.map(t => ({
+              label: t.label,
+              ...(t.wikidataUri && { wikidataUri: t.wikidataUri }),
             })),
-          );
-          for (let i = 0; i < candidates.length; i++) {
-            const src = result?.results[i];
-            if (src) {
-              candidates[i].sharedTerms = src.sharedTerms.map(t => ({
-                label: t.label,
-                ...(t.wikidataUri && { wikidataUri: t.wikidataUri }),
-              }));
-            }
-          }
-          return candidates;
+          }));
         }
 
         const dpResult = vocabDb!.findSimilarByDepictedPerson(args.objectNumber, maxResults);
@@ -3251,6 +3255,10 @@ function registerTools(
 
         const textParts = [header];
         if (resultLines.length) textParts.push("\n" + resultLines.join("\n\n"));
+
+        // Detect component-record clustering (sketchbook folios, album pages, etc.)
+        const clusterNote = detectComponentClustering(results.map(r => r.objectNumber));
+        if (clusterNote) warnings.push(clusterNote);
 
         // 6. Return dual-channel response
         const data: InferOutput<typeof SemanticSearchOutput> = {
