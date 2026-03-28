@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Similar to: View of Houses in Delft, Known as ‘The Little Street’</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         margin: 0 auto; padding: 20px; background: #fafafa; color: #222; }
+  h1 { font-size: 1.4em; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 0.85em; margin-bottom: 20px; }
+
+  .query-header { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                  padding: 20px; margin-bottom: 24px;
+                  display: flex; align-items: flex-start; gap: 20px; }
+  .query-thumb { width: 300px; max-height: 420px; object-fit: contain; border-radius: 4px;
+                 flex-shrink: 0; background: #eee; }
+  .query-thumb.no-image { height: 200px; display: flex; align-items: center;
+                          justify-content: center; color: #bbb; font-size: 0.9em; }
+  .query-info { flex: 1; min-width: 0; }
+  .query-info h2 { font-size: 1.2em; margin-bottom: 4px; }
+  .query-info .obj-num { font-size: 0.85em; color: #0066cc; text-decoration: none; }
+  .query-info .obj-num:hover { text-decoration: underline; }
+  .query-info .creator { font-size: 0.9em; color: #555; margin-top: 2px; }
+  .type-badge { display: inline-block; font-size: 0.7em; background: #e8e8e8;
+                padding: 1px 6px; border-radius: 3px; margin-left: 6px; color: #555; }
+
+  .query-metadata { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .meta-section { font-size: 0.8em; line-height: 1.5; }
+  .meta-section-label { font-weight: 600; font-size: 0.75em; text-transform: uppercase;
+                        letter-spacing: 0.03em; margin-bottom: 3px; }
+  .meta-section-label.iconclass { color: #1565c0; }
+  .meta-section-label.lineage { color: #6a1b9a; }
+  .meta-section-label.description { color: #e65100; }
+  .meta-section-label.depicted-person { color: #2e7d32; }
+  .meta-section-label.depicted-place { color: #4e342e; }
+  .meta-section .meta-content { color: #555; }
+  .meta-section .meta-content a { text-decoration: none; }
+  .meta-section .meta-content a:hover code { text-decoration: underline; }
+  .meta-section .meta-content code { font-family: "SF Mono", "Menlo", monospace;
+                                      font-size: 0.88em; background: #f0f4f8;
+                                      padding: 1px 5px; border-radius: 3px; color: #1565c0; }
+  .meta-section .meta-content .qualifier { background: #f3e5f5; color: #6a1b9a; }
+  .meta-section .meta-content a:hover .qualifier { text-decoration: underline; }
+  .meta-desc { color: #555; font-size: 1em; line-height: 1.45; }
+
+  .signal-rows { display: flex; flex-direction: column; gap: 20px; }
+
+  .signal-row { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                padding: 16px; overflow: hidden; }
+  .row-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .row-label { font-size: 0.95em; font-weight: 600; }
+  .row-count { font-size: 0.75em; color: #888; }
+  .row-method { font-size: 0.72em; color: #888; line-height: 1.3; margin-bottom: 12px;
+                max-width: 80ch; }
+  .row-method a { color: #0066cc; }
+  .row-method strong { font-weight: 600; color: #666; }
+  .empty-row { font-size: 0.85em; color: #999; font-style: italic; padding: 12px 0; }
+
+  .strip-container { position: relative; }
+  .strip-container::after { content: ''; position: absolute; top: 0; right: 0;
+                            width: 40px; height: 100%; pointer-events: none;
+                            background: linear-gradient(to right, transparent, rgba(255,255,255,0.8)); }
+  .cards-strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px;
+                 scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .cards-strip::-webkit-scrollbar { height: 6px; }
+  .cards-strip::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 3px; }
+  .cards-strip::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  .cards-strip::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+  .result-card { flex: 0 0 200px; scroll-snap-align: start; display: flex;
+                 flex-direction: column; gap: 6px; padding: 10px;
+                 border-radius: 6px; border: 1px solid #f0f0f0; }
+  .result-card:hover { border-color: #ddd; background: #fafafa; }
+  .result-thumb { width: 100%; aspect-ratio: 3/4; object-fit: contain; border-radius: 4px;
+                  background: #f5f5f5; }
+  .result-thumb.no-image { display: flex; align-items: center; justify-content: center;
+                           background: #f0f0f0; color: #bbb; font-size: 0.8em; }
+  .result-thumb-link { display: block; }
+  .result-info { font-size: 0.78em; }
+  .result-info .rank-sim { font-weight: 600; color: #333; }
+  .result-info .title { margin-top: 2px; color: #444; display: -webkit-box;
+                        -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .result-info .creator { color: #666; margin-top: 1px; white-space: nowrap;
+                          overflow: hidden; text-overflow: ellipsis; }
+  .result-info .obj-link { font-size: 0.85em; color: #0066cc; text-decoration: none; }
+  .result-info .obj-link:hover { text-decoration: underline; }
+
+  .card-detail { font-size: 0.7em; margin-top: 4px; padding-top: 4px;
+                 border-top: 1px solid #f0f0f0; color: #888; line-height: 1.35; }
+  .card-detail a { text-decoration: none; }
+  .card-detail a:hover code { text-decoration: underline; }
+  .card-detail code { font-family: "SF Mono", "Menlo", monospace; font-size: 0.9em;
+                      background: #f0f4f8; padding: 0px 3px; border-radius: 2px; color: #1565c0; }
+  .card-detail .qualifier { background: #f3e5f5; color: #6a1b9a; }
+  .card-detail a:hover .qualifier { text-decoration: underline; }
+  .card-detail .desc-snippet { color: #777; display: -webkit-box;
+                               -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+                               overflow: hidden; font-style: italic; }
+
+  .see-all-card { flex: 0 0 160px; scroll-snap-align: start; display: flex;
+                  align-items: center; justify-content: center; padding: 20px;
+                  border-radius: 6px; border: 1px dashed #ccc; background: #f8f8f8;
+                  text-decoration: none; color: #0066cc; font-size: 0.85em;
+                  text-align: center; line-height: 1.4; min-height: 200px; }
+  .see-all-card:hover { background: #f0f0f0; border-color: #aaa; }
+
+  .mode-badge { display: inline-block; font-size: 0.55em; color: #fff; padding: 1px 4px;
+                border-radius: 3px; margin-left: 2px; vertical-align: middle; }
+
+  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0;
+            font-size: 0.75em; color: #999; }
+  .footer a { color: #999; text-decoration: underline; }
+  .footer a:hover { color: #666; }
+
+  @media (max-width: 700px) {
+    .query-header { flex-direction: column; }
+    .query-thumb { width: 100%; max-height: 300px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Find Similar: View of Houses in Delft, Known as ‘The Little Street’</h1>
+<p class="subtitle">Visual: 20 | Iconclass: 20 | Description: 20 | 53 unique | pooled: 3+ types | 2026-03-28 09:21</p>
+
+<div class="query-header">
+  <img class="query-thumb" src="https://iiif.micr.io/VWEov/full/300,/0/default.jpg" alt="" loading="lazy"
+           onerror="this.style.display='none'">
+  <div class="query-info">
+    <h2>View of Houses in Delft, Known as ‘The Little Street’<span class="type-badge">painting</span></h2>
+    <div class="creator">Johannes Vermeer (1658)</div>
+    <a class="obj-num" href="https://www.rijksmuseum.nl/en/collection/SK-A-2860" target="_blank">SK-A-2860</a>
+    <div class="query-metadata"><div class="meta-section">
+      <div class="meta-section-label description">Description</div>
+      <div class="meta-desc">Gezicht op huizen in Delft, bekend als 'Het straatje'. De gevels van enkele huizen aan een straat in Delft. Tussen de huizen een steegje waar een vrouw over een wastobbe gebogen staat. In de openstaande deur van het huis rechts zit een vrouw te handwerken, links voor het huis op de stoep twee spelende kinderen.</div>
+    </div><div class="meta-section">
+      <div class="meta-section-label iconclass">Iconclass</div>
+      <div class="meta-content"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a> children's games and plays (+ out of doors (sports, games, etc.)) &middot; <a href="https://iconclass.org/41D44" target="_blank"><code>41D44</code></a> home sewing; repair of clothes &middot; <a href="https://iconclass.org/41A1" target="_blank"><code>41A1</code></a> civic architecture; edifices; dwellings &middot; <a href="https://iconclass.org/25I141" target="_blank"><code>25I141</code></a> street</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="signal-rows">
+  <div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#00838f">Visual</span>
+      <span class="row-count">20 of 21+ results</span>
+    </div>
+    <div class="row-method">The Rijksmuseum&rsquo;s own image-based visual similarity model. 87% of all artworks have digital images.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.907" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/jiVEm/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1</div>
+      <div class="title">Gezicht op huizen in Delft, bekend als 'Het straatje'</div>
+      <div class="creator">Willem Steelink (II) (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.907" target="_blank">RP-P-OB-59.907</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.147" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/FDqdT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2</div>
+      <div class="title">Gezicht op huizen in Delft, bekend als 'Het straatje'</div>
+      <div class="creator">Willem Steelink (II) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.147" target="_blank">RP-P-OB-70.147</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1054" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/fMsJh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3</div>
+      <div class="title">A Street in Amersfoort</div>
+      <div class="creator">Johannes Jelgerhuis</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1054" target="_blank">SK-A-1054</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-47.750" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SSNhA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4</div>
+      <div class="title">Gezicht op huizen in Delft</div>
+      <div class="creator">Johann Wilhelm Kaiser (I) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-47.750" target="_blank">RP-P-OB-47.750</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1982-13" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/YsedL/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5</div>
+      <div class="title">Huizen te Amersfoort</div>
+      <div class="creator">Johannes Jelgerhuis</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1982-13" target="_blank">RP-T-1982-13</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2720" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SyxzL/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6</div>
+      <div class="title">The Conferring of a Degree at the University of Leiden about 1650</div>
+      <div class="creator">Hendrick van der Burch</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2720" target="_blank">SK-A-2720</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-13469" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/QXjEB/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7</div>
+      <div class="title">J. Vermeer - Straatje, Delft</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-13469" target="_blank">RP-F-00-13469</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3887" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/DhYDC/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8</div>
+      <div class="title">Inner Courtyard</div>
+      <div class="creator">Andreas Schelfhout (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3887" target="_blank">SK-A-3887</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-AA-1-7-5009" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/WSChB/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9</div>
+      <div class="title">Gezicht op een hoekpand met trapgevels aan de Driehoekstraat</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-AA-1-7-5009" target="_blank">KOG-AA-1-7-5009</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3084" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/giKuO/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10</div>
+      <div class="title">The Old Gate</div>
+      <div class="creator">Charles Leickert (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3084" target="_blank">SK-A-3084</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1592" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hdmrT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11</div>
+      <div class="title">View of a Town</div>
+      <div class="creator">Jacob Vrel</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1592" target="_blank">SK-A-1592</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-AA-1-10-248" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/wHURp/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12</div>
+      <div class="title">Gezicht op de Sint Olofspoort</div>
+      <div class="creator">Reinier Vinkeles (I) (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-AA-1-10-248" target="_blank">KOG-AA-1-10-248</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-150" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SOvaQ/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#13</div>
+      <div class="title">Figures in a Courtyard behind a House</div>
+      <div class="creator">Pieter de Hooch</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-150" target="_blank">SK-C-150</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1148" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/QQhcG/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#14</div>
+      <div class="title">The Kalvermarkt, The Hague</div>
+      <div class="creator">Jean François Valois</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1148" target="_blank">SK-A-1148</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2388" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/MVoNU/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#15</div>
+      <div class="title">The Zuiderhavendijk, Enkhuizen</div>
+      <div class="creator">Cornelis Springer</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2388" target="_blank">SK-A-2388</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1129" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/RaJFX/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#16</div>
+      <div class="title">View in Dordrecht</div>
+      <div class="creator">Johannes Schoenmakers</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1129" target="_blank">SK-A-1129</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1160" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SUwNp/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#17</div>
+      <div class="title">A Town Gate in Leerdam</div>
+      <div class="creator">Jan Weissenbruch</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1160" target="_blank">SK-A-1160</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-171" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/OVYGI/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#18</div>
+      <div class="title">City View in the Winter</div>
+      <div class="creator">Dirk Jan van der Laan</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-171" target="_blank">SK-C-171</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-681" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/rguTY/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#19</div>
+      <div class="title">The Oude Zijds Herenlogement (Gentlemen's Hotel) in Amsterdam</div>
+      <div class="creator">Gerrit Berckheyde</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-681" target="_blank">SK-A-681</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1899-A-4207X" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/YhMFV/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#20</div>
+      <div class="title">Uitgebrand huis</div>
+      <div class="creator">Jan van der Heyden</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1899-A-4207X" target="_blank">RP-T-1899-A-4207X</a>
+    </div>
+    
+  </div>
+        <a class="see-all-card" href="https://www.rijksmuseum.nl/en/collection/visual/search?objectNodeId=a7dbf937cbd6f7c30f66f8aca4a0207c" target="_blank">
+         See all 21+<br>visual matches<br>on rijksmuseum.nl &rarr;
+       </a>
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#1565c0">Iconclass</span>
+      <span class="row-count">20 results</span>
+    </div>
+    <div class="row-method">Artworks sharing the same <a href='https://iconclass.org' target='_blank'>Iconclass</a> subject codes. Deeper codes (more specific scenes) that appear on fewer artworks contribute more. Single shallow matches are pruned.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.907" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/jiVEm/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 175.90</div>
+      <div class="title">Gezicht op huizen in Delft, bekend als 'Het straatje'</div>
+      <div class="creator">Willem Steelink (II) (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.907" target="_blank">RP-P-OB-59.907</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a> <a href="https://iconclass.org/41D44" target="_blank"><code>41D44</code></a> <a href="https://iconclass.org/25I141" target="_blank"><code>25I141</code></a> <a href="https://iconclass.org/41A1" target="_blank"><code>41A1</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.147" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/FDqdT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 133.90</div>
+      <div class="title">Gezicht op huizen in Delft, bekend als 'Het straatje'</div>
+      <div class="creator">Willem Steelink (II) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.147" target="_blank">RP-P-OB-70.147</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a> <a href="https://iconclass.org/25I141" target="_blank"><code>25I141</code></a> <a href="https://iconclass.org/41A1" target="_blank"><code>41A1</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-115.706" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/LzhfP/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 84.50</div>
+      <div class="title">Buitenspelen als goede vorm van onderwijs</div>
+      <div class="creator">Daniel Nikolaus Chodowiecki (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-115.706" target="_blank">RP-P-OB-115.706</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-115.705" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hBYbh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 84.50</div>
+      <div class="title">Buitenspelen als goede vorm van onderwijs</div>
+      <div class="creator">Daniel Nikolaus Chodowiecki</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-115.705" target="_blank">RP-P-OB-115.705</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1936-515" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/JSBnl/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 84.50</div>
+      <div class="title">Spelende jongens op een Egyptische leeuw van het Capitool in Rome</div>
+      <div class="creator">Carel Christiaan Antony Last (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1936-515" target="_blank">RP-P-1936-515</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-60.535" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/igcjD/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 84.50</div>
+      <div class="title">Spelende apen</div>
+      <div class="creator">Leonard Schenk (possibly)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-60.535" target="_blank">RP-P-OB-60.535</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-21-211" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/BHtfF/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 84.50</div>
+      <div class="title">Jongen speelt met een stokpaard en een meisje met een pop</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-21-211" target="_blank">KOG-ZG-1-21-211</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1907-4126" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/XHYAl/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 84.50</div>
+      <div class="title">Spelende apen</div>
+      <div class="creator">Leonard Schenk (possibly)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1907-4126" target="_blank">RP-P-1907-4126</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1924-78-33" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hdYjB/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 84.50</div>
+      <div class="title">Spelende kinderen in de Nieuwe Teertuinen te Amsterdam</div>
+      <div class="creator">George Hendrik Breitner</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1924-78-33" target="_blank">RP-T-1924-78-33</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1924-59-51" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ezlfH/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 84.50</div>
+      <div class="title">Spelende kinderen in een plantsoen</div>
+      <div class="creator">George Hendrik Breitner</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1924-59-51" target="_blank">RP-T-1924-59-51</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-202.912" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/uNRjT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 84.50</div>
+      <div class="title">Het vrije buitenleven</div>
+      <div class="creator">Jan de Haan (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-202.912" target="_blank">RP-P-OB-202.912</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-202.913" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ghFiy/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 84.50</div>
+      <div class="title">Het vrije buitenleven</div>
+      <div class="creator">Jan de Haan (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-202.913" target="_blank">RP-P-OB-202.913</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-2001-7-1488-6" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/TFcmA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#13 &mdash; 84.50</div>
+      <div class="title">Speelplein voor de jeugd in Heustrich-les-bains bij Spiez, Zwitserland</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-2001-7-1488-6" target="_blank">RP-F-2001-7-1488-6</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-RMA4763" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#14 &mdash; 84.50</div>
+      <div class="title">Henk Ames, Dick Wentzel, schilderijen, gouaches. Hans van Riessen, aardewerk</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-RMA4763" target="_blank">RP-P-RMA4763</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-20532" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#15 &mdash; 84.50</div>
+      <div class="title">Udine. Giardini Ricasoli</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-20532" target="_blank">RP-F-00-20532</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-AA-1-41-45" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hdHUR/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#16 &mdash; 84.50</div>
+      <div class="title">Amsterdamse kinderen spelen in de fontein op het plein voor de beurs</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-AA-1-41-45" target="_blank">KOG-AA-1-41-45</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/43C7(+6)" target="_blank"><code>43C7(+6)</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-835" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/BWtjg/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#17 &mdash; 49.40</div>
+      <div class="title">Gezicht op een straat in Domburg</div>
+      <div class="creator">Carl Wilhelm Bauer (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-835" target="_blank">RP-F-00-835</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/25I141" target="_blank"><code>25I141</code></a> <a href="https://iconclass.org/41A1" target="_blank"><code>41A1</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1913-1172" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ktxes/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#18 &mdash; 49.40</div>
+      <div class="title">Drie figuren zitten voor een huis</div>
+      <div class="creator">James Duffield Harding (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1913-1172" target="_blank">RP-P-1913-1172</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/25I141" target="_blank"><code>25I141</code></a> <a href="https://iconclass.org/41A1" target="_blank"><code>41A1</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1983-403" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/lMDsW/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#19 &mdash; 49.40</div>
+      <div class="title">Drie gezichten op huizen en gebouwen in of bij Brussel</div>
+      <div class="creator">Philip Zilcken (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1983-403" target="_blank">RP-P-1983-403</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/25I141" target="_blank"><code>25I141</code></a> <a href="https://iconclass.org/41A1" target="_blank"><code>41A1</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-2013" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/PcNQa/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#20 &mdash; 49.40</div>
+      <div class="title">Gezicht op de Westerstraat te Enkhuizen</div>
+      <div class="creator">attributed to anoniem (Monumentenzorg), A.J.M. Mulder (possibly)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-2013" target="_blank">RP-F-00-2013</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/25I141" target="_blank"><code>25I141</code></a> <a href="https://iconclass.org/41A1" target="_blank"><code>41A1</code></a></div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#e65100">Description</span>
+      <span class="row-count">20 results</span>
+    </div>
+    <div class="row-method">Artworks with semantically similar Dutch catalogue descriptions. Shared generic structural phrases, (&ldquo;Links een X, rechts een Y&rdquo;) can artificially inflate scores for visually dissimilar works.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.147" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/FDqdT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 1.00</div>
+      <div class="title">Gezicht op huizen in Delft, bekend als 'Het straatje'</div>
+      <div class="creator">Willem Steelink (II) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.147" target="_blank">RP-P-OB-70.147</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gezicht op huizen in Delft, bekend als 'Het straatje'. De gevels van enkele huizen aan een straat in Delft. Tussen de huizen een steegje waar een vrouw over een […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.907" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/jiVEm/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 0.97</div>
+      <div class="title">Gezicht op huizen in Delft, bekend als 'Het straatje'</div>
+      <div class="creator">Willem Steelink (II) (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.907" target="_blank">RP-P-OB-59.907</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gezicht op huizen in Delft, bekend als 'Het straatje'. De gevels van enkele huizen aan een straat in Delft. Tussen de huizen een steegje waar een vrouw over een […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-47.750" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SSNhA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 0.84</div>
+      <div class="title">Gezicht op huizen in Delft</div>
+      <div class="creator">Johann Wilhelm Kaiser (I) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-47.750" target="_blank">RP-P-OB-47.750</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De gevels van enkele huizen aan een straat in Delft. Tussen de huizen een steegje waar een vrouw over een wastobbe gebogen staat. In de openstaande deur van het […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1054" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/fMsJh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 0.72</div>
+      <div class="title">A Street in Amersfoort</div>
+      <div class="creator">Johannes Jelgerhuis</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1054" target="_blank">SK-A-1054</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Een straat in Amersfoort met een huis met een trapgevel. Een vrouw kijkt over de onderdeur naar buiten waar kinderen spelen. Links op de voorgrond een vrouw met […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1592" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hdmrT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 0.70</div>
+      <div class="title">View of a Town</div>
+      <div class="creator">Jacob Vrel</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1592" target="_blank">SK-A-1592</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Stadsgezicht. Gezicht door een smalle straat met aanweerszijden huizen. Een vrouw zit op een bankje voor een huis, op straat spreken twee mannen met elkaar.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-850-16(R)" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/HYBYM/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 0.69</div>
+      <div class="title">Figuren voor een stalletje</div>
+      <div class="creator">Jan de Waardt</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-850-16(R)" target="_blank">NG-850-16(R)</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Vrouw met omslagdoek en mutsje; man met pet op de rug gezien; vrouw in het zwart, frontaal; man met pet op de rug gezien. De mannen hebben de handen in de […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2011-36-29" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 0.69</div>
+      <div class="title">Huisgevel nummer 68</div>
+      <div class="creator">Jan Strube (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2011-36-29" target="_blank">RP-P-2011-36-29</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gevel van een huis met links een venster en rechts twee deuren met een trap.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2897" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/mtCEL/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 0.69</div>
+      <div class="title">View in a Village</div>
+      <div class="creator">Eduard Karsen</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2897" target="_blank">SK-A-2897</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Dorpsgezicht. Gezicht op enkele huizen gelegen aan een vaart. Een platte schuit ligt bij een huis aangemeerd, rechts hangt een vrouw wasgoed over een schutting.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-23.793" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/awiMf/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 0.69</div>
+      <div class="title">Stadhuis van Delft</div>
+      <div class="creator">Robbert Muys (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-23.793" target="_blank">RP-P-OB-23.793</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Het stadhuis van Delft met op de voorgrond een koets, een ruiter en andere figuren.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1931-2137" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 0.69</div>
+      <div class="title">Achterbuurt</div>
+      <div class="creator">Jan Pzn. Franken (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1931-2137" target="_blank">RP-P-1931-2137</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Een vrouw staand in een steeg. Links een huizenrij, rechts een muur.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-28.431" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/JYqBs/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 0.69</div>
+      <div class="title">Huis op stadswal</div>
+      <div class="creator">attributed to Johannes Hilverdink</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-28.431" target="_blank">RP-P-OB-28.431</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Het huis heeft een trapgevel. Op de trap voor het huis en op de straat lopen figuren.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1997-329" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 0.69</div>
+      <div class="title">Boterbrug en stadhuistoren in Delft</div>
+      <div class="creator">Johannes Mattheus Graadt van Roggen (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1997-329" target="_blank">RP-P-1997-329</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Op de voorgrond de Boterbrug in Delft. Op de achtergrond huizen en de stadhuistoren.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.402" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/QojgY/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#13 &mdash; 0.69</div>
+      <div class="title">Landschap met huis met hoge trap naar de eerste verdieping</div>
+      <div class="creator">Adrianus Serné (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.402" target="_blank">RP-P-OB-59.402</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gezicht op een huis met hoge trap naar de eerste verdieping. Op de voorgrond een vrouw met kind op de arm en een kind naast haar. Links een man in een sloep en […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3527" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/pQAeD/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#14 &mdash; 0.68</div>
+      <div class="title">Neighborhood Street in Rijswijk near The Hague</div>
+      <div class="creator">George Hendrik Breitner (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3527" target="_blank">SK-A-3527</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Buurtje in Rijswijk. Gezicht door een straatje tussen huizen.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1996-10-69-2(V)" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/amcol/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#15 &mdash; 0.68</div>
+      <div class="title">Straatgezichten</div>
+      <div class="creator">Adrianus Eversen</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1996-10-69-2(V)" target="_blank">RP-T-1996-10-69-2(V)</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Links een gezicht op een straat met aan weerszijden gebouwen. In het midden een figuur. Rechts huizen. Verso van een losse tekening uit een schetsboek met 69 […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-46.363" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/OabLc/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#16 &mdash; 0.68</div>
+      <div class="title">Oostpoort te Delft, 1757</div>
+      <div class="creator">Paulus van Liender (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-46.363" target="_blank">RP-P-OB-46.363</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gezicht op de Oostpoort in Delft, bestaande uit een land- en waterpoort. Rechts op de voorgrond lopen twee figuren op een weg.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-46.362" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/rKojj/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#17 &mdash; 0.68</div>
+      <div class="title">Oostpoort te Delft, 1757</div>
+      <div class="creator">Paulus van Liender (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-46.362" target="_blank">RP-P-OB-46.362</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gezicht op de Oostpoort in Delft, bestaande uit een land- en waterpoort. Rechts op de voorgrond lopen twee figuren op een weg.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1996-10-67(V)" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/vHdfU/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#18 &mdash; 0.68</div>
+      <div class="title">Stadsgezicht in Delft</div>
+      <div class="creator">Adrianus Eversen</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1996-10-67(V)" target="_blank">RP-T-1996-10-67(V)</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gezicht op gebouwen aan een straat of gracht te Delft. Rechts struikgewas en een boom. Blad 67 verso uit een schetsboek met 69 bladen vervaardigd in de omgeving […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2010-221-1514" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/PVAIV/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#19 &mdash; 0.68</div>
+      <div class="title">Amersfoort</div>
+      <div class="creator">Jo Bezaan (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2010-221-1514" target="_blank">RP-P-2010-221-1514</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gezicht op huizen, met rechts een gracht en links een vrouw.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2969" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/PXTAs/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#20 &mdash; 0.68</div>
+      <div class="title">Stadsgezicht</div>
+      <div class="creator">Ferdinand Carl Sierich</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2969" target="_blank">SK-A-2969</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Stadsgezicht. Gezicht op een grachtje achter huizen in een stad. Een vrouw staande op de kade maakt een praatje met een man in een boot.</div></div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#37474f">Pooled</span>
+      <span class="row-count">2 results</span>
+    </div>
+    <div class="row-method">Artworks appearing in <strong>3+</strong> of the 3 forms of similarity above. The scores and icons show which and how many forms agree.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.907" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/jiVEm/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 3.00 <span class="mode-badge" style="background:#00838f">V</span><span class="mode-badge" style="background:#1565c0">IC</span><span class="mode-badge" style="background:#e65100">Desc</span></div>
+      <div class="title">Gezicht op huizen in Delft, bekend als 'Het straatje'</div>
+      <div class="creator">Willem Steelink (II) (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-59.907" target="_blank">RP-P-OB-59.907</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.147" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/FDqdT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 3.00 <span class="mode-badge" style="background:#00838f">V</span><span class="mode-badge" style="background:#1565c0">IC</span><span class="mode-badge" style="background:#e65100">Desc</span></div>
+      <div class="title">Gezicht op huizen in Delft, bekend als 'Het straatje'</div>
+      <div class="creator">Willem Steelink (II) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.147" target="_blank">RP-P-OB-70.147</a>
+    </div>
+    
+  </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Generated by <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" target="_blank">rijksmuseum-mcp+</a> find_similar | 2026-03-28 09:21
+</div>
+
+</body>
+</html>
