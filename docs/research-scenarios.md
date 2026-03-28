@@ -11,17 +11,17 @@
 - [Semantic Search](#semantic-search)
 - [Provenance Research](#provenance-research)
 
-27 scenarios across 10 sections.
-
 ### Searching the Collection
 
 The `search_artwork` tool combines [39 filters](search-parameters.md) — from basic fields like creator, type, and date to vocabulary-backed parameters covering subject matter, production place, depicted persons, inscriptions, provenance, dimension ranges, creator demographics, attribution qualifiers, and place hierarchy — that can be composed to answer questions no single filter handles alone. Results are ranked by relevance (BM25) when text search filters are active (title, description, inscription, narrative, provenance), by geographic proximity for spatial queries, and by importance (a composite score reflecting image availability, curatorial attention, and metadata richness) for vocabulary-filter queries — so the most significant works surface first.
 
 For aggregate questions — counts, distributions, cross-tabulations — `collection_stats` answers in a single call what would otherwise require multiple `search_artwork` queries with `compact: true`. It supports the same artwork filters plus provenance-specific dimensions (transfer type, party, location, decade).
 
+The links following each research question show how the query was answered in Claude Opus. Responses that include an inline image viewer or visualisations require the use of a [paid subscription](https://claude.com/pricing) from Anthropic. Without this, only the written parts of the response will be shown. For some queries, 'extended thinking' was been enabled in Claude Opus allowing one to trace (to some degree) the model's step-by-step 'reasoning' during a task. Note: During testing, for these research questions, the rijksmuseum-mcp+ server was called "Rijksmuseum HTTP".
+
 #### 1. Mapping an Artist's Output Across Media
 
-*What is the actual distribution of Rembrandt's works in the Rijksmuseum across painting, printmaking, and drawing — and how does this challenge popular perceptions of him as primarily a painter?*
+*What is the actual distribution of Rembrandt's works in the Rijksmuseum across painting, printmaking, and drawing — and how does this challenge popular perceptions of him as primarily a painter?* [Link](https://claude.ai/share/ad43a233-e48a-49ad-bd72-bd7828a0036c)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `creator: "Rembrandt"` returns the full distribution across all media in a single call
@@ -32,7 +32,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 2. Material Culture Beyond the Canon
 
-*What is the scope of the Rijksmuseum's non-European holdings? How are Indonesian, Japanese, Chinese, and Indian objects distributed across media, and where were they produced?*
+*What is the scope of the Rijksmuseum's non-European holdings? How are Indonesian, Japanese, Chinese, and Indian objects distributed across media, and where were they produced?* [Link](https://claude.ai/share/b4a0033d-4391-4040-8626-8630b08e2f8c)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `productionPlace: "Japan"` returns the full media distribution for Japanese-produced works in a single call — repeat for `"China"`, `"Java"`, `"India"`
@@ -44,7 +44,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 3. Tracking the Adoption of Artistic Techniques
 
-*When did etching overtake engraving as the dominant printmaking technique in the Netherlands, and how do lesser-known techniques — mezzotint, aquatint, woodcut — appear in the Rijksmuseum collection over time?*
+*When did etching overtake engraving as the dominant printmaking technique in the Netherlands, and how do lesser-known techniques — mezzotint, aquatint, woodcut — appear in the Rijksmuseum collection over time?* [Link](https://claude.ai/share/85e48003-9abe-43fb-8088-0b57aeb7b2b1)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "decade"`, `type: "print"`, `technique: "engraving"` returns the full chronological distribution of engravings — repeat with `technique: "etching"` to compare the two curves
@@ -62,7 +62,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 4. Mapping the Visual Rhetoric of the Stadholders
 
-*How were the successive Princes of Orange visually represented across different media, and can we trace shifts in propaganda strategy from Maurice to William III?*
+*How were the successive Princes of Orange visually represented across different media, and can we trace shifts in propaganda strategy from Maurice to William III?* [Link](https://claude.ai/share/3db41904-f9ea-43ba-bf45-7d210213d71e)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `depictedPerson: "Maurice"` returns the full media distribution in a single call — repeat for `"Frederick Henry"`, `"William II"`, `"William III"`
@@ -74,7 +74,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 5. Production Geography and the Network of Printmaking Cities
 
-*Which cities dominate the Rijksmuseum's printmaking holdings, and how do the principal printmakers differ between Haarlem, Amsterdam, Leiden, and Antwerp?*
+*Which cities dominate the Rijksmuseum's printmaking holdings, and how do the principal printmakers differ between Haarlem, Amsterdam, Leiden, and Antwerp?* [Link](https://claude.ai/share/412abe3e-77e6-4296-8ba2-1d53a425cf17)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "productionPlace"`, `type: "print"` returns the top print-producing cities ranked by count
@@ -87,7 +87,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 6. Iconographic Traditions Across Media
 
-*How does the iconography of *vanitas* function differently in painting versus printmaking? Do the same symbolic conventions — skulls, hourglasses, extinguished candles, musical instruments — appear with equal frequency in both media?*
+*How does the iconography of *vanitas* function differently in painting versus printmaking? Do the same symbolic conventions — skulls, hourglasses, extinguished candles, musical instruments — appear with equal frequency in both media?* [Link](https://claude.ai/share/94d6f781-1328-46f3-8ca9-0723475f61db)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `subject: "vanitas"` to compare the distribution across painting, print, and drawing in a single call
@@ -106,7 +106,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 7. Dimensions as Evidence for Workshop Practice
 
-*Were there standard panel sizes used in Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?*
+*Were there standard panel sizes used in Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?* [Link](https://claude.ai/share/51f0d0c8-bb82-4e84-aa7e-22d5eb386fdf)
 
 **How the tools enable it:**
 - `search_artwork` with `type: "painting"`, `material: "panel"`, and dimension ranges (e.g. `minHeight: 40`, `maxHeight: 50`, `minWidth: 30`, `maxWidth: 40`) to find panels of a specific size cluster
@@ -117,7 +117,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 8. Credit Lines and Acquisition Context
 
-*How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, or state allocation, and when?*
+*How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, or state allocation, and when?* [Link](https://claude.ai/share/094cc47e-6381-49ab-a22a-a098254a3945)
 
 **How the tools enable it:**
 - `search_artwork` with `creditLine: "purchase"` and `creator: "Rembrandt"` to find works acquired by purchase — repeat with `"bequest"`, `"gift"`, `"loan"`
@@ -129,7 +129,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 9. Women Artists Across Centuries and Media
 
-*What is the representation of women artists in the Rijksmuseum's collection? How does their presence vary across centuries and media — and which women produced the most works in the collection?*
+*What is the representation of women artists in the Rijksmuseum's collection? How does their presence vary across centuries and media — and which women produced the most works in the collection?* [Link](https://claude.ai/share/35fdb5da-37f5-4f74-b34d-143a330669d8)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `creatorGender: "female"` returns the full media distribution for women artists in a single call — compare with `creatorGender: "male"` for the ratio
@@ -149,7 +149,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 10. Building a Literature Review
 
-*What is the complete published scholarship on Jan Asselijn's *The Threatened Swan*, and how has its interpretation changed over time?*
+*What is the complete published scholarship on Jan Asselijn's *The Threatened Swan*, and how has its interpretation changed over time?* [Link](https://claude.ai/share/0fad67bf-8aad-4d30-8d01-ee9196b2830a)
 
 **How the tools enable it:**
 - `get_artwork_bibliography` with `objectNumber: "SK-A-4"` and `full: true`
@@ -160,7 +160,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 11. Iconographic Depth and Scholarly Attention
 
-*Which depictions of the Crucifixion in the Rijksmuseum have generated the most scholarly literature, and how does the depth of scholarship on major biblical scenes compare across Iconclass categories?*
+*Which depictions of the Crucifixion in the Rijksmuseum have generated the most scholarly literature, and how does the depth of scholarship on major biblical scenes compare across Iconclass categories?* [Link](https://claude.ai/share/eb194bf0-1e04-443e-92b8-c8baac69f27a)
 
 **How the tools enable it:**
 - `search_artwork` with `iconclass: "73D82"` (Crucifixion) to find all Crucifixion scenes
@@ -178,7 +178,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 12. Technical Art History at the Brushstroke Level
 
-*What materials, technique, and support were used in Rembrandt's *The Night Watch*, what are its exact dimensions, and what inscriptions does it carry? Open the high-resolution image for close examination of the paint surface.*
+*What materials, technique, and support were used in Rembrandt's *The Night Watch*, what are its exact dimensions, and what inscriptions does it carry? Open the high-resolution image for close examination of the paint surface.* [Link](https://claude.ai/share/344b8837-139a-4b2a-8846-990a88e6a912)
 
 **How the tools enable it:**
 - `get_artwork_details` with `objectNumber: "SK-C-5"` returns materials, technique statement, structured dimensions, and inscriptions
@@ -189,7 +189,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 13. Comparative Detail Analysis Across Works
 
-*How many paintings by Leiden-born painters versus Haarlem-born painters does the Rijksmuseum hold, and who are the leading artists from each school? Open a representative work from each — a Gerrit Dou and a Frans Hals — for side-by-side examination at high zoom.*
+*How many paintings by Leiden-born painters versus Haarlem-born painters does the Rijksmuseum hold, and who are the leading artists from each school? Open a representative work from each — a Gerrit Dou and a Frans Hals — for side-by-side examination at high zoom.* [Link](https://claude.ai/share/383f023a-a3b3-449e-bedf-773525ae9c25)
 
 **How the tools enable it:**
 - `search_artwork` with `birthPlace: "Leiden"`, `profession: "painter"`, `type: "painting"`, `compact: true` for a count — repeat with `birthPlace: "Haarlem"`
@@ -200,7 +200,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 14. Reading Inscriptions and Examining Details with AI Vision
 
-*Open Utamaro's *Waitress at the Matsu Higashi House* (RP-P-1956-605) and read the Japanese text on the print — the catalogue has no transcribed inscriptions for this work. Highlight the text areas you find and tell me if you notice anything missing that you'd expect on a print of this period.*
+*Open Utamaro's *Waitress at the Matsu Higashi House* (RP-P-1956-605) and read the Japanese text on the print — the catalogue has no transcribed inscriptions for this work. Highlight the text areas you find and tell me if you notice anything missing that you'd expect on a print of this period.* [Link](https://claude.ai/share/00ae1128-7d23-4b97-9f64-d00a26c434ba)
 
 **How the tools enable it:**
 - `get_artwork_details` confirms the inscriptions field is empty — the catalogue has not transcribed the Japanese text
@@ -214,7 +214,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 15. Reproductive Prints and Their Painted Sources
 
-*How faithfully do reproductive prints translate the compositions of their painted sources? Find prints made "after" a specific painting and compare the print with the original at high magnification.*
+*How faithfully do reproductive prints translate the compositions of their painted sources? Find prints made "after" a specific painting and compare the print with the original at high magnification.* [Link](https://claude.ai/share/e822477d-6039-4103-8361-7ef77c7a523b)
 
 **How the tools enable it:**
 - `search_artwork` with `productionRole: "after painting by"` and `creator: "Rembrandt"` to find reproductive prints based on Rembrandt's compositions
@@ -232,7 +232,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 16. Tracing Career Evolution Through Subject and Place
 
-*Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?*
+*Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?* [Link](https://claude.ai/share/7f25a37c-f8e2-488d-9d19-9aba27f932af)
 
 **How the tools enable it:**
 - `search_artwork` with `creator: "Jacob van Ruisdael"`, then sort results by date
@@ -243,7 +243,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 17. Medium Shifts Within a Career
 
-*George Hendrik Breitner worked as a painter, draughtsman, and photographer. Does the timeline of his works in the Rijksmuseum reveal a clear sequence — drawing first, then painting, then photography — or did he work across media simultaneously?*
+*George Hendrik Breitner worked as a painter, draughtsman, and photographer. Does the timeline of his works in the Rijksmuseum reveal a clear sequence — drawing first, then painting, then photography — or did he work across media simultaneously?* [Link](https://claude.ai/share/9c62f373-2dfc-4a63-bd87-26d376b1cac3)
 
 **How the tools enable it:**
 - `search_artwork` with `profession: "painter"` and `creator: "Breitner"` to confirm his multi-profession classification
@@ -261,7 +261,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 18. Reconstructing Past Exhibitions
 
-*What objects were included in Rijksmuseum exhibitions related to Rembrandt, and how did the curatorial selection construct a narrative?*
+*What objects were included in Rijksmuseum exhibitions related to Rembrandt, and how did the curatorial selection construct a narrative?* [Link](https://claude.ai/share/03dad0c4-731a-411a-9223-95ead26a5917)
 
 **How the tools enable it:**
 - `list_curated_sets` with a keyword filter to find the relevant set
@@ -272,7 +272,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 19. Finding Thematic Connections Curators Have Already Made
 
-*Has the Rijksmuseum curated any groupings related to Dutch maritime trade, and what objects did they consider central to that story?*
+*Has the Rijksmuseum curated any groupings related to Dutch maritime trade, and what objects did they consider central to that story?* [Link](https://claude.ai/share/88ca435e-9854-457e-9738-a8f1423b0217)
 
 **How the tools enable it:**
 - `list_curated_sets` with `query: "maritime"` or `query: "trade"` or `query: "VOC"`
@@ -282,7 +282,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 20. Assessing Collection Depth for Grant Applications
 
-*How many Japanese prints does the Rijksmuseum hold, what curated sets relate to Japanese art, what date range do the holdings cover, and which artists are best represented?*
+*How many Japanese prints does the Rijksmuseum hold, what curated sets relate to Japanese art, what date range do the holdings cover, and which artists are best represented?* [Link](https://claude.ai/share/303fd236-da49-4e97-a7c0-ca1b484b3bc1)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "creator"`, `productionPlace: "Japan"`, `type: "print"` to identify the most prominent printmakers and get the total count
@@ -300,7 +300,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 21. Tracking New Acquisitions in a Research Area
 
-*Has the Rijksmuseum added any new 17th-century paintings to its collection in the past six months? If so, who are the artists and what are the subjects?*
+*Has the Rijksmuseum added any new 17th-century paintings to its collection in the past six months? If so, who are the artists and what are the subjects?* [Link](https://claude.ai/share/beb8831b-b798-44b1-8347-fae35317f466)
 
 **How the tools enable it:**
 - `get_recent_changes` with a date range covering the last six months
@@ -317,7 +317,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 22. Discovering Thematic Connections Beyond Formal Cataloguing
 
-*Which artworks in the Rijksmuseum engage with the theme of cultural exchange between Europe and Asia — not just objects *from* Asia or *depicting* Asia, but works where the mixing of cultures is the subject?*
+*Which artworks in the Rijksmuseum engage with the theme of cultural exchange between Europe and Asia — not just objects *from* Asia or *depicting* Asia, but works where the mixing of cultures is the subject?* [Link](https://claude.ai/share/8316d9dc-27ac-4c40-a42f-b2c355df8b35)
 
 **How the tools enable it:**
 - `semantic_search` with `query: "cultural exchange between East and West"` — returns artworks ranked by how closely their catalogued text relates to this concept
@@ -329,7 +329,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 23. Atmospheric and Emotional Concepts in Art
 
-*Can we find artworks in the Rijksmuseum that evoke a sense of solitude or isolation — a single figure in an empty landscape, a lone ship on a vast sea, an abandoned building?*
+*Can we find artworks in the Rijksmuseum that evoke a sense of solitude or isolation — a single figure in an empty landscape, a lone ship on a vast sea, an abandoned building?* [Link](https://claude.ai/share/32e517fd-849e-4289-b5b9-13f88b0e6a05)
 
 **How the tools enable it:**
 - `semantic_search` with `query: "loneliness and isolation in a vast empty space"`
@@ -341,7 +341,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 24. Cross-Language Conceptual Search
 
-*Ich suche Blumenstillleben — Gemälde von Blumensträußen in einer Vase, besonders aus dem 17. Jahrhundert. Welche Werke hat das Rijksmuseum?*
+*Ich suche Blumenstillleben — Gemälde von Blumensträußen in einer Vase, besonders aus dem 17. Jahrhundert. Welche Werke hat das Rijksmuseum?* [Link](https://claude.ai/share/5e2da910-6f33-43b7-94a4-689da7aa16f1)
 
 **How the tools enable it:**
 - `semantic_search` with `query: "Blumenstrauß in einer Vase"` — the multilingual embedding model handles the German query against Dutch and English catalogue text
@@ -359,7 +359,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 25. Wartime Transfers and Provenance Gaps
 
-*Find artworks that changed hands between 1933 and 1945 through confiscation or restitution, and show me their full ownership chains. Which ones have gaps in their provenance during this period?*
+*Find artworks that changed hands between 1933 and 1945 through confiscation or restitution, and show me their full ownership chains. Which ones have gaps in their provenance during this period?* [Link](https://claude.ai/share/b6c4a4c2-de36-4f14-bc20-7a12a2832092)
 
 **How the tools enable it:**
 - `search_provenance` with `transferType: "confiscation"`, `dateFrom: 1933`, `dateTo: 1945` to find wartime confiscations — repeat with `transferType: "restitution"` for post-war returns
@@ -372,7 +372,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 26. Generational Ownership and Collection Dispersal
 
-*Find artworks that passed through four or more generations by descent within a single family, then were sold at auction. How long did these family collections typically survive before dispersal?*
+*Find artworks that passed through four or more generations by descent within a single family, then were sold at auction. How long did these family collections typically survive before dispersal? [Link](https://claude.ai/share/fb01bd2b-c6fb-4a5b-af74-05fb32ddd731)
 
 **How the tools enable it:**
 - `search_provenance` with `layer: "periods"`, `acquisitionMethod: "by_descent"`, `minDuration: 80`, `sortBy: "duration"`, `sortOrder: "desc"` to find the longest-held family collections (80+ years approximates four generations)
@@ -385,7 +385,7 @@ For aggregate questions — counts, distributions, cross-tabulations — `collec
 
 #### 27. Art Dealers as Intermediaries
 
-*Which art dealers appear as both buyers and sellers in the Rijksmuseum provenance records? For each, show me what they sold to the museum versus what they bought from private collectors, and the price ranges involved.*
+*Which art dealers appear as both buyers and sellers in the Rijksmuseum provenance records? For each, show me what they sold to the museum versus what they bought from private collectors, and the price ranges involved.* [Link](https://claude.ai/share/59acc3af-dce5-428e-981c-3fdb8673371d)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "party"`, `hasProvenance: true` to identify the most frequently appearing parties across all provenance records
