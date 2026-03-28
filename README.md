@@ -66,7 +66,7 @@ A search for artworks `similar to` other artworks creates an interactive compari
 
 5. **Analyse provenance events** (experimental)
 
-The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the AAM standard. rijksmuseum-mcp+ parses these narratives into over 100,000 structured events following a CMOA/PLOD-aligned vocabulary, making them searchable by party name, transfer type (sale, gift, bequest, inheritance, confiscation, restitution, and others), date range, location, and price in the original historical currency. This enables queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries.
+The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the [AAM punctuation convention](https://www.museumprovenance.org/pages/standard_v1/). rijksmuseum-mcp+ [parses](/docs/rijksmuseum-mcp+/references/provenance-patterns.md) these narratives into over 100,000 structured events with a [CMOA-aligned transfer vocabulary](https://www.museumprovenance.org/reference/acquisition_methods/), making them searchable by party name, transfer type (sale, gift, bequest, inheritance, confiscation, restitution, and others), date range, location, and price in the original historical currency. This enables queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries.
 
 6. **Research skill package** (experimental)
 
@@ -84,7 +84,92 @@ Note to developers: the rijksmuseum-mcp+ server can also be run locally in STDIO
 
 ## How it works
 
-`to be added`. Here are references to the available [search parameters](docs/search-parameters.md) and [metadata categories](docs/metadata-categories.md). These [diagrams](docs/mcp-workflow-diagram.md) illustrate the structure and flow of information when using rijksmuseum-mcp+.
+When you submit your question, the AI assistant decides which combination of [tools](/docs/available-tools.md) and [search parameters](/docs/mcp-tool-parameters.md) provided by rijksmuseum-mcp+ will best answer it from the museum's [metadata](/docs/metadata-categories.md). It might [search](/docs/search-parameters.md) the collection by structured filters (`search_artwork`), look up an artwork's full metadata (`get_artwork_details`), query ownership history (`search_provenance`), or find works by meaning rather than keyword (`semantic_search`) — often chaining several tools in sequence, each result informing the next. Most queries go directly to a vocabulary database built from a periodic harvest of the museum's collection records, while concept-based queries are routed through precomputed embeddings for semantic similarity search. The results come back as structured data, which the AI interprets, contextualises, and presents in natural language (where requested alongside an artwork displayed in an interactive deep-zoom image viewer). Crucially, at each step, the AI can combine this retrieved data with its own background knowledge — about artists, periods, iconographic traditions, and historical context — to go beyond what the museum's metadata alone can provide.
+
+rijksmuseum-mcp+ draws on three different data sources: a [public API](https://data.rijksmuseum.nl/docs/search) to the collections provided by the Rijksmuseum, metadata harvested from the museum's [Linked Open Data](https://data.rijksmuseum.nl/docs/data-dumps/) and [OAI-PMH](https://data.rijksmuseum.nl/docs/oai-pmh/) interfaces, and public [Iconclass](https://iconclass.org) data. This means the AI assistant often needs to route queries through multiple tools and data sources to answer a single question (the so-called 'agentic loop'). Because rijksmuseum-mcp+ maintains its own copy of Rijksmuseum and IconClass metadata , it can store, enrich, and organise this in ways that aid research on the collections. For example:
+
+- indexing curated metadata not exposed through the museum's search interface
+- generating embeddings for semantic search by meaning and concept
+- geocoding toponyms with existing place identifiers for proximity and region-based search
+- parsing provenance texts into structured ownership chains with events, parties, prices, and dates
+- comparing artworks across multiple modalities of similarity
+
+In essence, rijksmuseum-mcp+ trades the conceptual simplicity of a traditional search interface where you formulate a query, receive results, and interpret them yourself for the more powerful exploration modalities made possible through the mediation of an AI assistant.
+
+```mermaid
+flowchart LR
+    User["You"] <-->|conversation| AI["AI Assistant"]
+
+    AI <-->|"MCP tool calls
+    (agentic loop)"| Server["rijksmuseum-mcp+
+    15 tools"]
+
+    Server --> Search["Search & Discovery
+    structured filters,
+    semantic search,
+    Iconclass lookup,
+    collection statistics"]
+
+    Server --> Details["Details & Metadata
+    Linked Art resolution,
+    bibliography,
+    provenance chains,
+    similarity comparison"]
+
+    Server --> Images["Image Inspection
+    deep-zoom viewer,
+    region crops for AI vision,
+    overlay annotations"]
+
+    Search --> VocabDB[("Vocab DB
+    832K artworks
+    194K vocab terms
+    13.7M mappings")]
+    Search --> EmbeddingsDB[("Embeddings DB
+    832K vectors
+    semantic search")]
+    Search --> IconclassDB[("Iconclass DB
+    40K notations")]
+    Details --> LinkedArt["Linked Art API
+    id.rijksmuseum.nl"]
+    Details --> VocabDB
+    Images --> IIIF["IIIF Image API
+    iiif.micr.io"]
+```
+
+**The agentic loop:** the AI assistant doesn't make one call to the MCP server and stop — it chains tools iteratively, each result informing the next. A single question like *"show me how Vermeer uses light"* might trigger:
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant AI
+    participant MCP as rijksmuseum-mcp+
+
+    You->>AI: "Show me how Vermeer uses light"
+
+    AI->>MCP: search_artwork(creator: "Vermeer", type: "painting")
+    MCP-->>AI: 35 paintings found
+
+    AI->>MCP: get_artwork_details("SK-A-2860")
+    MCP-->>AI: The Milkmaid — title, date, materials, description…
+
+    AI->>MCP: get_artwork_image("SK-A-2860")
+    MCP-->>AI: interactive deep-zoom viewer opened for you
+
+    AI->>MCP: inspect_artwork_image("SK-A-2860", region: "full")
+    MCP-->>AI: base64 image (AI can see the painting)
+
+    AI->>MCP: inspect_artwork_image("SK-A-2860", region: "pct:30,10,40,50")
+    MCP-->>AI: cropped detail of the light from the window
+
+    AI->>MCP: navigate_viewer(commands: [{action: "add_overlay", ...}])
+    MCP-->>AI: overlay placed, viewer zoomed to region
+
+    AI->>You: "Here's how Vermeer uses a single light source…"
+```
+## Technical notes
+
+For local setup (stdio or HTTP), deployment, architecture, data sources, and configuration, see the [technical guide](/docs/technical-guide.md).
 
 ## Roadmap
 
@@ -130,7 +215,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows. A `CITA
   author    = {Bosse, Arno},
   title     = {{rijksmuseum-mcp+}},
   year      = {2026},
-  version   = {0.20},
+  version   = {0.23},
   publisher = {Research and Infrastructure Support (RISE), University of Basel},
   url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
   orcid     = {0000-0003-3681-1289},
