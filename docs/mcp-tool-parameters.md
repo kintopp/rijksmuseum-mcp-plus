@@ -116,6 +116,16 @@ Aggregate statistics, counts, and distributions across the collection. Returns f
 | `material` | Filter by material |
 | `technique` | Filter by technique |
 | `creator` | Filter by creator (partial match) |
+| `productionPlace` | Filter by production place (partial match) |
+| `depictedPerson` | Filter by depicted person (partial match) |
+| `depictedPlace` | Filter by depicted place (partial match) |
+| `subject` | Filter by subject (partial match on Iconclass labels) |
+| `iconclass` | Filter by exact Iconclass notation code (e.g. `73D82`) |
+| `collectionSet` | Filter by curated set name (partial match) |
+| `creatorGender` | Filter by creator gender: `male` or `female` |
+| `creatorBornAfter` | Filter to creators born in or after this year |
+| `creatorBornBefore` | Filter to creators born in or before this year |
+| `imageAvailable` | Restrict to artworks with a digital image |
 | `creationDateFrom` | Earliest creation year |
 | `creationDateTo` | Latest creation year |
 | `hasProvenance` | Restrict to artworks with provenance records |

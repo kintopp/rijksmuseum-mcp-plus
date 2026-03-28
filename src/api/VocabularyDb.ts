@@ -359,8 +359,14 @@ export interface CollectionStatsParams {
   creator?: string;
   productionPlace?: string;
   depictedPerson?: string;
+  depictedPlace?: string;
   subject?: string;
+  iconclass?: string;
+  collectionSet?: string;
   creatorGender?: string;
+  creatorBornAfter?: number;
+  creatorBornBefore?: number;
+  imageAvailable?: boolean;
   creationDateFrom?: number;
   creationDateTo?: number;
   // Provenance filters
@@ -472,19 +478,24 @@ const VOCAB_FILTERS: VocabFilter[] = [
 /** Simplified vocab filter definition for collection_stats. */
 interface StatsVocabFilter {
   key: keyof CollectionStatsParams;
-  field: string;
+  fields: string[];
   vocabType?: string;
+  /** Match on `notation` column instead of `label_en` (for Iconclass codes). */
+  exactNotation?: boolean;
 }
 
 /** Vocab filters available on collection_stats. Subset of VOCAB_FILTERS with simpler matching. */
 const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
-  { key: "type",            field: "type" },
-  { key: "material",        field: "material" },
-  { key: "technique",       field: "technique" },
-  { key: "creator",         field: "creator" },
-  { key: "productionPlace", field: "spatial",  vocabType: "place" },
-  { key: "depictedPerson",  field: "subject",  vocabType: "person" },
-  { key: "subject",         field: "subject" },
+  { key: "type",            fields: ["type"] },
+  { key: "material",        fields: ["material"] },
+  { key: "technique",       fields: ["technique"] },
+  { key: "creator",         fields: ["creator"] },
+  { key: "productionPlace", fields: ["spatial"],            vocabType: "place" },
+  { key: "depictedPerson",  fields: ["subject"],            vocabType: "person" },
+  { key: "depictedPlace",   fields: ["subject", "spatial"], vocabType: "place" },
+  { key: "subject",         fields: ["subject"] },
+  { key: "iconclass",       fields: ["subject"],  exactNotation: true },
+  { key: "collectionSet",   fields: ["collection_set"],     vocabType: "set" },
 ];
 
 /**
@@ -1909,44 +1920,61 @@ export class VocabularyDb {
 
     // Artwork vocab filters — data-driven to avoid copy-paste.
     // Uses FTS5 when available (50-100x faster than LIKE '%...%' on 194K vocab terms).
-    for (const { key, field, vocabType } of STATS_VOCAB_FILTERS) {
+    // All paths use the two-step subquery pattern (narrow vocab first, then index-lookup on mappings).
+    for (const { key, fields, vocabType, exactNotation } of STATS_VOCAB_FILTERS) {
       const val = params[key];
       if (val == null || typeof val !== "string") continue;
 
-      const typeClause = vocabType ? " AND v.type = ?" : "";
+      const typeClause = vocabType ? " AND type = ?" : "";
       const typeBindings: unknown[] = vocabType ? [vocabType] : [];
 
-      // FTS5 path: resolve vocab IDs first, then use direct mapping filter
-      if (this.hasFts5) {
+      if (exactNotation) {
+        // Exact notation match (Iconclass codes) — two-step subquery, no FTS
+        const filter = this.mappingFilterSubquery(fields, `notation = ?${typeClause}`, [val, ...typeBindings]);
+        conditions.push(filter.condition);
+        bindings.push(...filter.bindings);
+      } else if (this.hasFts5) {
+        // FTS5 path: resolve vocab IDs first, then use direct mapping filter
         const vocabIds = vocabType === "person" && this.hasPersonNames
           ? this.findPersonIdsFts(val)
-          : this.findVocabIdsFts(val, vocabType ? " AND type = ?" : "", typeBindings);
+          : this.findVocabIdsFts(val, typeClause, typeBindings);
         if (vocabIds.length === 0) continue; // no matches — skip (non-destructive for stats)
-        const ftsFilter = this.mappingFilterDirect([field], vocabIds);
+        const ftsFilter = this.mappingFilterDirect(fields, vocabIds);
         conditions.push(ftsFilter.condition);
         bindings.push(...ftsFilter.bindings);
       } else {
-        // LIKE fallback
-        const fieldId = this.fieldIdMap.get(field);
-        if (fieldId === undefined) continue;
-        conditions.push(
-          `a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id ` +
-          `WHERE m.field_id = ? AND v.label_en LIKE '%' || ? || '%'${typeClause})`
+        // LIKE fallback — two-step subquery
+        const filter = this.mappingFilterSubquery(
+          fields,
+          `(label_en LIKE '%' || ? || '%' COLLATE NOCASE OR label_nl LIKE '%' || ? || '%' COLLATE NOCASE)${typeClause}`,
+          [val, val, ...typeBindings],
         );
-        bindings.push(fieldId, val, ...typeBindings);
+        conditions.push(filter.condition);
+        bindings.push(...filter.bindings);
       }
     }
-    // Creator gender — queries v.gender column, not label
-    if (params.creatorGender != null && this.stmtLookupPersonInfo) {
+    // Creator demographics — queries v.gender/v.birth_year columns, not labels
+    if (this.stmtLookupPersonInfo) {
       const creatorFieldId = this.fieldIdMap.get("creator");
       if (creatorFieldId != null) {
-        conditions.push(
-          `a.art_id IN (SELECT m.artwork_id FROM mappings m ` +
-          `JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id ` +
-          `WHERE m.field_id = ? AND v.type = 'person' AND v.gender = ?)`
-        );
-        bindings.push(creatorFieldId, params.creatorGender);
+        const demoConds: string[] = [];
+        const demoBindings: unknown[] = [creatorFieldId];
+        if (params.creatorGender != null) { demoConds.push("v.gender = ?"); demoBindings.push(params.creatorGender); }
+        if (params.creatorBornAfter != null) { demoConds.push("v.birth_year >= ?"); demoBindings.push(params.creatorBornAfter); }
+        if (params.creatorBornBefore != null) { demoConds.push("v.birth_year <= ?"); demoBindings.push(params.creatorBornBefore); }
+        if (demoConds.length > 0) {
+          conditions.push(
+            `a.art_id IN (SELECT m.artwork_id FROM mappings m ` +
+            `JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id ` +
+            `WHERE m.field_id = ? AND v.type = 'person' AND ${demoConds.join(" AND ")})`
+          );
+          bindings.push(...demoBindings);
+        }
       }
+    }
+    // Image availability
+    if (params.imageAvailable === true && this.hasImageColumn) {
+      conditions.push("a.has_image = 1");
     }
     if (params.creationDateFrom != null) {
       conditions.push("a.date_earliest >= ?");

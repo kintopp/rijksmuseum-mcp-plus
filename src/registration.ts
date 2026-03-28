@@ -2774,8 +2774,17 @@ function registerTools(
           creator: optStr().describe("Filter to artworks by this creator (partial match)."),
           productionPlace: optStr().describe("Filter to artworks produced in this place (partial match)."),
           depictedPerson: optStr().describe("Filter to artworks depicting this person (partial match)."),
+          depictedPlace: optStr().describe("Filter to artworks depicting this place (partial match)."),
           subject: optStr().describe("Filter to artworks with this subject (partial match on Iconclass labels)."),
+          iconclass: optStr().describe("Filter by exact Iconclass notation code (e.g. '73D82')."),
+          collectionSet: optStr().describe("Filter to artworks in this curated set (partial match on set name)."),
           creatorGender: optStr().describe("Filter by creator gender: 'male' or 'female'."),
+          creatorBornAfter: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Filter to creators born in or after this year."),
+          creatorBornBefore: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Filter to creators born in or before this year."),
+          imageAvailable: z.preprocess(stripNull, z.boolean().optional())
+            .describe("If true, restrict to artworks with a digital image."),
           creationDateFrom: z.preprocess(stripNull, z.number().int().optional())
             .describe("Earliest creation year (inclusive)."),
           creationDateTo: z.preprocess(stripNull, z.number().int().optional())
@@ -2808,8 +2817,14 @@ function registerTools(
         if (args.creator) params.creator = args.creator as string;
         if (args.productionPlace) params.productionPlace = args.productionPlace as string;
         if (args.depictedPerson) params.depictedPerson = args.depictedPerson as string;
+        if (args.depictedPlace) params.depictedPlace = args.depictedPlace as string;
         if (args.subject) params.subject = args.subject as string;
+        if (args.iconclass) params.iconclass = args.iconclass as string;
+        if (args.collectionSet) params.collectionSet = args.collectionSet as string;
         if (args.creatorGender) params.creatorGender = args.creatorGender as string;
+        if (args.creatorBornAfter != null) params.creatorBornAfter = args.creatorBornAfter as number;
+        if (args.creatorBornBefore != null) params.creatorBornBefore = args.creatorBornBefore as number;
+        if (args.imageAvailable != null) params.imageAvailable = args.imageAvailable as boolean;
         if (args.creationDateFrom != null) params.creationDateFrom = args.creationDateFrom as number;
         if (args.creationDateTo != null) params.creationDateTo = args.creationDateTo as number;
         if (args.hasProvenance != null) params.hasProvenance = args.hasProvenance as boolean;
@@ -2832,8 +2847,15 @@ function registerTools(
         if (params.creator) filterParts.push(`creator=${params.creator}`);
         if (params.productionPlace) filterParts.push(`productionPlace=${params.productionPlace}`);
         if (params.depictedPerson) filterParts.push(`depictedPerson=${params.depictedPerson}`);
+        if (params.depictedPlace) filterParts.push(`depictedPlace=${params.depictedPlace}`);
         if (params.subject) filterParts.push(`subject=${params.subject}`);
+        if (params.iconclass) filterParts.push(`iconclass=${params.iconclass}`);
+        if (params.collectionSet) filterParts.push(`collectionSet=${params.collectionSet}`);
         if (params.creatorGender) filterParts.push(`creatorGender=${params.creatorGender}`);
+        if (params.creatorBornAfter != null || params.creatorBornBefore != null) {
+          filterParts.push(`born ${params.creatorBornAfter ?? "..."}–${params.creatorBornBefore ?? "..."}`);
+        }
+        if (params.imageAvailable) filterParts.push("imageAvailable");
         if (params.creationDateFrom != null || params.creationDateTo != null) {
           filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);
         }
