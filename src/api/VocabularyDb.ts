@@ -2140,7 +2140,12 @@ export class VocabularyDb {
     if (requestedDimFilters.length > 0) {
       if (this.hasDimensions) {
         for (const [param, col, op] of requestedDimFilters) {
-          conditions.push(`${col} ${op} ?`);
+          // Exclude 0.0 sentinel values (meaning "unknown") from upper-bound filters
+          if (op === "<=") {
+            conditions.push(`${col} > 0 AND ${col} ${op} ?`);
+          } else {
+            conditions.push(`${col} ${op} ?`);
+          }
           bindings.push(effective[param]!);
         }
       } else {

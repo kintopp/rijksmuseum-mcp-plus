@@ -5,7 +5,7 @@
 
 ## Overview
 
-**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). 
+**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). It then goes further by enriching this data with semantic search, provenance analysis, visual similarity, and spatial reasoning.
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
@@ -19,24 +19,23 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
 Goto _Settings_ → _Connectors_ → _Add custom connector_ → Name it as you like and paste the URL into the _Remote MCP Server URL_ field. You can ignore the Authentication section. Once the connector is configured, optionally set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) for more details.
 
-Technically speaking, rijksmuseum-mcp+ is based on the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) standard. As such, it also works with other generative large language models (LLMs) in chatbots and applications which support the MCP standard, including several which can be used **without a paid subscription**. However, none beside [Claude Desktop](https://claude.com/download) and [claude.ai](https://claude.ai) support viewing and interacting with images and visualisations in the chat timeline. For more details, please see the [Choosing an AI system](#choosing-an-ai-system) section below.
+Technically speaking, rijksmuseum-mcp+ is based on the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) standard. As such, it also works with generative large language models (LLMs) in other chatbots and applications which support the MCP standard, including several which can be used **without a paid subscription**. However, none beside [Claude Desktop](https://claude.com/download) and [claude.ai](https://claude.ai) support viewing and interacting with images and visualisations in the chat timeline. For more details, please see the [Choosing an AI system](#choosing-an-ai-system) section below.
 
 ## Sample Queries
 
 After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. For example:
 
-- _Show me Avercamp's Winter Landscape with Skaters_
-- _What German artworks evoke vanitas and mortality?_
-- _List images by female photographers depicting places near the Eiffel Tower_
-- _Which artworks have a provenance linked to Emperor Bonaparte?_
-- _I'm looking for works with inscriptions mentioning 'luctor et emergo'_
-- _Find artworks similar to The Little Street, by Vermeer_
-- _Which work in the collection had previously been held for the longest time by the same family?_
-- _Show me sculptures in the collection by artists born in Leiden_
-- _Are there paintings in the collection wider than 3 meters?_
-- _Which 16th-century paintings are listed as Italian workshop productions?_
-- _What types of works does the collection have from Indonesia?_
-- _Show me the Roermondse passie and highlight the Betrayal of Judas_
+- _What German artworks evoke vanitas and mortality?_ [link](https://claude.ai/share/2d38db0c-82e2-434a-a48b-cfe3cbbcfec5)
+- _List portrait photographs by American female photographers in the collection_ [link](https://claude.ai/share/704b1dd1-6591-4fc5-b6a8-80cf38ad1df3)
+- _Which artworks have a provenance linked to Emperor Bonaparte?_ [link](https://claude.ai/share/0f38737d-176b-4c46-bb3d-044404e0b334)
+- Show artworks which include an inscription saying, 'Amor vincit omnia'_ [link](https://claude.ai/share/7415012a-5062-4866-a3e8-9278e9532a21)
+- _Find artworks similar to SK-A-2350_ [link](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2350.html)
+- _Which work in the collection had previously been held for the longest time by the same family?_ [link](https://claude.ai/share/157e5fd1-c8bd-497f-9fa2-36b21482f6e5)
+- _Show me sculptures in the collection by artists born in Leiden_ [link](https://claude.ai/share/077db4fb-d748-4b17-86fa-494a982b5bcb)
+- _What are the three largest paintings in the collection by width?_ [link](https://claude.ai/share/1a7f9a3c-012c-4065-9222-fbfca265585a)
+- _Which 15th-century paintings are listed as  workshop productions?_ [link](https://claude.ai/share/8733dcfc-4d25-4efd-b2af-6b2c3cddd7bb)
+- _What types of works does the collection have from Indonesia?_ [link](https://claude.ai/share/4f1bfe09-7620-4f45-9013-c719420ddf21)
+- _Show me the Roermondse passie and highlight the Betrayal of Judas_ [link](https://claude.ai/share/ca56c81b-7422-477e-9839-f921c0423c03) (requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai))
 
 For samples of more complex queries, please see the [research scenarios](docs/research-scenarios.md).
 
@@ -46,21 +45,25 @@ For samples of more complex queries, please see the [research scenarios](docs/re
 
 You can explore artworks with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ provides the following additional features:
 
-1. **More searchable metadata** — metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection) including `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), `title` variants, bibliography citations for individual artworks, [Iconclass](https://iconclass.org) descriptions, and full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`).
+1. **More searchable metadata**
 
-2. **Semantic search** — multilingual, concept/meaning-based explorations across multiple metadata categories. For example, queries like "vanitas symbolism" or "sense of loneliness in domestic interiors" which can't be expressed as structured metadata.
+These are metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). Significantly, several full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`) with search results ranked by relevance as well as `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), `title` variants, and bibliography citations for individual artworks. The museum's [Iconclass](https://iconclass.org) notations can now be searched by title and description and explored by following their parent and child branches. Proximity searches on geocoded locations (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). Physical dimension filters (`minWidth`, `maxWidth`, `minHeight`, `maxHeight`) support queries on artwork size (e.g. "paintings wider than 3 metres"). 
 
-3. **Spatial dimensions** — proximity radius searches on physical locations and size filters for artworks enable various spatial qeuries (e.g. "artworks related to places within 25 km of Leiden", "prints smaller than 10 cm wide"). 
+2. **Semantic search** 
 
-4. **Smart searching and relevance ranking** — morphological stemming to make subject searches more forgiving (e.g. "castle" and "castles"); automatic faceted counts allow the AI assistant to suggest appropriate filters to narrow the search results; textual queries (e.g. on `inscription`) return artworks ranked by relevance instead of catalogue order, while filter-only queries get ranked by their expected importance to users. 
+Multilingual, concept-based search drawing simultaneously on the full-text of several metadata fields (`title`, `description`, `inscription`, `curatorialNarrative`). This allows for broad, interpretive queries by meaning — such as "a sense of loneliness in domestic interiors" or "vanitas symbolism" — that go beyond what structured metadata filters can express. Iconclass notations can also be searched semantically, letting you find artworks by concept rather than exact notation code.
 
-5. **Interactive Image Viewer** — view high-resolution images of artworks inline in your chat discussion (N.B. this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai)). Zoom, pan, rotate, flip horizontally or view the image full-screen.
+3. **Interactive image viewer and AI analysis**
 
-6. **AI image analysis** — the AI assistant can analyse images visually in conjunction with the collection's metadata (e.g. "which iconographic elements of the Annunciation in this image have corresponding entries in Iconclass?").
+View high-resolution artwork images inline in your chat conversation using a deep-zoom viewer that supports pan, zoom, rotation, horizontal flip, and full-screen mode. The AI assistant can analyse what it sees in conjunction with the collection's metadata, and can zoom into and annotate regions of interest. You can also draw a rectangle around an area to direct the assistant's attention to it (e.g. "identify the species of butterfly highlighted in this still life"). N.B. this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). Other chatbots and applications can still view artworks and use the deep-zoom feature via the linked Rijksmuseum pages.
 
-7. **AI image annotation** - the AI assistant can zoom in and annotate images in the interactive image viewer (e.g. "highlight the biblical scenes depicted in the painting's panels"). Else, draw a rectangle around an area of interest to highlight it for the AI assistant (e.g. 'identify the species of butterfy highlighted in the still-life').
+4. **Analyse similar artworks** 
 
-8. **Find similar artworks** - Generates a webpage with a visual comparison of a given artwork showing multiple forms of similarity side by side: Visual, Iconclass, Lineage, Description, Depicted Person, and Depicted Place.
+A search for artworks `similar to` other artworks creates an interactive comparison page that places an artwork alongside the works most similar to it, evaluated across six independent dimensions: visual appearance, semantic description, Iconclass subject classification, artistic lineage (shared creators, workshops, or attribution chains), depicted persons, and depicted places. Works that appear across multiple dimensions are surfaced in a combined "pooled" view, highlighting the most broadly connected artworks in the collection.
+
+5. **Analyse provenance events**
+
+The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the AAM standard. rijksmuseum-mcp+ parses these narratives into over 100,000 structured events following a CMOA/PLOD-aligned vocabulary, making them searchable by party name, transfer type (sale, gift, bequest, inheritance, confiscation, restitution, and others), date range, location, and price in the original historical currency. This enables queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries.
 
 <br>
 <p align="center"><img src="docs/genre-analysis.png" alt="Fraction of paintings in each century by subject" width="500"></p>
@@ -69,9 +72,9 @@ You can explore artworks with the same (with minor exceptions) search filters of
 
 Technically speaking, rijksmuseum-mcp+ works with any chatbot or application supporting the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) and [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) standards. In practice, however, the extent and quality of support of these standards vary widely.
 
-As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector)) of a browser based chatbot with good, basic support of the MCP standard. In addition, many desktop 'LLM client' applications, such as [Jan.ai](https://jan.ai), are also MCP-compatible, and can be used with many many different LLM models. In contrast, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers, and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
+As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is a good example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector)) of a browser based chatbot with good, basic support of the MCP standard. In addition, many desktop 'LLM client' applications, such as [Jan.ai](https://jan.ai), are also MCP-compatible, and can be used with many many different LLM models. Many agentic coding applications (e.g. Claude Code, OpenAI Codex, Google Gemini CLI) also support the MCP standard. In contrast, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers, and while Google has announced MCP support for Gemini it has not indicated when this will be ready.  
 
-Moreover, none of these alteratives allow you to view and interact with images and visualisations drawn from the responses to queries directly in the chat timeline. For this reason, despite the existence of partially adequate substitutes, are present (April, 2026) the best way to use rijksmuseum-mcp+ remains beside [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). 
+However, none of these alteratives allow you to view and interact with images directly in the chat timeline. For this reason, despite the existence of many partially adequate substitutes, at present (April, 2026) the only way to use all the features provided by rijksmuseum-mcp+ is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). 
 
 Note to developers: the rijksmuseum-mcp+ server can also be run locally in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
 
@@ -93,8 +96,8 @@ Later:
 
 - create a [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file for exploring the collection
 - review capabilities of MCP clients besides Anthropic's Claude
-- investigate exporting jpg/png from image viewer together with overlays
 - add provenance metadata for geolocated places
+- investigate adding `attributed_by` technical metadata (e.g. conservation and scientific analyses)
 
 Maybe:
 
@@ -104,7 +107,6 @@ Maybe:
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - investigate browsing related images in the image viewer
 - review places without geolocation data
-- investigate support for MCP [elicitations](https://modelcontextprotocol.io/docs/learn/client-concepts#elicitation)
 
 ## Authors
 
