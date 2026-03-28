@@ -23,19 +23,20 @@ Technically speaking, rijksmuseum-mcp+ is based on the open [Model Context Proto
 
 ## Sample Queries
 
-After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. For example:
+After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language.
 
 - _What German artworks evoke vanitas and mortality?_ [link](https://claude.ai/share/2d38db0c-82e2-434a-a48b-cfe3cbbcfec5)
 - _List portrait photographs by American female photographers in the collection_ [link](https://claude.ai/share/704b1dd1-6591-4fc5-b6a8-80cf38ad1df3)
 - _Which artworks have a provenance linked to Emperor Bonaparte?_ [link](https://claude.ai/share/0f38737d-176b-4c46-bb3d-044404e0b334)
-- Show artworks which include an inscription saying, 'Amor vincit omnia'_ [link](https://claude.ai/share/7415012a-5062-4866-a3e8-9278e9532a21)
+- _Show artworks which include an inscription saying, 'Amor vincit omnia'_ [link](https://claude.ai/share/7415012a-5062-4866-a3e8-9278e9532a21)
 - _Find artworks similar to SK-A-2350_ [link](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2350.html)
 - _Which work in the collection had previously been held for the longest time by the same family?_ [link](https://claude.ai/share/157e5fd1-c8bd-497f-9fa2-36b21482f6e5)
 - _Show me sculptures in the collection by artists born in Leiden_ [link](https://claude.ai/share/077db4fb-d748-4b17-86fa-494a982b5bcb)
 - _What are the three largest paintings in the collection by width?_ [link](https://claude.ai/share/1a7f9a3c-012c-4065-9222-fbfca265585a)
 - _Which 15th-century paintings are listed as  workshop productions?_ [link](https://claude.ai/share/8733dcfc-4d25-4efd-b2af-6b2c3cddd7bb)
 - _What types of works does the collection have from Indonesia?_ [link](https://claude.ai/share/4f1bfe09-7620-4f45-9013-c719420ddf21)
-- _Show me the Roermondse passie and highlight the Betrayal of Judas_ [link](https://claude.ai/share/ca56c81b-7422-477e-9839-f921c0423c03) (requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai))
+- _Show me the Roermondse passie and highlight the Betrayal of Judas_ [link](https://claude.ai/share/ca56c81b-7422-477e-9839-f921c0423c03)
+  (requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai))
 
 For samples of more complex queries, please see the [research scenarios](docs/research-scenarios.md).
 
@@ -47,7 +48,9 @@ You can use rijksmuseum-mcp+ to explore artworks with the same (with minor excep
 
 1. **More searchable metadata**
 
-These are metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). Significantly, several full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`) with search results ranked by relevance as well as `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), `title` variants, and bibliography citations for individual artworks. The museum's [Iconclass](https://iconclass.org) notations can now be searched by title and description and explored by following their parent and child branches. Proximity searches on geocoded locations (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). Physical dimension filters (`minWidth`, `maxWidth`, `minHeight`, `maxHeight`) support queries on artwork size (e.g. "paintings wider than 3 metres"). 
+These are metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). Significantly, several full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`) with search results ranked by relevance. Also searchable now are, for example, `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), `title` variants, attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), bibliography citations for individual artworks, and [Iconclass](https://iconclass.org). The Iconclass notations can be searched by title and description and explored by following their parent and child branches. Proximity searches on geocoded locations (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). Physical dimension filters support queries on artwork size (e.g. "paintings wider than 3 metres"). Collection-wide aggregate statistics (counts, distributions, and cross-tabulations across any dimension) are available via `collection_stats`. 
+
+See [metadata categories](/docs/metadata-categories.md) for what the `get_artwork_details` tool returns and [search parameters](/docs/search-parameters.md) for all `search_artwork` filters.
 
 2. **Semantic search** 
 
@@ -67,7 +70,7 @@ The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text
 
 6. **Research skill package** (experimental)
 
-The [`rijksmuseum-mcp+` skill package](docs/rijksmuseum-mcp+.skill) gives a large language model (LLM) detailed guidance (written in natural language) on how best to use the rijksmuseum-mcp+ tools effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions (e.g. `productionPlace` vs `depictedPlace`, `subject` vs `iconclass`), known limitations with tested workarounds, and the full provenance data model. Installing the skill is optional but will significantly improve the quality and efficiency of an LLMs responses when exploring the collection. It can be installed in Claude by following [these instructions](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills). Skill files were originally developed by Anthropic for their Claude products but have now become an [open standard](https://agentskills.io/home). Even chatbots and applications without explicit support for skill packages can make use of the rijksmuseum-mcp+ skill by uploading/sharing [its components](/docs/rijksmuseum-mcp%2B) (SKILL.md, provenance-patterns.md) with the LLM directly at the start of a research session.
+The [`rijksmuseum-mcp+` skill package](docs/rijksmuseum-mcp+.skill) gives a large language model (LLM) detailed guidance (written in natural language) on how best to use the rijksmuseum-mcp+ tools effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions (e.g. `productionPlace` vs `depictedPlace`, `subject` vs `iconclass`), known limitations with tested workarounds, and the full provenance data model. Installing the skill is optional but will significantly improve the quality and efficiency of an LLMs responses when exploring the collection. It can be installed in Claude by following [these instructions](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills). Skill files were originally developed by Anthropic for their Claude products but have now become an [open standard](https://agentskills.io/home). Even chatbots and applications without explicit support for skill packages can make use of the rijksmuseum-mcp+ skill by uploading/sharing [its components](/docs/rijksmuseum-mcp%2B) (`SKILL.md`, `provenance-patterns.md`) with the LLM directly at the start of a research session.
 
 ## Choosing an AI system
 
@@ -119,7 +122,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows. A `CITA
 
 **APA (7th ed.)**
 
-> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.19.0) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
+> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.23) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
 
 **BibTeX**
 ```bibtex

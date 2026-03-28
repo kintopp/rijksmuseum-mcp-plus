@@ -1,6 +1,6 @@
 # Material Vocabulary
 
-734 distinct materials across ~1.2 million mappings. The `#` column shows the number of artworks linked to each material. The table below lists a representative subset; the full set is searchable via the vocabulary database.
+735 distinct materials across ~1.2 million mappings. The `#` column shows the number of artworks linked to each material. The table below lists a representative subset; the full set is searchable via the vocabulary database.
 
 **Usage:** `search_artwork` with `material: "canvas"`, `material: "oil paint"`, etc. Terms resolve to [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) equivalents where available.
 

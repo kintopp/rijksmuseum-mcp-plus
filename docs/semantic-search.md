@@ -4,19 +4,18 @@ The `semantic_search` tool finds artworks by meaning, concept, or theme using na
 
 ### How it works
 
-Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 384-dimensional vector generated from a composite text built from five metadata fields:
+Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 384-dimensional vector generated from a composite text built from four metadata fields (the "no-subjects" strategy):
 
 | Field | Source | Coverage |
 |-------|--------|----------|
 | Title | All title variants (brief, full, former × EN/NL) | ~99% |
-| Creator | Artist name / attribution | ~61% |
-| Curatorial narrative | Museum wall text (English/Dutch) | ~2% (14K works) |
 | Inscriptions | Transcribed text from the object surface | ~60% |
 | Description | Cataloguer observations (Dutch) | ~61% |
+| Curatorial narrative | Museum wall text (English/Dutch) | ~2% (14K works) |
 
-Iconclass subject labels are deliberately excluded — benchmarking showed that including them biased results toward tagged vocabulary matches rather than semantic meaning, reducing the number of paintings surfaced by 71% in painting-expected queries.
+Iconclass subject labels and creator names are deliberately excluded — benchmarking showed that including subject labels biased results toward tagged vocabulary matches rather than semantic meaning, reducing the number of paintings surfaced by 71% in painting-expected queries. Creator names are excluded because they duplicate the structured `creator` filter path (#72).
 
-The composite text is assembled as `[Title] ... [Creator] ... [Narrative] ... [Inscriptions] ... [Description] ...` and embedded using [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small), a multilingual sentence embedding model. Embeddings are int8-quantized (384 dimensions) and stored in a SQLite database using [sqlite-vec](https://github.com/asg017/sqlite-vec).
+The composite text is assembled as `[Title] ... [Inscriptions] ... [Description] ... [Narrative] ...` (omitting empty fields) and embedded using [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small), a multilingual sentence embedding model. Embeddings are int8-quantized (384 dimensions) and stored in a SQLite database using [sqlite-vec](https://github.com/asg017/sqlite-vec).
 
 At query time, the user's query is embedded with the same model, and the nearest artwork vectors are returned ranked by cosine similarity.
 
@@ -39,20 +38,22 @@ At query time, the user's query is embedded with the same model, and the nearest
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `query` | Yes | Natural language concept query (e.g. `"winter landscape with ice skating"`) |
-| `type` | No | Filter by object type (e.g. `"painting"`, `"print"`) |
-| `material` | No | Filter by material (e.g. `"canvas"`, `"paper"`) |
-| `technique` | No | Filter by technique (e.g. `"etching"`, `"oil painting"`) |
+| `type` | No | Filter by object type (e.g. `"painting"`, `"print"`). String or array |
+| `material` | No | Filter by material (e.g. `"canvas"`, `"paper"`). String or array |
+| `technique` | No | Filter by technique (e.g. `"etching"`, `"oil painting"`). String or array |
 | `creationDate` | No | Filter by date — exact year (`"1642"`) or wildcard (`"16*"`) |
-| `creator` | No | Filter by artist name |
-| `subject` | No | Filter by subject term |
-| `iconclass` | No | Filter by Iconclass notation code (e.g. `"73D82"`) |
-| `depictedPerson` | No | Filter by depicted person |
-| `depictedPlace` | No | Filter by depicted place |
-| `productionPlace` | No | Filter by production place |
-| `collectionSet` | No | Filter by curated set name (e.g. `"Rembrandt"`) |
-| `aboutActor` | No | Filter by person (depicted or creator) |
+| `dateMatch` | No | Date matching mode: `"overlaps"` (default), `"within"`, or `"midpoint"` |
+| `creator` | No | Filter by artist name. String or array |
+| `subject` | No | Pre-filter by subject term. String or array |
+| `iconclass` | No | Pre-filter by Iconclass notation code (e.g. `"73D82"`). String or array |
+| `depictedPerson` | No | Pre-filter by depicted person. String or array |
+| `depictedPlace` | No | Pre-filter by depicted place. String or array |
+| `productionPlace` | No | Pre-filter by production place. String or array |
+| `collectionSet` | No | Pre-filter by curated set name (e.g. `"Rembrandt"`). String or array |
+| `aboutActor` | No | Pre-filter by person (depicted or creator) |
 | `imageAvailable` | No | Restrict to artworks with a digital image |
 | `maxResults` | No | Number of results (1–50, default 15) |
+| `offset` | No | Skip this many results (for pagination) |
 
 Filters narrow the candidate set via the vocabulary database *before* semantic ranking. This is more precise than post-filtering because it searches the full metadata (not just the embedded text) and ensures all results match the filter exactly.
 
@@ -68,7 +69,7 @@ The tool uses two internal search paths:
 
 | Mode | When | How |
 |------|------|-----|
-| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of all ~831,000 vectors |
+| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of all ~832,000 vectors |
 | **Filtered KNN** | One or more filters specified | Vocabulary DB narrows candidates by metadata, then `vec_distance_cosine()` ranks the filtered set |
 
 The search mode (`semantic` or `semantic+filtered`) is reported in the response.
@@ -96,4 +97,4 @@ Source text is not stored in the embeddings database (saving ~270 MB). It is rec
 - **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The quantized ONNX model is sourced from the [Xenova mirror](https://huggingface.co/Xenova/multilingual-e5-small).
 - **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) v0.1.6. Brute-force scan (no ANN index). ~832,000 × int8[384] ≈ 305 MB in the vec0 table, plus a regular `artwork_embeddings` table for filtered queries.
 - **Query embedding prefix:** The model uses the `query:` prefix for queries and `passage:` for documents, following the E5 instruction format.
-- **Database size:** ~705 MB. Auto-downloaded on first start when `EMBEDDINGS_DB_URL` is set.
+- **Database size:** ~830 MB (after stripping source text and vacuuming; ~589 MB gzipped for deployment). Auto-downloaded on first start when `EMBEDDINGS_DB_URL` is set.

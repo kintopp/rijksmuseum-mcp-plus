@@ -8,17 +8,19 @@ flowchart LR
 
     AI <-->|"MCP tool calls
     (agentic loop)"| Server["rijksmuseum-mcp+
-    12 tools"]
+    15 tools"]
 
     Server --> Search["Search & Discovery
     structured filters,
     semantic search,
-    Iconclass lookup"]
+    Iconclass lookup,
+    collection statistics"]
 
     Server --> Details["Details & Metadata
     Linked Art resolution,
     bibliography,
-    artist timelines"]
+    provenance chains,
+    similarity comparison"]
 
     Server --> Images["Image Inspection
     deep-zoom viewer,
@@ -28,7 +30,7 @@ flowchart LR
     Search --> VocabDB[("Vocab DB
     832K artworks
     194K vocab terms
-    13.5M mappings")]
+    13.7M mappings")]
     Search --> EmbeddingsDB[("Embeddings DB
     832K vectors
     semantic search")]

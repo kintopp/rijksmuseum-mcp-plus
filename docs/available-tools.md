@@ -4,6 +4,7 @@
 
 - **`search_artwork`** — Search the collection by keyword, artist, period, medium, etc.
 - **`semantic_search`** — Find artworks by meaning, concept, or theme using natural language
+- **`collection_stats`** — Aggregate statistics, counts, and distributions across the collection
 - **`browse_set`** — Browse artworks within a curated collection set
 
 ## Artwork Details
@@ -13,11 +14,19 @@
 - **`inspect_artwork_image`** — Fetch an artwork image as base64 for direct visual analysis
 - **`get_artwork_bibliography`** — Scholarly references and bibliography for a work
 
+## Provenance
+
+- **`search_provenance`** — Search ownership and provenance history across ~48K artworks with parsed provenance records
+
 ## Classification & Curation
 
 - **`lookup_iconclass`** — Search the Iconclass vocabulary (universal iconographic classification system)
 - **`list_curated_sets`** — Browse curated exhibitions and scholarly groupings
 - **`get_recent_changes`** — Track recent additions and modifications to the collection
+
+## Similarity
+
+- **`find_similar`** — Find artworks similar to a given artwork across multiple signals (feature-gated)
 
 ## Viewer Navigation
 
@@ -25,6 +34,7 @@
 
 ---
 
-*11 tools total (+ 1 internal app tool). `semantic_search` and `lookup_iconclass` are
+*15 tools total (13 standard + 2 internal app tools). `find_similar` is feature-gated
+via `ENABLE_FIND_SIMILAR` (default: true). `semantic_search` and `lookup_iconclass` are
 particularly powerful for humanities research — query conceptually rather than by keyword,
 and cross-reference the Iconclass taxonomy directly.*

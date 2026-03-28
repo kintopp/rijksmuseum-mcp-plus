@@ -1,16 +1,17 @@
 # Search Parameters
 
-`search_artwork` accepts 37 search filters and 4 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
+`search_artwork` accepts 39 search filters and 5 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
 
 Parameters that accept arrays (marked **[]**) AND-combine their values: `subject: ["landscape", "seascape"]` returns artworks tagged with *both* subjects.
 
-All searches are backed by a vocabulary database of ~194,000 controlled terms mapped to ~832,000 artworks via ~13.5 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations) and a spatial place hierarchy (~31K geocoded places).
+All searches are backed by a vocabulary database of ~194,000 controlled terms mapped to ~832,000 artworks via ~13.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations) and a spatial place hierarchy (~31K geocoded places).
 
 - [Ranking](#ranking)
+- [Result limits and pagination](#result-limits-and-pagination)
 - [1. Vocabulary label filters](#1-vocabulary-label-filters) (17 parameters)
 - [2. Full-text search filters](#2-full-text-search-filters) (7 parameters)
-- [3. Column and metadata filters](#3-column-and-metadata-filters) (13 parameters)
-- [4. Output controls](#4-output-controls) (4 parameters)
+- [3. Column and metadata filters](#3-column-and-metadata-filters) (15 parameters)
+- [4. Output controls](#4-output-controls) (5 parameters)
 - [Semantic search](#semantic-search)
 - [Artwork detail fields](#artwork-detail-fields)
 
@@ -21,6 +22,25 @@ Results are ranked differently depending on which filters are active:
 - **BM25** — when any full-text filter is active (`title`, `description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), results are ranked by text relevance.
 - **Geographic proximity** — when `nearPlace` or `nearLat`/`nearLon` is active (without text filters), results are ranked by distance from the search point.
 - **Importance** — when only vocabulary, column, or modifier filters are active, results are ordered by a composite importance score reflecting image availability, curatorial attention, and metadata richness.
+
+---
+
+## Result limits and pagination
+
+| Tool | Default | Max | Pagination | Notes |
+|------|---------|-----|------------|-------|
+| `search_artwork` | 25 | 50 | `offset` | Response includes `totalResults` for the full match count |
+| `semantic_search` | 15 | 50 | `offset` | Similarity scores plateau after ~15 results |
+| `search_provenance` | 1 | 50 | `offset` | Each result includes the full provenance chain; response includes `totalArtworks` |
+| `collection_stats` | 25 | 500 | `offset` | Returns compact text tables; high max for comprehensive distributions |
+| `lookup_iconclass` | 25 | 50 | `offset` | |
+| `browse_set` | 10 | 50 | `resumptionToken` | OAI-PMH token-based pagination |
+| `get_recent_changes` | 10 | 50 | `resumptionToken` | OAI-PMH token-based pagination |
+| `find_similar` | 20 | 50 | — | Results per similarity signal; not pageable |
+| `get_artwork_details` | — | — | — | Single artwork lookup |
+| `get_artwork_bibliography` | 5 | all | `full=true` | Default returns first 5 with total count |
+
+Tools with `offset` pagination return a total count in the response (`totalResults` or `totalArtworks`), allowing the client to page through the full result set. OAI-PMH tools use opaque `resumptionToken` values returned with each page.
 
 ---
 
@@ -68,7 +88,7 @@ Match against ~194,000 controlled terms. Labels are bilingual (English and Dutch
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `collectionSet` | string **[]** | Curated collection set by name. [192 sets](vocabulary-collection-sets.md). Use `list_curated_sets` to discover sets. | `"Rembrandt"` |
-| `license` | string | Rights/license filter. Values: "publicdomain" ([PDM 1.0](http://creativecommons.org/publicdomain/mark/1.0/) — 728K), "zero" ([CC0 1.0](http://creativecommons.org/publicdomain/zero/1.0/) — 1.7K), "InC" ([In Copyright](http://rightsstatements.org/vocab/InC/1.0/) — 101K). | `"publicdomain"` |
+| `license` | string | Rights/license filter. Values: "publicdomain" ([PDM 1.0](http://creativecommons.org/publicdomain/mark/1.0/) — 728K), "zero" ([CC0 1.0](http://creativecommons.org/publicdomain/zero/1.0/) — 1.7K), "InC" ([In Copyright](http://rightsstatements.org/vocab/InC/1.0/) — 101K). Uses substring matching, so "by" also works for CC BY. | `"publicdomain"` |
 
 ---
 
@@ -97,7 +117,9 @@ Direct filters on artwork table columns, JOIN-based demographic filters, and spa
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `creationDate` | string | Creation date. ~628K artworks with dates (3000 BCE–2025). Exact year or wildcard. | `"1642"`, `"16*"`, `"164*"` |
+| `dateMatch` | string | How `creationDate` matches artwork date ranges. `"overlaps"` (default): artwork range overlaps query range — inclusive, but broadly-dated objects appear in multiple bins. `"within"`: artwork range falls entirely within query range — exclusive bins, but drops ~43% of collection with ranges >1 decade. `"midpoint"`: assigns each artwork to one bin by midpoint — every object counted exactly once. Best for statistical comparisons. | `"midpoint"` |
 | `imageAvailable` | boolean | When `true`, only artworks with a digital image (~728K artworks). *Modifier.* | `true` |
+| `hasProvenance` | boolean | When `true`, only artworks with parsed provenance records (~48K of 832K). *Modifier.* | `true` |
 
 ### Dimensions
 
@@ -146,42 +168,30 @@ Not filters — these control how results are returned.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `maxResults` | integer | 25 | Maximum results (1–50). All results include full metadata unless `compact` is true. |
+| `offset` | integer | 0 | Skip this many results (for pagination). Use with `maxResults`. |
 | `compact` | boolean | `false` | Returns only total count and object IDs without resolving metadata (faster for counting). |
-| `facets` | boolean | `false` | When results are truncated, includes top-5 counts per dimension (type, material, technique, century) to guide narrowing. Dimensions already filtered on are excluded. |
+| `facets` | boolean or string[] | — | Compute facet counts when results are truncated. Pass `true` for all dimensions, or an array of specific dimension names. Available dimensions: `type`, `material`, `technique`, `century`, `creatorGender`, `rights`, `imageAvailable`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`. Dimensions already filtered on are excluded automatically. |
+| `facetLimit` | integer | 5 | Maximum entries per facet dimension (1–50). |
 
 ---
 
 ## Semantic search
 
-For concepts that cannot be expressed as structured vocabulary terms — atmosphere, emotion, composition, art-historical interpretation — use the `semantic_search` tool instead. It accepts free-text queries in any language and ranks all ~831,000 artworks by embedding similarity. Its filters (`type`, `material`, `technique`, `creationDate`, `creator`, `collectionSet`, `aboutActor`, `iconclass`, `imageAvailable`) are a subset of those listed above. Results are most reliable when curatorial narrative texts discuss the relevant concept explicitly. See [Semantic Search](semantic-search.md) for full documentation.
+For concepts that cannot be expressed as structured vocabulary terms — atmosphere, emotion, composition, art-historical interpretation — use the `semantic_search` tool instead. It accepts free-text queries in any language and ranks all ~832,000 artworks by embedding similarity. It supports pre-filtering by `type`, `material`, `technique`, `creationDate`, `dateMatch`, `creator`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, and `imageAvailable` — a subset of those listed above. See the [tool parameters reference](mcp-tool-parameters.md#semantic_search) for the full parameter list.
+
+Each artwork's embedding is generated from a composite source text built from four metadata fields (the "no-subjects" strategy — subject vocabulary is excluded to avoid duplicating the structured search path):
+
+| Component | Field | Description |
+|-----------|-------|-------------|
+| Title | `title` | Primary artwork title |
+| Inscriptions | `inscription_text` | Transcribed text from the object surface |
+| Description | `description_text` | Cataloguer description (compositional details, motifs, condition) |
+| Narrative | `narrative_text` | Curatorial wall text (art-historical interpretation) |
+
+Fields are concatenated as `[Title] ... [Inscriptions] ... [Description] ... [Narrative] ...`, omitting any that are empty. Results include the reconstructed source text for grounding — use it to explain why a result matched or to flag false positives.
 
 ---
 
 ## Artwork detail fields
 
-`get_artwork_details` returns [24 metadata categories](metadata-categories.md) per artwork, plus summary fields (`id`, `title`, `creator`, `date`, `url`). Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters. The exceptions are identifiers, current location, web page, related objects, and bibliography count.
-
-| Field | What it contains | Notes |
-|---|---|---|
-| Object number (`objectNumber`) | Museum inventory number (e.g. `SK-C-5`) | Format encodes the collection: `SK` = paintings, `RP` = prints, `BK` = sculpture/applied art, `NG` = modern acquisitions. |
-| Persistent identifier (`persistentId`) | Stable [Handle](https://www.handle.net/) URI | Permanent citation link. Use in publications and bibliographies. |
-| External identifiers (`externalIds`) | All cataloguing identifiers | Includes the object number and any additional identifiers. |
-| Title variants (`titles`) | All known titles with language and type | Each entry has language (`en`/`nl`) and qualifier (`brief`/`full`/`other`). Up to 6 variants. The brief English title is the primary display title. |
-| Curatorial narrative (`curatorialNarrative`) | Museum wall text in EN and/or NL | Interpretive art-historical context written by curators. Distinct from `description`. |
-| Description (`description`) | Cataloguer description (Dutch) | Compositional details, motifs, condition, attribution remarks. ~510K artworks. |
-| Production details (`production`) | Structured creator, role, and place data | Each entry: `name`, `role`, `place`, `actorUri`, and optional `personInfo` (with `birthYear`, `deathYear`, `gender`, `bio`, `wikidataId`). Person info available for ~49K creators with life dates, ~11K with biographical notes. |
-| Object types (`objectTypes`) | What the object is, with authority links | Resolved terms with [Getty AAT](https://www.getty.edu/research/tools/vocabularies/aat/) and [Wikidata](https://www.wikidata.org/) equivalents. |
-| Materials (`materials`) | What it is made of, with authority links | Resolved terms with AAT and Wikidata equivalents. |
-| Technique statement (`techniqueStatement`) | Free-text technique description | |
-| Dimension statement (`dimensionStatement`) | Human-readable dimensions text | For numeric filtering, use `minHeight`/`maxHeight`/`minWidth`/`maxWidth`. |
-| Structured dimensions (`dimensions`) | Numeric dimension values | Each entry: type label, numeric `value`, `unit` (cm/mm/kg/g/m), optional `note`. |
-| Subjects (`subjects`) | Iconographic annotations | Three components: `iconclass`, `depictedPersons`, `depictedPlaces`. Each a resolved term with `label`, `id`, and `equivalents`. |
-| Provenance (`provenance`) | Ownership history text | |
-| Credit line (`creditLine`) | Acquisition acknowledgement | |
-| Inscriptions (`inscriptions`) | Text transcribed from the object surface | May include multiple entries. |
-| License (`license`) | Rights/license URI | CC0, Public Domain Mark, or In Copyright. |
-| Collection sets (`collectionSets`, `collectionSetLabels`) | Curatorial groupings | Raw URIs and resolved English labels with authority equivalents. |
-| Current location (`location`) | Gallery and room within the museum | May be absent for works in storage or on loan. |
-| Web page (`webPage`) | Rijksmuseum website URL | |
-| Related objects (`relatedObjects`) | Links to associated artworks | Each entry: `relationship` label and `objectUri`. |
-| Bibliography count (`bibliographyCount`) | Number of scholarly references | Use `get_artwork_bibliography` for full citations. Major works can have 100+. |
+`get_artwork_details` returns [26 metadata categories](metadata-categories.md) per artwork, plus summary fields (`id`, `title`, `creator`, `date`, `url`). Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters — see the [metadata categories reference](metadata-categories.md) for the full list, including a table of search-only filters that have no corresponding return field.
