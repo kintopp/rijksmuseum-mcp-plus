@@ -2772,6 +2772,10 @@ function registerTools(
           material: optStr().describe("Filter to artworks with this material."),
           technique: optStr().describe("Filter to artworks with this technique."),
           creator: optStr().describe("Filter to artworks by this creator (partial match)."),
+          productionPlace: optStr().describe("Filter to artworks produced in this place (partial match)."),
+          depictedPerson: optStr().describe("Filter to artworks depicting this person (partial match)."),
+          subject: optStr().describe("Filter to artworks with this subject (partial match on Iconclass labels)."),
+          creatorGender: optStr().describe("Filter by creator gender: 'male' or 'female'."),
           creationDateFrom: z.preprocess(stripNull, z.number().int().optional())
             .describe("Earliest creation year (inclusive)."),
           creationDateTo: z.preprocess(stripNull, z.number().int().optional())
@@ -2802,6 +2806,10 @@ function registerTools(
         if (args.material) params.material = args.material as string;
         if (args.technique) params.technique = args.technique as string;
         if (args.creator) params.creator = args.creator as string;
+        if (args.productionPlace) params.productionPlace = args.productionPlace as string;
+        if (args.depictedPerson) params.depictedPerson = args.depictedPerson as string;
+        if (args.subject) params.subject = args.subject as string;
+        if (args.creatorGender) params.creatorGender = args.creatorGender as string;
         if (args.creationDateFrom != null) params.creationDateFrom = args.creationDateFrom as number;
         if (args.creationDateTo != null) params.creationDateTo = args.creationDateTo as number;
         if (args.hasProvenance != null) params.hasProvenance = args.hasProvenance as boolean;
@@ -2822,6 +2830,10 @@ function registerTools(
         if (params.material) filterParts.push(`material=${params.material}`);
         if (params.technique) filterParts.push(`technique=${params.technique}`);
         if (params.creator) filterParts.push(`creator=${params.creator}`);
+        if (params.productionPlace) filterParts.push(`productionPlace=${params.productionPlace}`);
+        if (params.depictedPerson) filterParts.push(`depictedPerson=${params.depictedPerson}`);
+        if (params.subject) filterParts.push(`subject=${params.subject}`);
+        if (params.creatorGender) filterParts.push(`creatorGender=${params.creatorGender}`);
         if (params.creationDateFrom != null || params.creationDateTo != null) {
           filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);
         }

@@ -357,6 +357,10 @@ export interface CollectionStatsParams {
   material?: string;
   technique?: string;
   creator?: string;
+  productionPlace?: string;
+  depictedPerson?: string;
+  subject?: string;
+  creatorGender?: string;
   creationDateFrom?: number;
   creationDateTo?: number;
   // Provenance filters
@@ -463,6 +467,24 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "productionRole",fields: ["production_role"],        matchMode: "like",                               ftsUpgrade: true },
   { param: "attributionQualifier", fields: ["attribution_qualifier"], matchMode: "like",                       ftsUpgrade: true },
   { param: "aboutActor",   fields: ["subject", "creator"],    matchMode: "like", vocabType: "person",         ftsUpgrade: true },
+];
+
+/** Simplified vocab filter definition for collection_stats. */
+interface StatsVocabFilter {
+  key: keyof CollectionStatsParams;
+  field: string;
+  vocabType?: string;
+}
+
+/** Vocab filters available on collection_stats. Subset of VOCAB_FILTERS with simpler matching. */
+const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
+  { key: "type",            field: "type" },
+  { key: "material",        field: "material" },
+  { key: "technique",       field: "technique" },
+  { key: "creator",         field: "creator" },
+  { key: "productionPlace", field: "spatial",  vocabType: "place" },
+  { key: "depictedPerson",  field: "subject",  vocabType: "person" },
+  { key: "subject",         field: "subject" },
 ];
 
 /**
@@ -1749,17 +1771,18 @@ export class VocabularyDb {
 
     // Single CTE materialises the matched event set; all facets read from it.
     const cte = `WITH matched AS (
-      SELECT pe.artwork_id, pe.transfer_type, pe.date_year, pe.location, pe.transfer_category
+      SELECT pe.artwork_id, pe.sequence, pe.transfer_type, pe.date_year, pe.location, pe.transfer_category
       FROM provenance_events pe JOIN artworks a ON a.art_id = pe.artwork_id
       WHERE ${where}
     )`;
 
     // Single query: all facets in one UNION ALL so the CTE is evaluated once.
+    // Party branch uses EXISTS with sequence to restrict to parties on matched events (#194).
     const partyBranch = this.hasPartyTable_
       ? `UNION ALL
       SELECT 'partyPosition', pp.party_position, COUNT(DISTINCT pp.artwork_id)
       FROM provenance_parties pp
-      WHERE pp.artwork_id IN (SELECT artwork_id FROM matched)
+      WHERE EXISTS (SELECT 1 FROM matched m WHERE m.artwork_id = pp.artwork_id AND m.sequence = pp.sequence)
         AND pp.party_position IS NOT NULL
       GROUP BY pp.party_position`
       : "";
@@ -1884,21 +1907,46 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
-    // Artwork vocab filters — data-driven to avoid copy-paste
-    const STATS_VOCAB_FILTERS: { key: keyof CollectionStatsParams; field: string; like?: boolean }[] = [
-      { key: "type",      field: "type" },
-      { key: "material",  field: "material" },
-      { key: "technique", field: "technique" },
-      { key: "creator",   field: "creator", like: true },
-    ];
-    for (const { key, field, like } of STATS_VOCAB_FILTERS) {
+    // Artwork vocab filters — data-driven to avoid copy-paste.
+    // Uses FTS5 when available (50-100x faster than LIKE '%...%' on 194K vocab terms).
+    for (const { key, field, vocabType } of STATS_VOCAB_FILTERS) {
       const val = params[key];
       if (val == null || typeof val !== "string") continue;
-      const fieldId = this.fieldIdMap.get(field);
-      if (fieldId === undefined) continue;
-      const op = like ? "LIKE '%' || ? || '%'" : "= ?";
-      conditions.push(`a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id WHERE m.field_id = ? AND v.label_en ${op})`);
-      bindings.push(fieldId, val);
+
+      const typeClause = vocabType ? " AND v.type = ?" : "";
+      const typeBindings: unknown[] = vocabType ? [vocabType] : [];
+
+      // FTS5 path: resolve vocab IDs first, then use direct mapping filter
+      if (this.hasFts5) {
+        const vocabIds = vocabType === "person" && this.hasPersonNames
+          ? this.findPersonIdsFts(val)
+          : this.findVocabIdsFts(val, vocabType ? " AND type = ?" : "", typeBindings);
+        if (vocabIds.length === 0) continue; // no matches — skip (non-destructive for stats)
+        const ftsFilter = this.mappingFilterDirect([field], vocabIds);
+        conditions.push(ftsFilter.condition);
+        bindings.push(...ftsFilter.bindings);
+      } else {
+        // LIKE fallback
+        const fieldId = this.fieldIdMap.get(field);
+        if (fieldId === undefined) continue;
+        conditions.push(
+          `a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id ` +
+          `WHERE m.field_id = ? AND v.label_en LIKE '%' || ? || '%'${typeClause})`
+        );
+        bindings.push(fieldId, val, ...typeBindings);
+      }
+    }
+    // Creator gender — queries v.gender column, not label
+    if (params.creatorGender != null && this.stmtLookupPersonInfo) {
+      const creatorFieldId = this.fieldIdMap.get("creator");
+      if (creatorFieldId != null) {
+        conditions.push(
+          `a.art_id IN (SELECT m.artwork_id FROM mappings m ` +
+          `JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id ` +
+          `WHERE m.field_id = ? AND v.type = 'person' AND v.gender = ?)`
+        );
+        bindings.push(creatorFieldId, params.creatorGender);
+      }
     }
     if (params.creationDateFrom != null) {
       conditions.push("a.date_earliest >= ?");
