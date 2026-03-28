@@ -79,6 +79,9 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 | `writeback-missing-receivers.mjs` | Node | Extracts missing receiver parties from event text (#116) via deterministic patterns ("to the [Name]"). |
 | `writeback-unsold-prices.mjs` | Node | Extracts prices from unsold/bought-in events (#161). Pattern: "bought in at fl. X". |
 | `writeback-residual-nulls.mjs` | Node | Deterministic cleanup of remaining null-position party artifacts after LLM enrichment passes. |
+| `writeback-event-reclassification.mjs` | Node | Writes back LLM event reclassifications: mark as non-provenance, merge with adjacent event, or merge alternatives with uncertainty flag. |
+| `writeback-event-splitting.mjs` | Node | Writes back LLM event splits: replaces original event with multiple sub-events, re-sequences all events/parties for the artwork. |
+| `writeback-field-corrections.mjs` | Node | Writes back LLM field corrections: truncated/wrong locations (#149/#119), missing receivers (#116). |
 | `backfill-enrichment-reasoning.mjs` | Node | Backfills `enrichment_reasoning` column from all audit JSON files (type classification, position enrichment, party disambiguation). |
 
 ### Review & Collection
@@ -87,6 +90,7 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 |--------|------|-------------|
 | `generate-position-review.mjs` | Node | Generates HTML review page for position-enrichment LLM results. |
 | `generate-disambig-review.mjs` | Node | Generates HTML review page for party-disambiguation LLM results. |
+| `generate-structural-review.mjs` | Node | Generates HTML review page for LLM structural corrections (field corrections, event reclassifications, event splits). |
 | `review-long-duration-periods.mjs` | Node | Generates HTML review page for long-duration periods (>200 years), classifying as legitimate vs artifact (#178). |
 | `collect-round1-results.mjs` | Node | One-time: collects round 1 position-enrichment batch results from Anthropic API. |
 | `collect-disambig-results.mjs` | Node | One-time: collects party-disambiguation batch results from Anthropic API. |
@@ -96,6 +100,7 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 | File | Description |
 |------|-------------|
 | `POST-REPARSE-STEPS.md` | Step-by-step guide for restoring LLM enrichments + manual corrections after a full re-parse (6 steps, strict order). |
+| `manual-corrections-2026-03-23.csv` | Manual corrections CSV: hand-verified fixes for parser artifacts (lot numbers parsed as years, missing transfer types, etc.). Applied by `reimport-snapshots.py` or writeback scripts. |
 
 ## Profiling & Diagnostics
 
@@ -111,6 +116,7 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 
 | Script | Lang | Description |
 |--------|------|-------------|
+| `RELEASE.md` | — | Full 3-phase release & deploy runbook (code push → DB upgrade → finalize). |
 | `warm-cache.mjs` | Node | Post-deployment cache warming via Streamable HTTP. Uses `warm-cache-prompts.tsv`. |
 | `warm-cache-local.mjs` | Node | Local cache warming via stdio transport. Same TSV, no running server needed. |
 | `warm-cache-prompts.tsv` | Data | Tool call definitions used by both warm-cache scripts. |
@@ -130,6 +136,7 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `test-fts-edge-cases.mjs` | — | FTS5 query escaping with tricky inputs |
 | `test-new-filters.mjs` | 19 | v0.20 filters: creatorGender, creatorBornAfter/Before, expandPlaceHierarchy |
 | `test-find-similar.mjs` | ~51 | All find_similar signal modes (Visual, Lineage, Iconclass, Description, Person, Place, Pooled). Requires `ENABLE_FIND_SIMILAR=true`. |
+| `bench-find-similar.mjs` | — | Benchmark find_similar across diverse artworks to profile performance across signal profiles. |
 | `test-description-similarity.mjs` | ~4 | Smoke test for find_similar description mode. Requires `ENABLE_FIND_SIMILAR=true`. |
 | `test-attribution-qualifiers.mjs` | ~5 | Verifies `attributionQualifier` extraction from Linked Art `assigned_by[].classified_as`. |
 | `test-provenance-parser.mjs` | ~39 | Unit tests for Layer 1 provenance parser functions (splitEvents, classifyTransfer, parseDate, parsePrice, etc.) |
@@ -138,6 +145,9 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `test-query-plans.mjs` | 200+ | EXPLAIN QUERY PLAN validation — asserts the optimizer never uses `idx_mappings_field_vocab` as a covering-scan driver. |
 | `test-totalcount.mjs` | ~16 | Smoke test: totalResults always present + selective/compact facets. |
 | `test-v019-features.mjs` | — | Targeted tests for all v0.19 features |
+| `test-svg-overlays.mjs` | — | Visual test for SVG overlay rendering on The Night Watch. Opens viewer, adds various overlay shapes. |
+| `test-viewer-build.mjs` | — | Validates bundled viewer HTML is self-contained (no CDN dependencies) and within size budget. |
+| `audit-schemas.mjs` | — | Schema audit: checks all outputSchemas for structural risk factors (anyOf/oneOf, $ref/$defs, nesting depth). |
 | `validate-vocab-db.mjs` | — | Comprehensive vocab DB structure & integrity validation (13 checks: integrity, tables, FTS5, FK integrity, importance, server compat, etc.) |
 | `generate-similarity-review.mjs` | — | Generates HTML review pages for find_similar results (outputs `similarity-review.html`). |
 | `survey-persons.mjs` | — | Quick survey of `depictedPerson` vs `aboutActor` coverage. |
