@@ -3310,27 +3310,34 @@ export class VocabularyDb {
     const where = conditions.join(" AND ");
 
     // Step 1: Build ORDER BY + CTEs for sortBy
+    // Sort CTEs apply the same WHERE filters as the outer query (#192)
+    // so sort values come only from matching events, not unrelated ones.
     let orderBy = "";
     let sortCte = "";
     let sortJoin = "";
+    let sortBindings: unknown[] = [];
     const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
     if (params.sortBy === "price") {
-      sortCte = "WITH sort_agg AS (SELECT artwork_id, MAX(price_amount) AS sort_val FROM provenance_events WHERE price_amount IS NOT NULL GROUP BY artwork_id)";
+      sortCte = `WITH sort_agg AS (SELECT pe2.artwork_id, MAX(pe2.price_amount) AS sort_val FROM provenance_events pe2 JOIN artworks a2 ON a2.art_id = pe2.artwork_id WHERE pe2.price_amount IS NOT NULL AND ${where.replace(/\bpe\./g, "pe2.").replace(/\ba\./g, "a2.")} GROUP BY pe2.artwork_id)`;
       sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
       orderBy = `ORDER BY sa.sort_val ${dir} NULLS LAST`;
+      sortBindings = [...bindings];
     } else if (params.sortBy === "eventCount") {
-      sortCte = "WITH sort_agg AS (SELECT artwork_id, COUNT(*) AS sort_val FROM provenance_events GROUP BY artwork_id)";
+      sortCte = `WITH sort_agg AS (SELECT pe2.artwork_id, COUNT(*) AS sort_val FROM provenance_events pe2 JOIN artworks a2 ON a2.art_id = pe2.artwork_id WHERE ${where.replace(/\bpe\./g, "pe2.").replace(/\ba\./g, "a2.")} GROUP BY pe2.artwork_id)`;
       sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
       orderBy = `ORDER BY sa.sort_val ${dir}`;
+      sortBindings = [...bindings];
     } else if (params.sortBy === "dateYear") {
-      sortCte = "WITH sort_agg AS (SELECT artwork_id, MIN(date_year) AS sort_val FROM provenance_events WHERE date_year IS NOT NULL GROUP BY artwork_id)";
+      sortCte = `WITH sort_agg AS (SELECT pe2.artwork_id, MIN(pe2.date_year) AS sort_val FROM provenance_events pe2 JOIN artworks a2 ON a2.art_id = pe2.artwork_id WHERE pe2.date_year IS NOT NULL AND ${where.replace(/\bpe\./g, "pe2.").replace(/\ba\./g, "a2.")} GROUP BY pe2.artwork_id)`;
       sortJoin = "LEFT JOIN sort_agg sa ON sa.artwork_id = pe.artwork_id";
       orderBy = `ORDER BY sa.sort_val ${dir} NULLS LAST`;
+      sortBindings = [...bindings];
     }
 
     const offset = params.offset ?? 0;
 
     // Find matching artwork_ids (limited + offset)
+    // Binding order: sortCte bindings (filtered), then outer WHERE bindings, then LIMIT/OFFSET
     const artworkIds = (this.db.prepare(`
       ${sortCte}
       SELECT DISTINCT pe.artwork_id
@@ -3340,7 +3347,7 @@ export class VocabularyDb {
       WHERE ${where}
       ${orderBy}
       LIMIT ? OFFSET ?
-    `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
+    `).all(...sortBindings, ...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
 
     if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
 
@@ -3549,12 +3556,11 @@ export class VocabularyDb {
       }
     }
 
-    // Exclude negative durations (parsing artefacts) when sorting by duration
-    let orderBy = "";
-    if (params.sortBy === "duration") {
+    // Duration sort uses aggregate (MAX for desc, MIN for asc) to avoid
+    // nondeterministic results when artworks have multiple periods (#193).
+    const sortByDuration = params.sortBy === "duration";
+    if (sortByDuration) {
       conditions.push("pp.end_year IS NOT NULL AND pp.begin_year IS NOT NULL AND (pp.end_year - pp.begin_year) >= 0");
-      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
-      orderBy = `ORDER BY (pp.end_year - pp.begin_year) ${dir}`;
     }
 
     if (conditions.length === 0) {
@@ -3565,14 +3571,30 @@ export class VocabularyDb {
     const offset = params.offset ?? 0;
 
     // Find matching artwork_ids
-    const artworkIds = (this.db.prepare(`
-      SELECT DISTINCT pp.artwork_id
-      FROM provenance_periods pp
-      JOIN artworks a ON a.art_id = pp.artwork_id
-      WHERE ${where}
-      ${orderBy}
-      LIMIT ? OFFSET ?
-    `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
+    let artworkIds: number[];
+    if (sortByDuration) {
+      const dir = params.sortOrder === "asc" ? "ASC" : "DESC";
+      const agg = params.sortOrder === "asc" ? "MIN" : "MAX";
+      artworkIds = (this.db.prepare(`
+        SELECT artwork_id FROM (
+          SELECT pp.artwork_id, ${agg}(pp.end_year - pp.begin_year) AS max_dur
+          FROM provenance_periods pp
+          JOIN artworks a ON a.art_id = pp.artwork_id
+          WHERE ${where}
+          GROUP BY pp.artwork_id
+        ) sub
+        ORDER BY sub.max_dur ${dir}
+        LIMIT ? OFFSET ?
+      `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
+    } else {
+      artworkIds = (this.db.prepare(`
+        SELECT DISTINCT pp.artwork_id
+        FROM provenance_periods pp
+        JOIN artworks a ON a.art_id = pp.artwork_id
+        WHERE ${where}
+        LIMIT ? OFFSET ?
+      `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
+    }
 
     if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
 
