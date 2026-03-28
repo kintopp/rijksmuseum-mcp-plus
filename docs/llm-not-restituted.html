@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enrichment Review — 10 LLM-Assisted Results</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+  :root {
+    --bg: #f5f0e8; --surface: #fffdf8; --border: #d4c9b0;
+    --text: #2a2118; --text-muted: #7a6e5e; --accent: #8b4513;
+    --highlight: #fff3cd; --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: var(--accent); }
+  .subtitle { color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem; }
+
+  .summary { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .summary h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .summary-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .summary-item { font-family: var(--mono); font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; background: #eee8d8; }
+
+  .disclaimer { background: #fff3cd; border: 2px solid #e6c200; border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .disclaimer h2 { font-size: 1rem; margin-bottom: 0.5rem; color: #856404; }
+  .disclaimer p { font-size: 0.9rem; line-height: 1.6; color: #856404; }
+
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .toc h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .toc-grid { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .toc-link { font-family: var(--mono); font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; text-decoration: none; color: var(--accent); background: #f5ece0; }
+  .toc-link:hover { background: var(--highlight); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
+  .card-header { background: #eee8d8; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  .card-header h2 { font-size: 1rem; font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; font-family: var(--mono); }
+
+  .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 800px) { .card-body { grid-template-columns: 1fr; } .left { border-right: none !important; border-bottom: 1px solid var(--border); } }
+  .left, .right { padding: 1rem; }
+  .left { border-right: 1px solid var(--border); }
+
+  .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }
+
+  .event-list { list-style: none; font-size: 0.82rem; max-height: 400px; overflow-y: auto; }
+  .event-list li { padding: 4px 0; border-bottom: 1px solid #f0ebe0; }
+  .event-list li:last-child { border-bottom: none; }
+  .event-list .seq { color: var(--text-muted); font-family: var(--mono); font-size: 0.75rem; min-width: 1.5em; display: inline-block; }
+  .event-list .type-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--accent); }
+  .event-list .highlight { background: var(--highlight); padding: 2px 4px; border-radius: 3px; }
+  .event-list .context { opacity: 0.6; }
+
+  .resolution-summary { font-size: 0.8rem; color: var(--text-muted); font-family: var(--mono); margin-bottom: 0.75rem; padding: 4px 8px; background: #eee8d8; border-radius: 4px; }
+
+  .enrichment-item { margin-bottom: 1rem; }
+  .enrichment-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
+  .enrichment-target { font-size: 0.82rem; font-family: var(--mono); }
+  .reasoning { font-family: var(--sans); font-style: italic; color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem; background: #faf8f2; border-radius: 4px; border-left: 3px solid var(--accent); }
+
+  .back-to-top { position: fixed; bottom: 1rem; right: 1rem; background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; opacity: 0.8; }
+  .back-to-top:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Enrichment Review — 10 LLM-Assisted Results</h1>
+<p class="subtitle">Query: <code>type=confiscation, date=1933–1945</code>. Generated 2026-03-28.</p>
+
+<div class="disclaimer">
+  <h2>About this page</h2>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision. Methods include type/category classification, party disambiguation, validated deterministic rules, and structural corrections (location fixes, phantom event removal, event splitting).</p>
+  <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
+</div>
+
+<div class="summary">
+  <h2>Task description</h2>
+  <p style="font-size:0.9rem;line-height:1.6;">The provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
+</div>
+
+<div class="summary">
+  <h2>Distribution</h2>
+  <div class="summary-grid">
+    <span class="summary-item">Total events: 24</span>
+    <span class="summary-item">Deterministic: 21</span>
+    <span class="summary-item">LLM events: 3</span>
+    <span class="summary-item">LLM parties: 7</span>
+    <span class="summary-item">Artworks: 3</span>
+  </div>
+  <div class="summary-grid" style="margin-top:0.5rem">
+    <span class="summary-item"><span class="badge" style="background:#6b4c9a;color:white;font-size:0.7rem;vertical-align:middle">LLM classified</span> 8</span>
+    <span class="summary-item"><span class="badge" style="background:#6b4c9a;color:white;font-size:0.7rem;vertical-align:middle">LLM disambiguated</span> 2</span>
+  </div>
+</div>
+
+
+<div class="toc">
+  <h2>Jump to artwork</h2>
+  <div class="toc-grid">
+    <a class="toc-link" href="#card-0">BK-17040-A</a>
+    <a class="toc-link" href="#card-1">RP-T-1980-26</a>
+    <a class="toc-link" href="#card-2">RP-P-2023-55</a>
+  </div>
+</div>
+
+
+<div class="card" id="card-0">
+  <div class="card-header">
+    <h2>BK-17040-A — Tafelstuk</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Wenzel Jamnitzer</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1880</span> from the Duke of Hamilton, possibly for 800,000 RM, to Mayer Carl von Rothschild (1820-1886), Frankfurt, 1880</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[by_descent]</span> <span class="type-tag">1912</span> {Note RMA; Glanville 2003-2004, p. 37.} his daughter, Thèrese, Baroness James de Rothschild (1847-1931), Frankfurt and Paris, 1912, 1928</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[by_descent]</span> {Jones 1912, Pl. I , Introduction; Jones, 1928, p.180, Pl. L, no. 1.} her son Henri de Rothschild</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[sale]</span> {Weltkunst 1937, p. 42.} from whom to a consortium of dealers for Fritz Mannheimer(1890-1939), Amsterdam and Paris</li>
+<li class="highlight"><span class="seq">5.</span> <span class="type-tag">[confiscation]</span> <span class="type-tag">1940</span> {Weltkunst 1937, p. 42.} from whose estate purchased, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[recuperation]</span> <span class="type-tag">1945</span> {Korthals Altes 1974, pp. 21-22.} war recuperation, SNK, 1945</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[loan]</span> <span class="type-tag">1952</span> {HNA, SNK Archive, 2.08.42, inv. no. 548.} on loan, with xx other objects, from the DRVK to the museum, 1952</li>
+<li class="context"><span class="seq">8.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1960</span> {Note RMA.} transferred to the museum, 1960</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (0 events, 1 party)</div>
+      <div class="resolution-summary">7 of 8 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM disambiguated</span>
+            <span class="enrichment-target">Event 5, "Fritz Mannheimer estate" → <code>sender</code></span>
+          </div>
+          <div class="reasoning">[rename] This is an anaphoric reference 'whose estate' referring back to Fritz Mannheimer from event 4. The phrase 'from whose estate purchased' indicates the estate as the sender/consignor in this confiscation event. The 'from' and 'purchased' are verb phrases that should be stripped to leave just the party name. | Original: &quot;from whose estate purchased&quot; → Fritz Mannheimer estate [sender]</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-1">
+  <div class="card-header">
+    <h2>RP-T-1980-26 — Rechtspraak van Daniël</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">anonymous</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1928</span> sale, F. Leverton Harris et al.[section Archibald George Blomefield Russell (1879-1955)…..], London (Sotheby’s), 22 May 1928, no. 77, as Giovanni Antonio Licinio, Il Pordenone (Judgment of Daniel)</li>
+<li class="highlight"><span class="seq">2.</span> <span class="type-tag">[sale]</span> {Copy IB, Cohen 1975}, £ 20, to Dussler [Luitpold Dussler?]</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1933</span> {Copy Sotheby’s} from Luitpold Dussler, München, fl. 714, to Jaques Goudstikker, in or before 1933</li>
+<li class="highlight"><span class="seq">4.</span> <span class="type-tag">[confiscation batch]</span> <span class="type-tag">1940</span> {Goudstikker Catalog 1939, no.2247; Goudstikker, black book, 1940, no.2247, as Pordenone; Goudstikker-Miedl Archive, as 2247 Pordenone(‘Ordeel van Daniel’)} probably from his employees, fl. 2,500,000, with xx other objects, to Alois Miedl, 1940</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1940</span> {report restitution committee, 1.15, p.11.} the dealer J. Goudstikker/Miedl, 1940</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[sale unsold]</span> <span class="type-tag">1941</span> {report restitution committee, 1.15, p.11 .} anonymous sale, Cologne(Lempertz), 14 June 1941, no. 73, as as Giovanni Antonio Licinio, Il Pordenone, unsold</li>
+<li class="highlight"><span class="seq">7.</span> <span class="type-tag">[widowhood]</span> <span class="type-tag">1949</span> {Copy RKD.} back to Alois Miedl, 1 september 1941 {according to RKD Fiches uit Goudstikker-Miedl-archief 1940-45, as 2247 Pordenone(‘Odeel van Daniel’)} restituted to the widow Désirée Goudstikker, 1949</li>
+<li class="context"><span class="seq">8.</span> <span class="type-tag">[sale]</span> sale, Goudstikker, Amsterdam (Kunsthandel A. Staal), Amsterdam</li>
+<li class="highlight"><span class="seq">9.</span> <span class="type-tag">[gift]</span> <span class="type-tag">1975</span> Mr. L. de Ruyter before 1975, Jutphaas</li>
+<li class="highlight"><span class="seq">10.</span> <span class="type-tag">[gift]</span> <span class="type-tag">1980</span> {Note IB, Cohen 1975}, by whom donated to the museum, 1980</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (2 events, 4 parties)</div>
+      <div class="resolution-summary">5 of 10 resolved deterministically, 5 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 2 → <code>sale</code></span>
+          </div>
+          <div class="reasoning">The preceding context shows this is part of a sale at Sotheby's (May 22, 1928, no. 77). The price '£20' and 'to Dussler' indicates this is the purchase by Dussler at that auction.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 4 → <code>confiscation</code></span>
+          </div>
+          <div class="reasoning">In 1940 wartime context, 'from his employees' to Alois Miedl with a large sum (fl. 2,500,000) suggests coerced wartime acquisition. Miedl was a known Nazi art dealer who acquired Jewish collections during WWII. This appears to be forced wartime confiscation from Goudstikker's business.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM disambiguated</span>
+            <span class="enrichment-target">Event 4, "[Goudstikker employees]" → <code>sender</code></span>
+          </div>
+          <div class="reasoning">[rename] The phrase 'probably from his employees' contains the preposition 'from' which indicates direction but isn't part of the party name. 'His employees' refers to Jaques Goudstikker's employees from the previous event (event 3), who likely acted on behalf of the Goudstikker business/estate during the 1940 confiscation period. This is one party (the employees as a group) acting as sender, not multiple parties. | Original: &quot;probably from his employees&quot; → [Goudstikker employees] [sender]</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 7, "back to Alois Miedl" → <code>unknown</code></span>
+          </div>
+          <div class="reasoning">'back to Alois Miedl' indicates Miedl is receiving the artwork again (returning to his possession after the failed auction). The word 'back' and 'to' clearly indicate he is the receiver in this return transfer.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 9, "Mr. L. de Ruyter before 1975" → <code>unknown</code></span>
+          </div>
+          <div class="reasoning">Following AAM bare-name convention, 'Mr. L. de Ruyter before 1975, Jutphaas' indicates de Ruyter held the artwork before 1975. The location and temporal qualifier establish him as the holder/owner, making him the receiver in this event.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 10, "museum" → <code>receiver</code></span>
+          </div>
+          <div class="reasoning">Extracted from event text: receiver &quot;museum&quot; found in &quot;to the/to [Name]&quot; pattern. Parser's parseRest() missed this tail party.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-2">
+  <div class="card-header">
+    <h2>RP-P-2023-55 — Portret van schrijfmeester Hendrick Persijn</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Gerrit Gauw (mentioned on object)</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="highlight"><span class="seq">1.</span> <span class="type-tag">[confiscation]</span> <span class="type-tag">1939</span> Zentralstelle für Denkmalschutz, Vienna, after April 1939 and before December 1940</li>
+<li class="highlight"><span class="seq">2.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1990</span> Unknown sale (possibly Van Stockum, The Hague, or Van Gendt, The Hague), c. 1990’s, to private collector</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">2023</span> {According to an oral remark of the collector.} from whom to the museum, 2023</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 2 parties)</div>
+      <div class="resolution-summary">1 of 3 resolved deterministically, 2 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 1 → <code>confiscation</code></span>
+          </div>
+          <div class="reasoning">The Zentralstelle für Denkmalschutz was the Nazi Austrian authority for cultural protection/looting during WWII. The timing (after April 1939, when Germany annexed Austria) and the export stamp mentioned in the citation strongly indicate this was Nazi confiscation of cultural property, not a normal collection event.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 1, "Zentralstelle für Denkmalschutz" → <code>unknown</code></span>
+          </div>
+          <div class="reasoning">The Zentralstelle für Denkmalschutz was the Nazi authority responsible for controlling cultural property exports from Austria after the Anschluss. In this context, they received/confiscated the artwork from its previous owner. The transfer_type is already identified as 'confiscation', confirming they acquired the artwork through seizure.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 2, "private collector" → <code>receiver</code></span>
+          </div>
+          <div class="reasoning">Extracted from event text: receiver &quot;private collector&quot; found in &quot;to the/to [Name]&quot; pattern. Parser's parseRest() missed this tail party.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<a href="#" class="back-to-top">↑ Top</a>
+</body>
+</html>
