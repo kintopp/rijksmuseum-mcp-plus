@@ -69,9 +69,6 @@ The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text
 
 The [`rijksmuseum-mcp+` skill package](docs/rijksmuseum-mcp+.skill) gives a large language model (LLM) detailed guidance (written in natural language) on how best to use the rijksmuseum-mcp+ tools effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions (e.g. `productionPlace` vs `depictedPlace`, `subject` vs `iconclass`), known limitations with tested workarounds, and the full provenance data model. Installing the skill is optional but will significantly improve the quality and efficiency of an LLMs responses when exploring the collection. It can be installed in Claude by following [these instructions](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills). Skill files were originally developed by Anthropic for their Claude products but have now become an [open standard](https://agentskills.io/home). Even chatbots and applications without explicit support for skill packages can make use of the rijksmuseum-mcp+ skill by uploading/sharing [its components](/docs/rijksmuseum-mcp%2B) (SKILL.md, provenance-patterns.md) with the LLM directly at the start of a research session.
 
-<br>
-<p align="center"><img src="docs/genre-analysis.png" alt="Fraction of paintings in each century by subject" width="500"></p>
-
 ## Choosing an AI system
 
 Technically speaking, rijksmuseum-mcp+ works with any chatbot or application supporting the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) and [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) standards. In practice, however, the extent and quality of support of these standards vary widely.
