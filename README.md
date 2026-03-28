@@ -61,9 +61,13 @@ View high-resolution artwork images inline in your chat conversation using a dee
 
 A search for artworks `similar to` other artworks creates an interactive comparison page that places an artwork alongside the works most similar to it, evaluated across six independent dimensions: visual appearance, semantic description, Iconclass subject classification, artistic lineage (shared creators, workshops, or attribution chains), depicted persons, and depicted places. Works that appear across multiple dimensions are surfaced in a combined "pooled" view, highlighting the most broadly connected artworks in the collection.
 
-5. **Analyse provenance events**
+5. **Analyse provenance events** (experimental)
 
 The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the AAM standard. rijksmuseum-mcp+ parses these narratives into over 100,000 structured events following a CMOA/PLOD-aligned vocabulary, making them searchable by party name, transfer type (sale, gift, bequest, inheritance, confiscation, restitution, and others), date range, location, and price in the original historical currency. This enables queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries.
+
+6. **Research skill for Claude Code** (experimental)
+
+The [`rijksmuseum-mcp+` skill package](docs/rijksmuseum-mcp+.skill) is a ready-made skill that gives a large language model (LLM) detailed guidance on how to use the rijksmuseum-mcp+ tools effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions (e.g. `productionPlace` vs `depictedPlace`, `subject` vs `iconclass`), known limitations with tested workarounds, and the full provenance data model. Installing the skill is optional but will significantly improve the quality and efficiency of an LLMs responses when exploring the collection. It can be installed in Claude Code, Claude Desktop, or claude.ai by following Anthropic's [instructions](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills). Other chatbots and applications can make use of it by sharing the components of the skill package with the LLM directly.
 
 <br>
 <p align="center"><img src="docs/genre-analysis.png" alt="Fraction of paintings in each century by subject" width="500"></p>
