@@ -2706,8 +2706,7 @@ function registerTools(
 
             if (httpPort) {
               enrichmentReviewPages.set(uuid, { html, lastAccess: Date.now() });
-              const baseUrl = process.env.PUBLIC_URL || `http://localhost:${httpPort}`;
-              const reviewUrl = `${baseUrl}/enrichment-review/${uuid}`;
+              const reviewUrl = `${publicBaseUrl}/enrichment-review/${uuid}`;
               lines.push("");
               lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);
               lines.push(`REVIEW_URL: ${reviewUrl}`);
