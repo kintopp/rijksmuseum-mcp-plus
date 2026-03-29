@@ -2753,7 +2753,7 @@ function registerTools(
           "- \"Top 20 depicted persons\" → dimension='depictedPerson', topN=20\n" +
           "- \"Sales by decade 1600–1900\" → dimension='provenanceDecade', transferType='sale', dateFrom=1600, dateTo=1900\n" +
           "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n\n" +
-          "Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade.\n" +
+          "Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width.\n" +
           "Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, " +
           "currency, categoryMethod, positionMethod, parseMethod.\n\n" +
           "Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters " +

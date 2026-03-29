@@ -1,7 +1,7 @@
 ---
 name: rijksmuseum-mcp
 version: "0.23.1"
-last_updated: 2026-03-24
+last_updated: 2026-03-29
 description: >
   Research workflows for the Rijksmuseum MCP+ server. Use this skill whenever
   the user wants to search the Rijksmuseum collection, look up artwork details,
@@ -79,6 +79,20 @@ Each result includes a `rijksCount` (how many Rijksmuseum artworks carry that no
 - you want to explore a conceptual neighbourhood (browse children/siblings of a notation)
 - the query is in a non-English language (Iconclass covers 13 languages; subject vocab is almost entirely English)
 - you want to search by meaning rather than keywords (semantic mode: "religious suffering", "festive gathering")
+
+### `dateMatch` — controlling how date ranges are binned
+
+Most artworks have date *ranges* (e.g. "1630–1640"), not exact years. `dateMatch` controls how these ranges interact with `creationDate` wildcards and `collection_stats` decade/century dimensions:
+
+| Mode | Behaviour | Use when |
+|---|---|---|
+| `"overlaps"` (default) | Artwork appears in every bin its range touches | Inclusive discovery — "show me everything that *could* be from the 1630s" |
+| `"within"` | Artwork appears only if its entire range falls within the bin | Exclusive bins, but drops ~43% of the collection (broadly-dated objects) |
+| `"midpoint"` | Each artwork counted in exactly one bin (midpoint of its date range) | **Statistical comparisons, charts, decade-by-decade counts** — no double-counting, no data loss |
+
+**Rule of thumb:** use `midpoint` whenever you're comparing counts across bins (decade trends, century breakdowns, gender ratios by period). Use the default `overlaps` for discovery queries where inclusiveness matters more than precision.
+
+Available on `search_artwork`, `semantic_search`, and implicitly via `collection_stats` `creationDateFrom`/`creationDateTo` filters.
 
 ### `attributionQualifier` + `creator` — structural limitation
 
@@ -159,7 +173,7 @@ These narrow results but **require at least one other content filter**:
 For any counting, distributional, or comparative question, **start with `collection_stats`** — it answers in one call what would otherwise require multiple `compact: true` loops.
 
 ```
-# Example: Rembrandt's output across media — one call
+# Example: Rembrandt's output across media ��� one call
 collection_stats(dimension="type", creator="Rembrandt van Rijn")
 # → painting 314 (38.2%), print 289 (35.2%), drawing 218 (26.5%)
 
@@ -168,6 +182,17 @@ collection_stats(dimension="type", hasProvenance=true, location="Amsterdam")
 
 # Top 30 depicted persons
 collection_stats(dimension="depictedPerson", topN=30)
+
+# Cross-filter with Iconclass or curated sets
+collection_stats(dimension="type", iconclass="73D82")
+# → what types of artworks depict the Crucifixion?
+
+collection_stats(dimension="creator", collectionSet="Japanese prints", topN=20)
+# → top 20 creators in the Japanese prints set
+
+# Physical size distributions (binned by binWidth, in cm)
+collection_stats(dimension="height", type="painting", binWidth=20)
+# → height distribution of paintings in 20cm bins
 ```
 
 Use `compact: true` on `search_artwork` only when you need the actual object numbers (e.g. to feed into `get_artwork_details`), not just the count or distribution. For pure counting, `collection_stats` is always more efficient.
@@ -196,11 +221,11 @@ Check `rijksCount` in `lookup_iconclass` results before searching — a code wit
 
 ### 3. Century / Decade Wildcards
 
-For longitudinal analysis, prefer `collection_stats` with decade or century binning:
+For longitudinal analysis, prefer `collection_stats` with decade or century binning. **Use `dateMatch: "midpoint"` for statistical comparisons** — the default `overlaps` mode double-counts broadly-dated objects across bins (see Critical Parameter Distinctions above):
 
 ```
 collection_stats(dimension="decade", technique="etching", creationDateFrom=1500, creationDateTo=1800)
-# → decade-by-decade etching counts in one call
+# → decade-by-decade etching counts in one call (default overlaps — inclusive but inflated)
 
 collection_stats(dimension="decade", technique="etching", creationDateFrom=1500, creationDateTo=1800, binWidth=50)
 # → half-century bins
@@ -209,8 +234,9 @@ collection_stats(dimension="decade", technique="etching", creationDateFrom=1500,
 For queries that need individual object numbers (not just counts), use `creationDate` wildcards with `search_artwork`:
 
 ```
-search_artwork(technique="etching", creationDate="16*")
-search_artwork(technique="etching", creationDate="17*")
+search_artwork(technique="etching", creationDate="16*", dateMatch="midpoint")
+search_artwork(technique="etching", creationDate="17*", dateMatch="midpoint")
+# dateMatch="midpoint" ensures each artwork is counted in exactly one century
 ```
 
 Supported patterns: `"1642"` (exact year), `"164*"` (decade), `"16*"` (century), `"1*"` (millennium).
@@ -229,23 +255,44 @@ semantic_search(query="loneliness and isolation in a vast empty space", type="pa
 # Compare overlap: works only reachable via semantic search are the interesting gap cases
 ```
 
+**Pre-filtering:** `semantic_search` accepts all vocabulary filters from `search_artwork` as pre-filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, `imageAvailable`, `dateMatch`. These narrow the candidate set *before* semantic ranking, combining structured precision with conceptual search:
+
+```
+semantic_search(query="vanitas symbolism", subject="skull", type="painting")
+# → paintings with skull subjects, ranked by how well they match "vanitas symbolism"
+```
+
 **Language note**: English queries yield slightly higher precision against the
 bilingual catalogue even though the embedding model is multilingual. If a Dutch
 or German query returns unexpected results, reformulate in English.
 
-### 5. Two-Pass Image Inspection
+### 5. Image Inspection and Overlay Placement
 
-Single-pass overlay placement in `navigate_viewer` is unreliable. Always
-inspect first, then annotate.
+**Basic inspection + zoom is now a single step.** `inspect_artwork_image` automatically navigates the open viewer to the inspected region (`navigateViewer` defaults to `true`). No separate `navigate_viewer` call is needed for basic zoom — the viewer stays in sync with your analysis.
 
 ```
-# Pass 1: locate the feature
+# Single call: inspect a region AND zoom the viewer there
 inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
-# → base64 image + AI analysis of what's in that region
-
-# Pass 2: place overlay using confirmed coordinates from Pass 1
-navigate_viewer(objectNumber="SK-C-5", add_overlay={...confirmed coordinates...})
+# → base64 image for AI analysis + viewer auto-zooms to the same region
 ```
+
+**For overlays, use the inspect → overlay two-step with `relativeTo`:**
+
+```
+# Step 1: inspect the area
+inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
+# → found a detail at roughly the center of this crop
+
+# Step 2: place overlay using crop-local coordinates — the server projects to full-image space
+navigate_viewer(viewUUID=..., commands=[{
+  action: "add_overlay",
+  region: "pct:30,30,40,40",      # coordinates within the crop
+  relativeTo: "pct:70,60,20,20",  # the crop region from Step 1
+  label: "Detail"
+}])
+```
+
+The `relativeTo` parameter eliminates manual coordinate conversion — specify where the feature is within the crop, and the server handles the projection. Both `region` and `relativeTo` must use `pct:` format.
 
 Use `region="full"` for an initial composition overview before cropping to
 details. `inspect_artwork_image` can surface content **absent from structured
@@ -297,8 +344,8 @@ to painted sources.
 ```
 search_artwork(productionRole="after painting by", creator="Rembrandt van Rijn")
 # → get_artwork_details on a result
-# → relatedObjects links to the source painting's URI
-# → get_artwork_details on that URI for full source metadata
+# → relatedObjects includes the source painting's Linked Art URI
+# → get_artwork_details(uri="https://id.rijksmuseum.nl/200666460") for full source metadata
 # → get_artwork_image on both for side-by-side comparison
 ```
 
@@ -324,8 +371,8 @@ search_artwork(productionPlace="Japan", type="print", maxResults=10)  # sample w
 filter. Use century wildcards to reveal structural patterns over time.
 
 ```
-# Count women painters per century
-search_artwork(creatorGender="female", type="painting", creationDate="17*", compact=true)
+# Count women painters per century — use dateMatch="midpoint" to avoid double-counting
+search_artwork(creatorGender="female", type="painting", creationDate="17*", dateMatch="midpoint", compact=true)
 # Repeat for "18*", "19*"; then drop compact=true to identify leading artists per century
 
 # Or: one-call gender breakdown per century
@@ -343,10 +390,10 @@ collection_stats(dimension="creatorGender", type="painting", creationDateFrom=17
 | No `subject` results in English | Try the Dutch term — vocabulary is bilingual ("fotograaf" not "photographer") |
 | `semantic_search` skews toward prints/drawings | Filter with `type: "painting"` — prints and drawings outnumber paintings ~77:1 |
 | `bibliographyCount` is high but citations needed | Use `get_artwork_bibliography(full=false)` to get structured metadata without full text |
-| Inscription field empty in catalogue | Use `inspect_artwork_image` — AI vision can often read text directly from the image |
+| Inscription field empty in catalogue | Use `inspect_artwork_image` — AI vision can often read text directly from the image. Try `quality: "gray"` for better contrast on faded inscriptions or signatures. |
 | `facets` on `search_artwork` | 11 dimensions: type, material, technique, century, creatorGender, rights, imageAvailable, creator, depictedPerson, depictedPlace, productionPlace. Configure with `facetLimit` (1–50, default 5). Pass `facets=true` for all or `facets=["creator","type"]` for specific ones. All entries include percentage. |
 | `facets` on `search_provenance` | 5 dimensions: transferType, decade, location, transferCategory, partyPosition. Set `facets=true`. Percentages included. |
-| Collection-wide distributions | Use `collection_stats` instead of `compact=true` counting loops — 19 dimensions across artwork and provenance domains with cross-domain filters. One call replaces N iterations. |
+| Collection-wide distributions | Use `collection_stats` instead of `compact=true` counting loops — 21 dimensions across artwork and provenance domains with cross-domain filters (including `height`/`width` for physical size distributions, binned by `binWidth`). One call replaces N iterations. |
 | `search_provenance` data model details | Batch prices, unsold lots, historical currencies, gap flags, parse methods, party coverage, 0-year durations, and `sortBy: "eventCount"` unreliability — see `references/provenance-patterns.md` |
 | `attributionQualifier` + `creator` | Does not work — use `aboutActor` instead. See Critical Parameter Distinctions above. |
 | `attributionQualifier: "manner of"` | Not a valid value — returns zero results. Use `aboutActor`. |
