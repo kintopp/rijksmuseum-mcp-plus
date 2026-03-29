@@ -17,7 +17,7 @@ The `search_artwork` tool combines [39 filters](search-parameters.md) — from b
 
 For aggregate questions — counts, distributions, cross-tabulations — `collection_stats` answers in a single call what would otherwise require multiple `search_artwork` queries with `compact: true`. It supports the same artwork filters plus provenance-specific dimensions (transfer type, party, location, decade).
 
-The links following each research question show how the query was answered in Claude Opus. Responses that include an inline image viewer or visualisations require the use of a [paid subscription](https://claude.com/pricing) from Anthropic. Without this, only the written parts of the response will be shown. For some queries, 'extended thinking' was been enabled in Claude Opus allowing one to trace (to some degree) the model's step-by-step 'reasoning' during a task. Note: During testing, for these research questions, the rijksmuseum-mcp+ server was called "Rijksmuseum HTTP".
+The links following each research question show how the query was answered in Claude Opus. Responses that include an inline image viewer or visualisations require the use of a [paid subscription](https://claude.com/pricing) from Anthropic. Without this, only the written parts of the response will be shown. For some queries, 'extended thinking' had been enabled in Claude Opus allowing one to trace (to some degree) the model's step-by-step 'reasoning' during a task. Note: During testing, for these research questions, the rijksmuseum-mcp+ server was called "Rijksmuseum HTTP".
 
 #### 1. Mapping an Artist's Output Across Media
 
@@ -372,7 +372,7 @@ The links following each research question show how the query was answered in Cl
 
 #### 26. Generational Ownership and Collection Dispersal
 
-*Find artworks that passed through four or more generations by descent within a single family, then were sold at auction. How long did these family collections typically survive before dispersal? [Link](https://claude.ai/share/fb01bd2b-c6fb-4a5b-af74-05fb32ddd731)
+*Find artworks that passed through four or more generations by descent within a single family, then were sold at auction. How long did these family collections typically survive before dispersal?* [Link](https://claude.ai/share/fb01bd2b-c6fb-4a5b-af74-05fb32ddd731)
 
 **How the tools enable it:**
 - `search_provenance` with `layer: "periods"`, `acquisitionMethod: "by_descent"`, `minDuration: 80`, `sortBy: "duration"`, `sortOrder: "desc"` to find the longest-held family collections (80+ years approximates four generations)
