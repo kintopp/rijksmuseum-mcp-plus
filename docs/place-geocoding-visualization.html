@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Place Geocoding &mdash; rijksmuseum-mcp+</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #fafaf8; color: #1a1a1a; line-height: 1.6;
+  }
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
+  section { padding: 3.5rem 0 2.5rem; }
+  section + section { border-top: 1px solid #e5e5e0; }
+
+  /* ── Typography ───────────────────────────────────────────── */
+  h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+  p, li { font-size: 0.95rem; color: #333; }
+  .muted { color: #666; font-size: 0.85rem; }
+  .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* ── Hero ──────────────────────────────────────────────────── */
+  .hero {
+    padding: 4rem 0 3rem;
+    background: linear-gradient(135deg, #3e2f23 0%, #4a3728 50%, #5c4633 100%);
+    color: #fff;
+  }
+  .hero h1 { font-size: 2.2rem; margin-bottom: 0.5rem; color: #fff; }
+  .hero .subtitle { font-size: 1.1rem; color: #a8a29e; font-weight: 400; margin-bottom: 1.5rem; }
+  .hero .stats-row {
+    display: flex; gap: 2.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+  }
+  .hero .stat { text-align: left; }
+  .hero .stat .num { font-size: 1.8rem; font-weight: 700; color: #e7e5e4; line-height: 1.2; }
+  .hero .stat .desc { font-size: 0.78rem; color: #a8a29e; margin-top: 0.15rem; }
+
+  /* ── Pipeline diagram ──────────────────────────────────────── */
+  .pipeline {
+    display: flex; align-items: stretch; gap: 0;
+    margin: 1.5rem 0; flex-wrap: nowrap; overflow-x: auto;
+  }
+  .pipe-step {
+    flex: 1; min-width: 145px; padding: 1.1rem 1rem;
+    background: #fff; border: 1px solid #d4d4c8;
+    position: relative;
+  }
+  .pipe-step:first-child { border-radius: 8px 0 0 8px; }
+  .pipe-step:last-child  { border-radius: 0 8px 8px 0; }
+  .pipe-step + .pipe-step { border-left: none; }
+  .pipe-step .step-num {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 0.3rem;
+  }
+  .pipe-step h3 { font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .pipe-step p  { font-size: 0.78rem; color: #666; line-height: 1.5; }
+  .pipe-arrow {
+    display: flex; align-items: center; font-size: 1.2rem; color: #94a3b8;
+    padding: 0 0.1rem; flex-shrink: 0;
+  }
+
+  /* ── Structured output cards ───────────────────────────────── */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+    padding: 1.1rem 1.25rem; position: relative;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card .card-icon {
+    font-size: 1.3rem; margin-bottom: 0.4rem; display: block;
+  }
+  .card h3 { font-size: 0.95rem; }
+  .card p  { font-size: 0.82rem; color: #555; margin-top: 0.3rem; }
+  .card .example {
+    margin-top: 0.6rem; padding: 0.5rem 0.7rem;
+    background: #f8f8f5; border-radius: 5px;
+    font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.78rem; color: #444;
+  }
+  .card .count {
+    position: absolute; top: 1rem; right: 1.1rem;
+    font-size: 0.72rem; color: #94a3b8; font-weight: 600;
+  }
+
+  /* ── Authority source table ────────────────────────────────── */
+  .source-table {
+    width: 100%; border-collapse: collapse; font-size: 0.82rem;
+    margin: 1rem 0;
+  }
+  .source-table th {
+    text-align: left; font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: #94a3b8; padding: 0.5rem 0.7rem; border-bottom: 2px solid #e5e5e0;
+  }
+  .source-table td {
+    padding: 0.55rem 0.7rem; border-bottom: 1px solid #f0f0eb;
+    vertical-align: top; color: #333;
+  }
+  .source-table tr:last-child td { border-bottom: none; }
+  .source-table .mono {
+    font-family: 'Iosevka', monospace; font-size: 0.78rem;
+  }
+
+  /* ── Authority badges ──────────────────────────────────────── */
+  .auth-badge {
+    display: inline-block; font-size: 0.7rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .auth-wikidata  { background: #dbeafe; color: #1e40af; }
+  .auth-tgn       { background: #fef3c7; color: #92400e; }
+  .auth-geonames  { background: #d1fae5; color: #065f46; }
+  .auth-whg       { background: #f3e8ff; color: #6b21a8; }
+  .auth-inherit   { background: #e0e7ff; color: #3730a3; }
+  .auth-nominatim { background: #fce7f3; color: #9d174d; }
+
+  /* ── Method bar ────────────────────────────────────────────── */
+  .method-bar {
+    display: flex; height: 32px; border-radius: 6px; overflow: hidden;
+    margin: 1rem 0; font-size: 0.7rem; font-weight: 600; color: #fff;
+  }
+  .method-bar > div {
+    display: flex; align-items: center; justify-content: center;
+    white-space: nowrap; padding: 0 0.5rem; min-width: 24px;
+  }
+  .bar-wikidata  { background: #3b82f6; }
+  .bar-tgn       { background: #d97706; }
+  .bar-geonames  { background: #059669; }
+  .bar-inherit   { background: #6366f1; }
+  .bar-whg       { background: #7c3aed; }
+  .bar-selfref   { background: #94a3b8; }
+  .bar-none      { background: #e5e5e0; color: #888; }
+
+  /* ── Waterfall ─────────────────────────────────────────────── */
+  .waterfall {
+    display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0;
+  }
+  .wf-row {
+    display: flex; align-items: center; gap: 0.8rem;
+  }
+  .wf-label {
+    width: 200px; flex-shrink: 0; font-size: 0.82rem; font-weight: 500;
+    text-align: right; color: #555;
+  }
+  .wf-bar-track {
+    flex: 1; height: 22px; background: #f0f0eb; border-radius: 4px;
+    position: relative; overflow: hidden;
+  }
+  .wf-bar-fill {
+    height: 100%; border-radius: 4px; display: flex;
+    align-items: center; padding-left: 8px;
+    font-size: 0.72rem; font-weight: 600; color: #fff;
+    transition: width 0.6s ease;
+  }
+  .wf-note { font-size: 0.75rem; color: #94a3b8; width: 80px; flex-shrink: 0; }
+
+  /* ── Place field grid ──────────────────────────────────────── */
+  .field-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.6rem; margin: 1rem 0;
+  }
+  .field-item {
+    display: flex; align-items: baseline; gap: 0.5rem;
+    font-size: 0.82rem; padding: 0.45rem 0.7rem;
+    background: #fff; border: 1px solid #e5e5e0; border-radius: 6px;
+  }
+  .field-item .f-name { font-weight: 600; }
+  .field-item .f-count { color: #94a3b8; font-size: 0.75rem; margin-left: auto; white-space: nowrap; }
+
+  /* ── Resolution demo ───────────────────────────────────────── */
+  .resolution-demo {
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+    padding: 1.25rem 1.5rem; margin: 1.5rem 0;
+    font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.82rem; line-height: 1.85;
+  }
+  .res-step {
+    display: flex; align-items: flex-start; gap: 0.7rem;
+    margin: 0.4rem 0; padding: 0.3rem 0;
+  }
+  .res-icon {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 700; color: #fff; margin-top: 2px;
+  }
+  .res-hit  { background: #059669; }
+  .res-miss { background: #d1d5db; }
+  .res-text { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 0.82rem; color: #333; }
+
+  /* ── Callout boxes ─────────────────────────────────────────── */
+  .callout-green {
+    background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px;
+    padding: 1rem 1.25rem; margin: 1.5rem 0;
+  }
+  .callout-green h3 { color: #065f46; font-size: 0.95rem; }
+  .callout-green p  { color: #166534; font-size: 0.82rem; margin-top: 0.3rem; }
+
+  .callout-amber {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fbbf24; border-radius: 8px;
+    padding: 1.25rem 1.5rem; margin: 1.5rem 0;
+  }
+  .callout-amber h3 { color: #92400e; }
+  .callout-amber p  { color: #78350f; font-size: 0.82rem; margin-top: 0.3rem; }
+
+  /* ── Footer ────────────────────────────────────────────────── */
+  footer {
+    padding: 2rem 0; border-top: 1px solid #e5e5e0;
+    text-align: center; color: #94a3b8; font-size: 0.78rem;
+  }
+  footer a { color: #64748b; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  HERO                                                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="container">
+    <h1>Place Geocoding</h1>
+    <div class="subtitle">Adding coordinates to 32,000 place names from five centuries of art history</div>
+    <p style="color:#d6d3d1; font-size:0.9rem; max-width:700px;">
+      The Rijksmuseum's collection metadata references over 32,000 distinct places &mdash; production sites,
+      depicted locations, and artist birthplaces spanning five continents and five centuries.
+      Most arrive as bare names without coordinates.
+      <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" style="color:#93c5fd;">rijksmuseum-mcp+</a>
+      geocodes these places by cascading through multiple authority databases, enabling
+      proximity search, geographic analysis, and spatial reasoning over the entire collection.
+    </p>
+    <div class="stats-row">
+      <div class="stat"><div class="num">32,347</div><div class="desc">distinct places</div></div>
+      <div class="stat"><div class="num">31,033</div><div class="desc">geocoded (96%)</div></div>
+      <div class="stat"><div class="num">5</div><div class="desc">authority sources</div></div>
+      <div class="stat"><div class="num">485K</div><div class="desc">artwork&ndash;place links</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  THE PROBLEM                                                -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>The problem</h2>
+    <p style="margin-bottom:1rem;">
+      Places appear in four roles across the collection, linking artworks to geography through
+      the vocabulary database's <code>mappings</code> table. But the Rijksmuseum's source data provides
+      coordinates for only a fraction of them. Most arrive as text labels with an authority URI
+      (Wikidata, Getty TGN, or GeoNames) but no latitude or longitude.
+    </p>
+
+    <h3 style="margin-top:1.2rem;">How places connect to artworks</h3>
+    <div class="field-grid">
+      <div class="field-item"><span class="f-name">Production place</span><span class="f-count">485,429 links</span></div>
+      <div class="field-item"><span class="f-name">Depicted place</span><span class="f-count">309,502 links</span></div>
+      <div class="field-item"><span class="f-name">Creator birth place</span><span class="f-count">196,234 links</span></div>
+      <div class="field-item"><span class="f-name">Creator death place</span><span class="f-count">180,185 links</span></div>
+    </div>
+
+    <p class="muted" style="margin-top:0.8rem;">
+      A single place like "Amsterdam" may appear in all four roles across thousands of artworks.
+      Production places come from OAI-PMH <code>dcterms:spatial</code>; depicted places from
+      <code>dc:subject</code>; birth/death places from Linked Art person records.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  CASCADING AUTHORITY STRATEGY                               -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Cascading authority strategy</h2>
+    <p style="margin-bottom:0.5rem;">
+      Each place in the vocabulary database carries an <code>external_id</code> linking it to one or more
+      authority databases. The geocoding pipeline resolves coordinates by querying these authorities
+      in order of reliability, falling through to the next source when a query returns no result.
+    </p>
+
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="step-num">Source 1</div>
+        <h3>Getty TGN</h3>
+        <p>SPARQL batch queries against the Getty Thesaurus of Geographic Names. 200 IDs per request.</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Source 2</div>
+        <h3>Wikidata</h3>
+        <p>SPARQL queries for P625 (coordinate location). 400 QIDs per batch. Fallback to P159, P131, P276.</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Source 3</div>
+        <h3>GeoNames</h3>
+        <p>REST API lookups by GeoNames&nbsp;ID. One-by-one at 1&nbsp;req/sec.</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Source 4</div>
+        <h3>WHG</h3>
+        <p>Fuzzy name matching via World Historical Gazetteer. Resolves historical variants.</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Fallback</div>
+        <h3>Hierarchy</h3>
+        <p>Places without coordinates inherit from their nearest geocoded parent via <code>broader_id</code>.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:1rem;">
+      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Coordinate sources across 31,033 geocoded places</div>
+      <div class="method-bar">
+        <div class="bar-wikidata" style="width:33%;" title="Wikidata: 10,264">Wikidata 33%</div>
+        <div class="bar-inherit" style="width:31%;" title="Hierarchy: ~9,460">Hierarchy 31%</div>
+        <div class="bar-tgn" style="width:29%;" title="Getty TGN: 8,882">Getty TGN 29%</div>
+        <div class="bar-geonames" style="width:4%;" title="GeoNames: 1,201">GN</div>
+        <div class="bar-whg" style="width:3%;" title="WHG: ~2,283">WHG</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  AUTHORITY SOURCES DETAIL                                   -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Authority sources in detail</h2>
+    <p style="margin-bottom:0.5rem;">Each source contributes coordinates with different strengths. The pipeline queries them
+      in order of precision and batch efficiency.</p>
+
+    <div style="overflow-x:auto;">
+    <table class="source-table">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Method</th>
+          <th>Places</th>
+          <th>Geocoded</th>
+          <th>Strengths</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="auth-badge auth-tgn">Getty TGN</span></td>
+          <td>SPARQL endpoint<br><span class="muted">foaf:focus &rarr; wgs84:lat/long</span></td>
+          <td class="mono">8,884</td>
+          <td class="mono">8,882 <span class="muted">(99.98%)</span></td>
+          <td style="font-size:0.82rem;">Art-world standard. Curated by Getty. Includes historical place names and hierarchies.</td>
+        </tr>
+        <tr>
+          <td><span class="auth-badge auth-wikidata">Wikidata</span></td>
+          <td>SPARQL endpoint<br><span class="muted">P625 + P159/P131/P276 fallbacks</span></td>
+          <td class="mono">10,308</td>
+          <td class="mono">10,264 <span class="muted">(99.6%)</span></td>
+          <td style="font-size:0.82rem;">Largest coverage. Fallback properties (headquarters, admin territory) resolve institutions and districts.</td>
+        </tr>
+        <tr>
+          <td><span class="auth-badge auth-geonames">GeoNames</span></td>
+          <td>REST JSON API<br><span class="muted">by numeric ID</span></td>
+          <td class="mono">1,215</td>
+          <td class="mono">1,201 <span class="muted">(98.8%)</span></td>
+          <td style="font-size:0.82rem;">Good for modern administrative units. Free tier rate-limited (1,000 req/hour).</td>
+        </tr>
+        <tr>
+          <td><span class="auth-badge auth-whg">World Historical Gazetteer</span></td>
+          <td>Reconciliation API<br><span class="muted">fuzzy name matching</span></td>
+          <td class="mono">~2,283</td>
+          <td class="mono">~2,283 <span class="muted">(accepted)</span></td>
+          <td style="font-size:0.82rem;">Resolves historical variants (Batavia&rarr;Jakarta, Leyden&rarr;Leiden). Bridges to other authorities.</td>
+        </tr>
+        <tr>
+          <td><span class="auth-badge auth-inherit">Hierarchy inheritance</span></td>
+          <td>Recursive CTE<br><span class="muted">broader_id &rarr; parent coords</span></td>
+          <td class="mono">~9,460</td>
+          <td class="mono">~9,460</td>
+          <td style="font-size:0.82rem;">Streets, buildings, landmarks inherit city-level coordinates from parent place. 79% of places have a parent.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  SIX-PHASE PIPELINE                                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Geocoding pipeline phases</h2>
+    <p style="margin-bottom:0.5rem;">
+      The geocoding script (<code>geocode_places.py</code>) runs post-harvest in six sequential phases,
+      each targeting a different category of unresolved places.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="count">Phase 1a</div>
+        <h3>Authority ID resolution</h3>
+        <p>Batch SPARQL queries to Getty TGN and Wikidata using existing authority IDs from
+          the harvest. GeoNames IDs resolved via REST API. Handles ~20,000 places in minutes.</p>
+        <div class="example">
+          external_id: "http://vocab.getty.edu/tgn/7006952"<br>
+          &rarr; SPARQL &rarr; lat: 52.37, lon: 4.89 (Amsterdam)
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="count">Phase 1b</div>
+        <h3>Wikidata alternative properties</h3>
+        <p>When P625 (coordinates) is missing, follow indirect paths: P159 (headquarters location),
+          P131 (located in admin territory), P276 (location). Catches institutions and districts.</p>
+        <div class="example">
+          "Rijksmuseum" (Q190804) &mdash; no P625<br>
+          &rarr; P131 &rarr; Amsterdam &rarr; 52.37&deg;N, 4.89&deg;E
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="count">Phase 1c</div>
+        <h3>Cross-reference bridging</h3>
+        <p>Map Getty TGN IDs to Wikidata via P1667 (TGN ID property), then query Wikidata for
+          coordinates. Recovers places where TGN itself lacks coordinates but Wikidata has them.</p>
+        <div class="example">
+          TGN 7011405 &rarr; P1667 &rarr; Q727 (Amsterdam)<br>
+          &rarr; P625 &rarr; 52.37&deg;N, 4.89&deg;E
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="count">Phase 2</div>
+        <h3>Self-reference resolution</h3>
+        <p>Some vocabulary entries reference other entries that have already been geocoded.
+          Copy coordinates from the resolved entry. Handles aliases and duplicate records.</p>
+        <div class="example">
+          "'s-Gravenhage" &rarr; references "Den Haag"<br>
+          &rarr; copy lat: 52.08, lon: 4.30
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="count">Phase 3</div>
+        <h3>Fuzzy name reconciliation</h3>
+        <p>Places with no authority ID are matched by name against Wikidata and the
+          <a href="https://whgazetteer.org">World Historical Gazetteer</a>.
+          Confidence scoring: auto-accept &ge;0.85, flag 0.50&ndash;0.85 for review, reject &lt;0.50.</p>
+        <div class="example">
+          "Amstelledamme" &rarr; WHG fuzzy &rarr; Amsterdam<br>
+          score: 0.92 &rarr; auto-accept
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="count">Phase 4</div>
+        <h3>Validation</h3>
+        <p>Systematic checks for hemisphere errors, null island false positives (0&deg;N,&nbsp;0&deg;E),
+          latitude/longitude swaps, and authority misidentifications detected via
+          production-place vs depicted-place distance outliers.</p>
+        <div class="example">
+          Tewkesbury &rarr; TGN 7821058 (Tasmania!)<br>
+          &rarr; flagged: 16,000 km from other English works<br>
+          &rarr; corrected to Gloucestershire
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  PLACE HIERARCHY                                            -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Place hierarchy and coordinate inheritance</h2>
+    <p style="margin-bottom:1rem;">
+      The vocabulary database links places into a parent&ndash;child tree via <code>broader_id</code>,
+      derived from the Rijksmuseum's place hierarchy (<code>P89_falls_within</code> in CIDOC-CRM).
+      79% of places have a parent. This hierarchy serves two purposes.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Coordinate inheritance</h3>
+        <p>Streets, buildings, and landmarks that no authority can geocode directly inherit coordinates from their
+          nearest geocoded ancestor. Precision drops to city-level, but coverage jumps from 64% to 96%.</p>
+        <div class="example">
+          "Spin- en Nieuwe Werkhuis"<br>
+          &rarr; no coordinates in any authority<br>
+          &rarr; broader_id &rarr; Amsterdam<br>
+          &rarr; inherits 52.37&deg;N, 4.89&deg;E
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Hierarchy expansion at query time</h3>
+        <p>The <code>expandPlaceHierarchy</code> flag on <code>search_artwork</code> recursively
+          expands a place to include all descendants &mdash; so "Netherlands" also returns
+          artworks produced in Amsterdam, Delft, Haarlem, and every other Dutch location.</p>
+        <div class="example" style="font-family:'Segoe UI',system-ui,sans-serif;">
+          <code>search_artwork(productionPlace: "Netherlands",
+  expandPlaceHierarchy: true)</code><br>
+          <span class="muted">&rarr; recursive CTE walks broader_id tree (max depth 10, limit 10K descendants)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  HISTORICAL VARIANTS                                        -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Resolving historical place names</h2>
+    <p style="margin-bottom:1rem;">
+      A collection spanning the 15th to 21st century uses place names from many eras. The World
+      Historical Gazetteer is particularly valuable here &mdash; its datasets include Dutch colonial
+      names, VOC-era toponyms, and medieval variants that modern gazetteers do not cover.
+    </p>
+
+    <div style="overflow-x:auto;">
+    <table class="source-table">
+      <thead>
+        <tr>
+          <th>Historical name</th>
+          <th>Modern name</th>
+          <th>Resolved via</th>
+          <th>Context</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">Batavia</td>
+          <td>Jakarta</td>
+          <td><span class="auth-badge auth-whg">WHG</span></td>
+          <td style="font-size:0.82rem;">VOC headquarters, 1619&ndash;1942</td>
+        </tr>
+        <tr>
+          <td class="mono">Leyden</td>
+          <td>Leiden</td>
+          <td><span class="auth-badge auth-whg">WHG</span></td>
+          <td style="font-size:0.82rem;">Historical English/Latin spelling</td>
+        </tr>
+        <tr>
+          <td class="mono">'s-Gravenhage</td>
+          <td>Den Haag / The Hague</td>
+          <td><span class="auth-badge auth-wikidata">Wikidata</span></td>
+          <td style="font-size:0.82rem;">Formal Dutch name</td>
+        </tr>
+        <tr>
+          <td class="mono">Cochin</td>
+          <td>Kochi</td>
+          <td><span class="auth-badge auth-whg">WHG</span></td>
+          <td style="font-size:0.82rem;">VOC trading post, Kerala</td>
+        </tr>
+        <tr>
+          <td class="mono">Elmina</td>
+          <td>Elmina</td>
+          <td><span class="auth-badge auth-whg">WHG</span></td>
+          <td style="font-size:0.82rem;">WIC fort, Gold Coast (Ghana)</td>
+        </tr>
+        <tr>
+          <td class="mono">Amstelledamme</td>
+          <td>Amsterdam</td>
+          <td><span class="auth-badge auth-whg">WHG</span></td>
+          <td style="font-size:0.82rem;">Medieval Dutch</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  RUNTIME FEATURES                                           -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>What geocoding enables at runtime</h2>
+    <p style="margin-bottom:0.5rem;">With coordinates in the database, rijksmuseum-mcp+ supports spatial queries
+      that would be impossible with place names alone.</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">&target;</div>
+        <h3>Proximity search</h3>
+        <p>Find artworks produced in, depicting, or connected to places within a radius of a named location.
+          Uses a custom Haversine distance function in SQLite with a bounding-box pre-filter for performance.</p>
+        <div class="example" style="font-family:'Segoe UI',system-ui,sans-serif;">
+          <code>search_artwork(nearPlace: "Oude Kerk Amsterdam",
+  nearPlaceRadius: 0.5)</code><br>
+          <span class="muted">&rarr; artworks within 500m of the Oude Kerk</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">&equiv;</div>
+        <h3>Multi-word place resolution</h3>
+        <p>Ambiguous queries like "Paleis van Justitie Den Haag" are resolved via progressive
+          token splitting: try the full string, then progressively drop right-side tokens, using the
+          remainder as geographic context for disambiguation.</p>
+        <div class="example">
+          "Rapenburg" &rarr; 2 candidates<br>
+          (Leiden: 52.16&deg;N &amp; Amsterdam: 52.37&deg;N)<br>
+          + context "Leiden" &rarr; picks correct one
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">&loz;</div>
+        <h3>Geographic distance as a signal</h3>
+        <p>Proximity queries double as a <strong>data quality tool</strong>: outlier distances between
+          an artwork's production place and depicted place can surface authority misidentifications
+          that would otherwise be invisible in text-only metadata.</p>
+        <div class="example">
+          SK-A-XXXX: produced in London,<br>depicts "Tewkesbury" &rarr; geocoded to Tasmania<br>
+          &rarr; 16,000 km distance flags the error
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">&oplus;</div>
+        <h3>Configurable radius</h3>
+        <p>Radii from 100 metres to 500 km. Useful for both fine-grained queries ("artworks
+          from this street") and regional surveys ("production in the Rhine valley").</p>
+        <div class="example" style="font-family:'Segoe UI',system-ui,sans-serif;">
+          <code>nearPlaceRadius: 0.1</code> &rarr; 100m (a building)<br>
+          <code>nearPlaceRadius: 25</code> &rarr; 25km (a city region)<br>
+          <code>nearPlaceRadius: 200</code> &rarr; 200km (a province)
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  COVERAGE WATERFALL                                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Building coverage: from 0% to 96%</h2>
+    <p style="margin-bottom:0.5rem;">
+      Each phase of the pipeline adds coordinates to a new tranche of places.
+      Authority ID resolution handles the bulk; hierarchy inheritance closes the long tail.
+    </p>
+
+    <div class="waterfall">
+      <div class="wf-row">
+        <div class="wf-label">Total places</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:100%; background:#94a3b8;">32,347</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Wikidata P625</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:31.7%; background:#3b82f6;">10,264</div></div>
+        <div class="wf-note muted">SPARQL</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Getty TGN</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:27.5%; background:#d97706;">8,882</div></div>
+        <div class="wf-note muted">SPARQL</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">WHG fuzzy + bridge</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:7.1%; background:#7c3aed;">2,283</div></div>
+        <div class="wf-note muted">API</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">GeoNames</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:3.7%; background:#059669;">1,201</div></div>
+        <div class="wf-note muted">REST API</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label" style="font-style:italic;">Subtotal (direct)</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:70%; background:#0ea5e9;">22,630 &nbsp;(70%)</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Hierarchy inheritance</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:26%; background:#6366f1;">~8,400</div></div>
+        <div class="wf-note muted">broader_id</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label" style="font-weight:700;">Total geocoded</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:96%; background:#059669;">31,033 &nbsp;(96%)</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label" style="color:#94a3b8;">Remaining ungeocoded</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:4%; background:#e5e5e0; color:#888; min-width:40px;">1,314</div></div>
+        <div class="wf-note"></div>
+      </div>
+    </div>
+
+    <p class="muted" style="margin-top:0.5rem;">
+      The 1,314 ungeocoded places are primarily orphan vocabulary entries (not linked to any artwork),
+      extremely local landmarks, and a small number of places with authority IDs but no coordinates
+      in any source.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  VALIDATION                                                 -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Validation and edge cases</h2>
+    <p style="margin-bottom:1rem;">
+      Geocoding at this scale surfaces errors that are invisible in text-only metadata.
+      Phase&nbsp;4 runs systematic validation checks; several caught real errors in the source data.
+    </p>
+
+    <div class="callout-amber">
+      <h3 style="margin-bottom:0.7rem;">Errors caught by validation</h3>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin-top:0.5rem;">
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Authority misidentification</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            Tewkesbury (England) linked to Getty TGN&nbsp;7821058 &mdash; which is Tewkesbury,
+            <em>Tasmania</em>. Invisible without coordinates; detected by distance outlier
+            analysis (16,000&nbsp;km from co-occurring English places).
+          </p>
+        </div>
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Hemisphere and sign errors</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            6 Caribbean/Dutch locations had latitude/longitude swaps placing them near the Falkland
+            Islands. 2 negative-latitude signs inverted Northern Hemisphere locations to the Southern.
+            All 8 caught by systematic hemisphere checks.
+          </p>
+        </div>
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Null Island false positives</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            Places geocoded to 0&deg;N,&nbsp;0&deg;E (a point in the Gulf of Guinea) indicate a
+            missing-data default, not a real location. Flagged and excluded.
+          </p>
+        </div>
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Celestial false positive</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            A vocabulary entry for "Moon" was geocoded to Moon Township, Pennsylvania.
+            Manually corrected.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout-green">
+      <h3>Geocoding as a data quality tool</h3>
+      <p>
+        Adding coordinates doesn't just enable spatial search &mdash; it turns silent metadata errors into
+        detectable outliers. An authority misidentification that maps an English town to Tasmania is
+        undetectable when your data is just text labels and URIs. With coordinates, a single distance
+        query surfaces it immediately. The geocoding pipeline is, in effect, a validation layer for
+        the museum's authority links.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  FOOTER                                                     -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="container">
+    <a href="https://github.com/kintopp/rijksmuseum-mcp-plus">rijksmuseum-mcp+</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://rise.unibas.ch/en/">RISE, University of Basel</a>
+    &nbsp;&middot;&nbsp;
+    Data: <a href="https://data.rijksmuseum.nl">Rijksmuseum, Amsterdam</a>
+    &nbsp;&middot;&nbsp;
+    Historical gazetteer: <a href="https://whgazetteer.org">WHG</a>
+  </div>
+</footer>
+
+</body>
+</html>
