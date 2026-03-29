@@ -125,7 +125,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 
 | API | URL | Purpose |
 |---|---|---|
-| Search API | `https://data.rijksmuseum.nl/search/collection` | Field-based search (title, creator, depicted person, type, material, technique, date, description, image availability), returns Linked Art URIs |
+| Search API | `https://data.rijksmuseum.nl/search/collection` | Fallback only: resolves object numbers to Linked Art URIs when the vocabulary database is unavailable. All primary search is handled by the local vocabulary database. |
 | Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata, vocabulary terms, and bibliography as JSON-LD |
 | IIIF Image API | `https://iiif.micr.io/{id}/info.json` | High-resolution image tiles |
 | OAI-PMH | `https://data.rijksmuseum.nl/oai` | Curated sets, EDM metadata records, date-based change tracking. 192 sets, 832K+ records. |
