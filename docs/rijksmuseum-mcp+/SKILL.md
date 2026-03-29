@@ -1,6 +1,6 @@
 ---
 name: rijksmuseum-mcp
-version: "0.23.1"
+version: "0.23.2"
 last_updated: 2026-03-29
 description: >
   Research workflows for the Rijksmuseum MCP+ server. Use this skill whenever
