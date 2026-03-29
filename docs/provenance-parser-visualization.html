@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Provenance Parser &mdash; rijksmuseum-mcp+</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #fafaf8; color: #1a1a1a; line-height: 1.6;
+  }
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
+  section { padding: 3.5rem 0 2.5rem; }
+  section + section { border-top: 1px solid #e5e5e0; }
+
+  /* ── Typography ───────────────────────────────────────────── */
+  h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+  p, li { font-size: 0.95rem; color: #333; }
+  .muted { color: #666; font-size: 0.85rem; }
+  .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* ── Hero ──────────────────────────────────────────────────── */
+  .hero {
+    padding: 4rem 0 3rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+  }
+  .hero h1 { font-size: 2.2rem; margin-bottom: 0.5rem; color: #fff; }
+  .hero .subtitle { font-size: 1.1rem; color: #94a3b8; font-weight: 400; margin-bottom: 1.5rem; }
+  .hero .stats-row {
+    display: flex; gap: 2.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+  }
+  .hero .stat { text-align: left; }
+  .hero .stat .num { font-size: 1.8rem; font-weight: 700; color: #e2e8f0; line-height: 1.2; }
+  .hero .stat .desc { font-size: 0.78rem; color: #94a3b8; margin-top: 0.15rem; }
+
+  /* ── Raw text block ────────────────────────────────────────── */
+  .raw-text {
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+    padding: 1.25rem 1.5rem; font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.82rem; line-height: 1.85; color: #1a1a1a;
+    overflow-x: auto; position: relative;
+  }
+  .raw-text .tag {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #fff; padding: 2px 7px; border-radius: 3px;
+    vertical-align: middle; margin-right: 2px; white-space: nowrap;
+  }
+
+  /* colour-coded highlights */
+  .hl-party   { background: #dbeafe; border-radius: 3px; padding: 1px 3px; }
+  .hl-date    { background: #fef3c7; border-radius: 3px; padding: 1px 3px; }
+  .hl-loc     { background: #d1fae5; border-radius: 3px; padding: 1px 3px; }
+  .hl-price   { background: #fce7f3; border-radius: 3px; padding: 1px 3px; }
+  .hl-type    { background: #f3e8ff; border-radius: 3px; padding: 1px 3px; }
+  .hl-cite    { background: #e5e5e0; border-radius: 3px; padding: 1px 3px; color: #888; }
+  .hl-gap     { background: #fee2e2; border-radius: 3px; padding: 1px 3px; }
+  .hl-lot     { background: #e0e7ff; border-radius: 3px; padding: 1px 3px; }
+  .hl-role    { background: #ccfbf1; border-radius: 3px; padding: 1px 3px; }
+
+  .tag-party  { background: #3b82f6; }
+  .tag-date   { background: #d97706; }
+  .tag-loc    { background: #059669; }
+  .tag-price  { background: #db2777; }
+  .tag-type   { background: #7c3aed; }
+  .tag-cite   { background: #9ca3af; }
+  .tag-gap    { background: #ef4444; }
+  .tag-lot    { background: #4f46e5; }
+  .tag-role   { background: #0d9488; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem;
+    margin-bottom: 1rem; padding: 0.6rem 0;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 0.35rem;
+    font-size: 0.78rem; color: #555;
+  }
+  .legend-swatch {
+    width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
+  }
+
+  /* ── Pipeline diagram ──────────────────────────────────────── */
+  .pipeline {
+    display: flex; align-items: stretch; gap: 0;
+    margin: 1.5rem 0; flex-wrap: nowrap; overflow-x: auto;
+  }
+  .pipe-step {
+    flex: 1; min-width: 160px; padding: 1.1rem 1rem;
+    background: #fff; border: 1px solid #d4d4c8;
+    position: relative;
+  }
+  .pipe-step:first-child { border-radius: 8px 0 0 8px; }
+  .pipe-step:last-child  { border-radius: 0 8px 8px 0; }
+  .pipe-step + .pipe-step { border-left: none; }
+  .pipe-step .step-num {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 0.3rem;
+  }
+  .pipe-step h3 { font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .pipe-step p  { font-size: 0.78rem; color: #666; line-height: 1.5; }
+  .pipe-arrow {
+    display: flex; align-items: center; font-size: 1.2rem; color: #94a3b8;
+    padding: 0 0.1rem; flex-shrink: 0;
+  }
+
+  /* ── Structured output cards ───────────────────────────────── */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+    padding: 1.1rem 1.25rem; position: relative;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card .card-icon {
+    font-size: 1.3rem; margin-bottom: 0.4rem; display: block;
+  }
+  .card h3 { font-size: 0.95rem; }
+  .card p  { font-size: 0.82rem; color: #555; margin-top: 0.3rem; }
+  .card .example {
+    margin-top: 0.6rem; padding: 0.5rem 0.7rem;
+    background: #f8f8f5; border-radius: 5px;
+    font-family: 'Iosevka', monospace; font-size: 0.78rem; color: #444;
+  }
+  .card .count {
+    position: absolute; top: 1rem; right: 1.1rem;
+    font-size: 0.72rem; color: #94a3b8; font-weight: 600;
+  }
+
+  /* ── Event table ───────────────────────────────────────────── */
+  .event-table {
+    width: 100%; border-collapse: collapse; font-size: 0.8rem;
+    margin: 1rem 0;
+  }
+  .event-table th {
+    text-align: left; font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: #94a3b8; padding: 0.5rem 0.7rem; border-bottom: 2px solid #e5e5e0;
+  }
+  .event-table td {
+    padding: 0.55rem 0.7rem; border-bottom: 1px solid #f0f0eb;
+    vertical-align: top; color: #333;
+  }
+  .event-table tr:last-child td { border-bottom: none; }
+  .event-table .mono {
+    font-family: 'Iosevka', monospace; font-size: 0.78rem;
+  }
+  .type-badge {
+    display: inline-block; font-size: 0.7rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .type-sale       { background: #dbeafe; color: #1e40af; }
+  .type-collection { background: #f3e8ff; color: #6b21a8; }
+  .type-by_descent { background: #d1fae5; color: #065f46; }
+  .type-gift       { background: #fef3c7; color: #92400e; }
+  .type-bequest    { background: #fce7f3; color: #9d174d; }
+  .type-loan       { background: #e0e7ff; color: #3730a3; }
+  .type-unknown    { background: #f5f5f0; color: #888; }
+
+  /* ── Transfer type grid ────────────────────────────────────── */
+  .type-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.6rem; margin: 1rem 0;
+  }
+  .type-item {
+    display: flex; align-items: baseline; gap: 0.5rem;
+    font-size: 0.82rem; padding: 0.45rem 0.7rem;
+    background: #fff; border: 1px solid #e5e5e0; border-radius: 6px;
+  }
+  .type-item .t-name { font-weight: 600; }
+  .type-item .t-count { color: #94a3b8; font-size: 0.75rem; margin-left: auto; white-space: nowrap; }
+
+  /* ── LLM section ───────────────────────────────────────────── */
+  .llm-box {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fbbf24; border-radius: 8px;
+    padding: 1.25rem 1.5rem; margin: 1.5rem 0;
+  }
+  .llm-box h3 { color: #92400e; }
+
+  .method-bar {
+    display: flex; height: 32px; border-radius: 6px; overflow: hidden;
+    margin: 1rem 0; font-size: 0.72rem; font-weight: 600; color: #fff;
+  }
+  .method-bar > div {
+    display: flex; align-items: center; justify-content: center;
+    white-space: nowrap; padding: 0 0.6rem; min-width: 30px;
+  }
+  .bar-peg     { background: #3b82f6; }
+  .bar-regex   { background: #8b5cf6; }
+  .bar-crossref { background: #94a3b8; }
+  .bar-llm     { background: #f59e0b; }
+
+  .waterfall {
+    display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0;
+  }
+  .wf-row {
+    display: flex; align-items: center; gap: 0.8rem;
+  }
+  .wf-label {
+    width: 180px; flex-shrink: 0; font-size: 0.82rem; font-weight: 500;
+    text-align: right; color: #555;
+  }
+  .wf-bar-track {
+    flex: 1; height: 22px; background: #f0f0eb; border-radius: 4px;
+    position: relative; overflow: hidden;
+  }
+  .wf-bar-fill {
+    height: 100%; border-radius: 4px; display: flex;
+    align-items: center; padding-left: 8px;
+    font-size: 0.72rem; font-weight: 600; color: #fff;
+    transition: width 0.6s ease;
+  }
+  .wf-note { font-size: 0.75rem; color: #94a3b8; width: 60px; flex-shrink: 0; }
+
+  /* ── Footer ────────────────────────────────────────────────── */
+  footer {
+    padding: 2rem 0; border-top: 1px solid #e5e5e0;
+    text-align: center; color: #94a3b8; font-size: 0.78rem;
+  }
+  footer a { color: #64748b; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  HERO                                                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="container">
+    <h1>Provenance Parser</h1>
+    <div class="subtitle">Turning free-text ownership histories into structured data</div>
+    <p style="color:#cbd5e1; font-size:0.9rem; max-width:680px;">
+      The Rijksmuseum records the ownership history of ~48,000 artworks as free-text narratives
+      following the <a href="https://www.museumprovenance.org/pages/standard_v1/" style="color:#93c5fd;">AAM
+      punctuation convention</a>. The provenance parser in
+      <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" style="color:#93c5fd;">rijksmuseum-mcp+</a>
+      parses these narratives into over 100,000 structured events, making them searchable
+      by party, transfer type, date, location, and price.
+    </p>
+    <div class="stats-row">
+      <div class="stat"><div class="num">48,313</div><div class="desc">artworks with provenance</div></div>
+      <div class="stat"><div class="num">100,727</div><div class="desc">events parsed</div></div>
+      <div class="stat"><div class="num">19</div><div class="desc">transfer types</div></div>
+      <div class="stat"><div class="num">10</div><div class="desc">currencies recognised</div></div>
+      <div class="stat"><div class="num">3</div><div class="desc">unresolved events</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  PIPELINE OVERVIEW                                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Processing pipeline</h2>
+    <p style="margin-bottom:0.5rem;">Each provenance narrative passes through a three-layer pipeline. Deterministic parsing handles
+      ~97% of events; an LLM enrichment pass resolves the remainder.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="step-num">Layer 1a</div>
+        <h3>Preprocessing</h3>
+        <p>Strip HTML, extract <code>{citations}</code>, split on semicolons, rejoin prices split across commas</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Layer 1b</div>
+        <h3>PEG Grammar</h3>
+        <p>22 ordered-choice rules match event-type-specific patterns (sales, gifts, bequests, loans&hellip;)</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Layer 1c</div>
+        <h3>Regex Fallback</h3>
+        <p>Keyword-priority classifier for segments the grammar can't match</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Layer 2</div>
+        <h3>Interpretation</h3>
+        <p>Infer party positions (sender / receiver), transfer category (ownership / custody), ownership periods</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step" style="background:#fffbeb;">
+        <div class="step-num" style="color:#d97706;">Layer 3</div>
+        <h3>LLM Enrichment</h3>
+        <p>Classify residual unknowns, disambiguate merged parties, assign positions &mdash; with reasoning</p>
+      </div>
+    </div>
+
+    <div style="margin-top:1rem;">
+      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Parse method distribution (100,727 events)</div>
+      <div class="method-bar">
+        <div class="bar-peg" style="width:58%;" title="PEG grammar: 58%">PEG grammar &nbsp;58%</div>
+        <div class="bar-regex" style="width:19%;" title="Regex fallback: 19%">Regex &nbsp;19%</div>
+        <div class="bar-crossref" style="width:20%;" title="Cross-references: 20%">Cross-ref &nbsp;20%</div>
+        <div class="bar-llm" style="width:3%;" title="LLM enrichment: 3%">LLM</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  EXAMPLE: RAW TEXT                                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Example: The Milkmaid (SK-A-2344)</h2>
+    <p style="margin-bottom:1rem;">A provenance narrative for one of the Rijksmuseum's most famous paintings,
+      showing the data elements the parser extracts from each semicolon-delimited event.</p>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:#dbeafe;"></div> Party</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#ccfbf1;"></div> Role</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#f3e8ff;"></div> Transfer type</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fef3c7;"></div> Date</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#d1fae5;"></div> Location</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fce7f3;"></div> Price</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#e0e7ff;"></div> Lot / details</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#e5e5e0;"></div> Citation</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fee2e2;"></div> Gap</div>
+    </div>
+
+    <div class="raw-text"><!--
+   -->? <span class="hl-party"><span class="tag tag-party">party</span> Pieter Claesz van Ruijven (1624-1674)</span> and <span class="hl-party"><span class="tag tag-party">party</span> Maria Simonsdr de Knuijt (1623-1681)</span>, <span class="hl-loc"><span class="tag tag-loc">loc</span> Delft</span> ;<br><!--
+   -->? <span class="hl-role"><span class="tag tag-role">role</span> their daughter</span>, <span class="hl-party"><span class="tag tag-party">party</span> Magdalena van Ruijven (1655-1682)</span>, <span class="hl-loc"><span class="tag tag-loc">loc</span> Delft</span> ;<br><!--
+   -->? <span class="hl-role"><span class="tag tag-role">role</span> her widower</span>, <span class="hl-party"><span class="tag tag-party">party</span> Jacob Dissius (1653-1695)</span>, <span class="hl-loc"><span class="tag tag-loc">loc</span> Delft</span> ;<br><!--
+   --><span class="hl-cite"><span class="tag tag-cite">cite</span> {Montias 1989, pp. 246-262, 359, doc. 417.}</span><br><!--
+   --><span class="hl-role"><span class="tag tag-role">role</span> his</span> <span class="hl-type"><span class="tag tag-type">type</span> sale</span>, <span class="hl-loc"><span class="tag tag-loc">loc</span> Amsterdam</span>, <span class="hl-date"><span class="tag tag-date">date</span> 16 May 1696</span>, <span class="hl-lot"><span class="tag tag-lot">lot</span> no. 2</span>, <span class="hl-price"><span class="tag tag-price">price</span> fl. 175</span>, to <span class="hl-party"><span class="tag tag-party">party</span> Isaac Rooleeuw (1663-1701)</span>, <span class="hl-loc"><span class="tag tag-loc">loc</span> Amsterdam</span> ;<br><!--
+   --><span class="hl-gap"><span class="tag tag-gap">gap</span> &hellip;</span><br><!--
+   --><span class="hl-party"><span class="tag tag-party">party</span> Lucretia Johanna van Winter (1785-1845)</span>, <span class="hl-loc"><span class="tag tag-loc">loc</span> Amsterdam</span>, <span class="hl-date"><span class="tag tag-date">date</span> 1817</span> ;<br><!--
+   --><span class="hl-role"><span class="tag tag-role">role</span> from whom</span> <span class="hl-type"><span class="tag tag-type">type</span> purchased</span> by the <span class="hl-party"><span class="tag tag-party">party</span> Rijksmuseum</span>, <span class="hl-loc"><span class="tag tag-loc">loc</span> Amsterdam</span>, <span class="hl-date"><span class="tag tag-date">date</span> 1908</span>, <span class="hl-price"><span class="tag tag-price">price</span> fl. 550,000</span> with <span class="hl-lot"><span class="tag tag-lot">batch</span> 38 other paintings</span>
+    </div>
+    <p class="muted" style="margin-top:0.6rem;">
+      Abbreviated for display. Full narrative has 16 events spanning 1624&ndash;1908.
+      The <code>?</code> prefix marks uncertain attributions; <code>&hellip;</code> marks a gap in the documented chain.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  STRUCTURED OUTPUT                                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>What the parser extracts</h2>
+    <p style="margin-bottom:0.5rem;">Each provenance event is decomposed into structured fields, stored in a SQLite database, and
+      exposed through the <code>search_provenance</code> tool.</p>
+
+    <div class="cards">
+      <!-- Transfer type -->
+      <div class="card">
+        <div class="card-icon">&circlearrowright;</div>
+        <h3>Transfer type</h3>
+        <p>How ownership changed: sale, gift, bequest, inheritance, confiscation, loan, and 13 other types aligned with the
+          <a href="https://www.museumprovenance.org/reference/acquisition_methods/">CMOA vocabulary</a>.</p>
+        <div class="example">
+          "his sale, Amsterdam" &rarr; <span class="type-badge type-sale">sale</span><br>
+          "donated to the museum" &rarr; <span class="type-badge type-gift">gift</span><br>
+          "her widower, Jacob&hellip;" &rarr; <span class="type-badge type-by_descent">widowhood</span>
+        </div>
+      </div>
+
+      <!-- Parties -->
+      <div class="card">
+        <div class="card-icon">&starf;</div>
+        <h3>Parties &amp; roles</h3>
+        <p>People and institutions involved, with life dates, roles (buyer, seller, heir, donor&hellip;)
+          and inferred position: <strong>sender</strong>, <strong>receiver</strong>, or <strong>agent</strong>.</p>
+        <div class="example">
+          "to Isaac Rooleeuw (1663-1701)"<br>
+          &rarr; name: Isaac Rooleeuw<br>
+          &rarr; dates: 1663&ndash;1701, role: buyer<br>
+          &rarr; position: <strong>receiver</strong>
+        </div>
+      </div>
+
+      <!-- Dates -->
+      <div class="card">
+        <div class="card-icon">&varnothing;</div>
+        <h3>Dates &amp; qualifiers</h3>
+        <p>Event year with qualifier: <em>before</em>, <em>after</em>, <em>circa</em> (&plusmn;10 years),
+          or exact. Full date expressions preserved.</p>
+        <div class="example">
+          "16 May 1696" &rarr; year: 1696, qualifier: null<br>
+          "c. 1817" &rarr; year: 1817, qualifier: circa<br>
+          "before 1674" &rarr; year: 1674, qualifier: before
+        </div>
+      </div>
+
+      <!-- Locations -->
+      <div class="card">
+        <div class="card-icon">&oplus;</div>
+        <h3>Locations</h3>
+        <p>Place names matched against 27,237 verified toponyms from the vocabulary database.
+          64% are geocoded for proximity search.</p>
+        <div class="example">
+          "Amsterdam" &rarr; loc: Amsterdam (52.37&deg;N, 4.89&deg;E)<br>
+          "Delft" &rarr; loc: Delft (52.01&deg;N, 4.36&deg;E)
+        </div>
+      </div>
+
+      <!-- Prices -->
+      <div class="card">
+        <div class="card-icon">&curren;</div>
+        <h3>Prices &amp; currencies</h3>
+        <p>Amounts in original historical currency. Ten currencies recognised: guilders, pounds, francs,
+          marks, euros, dollars, lire, yen, kronen, reis. A <code>batch_price</code> flag marks
+          <em>en bloc</em> totals for multiple works.</p>
+        <div class="example">
+          "fl. 175" &rarr; 175 guilders<br>
+          "fl. 550,000 with 38 other paintings"<br>
+          &rarr; 550,000 guilders, batch_price: true
+        </div>
+      </div>
+
+      <!-- Sale details & citations -->
+      <div class="card">
+        <div class="card-icon">&para;</div>
+        <h3>Sale details &amp; citations</h3>
+        <p>Lot numbers, auctioneer names, and bibliographic references extracted from
+          <code>{curly braces}</code> and stored separately.</p>
+        <div class="example">
+          "no. 2" &rarr; lot number: 2<br>
+          "{Montias 1989, pp. 246-262}"<br>
+          &rarr; citation (linked to event)
+        </div>
+      </div>
+
+      <!-- Flags -->
+      <div class="card wide">
+        <div class="card-icon">&triangledown;</div>
+        <h3>Provenance signals</h3>
+        <p>Boolean flags and metadata that support filtering and research workflows:</p>
+        <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:0.6rem; font-size:0.82rem;">
+          <div><code>uncertain</code> &mdash; <code>?</code> prefix on event or party</div>
+          <div><code>gap</code> &mdash; <code>&hellip;</code> break in ownership chain</div>
+          <div><code>unsold</code> &mdash; auction lot was bought-in (no transfer occurred)</div>
+          <div><code>batch_price</code> &mdash; price covers multiple works</div>
+          <div><code>parseMethod</code> &mdash; peg, regex_fallback, cross_ref, or credit_line</div>
+          <div><code>categoryMethod</code> / <code>positionMethod</code> &mdash; provenance of every enrichment decision</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  PARSED OUTPUT TABLE                                        -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Parsed output for the Milkmaid (excerpt)</h2>
+    <p style="margin-bottom:0.5rem;">The first five events as structured rows. Each row is one semicolon-delimited segment from the raw text.</p>
+    <div style="overflow-x:auto;">
+    <table class="event-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Type</th>
+          <th>Party</th>
+          <th>Position</th>
+          <th>Location</th>
+          <th>Date</th>
+          <th>Price</th>
+          <th>Method</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">1</td>
+          <td><span class="type-badge type-collection">collection</span></td>
+          <td>Pieter Claesz van Ruijven <span class="muted">(1624-1674)</span><br>Maria Simonsdr de Knuijt <span class="muted">(1623-1681)</span></td>
+          <td class="muted">receiver<br>receiver</td>
+          <td>Delft</td>
+          <td class="muted">&mdash;</td>
+          <td class="muted">&mdash;</td>
+          <td class="mono muted">peg</td>
+        </tr>
+        <tr>
+          <td class="mono">2</td>
+          <td><span class="type-badge type-by_descent">by_descent</span></td>
+          <td>Magdalena van Ruijven <span class="muted">(1655-1682)</span></td>
+          <td class="muted">receiver</td>
+          <td>Delft</td>
+          <td class="muted">&mdash;</td>
+          <td class="muted">&mdash;</td>
+          <td class="mono muted">peg</td>
+        </tr>
+        <tr>
+          <td class="mono">3</td>
+          <td><span class="type-badge type-by_descent">widowhood</span></td>
+          <td>Jacob Dissius <span class="muted">(1653-1695)</span></td>
+          <td class="muted">receiver</td>
+          <td>Delft</td>
+          <td class="muted">&mdash;</td>
+          <td class="muted">&mdash;</td>
+          <td class="mono muted">peg</td>
+        </tr>
+        <tr>
+          <td class="mono">4</td>
+          <td><span class="type-badge type-sale">sale</span></td>
+          <td>Isaac Rooleeuw <span class="muted">(1663-1701)</span></td>
+          <td class="muted">receiver</td>
+          <td>Amsterdam</td>
+          <td>16 May 1696</td>
+          <td class="mono">fl. 175</td>
+          <td class="mono muted">peg</td>
+        </tr>
+        <tr style="background:#fefce8;">
+          <td class="mono" style="color:#92400e;">&hellip;</td>
+          <td colspan="6" style="color:#92400e; font-style:italic; font-size:0.82rem;">
+            gap in the documented ownership chain
+          </td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="mono">5</td>
+          <td><span class="type-badge type-collection">collection</span></td>
+          <td>Lucretia Johanna van Winter <span class="muted">(1785-1845)</span></td>
+          <td class="muted">receiver</td>
+          <td>Amsterdam</td>
+          <td>1817</td>
+          <td class="muted">&mdash;</td>
+          <td class="mono muted">peg</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  TRANSFER TYPES                                             -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Transfer type vocabulary</h2>
+    <p style="margin-bottom:0.5rem;">
+      19 types aligned with the
+      <a href="https://www.museumprovenance.org/reference/acquisition_methods/">CMOA Art Tracks standard</a>,
+      organised by whether they transfer <strong>ownership</strong> (legal title) or only
+      <strong>custody</strong> (temporary possession).
+    </p>
+
+    <h3 style="margin-top:1.2rem;">Ownership transfers</h3>
+    <div class="type-grid">
+      <div class="type-item"><span class="t-name">sale</span><span class="t-count">12,886</span></div>
+      <div class="type-item"><span class="t-name">collection</span><span class="t-count">17,883</span></div>
+      <div class="type-item"><span class="t-name">gift</span><span class="t-count">10,663</span></div>
+      <div class="type-item"><span class="t-name">by_descent</span><span class="t-count">9,344</span></div>
+      <div class="type-item"><span class="t-name">bequest</span><span class="t-count">4,378</span></div>
+      <div class="type-item"><span class="t-name">inheritance</span><span class="t-count">4,366</span></div>
+      <div class="type-item"><span class="t-name">widowhood</span><span class="t-count">3,423</span></div>
+      <div class="type-item"><span class="t-name">commission</span><span class="t-count">574</span></div>
+      <div class="type-item"><span class="t-name">recuperation</span><span class="t-count">852</span></div>
+      <div class="type-item"><span class="t-name">restitution</span><span class="t-count">86</span></div>
+      <div class="type-item"><span class="t-name">inventory</span><span class="t-count">75</span></div>
+      <div class="type-item"><span class="t-name">confiscation</span><span class="t-count">21</span></div>
+      <div class="type-item"><span class="t-name">exchange</span><span class="t-count">4</span></div>
+      <div class="type-item"><span class="t-name">theft / looting</span><span class="t-count">5</span></div>
+    </div>
+
+    <h3 style="margin-top:1.2rem;">Custody transfers</h3>
+    <div class="type-grid">
+      <div class="type-item"><span class="t-name">loan</span><span class="t-count">6,333</span></div>
+      <div class="type-item"><span class="t-name">deposit</span><span class="t-count">246</span></div>
+    </div>
+
+    <h3 style="margin-top:1.2rem;">Ambiguous / unresolved</h3>
+    <div class="type-grid">
+      <div class="type-item"><span class="t-name">transfer</span> <span class="muted" style="font-size:0.75rem;">(administrative)</span><span class="t-count">6,052</span></div>
+      <div class="type-item"><span class="t-name">unknown</span> <span class="muted" style="font-size:0.75rem;">(incl. cross-refs)</span><span class="t-count">21,436</span></div>
+    </div>
+
+    <p class="muted" style="margin-top:1rem;">
+      The 21,436 <em>unknown</em> events include 19,871 cross-references (<code>"see provenance of SK-A-XXXX"</code>)
+      that link to companion works and are not true unknowns. After excluding cross-references, only 3 events remain genuinely unresolved.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  LLM ENRICHMENT                                             -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Where the parser needed help from an LLM</h2>
+    <p style="margin-bottom:1rem;">
+      The deterministic parser (PEG grammar + regex fallback + rule-based inference) resolved ~97% of events.
+      For the remaining cases, an LLM (Claude Sonnet) was used in targeted batch passes to resolve
+      three categories of ambiguity that require world knowledge or contextual reasoning.
+    </p>
+
+    <div class="llm-box">
+      <h3 style="margin-bottom:0.7rem;">Three problems that required an LLM</h3>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.2rem; margin-top:0.5rem;">
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">1. Transfer type classification</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            170 events used institution-specific jargon, archaic terminology, or non-standard phrasing
+            that no keyword rule could reliably match. The LLM classified each with a transfer type
+            and written reasoning.
+          </p>
+          <div class="example" style="background:#fef9ee; font-size:0.78rem; border:1px solid #fde68a; margin-top:0.5rem;">
+            "placed at the disposal of the SNK"<br>
+            &rarr; LLM: <span class="type-badge type-loan">deposit</span><br>
+            <span class="muted">Reasoning: "SNK administered wartime<br>deposits; this is custody, not ownership"</span>
+          </div>
+        </div>
+
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">2. Party position disambiguation</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            824 parties had no deterministic role mapping. The LLM inferred sender/receiver/agent
+            from the narrative context and the transfer type of the event.
+          </p>
+          <div class="example" style="background:#fef9ee; font-size:0.78rem; border:1px solid #fde68a; margin-top:0.5rem;">
+            "with dealer [Name], to the museum"<br>
+            &rarr; LLM: [Name] = <strong>sender</strong><br>
+            <span class="muted">Reasoning: "dealer is the intermediary<br>selling to the museum (receiver)"</span>
+          </div>
+        </div>
+
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">3. Merged party decomposition</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            367 party texts contained multiple people merged into a single string by the parser.
+            The LLM decomposed these into individual parties with correct positions.
+          </p>
+          <div class="example" style="background:#fef9ee; font-size:0.78rem; border:1px solid #fde68a; margin-top:0.5rem;">
+            "Jan de Vos, his son Pieter de Vos"<br>
+            &rarr; LLM: split into 2 parties<br>
+            <span class="muted">Jan de Vos (sender),<br>Pieter de Vos (receiver)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Waterfall -->
+    <h3 style="margin-top:1.5rem;">From 3,192 unknowns to 3</h3>
+    <p style="margin-bottom:0.5rem; font-size:0.88rem; color:#555;">
+      A series of grammar improvements, structural signal detection, deterministic rules,
+      and targeted LLM passes reduced the non-cross-reference unknowns by 99.9%.
+    </p>
+
+    <div class="waterfall">
+      <div class="wf-row">
+        <div class="wf-label">Starting unknowns</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:100%; background:#94a3b8;">3,192</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Grammar improvements</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:60%; background:#3b82f6;">&minus;1,890</div></div>
+        <div class="wf-note muted">PEG rules</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Structural signals</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:26%; background:#8b5cf6;">&minus;832</div></div>
+        <div class="wf-note muted">regex</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Unsold reclassification</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:7.2%; background:#059669;">&minus;230</div></div>
+        <div class="wf-note muted">rule</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Credit-line events</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:2.2%; background:#059669;">&minus;70</div></div>
+        <div class="wf-note muted">rule</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label" style="color:#d97706; font-weight:600;">LLM type classification</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:5.3%; background:#f59e0b;">&minus;170</div></div>
+        <div class="wf-note muted" style="color:#d97706;">$0.73</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label" style="font-weight:700;">Remaining</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:0.7%; background:#ef4444; min-width:24px;">3</div></div>
+        <div class="wf-note"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem; padding:1rem 1.25rem; background:#f0fdf4; border:1px solid #86efac; border-radius:8px;">
+      <h3 style="color:#065f46; font-size:0.95rem;">Total LLM enrichment cost: ~$34</h3>
+      <p style="font-size:0.82rem; color:#166534; margin-top:0.3rem;">
+        All LLM passes used Claude Sonnet via the Anthropic Batch API. Type classification ($0.73) +
+        position enrichment ($9.03) + party disambiguation ($2.31) + forced sale analysis ($21.35, private).
+        Every LLM decision includes written reasoning stored in an <code>enrichment_reasoning</code> column
+        and surfaced in the API output, so downstream users can audit the provenance of the provenance.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  FOOTER                                                     -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="container">
+    <a href="https://github.com/kintopp/rijksmuseum-mcp-plus">rijksmuseum-mcp+</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://rise.unibas.ch/en/">RISE, University of Basel</a>
+    &nbsp;&middot;&nbsp;
+    Data: <a href="https://data.rijksmuseum.nl">Rijksmuseum, Amsterdam</a>
+  </div>
+</footer>
+
+</body>
+</html>
