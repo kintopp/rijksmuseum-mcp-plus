@@ -17,7 +17,7 @@ The `search_artwork` tool combines [39 filters](search-parameters.md) — from b
 
 For aggregate questions — counts, distributions, cross-tabulations — `collection_stats` answers in a single call what would otherwise require multiple `search_artwork` queries with `compact: true`. It supports the same artwork filters plus provenance-specific dimensions (transfer type, party, location, decade).
 
-The links following each research question show how the query was answered in Claude Desktop. They only reproduce the textual portion of the response (no image viewer or visualisations). For some queries, 'extended thinking' had been enabled in Claude allowing one to trace (to some degree) the model's step-by-step 'reasoning' during a task.
+The links following each research question show how the query was answered in Claude Desktop. However, they only reproduce the textual portion of the response (no image viewer or visualisations). For some queries, 'extended thinking' had been enabled in Claude allowing one to trace (to some degree) the model's step-by-step 'reasoning' during a task.
 
 #### 1. Mapping an Artist's Output Across Media
 
