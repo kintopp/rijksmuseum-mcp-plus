@@ -9,7 +9,7 @@
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
-The tool was developed as a technology demo by the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and complements our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks carried out by large language models (LLMs). We are particularly interested in exploring the [research opportunities](docs/research-scenarios.md) and technical challenges posed by retrieving and analysing structured data with LLMs. If you are interested in collaborating with us in this area, please [get in touch](mailto:rise@unibas.ch).
+The tool was developed as a technology demo by the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and complements our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks carried out by large language models (LLMs). We are particularly interested in exploring the research opportunities, methodological risks, and technical challenges posed by retrieving and analysing data with LLMs. If you are interested in collaborating with us in this area, please [get in touch](mailto:rise@unibas.ch).
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ For samples of more complex queries, please see the [research scenarios](docs/re
 
 You can use rijksmuseum-mcp+ to explore artworks with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ provides the following additional features:
 
-1. **More searchable metadata**
+1. **Additional metadata**
 
 These are metadata fields not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). Significantly, several full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`) with search results ranked by relevance. Also searchable now are, for example, `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), `title` variants, attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), bibliography citations for individual artworks, and [Iconclass](https://iconclass.org). The Iconclass notations can be searched by title and description and explored by following their parent and child branches. Proximity searches on [geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). Physical dimension filters support queries on artwork size (e.g. "paintings wider than 3 metres"). Collection-wide aggregate statistics (counts, distributions, and cross-tabulations across any dimension) are available via `collection_stats`. Full details are documented in [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md).
 
@@ -58,7 +58,7 @@ Multilingual, concept-based search drawing simultaneously on the full-text of se
 
 View high-resolution artwork images inline in your chat conversation using a deep-zoom viewer that supports pan, zoom, rotation, horizontal flip, and full-screen mode (click on the ? icon in the image viewer for details). The AI assistant can analyse what it sees in conjunction with the collection's metadata, and can zoom into and annotate regions of interest. You can also (click on the □ icon) draw a rectangle around an area to copy its coordinates into the prompt and direct the assistant's attention to it (e.g. "identify the species of butterfly highlighted in this still life"). Note: this feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). Other chatbots and applications can still view artworks and use the deep-zoom feature via the linked Rijksmuseum pages.
 
-4. **Analyse similar artworks** 
+4. **Find similar artworks** 
 
 A search for artworks `similar to` other artworks creates an interactive comparison page that places an artwork alongside the works most similar to it, evaluated across six independent dimensions: visual appearance, semantic description, Iconclass subject classification, artistic lineage (shared creators, workshops, or attribution chains), depicted persons, and depicted places. Works that appear across multiple dimensions are surfaced in a combined "pooled" view, highlighting the most broadly connected artworks in the collection. Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2350.html) of a `find_similar` analysis.
 
@@ -92,7 +92,7 @@ Because rijksmuseum-mcp+ maintains its own copy of Rijksmuseum and Iconclass met
 - parsing provenance texts into structured ownership chains with events, parties, prices, and dates
 - comparing artworks across multiple modalities of similarity
 
-In essence, rijksmuseum-mcp+ trades the conceptual simplicity of a traditional search interface, where you formulate a query, receive results, and interpret them yourself, for a more flexible and powerful but also more complex scenario, where an AI assistant with direct access to curated metadata can search, combine, and interpret results together with a researcher. 
+In essence, rijksmuseum-mcp+ trades the conceptual simplicity of a traditional search interface, where you formulate a query, receive results, and interpret them yourself, for a more flexible and powerful but also much more complex scenario, where an AI assistant with direct access to curated metadata can search, combine, and interpret results together with a researcher. 
 
 ```mermaid
 flowchart LR
