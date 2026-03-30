@@ -284,6 +284,9 @@
       Each place in the vocabulary database carries an <code>external_id</code> linking it to one or more
       authority databases. The geocoding pipeline resolves coordinates by querying these authorities
       in order of reliability, falling through to the next source when a query returns no result.
+      Places with no authority link are sent by name to the Wikidata and WHG reconciliation APIs,
+      which return fuzzy-matched candidates; a local scoring layer then combines string similarity,
+      geographic type, and coordinate availability to accept, flag for review, or reject each match.
     </p>
 
     <div class="pipeline">
