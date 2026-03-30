@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Provenance Data Model and Query Patterns</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.7;
+    max-width: 52rem;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    border-bottom: 2px solid #ccc;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+  }
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-top: 1.8rem;
+    margin-bottom: 0.5rem;
+  }
+  p { margin-bottom: 0.75rem; }
+  code {
+    font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+    font-size: 0.88em;
+    padding: 0.15em 0.35em;
+  }
+  pre {
+    border: 1px solid #ccc;
+    padding: 1rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  pre code { padding: 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: 0.92rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #ccc;
+  }
+  th { font-weight: 600; }
+  hr {
+    border: none;
+    border-top: 1px solid #ccc;
+    margin: 2rem 0;
+  }
+  strong { font-weight: 600; }
+  ul, ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
+  li { margin-bottom: 0.3rem; }
+  nav { margin-bottom: 2rem; }
+  nav ol { margin-left: 1.5rem; }
+  nav li { margin-bottom: 0.2rem; }
+  nav a { text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<h1>Provenance Data Model and Query Patterns</h1>
+<p>Reference material for <code>search_provenance</code>. Consult this page when you need to interpret raw provenance text, understand the data model, or construct specialised query patterns.</p>
+
+<nav>
+<ol>
+  <li><a href="#aam-standard">Provenance Text Format (AAM Standard)</a></li>
+  <li><a href="#transfer-types">Transfer Types (CMOA/PLOD-aligned Vocabulary)</a></li>
+  <li><a href="#party-roles">Party Roles and Positions</a></li>
+  <li><a href="#date-representation">Date Representation</a></li>
+  <li><a href="#historical-currencies">Historical Currencies</a></li>
+  <li><a href="#enrichment-provenance">Enrichment Provenance</a></li>
+  <li><a href="#parse-method">Parse Method Values</a></li>
+  <li><a href="#provenance-facets">Provenance Facets</a></li>
+  <li><a href="#tested-query-patterns">Tested Query Patterns</a></li>
+</ol>
+</nav>
+
+<hr>
+
+<h2 id="aam-standard">Provenance Text Format (AAM Standard)</h2>
+<p>The Rijksmuseum's provenance text follows the <strong>AAM (American Alliance of Museums) standard</strong> for provenance notation:</p>
+<ul>
+  <li><strong>Semicolon-delimited events</strong>: each ownership change is separated by <code>;</code> &mdash; <code>Owner A, City, date; Owner B, City, date</code></li>
+  <li><strong>Chronological order</strong>: earliest known owner first, current holder last</li>
+  <li><strong>Bare names = ownership</strong>: a name without a transfer keyword (e.g. <code>Pieter Six (1618&ndash;1707), Amsterdam</code>) indicates an ownership period &mdash; classified as <code>collection</code></li>
+  <li><strong>Ellipsis = gap</strong>: <code>&hellip;</code> or <code>...</code> marks a gap in the documented chain</li>
+  <li><strong>Curly braces = citations</strong>: <code>{Bredius 1935, p. 47}</code> are bibliographic references, not provenance events</li>
+  <li><strong>Question mark = uncertainty</strong>: <code>? sale, Amsterdam, 1804</code> &mdash; the transfer or attribution is uncertain</li>
+  <li><strong>Cross-references</strong>: <code>(see also SK-A-3137)</code> links to pendant or companion works that share provenance</li>
+  <li><strong>Life dates</strong>: <code>Name (1650&ndash;1720)</code> &mdash; dates in parentheses after a name are birth&ndash;death years, not event dates</li>
+</ul>
+<p>The Rijksmuseum extends the AAM standard with Dutch-language keywords (<code>schenking</code> = gift, <code>bruikleen</code> = loan, <code>verwerving</code> = acquisition, <code>aangekocht</code> = purchased) and institutional conventions (<code>Inv.</code> = inventory reference, <code>L.</code> = Lugt collector mark number).</p>
+
+<hr>
+
+<h2 id="transfer-types">Transfer Types (CMOA/PLOD-aligned Vocabulary)</h2>
+<p>Transfer types follow the <strong>CMOA Art Tracks thesaurus</strong> (Carnegie Museum of Art), aligned with the <strong>PLOD framework</strong> (Art Institute of Chicago).</p>
+<table>
+<tr><th>Type</th><th>Category</th><th>Description</th></tr>
+<tr><td><code>sale</code></td><td>ownership</td><td>Sale, purchase, or auction (includes "purchased by", "acquired from"). Includes unsold lots &mdash; check <code>unsold</code> flag.</td></tr>
+<tr><td><code>by_descent</code></td><td>ownership</td><td>Inheritance to a named relative (son, daughter, nephew, heir, etc.)</td></tr>
+<tr><td><code>widowhood</code></td><td>ownership</td><td>Inheritance specifically to a widow or widower</td></tr>
+<tr><td><code>inheritance</code></td><td>ownership</td><td>Generic inheritance (no specific relationship identified)</td></tr>
+<tr><td><code>bequest</code></td><td>ownership</td><td>Testamentary gift</td></tr>
+<tr><td><code>gift</code></td><td>ownership</td><td>Donation, gift, or presentation</td></tr>
+<tr><td><code>commission</code></td><td>ownership</td><td>Commissioned creation</td></tr>
+<tr><td><code>exchange</code></td><td>ownership</td><td>Exchange or swap</td></tr>
+<tr><td><code>confiscation</code></td><td>ownership</td><td>Seized by authority</td></tr>
+<tr><td><code>theft</code></td><td>ownership</td><td>Stolen</td></tr>
+<tr><td><code>looting</code></td><td>ownership</td><td>Looted (wartime)</td></tr>
+<tr><td><code>recuperation</code></td><td>ownership</td><td>Recovered by Allied forces (post-WWII, distinct from restitution)</td></tr>
+<tr><td><code>restitution</code></td><td>ownership</td><td>Legally returned to original owner</td></tr>
+<tr><td><code>collection</code></td><td>ownership</td><td>Bare-name ownership period (AAM convention &mdash; no transfer keyword)</td></tr>
+<tr><td><code>inventory</code></td><td>ownership</td><td>Documented in an estate inventory or attestation</td></tr>
+<tr><td><code>loan</code></td><td>custody</td><td>On loan (temporary custody, no ownership change)</td></tr>
+<tr><td><code>deposit</code></td><td>custody</td><td>On deposit or in storage</td></tr>
+<tr><td><code>transfer</code></td><td>ambiguous</td><td>Administrative or intra-organisational transfer</td></tr>
+<tr><td><code>unknown</code></td><td>ambiguous</td><td>Parser could not classify (includes cross-references)</td></tr>
+</table>
+<p>Extensions beyond CMOA: <code>recuperation</code> (physical recovery vs legal return), <code>collection</code> (AAM bare-name convention), <code>inventory</code> (attestation events).</p>
+
+<h3>Event Flags</h3>
+<table>
+<tr><th>Flag</th><th>On type</th><th>Meaning</th></tr>
+<tr><td><code>unsold: true</code></td><td><code>sale</code></td><td>Auction lot was unsold, bought in, or withdrawn. No ownership transfer occurred. Filter these when analysing actual sales.</td></tr>
+<tr><td><code>batchPrice: true</code></td><td>any with price</td><td>The price is an en bloc / batch total for multiple artworks, not an individual price. <strong>Always filter these when ranking or comparing prices</strong> &mdash; they massively distort rankings (e.g. fl. 6,350,000 for 393 Mannheimer objects).</td></tr>
+</table>
+<p><strong>Inheritance granularity</strong>: use <code>by_descent</code> for works inherited by named relatives, <code>widowhood</code> for widow/widower inheritance specifically, or <code>inheritance</code> for the generic case. To catch all inheritance-related transfers: <code>transferType: ["by_descent", "widowhood", "inheritance"]</code>.</p>
+
+<hr>
+
+<h2 id="party-roles">Party Roles and Positions</h2>
+<p>Each party in a provenance event has a <strong>role</strong> (what they did) and a <strong>position</strong> (their side of the transfer):</p>
+<table>
+<tr><th>Role</th><th>Position</th><th>Context</th></tr>
+<tr><td><code>buyer</code></td><td>receiver</td><td>Sale events</td></tr>
+<tr><td><code>seller</code></td><td>sender</td><td>Sale events</td></tr>
+<tr><td><code>donor</code></td><td>sender</td><td>Gift events</td></tr>
+<tr><td><code>recipient</code></td><td>receiver</td><td>Gift, transfer, deposit events</td></tr>
+<tr><td><code>heir</code></td><td>receiver</td><td>Bequest, inheritance events</td></tr>
+<tr><td><code>lender</code></td><td>sender</td><td>Loan events</td></tr>
+<tr><td><code>borrower</code></td><td>receiver</td><td>Loan events</td></tr>
+<tr><td><code>patron</code></td><td>receiver</td><td>Commission events</td></tr>
+<tr><td><code>collector</code></td><td>receiver</td><td>Collection events</td></tr>
+<tr><td><code>dealer</code> / <code>intermediary</code> / <code>auctioneer</code></td><td>agent</td><td>Facilitated without owning</td></tr>
+</table>
+<p>Positions (<code>sender</code>/<code>receiver</code>/<code>agent</code>) are derived from roles via deterministic mapping, with LLM enrichment for ambiguous cases. The <code>positionMethod</code> field tracks how each party's position was determined: <code>role_mapping</code> (deterministic), <code>llm_enrichment</code> (LLM-classified), or <code>llm_disambiguation</code> (LLM-resolved merged party text).</p>
+<p>Coverage: ~86K parties extracted across ~101K events. Not all events have named parties &mdash; bare-name <code>collection</code> events and cross-references often lack structured party data.</p>
+
+<hr>
+
+<h2 id="date-representation">Date Representation</h2>
+<p>Dates use qualified single years with temporal bounds, similar to the <strong>EDTF (Extended Date/Time Format)</strong> approach:</p>
+<table>
+<tr><th>Expression</th><th><code>dateYear</code></th><th><code>dateQualifier</code></th><th>Interpretation</th></tr>
+<tr><td><code>1808</code></td><td>1808</td><td>&mdash;</td><td>Exact year</td></tr>
+<tr><td><code>c. 1700</code></td><td>1700</td><td><code>circa</code></td><td>Approximate (&plusmn;10 years in Layer 2)</td></tr>
+<tr><td><code>before 1800</code> / <code>by 1800</code></td><td>1800</td><td><code>before</code></td><td>Terminal bound only</td></tr>
+<tr><td><code>after 1945</code></td><td>1945</td><td><code>after</code></td><td>Start bound only</td></tr>
+<tr><td><code>1560-70</code></td><td>1565</td><td>&mdash;</td><td>Midpoint of range</td></tr>
+<tr><td><code>possibly 1767</code></td><td>1767</td><td><code>circa</code></td><td>Uncertain attribution</td></tr>
+<tr><td><code>1858 or earlier</code></td><td>1858</td><td><code>before</code></td><td>Terminal bound</td></tr>
+</table>
+
+<hr>
+
+<h2 id="historical-currencies">Historical Currencies</h2>
+<p>Prices are stored in their original historical currency &mdash; no inflation adjustment or cross-currency conversion is performed. Supported currency values:</p>
+<p><code>guilders</code>, <code>pounds</code>, <code>francs</code>, <code>livres</code>, <code>napol&eacute;ons</code>, <code>guineas</code>, <code>belgian_francs</code>, <code>deutschmarks</code>, <code>reichsmarks</code>, <code>swiss_francs</code>, <code>euros</code>, <code>dollars</code>, <code>yen</code>, <code>marks</code>, <code>louis_d_or</code>.</p>
+<p>Pre-decimal notations (&pound;.s.d, fl. X:Y:-) are converted to decimal equivalents of the base currency unit.</p>
+<p>Note on batch prices: <em>en bloc</em> prices (a batch sold together, e.g. the entire Mannheimer collection for fl. 6,350,000) are attributed to every individual item in the batch. These events are flagged with <code>batchPrice: true</code> &mdash; always filter them out when ranking or comparing prices.</p>
+
+<hr>
+
+<h2 id="enrichment-provenance">Enrichment Provenance</h2>
+<p>Every record carries provenance-of-provenance metadata tracking how it was determined:</p>
+<ul>
+  <li><code>parseMethod</code>: how the event was parsed (<code>peg</code>, <code>regex_fallback</code>, <code>cross_ref</code>, <code>credit_line</code>)</li>
+  <li><code>categoryMethod</code>: how the transfer type/category was determined (<code>type_mapping</code> = parser, <code>llm_enrichment</code> = LLM, <code>rule:transfer_is_ownership</code> = validated rule)</li>
+  <li><code>positionMethod</code> (on parties): how the party position was determined (<code>role_mapping</code> = parser, <code>type_mapping</code> = from transfer type, <code>llm_enrichment</code> = LLM, <code>llm_disambiguation</code> = LLM-decomposed merged text)</li>
+  <li><code>enrichmentReasoning</code>: the LLM's reasoning for any non-deterministic decision</li>
+</ul>
+<p>When results contain LLM-enriched records, <code>search_provenance</code> provides a URL to an enrichment review page showing the full methodology and reasoning for each decision. <strong>Always show this URL to the user.</strong></p>
+
+<h3>Querying by enrichment method</h3>
+<pre><code># Artworks where transfer type was classified by LLM (170 events)
+search_provenance(categoryMethod="llm_enrichment", maxResults=10)
+
+# Artworks where party position was assigned by LLM
+search_provenance(positionMethod="llm_enrichment", maxResults=10)
+
+# Artworks where merged party text was decomposed by LLM (204 splits)
+search_provenance(positionMethod="llm_disambiguation", maxResults=10)</code></pre>
+<p>For collection-wide distribution of methods:</p>
+<pre><code>collection_stats(dimension="categoryMethod")
+collection_stats(dimension="positionMethod")
+collection_stats(dimension="parseMethod")</code></pre>
+
+<hr>
+
+<h2 id="parse-method">Parse Method Values</h2>
+<p>The <code>parseMethod</code> field records how each provenance record was processed:</p>
+<table>
+<tr><th>Value</th><th>Share</th><th>Description</th></tr>
+<tr><td><code>peg</code></td><td>~80%</td><td>PEG grammar parser &mdash; highest confidence</td></tr>
+<tr><td><code>cross_ref</code></td><td>~20%</td><td>Cross-reference links</td></tr>
+<tr><td><code>credit_line</code></td><td>~0.1%</td><td>Inferred from the museum's credit line field when the provenance chain lacked acquisition information</td></tr>
+<tr><td><code>regex_fallback</code></td><td>&mdash;</td><td>Legacy, currently unused</td></tr>
+</table>
+<p><code>credit_line</code> events are particularly useful: they recover acquisition context (donor name, purchase fund) that the provenance text omits.</p>
+
+<hr>
+
+<h2 id="provenance-facets">Provenance Facets</h2>
+<p><code>search_provenance</code> supports <code>facets: true</code>, returning 5 facet dimensions alongside chain results:</p>
+<ul>
+  <li><strong>transferType</strong>: distribution of transfer types in matching events</li>
+  <li><strong>decade</strong>: temporal distribution of matching events</li>
+  <li><strong>location</strong>: geographic distribution (city-level, top 20)</li>
+  <li><strong>transferCategory</strong>: ownership vs custody vs ambiguous</li>
+  <li><strong>partyPosition</strong>: sender vs receiver vs agent</li>
+</ul>
+<p>All entries include <code>count</code> and <code>percentage</code>.</p>
+<pre><code># Faceted overview of wartime confiscations
+search_provenance(transferType="confiscation", dateFrom=1933, dateTo=1945, facets=true)
+
+# Faceted overview of a dealer's activity
+search_provenance(party="Goudstikker", facets=true)
+
+# Faceted audit of LLM-classified events
+search_provenance(categoryMethod="llm_enrichment", facets=true)</code></pre>
+
+<hr>
+
+<h2 id="tested-query-patterns">Tested Query Patterns</h2>
+
+<h3>Collector profiling</h3>
+<pre><code># All works associated with a collector across all event types
+search_provenance(party="Mannheimer", maxResults=50)
+
+# Collector as seller specifically
+search_provenance(party="Goupil", maxResults=20)
+# Then filter results: role="seller" + position="sender" to map direction of trade
+
+# Ownership durations for a family name
+search_provenance(layer="periods", ownerName="Six",
+                  sortBy="duration", sortOrder="desc", maxResults=20)</code></pre>
+
+<h3>Acquisition channel analysis</h3>
+<pre><code># creditLine covers ~358K artworks — far more than parsed provenance (~48K)
+search_artwork(creditLine="Drucker-Fraser", compact=true)
+search_artwork(creditLine="Vereniging Rembrandt", type="painting", compact=true)</code></pre>
+
+<h3>Wartime provenance</h3>
+<pre><code># Anti-join: confiscated but never restituted
+search_provenance(transferType="confiscation",
+                  excludeTransferType="restitution", maxResults=20)
+
+# Works with documented gaps + events in the wartime period
+search_provenance(hasGap=true, creator="Rembrandt",
+                  dateFrom=1933, dateTo=1945, maxResults=20)
+
+# Recuperation events (Allied recovery, distinct from legal restitution)
+search_provenance(transferType="recuperation", maxResults=20)</code></pre>
+
+<h3>Price and market history</h3>
+<pre><code># Most expensive recorded transactions in guilders
+# Check batchPrice on results — true means en bloc total, not individual price
+search_provenance(hasPrice=true, currency="guilders",
+                  sortBy="price", sortOrder="desc", maxResults=20)
+
+# Price history for a specific work
+search_provenance(objectNumber="SK-A-2344", layer="events")
+# Check unsold flag: unsold lots have prices but no sale occurred</code></pre>
+
+<h3>Multi-generation family collections</h3>
+<pre><code>search_provenance(transferType=["by_descent", "widowhood"],
+                  layer="periods", minDuration=50,
+                  sortBy="duration", sortOrder="desc", maxResults=20)</code></pre>
+
+<h3>Chronological exploration</h3>
+<pre><code># Earliest documented provenance events in the collection
+search_provenance(dateFrom=1400, dateTo=1500, sortBy="dateYear",
+                  sortOrder="asc", maxResults=20)</code></pre>
+
+<h3>Decade-level time series</h3>
+<p>Use <code>collection_stats</code> for single-call time series &mdash; no manual pagination loop needed:</p>
+<pre><code># Sale events per decade 1600–1900
+collection_stats(dimension="provenanceDecade", transferType="sale",
+                 dateFrom=1600, dateTo=1900)
+
+# Half-century bins
+collection_stats(dimension="provenanceDecade", transferType="sale",
+                 dateFrom=1600, dateTo=1900, binWidth=50)
+
+# Confiscation events by decade (wartime distribution)
+collection_stats(dimension="provenanceDecade", transferType="confiscation")
+# Reveals 1790s + 1940s bimodal pattern (French Revolution + WWII)</code></pre>
+
+</body>
+</html>
