@@ -288,8 +288,8 @@
       <div class="pipe-arrow">&rarr;</div>
       <div class="pipe-step">
         <div class="step-num">Layer 2</div>
-        <h3>Interpretation</h3>
-        <p>Infer party positions (sender / receiver), transfer category (ownership / custody), ownership periods</p>
+        <h3>Post-processing</h3>
+        <p>Assign party positions (sender / receiver), transfer category (ownership / custody), ownership periods</p>
       </div>
       <div class="pipe-arrow">&rarr;</div>
       <div class="pipe-step" style="background:#fffbeb;">
@@ -302,7 +302,7 @@
     <div style="margin-top:1rem;">
       <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Parse method distribution (100,727 events)</div>
       <div class="method-bar">
-        <div class="bar-peg" style="width:58%;" title="PEG grammar: 58%">PEG grammar &nbsp;58%</div>
+        <div class="bar-peg" style="width:58%;" title="PEG grammar: 58%">Parsing Expression Grammar (PEG) &nbsp;58%</div>
         <div class="bar-regex" style="width:19%;" title="Regex fallback: 19%">Regex &nbsp;19%</div>
         <div class="bar-crossref" style="width:20%;" title="Cross-references: 20%">Cross-ref &nbsp;20%</div>
         <div class="bar-llm" style="width:3%;" title="LLM enrichment: 3%">LLM</div>
@@ -598,7 +598,7 @@
   <div class="container">
     <h2>Where the parser needed help from an LLM</h2>
     <p style="margin-bottom:1rem;">
-      The deterministic parser (PEG grammar + regex fallback + rule-based inference) resolved ~97% of events.
+      The deterministic parser (Parsing Expression Grammar + regex fallback + rule-based inference) resolved ~97% of events.
       For the remaining cases, an LLM (Claude Sonnet) was used in targeted batch passes to resolve
       three categories of ambiguity that require world knowledge or contextual reasoning.
     </p>
@@ -694,15 +694,6 @@
       </div>
     </div>
 
-    <div style="margin-top:1.5rem; padding:1rem 1.25rem; background:#f0fdf4; border:1px solid #86efac; border-radius:8px;">
-      <h3 style="color:#065f46; font-size:0.95rem;">Total LLM enrichment cost: ~$34</h3>
-      <p style="font-size:0.82rem; color:#166534; margin-top:0.3rem;">
-        All LLM passes used Claude Sonnet via the Anthropic Batch API. Type classification ($0.73) +
-        position enrichment ($9.03) + party disambiguation ($2.31) + forced sale analysis ($21.35, private).
-        Every LLM decision includes written reasoning stored in an <code>enrichment_reasoning</code> column
-        and surfaced in the API output, so downstream users can audit the provenance of the provenance.
-      </p>
-    </div>
   </div>
 </section>
 
