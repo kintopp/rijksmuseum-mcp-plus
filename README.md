@@ -23,7 +23,7 @@ Technically speaking, rijksmuseum-mcp+ is based on the open [Model Context Proto
 
 ## Sample Queries
 
-After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. The shared links below are to sample responses to these queries in Claude Desktop. They only reproduce the textual portion of the response (no image viewer or visualisations). 
+After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. The links below are to sample responses to these queries in Claude Desktop. However, such shared links only reproduce the textual portion of the original session (no image viewer or visualisations). 
 
 - _What German artworks evoke vanitas and mortality?_ [link](https://claude.ai/share/2d38db0c-82e2-434a-a48b-cfe3cbbcfec5)
 - _List portrait photographs by American female photographers in the collection_ [link](https://claude.ai/share/704b1dd1-6591-4fc5-b6a8-80cf38ad1df3)
