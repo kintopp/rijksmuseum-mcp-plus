@@ -1,6 +1,6 @@
 ---
 name: rijksmuseum-mcp
-version: "0.23.2"
+version: "0.23.3"
 last_updated: 2026-03-29
 description: >
   Research workflows for the Rijksmuseum MCP+ server. Use this skill whenever
@@ -262,6 +262,8 @@ semantic_search(query="vanitas symbolism", subject="skull", type="painting")
 # → paintings with skull subjects, ranked by how well they match "vanitas symbolism"
 ```
 
+**Filter specificity matters.** Very broad single filters (e.g. `type: "print"` alone — 421K works, or `material: "paper"` — 643K) exceed the internal candidate limit, so semantic ranking operates on a subset. Results are still high-quality (distances are near-optimal), but a different subset might surface equally-good alternatives. For best coverage, combine two or more filters or pair a broad filter with a specific one (e.g. `type: "print", subject: "landscape"`).
+
 **Language note**: English queries yield slightly higher precision against the
 bilingual catalogue even though the embedding model is multilingual. If a Dutch
 or German query returns unexpected results, reformulate in English.
@@ -389,6 +391,7 @@ collection_stats(dimension="creatorGender", type="painting", creationDateFrom=17
 | `navigate_viewer` WebSocket disconnection | Use `inspect_artwork_image` as the reliable fallback for region analysis |
 | No `subject` results in English | Try the Dutch term — vocabulary is bilingual ("fotograaf" not "photographer") |
 | `semantic_search` skews toward prints/drawings | Filter with `type: "painting"` — prints and drawings outnumber paintings ~77:1 |
+| `semantic_search` with very broad filter | Single broad filters (`type: "print"`, `material: "paper"`) exceed the candidate limit — results are good but not exhaustive. Combine filters for better coverage. |
 | `bibliographyCount` is high but citations needed | Use `get_artwork_bibliography(full=false)` to get structured metadata without full text |
 | Inscription field empty in catalogue | Use `inspect_artwork_image` — AI vision can often read text directly from the image. Try `quality: "gray"` for better contrast on faded inscriptions or signatures. |
 | `facets` on `search_artwork` | 11 dimensions: type, material, technique, century, creatorGender, rights, imageAvailable, creator, depictedPerson, depictedPlace, productionPlace. Configure with `facetLimit` (1–50, default 5). Pass `facets=true` for all or `facets=["creator","type"]` for specific ones. All entries include percentage. |

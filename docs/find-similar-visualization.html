@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Find Similar Artworks &mdash; rijksmuseum-mcp+</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #fafaf8; color: #1a1a1a; line-height: 1.6;
+  }
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
+  section { padding: 3.5rem 0 2.5rem; }
+  section + section { border-top: 1px solid #e5e5e0; }
+
+  /* ── Typography ───────────────────────────────────────────── */
+  h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+  p, li { font-size: 0.95rem; color: #333; }
+  .muted { color: #666; font-size: 0.85rem; }
+  .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+  .mono { font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace; }
+
+  /* ── Hero ──────────────────────────────────────────────────── */
+  .hero {
+    padding: 4rem 0 3rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+  }
+  .hero h1 { font-size: 2.2rem; margin-bottom: 0.5rem; color: #fff; }
+  .hero .subtitle { font-size: 1.1rem; color: #94a3b8; font-weight: 400; margin-bottom: 1.5rem; }
+  .hero .stats-row {
+    display: flex; gap: 2.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+  }
+  .hero .stat { text-align: left; }
+  .hero .stat .num { font-size: 1.8rem; font-weight: 700; color: #e2e8f0; line-height: 1.2; }
+  .hero .stat .desc { font-size: 0.78rem; color: #94a3b8; margin-top: 0.15rem; }
+
+  /* ── Cards ─────────────────────────────────────────────────── */
+  .cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0;
+  }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+    padding: 1.1rem 1.25rem; position: relative;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card h3 { font-size: 0.95rem; }
+  .card p { font-size: 0.82rem; color: #555; }
+  .card .example {
+    font-size: 0.78rem; font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+    background: #f8f8f5; border-radius: 5px; padding: 0.5rem 0.7rem; margin-top: 0.5rem;
+    line-height: 1.7;
+  }
+  .card .card-icon {
+    position: absolute; top: 0.9rem; right: 1rem; font-size: 1.3rem; color: #94a3b8;
+  }
+
+  /* ── Signal mode badges ────────────────────────────────────── */
+  .sig-badge {
+    display: inline-block; font-size: 0.68rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap; color: #fff;
+  }
+  .sig-visual  { background: #00838f; }
+  .sig-desc    { background: #e65100; }
+  .sig-ic      { background: #1565c0; }
+  .sig-lineage { background: #6a1b9a; }
+  .sig-person  { background: #2e7d32; }
+  .sig-place   { background: #4e342e; }
+  .sig-pooled  { background: #37474f; }
+
+  /* ── Tables ────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 1rem 0; }
+  th {
+    text-align: left; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #94a3b8; padding: 0.5rem 0.7rem;
+    border-bottom: 2px solid #e5e5e0;
+  }
+  td {
+    padding: 0.55rem 0.7rem; border-bottom: 1px solid #f0f0eb;
+    vertical-align: top; color: #333;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  /* ── Pipeline diagram ──────────────────────────────────────── */
+  .pipeline {
+    display: flex; align-items: stretch; gap: 0;
+    margin: 1.5rem 0; flex-wrap: nowrap; overflow-x: auto;
+  }
+  .pipe-step {
+    flex: 1; min-width: 145px; padding: 1.1rem 1rem;
+    background: #fff; border: 1px solid #d4d4c8; position: relative;
+  }
+  .pipe-step:first-child { border-radius: 8px 0 0 8px; }
+  .pipe-step:last-child { border-radius: 0 8px 8px 0; }
+  .pipe-step + .pipe-step { border-left: none; }
+  .pipe-step .step-num {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 0.3rem;
+  }
+  .pipe-step h3 { font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .pipe-step p { font-size: 0.78rem; color: #666; line-height: 1.5; }
+  .pipe-arrow {
+    display: flex; align-items: center; font-size: 1.2rem;
+    color: #94a3b8; padding: 0 0.1rem; flex-shrink: 0;
+  }
+
+  /* ── Waterfall chart ───────────────────────────────────────── */
+  .waterfall { display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0; }
+  .wf-row { display: flex; align-items: center; gap: 0.8rem; }
+  .wf-label {
+    width: 180px; flex-shrink: 0; font-size: 0.82rem; font-weight: 500;
+    text-align: right; color: #555;
+  }
+  .wf-bar-track {
+    flex: 1; height: 22px; background: #f0f0eb; border-radius: 4px;
+    position: relative; overflow: hidden;
+  }
+  .wf-bar-fill {
+    height: 100%; border-radius: 4px; display: flex; align-items: center;
+    padding-left: 8px; font-size: 0.72rem; font-weight: 600; color: #fff;
+    transition: width 0.6s ease;
+  }
+  .wf-note {
+    font-size: 0.75rem; color: #94a3b8; width: 100px; flex-shrink: 0; white-space: nowrap;
+  }
+
+  /* ── Amber callout ─────────────────────────────────────────── */
+  .callout-amber {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fbbf24; border-radius: 8px;
+    padding: 1.25rem 1.5rem; margin: 1.5rem 0;
+  }
+  .callout-amber h3 { color: #92400e; }
+
+  /* ── Method bar ────────────────────────────────────────────── */
+  .method-bar {
+    display: flex; height: 32px; border-radius: 6px; overflow: hidden;
+    margin: 1rem 0; font-size: 0.72rem; font-weight: 600; color: #fff;
+  }
+  .method-bar > div {
+    display: flex; align-items: center; justify-content: center;
+    white-space: nowrap; padding: 0 0.6rem; min-width: 30px;
+  }
+
+  /* ── Artwork thumbnail ─────────────────────────────────────── */
+  .thumb-row {
+    display: flex; gap: 1rem; margin: 1.5rem 0; overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+  .thumb-card {
+    flex-shrink: 0; width: 160px; text-align: center;
+  }
+  .thumb-card img {
+    width: 160px; height: 200px; object-fit: cover;
+    border-radius: 6px; border: 1px solid #d4d4c8;
+    background: #f0f0eb;
+  }
+  .thumb-card .tc-title {
+    font-size: 0.72rem; font-weight: 600; color: #333;
+    margin-top: 0.4rem; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .thumb-card .tc-creator {
+    font-size: 0.68rem; color: #666; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .thumb-card .tc-score {
+    font-size: 0.65rem; color: #94a3b8; margin-top: 0.15rem;
+    font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  /* ── Artwork showcase ──────────────────────────────────────── */
+  .showcase {
+    display: flex; gap: 1.5rem; margin: 1.5rem 0; align-items: flex-start;
+  }
+  @media (max-width: 640px) { .showcase { flex-direction: column; } }
+  .showcase img {
+    width: 220px; height: 280px; object-fit: cover;
+    border-radius: 8px; border: 1px solid #d4d4c8;
+    flex-shrink: 0; background: #f0f0eb;
+  }
+  .showcase .showcase-meta { flex: 1; }
+  .showcase .showcase-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.2rem; }
+  .showcase .showcase-creator { font-size: 0.88rem; color: #555; margin-bottom: 0.5rem; }
+
+  /* ── Signal strip ──────────────────────────────────────────── */
+  .signal-strip {
+    margin: 1rem 0 0.5rem; padding: 0.8rem 1rem;
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+  }
+  .signal-strip .ss-header {
+    display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;
+  }
+  .signal-strip .ss-label { font-size: 0.82rem; font-weight: 600; }
+  .signal-strip .ss-method { font-size: 0.75rem; color: #666; margin-bottom: 0.5rem; }
+
+  /* ── Footer ────────────────────────────────────────────────── */
+  footer {
+    padding: 2rem 0; border-top: 1px solid #e5e5e0;
+    text-align: center; color: #94a3b8; font-size: 0.78rem;
+  }
+  footer a { color: #64748b; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  HERO                                                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="container">
+    <h1>Find Similar Artworks</h1>
+    <p class="subtitle">Six independent signals, one comparison page</p>
+    <p style="color:#cbd5e1; font-size:0.9rem; max-width:700px;">
+      Given any artwork in the Rijksmuseum collection, <code style="color:#e2e8f0;">find_similar</code>
+      discovers related works through six orthogonal similarity signals &mdash;
+      visual appearance, catalogue description, Iconclass subject codes, creator lineage,
+      depicted persons, and depicted places &mdash; then renders an interactive comparison
+      page with IIIF thumbnails. Each signal captures a different dimension of &ldquo;similar&rdquo;,
+      and artworks that appear across three or more signals are pooled as the strongest matches.
+    </p>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="num">6</div>
+        <div class="desc">similarity signals</div>
+      </div>
+      <div class="stat">
+        <div class="num">832K</div>
+        <div class="desc">artworks searchable</div>
+      </div>
+      <div class="stat">
+        <div class="num">511K</div>
+        <div class="desc">description embeddings</div>
+      </div>
+      <div class="stat">
+        <div class="num">3+</div>
+        <div class="desc">signals to pool</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  WHY MULTI-SIGNAL                                           -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>The problem: &ldquo;similar&rdquo; means different things</h2>
+    <p style="margin-bottom:1rem;">
+      When a researcher says &ldquo;find artworks similar to The Night Watch&rdquo;, they could
+      mean any of several things: works that <em>look</em> similar, works that depict the
+      <em>same people</em>, works from the <em>same artistic circle</em>, or works that share
+      the <em>same subject matter</em>. No single similarity metric captures all of these.
+    </p>
+
+    <div class="showcase">
+      <img src="https://iiif.micr.io/PJEZO/full/440,/0/default.jpg"
+           alt="The Night Watch by Rembrandt van Rijn, 1642">
+      <div class="showcase-meta">
+        <div class="showcase-title">The Night Watch</div>
+        <div class="showcase-creator">Rembrandt van Rijn, 1642 &middot; SK-C-5</div>
+        <p style="font-size:0.82rem; color:#555; margin-bottom:0.7rem;">
+          The iconic civic guard painting yields very different results depending on
+          which dimension of similarity you ask about:
+        </p>
+        <div style="font-size:0.82rem; line-height:1.8;">
+          <span class="sig-badge sig-visual">Visual</span>
+          &nbsp;other large group scenes with dramatic lighting<br>
+          <span class="sig-badge sig-ic">Iconclass</span>
+          &nbsp;artworks tagged with civic guard, weapons, drums<br>
+          <span class="sig-badge sig-desc">Description</span>
+          &nbsp;works described with the same compositional vocabulary<br>
+          <span class="sig-badge sig-person">Person</span>
+          &nbsp;other portraits of Frans Banninck Cocq, Willem van Ruytenburch, etc.
+        </div>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:0.7rem;">
+          Each signal is a different lens on the collection. Combining them reveals connections
+          that no single signal would surface alone.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  THE SIX SIGNALS                                            -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Six similarity signals</h2>
+    <p style="margin-bottom:1rem;">
+      Each signal uses a different data source and scoring algorithm. They run concurrently
+      and produce independent result lists, which are then rendered side-by-side.
+    </p>
+
+    <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Signal</th>
+          <th>Data source</th>
+          <th>Scoring</th>
+          <th style="text-align:right;">Coverage</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="sig-badge sig-visual">Visual</span></td>
+          <td>Rijksmuseum image similarity API</td>
+          <td class="muted">Rank order (external model)</td>
+          <td class="mono" style="text-align:right;">~87%</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-desc">Description</span></td>
+          <td>511K Dutch catalogue descriptions &rarr; e5-small 384d int8 embeddings</td>
+          <td class="muted">Cosine similarity (1 &minus; distance)</td>
+          <td class="mono" style="text-align:right;">~61%</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-ic">Iconclass</span></td>
+          <td>658K artworks with Iconclass notation codes</td>
+          <td class="muted">depth &times; IDF per shared notation</td>
+          <td class="mono" style="text-align:right;">~79%</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-lineage">Lineage</span></td>
+          <td>208K artworks with attribution qualifiers (after, workshop of, circle of&nbsp;&hellip;)</td>
+          <td class="muted">qualifier strength &times; creator IDF</td>
+          <td class="mono" style="text-align:right;">~25%</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-person">Person</span></td>
+          <td>217K artworks with depicted person metadata</td>
+          <td class="muted">IDF per shared person</td>
+          <td class="mono" style="text-align:right;">~26%</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-place">Place</span></td>
+          <td>116K artworks with depicted place metadata (broad regions excluded)</td>
+          <td class="muted">IDF per shared place</td>
+          <td class="mono" style="text-align:right;">~14%</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="label" style="margin-top:1rem; margin-bottom:0.4rem; color:#94a3b8;">Coverage across the collection (832K artworks)</div>
+    <div class="waterfall">
+      <div class="wf-row">
+        <div class="wf-label"><span class="sig-badge sig-visual">Visual</span></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:87%; background:#00838f;">~724K</div></div>
+        <div class="wf-note muted">external API</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label"><span class="sig-badge sig-ic">Iconclass</span></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:79%; background:#1565c0;">~658K</div></div>
+        <div class="wf-note muted">vocab DB</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label"><span class="sig-badge sig-desc">Description</span></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:61%; background:#e65100;">~511K</div></div>
+        <div class="wf-note muted">embeddings DB</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label"><span class="sig-badge sig-person">Person</span></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:26%; background:#2e7d32;">~217K</div></div>
+        <div class="wf-note muted">vocab DB</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label"><span class="sig-badge sig-lineage">Lineage</span></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:25%; background:#6a1b9a;">~208K</div></div>
+        <div class="wf-note muted">vocab DB</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label"><span class="sig-badge sig-place">Place</span></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:14%; background:#4e342e;">~116K</div></div>
+        <div class="wf-note muted">vocab DB</div>
+      </div>
+    </div>
+
+    <p class="muted" style="margin-top:0.5rem;">
+      Not every artwork produces results for every signal. An artwork with no depicted persons
+      will have an empty Person row; a primary attribution (no qualifier) will have an empty
+      Lineage row. The comparison page only shows signal rows that produced results.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  SIGNAL DEEP DIVES                                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>How each signal works</h2>
+
+    <!-- VISUAL ──────────────────────────────────────────────── -->
+    <div class="signal-strip">
+      <div class="ss-header">
+        <span class="sig-badge sig-visual">Visual</span>
+        <span class="ss-label">Image-based similarity</span>
+      </div>
+      <p class="ss-method">
+        Calls the Rijksmuseum&rsquo;s own visual search API, which uses an internal image
+        embedding model. The object number is first resolved to an internal node ID, then
+        passed to the <code>/api/v1/collection/visualsearch</code> endpoint. Best-effort:
+        API failures are silently skipped. Results are rank-ordered (no numeric similarity score).
+      </p>
+      <div class="thumb-row">
+        <div class="thumb-card">
+          <img src="https://iiif.micr.io/PJEZO/pct:20,10,60,60/160,200/0/default.jpg"
+               alt="The Night Watch (detail)" loading="lazy">
+          <div class="tc-title">The Night Watch</div>
+          <div class="tc-creator">query artwork</div>
+        </div>
+        <div style="display:flex; align-items:center; color:#94a3b8; font-size:1.2rem; padding:0 0.3rem;">&rarr;</div>
+        <div class="thumb-card">
+          <img src="https://iiif.micr.io/pVyUn/pct:15,10,70,60/160,200/0/default.jpg"
+               alt="Copy of The Night Watch" loading="lazy">
+          <div class="tc-title">Copy of The Night Watch</div>
+          <div class="tc-creator">attr. Gerrit Lundens</div>
+          <div class="tc-score">rank #1</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DESCRIPTION ─────────────────────────────────────────── -->
+    <div class="signal-strip">
+      <div class="ss-header">
+        <span class="sig-badge sig-desc">Description</span>
+        <span class="ss-label">Catalogue description similarity</span>
+      </div>
+      <p class="ss-method">
+        Each of 511K artworks has a Dutch catalogue description embedded with
+        <code>intfloat/multilingual-e5-small</code> (384 dimensions, int8 quantized).
+        At query time, the embedding of the query artwork is looked up and used for
+        KNN search via <code>sqlite-vec</code> (vec0 virtual table). Score is cosine
+        similarity (1&nbsp;&minus;&nbsp;distance). Artworks with similar compositional
+        vocabulary (&ldquo;links een&nbsp;X, rechts een&nbsp;Y&rdquo;) cluster together.
+      </p>
+      <div class="thumb-row">
+        <div class="thumb-card">
+          <img src="https://iiif.micr.io/QkOGy/full/160,/0/default.jpg"
+               alt="The Milkmaid" loading="lazy">
+          <div class="tc-title">The Milkmaid</div>
+          <div class="tc-creator">query artwork</div>
+        </div>
+        <div style="display:flex; align-items:center; color:#94a3b8; font-size:1.2rem; padding:0 0.3rem;">&rarr;</div>
+        <div class="thumb-card" style="opacity:0.85;">
+          <div style="width:160px; height:200px; background:#f0f0eb; border-radius:6px; border:1px solid #d4d4c8; display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:#94a3b8; text-align:center; padding:0.5rem;">
+            works with similar<br>Dutch descriptions of<br>interior domestic scenes
+          </div>
+          <div class="tc-title">Kitchen scenes, still lifes</div>
+          <div class="tc-score">similarity: 0.82&ndash;0.91</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ICONCLASS ───────────────────────────────────────────── -->
+    <div class="signal-strip">
+      <div class="ss-header">
+        <span class="sig-badge sig-ic">Iconclass</span>
+        <span class="ss-label">Shared subject codes</span>
+      </div>
+      <p class="ss-method">
+        Finds artworks sharing the same
+        <a href="https://iconclass.org">Iconclass</a> notation codes.
+        Deeper codes (more specific subjects) that appear on fewer artworks contribute more &mdash;
+        the score is <strong>depth&nbsp;&times;&nbsp;IDF</strong> (inverse document frequency).
+        Generic top-level notations like &ldquo;historical persons&rdquo; (<code>61B2</code>, 90K artworks) are
+        noise-filtered. Single shallow matches (depth&nbsp;&lt;&nbsp;5) are pruned to avoid overly broad hits.
+      </p>
+      <div class="example" style="font-size:0.78rem; background:#f8f8f5; border-radius:5px; padding:0.5rem 0.7rem; line-height:1.7;">
+        Night Watch shares <code>45(+26)</code> "citizen militia",
+        <code>45C1</code> "weapons", <code>48C7341</code> "drum"<br>
+        &rarr; deep, rare codes like <code>45(+26)</code> score highest<br>
+        &rarr; matches: other civic guard paintings, militia group portraits
+      </div>
+    </div>
+
+    <!-- LINEAGE ─────────────────────────────────────────────── -->
+    <div class="signal-strip">
+      <div class="ss-header">
+        <span class="sig-badge sig-lineage">Lineage</span>
+        <span class="ss-label">Creator attribution chains</span>
+      </div>
+      <p class="ss-method">
+        Finds artworks that share visual-style lineage through attribution qualifiers.
+        Works &ldquo;after&rdquo; the same artist, from the same &ldquo;workshop&rdquo;,
+        &ldquo;attributed to&rdquo; the same hand, or in the same &ldquo;circle&rdquo; are
+        connected. Score is weighted by <strong>qualifier strength&nbsp;&times;&nbsp;creator IDF</strong>:
+        rarer creators contribute more.
+      </p>
+      <div style="overflow-x:auto;">
+      <table style="font-size:0.78rem; margin:0.5rem 0;">
+        <thead>
+          <tr><th>Qualifier</th><th>Weight</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>after / copyist of</td><td class="mono">3.0&times;</td><td class="muted">direct visual derivation</td></tr>
+          <tr><td>workshop of</td><td class="mono">2.0&times;</td><td class="muted">produced in the master&rsquo;s studio</td></tr>
+          <tr><td>attributed to</td><td class="mono">1.5&times;</td><td class="muted">probably by this artist</td></tr>
+          <tr><td>circle of / follower of</td><td class="mono">1.0&times;</td><td class="muted">stylistic sphere of influence</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="thumb-row">
+        <div class="thumb-card">
+          <img src="https://iiif.micr.io/wRxpz/full/160,/0/default.jpg"
+               alt="Laughing Young Man" loading="lazy">
+          <div class="tc-title">Laughing Young Man</div>
+          <div class="tc-creator">circle of Rembrandt</div>
+        </div>
+        <div style="display:flex; align-items:center; color:#94a3b8; font-size:1.2rem; padding:0 0.3rem;">&rarr;</div>
+        <div class="thumb-card" style="opacity:0.85;">
+          <div style="width:160px; height:200px; background:#f3e8ff; border-radius:6px; border:1px solid #d4d4c8; display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:#6a1b9a; text-align:center; padding:0.5rem;">
+            other works in Rembrandt&rsquo;s<br>circle, workshop, and<br>follower attributions
+          </div>
+          <div class="tc-title">Circle / workshop / after</div>
+          <div class="tc-score">qualifier: circle of (1.0&times;)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEPICTED PERSON ─────────────────────────────────────── -->
+    <div class="signal-strip">
+      <div class="ss-header">
+        <span class="sig-badge sig-person">Depicted Person</span>
+        <span class="ss-label">Shared historical figures</span>
+      </div>
+      <p class="ss-method">
+        Finds artworks that depict the same named individuals. Scoring uses
+        <strong>IDF</strong>: people who appear in fewer artworks contribute more.
+        A rarer figure like Jan Pietersen Bronchorst scores higher than
+        a frequently depicted person. Results link to Wikidata where available.
+      </p>
+      <div class="example" style="font-size:0.78rem; background:#f8f8f5; border-radius:5px; padding:0.5rem 0.7rem; line-height:1.7;">
+        Night Watch depicts 14 named guardsmen<br>
+        &rarr; Frans Banninck Cocq appears in 40 artworks &rarr; lower IDF<br>
+        &rarr; Jan Pietersen Bronchorst appears in 2 &rarr; higher IDF<br>
+        &rarr; matches: other portraits, prints, and reproductions of these individuals
+      </div>
+      <p class="muted" style="margin-top:0.5rem;">
+        <strong>Known limitation:</strong> Due to a harvest-level classification issue
+        (<a href="https://github.com/kintopp/rijksmuseum-mcp-plus-offline/issues/145">#145</a>),
+        74 organisations and institutions (e.g. the VOC, Binnenhof) are currently
+        misclassified as depicted persons in the vocabulary database. These entities may
+        appear in Person signal results. A fix is tracked but requires a database update.
+      </p>
+    </div>
+
+    <!-- DEPICTED PLACE ──────────────────────────────────────── -->
+    <div class="signal-strip">
+      <div class="ss-header">
+        <span class="sig-badge sig-place">Place</span>
+        <span class="ss-label">Shared depicted locations</span>
+      </div>
+      <p class="ss-method">
+        Finds artworks depicting the same specific locations &mdash; streets, buildings,
+        monuments, waterways. Broad administrative regions (countries, provinces, and cities
+        with &gt;20 child places in the hierarchy) are <strong>excluded</strong> to avoid
+        matching everything in Amsterdam or the Netherlands. Scoring uses place IDF.
+      </p>
+      <div class="example" style="font-size:0.78rem; background:#f8f8f5; border-radius:5px; padding:0.5rem 0.7rem; line-height:1.7;">
+        An artwork depicting "Oude Kerk, Amsterdam"<br>
+        &rarr; "Amsterdam" excluded (too broad, &gt;20 children)<br>
+        &rarr; "Oude Kerk" retained (specific landmark)<br>
+        &rarr; matches: other paintings, prints, and photographs of the Oude Kerk
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  POOLING                                                    -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Pooling: the strongest connections</h2>
+    <p style="margin-bottom:1rem;">
+      Artworks that appear in three or more signal modes are pooled into a
+      combined row at the top of the comparison page. These are the works most
+      deeply connected to the query artwork &mdash; similar in multiple independent
+      dimensions simultaneously.
+    </p>
+
+    <div class="callout-amber">
+      <h3 style="margin-bottom:0.7rem;">Why pooling matters</h3>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin-top:0.5rem;">
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Single-signal noise</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            Any individual signal can produce false positives: the description signal may match
+            works with similar Dutch phrasing but unrelated subjects; Iconclass may match on a
+            generic shared code; visual similarity may surface works with similar colour palettes
+            but no thematic connection.
+          </p>
+        </div>
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Multi-signal convergence</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            When three or more signals independently identify the same artwork, the connection
+            is unlikely to be noise. A work that is visually similar, shares subject codes,
+            <em>and</em> depicts the same people is almost certainly a meaningful match &mdash;
+            a copy, a companion piece, or a closely related work.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <p class="muted">
+      The pooled row shows which signals matched for each artwork via
+      coloured mode badges
+      (<span class="sig-badge sig-visual">V</span>
+      <span class="sig-badge sig-desc">Desc</span>
+      <span class="sig-badge sig-ic">IC</span>
+      <span class="sig-badge sig-lineage">Lin</span>
+      <span class="sig-badge sig-person">Per</span>
+      <span class="sig-badge sig-place">Pl</span>),
+      sorted by the number of matching signals.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  PIPELINE                                                   -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Execution pipeline</h2>
+    <p style="margin-bottom:0.5rem;">
+      When <code>find_similar</code> is called, all six signals run concurrently.
+      The visual signal is best-effort (external API); the other five are local database queries.
+      Results are assembled into an HTML page and served via a time-limited URL.
+    </p>
+
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="step-num">Step 1</div>
+        <h3>Resolve query</h3>
+        <p>Look up artwork metadata, types, descriptions, and IIIF image ID</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Step 2</div>
+        <h3>6 signals</h3>
+        <p>Run all signals concurrently: 5 local DB queries + 1 external API call</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Step 3</div>
+        <h3>Pool</h3>
+        <p>Identify artworks appearing in 3+ signals, sort by count</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Step 4</div>
+        <h3>Render HTML</h3>
+        <p>Generate self-contained page with IIIF thumbnails, signal rows, metadata</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step" style="background:#fffbeb;">
+        <div class="step-num">Step 5</div>
+        <h3>Serve</h3>
+        <p>HTTP: <code>/similar/:uuid</code> (30-min TTL). Stdio: temp file</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  COMPARISON PAGE ANATOMY                                    -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Anatomy of a comparison page</h2>
+    <p style="margin-bottom:1rem;">
+      The HTML page is a self-contained document with no external dependencies.
+      It displays the query artwork with its full metadata, followed by horizontal
+      scroll rows for each signal that produced results.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">&target;</div>
+        <h3>Query artwork header</h3>
+        <p>IIIF thumbnail (300px), title, creator, date, type badge.
+          Below: description (Dutch), Iconclass codes (linked to iconclass.org),
+          lineage qualifiers (linked to Getty AAT), depicted persons and places
+          (linked to Wikidata).</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&equiv;</div>
+        <h3>Signal rows</h3>
+        <p>One horizontal scroll strip per signal, in fixed order:
+          Visual &rarr; Lineage &rarr; Iconclass &rarr; Description &rarr;
+          Person &rarr; Place. Each row has a coloured header, methodology
+          note, and result cards. Empty rows are hidden.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&oplus;</div>
+        <h3>Result cards</h3>
+        <p>200px-wide cards with IIIF thumbnails (3:4 aspect ratio), rank + score,
+          title (2-line clamp), creator. Detail line varies by signal:
+          Iconclass codes, qualifier + creator, description snippet,
+          or shared person/place names.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&curren;</div>
+        <h3>Pooled row</h3>
+        <p>Artworks in 3+ signals, sorted by count descending.
+          Each card shows coloured mode badges indicating which signals matched.
+          This row appears first when present, highlighting the strongest connections.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  LIVE EXAMPLES                                              -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Example results</h2>
+    <p style="margin-bottom:1rem;">
+      Three artworks from different periods illustrating how different signal combinations
+      reveal different kinds of connections.
+    </p>
+
+    <!-- Night Watch -->
+    <div style="display:flex; gap:1rem; align-items:flex-start; margin-bottom:1.5rem; padding:1rem; background:#fff; border:1px solid #d4d4c8; border-radius:8px;">
+      <img src="https://iiif.micr.io/PJEZO/pct:25,15,50,55/140,175/0/default.jpg"
+           alt="The Night Watch" loading="lazy"
+           style="width:140px; height:175px; object-fit:cover; border-radius:6px; flex-shrink:0;">
+      <div>
+        <div style="font-size:0.95rem; font-weight:600;">The Night Watch</div>
+        <div style="font-size:0.82rem; color:#555; margin-bottom:0.4rem;">Rembrandt van Rijn, 1642 &middot; SK-C-5</div>
+        <div style="font-size:0.78rem; line-height:1.7;">
+          <span class="sig-badge sig-visual">Visual</span> 8 results &nbsp;
+          <span class="sig-badge sig-ic">Iconclass</span> 8 &nbsp;
+          <span class="sig-badge sig-desc">Description</span> 8 &nbsp;
+          <span class="sig-badge sig-person">Person</span> 8 &nbsp;
+          <span class="sig-badge sig-pooled">Pooled</span> 1
+        </div>
+        <div class="muted" style="margin-top:0.3rem; font-size:0.75rem;">
+          No Lineage (primary attribution) or Place (Amsterdam too broad) results.
+          The pooled artwork is the Lundens copy &mdash; visually identical, shares all depicted persons.
+        </div>
+      </div>
+    </div>
+
+    <!-- Laughing Young Man -->
+    <div style="display:flex; gap:1rem; align-items:flex-start; margin-bottom:1.5rem; padding:1rem; background:#fff; border:1px solid #d4d4c8; border-radius:8px;">
+      <img src="https://iiif.micr.io/wRxpz/full/140,/0/default.jpg"
+           alt="Laughing Young Man" loading="lazy"
+           style="width:140px; height:175px; object-fit:cover; border-radius:6px; flex-shrink:0;">
+      <div>
+        <div style="font-size:0.95rem; font-weight:600;">Laughing Young Man</div>
+        <div style="font-size:0.82rem; color:#555; margin-bottom:0.4rem;">circle of Rembrandt van Rijn, c. 1629&ndash;1630 &middot; SK-A-3934</div>
+        <div style="font-size:0.78rem; line-height:1.7;">
+          <span class="sig-badge sig-visual">Visual</span> 6 results &nbsp;
+          <span class="sig-badge sig-lineage">Lineage</span> 6 &nbsp;
+          <span class="sig-badge sig-ic">Iconclass</span> 6 &nbsp;
+          <span class="sig-badge sig-desc">Description</span> 6
+        </div>
+        <div class="muted" style="margin-top:0.3rem; font-size:0.75rem;">
+          The &ldquo;circle of&rdquo; qualifier activates the Lineage signal &mdash; finding other works
+          from Rembrandt&rsquo;s workshop, pupils, and followers. No depicted persons (generic tronie).
+        </div>
+      </div>
+    </div>
+
+    <!-- Van Gogh Self-portrait -->
+    <div style="display:flex; gap:1rem; align-items:flex-start; padding:1rem; background:#fff; border:1px solid #d4d4c8; border-radius:8px;">
+      <img src="https://iiif.micr.io/vjYfT/full/140,/0/default.jpg"
+           alt="Van Gogh Self-portrait" loading="lazy"
+           style="width:140px; height:175px; object-fit:cover; border-radius:6px; flex-shrink:0;">
+      <div>
+        <div style="font-size:0.95rem; font-weight:600;">Self-portrait</div>
+        <div style="font-size:0.82rem; color:#555; margin-bottom:0.4rem;">Vincent van Gogh, 1887 &middot; SK-A-3262</div>
+        <div style="font-size:0.78rem; line-height:1.7;">
+          <span class="sig-badge sig-visual">Visual</span> 6 results &nbsp;
+          <span class="sig-badge sig-ic">Iconclass</span> 6 &nbsp;
+          <span class="sig-badge sig-desc">Description</span> 6 &nbsp;
+          <span class="sig-badge sig-person">Person</span> 6
+        </div>
+        <div class="muted" style="margin-top:0.3rem; font-size:0.75rem;">
+          The Person signal finds other depictions of Vincent van Gogh across the collection &mdash;
+          other self-portraits, photographs, and posthumous works. Iconclass matches on
+          &ldquo;portrait, self-portrait of painter&rdquo; (<code>48C513</code>).
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  SCORING DEEP DIVE                                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Scoring and ranking</h2>
+    <p style="margin-bottom:0.5rem;">
+      Each signal uses a scoring formula appropriate to its data. All vocabulary-based
+      signals use IDF (inverse document frequency) as a core building block: terms that
+      appear on fewer artworks get higher weights, preventing generic matches from
+      dominating results.
+    </p>
+
+    <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Signal</th>
+          <th>Formula</th>
+          <th>Precision</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="sig-badge sig-visual">Visual</span></td>
+          <td class="mono">(rank order)</td>
+          <td class="muted">&mdash;</td>
+          <td class="muted">No numeric score; ordered by the external API</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-desc">Description</span></td>
+          <td class="mono">1 &minus; cosine_dist</td>
+          <td class="muted">3 dp</td>
+          <td class="muted">Embedding similarity, normalised to [0, 1]</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-ic">Iconclass</span></td>
+          <td class="mono">depth &times; ln(N/df)</td>
+          <td class="muted">1 dp</td>
+          <td class="muted">Deeper + rarer notations score higher</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-lineage">Lineage</span></td>
+          <td class="mono">strength &times; ln(N/df)</td>
+          <td class="muted">2 dp</td>
+          <td class="muted">&ldquo;After&rdquo; (3&times;) beats &ldquo;circle of&rdquo; (1&times;)</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-person">Person</span></td>
+          <td class="mono">ln(N/df)</td>
+          <td class="muted">2 dp</td>
+          <td class="muted">Rare people score higher</td>
+        </tr>
+        <tr>
+          <td><span class="sig-badge sig-place">Place</span></td>
+          <td class="mono">ln(N/df)</td>
+          <td class="muted">2 dp</td>
+          <td class="muted">Broad regions (&gt;20 children) excluded</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  INFRASTRUCTURE                                             -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Infrastructure and serving</h2>
+    <p style="margin-bottom:0.5rem;">
+      The comparison page is generated server-side as self-contained HTML. Two serving
+      modes support both Claude Desktop (stdio, file-based) and claude.ai (HTTP, URL-based).
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <h3>HTTP mode</h3>
+        <p>The page is stored in a module-scope <code>similarPages</code> Map,
+          keyed by a random UUID. The route <code>GET&nbsp;/similar/:uuid</code>
+          serves the HTML. A 30-minute TTL sweeper runs every 60 seconds,
+          deleting pages not accessed within the window.</p>
+        <div class="example">
+          https://&hellip;.up.railway.app/similar/06818252-591e-4508-843a-cf2bdb1ebf8b
+        </div>
+      </div>
+      <div class="card">
+        <h3>Stdio mode</h3>
+        <p>The page is written to <code>os.tmpdir()</code> as a local HTML file.
+          Same 30-minute TTL sweep applies. The LLM returns the file path for the
+          user to open in a browser.</p>
+        <div class="example">
+          /tmp/rijksmuseum-similar-a1b2c3d4.html
+        </div>
+      </div>
+      <div class="card">
+        <h3>Feature gate</h3>
+        <p>The tool is enabled by default. Set <code>ENABLE_FIND_SIMILAR=false</code>
+          to disable it (e.g. in environments without the vocabulary database).
+          When disabled, the tool is not registered and does not appear in the tool list.</p>
+      </div>
+      <div class="card">
+        <h3>Data requirements</h3>
+        <p>Requires the vocabulary database (1.1&nbsp;GB) for all DB-based signals,
+          plus the embeddings database (997&nbsp;MB) for the Description signal.
+          Visual signal needs internet access. Total: ~2.2&nbsp;GB across three
+          SQLite files, all memory-mapped.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  FOOTER                                                     -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="container">
+    <a href="https://github.com/kintopp/rijksmuseum-mcp-plus">rijksmuseum-mcp+</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://rise.unibas.ch/en/">RISE, University of Basel</a>
+    &nbsp;&middot;&nbsp;
+    Data: <a href="https://data.rijksmuseum.nl">Rijksmuseum, Amsterdam</a>
+    &nbsp;&middot;&nbsp;
+    Images: <a href="https://iiif.io">IIIF</a>
+  </div>
+</footer>
+
+</body>
+</html>

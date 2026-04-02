@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iconclass Subject Search &mdash; rijksmuseum-mcp+</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #fafaf8; color: #1a1a1a; line-height: 1.6;
+  }
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
+  section { padding: 3.5rem 0 2.5rem; }
+  section + section { border-top: 1px solid #e5e5e0; }
+
+  /* ── Typography ───────────────────────────────────────────── */
+  h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+  p, li { font-size: 0.95rem; color: #333; }
+  .muted { color: #666; font-size: 0.85rem; }
+  .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+  .mono { font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace; }
+
+  /* ── Hero ──────────────────────────────────────────────────── */
+  .hero {
+    padding: 4rem 0 3rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+  }
+  .hero h1 { font-size: 2.2rem; margin-bottom: 0.5rem; color: #fff; }
+  .hero .subtitle { font-size: 1.1rem; color: #94a3b8; font-weight: 400; margin-bottom: 1.5rem; }
+  .hero .stats-row {
+    display: flex; gap: 2.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+  }
+  .hero .stat { text-align: left; }
+  .hero .stat .num { font-size: 1.8rem; font-weight: 700; color: #e2e8f0; line-height: 1.2; }
+  .hero .stat .desc { font-size: 0.78rem; color: #94a3b8; margin-top: 0.15rem; }
+
+  /* ── Cards ─────────────────────────────────────────────────── */
+  .cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0;
+  }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+    padding: 1.1rem 1.25rem; position: relative;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card h3 { font-size: 0.95rem; }
+  .card p { font-size: 0.82rem; color: #555; }
+  .card .example {
+    font-size: 0.78rem; font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+    background: #f8f8f5; border-radius: 5px; padding: 0.5rem 0.7rem; margin-top: 0.5rem;
+    line-height: 1.7;
+  }
+  .card .card-icon {
+    position: absolute; top: 0.9rem; right: 1rem; font-size: 1.3rem; color: #94a3b8;
+  }
+
+  /* ── Pipeline diagram ──────────────────────────────────────── */
+  .pipeline {
+    display: flex; align-items: stretch; gap: 0;
+    margin: 1.5rem 0; flex-wrap: nowrap; overflow-x: auto;
+  }
+  .pipe-step {
+    flex: 1; min-width: 160px; padding: 1.1rem 1rem;
+    background: #fff; border: 1px solid #d4d4c8; position: relative;
+  }
+  .pipe-step:first-child { border-radius: 8px 0 0 8px; }
+  .pipe-step:last-child { border-radius: 0 8px 8px 0; }
+  .pipe-step + .pipe-step { border-left: none; }
+  .pipe-step .step-num {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 0.3rem;
+  }
+  .pipe-step h3 { font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .pipe-step p { font-size: 0.78rem; color: #666; line-height: 1.5; }
+  .pipe-arrow {
+    display: flex; align-items: center; font-size: 1.2rem;
+    color: #94a3b8; padding: 0 0.1rem; flex-shrink: 0;
+  }
+
+  /* ── Tables ────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 1rem 0; }
+  th {
+    text-align: left; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #94a3b8; padding: 0.5rem 0.7rem;
+    border-bottom: 2px solid #e5e5e0;
+  }
+  td {
+    padding: 0.55rem 0.7rem; border-bottom: 1px solid #f0f0eb;
+    vertical-align: top; color: #333;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  /* ── Notation badges ───────────────────────────────────────── */
+  .ic-badge {
+    display: inline-block; font-size: 0.7rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+    font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  .ic-bible    { background: #dbeafe; color: #1e40af; }
+  .ic-religion { background: #f3e8ff; color: #6b21a8; }
+  .ic-nature   { background: #d1fae5; color: #065f46; }
+  .ic-human    { background: #fef3c7; color: #92400e; }
+  .ic-society  { background: #fce7f3; color: #9d174d; }
+  .ic-abstract { background: #e0e7ff; color: #3730a3; }
+  .ic-history  { background: #f5f5f0; color: #555; }
+  .ic-myth     { background: #ccfbf1; color: #0f766e; }
+
+  /* ── Mode badges ───────────────────────────────────────────── */
+  .mode-badge {
+    display: inline-block; font-size: 0.68rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .mode-keyword  { background: #dbeafe; color: #1e40af; }
+  .mode-browse   { background: #d1fae5; color: #065f46; }
+  .mode-semantic { background: #f3e8ff; color: #6b21a8; }
+
+  /* ── Hierarchy tree ────────────────────────────────────────── */
+  .tree {
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+    padding: 1.25rem 1.5rem; font-size: 0.82rem; line-height: 2;
+    font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+    overflow-x: auto;
+  }
+  .tree .level { padding-left: 1.8rem; border-left: 1px solid #e5e5e0; }
+  .tree .node-label { color: #555; font-family: 'Segoe UI', system-ui, sans-serif; }
+  .tree .node-count { color: #94a3b8; font-size: 0.72rem; }
+  .tree .node-active { color: #1e40af; font-weight: 600; }
+
+  /* ── Method bar ────────────────────────────────────────────── */
+  .method-bar {
+    display: flex; height: 32px; border-radius: 6px; overflow: hidden;
+    margin: 1rem 0; font-size: 0.72rem; font-weight: 600; color: #fff;
+  }
+  .method-bar > div {
+    display: flex; align-items: center; justify-content: center;
+    white-space: nowrap; padding: 0 0.6rem; min-width: 30px;
+  }
+
+  /* ── Waterfall chart ───────────────────────────────────────── */
+  .waterfall { display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0; }
+  .wf-row { display: flex; align-items: center; gap: 0.8rem; }
+  .wf-label {
+    width: 200px; flex-shrink: 0; font-size: 0.82rem; font-weight: 500;
+    text-align: right; color: #555;
+  }
+  .wf-bar-track {
+    flex: 1; height: 22px; background: #f0f0eb; border-radius: 4px;
+    position: relative; overflow: hidden;
+  }
+  .wf-bar-fill {
+    height: 100%; border-radius: 4px; display: flex; align-items: center;
+    padding-left: 8px; font-size: 0.72rem; font-weight: 600; color: #fff;
+    transition: width 0.6s ease;
+  }
+  .wf-note {
+    font-size: 0.75rem; color: #94a3b8; width: 80px; flex-shrink: 0; white-space: nowrap;
+  }
+
+  /* ── Amber callout ─────────────────────────────────────────── */
+  .callout-amber {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fbbf24; border-radius: 8px;
+    padding: 1.25rem 1.5rem; margin: 1.5rem 0;
+  }
+  .callout-amber h3 { color: #92400e; }
+
+  /* ── Item grid ─────────────────────────────────────────────── */
+  .item-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.6rem; margin: 1rem 0;
+  }
+  .item-grid .item {
+    display: flex; align-items: baseline; gap: 0.5rem;
+    font-size: 0.82rem; padding: 0.45rem 0.7rem;
+    background: #fff; border: 1px solid #e5e5e0; border-radius: 6px;
+  }
+  .item-grid .item .i-name { font-weight: 600; }
+  .item-grid .item .i-count { color: #94a3b8; font-size: 0.75rem; margin-left: auto; }
+
+  /* ── Footer ────────────────────────────────────────────────── */
+  footer {
+    padding: 2rem 0; border-top: 1px solid #e5e5e0;
+    text-align: center; color: #94a3b8; font-size: 0.78rem;
+  }
+  footer a { color: #64748b; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  HERO                                                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="container">
+    <h1>Iconclass Subject Search</h1>
+    <p class="subtitle">Structured subject vocabulary for 830,000 artworks</p>
+    <p style="color:#cbd5e1; font-size:0.9rem; max-width:700px;">
+      Iconclass is a hierarchical classification system for art subject matter &mdash;
+      the standard vocabulary used by museums, libraries, and art historians worldwide
+      to describe <em>what</em> an artwork depicts. rijksmuseum-mcp+ indexes the full system
+      (40,675 notations across 13 languages) and links it to the Rijksmuseum collection,
+      enabling subject-based discovery from broad categories down to individual scenes.
+    </p>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="num">40,675</div>
+        <div class="desc">Iconclass notations</div>
+      </div>
+      <div class="stat">
+        <div class="num">13</div>
+        <div class="desc">languages</div>
+      </div>
+      <div class="stat">
+        <div class="num">15,190</div>
+        <div class="desc">notations linked to artworks</div>
+      </div>
+      <div class="stat">
+        <div class="num">3</div>
+        <div class="desc">search modes</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  WHY ICONCLASS                                              -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>The problem: finding artworks by subject</h2>
+    <p style="margin-bottom:1rem;">
+      An art collection&rsquo;s most basic search need &mdash; &ldquo;show me paintings of the
+      Crucifixion&rdquo; &mdash; is surprisingly hard to serve with title search alone. Titles are
+      brief, inconsistent, and often in Dutch. Subject metadata is richer, but it uses
+      free-text labels that vary across cataloguers and languages.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Title search is too narrow</h3>
+        <p>The Rijksmuseum&rsquo;s BM25 text index only covers titles.
+          A painting titled <em>&ldquo;De Kruisiging&rdquo;</em> (The Crucifixion)
+          won&rsquo;t appear in a search for &ldquo;crucifixion&rdquo; because the title
+          is in Dutch. Many works have purely descriptive titles like
+          <em>&ldquo;Biblical scene&rdquo;</em> that reveal nothing about the specific subject.</p>
+      </div>
+      <div class="card">
+        <h3>Subject labels are inconsistent</h3>
+        <p>Free-text <code>dc:subject</code> tags vary by cataloguer and era.
+          The same biblical scene might be tagged as &ldquo;Crucifixion&rdquo;,
+          &ldquo;Christ on the Cross&rdquo;, or &ldquo;Golgotha&rdquo;. Searching for one misses
+          the others. Without a controlled vocabulary, recall is inherently incomplete.</p>
+      </div>
+      <div class="card wide">
+        <h3>Iconclass solves both problems</h3>
+        <p>Each notation is a language-independent code (<code>73D6</code> = Crucifixion) with labels in
+          13 languages. The hierarchy groups related concepts: searching for &ldquo;73D&rdquo; (Passion of Christ)
+          automatically includes the Crucifixion, Last Supper, and Gethsemane. And because the Rijksmuseum
+          catalogues its artworks with Iconclass notations, the mapping between notation and artwork is
+          already in the data &mdash; no NLP or inference required.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  THE NOTATION SYSTEM                                        -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>How the notation system works</h2>
+    <p style="margin-bottom:1rem;">
+      Iconclass notations are alphanumeric codes that encode a path through a hierarchy.
+      Each character extends the specificity: <code>7</code> &rarr; Bible,
+      <code>73</code> &rarr; New Testament, <code>73D</code> &rarr; Passion of Christ,
+      <code>73D6</code> &rarr; Crucifixion. The system has 10 top-level divisions covering
+      all representational subject matter.
+    </p>
+
+    <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Division</th>
+          <th>Examples</th>
+          <th style="text-align:right;">Artworks</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="ic-badge ic-abstract">0</span></td>
+          <td>Abstract, Non-representational Art</td>
+          <td class="muted">geometric patterns, colour fields</td>
+          <td class="mono" style="text-align:right;">1,515</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-religion">1</span></td>
+          <td>Religion and Magic</td>
+          <td class="muted">Christian iconography, saints, angels</td>
+          <td class="mono" style="text-align:right;">36,000+</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-nature">2</span></td>
+          <td>Nature</td>
+          <td class="muted">landscapes, animals, plants, weather</td>
+          <td class="mono" style="text-align:right;">78,000+</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-human">3</span></td>
+          <td>Human Being, Man in General</td>
+          <td class="muted">anatomy, senses, death, clothing</td>
+          <td class="mono" style="text-align:right;">65,000+</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-society">4</span></td>
+          <td>Society, Civilization, Culture</td>
+          <td class="muted">trade, war, law, education, heraldry</td>
+          <td class="mono" style="text-align:right;">91,000+</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-abstract">5</span></td>
+          <td>Abstract Ideas and Concepts</td>
+          <td class="muted">virtues, vices, time, fortune</td>
+          <td class="mono" style="text-align:right;">5,400+</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-history">6</span></td>
+          <td>History</td>
+          <td class="muted">historical events, persons, places</td>
+          <td class="mono" style="text-align:right;">96,000+</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-bible">7</span></td>
+          <td>Bible</td>
+          <td class="muted">Old and New Testament narratives</td>
+          <td class="mono" style="text-align:right;">12,000+</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-myth">8</span></td>
+          <td>Literature</td>
+          <td class="muted">classical literature, mythology</td>
+          <td class="mono" style="text-align:right;">2,100+</td>
+        </tr>
+        <tr>
+          <td><span class="ic-badge ic-religion">9</span></td>
+          <td>Classical Mythology and Ancient History</td>
+          <td class="muted">Greek/Roman gods, myths, legends</td>
+          <td class="mono" style="text-align:right;">9,500+</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3 style="margin-top:1.5rem;">Hierarchy depth: from &ldquo;Bible&rdquo; to a single scene</h3>
+    <div class="tree">
+      <div>
+        <span class="ic-badge ic-bible">7</span>
+        <span class="node-label">Bible</span>
+        <span class="node-count">&mdash; 139 artworks</span>
+      </div>
+      <div class="level">
+        <span class="ic-badge ic-bible">73</span>
+        <span class="node-label">New Testament</span>
+        <span class="node-count">&mdash; 220</span>
+      </div>
+      <div class="level"><div class="level">
+        <span class="ic-badge ic-bible">73D</span>
+        <span class="node-label">Passion of Christ</span>
+      </div></div>
+      <div class="level"><div class="level"><div class="level">
+        <span class="node-active">73D6</span>
+        <span class="node-label" style="color:#1e40af; font-weight:600;">
+          Crucifixion: Christ&rsquo;s death on the cross; Golgotha</span>
+        <span class="node-count">&mdash; 362</span>
+      </div></div></div>
+      <div class="level"><div class="level"><div class="level"><div class="level">
+        <span style="color:#94a3b8;">73D61</span>
+        <span class="node-label">comprehensive representations on Golgotha</span>
+        <span class="node-count">&mdash; 56</span>
+      </div></div></div></div>
+      <div class="level"><div class="level"><div class="level"><div class="level">
+        <span style="color:#94a3b8;">73D64</span>
+        <span class="node-label">crucified Christ, with particular persons under the cross</span>
+        <span class="node-count">&mdash; 85</span>
+      </div></div></div></div>
+      <div class="level"><div class="level"><div class="level"><div class="level">
+        <span style="color:#94a3b8;">73D66</span>
+        <span class="node-label">Christ on the cross alone, without bystanders</span>
+        <span class="node-count">&mdash; 58</span>
+      </div></div></div></div>
+    </div>
+    <p class="muted" style="margin-top:0.5rem;">
+      Maximum hierarchy depth: 11 levels. Most notations cluster at depth 5&ndash;7.
+      Each level adds specificity while inheriting its parent&rsquo;s meaning.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  BUILD PIPELINE                                             -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>How the Iconclass database is built</h2>
+    <p style="margin-bottom:0.5rem;">
+      The Iconclass DB is a self-contained SQLite database built from the
+      <a href="https://github.com/iconclass/data">Iconclass CC0 data dump</a>
+      and cross-referenced against the vocabulary database for artwork counts.
+    </p>
+
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="step-num">Phase 1</div>
+        <h3>Parse notations</h3>
+        <p>Read <code>notations.txt</code> &rarr; extract hierarchy (children, refs) &rarr; compute
+          ancestor paths via parent&rarr;child reverse map</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Phase 2</div>
+        <h3>Parse texts</h3>
+        <p>Read <code>txt/{lang}/*.txt</code> for 13 languages &rarr; 279,231 label entries &rarr;
+          build FTS5 full-text index</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Phase 3</div>
+        <h3>Parse keywords</h3>
+        <p>Read <code>kw/{lang}/*.txt</code> &rarr; 780,049 keyword entries &rarr;
+          separate FTS5 keyword index</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step">
+        <div class="step-num">Phase 4</div>
+        <h3>Cross-reference</h3>
+        <p>Query <code>vocabulary.db</code> for per-notation artwork counts &rarr;
+          update <code>rijks_count</code> column</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step" style="background:#fffbeb;">
+        <div class="step-num">Phase 5</div>
+        <h3>Embed</h3>
+        <p>Generate 384d embeddings for all 40,670 notations on Modal cloud GPU (e5-small, int8)</p>
+      </div>
+    </div>
+
+    <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Database contents</div>
+    <div class="method-bar">
+      <div style="width:52%; background:#3b82f6;" title="Texts: 279,231">Labels &nbsp;279K</div>
+      <div style="width:33%; background:#7c3aed;" title="Keywords: 780,049">Keywords &nbsp;780K</div>
+      <div style="width:10%; background:#059669;" title="Notations: 40,675">Notations &nbsp;41K</div>
+      <div style="width:5%; background:#d97706;" title="Embeddings: 40,670">Embed</div>
+    </div>
+
+    <p class="muted" style="margin-top:0.5rem;">
+      Database size: 130 MB (including embeddings). Stored as a single SQLite file
+      alongside the vocabulary and embeddings databases.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  THREE SEARCH MODES                                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Three ways to find a notation</h2>
+    <p style="margin-bottom:1rem;">
+      The <code>lookup_iconclass</code> tool supports three search modes, each suited to a different
+      stage of research. Results include artwork counts so the user can gauge collection
+      coverage before querying <code>search_artwork</code>.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">&equiv;</div>
+        <h3><span class="mode-badge mode-keyword">Keyword search</span></h3>
+        <p>FTS5 full-text search across labels and keywords in all 13 languages.
+          Exact word matching (no stemming) &mdash; &ldquo;crucifixion&rdquo; won&rsquo;t match
+          &ldquo;crucified&rdquo;. Results ranked by artwork count.</p>
+        <div class="example">
+          query: "crucifixion"<br>
+          &rarr; 52 notations matched<br>
+          &rarr; 73D6 (362 artworks), 73D5 (41),<br>
+          &nbsp;&nbsp;&nbsp;73F2165 "Peter crucified" (37) &hellip;
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">&loz;</div>
+        <h3><span class="mode-badge mode-browse">Browse</span></h3>
+        <p>Navigate the hierarchy by notation code. Returns the entry with its
+          full ancestry path and direct children &mdash; ideal for
+          exploring what a notation contains or narrowing a broad category.</p>
+        <div class="example">
+          notation: "73D6"<br>
+          &rarr; path: 7 &rsaquo; 73 &rsaquo; 73D &rsaquo; 73D6<br>
+          &rarr; 9 children: 73D61&hellip;73D69<br>
+          &rarr; keywords: Calvary, Golgotha,<br>
+          &nbsp;&nbsp;&nbsp;crucifixion, death, last hours
+        </div>
+      </div>
+
+      <div class="card wide">
+        <div class="card-icon">&oplus;</div>
+        <h3><span class="mode-badge mode-semantic">Semantic search</span></h3>
+        <p>Conceptual search using 384-dimensional embeddings (<code>intfloat/multilingual-e5-small</code>).
+          Finds notations by meaning rather than exact keywords &mdash; &ldquo;domestic animals in
+          everyday life&rdquo; finds <code>34B1</code> (domestic animals kept in the house),
+          <code>34B2</code> (kept outside the house), and even <code>25FF21</code>
+          (fabulous animals ~ domestic animals). Optional <code>onlyWithArtworks</code>
+          filter restricts results to notations that appear in the collection.</p>
+        <div class="example">
+          semanticQuery: "domestic animals in everyday life"<br>
+          &rarr; 34B1 (11 artworks, dist: 0.148)<br>
+          &rarr; 34B "domestic animals, kept in and<br>
+          &nbsp;&nbsp;&nbsp;outside the house" (6, dist: 0.148)<br>
+          &rarr; 34B13 "domestic birds" (8, dist: 0.154)
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  EMBEDDING GENERATION                                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Embedding strategy: composite texts</h2>
+    <p style="margin-bottom:1rem;">
+      Each Iconclass notation is embedded as a composite text that combines its label,
+      Dutch translation, keywords, and full category path. This gives the embedding model
+      richer context than a bare label &mdash; critical for short or ambiguous entries.
+    </p>
+
+    <div class="callout-amber">
+      <h3 style="margin-bottom:0.7rem;">What goes into a single embedding</h3>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin-top:0.5rem;">
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Notation 73D6</div>
+          <div style="font-size:0.78rem; color:#78350f; font-family:'Iosevka','JetBrains Mono',monospace; line-height:1.8;">
+            [Description] the crucifixion of<br>
+            Christ: Christ's death on the cross;<br>
+            Golgotha (Matthew 27:45-58 &hellip;)<br>
+            [Description NL] Christus' kruisdood<br>
+            [Keywords] Calvary, Golgotha,<br>
+            crucifixion, death, last hours<br>
+            [Category] Bible &gt; New Testament<br>
+            &gt; Passion of Christ &gt; Crucifixion
+          </div>
+        </div>
+        <div>
+          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Why composite?</div>
+          <p style="font-size:0.82rem; color:#78350f;">
+            A notation like <code>31A33</code> has the bare label &ldquo;smell, smelling
+            (one of the five senses)&rdquo;. Without the category path
+            <em>Human Being &gt; Senses &gt; Taste &amp; Smell</em>,
+            the embedding can&rsquo;t distinguish it from &ldquo;smell&rdquo; in a
+            chemical or environmental sense. The hierarchy path acts as
+            a disambiguation signal.
+          </p>
+          <p style="font-size:0.82rem; color:#78350f; margin-top:0.5rem;">
+            Dutch labels add multilingual coverage &mdash; a query in Dutch
+            matches via embedding similarity even though FTS5 only does
+            exact word matching.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <p class="muted" style="margin-top:0.5rem;">
+      Embeddings are generated on Modal cloud GPU (NVIDIA T4) using
+      <code>intfloat/multilingual-e5-small</code> (384 dimensions, int8 quantized).
+      The same model encodes user queries at runtime on the host machine (CPU, ~130 MB).
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  LANGUAGE COVERAGE                                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Multilingual coverage</h2>
+    <p style="margin-bottom:0.5rem;">
+      Iconclass labels are available in 13 languages, though coverage varies widely.
+      The top five languages cover &gt;99% of notations; the long tail drops sharply.
+      A language fallback chain (requested &rarr; English &rarr; Dutch &rarr; any)
+      ensures every notation returns a label regardless of the query language.
+    </p>
+
+    <div class="waterfall">
+      <div class="wf-row">
+        <div class="wf-label">English</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:100%; background:#3b82f6;">40,670 &nbsp;(99.9%)</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">German</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:99.9%; background:#3b82f6;">40,645</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">French</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:99.9%; background:#3b82f6;">40,642</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Italian</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:99.9%; background:#3b82f6;">40,639</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Japanese</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:99.5%; background:#3b82f6;">40,476</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Portuguese</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:99.2%; background:#7c3aed;">40,354</div></div>
+        <div class="wf-note"></div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Finnish</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:33.5%; background:#d97706;">13,615</div></div>
+        <div class="wf-note muted">33.5%</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Spanish</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:29%; background:#d97706;">11,800</div></div>
+        <div class="wf-note muted">29%</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Chinese</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:16.5%; background:#059669;">6,709</div></div>
+        <div class="wf-note muted">16.5%</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Dutch</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:4.7%; background:#059669;">1,900</div></div>
+        <div class="wf-note muted">4.7%</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Polish</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:3.7%; background:#94a3b8; min-width:40px;">1,493</div></div>
+        <div class="wf-note muted">3.7%</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Hungarian</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:1.5%; background:#94a3b8; min-width:30px;">288</div></div>
+        <div class="wf-note muted">0.7%</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-label">Czech</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:0.5%; background:#94a3b8; min-width:24px;">&mdash;</div></div>
+        <div class="wf-note muted">&lt;0.1%</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  TOP NOTATIONS                                              -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Most-used notations in the Rijksmuseum</h2>
+    <p style="margin-bottom:0.5rem;">
+      15,190 of the 40,675 notations (37%) are linked to at least one artwork. The distribution
+      is heavily skewed &mdash; a few broad notations cover tens of thousands of works, while
+      the long tail describes rare or highly specific subjects.
+    </p>
+
+    <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Notation</th>
+          <th>Subject</th>
+          <th>Division</th>
+          <th style="text-align:right;">Artworks</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">61B2</td>
+          <td>historical persons (portraits, depictions)</td>
+          <td><span class="ic-badge ic-history">6</span></td>
+          <td class="mono" style="text-align:right;">90,471</td>
+        </tr>
+        <tr>
+          <td class="mono">61BB2</td>
+          <td>historical persons &mdash; women</td>
+          <td><span class="ic-badge ic-history">6</span></td>
+          <td class="mono" style="text-align:right;">14,026</td>
+        </tr>
+        <tr>
+          <td class="mono">31D14</td>
+          <td>adult man</td>
+          <td><span class="ic-badge ic-human">3</span></td>
+          <td class="mono" style="text-align:right;">13,156</td>
+        </tr>
+        <tr>
+          <td class="mono">11Q712</td>
+          <td>church (exterior)</td>
+          <td><span class="ic-badge ic-religion">1</span></td>
+          <td class="mono" style="text-align:right;">11,465</td>
+        </tr>
+        <tr>
+          <td class="mono">46A122</td>
+          <td>armorial bearing, heraldry</td>
+          <td><span class="ic-badge ic-society">4</span></td>
+          <td class="mono" style="text-align:right;">10,859</td>
+        </tr>
+        <tr>
+          <td class="mono">31D15</td>
+          <td>adult woman</td>
+          <td><span class="ic-badge ic-human">3</span></td>
+          <td class="mono" style="text-align:right;">10,154</td>
+        </tr>
+        <tr>
+          <td class="mono">25I1</td>
+          <td>city view in general (&lsquo;veduta&rsquo;)</td>
+          <td><span class="ic-badge ic-nature">2</span></td>
+          <td class="mono" style="text-align:right;">9,518</td>
+        </tr>
+        <tr>
+          <td class="mono">46C24</td>
+          <td>sailing ship, sailing boat</td>
+          <td><span class="ic-badge ic-society">4</span></td>
+          <td class="mono" style="text-align:right;">7,979</td>
+        </tr>
+        <tr>
+          <td class="mono">25H213</td>
+          <td>river</td>
+          <td><span class="ic-badge ic-nature">2</span></td>
+          <td class="mono" style="text-align:right;">7,898</td>
+        </tr>
+        <tr>
+          <td class="mono">34B11</td>
+          <td>dog</td>
+          <td><span class="ic-badge ic-human">3</span></td>
+          <td class="mono" style="text-align:right;">6,291</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p class="muted" style="margin-top:0.5rem;">
+      Artwork counts are pre-computed at database build time and approximate.
+      Use <code>search_artwork(iconclass: "73D6")</code> for current, precise results.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  WORKFLOW: LOOKUP → SEARCH                                  -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>The two-step workflow: lookup, then search</h2>
+    <p style="margin-bottom:1rem;">
+      Iconclass integrates into the broader search pipeline through a two-step pattern:
+      first discover the right notation code via <code>lookup_iconclass</code>, then pass it
+      to <code>search_artwork</code> as a structured filter. This separates the vocabulary
+      navigation problem from the collection query problem.
+    </p>
+
+    <div class="pipeline" style="margin-bottom:1rem;">
+      <div class="pipe-step">
+        <div class="step-num">Step 1</div>
+        <h3>Discover notation</h3>
+        <p><code>lookup_iconclass</code><br>
+          keyword / browse / semantic &rarr; notation code + artwork count</p>
+      </div>
+      <div class="pipe-arrow" style="font-size:1.5rem;">&rarr;</div>
+      <div class="pipe-step" style="background:#fffbeb;">
+        <div class="step-num">Step 2</div>
+        <h3>Search collection</h3>
+        <p><code>search_artwork</code><br>
+          <code>iconclass: "73D6"</code><br>
+          Combines with all other filters (creator, date, material, type &hellip;)</p>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Example: finding Crucifixion prints from the 17th century</h3>
+        <div class="example">
+          1. lookup_iconclass(query: "crucifixion")<br>
+          &nbsp;&nbsp;&nbsp;&rarr; 73D6 (362 artworks)<br><br>
+          2. search_artwork(<br>
+          &nbsp;&nbsp;&nbsp;iconclass: "73D6",<br>
+          &nbsp;&nbsp;&nbsp;type: "print",<br>
+          &nbsp;&nbsp;&nbsp;creationDateFrom: 1600,<br>
+          &nbsp;&nbsp;&nbsp;creationDateTo: 1699<br>
+          &nbsp;&nbsp;)
+        </div>
+      </div>
+      <div class="card">
+        <h3>Example: heraldic objects in silver</h3>
+        <div class="example">
+          1. lookup_iconclass(query: "heraldry")<br>
+          &nbsp;&nbsp;&nbsp;&rarr; 46A122 (10,859 artworks)<br><br>
+          2. search_artwork(<br>
+          &nbsp;&nbsp;&nbsp;iconclass: "46A122",<br>
+          &nbsp;&nbsp;&nbsp;material: "silver"<br>
+          &nbsp;&nbsp;)
+        </div>
+      </div>
+      <div class="card wide">
+        <h3>Integration with collection_stats</h3>
+        <p>The <code>iconclass</code> parameter also works in <code>collection_stats</code>,
+          enabling aggregate analysis: &ldquo;which creators produced the most works tagged with this
+          subject?&rdquo; or &ldquo;what materials are most common for works depicting dogs?&rdquo;</p>
+        <div class="example">
+          collection_stats(<br>
+          &nbsp;&nbsp;dimension: "creator",<br>
+          &nbsp;&nbsp;iconclass: "34B11"  <span class="muted">// dog</span><br>
+          )<br>
+          &rarr; top creators of works depicting dogs
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  TECHNICAL IMPLEMENTATION                                   -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>Under the hood</h2>
+    <p style="margin-bottom:0.5rem;">
+      Key implementation choices that affect performance and capability.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Dual FTS5 indexes</h3>
+        <p>Labels and keywords live in separate FTS5 virtual tables with a UNION query
+          and deduplication by notation. This avoids contaminating label matches with
+          keyword noise and vice versa, while still returning a single ranked result list.</p>
+      </div>
+      <div class="card">
+        <h3>Dual KNN paths</h3>
+        <p>Pure semantic search uses the <code>vec0</code> virtual table (fast brute-force scan).
+          When <code>onlyWithArtworks</code> is set, a slower path joins against
+          <code>rijks_count&nbsp;&gt;&nbsp;0</code> using <code>vec_distance_cosine()</code>
+          on the regular embeddings table. Both use int8 quantized vectors.</p>
+      </div>
+      <div class="card">
+        <h3>Language fallback chain</h3>
+        <p>Every label lookup tries: requested language &rarr; English &rarr; Dutch &rarr; any.
+          Graceful degradation ensures queries always return labels, even for languages with
+          &lt;1% coverage. Prepared statements are cached for the lifetime of the DB connection.</p>
+      </div>
+      <div class="card">
+        <h3>Dimension guard</h3>
+        <p>Iconclass embeddings are always 384d (e5-small native). Artwork embeddings may be
+          MRL-truncated to a shorter dimension. A runtime check in <code>registration.ts</code>
+          prevents mismatched KNN queries &mdash; if the artwork embedding model outputs a
+          different dimension, the Iconclass semantic search path is silently disabled.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  FOOTER                                                     -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="container">
+    <a href="https://github.com/kintopp/rijksmuseum-mcp-plus">rijksmuseum-mcp+</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://rise.unibas.ch/en/">RISE, University of Basel</a>
+    &nbsp;&middot;&nbsp;
+    Data: <a href="https://data.rijksmuseum.nl">Rijksmuseum, Amsterdam</a>
+    &nbsp;&middot;&nbsp;
+    Iconclass: <a href="https://iconclass.org">iconclass.org</a> (CC0)
+  </div>
+</footer>
+
+</body>
+</html>
