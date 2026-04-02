@@ -1951,7 +1951,11 @@ export class VocabularyDb {
         const vocabIds = vocabType === "person" && this.hasPersonNames
           ? this.findPersonIdsFts(val)
           : this.findVocabIdsFts(val, typeClause, typeBindings);
-        if (vocabIds.length === 0) continue; // no matches — skip (non-destructive for stats)
+        if (vocabIds.length === 0) {
+          // Filter matched zero vocab terms → no artworks can match → return empty immediately
+          return { dimension: params.dimension, total: 0, totalDistinct: 0, offset: 0, entries: [],
+            warnings: [`No vocabulary matches found for ${key}="${val}". No artworks match this filter.`] };
+        }
         const ftsFilter = this.mappingFilterDirect(fields, vocabIds);
         conditions.push(ftsFilter.condition);
         bindings.push(...ftsFilter.bindings);
@@ -2610,18 +2614,19 @@ export class VocabularyDb {
   /**
    * Return art_ids matching metadata filters, for use as candidates in semantic search.
    * Supports all structured vocab filters (not text search, geo, or dimensions).
-   * Returns up to 50,000 art_ids — beyond that, pure KNN + post-filter is faster.
-   * Returns null if the DB lacks integer mappings (text-schema backward compat).
+   * Returns up to 200,000 art_ids — searchFiltered() handles sets this large in ~600ms
+   * via chunked vec_distance_cosine (linear ~3ms/1K). Beyond 200K it falls back to
+   * pure KNN + post-filter (~1.5s).
+   * Returns null if the DB is unavailable or no effective filters are present.
    */
   filterArtIds(params: Partial<VocabSearchParams>): number[] | null {
-    if (!this.db) return null;
     if (!this.db) return null;
 
     const vocabResult = this.buildVocabConditions(params as Record<string, unknown>);
     if (vocabResult === null) return []; // a filter matched zero vocab terms
     if (vocabResult.conditions.length === 0) return null; // no effective filters — fall back to unfiltered
 
-    const sql = `SELECT a.art_id FROM artworks a WHERE ${vocabResult.conditions.join(" AND ")} LIMIT 50000`;
+    const sql = `SELECT a.art_id FROM artworks a WHERE ${vocabResult.conditions.join(" AND ")} LIMIT 200000`;
     let stmt = this.stmtFilterArtIds.get(sql);
     if (!stmt) {
       stmt = this.db.prepare(sql);

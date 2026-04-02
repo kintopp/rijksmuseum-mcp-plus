@@ -3210,7 +3210,7 @@ function registerTools(
           // FILTERED PATH: pre-filter via vocab DB, then distance-rank
           const candidateArtIds = vocabDb.filterArtIds(filterParams);
           if (candidateArtIds === null) {
-            // DB lacks integer mappings (text-schema) — fall back to pure KNN
+            // No effective filters — fall back to pure KNN
             candidates = embeddingsDb!.search(queryVec, fetchLimit);
             warnings.push("Metadata filters ignored: vocabulary DB does not support filtered search. Results ranked by semantic similarity only.");
           } else if (candidateArtIds.length === 0) {

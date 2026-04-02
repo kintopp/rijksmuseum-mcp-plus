@@ -410,6 +410,10 @@ async function runHttp(): Promise<void> {
     res.status(405).json({ error: "Method not allowed — this server is stateless (POST only)" });
   });
 
+  // ── Bundled OpenSeadragon assets for legacy viewer ──────────────
+  const osdPath = path.resolve(__dirname, "../node_modules/openseadragon/build/openseadragon");
+  app.use("/vendor/openseadragon", express.static(osdPath, { maxAge: "7d", immutable: true }));
+
   // ── Viewer endpoint ─────────────────────────────────────────────
 
   app.get("/viewer", (req: express.Request, res: express.Response) => {
