@@ -23,7 +23,7 @@ Usage:
     python3 scripts/harvest-vocabulary-db.py --phase 3      # Run only from phase N onward
     python3 scripts/harvest-vocabulary-db.py --phase 4      # Run Phase 4 + 3 only
     python3 scripts/harvest-vocabulary-db.py --threads 16   # Phase 4 thread count
-    python3 scripts/harvest-vocabulary-db.py --phase 3 --geo-csv data/geo/geocoded_places_exported.csv
+    python3 scripts/harvest-vocabulary-db.py --phase 3 --geo-csv data/backfills/geocoded-places.csv
 
 Output: data/vocabulary.db (~1 GB)
 """
@@ -72,7 +72,7 @@ DUMP_CONFIGS = [
 OAI_BASE = "https://data.rijksmuseum.nl/oai"
 LINKED_ART_BASE = "https://data.rijksmuseum.nl"
 USER_AGENT = "rijksmuseum-mcp-harvest/1.0"
-DEFAULT_THREADS = 8
+DEFAULT_THREADS = 6
 BATCH_SIZE = 500  # Commit every N pages
 
 # ─── AAT URIs for Tier 2 Linked Art parsing ─────────────────────────

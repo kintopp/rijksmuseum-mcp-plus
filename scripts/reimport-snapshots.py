@@ -12,11 +12,11 @@ Usage:
     python3 scripts/reimport-snapshots.py --only geo         # just geocoded coordinates
     python3 scripts/reimport-snapshots.py --dry-run          # preview without writing
 
-Snapshot files (all in data/):
-    enrichment_actors.csv       — birth_year, death_year, gender, bio, wikidata_id
-    enrichment_broader_ids.csv  — broader_id links (harvest-native + enrichment)
-    backfill_dates.csv          — date_earliest, date_latest for artworks
-    geo/geocoded_places_exported.csv — lat, lon, external_id for places
+Snapshot files (all in data/backfills/):
+    actors.csv       — birth_year, death_year, gender, bio, wikidata_id
+    broader-ids.csv  — broader_id links (harvest-native + enrichment)
+    dates.csv        — date_earliest, date_latest for artworks
+    geocoded-places.csv — lat, lon, external_id for places
 """
 
 import argparse
@@ -25,6 +25,7 @@ import sqlite3
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+BACKFILLS_DIR = DATA_DIR / "backfills"
 DB_PATH = DATA_DIR / "vocabulary.db"
 
 
@@ -39,7 +40,7 @@ def ensure_columns(conn, table, columns):
 
 def reimport_actors(conn, dry_run=False):
     """Reimport actor enrichment: birth/death years, gender, bio, wikidata_id."""
-    csv_path = DATA_DIR / "enrichment_actors.csv"
+    csv_path = BACKFILLS_DIR / "actors.csv"
     if not csv_path.exists():
         print(f"  SKIP: {csv_path} not found")
         return
@@ -83,7 +84,7 @@ def reimport_actors(conn, dry_run=False):
 
 def reimport_broader(conn, dry_run=False):
     """Reimport broader_id links."""
-    csv_path = DATA_DIR / "enrichment_broader_ids.csv"
+    csv_path = BACKFILLS_DIR / "broader-ids.csv"
     if not csv_path.exists():
         print(f"  SKIP: {csv_path} not found")
         return
@@ -110,7 +111,7 @@ def reimport_broader(conn, dry_run=False):
 
 def reimport_dates(conn, dry_run=False):
     """Reimport date backfill: date_earliest, date_latest."""
-    csv_path = DATA_DIR / "backfill_dates.csv"
+    csv_path = BACKFILLS_DIR / "dates.csv"
     if not csv_path.exists():
         print(f"  SKIP: {csv_path} not found")
         return
@@ -145,7 +146,7 @@ def reimport_dates(conn, dry_run=False):
 
 def reimport_geo(conn, dry_run=False):
     """Reimport geocoded place coordinates."""
-    csv_path = DATA_DIR / "geo" / "geocoded_places_exported.csv"
+    csv_path = BACKFILLS_DIR / "geocoded-places.csv"
     if not csv_path.exists():
         print(f"  SKIP: {csv_path} not found")
         return

@@ -18,16 +18,16 @@ node scripts/writeback-type-classifications.mjs
 node scripts/writeback-transfer-category.mjs
 
 # 1c. Position enrichment R1 (258 parties → party_position)
-node scripts/writeback-position-enrichment.mjs --input data/audit-position-enrichment-r1.json
+node scripts/writeback-position-enrichment.mjs --input data/audit/audit-position-enrichment-r1.json
 
 # 1d. Position enrichment R2 (12 parties)
-node scripts/writeback-position-enrichment.mjs --input data/audit-position-enrichment-r2.json
+node scripts/writeback-position-enrichment.mjs --input data/audit/audit-position-enrichment-r2.json
 
 # 1e. Party disambiguation R1 (213 disambiguations)
-node scripts/writeback-party-disambiguation.mjs --input data/audit-party-disambiguation-r1.json
+node scripts/writeback-party-disambiguation.mjs --input data/audit/audit-party-disambiguation-r1.json
 
 # 1f. Party disambiguation R2 (154 disambiguations)
-node scripts/writeback-party-disambiguation.mjs --input data/audit-party-disambiguation-r2.json
+node scripts/writeback-party-disambiguation.mjs --input data/audit/audit-party-disambiguation-r2.json
 
 # 1g. Residual null-position cleanup (121+ artifact parties deleted)
 node scripts/writeback-residual-nulls.mjs
@@ -118,24 +118,112 @@ DELETE FROM provenance_parties WHERE party_name IN ('Charter Room in Leiden Town
 
 ## Step 5: Credit-line reclassifications
 
-9 credit-line events misclassified as sale. Source: commit dd9999c.
+8 credit-line events misclassified as purchase by the credit-line heuristic. The 9th
+(artwork_id=813082, RP-T-2025-20) was confirmed correct and needs no correction.
+Source: commit dd9999c, reconstructed from DB state 2026-04-02.
 
 ```sql
--- See commit dd9999c for full SQL (9 UPDATE statements on artwork_ids:
--- 21712, 148342, 150495, 275981, 291046, 329004, 556616, 727109, 813082)
+-- 5a. RP-T-1967-90 — bare name with Lugt number → collection
+UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
+  category_method = 'llm_enrichment',
+  enrichment_reasoning = 'Bare name with Lugt number (L.2987) and life dates — AAM convention for a collector/owner. Credit-line heuristic misclassified as purchase.'
+WHERE artwork_id = 21712 AND sequence = 1 AND parse_method = 'credit_line';
+
+-- 5b. AK-MAK-361 — exchange, not purchase
+UPDATE provenance_events SET transfer_type = 'exchange', transfer_category = 'ownership',
+  category_method = 'llm_enrichment',
+  enrichment_reasoning = 'Text explicitly states "partly in exchange for an unknown object". Credit-line heuristic misclassified as purchase.'
+WHERE artwork_id = 148342 AND sequence = 2 AND parse_method = 'credit_line';
+
+-- 5c. AK-MAK-1293 — citation fragment leak, not a provenance event
+UPDATE provenance_events SET transfer_type = 'unknown', transfer_category = 'ambiguous',
+  category_method = 'llm_enrichment',
+  enrichment_reasoning = 'Citation fragment leak ("Note RMA.") — not a provenance event. Credit-line heuristic misclassified as purchase.'
+WHERE artwork_id = 150495 AND sequence = 4 AND parse_method = 'credit_line';
+
+-- 5d. BK-1970-99 — physical event description, not ownership transfer
+UPDATE provenance_events SET transfer_type = 'unknown', transfer_category = 'ambiguous',
+  category_method = 'llm_enrichment',
+  enrichment_reasoning = 'Physical event description (pulpit dismantled, 1874) — not an ownership transfer. Credit-line heuristic misclassified as purchase.'
+WHERE artwork_id = 275981 AND sequence = 2 AND parse_method = 'credit_line';
+
+-- 5e. RP-P-1995-1 — bare name with city → collection
+UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
+  category_method = 'llm_enrichment',
+  enrichment_reasoning = 'Bare name with city (Schweinfurt) — AAM convention for a collector/owner. Credit-line heuristic misclassified as purchase.'
+WHERE artwork_id = 291046 AND sequence = 1 AND parse_method = 'credit_line';
+
+-- 5f. RP-P-1997-116 — bare name → collection
+UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
+  category_method = 'llm_enrichment',
+  enrichment_reasoning = 'Bare name — collector/owner. Credit-line heuristic misclassified as purchase.'
+WHERE artwork_id = 329004 AND sequence = 2 AND parse_method = 'credit_line';
+
+-- 5g. BK-NM-10513 — provenance origin from building facade → collection
+UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
+  category_method = 'llm_enrichment',
+  enrichment_reasoning = 'Uncertain provenance origin from a building facade — describes where the object was found, not a sale. Credit-line heuristic misclassified as purchase.'
+WHERE artwork_id = 556616 AND sequence = 1 AND parse_method = 'credit_line';
+
+-- 5h. RP-P-2021-37 — bare name → collection
+UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
+  category_method = 'llm_enrichment',
+  enrichment_reasoning = 'Bare name — collector/owner. Credit-line heuristic misclassified as purchase.'
+WHERE artwork_id = 727109 AND sequence = 1 AND parse_method = 'credit_line';
+
+-- 5i. RP-T-2025-20 — confirmed correct (sale to art dealer). No correction needed.
+-- artwork_id = 813082, sequence = 2.
 ```
 
 ## Step 6: Party corrections from null-position cleanup
 
-10 manual party corrections (splits, renames, deletes). Source: commit dd9999c session.
+7 manual party corrections (3 splits, 2 renames, 1 position assignment, 1 receiver extraction).
+Source: commit dd9999c session, reconstructed from DB state 2026-04-02.
+
+Note: the Museum Het Broekerhuis splits (14945/14947/14948) and the Reaelen-eiland renames
+(194553) were applied by the LLM disambiguation writeback scripts (Steps 1e/1f), not ad-hoc SQL.
+They will be restored automatically when those writebacks re-run. The corrections below are the
+ones that were applied as ad-hoc SQL and are NOT covered by any writeback script.
 
 ```sql
--- See conversation log 2026-03-23 for full SQL covering:
--- 14945/14947/14948 (Museum Het Broekerhuis split)
--- 50272 (Zierikzee city-name delete)
--- 118239 (E.C. Lorentz → receiver)
--- 182809 (John Smith rename from price fragment)
--- 194553 seq 8-11 (Huys te Nigtevegt / Reaelen-eiland corrections)
+-- 6a. BK-NM-8477 (artwork_id=50272) seq 2 — extract receiver "museum" from event text
+--     Parser's parseRest() missed the tail party "to the museum".
+INSERT OR IGNORE INTO provenance_parties (artwork_id, sequence, party_idx, party_name,
+  party_role, party_position, position_method, enrichment_reasoning)
+VALUES (50272, 2, 1, 'museum', 'buyer', 'receiver', 'llm_enrichment',
+  'Extracted from event text: receiver "museum" found in "to the/to [Name]" pattern. Parser''s parseRest() missed this tail party.');
+
+-- 6b. NG-2020-17 (artwork_id=118239) seq 1 — bare name E.C. Lorentz → receiver
+UPDATE provenance_parties SET party_position = 'receiver',
+  position_method = 'llm_enrichment',
+  enrichment_reasoning = 'Bare name in unknown event — person who held the artwork (receiver in AAM bare-name convention).'
+WHERE artwork_id = 118239 AND sequence = 1 AND party_name = 'E.C. Lorentz';
+
+-- 6c. SK-A-484 (artwork_id=182809) seq 5 — rename price fragment out of party name
+UPDATE provenance_parties SET party_name = 'John Smith',
+  party_position = 'agent', position_method = 'llm_enrichment',
+  enrichment_reasoning = 'Renamed from "200 gns by the dealer John Smith" — price fragment (200 gns) merged into party name by parser. John Smith is the dealer (agent).'
+WHERE artwork_id = 182809 AND sequence = 5 AND party_idx = 0;
+
+-- 6d. SK-A-1928 (artwork_id=194553) seq 10 — rename Reaelen-eiland out of party name
+UPDATE provenance_parties SET party_name = 'Jan van Andel',
+  party_position = 'receiver', position_method = 'llm_enrichment',
+  enrichment_reasoning = 'Renamed from "Reaelen-eiland to Jan van Andel" — Reaelen-eiland is a location/estate ("sold with Reaelen-eiland"), Jan van Andel (Burgomaster of Vreeland) is the buyer.'
+WHERE artwork_id = 194553 AND sequence = 10 AND party_idx = 0;
+
+-- 6e. SK-A-1928 (artwork_id=194553) seq 11 — rename Realen-eiland out of party name
+UPDATE provenance_parties SET party_name = 'Gerrit Gijsbertus van den Andel',
+  party_position = 'receiver', position_method = 'llm_enrichment',
+  enrichment_reasoning = 'Renamed from "Realen-eiland to his son Gerrit Gijsbertus van den Andel" — Realen-eiland is a location/estate, Gerrit Gijsbertus van den Andel is the heir ("his son").'
+WHERE artwork_id = 194553 AND sequence = 11 AND party_idx = 0;
+
+-- 6f. BK-NM-8476 (artwork_id=50261) — Zierikzee city name → receiver
+--     Zierikzee is a city, not a person, but in AAM bare-name convention it indicates
+--     prior ownership/holding. Assigned position rather than deleted.
+UPDATE provenance_parties SET party_position = 'receiver',
+  position_method = 'llm_enrichment',
+  enrichment_reasoning = 'Zierikzee is a city name. Given the AAM bare-name convention and the subsequent donation event suggesting prior ownership, this likely indicates the artwork was held/owned by someone in Zierikzee. Following AAM convention, the named location represents the receiver/holder.'
+WHERE artwork_id = 50261 AND sequence = 1 AND party_name = 'Zierikzee';
 ```
 
 ## Step 7: LLM structural corrections
@@ -146,13 +234,13 @@ then reclassifications (may delete events), then splits (renumber sequences).
 
 ```bash
 # 7a. Field corrections: locations + missing receivers (~55 events)
-node scripts/writeback-field-corrections.mjs --input data/audit-field-correction-YYYY-MM-DD.json
+node scripts/writeback-field-corrections.mjs --input data/audit/audit-field-correction-2026-03-25.json
 
 # 7b. Event reclassifications: phantoms, location-as-event, alternatives (~25 events)
-node scripts/writeback-event-reclassification.mjs --input data/audit-event-reclassification-YYYY-MM-DD.json
+node scripts/writeback-event-reclassification.mjs --input data/audit/audit-event-reclassification-2026-03-25.json
 
 # 7c. Event splits: multi-transfer, bequest chain, gap bridge (~50 events)
-node scripts/writeback-event-splitting.mjs --input data/audit-event-splitting-YYYY-MM-DD.json
+node scripts/writeback-event-splitting.mjs --input data/audit/audit-event-splitting-2026-03-25.json
 ```
 
 **Order rationale:** 7a modifies fields on existing events (safe). 7b deletes/merges events (may affect event counts but not sequences used by 7c). 7c renumbers sequences per artwork (must run last because it rebuilds the sequence space).

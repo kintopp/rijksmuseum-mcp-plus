@@ -28,7 +28,7 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 
 | Script | Lang | Description |
 |--------|------|-------------|
-| `geocode_places.py` | Python | Multi-phase geocoding pipeline: GeoNames, Wikidata, Getty TGN, entity reconciliation, WHG fuzzy matching. Produces CSVs in `offline/geo/` (audit trail) and `data/geo/` (active). |
+| `geocode_places.py` | Python | Multi-phase geocoding pipeline: GeoNames, Wikidata, Getty TGN, entity reconciliation, WHG fuzzy matching. Produces CSVs in `offline/geo/` (audit trail) and `data/backfills/` (active). |
 | `batch_geocode.py` | Python | Batch geocode using external IDs already in the DB (Wikidata SPARQL, GeoNames API, Getty TGN). Simpler than `geocode_places.py`. |
 | `map_depicted_places.py` | Python | Extracts depicted places, geocodes missing coords, generates an interactive Leaflet map. |
 
