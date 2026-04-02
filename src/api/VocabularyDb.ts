@@ -500,6 +500,13 @@ const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
 ];
 
 /**
+ * Maximum art_ids returned by filterArtIds(). The chunked vec_distance_cosine path
+ * in EmbeddingsDb scales linearly (~3ms/1K) up to this limit; beyond it, pure KNN
+ * + post-filter (~1.5s) kicks in. Benchmarked at ~600ms for 200K candidates.
+ */
+export const FILTER_ART_IDS_LIMIT = 200_000;
+
+/**
  * Parameter keys eligible for filterArtIds — all VOCAB_FILTERS params plus direct-column filters.
  * Used by semantic_search to forward structured filters. Excludes text FTS, geo, and dimensions.
  */
@@ -2614,9 +2621,7 @@ export class VocabularyDb {
   /**
    * Return art_ids matching metadata filters, for use as candidates in semantic search.
    * Supports all structured vocab filters (not text search, geo, or dimensions).
-   * Returns up to 200,000 art_ids — searchFiltered() handles sets this large in ~600ms
-   * via chunked vec_distance_cosine (linear ~3ms/1K). Beyond 200K it falls back to
-   * pure KNN + post-filter (~1.5s).
+   * Returns up to FILTER_ART_IDS_LIMIT art_ids.
    * Returns null if the DB is unavailable or no effective filters are present.
    */
   filterArtIds(params: Partial<VocabSearchParams>): number[] | null {
@@ -2626,7 +2631,7 @@ export class VocabularyDb {
     if (vocabResult === null) return []; // a filter matched zero vocab terms
     if (vocabResult.conditions.length === 0) return null; // no effective filters — fall back to unfiltered
 
-    const sql = `SELECT a.art_id FROM artworks a WHERE ${vocabResult.conditions.join(" AND ")} LIMIT 200000`;
+    const sql = `SELECT a.art_id FROM artworks a WHERE ${vocabResult.conditions.join(" AND ")} LIMIT ${FILTER_ART_IDS_LIMIT}`;
     let stmt = this.stmtFilterArtIds.get(sql);
     if (!stmt) {
       stmt = this.db.prepare(sql);

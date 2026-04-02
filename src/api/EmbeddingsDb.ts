@@ -1,6 +1,7 @@
 import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
 import { createRequire } from "node:module";
 import { resolveDbPath } from "../utils/db.js";
+import { FILTER_ART_IDS_LIMIT } from "./VocabularyDb.js";
 
 const require = createRequire(import.meta.url);
 
@@ -150,7 +151,8 @@ export class EmbeddingsDb {
   /**
    * Filtered KNN search — pre-filter by art_id set, then compute distances.
    * Uses regular table + vec_distance_cosine() per sqlite-vec maintainer recommendation.
-   * Best when filter is selective (returns <50K candidates from 831K total).
+   * Chunked path scales linearly (~3ms/1K candidates) up to FILTER_ART_IDS_LIMIT;
+   * beyond that, falls back to pure KNN + post-filter (~1.5s full scan).
    */
   searchFiltered(queryEmbedding: Float32Array, candidateArtIds: number[], k: number): FilteredSearchResponse {
     if (!this.db || !this.stmtQuantize || candidateArtIds.length === 0) return { results: [] };
@@ -161,7 +163,7 @@ export class EmbeddingsDb {
     // The chunked vec_distance_cosine path scales linearly (~2.5ms/1K candidates)
     // and stays faster than the ~1.5s full vec0 scan up to ~600K candidates.
     // 200K is a conservative threshold (~500ms) that leaves headroom.
-    if (candidateArtIds.length > 200000) {
+    if (candidateArtIds.length > FILTER_ART_IDS_LIMIT) {
       const allResults = this.search(queryEmbedding, 4096);
       const idSet = new Set(candidateArtIds);
       const filtered = allResults.filter(r => idSet.has(r.artId)).slice(0, k);

@@ -3,7 +3,7 @@
  * between filter-first and KNN-first strategies.
  *
  * Measures:
- * 1. filterArtIds() latency (uncapped) for representative filters
+ * 1. filterArtIds() latency for representative filters
  * 2. searchFiltered() (chunked vec_distance_cosine) at various candidate set sizes up to full collection
  * 3. Pure KNN + post-filter at various pool sizes
  * 4. Head-to-head: filter-first vs KNN-first across diverse queries and filters
@@ -78,22 +78,6 @@ function median(arr) {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-/**
- * Uncapped filterArtIds — bypasses the 50K LIMIT for benchmarking.
- * Calls buildVocabConditions via the internal search path and runs without LIMIT.
- */
-function filterArtIdsUncapped(params) {
-  const db = vocabDb.db;
-  if (!db) return null;
-  // Use the public filterArtIds but with a patched LIMIT — we can't easily call
-  // buildVocabConditions directly. Instead, use the DB to count + fetch all.
-  // Workaround: call searchInternal with a crafted query that returns art_ids.
-  // Actually simpler: just run the SQL directly using the same filter logic.
-  // Since buildVocabConditions is private, we'll use a raw SQL approach for uncapped counts.
-  // For the benchmark, we just need the art_ids — use filterArtIds and note when it's capped.
-  return vocabDb.filterArtIds(params);
-}
-
 // ── Section 1: filterArtIds latency ─────────────────────────────
 
 console.log("═══════════════════════════════════════════════════════════════════════════");
@@ -137,7 +121,7 @@ for (const test of FILTER_TESTS) {
   const { result, ms } = timeMs(() => vocabDb.filterArtIds(test.params));
   const count = result?.length ?? 0;
   const trueCount = trueCountCache.get(test.label);
-  const capped = count >= 50000;
+  const capped = count >= 200000;
   filterData.push({ ...test, count, trueCount, ms, capped });
   const flag = capped ? ` ⚠ CAPPED (true: ${trueCount.toLocaleString()})` : "";
   console.log(`  ${test.label.padEnd(52)} → ${String(count).padStart(7)} artworks  ${fmt(ms).padStart(10)}${flag}`);
@@ -265,8 +249,7 @@ const H2H_FILTERS = [
   { label: "paper",       params: { material: "paper" } },
 ];
 
-// Pre-resolve uncapped filter sets (using the current 50K cap for strategy A,
-// and the capped set as-is for the ID set in strategy B)
+// Pre-resolve filter sets for both strategies
 const h2hFilterData = new Map();
 for (const f of H2H_FILTERS) {
   const ids = vocabDb.filterArtIds(f.params);
@@ -286,7 +269,7 @@ for (const query of QUERIES) {
     const { ids, idSet, trueCount } = h2hFilterData.get(filter.label);
     if (ids.length === 0) continue;
 
-    // Strategy A: filter-first (capped at 50K by filterArtIds)
+    // Strategy A: filter-first (capped at 200K by filterArtIds)
     const timesA = [];
     for (let r = 0; r < RUNS; r++) {
       const { ms } = timeMs(() => embeddingsDb.searchFiltered(qVec, ids, K));
@@ -326,47 +309,44 @@ for (const query of QUERIES) {
 // ── Section 5: Quality deep-dive — does the cap affect results? ─
 
 console.log("\n═══════════════════════════════════════════════════════════════════════════");
-console.log("  Section 5: Quality — 50K-capped vs uncapped filter-first");
+console.log("  Section 5: Quality — slice stability for capped filters");
 console.log("═══════════════════════════════════════════════════════════════════════════\n");
-console.log("  Compares results when using first-50K vs a different-50K slice.\n");
+console.log("  Compares results from first half vs last half of capped candidate sets.\n");
 
-// For filters that are capped, compare first-50K results with last-50K results
-// This simulates what happens when the "right" artworks are NOT in the first 50K.
+// For filters that hit the 200K cap, compare first-half results with last-half results.
+// This measures whether the arbitrary row order affects which results appear.
 
+const SLICE_SIZE = 100_000; // half of FILTER_ART_IDS_LIMIT
 const QUALITY_FILTERS = filterData.filter(f => f.capped);
 
 if (QUALITY_FILTERS.length === 0) {
   console.log("  No capped filters — nothing to compare.\n");
 } else {
-  console.log(`  ${"Query".padEnd(30)} │ ${"Filter".padEnd(16)} │ ${"True#".padStart(7)} │ ${"1st50K dist".padStart(11)} │ ${"Last50K dist".padStart(12)} │ ${"Overlap".padStart(7)}`);
-  console.log(`  ${"─".repeat(30)} ┼ ${"─".repeat(16)} ┼ ${"─".repeat(7)} ┼ ${"─".repeat(11)} ┼ ${"─".repeat(12)} ┼ ${"─".repeat(7)}`);
+  console.log(`  ${"Query".padEnd(30)} │ ${"Filter".padEnd(16)} │ ${"True#".padStart(7)} │ ${"1st half dist".padStart(13)} │ ${"2nd half dist".padStart(13)} │ ${"Overlap".padStart(7)}`);
+  console.log(`  ${"─".repeat(30)} ┼ ${"─".repeat(16)} ┼ ${"─".repeat(7)} ┼ ${"─".repeat(13)} ┼ ${"─".repeat(13)} ┼ ${"─".repeat(7)}`);
 
   for (const query of QUERIES.slice(0, 6)) {
     const qVec = queryVecs.get(query);
     for (const filter of QUALITY_FILTERS) {
-      // Get all matching art_ids (up to the true count, but we only have 50K from filterArtIds)
-      // To get a different slice, query with different row ordering
-      // Simplest: use the shuffled pool filtered by the same condition
       const filterIds = vocabDb.filterArtIds(filter.params);
-      if (!filterIds || filterIds.length < 50000) continue;
+      if (!filterIds || filterIds.length < SLICE_SIZE * 2) continue;
 
-      const first50K = filterIds.slice(0, 50000);
-      // Reverse to simulate a different 50K slice
-      const last50K = [...filterIds].reverse().slice(0, 50000);
+      const firstHalf = filterIds.slice(0, SLICE_SIZE);
+      const secondHalf = filterIds.slice(SLICE_SIZE, SLICE_SIZE * 2);
 
-      const resFirst = embeddingsDb.searchFiltered(qVec, first50K, K);
-      const resLast = embeddingsDb.searchFiltered(qVec, last50K, K);
+      const resFirst = embeddingsDb.searchFiltered(qVec, firstHalf, K);
+      const resSecond = embeddingsDb.searchFiltered(qVec, secondHalf, K);
 
       const setFirst = new Set(resFirst.results.map(r => r.objectNumber));
-      const setLast = new Set(resLast.results.map(r => r.objectNumber));
-      const overlap = [...setFirst].filter(x => setLast.has(x)).length;
+      const setSecond = new Set(resSecond.results.map(r => r.objectNumber));
+      const overlap = [...setFirst].filter(x => setSecond.has(x)).length;
 
       const distFirst = resFirst.results[0]?.distance.toFixed(4) ?? "N/A";
-      const distLast = resLast.results[0]?.distance.toFixed(4) ?? "N/A";
+      const distSecond = resSecond.results[0]?.distance.toFixed(4) ?? "N/A";
       const qLabel = query.length > 28 ? query.slice(0, 26) + "…" : query;
 
       console.log(
-        `  ${qLabel.padEnd(30)} │ ${filter.label.padEnd(16)} │ ${String(filter.trueCount).padStart(7)} │ ${distFirst.padStart(11)} │ ${distLast.padStart(12)} │ ${`${overlap}/${K}`.padStart(7)}`
+        `  ${qLabel.padEnd(30)} │ ${filter.label.padEnd(16)} │ ${String(filter.trueCount).padStart(7)} │ ${distFirst.padStart(13)} │ ${distSecond.padStart(13)} │ ${`${overlap}/${K}`.padStart(7)}`
       );
     }
   }
