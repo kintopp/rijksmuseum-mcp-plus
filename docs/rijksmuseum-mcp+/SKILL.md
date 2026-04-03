@@ -1,6 +1,6 @@
 ---
 name: rijksmuseum-mcp
-version: "0.23.3"
+version: "0.23.4"
 last_updated: 2026-03-29
 description: >
   Research workflows for the Rijksmuseum MCP+ server. Use this skill whenever
@@ -28,7 +28,7 @@ Avoid jumping directly to RETRIEVE without a DISCOVER or QUANTIFY step unless th
 |---|---|
 | "Find works about X" — clear vocabulary concept | `search_artwork` with `subject` |
 | "Find works about X" — interpretive / atmospheric | `semantic_search` |
-| "Find works depicting [iconographic scene]" | `lookup_iconclass` → `search_artwork` with `iconclass` |
+| "Find works depicting [iconographic scene]" | Iconclass server `search` → `search_artwork` with `iconclass` |
 | "How many works match X?" | `collection_stats` for counts/distributions; `search_artwork` with `compact: true` only when you need object numbers |
 | "Distribution of X across the collection" | `collection_stats` with `dimension` |
 | "Top N creators / depicted persons / places" | `collection_stats` with `dimension` + `topN` |
@@ -66,19 +66,15 @@ distinguish objects *from* Asia versus European images *of* Asia.
 ### `subject` vs `iconclass`
 
 - `subject`: morphological stemming against ~108K terms (almost all in English); best first pass; try natural phrases ("winter landscape", "vanitas", "civic guard")
-- `iconclass`: the Iconclass classification system — a universal art-historical taxonomy of ~40,675 notations across 13 languages, with hierarchical browsing and pre-computed Rijksmuseum artwork counts. Three search modes via `lookup_iconclass`:
-  - keyword (`query`): FTS5 across labels and keywords in all 13 languages (exact word match)
-  - semantic (`semanticQuery`): embedding-based concept search — finds notations by meaning, not just words (e.g. "domestic animals" finds dogs, cats, horses)
-  - browse (`notation`): navigate the hierarchy — view any notation's path, children, cross-references, and keywords
-
-Each result includes a `rijksCount` (how many Rijksmuseum artworks carry that notation), so you can gauge usefulness before searching. Pass the notation code to `search_artwork`'s `iconclass` parameter for precise filtering.
+- `iconclass`: the Iconclass classification system — ~40,675 notations across 13 languages. A retrieval tool, not a descriptive language: a notation's meaning comes from its position in the hierarchy, not just its label. Use the **Iconclass server** (`search`, `browse`, `resolve`, `expand_keys`, `search_prefix`) to discover notation codes by keyword, concept, or hierarchy navigation — see its SKILL file for full workflows and query patterns. Each result includes collection counts signalling how many artworks carry that notation. Pass the code to `search_artwork`'s `iconclass` parameter for precise filtering.
 
 **Decision rule:** start with `subject` — it's faster and handles most queries well. Switch to `iconclass` when:
-- you need to distinguish closely related scenes (Crucifixion vs Deposition, Annunciation vs Visitation)
+- you need to distinguish closely related scenes (Crucifixion vs Deposition, Annunciation vs Visitation) — these are sibling notations with distinct codes
 - `subject` returns too broad a result set and you need hierarchical precision
 - you want to explore a conceptual neighbourhood (browse children/siblings of a notation)
 - the query is in a non-English language (Iconclass covers 13 languages; subject vocab is almost entirely English)
 - you want to search by meaning rather than keywords (semantic mode: "religious suffering", "festive gathering")
+- you need to combine multiple iconographic concepts in a single query (AND-combined codes)
 
 ### `dateMatch` — controlling how date ranges are binned
 
@@ -197,27 +193,27 @@ collection_stats(dimension="height", type="painting", binWidth=20)
 
 Use `compact: true` on `search_artwork` only when you need the actual object numbers (e.g. to feed into `get_artwork_details`), not just the count or distribution. For pure counting, `collection_stats` is always more efficient.
 
-### 2. Iconclass Two-Step
+### 2. Iconclass Research
 
 Never pass iconographic concepts as free text to `search_artwork(iconclass=...)` —
-it expects exact notation codes. Always discover valid codes first via `lookup_iconclass`.
+it expects exact notation codes. Use the **Iconclass server** to discover codes first (see its SKILL file for full discovery workflows, FTS query patterns, hierarchy navigation, and cross-branch strategies).
 
-**Step 1: discover notation codes (three modes available)**
+**Quick reference — Iconclass server tools:**
+- `search(query=...)` — keyword lookup ("crucifixion" → `73D6`)
+- `search(semanticQuery=...)` — concept search ("domestic animals" → `34B1`)
+- `browse(notation=...)` — hierarchy navigation (children, cross-refs, path)
+- `resolve(notation=[...])` — batch lookup of known codes
+- `expand_keys` / `search_prefix` — key variants and subtree enumeration
 
-```
-lookup_iconclass(query="Crucifixion")                                      # keyword
-lookup_iconclass(semanticQuery="religious suffering", onlyWithArtworks=True) # semantic
-lookup_iconclass(notation="73D8")                                          # browse hierarchy
-# → shows children: 73D81 (Christ before Pilate), 73D82 (Crucifixion), …
-```
+**Before handing off**, check `collectionCounts` — a code with 0 artworks returns nothing; a code with 2,000 vs 3 signals very different curatorial depth.
 
-**Step 2: search with the discovered code**
+**Searching with codes on this server:**
 ```
 search_artwork(iconclass=["73D82"])
-search_artwork(iconclass=["73D82", "25F33(DOVE)"])  # AND-combines multiple codes
+search_artwork(iconclass=["73D82", "25F33(DOVE)"])  # AND-combines across branches
 ```
 
-Check `rijksCount` in `lookup_iconclass` results before searching — a code with `rijksCount: 0` will return nothing.
+Multiple codes AND-combine — this is how you express compound iconographic queries. If results are unexpected, use the Iconclass server's semantic search to discover alternative branches — the same concept can live in multiple places (a dog as pet under `34B11`, a dog as symbol of fidelity under `11A(DOG)`).
 
 ### 3. Century / Decade Wildcards
 
