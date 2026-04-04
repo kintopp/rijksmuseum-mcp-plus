@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, pluralize, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, formatDimensions, pluralize, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -1474,11 +1474,7 @@ function registerTools(
         activeOverlays: [],
       });
 
-      // Format physical dimension statement from DB columns
-      const dimParts: string[] = [];
-      if (artwork.heightCm != null) dimParts.push(`h ${artwork.heightCm} cm`);
-      if (artwork.widthCm != null) dimParts.push(`w ${artwork.widthCm} cm`);
-      const physicalDimensions = dimParts.length > 0 ? dimParts.join(" × ") : null;
+      const physicalDimensions = formatDimensions(artwork.heightCm, artwork.widthCm);
 
       const { thumbnailUrl, iiifId, ...imageData } = resolvedImageInfo;
       const viewerData: InferOutput<typeof ImageInfoOutput> = {

@@ -39,18 +39,18 @@ export interface ArtworkDetailFromDb {
   dimensions: { type: string; value: number; unit: string; note: string | null }[];
   relatedObjects: { relationship: string; objectUri: string }[];
   persistentId: string | null;
-  objectTypes: { id: string; label: string }[];
-  materials: { id: string; label: string }[];
+  objectTypes: VocabTerm[];
+  materials: VocabTerm[];
   production: {
     name: string; role: string | null; attributionQualifier: string | null;
     place: string | null; actorUri: string;
     personInfo?: PersonInfo;
   }[];
-  collectionSetLabels: { id: string; label: string }[];
+  collectionSetLabels: VocabTerm[];
   subjects: {
-    iconclass: { id: string; label: string }[];
-    depictedPersons: { id: string; label: string }[];
-    depictedPlaces: { id: string; label: string }[];
+    iconclass: VocabTerm[];
+    depictedPersons: VocabTerm[];
+    depictedPlaces: VocabTerm[];
   };
 }
 
@@ -155,6 +155,20 @@ const ICONCLASS_NOISE_LABELS = new Set([
 export function formatDateRange(earliest: number | null | undefined, latest: number | null | undefined): string | undefined {
   if (earliest == null) return undefined;
   return earliest === latest ? String(earliest) : `${earliest}–${latest}`;
+}
+
+/** Format height/width in cm as a dimension statement (e.g. "h 379.5 cm × w 453.5 cm"). */
+export function formatDimensions(heightCm: number | null | undefined, widthCm: number | null | undefined): string | null {
+  const parts: string[] = [];
+  if (heightCm != null) parts.push(`h ${heightCm} cm`);
+  if (widthCm != null) parts.push(`w ${widthCm} cm`);
+  return parts.length > 0 ? parts.join(" × ") : null;
+}
+
+/** A vocabulary term reference (id + label). */
+export interface VocabTerm {
+  id: string;
+  label: string;
 }
 
 export interface VocabSearchParams {
@@ -719,6 +733,9 @@ export class VocabularyDb {
   private stmtLookupArtwork: Statement | null = null;
   private stmtLookupPersonInfo: Statement | null = null;
   private stmtLookupIiifId: Statement | null = null;
+  private stmtImageMetadata: Statement | null = null;
+  private stmtArtworkRow: Statement | null = null;
+  private stmtArtworkMappings: Statement | null = null;
   private stmtFilterArtIds = new Map<string, Statement>();
 
   // ── find_similar shared ──
@@ -850,6 +867,37 @@ export class VocabularyDb {
         );
       }
 
+      // Cached statements for getArtworkDetail / lookupImageMetadata
+      if (this.hasRightsLookup) {
+        this.stmtImageMetadata = this.db.prepare(`
+          SELECT a.object_number, a.title, a.title_all_text, a.creator_label,
+                 a.date_earliest, a.date_latest, a.iiif_id,
+                 a.height_cm, a.width_cm, rl.uri AS rights_uri
+          FROM artworks a
+          LEFT JOIN rights_lookup rl ON a.rights_id = rl.id
+          WHERE a.object_number = ?
+        `);
+        this.stmtArtworkRow = this.db.prepare(`
+          SELECT a.object_number, a.art_id, a.title, a.title_all_text, a.creator_label,
+                 a.date_earliest, a.date_latest, a.description_text, a.inscription_text,
+                 a.provenance_text, a.credit_line, a.narrative_text,
+                 a.height_cm, a.width_cm, a.iiif_id,
+                 rl.uri AS rights_uri
+          FROM artworks a
+          LEFT JOIN rights_lookup rl ON a.rights_id = rl.id
+          WHERE a.object_number = ?
+        `);
+      }
+      this.stmtArtworkMappings = this.db.prepare(`
+        SELECT f.name AS field, v.label_en, v.label_nl, v.id AS vocab_id,
+               v.notation, v.external_id, v.type AS vocab_type,
+               v.birth_year, v.death_year, v.gender, v.bio, v.wikidata_id
+        FROM mappings m
+        JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+        JOIN field_lookup f ON m.field_id = f.id
+        WHERE m.artwork_id = ?
+      `);
+
       const features = [
         this.hasFts5 && "vocabFTS5",
         this.hasTextFts && "textFTS5",
@@ -969,15 +1017,8 @@ export class VocabularyDb {
     iiifId: string | null; heightCm: number | null; widthCm: number | null;
     license: string | null;
   } | null {
-    if (!this.db) return null;
-    const row = this.db.prepare(`
-      SELECT a.object_number, a.title, a.title_all_text, a.creator_label,
-             a.date_earliest, a.date_latest, a.iiif_id,
-             a.height_cm, a.width_cm, rl.uri AS rights_uri
-      FROM artworks a
-      LEFT JOIN rights_lookup rl ON a.rights_id = rl.id
-      WHERE a.object_number = ?
-    `).get(objectNumber) as {
+    if (!this.stmtImageMetadata) return null;
+    const row = this.stmtImageMetadata.get(objectNumber) as {
       object_number: string; title: string | null; title_all_text: string | null;
       creator_label: string | null; date_earliest: number | null; date_latest: number | null;
       iiif_id: string | null; height_cm: number | null; width_cm: number | null;
@@ -1001,19 +1042,10 @@ export class VocabularyDb {
    * toDetailEnriched() for get_artwork_details. Two queries: artwork row + mappings.
    */
   getArtworkDetail(objectNumber: string): ArtworkDetailFromDb | null {
-    if (!this.db) return null;
+    if (!this.stmtArtworkRow || !this.stmtArtworkMappings) return null;
 
     // Query 1: artwork row
-    const row = this.db.prepare(`
-      SELECT a.object_number, a.art_id, a.title, a.title_all_text, a.creator_label,
-             a.date_earliest, a.date_latest, a.description_text, a.inscription_text,
-             a.provenance_text, a.credit_line, a.narrative_text,
-             a.height_cm, a.width_cm, a.iiif_id,
-             rl.uri AS rights_uri
-      FROM artworks a
-      LEFT JOIN rights_lookup rl ON a.rights_id = rl.id
-      WHERE a.object_number = ?
-    `).get(objectNumber) as {
+    const row = this.stmtArtworkRow.get(objectNumber) as {
       object_number: string; art_id: number; title: string | null; title_all_text: string | null;
       creator_label: string | null; date_earliest: number | null; date_latest: number | null;
       description_text: string | null; inscription_text: string | null;
@@ -1024,15 +1056,7 @@ export class VocabularyDb {
     if (!row) return null;
 
     // Query 2: all vocabulary mappings for this artwork
-    const mappings = this.db.prepare(`
-      SELECT f.name AS field, v.label_en, v.label_nl, v.id AS vocab_id,
-             v.notation, v.external_id, v.type AS vocab_type,
-             v.birth_year, v.death_year, v.gender, v.bio, v.wikidata_id
-      FROM mappings m
-      JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-      JOIN field_lookup f ON m.field_id = f.id
-      WHERE m.artwork_id = ?
-    `).all(row.art_id) as {
+    const mappings = this.stmtArtworkMappings.all(row.art_id) as {
       field: string; label_en: string | null; label_nl: string | null; vocab_id: string;
       notation: string | null; external_id: string | null; vocab_type: string | null;
       birth_year: number | null; death_year: number | null; gender: string | null;
@@ -1096,11 +1120,7 @@ export class VocabularyDb {
     // Assemble date string
     const date = formatDateRange(row.date_earliest, row.date_latest) ?? "";
 
-    // Dimension statement from columns
-    const dimParts: string[] = [];
-    if (row.height_cm != null) dimParts.push(`h ${row.height_cm} cm`);
-    if (row.width_cm != null) dimParts.push(`w ${row.width_cm} cm`);
-    const dimensionStatement = dimParts.length > 0 ? dimParts.join(" × ") : null;
+    const dimensionStatement = formatDimensions(row.height_cm, row.width_cm);
 
     // Dimensions structured
     const dimensions: { type: string; value: number; unit: string; note: string | null }[] = [];
