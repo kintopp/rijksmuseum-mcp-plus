@@ -50,9 +50,7 @@ You can use rijksmuseum-mcp+ to explore artworks with the same (with minor excep
 
 1. **Additional metadata**
 
-This adds several additional curated metadata fields otherwise not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). These include full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all five `title` variants for an artwork, multiple attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), bibliographic citations, and [Iconclass](https://iconclass.org) notations. Over 1.3M Iconclass notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. 
-
-New proximity searches on [enriched geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden") while physical dimension filters support queries on the size of an artwork (e.g. "paintings wider than 3 metres"). Finally, rijksmuseum-mcp+ is also able to produce many different kinds of aggregate statistics (e.g. counts, distributions, and cross-tabulations across arbitrary metadata categories) of the collecton which can then be passed on to the AI assistant for visualisation and other forms of analysis. For more details, please see the reference documents for [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md).
+This adds several additional curated metadata fields otherwise not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). These include full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all five `title` variants for an artwork, multiple attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), bibliographic citations, and [Iconclass](https://iconclass.org) notations. Over 1.3M Iconclass notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. New proximity searches on [enriched geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden") while physical dimension filters support queries on the size of an artwork (e.g. "paintings wider than 3 metres"). Finally, rijksmuseum-mcp+ is also able to produce many different kinds of aggregate statistics (e.g. counts, distributions, and cross-tabulations across arbitrary metadata categories) of the collecton which can then be passed on to the AI assistant for visualisation and other forms of analysis. For more details, please see the reference documents for [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md).
 
 2. **Semantic search** 
 
@@ -189,22 +187,24 @@ For local setup (stdio or HTTP), deployment, architecture, data sources, and con
 
 Soon:
 
-- update documentation
-- fine-tune query strategies
-- fix bugs
+- update documentation (IconClass references -> rijksmuseum-iconclass-mcp). 
+- update SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file
+- fix bugs and fine-tune queries and tool descriptions
+- reduce/remove use of the Linked Art resolver
+- remove artwork bibliography tool (replace later with its own MCP server)
 - v1.0 release
 - paper/presentation
 
 Later:
 
-- create a [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file for exploring the collection
-- review capabilities of MCP clients besides Anthropic's Claude
+- re-harvest metadata (OAI-PMH) to capture remaining metadata (e.g. location, relatedObjects)
+- investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after"
+- implement incremental updates via LDES endpoint
 - add provenance metadata for geolocated places
 - investigate adding `attributed_by` technical metadata (e.g. conservation and scientific analyses)
 
 Maybe:
 
-- investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after" 
 - investigate separate windows for chat and image viewer
 - investigate incorporating historical exhibition data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
