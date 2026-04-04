@@ -60,20 +60,18 @@ See [mcp-tool-parameters.md](mcp-tool-parameters.md) for the full parameter refe
 | `search_artwork` | Search the collection using [39 search filters](search-parameters.md) including full-text fields, vocabulary labels, creator demographics, dimensions, geo proximity, and place hierarchy expansion. Returns up to 25 results (max 50). Compact mode, facets, and offset pagination supported. |
 | `semantic_search` | Find artworks by meaning, concept, or theme using natural language. Returns up to 15 results (max 50) ranked by semantic similarity with reconstructed source text for grounding. Pre-filters: `type`, `material`, `technique`, `creationDate`, `dateMatch`, `creator`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, `imageAvailable`. Requires embeddings database and embedding model. |
 | `collection_stats` | Aggregate statistics, counts, and distributions across any dimension (artwork or provenance). Returns formatted text tables. Artwork dimensions: type, material, technique, creator, century, decade, etc. Provenance dimensions: transferType, party, location, decade, etc. Artwork filters: type, material, technique, creator, productionPlace, depictedPerson, depictedPlace, subject, iconclass, collectionSet, creatorGender, creatorBornAfter/Before, imageAvailable, creation date range. Provenance filters: transferType, location, party, date range, categoryMethod, positionMethod. All filters combine freely. |
-| `get_artwork_details` | [26 metadata categories](metadata-categories.md) by object number (e.g. `SK-C-5`) or Linked Art URI. Returns titles, creator, date, description, curatorial narrative, dimensions, materials, production details (with creator life dates, gender, biographical notes, attribution qualifiers, and Wikidata IDs where available), provenance (raw text + parsed chain), inscriptions, iconographic subjects, related objects, and more. Vocabulary terms resolved to English labels with links to Getty AAT, Wikidata, and Iconclass. |
-| `get_artwork_bibliography` | Scholarly references for an artwork by its objectNumber. Summary (first 5 + total count) by default, or full (100+ for major works). Resolves publication records with ISBNs and WorldCat links. |
+| `get_artwork_details` | [26 metadata categories](metadata-categories.md) by object number (e.g. `SK-C-5`) or Linked Art URI. Returns titles, creator, date, description, curatorial narrative, dimensions, materials, production details (with creator life dates, gender, biographical notes, attribution qualifiers, and Wikidata IDs where available), provenance (raw text + parsed chain), inscriptions, iconographic subjects, and more. All data served from the local vocabulary database. |
 | `get_artwork_image` | View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate, flip) via [MCP Apps](https://github.com/modelcontextprotocol/ext-apps). For LLM image analysis, use `inspect_artwork_image` instead. |
 | `inspect_artwork_image` | Retrieve an artwork image or region as base64 for direct visual analysis by the LLM. Regions: `full`, `square`, `pct:x,y,w,h`, or `x,y,w,h`. Size 200–2000 px, rotation (0/90/180/270), quality (default or grayscale). Auto-navigates the open viewer to the inspected region. |
 | `navigate_viewer` | Navigate the artwork viewer to a specific region and/or add labeled visual overlays. Requires a `viewUUID` from a prior `get_artwork_image` call. Commands: `navigate`, `add_overlay` (with `relativeTo` for crop-local coordinates), `clear_overlays`. |
 | `search_provenance` | Search ownership and provenance history across ~48K artworks with parsed provenance records. Filter by party, transfer type, date range, location, price/currency, provenance gaps, and cross-references. Two layers: raw events and interpreted ownership periods. Sorting by price, date, event count, or duration. Includes provenance-of-provenance metadata (parse method, LLM enrichment reasoning). |
-| `collection_stats` | (see above) |
-| `find_similar` | Find artworks similar to a given artwork across five independent signals (Lineage, Iconclass, Description, Depicted Person, Depicted Place) plus a pooled column. Returns a URL/path to an HTML comparison page. Feature-gated via `ENABLE_FIND_SIMILAR`. |
+| `find_similar` | Find artworks similar to a given artwork across six independent signals (Visual, Description, Iconclass, Lineage, Depicted Person, Depicted Place) plus a pooled column. Returns a URL/path to an HTML comparison page. Feature-gated via `ENABLE_FIND_SIMILAR`. |
 | `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic collections). Optional name filter. Via OAI-PMH. |
 | `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, IIIF URLs, and iconographic subjects. Pagination via resumption token. |
 | `get_recent_changes` | Track additions and modifications by date range. Full EDM records or lightweight headers (`identifiersOnly`). Pagination via resumption token. |
 | `poll_viewer_commands` | Internal: poll for pending viewer navigation commands. Used by the artwork viewer; not called directly by users. |
 
-**Structured output:** 12 of 15 tools return typed structured data (`structuredContent`) alongside the text summary. `collection_stats` and `find_similar` return text only by design. MCP clients that support `outputSchema` ([spec](https://modelcontextprotocol.io/specification/2025-11-25)) receive machine-readable results for richer UI rendering. Set `STRUCTURED_CONTENT=false` to disable if your client has compatibility issues.
+**Structured output:** 10 of 13 tools return typed structured data (`structuredContent`) alongside the text summary. `collection_stats` and `find_similar` return text only by design. MCP clients that support `outputSchema` ([spec](https://modelcontextprotocol.io/specification/2025-11-25)) receive machine-readable results for richer UI rendering. Set `STRUCTURED_CONTENT=false` to disable if your client has compatibility issues.
 
 #### Prompts and Resources
 
@@ -89,7 +87,7 @@ See [mcp-tool-parameters.md](mcp-tool-parameters.md) for the full parameter refe
 src/
   index.ts                    — Dual-transport entry point (stdio + HTTP)
   registration.ts             — Tool/resource/prompt registration, hybrid search routing
-  types.ts                    — Linked Art, IIIF, and output types
+  types.ts                    — IIIF and OAI-PMH types
   viewer.ts                   — OpenSeadragon HTML generator (HTTP mode)
   similarHtml.ts              — HTML template for find_similar comparison pages
   enrichmentReviewHtml.ts     — HTML review pages for LLM enrichments
@@ -98,49 +96,44 @@ src/
   provenance-peg.ts           — PEG parser driver + regex fallback
   provenance-interpret.ts     — Event interpretation layer (ownership periods)
   api/
-    RijksmuseumApiClient.ts   — Linked Art API client, vocabulary resolver, bibliography, IIIF image chain
+    RijksmuseumApiClient.ts   — IIIF image client (info.json, region/thumbnail base64)
     OaiPmhClient.ts           — OAI-PMH client (curated sets, EDM records, change tracking)
-    VocabularyDb.ts           — SQLite vocabulary database (vocab term, full-text, dimension, date, and geo proximity search)
-    IconclassDb.ts            — Iconclass notation search/browse (SQLite)
+    VocabularyDb.ts           — SQLite vocabulary database (artwork details, image metadata, vocab search, full-text, dimension, date, geo proximity, provenance, find_similar)
     EmbeddingsDb.ts           — sqlite-vec vector search (pure KNN + filtered KNN)
     EmbeddingModel.ts         — HuggingFace Transformers embedding model (ONNX/WASM)
   auth/
     StubOAuthProvider.ts      — No-op OAuth provider for Claude client compatibility
   utils/
     db.ts                     — Shared path resolution (PROJECT_ROOT, import.meta.url)
-    ResponseCache.ts          — LRU+TTL response cache
+    ResponseCache.ts          — LRU+TTL cache (IIIF info.json responses)
     UsageStats.ts             — Tool call aggregation and periodic flush
 apps/
   artwork-viewer/             — MCP Apps inline IIIF viewer (Vite + OpenSeadragon)
 data/
   vocabulary.db               — Vocabulary database (built from OAI-PMH + Linked Art harvest, not in git)
-  iconclass.db                — Iconclass database (built from CC0 dump, not in git)
   embeddings.db               — Artwork embeddings (~832K int8 vectors, not in git)
 ```
 
 #### Data Sources
 
-The server uses the Rijksmuseum's open APIs with no authentication required:
+At runtime, the server only makes HTTP requests for IIIF images and OAI-PMH feeds. All artwork metadata is served from local databases. No authentication is required.
 
 | API | URL | Purpose |
 |---|---|---|
-| Search API | `https://data.rijksmuseum.nl/search/collection` | Fallback only: resolves object numbers to Linked Art URIs when the vocabulary database is unavailable. All primary search is handled by the local vocabulary database. |
-| Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata, vocabulary terms, and bibliography as JSON-LD |
-| IIIF Image API | `https://iiif.micr.io/{id}/info.json` | High-resolution image tiles |
+| IIIF Image API | `https://iiif.micr.io/{id}/info.json` | High-resolution image tiles (info.json + region/thumbnail fetch) |
 | OAI-PMH | `https://data.rijksmuseum.nl/oai` | Curated sets, EDM metadata records, date-based change tracking. 192 sets, 832K+ records. |
-| Iconclass (CC0) | `https://iconclass.org/` | ~40K iconographic classification notations. Accessed via the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp); Iconclass notation codes can be passed to `search_artwork`'s `iconclass` parameter. |
+| Iconclass (CC0) | `https://iconclass.org/` | ~1.3M iconographic classification notations. Accessed via the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp); Iconclass notation codes can be passed to `search_artwork`'s `iconclass` parameter. |
 
-**Image discovery chain (4 HTTP hops):** Object `.shows` > VisualItem `.digitally_shown_by` > DigitalObject `.access_point` > IIIF info.json
+The following APIs are used only during the **offline harvest** (not at runtime):
 
-**Vocabulary resolution:** Material, object type, technique, place, collection, and subject terms are Rijksmuseum vocabulary URIs. These are resolved in parallel to obtain English labels and links to external authorities (Getty AAT, Wikidata, Iconclass). See [Artwork Metadata Categories](metadata-categories.md) for the full field reference.
+| API | URL | Purpose |
+|---|---|---|
+| Search API | `https://data.rijksmuseum.nl/search/collection` | Resolves object numbers to Linked Art URIs during harvest |
+| Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata and vocabulary terms as JSON-LD (harvest-time enrichment) |
 
-**Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
-
-**Vocabulary database:** A pre-built SQLite database maps ~194,000 controlled vocabulary terms to ~832,000 artworks via ~13.7 million mappings. Built from OAI-PMH EDM records and Linked Art resolution (both vocabulary terms and full artwork records), it powers vocabulary-backed filters (`subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `productionRole`, `attributionQualifier`), cross-filters (`material`, `technique`, `type`, `creator`), full-text search on artwork texts (`inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `title`, `description`), date range filtering (`creationDate` with `dateMatch` modes), numeric dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`), and geo proximity search (`nearPlace`, `nearLat`/`nearLon`, `nearPlaceRadius`). Includes ~31,000 geocoded places (96% coverage) with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/), supplemented by coordinate inheritance from parent places via a spatial hierarchy. Place name queries support fuzzy matching with geo-disambiguation for ambiguous names. The database also contains biographical data for ~49,000 creators (birth/death years), ~64,000 gender annotations, ~11,000 biographical notes, and ~5,000 Wikidata identifiers, enriched from Rijksmuseum actor authority files and data dumps. Provenance data covers ~48,000 artworks with parsed ownership chains (events, parties, transfer types, dates, locations, prices).
+**Vocabulary database:** A pre-built SQLite database maps ~194,000 controlled vocabulary terms to ~832,000 artworks via ~13.7 million mappings. Built from OAI-PMH EDM records and Linked Art resolution (both vocabulary terms and full artwork records), it is the single source of truth for all artwork metadata at runtime — powering `get_artwork_details`, image tool metadata, vocabulary-backed filters (`subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `productionRole`, `attributionQualifier`), cross-filters (`material`, `technique`, `type`, `creator`), full-text search on artwork texts (`inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `title`, `description`), date range filtering (`creationDate` with `dateMatch` modes), numeric dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`), and geo proximity search (`nearPlace`, `nearLat`/`nearLon`, `nearPlaceRadius`). Includes ~31,000 geocoded places (96% coverage) with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/), supplemented by coordinate inheritance from parent places via a spatial hierarchy. Place name queries support fuzzy matching with geo-disambiguation for ambiguous names. The database also contains biographical data for ~49,000 creators (birth/death years), ~64,000 gender annotations, ~11,000 biographical notes, and ~5,000 Wikidata identifiers, enriched from Rijksmuseum actor authority files and data dumps. Provenance data covers ~48,000 artworks with parsed ownership chains (events, parties, transfer types, dates, locations, prices).
 
 **Embeddings database:** A pre-built SQLite database contains ~832,000 int8-quantized embeddings (384 dimensions) generated by [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small) from composite artwork text (title, inscriptions, description, curatorial narrative — subjects and creator names deliberately excluded). Vector search uses [sqlite-vec](https://github.com/asg017/sqlite-vec) with dual paths: vec0 virtual table for pure KNN, and `vec_distance_cosine()` on a regular table for filtered KNN (pre-filtered by type, material, technique, date, creator, subject, iconclass, depictedPerson, depictedPlace, productionPlace, collectionSet, aboutActor, or imageAvailable via the vocabulary database). Source text is not stored in the embeddings DB — it is reconstructed from the vocabulary database at query time, matching the original embedding generation format.
-
-**Bibliography resolution:** Publication references resolve to Schema.org Book records (a different JSON-LD context from the Linked Art artwork data) with author, title, ISBN, and WorldCat links.
 
 #### Configuration
 
