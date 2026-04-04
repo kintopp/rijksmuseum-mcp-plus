@@ -13,14 +13,14 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, pluralize, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, pluralize, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
-import type { LinkedArtObject } from "./types.js";
+import { parseProvenance } from "./provenance.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -275,7 +275,7 @@ interface ProvenanceChainEvent {
   location: string | null; price: { currency: string; amount: number | null; text: string } | null;
   uncertain: boolean;
 }
-type DetailWithChain = InferOutput<typeof ArtworkDetailOutput> & { provenanceChain?: ProvenanceChainEvent[] | null };
+type DetailWithChain = (InferOutput<typeof ArtworkDetailOutput> | ArtworkDetailFromDb) & { provenanceChain?: ProvenanceChainEvent[] | null };
 
 /** Format artwork detail as a compact key-value summary for LLM content (Tier 3). */
 function formatDetailSummary(d: DetailWithChain): string {
@@ -1387,36 +1387,24 @@ function registerTools(
       ...withOutputSchema(ArtworkDetailOutput),
     },
     withLogging("get_artwork_details", async (args) => {
+      if (!vocabDb?.available) {
+        return errorResponse("get_artwork_details requires the vocabulary database.");
+      }
       const count = (args.objectNumber ? 1 : 0) + (args.uri ? 1 : 0);
       if (count !== 1) throw new Error("Provide exactly one of objectNumber or uri.");
-      let resolvedUri: string;
-      let object: LinkedArtObject;
-      if (args.objectNumber) {
-        const found = await api.findByObjectNumber(args.objectNumber);
-        resolvedUri = found.uri;
-        object = found.object;
-      } else {
-        resolvedUri = args.uri!;
-        object = await api.resolveObject(resolvedUri);
-      }
-      const detail: InferOutput<typeof ArtworkDetailOutput> = await api.toDetailEnriched(object, resolvedUri);
-      // Enrich production entries with person info from vocab DB
-      if (vocabDb?.available && detail.production.length > 0) {
-        const actorIdByUri = new Map(
-          detail.production.map(p => [p.actorUri, p.actorUri.split("/").pop()] as const)
-        );
-        const uniqueIds = [...new Set([...actorIdByUri.values()].filter((id): id is string => !!id))];
-        const personMap = vocabDb.lookupPersonInfo(uniqueIds);
-        for (const p of detail.production) {
-          const info = personMap.get(actorIdByUri.get(p.actorUri)!);
-          if (info) p.personInfo = info;
-        }
-      }
-      const text = formatDetailSummary(detail);
-      // Strip provenanceChain from structuredContent — too large for some clients.
-      // The text channel still includes the provenance summary.
-      const { provenanceChain: _, bibliographyCount: _b, ...structuredDetail } = detail as DetailWithChain & Record<string, unknown>;
-      return structuredResponse(structuredDetail, text);
+
+      const objNum = args.objectNumber ?? args.uri!.split("/").pop()!;
+      const detail = vocabDb.getArtworkDetail(objNum);
+      if (!detail) throw new Error(`No artwork found: ${objNum}`);
+
+      // Parse provenance chain for text summary
+      const provenanceChain = detail.provenance
+        ? parseProvenance(detail.provenance).events
+        : null;
+
+      const text = formatDetailSummary({ ...detail, provenanceChain });
+      // provenanceChain excluded from structuredContent — too large for some clients
+      return structuredResponse(detail, text);
     })
   );
 
@@ -1448,14 +1436,20 @@ function registerTools(
       },
     },
     withLogging("get_artwork_image", async (args) => {
-      // Resolve image info (fast path: 1 req) in parallel with object metadata (2 reqs).
-      // Falls back to 4-step image chain when no cached IIIF ID or fast path fails.
-      const cachedIiifId = vocabDb?.lookupIiifId(args.objectNumber) ?? null;
-      const [fastImageInfo, { object }] = await Promise.all([
-        cachedIiifId ? api.getImageInfoFast(cachedIiifId) : Promise.resolve(null),
-        api.findByObjectNumber(args.objectNumber),
-      ]);
-      const resolvedImageInfo = fastImageInfo ?? await api.getImageInfo(object);
+      // Look up metadata from vocab DB (sync) — replaces Linked Art resolver
+      const artwork = vocabDb?.lookupImageMetadata(args.objectNumber);
+      if (!artwork) {
+        const errorData: InferOutput<typeof ImageInfoOutput> = {
+          objectNumber: args.objectNumber,
+          error: "No artwork found for this object number",
+        };
+        return structuredResponse(errorData, "No artwork found for this object number");
+      }
+
+      // Resolve IIIF image info (1 HTTP request) — only if artwork has an image
+      const resolvedImageInfo = artwork.iiifId
+        ? await api.getImageInfoFast(artwork.iiifId)
+        : null;
 
       if (!resolvedImageInfo) {
         const errorData: InferOutput<typeof ImageInfoOutput> = {
@@ -1465,11 +1459,8 @@ function registerTools(
         return structuredResponse(errorData, "No image available for this artwork");
       }
 
-      const title = RijksmuseumApiClient.parseTitle(object);
-      const objectNumber = RijksmuseumApiClient.parseObjectNumber(object);
-
       if (publicBaseUrl) {
-        resolvedImageInfo.viewerUrl = `${publicBaseUrl}/viewer?iiif=${encodeURIComponent(resolvedImageInfo.iiifId)}&title=${encodeURIComponent(title)}`;
+        resolvedImageInfo.viewerUrl = `${publicBaseUrl}/viewer?iiif=${encodeURIComponent(resolvedImageInfo.iiifId)}&title=${encodeURIComponent(artwork.title)}`;
       }
 
       const viewUUID = randomUUID();
@@ -1477,27 +1468,33 @@ function registerTools(
         commands: [],
         createdAt: Date.now(),
         lastAccess: Date.now(),
-        objectNumber,
+        objectNumber: artwork.objectNumber,
         imageWidth: resolvedImageInfo.width,
         imageHeight: resolvedImageInfo.height,
         activeOverlays: [],
       });
 
+      // Format physical dimension statement from DB columns
+      const dimParts: string[] = [];
+      if (artwork.heightCm != null) dimParts.push(`h ${artwork.heightCm} cm`);
+      if (artwork.widthCm != null) dimParts.push(`w ${artwork.widthCm} cm`);
+      const physicalDimensions = dimParts.length > 0 ? dimParts.join(" × ") : null;
+
       const { thumbnailUrl, iiifId, ...imageData } = resolvedImageInfo;
       const viewerData: InferOutput<typeof ImageInfoOutput> = {
         ...imageData,
-        objectNumber,
-        title,
-        creator: RijksmuseumApiClient.parseCreator(object),
-        date: RijksmuseumApiClient.parseDate(object),
-        license: RijksmuseumApiClient.parseLicense(object),
-        physicalDimensions: RijksmuseumApiClient.parseDimensionStatement(object),
-        collectionUrl: `https://www.rijksmuseum.nl/en/collection/${objectNumber}`,
+        objectNumber: artwork.objectNumber,
+        title: artwork.title,
+        creator: artwork.creator,
+        date: artwork.date,
+        license: artwork.license,
+        physicalDimensions,
+        collectionUrl: `https://www.rijksmuseum.nl/en/collection/${artwork.objectNumber}`,
         viewUUID,
       };
 
       const dims = viewerData.width && viewerData.height ? ` | ${viewerData.width}×${viewerData.height}px` : "";
-      const text = `${objectNumber} — "${title}" by ${viewerData.creator ?? "unknown"}${dims} | viewUUID: ${viewUUID}`;
+      const text = `${artwork.objectNumber} — "${artwork.title}" by ${artwork.creator}${dims} | viewUUID: ${viewUUID}`;
       return structuredResponse(viewerData, text);
     })
   );
@@ -1587,13 +1584,16 @@ function registerTools(
       };
 
       try {
-        // Resolve image info (fast path: 1 req) in parallel with object metadata (2 reqs).
-        const cachedIiifId = vocabDb?.lookupIiifId(args.objectNumber) ?? null;
-        const [fastImageInfo, { object }] = await Promise.all([
-          cachedIiifId ? api.getImageInfoFast(cachedIiifId) : Promise.resolve(null),
-          api.findByObjectNumber(args.objectNumber),
-        ]);
-        const imageInfo = fastImageInfo ?? await api.getImageInfo(object);
+        // Look up metadata from vocab DB (sync) — replaces Linked Art resolver
+        const artwork = vocabDb?.lookupImageMetadata(args.objectNumber);
+        if (!artwork) {
+          return cropError("No artwork found for this object number");
+        }
+
+        // Resolve IIIF image info (1 HTTP request)
+        const imageInfo = artwork.iiifId
+          ? await api.getImageInfoFast(artwork.iiifId)
+          : null;
 
         // Find active viewer — prefer explicit viewUUID (validated), fall back to
         // objectNumber scan only when there's exactly one unambiguous match.
@@ -1659,8 +1659,6 @@ function registerTools(
         }
         const fetchTimeMs = Math.round(performance.now() - fetchStart);
 
-        const title = RijksmuseumApiClient.parseTitle(object);
-        const creator = RijksmuseumApiClient.parseCreator(object);
         const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
         const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
 
@@ -1676,7 +1674,7 @@ function registerTools(
         }
 
         const captionParts = [
-          `"${title}" by ${creator} — ${args.objectNumber}`,
+          `"${artwork.title}" by ${artwork.creator} — ${args.objectNumber}`,
           `(${regionLabel}, ${effectiveSize}px${sizeNote}, ${fetchTimeMs}ms)`,
         ];
         if (viewerNavigated) captionParts.push("| viewer navigated");

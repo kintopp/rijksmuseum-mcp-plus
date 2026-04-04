@@ -14,6 +14,46 @@ export interface PersonInfo {
   wikidataId: string | null;
 }
 
+/** Full artwork detail assembled from vocab DB — replaces ArtworkDetailEnriched from Linked Art. */
+export interface ArtworkDetailFromDb {
+  id: string;
+  objectNumber: string;
+  title: string;
+  creator: string;
+  date: string;
+  type?: string;
+  url: string;
+  description: string | null;
+  techniqueStatement: string | null;
+  dimensionStatement: string | null;
+  provenance: string | null;
+  creditLine: string | null;
+  inscriptions: string[];
+  location: string | null;
+  collectionSets: string[];
+  externalIds: Record<string, string>;
+  titles: { title: string; language: "en" | "nl" | "other"; qualifier: "brief" | "full" | "other" }[];
+  curatorialNarrative: { en: string | null; nl: string | null };
+  license: string | null;
+  webPage: string | null;
+  dimensions: { type: string; value: number; unit: string; note: string | null }[];
+  relatedObjects: { relationship: string; objectUri: string }[];
+  persistentId: string | null;
+  objectTypes: { id: string; label: string }[];
+  materials: { id: string; label: string }[];
+  production: {
+    name: string; role: string | null; attributionQualifier: string | null;
+    place: string | null; actorUri: string;
+    personInfo?: PersonInfo;
+  }[];
+  collectionSetLabels: { id: string; label: string }[];
+  subjects: {
+    iconclass: { id: string; label: string }[];
+    depictedPersons: { id: string; label: string }[];
+    depictedPlaces: { id: string; label: string }[];
+  };
+}
+
 // ─── find_similar types ──────────────────────────────────────────────
 
 export interface SharedMotif {
@@ -918,6 +958,193 @@ export class VocabularyDb {
     if (!this.stmtLookupIiifId) return null;
     const row = this.stmtLookupIiifId.get(objectNumber) as { iiif_id: string | null } | undefined;
     return row?.iiif_id ?? null;
+  }
+
+  /**
+   * Look up lightweight image metadata for an artwork. Used by get_artwork_image
+   * and inspect_artwork_image — replaces the Linked Art resolver for metadata.
+   */
+  lookupImageMetadata(objectNumber: string): {
+    objectNumber: string; title: string; creator: string; date: string;
+    iiifId: string | null; heightCm: number | null; widthCm: number | null;
+    license: string | null;
+  } | null {
+    if (!this.db) return null;
+    const row = this.db.prepare(`
+      SELECT a.object_number, a.title, a.title_all_text, a.creator_label,
+             a.date_earliest, a.date_latest, a.iiif_id,
+             a.height_cm, a.width_cm, rl.uri AS rights_uri
+      FROM artworks a
+      LEFT JOIN rights_lookup rl ON a.rights_id = rl.id
+      WHERE a.object_number = ?
+    `).get(objectNumber) as {
+      object_number: string; title: string | null; title_all_text: string | null;
+      creator_label: string | null; date_earliest: number | null; date_latest: number | null;
+      iiif_id: string | null; height_cm: number | null; width_cm: number | null;
+      rights_uri: string | null;
+    } | undefined;
+    if (!row) return null;
+    return {
+      objectNumber: row.object_number,
+      title: row.title || row.title_all_text?.split("\n")[0] || "Untitled",
+      creator: row.creator_label || "Unknown",
+      date: formatDateRange(row.date_earliest, row.date_latest) ?? "",
+      iiifId: row.iiif_id,
+      heightCm: row.height_cm,
+      widthCm: row.width_cm,
+      license: row.rights_uri,
+    };
+  }
+
+  /**
+   * Full artwork detail from the vocab DB — replaces the Linked Art resolver +
+   * toDetailEnriched() for get_artwork_details. Two queries: artwork row + mappings.
+   */
+  getArtworkDetail(objectNumber: string): ArtworkDetailFromDb | null {
+    if (!this.db) return null;
+
+    // Query 1: artwork row
+    const row = this.db.prepare(`
+      SELECT a.object_number, a.art_id, a.title, a.title_all_text, a.creator_label,
+             a.date_earliest, a.date_latest, a.description_text, a.inscription_text,
+             a.provenance_text, a.credit_line, a.narrative_text,
+             a.height_cm, a.width_cm, a.iiif_id,
+             rl.uri AS rights_uri
+      FROM artworks a
+      LEFT JOIN rights_lookup rl ON a.rights_id = rl.id
+      WHERE a.object_number = ?
+    `).get(objectNumber) as {
+      object_number: string; art_id: number; title: string | null; title_all_text: string | null;
+      creator_label: string | null; date_earliest: number | null; date_latest: number | null;
+      description_text: string | null; inscription_text: string | null;
+      provenance_text: string | null; credit_line: string | null; narrative_text: string | null;
+      height_cm: number | null; width_cm: number | null; iiif_id: string | null;
+      rights_uri: string | null;
+    } | undefined;
+    if (!row) return null;
+
+    // Query 2: all vocabulary mappings for this artwork
+    const mappings = this.db.prepare(`
+      SELECT f.name AS field, v.label_en, v.label_nl, v.id AS vocab_id,
+             v.notation, v.external_id, v.type AS vocab_type,
+             v.birth_year, v.death_year, v.gender, v.bio, v.wikidata_id
+      FROM mappings m
+      JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+      JOIN field_lookup f ON m.field_id = f.id
+      WHERE m.artwork_id = ?
+    `).all(row.art_id) as {
+      field: string; label_en: string | null; label_nl: string | null; vocab_id: string;
+      notation: string | null; external_id: string | null; vocab_type: string | null;
+      birth_year: number | null; death_year: number | null; gender: string | null;
+      bio: string | null; wikidata_id: string | null;
+    }[];
+
+    // Group mappings by field
+    const byField = new Map<string, typeof mappings>();
+    for (const m of mappings) {
+      let arr = byField.get(m.field);
+      if (!arr) { arr = []; byField.set(m.field, arr); }
+      arr.push(m);
+    }
+
+    const label = (m: typeof mappings[0]) => m.label_en || m.label_nl || "";
+    const toTerm = (m: typeof mappings[0]) => ({ id: m.vocab_id, label: label(m) });
+
+    // Object types
+    const objectTypes = (byField.get("type") ?? []).map(toTerm);
+    // Materials
+    const materials = (byField.get("material") ?? []).map(toTerm);
+    // Techniques
+    const techniques = (byField.get("technique") ?? []).map(toTerm);
+    // Collection sets
+    const collectionSets = (byField.get("collection_set") ?? []).map((m) => m.vocab_id);
+    const collectionSetLabels = (byField.get("collection_set") ?? []).map(toTerm);
+
+    // Subjects: split by type
+    const subjectMappings = byField.get("subject") ?? [];
+    const iconclass = subjectMappings
+      .filter((m) => m.notation != null)
+      .map((m) => ({ id: m.notation!, label: label(m) }));
+    const depictedPersons = subjectMappings
+      .filter((m) => m.vocab_type === "person")
+      .map(toTerm);
+    const depictedPlaces = subjectMappings
+      .filter((m) => m.vocab_type === "place")
+      .map(toTerm);
+
+    // Production participants: positional matching of creator/role/qualifier
+    const creators = byField.get("creator") ?? [];
+    const roles = byField.get("production_role") ?? [];
+    const qualifiers = byField.get("attribution_qualifier") ?? [];
+    const birthPlaces = byField.get("birth_place") ?? [];
+    const spatials = byField.get("spatial") ?? [];
+
+    const production = creators.map((c, i) => {
+      const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.bio || c.wikidata_id)
+        ? { birthYear: c.birth_year, deathYear: c.death_year, gender: c.gender, bio: c.bio, wikidataId: c.wikidata_id }
+        : undefined;
+      return {
+        name: label(c),
+        role: roles[i] ? label(roles[i]) : null,
+        attributionQualifier: qualifiers[i] ? label(qualifiers[i]) : null,
+        place: spatials[i] ? label(spatials[i]) : (birthPlaces[i] ? label(birthPlaces[i]) : null),
+        actorUri: c.vocab_id,
+        personInfo,
+      };
+    });
+
+    // Assemble date string
+    const date = formatDateRange(row.date_earliest, row.date_latest) ?? "";
+
+    // Dimension statement from columns
+    const dimParts: string[] = [];
+    if (row.height_cm != null) dimParts.push(`h ${row.height_cm} cm`);
+    if (row.width_cm != null) dimParts.push(`w ${row.width_cm} cm`);
+    const dimensionStatement = dimParts.length > 0 ? dimParts.join(" × ") : null;
+
+    // Dimensions structured
+    const dimensions: { type: string; value: number; unit: string; note: string | null }[] = [];
+    if (row.height_cm != null) dimensions.push({ type: "height", value: row.height_cm, unit: "cm", note: null });
+    if (row.width_cm != null) dimensions.push({ type: "width", value: row.width_cm, unit: "cm", note: null });
+
+    // Technique statement from techniques
+    const techniqueStatement = techniques.length > 0
+      ? techniques.map((t) => t.label).join(", ")
+      : null;
+
+    return {
+      id: `https://id.rijksmuseum.nl/${row.art_id}`,
+      objectNumber: row.object_number,
+      title: row.title || row.title_all_text?.split("\n")[0] || "Untitled",
+      creator: row.creator_label || "Unknown",
+      date,
+      type: objectTypes[0]?.label,
+      url: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
+      description: row.description_text,
+      techniqueStatement,
+      dimensionStatement,
+      provenance: row.provenance_text,
+      creditLine: row.credit_line,
+      inscriptions: row.inscription_text ? row.inscription_text.split(" | ") : [],
+      location: null, // not harvested
+      collectionSets,
+      externalIds: {},
+      // Group A
+      titles: [], // language/qualifier tags not in DB
+      curatorialNarrative: { en: row.narrative_text, nl: null },
+      license: row.rights_uri,
+      webPage: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
+      dimensions,
+      relatedObjects: [], // not harvested
+      persistentId: row.art_id ? `http://hdl.handle.net/10934/RM0001.COLLECT.${row.art_id}` : null,
+      // Group B
+      objectTypes,
+      materials,
+      production,
+      collectionSetLabels,
+      // Group C
+      subjects: { iconclass, depictedPersons, depictedPlaces },
+    };
   }
 
   /**

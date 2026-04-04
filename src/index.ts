@@ -19,7 +19,6 @@ import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
-import { TOP_100_SET } from "./types.js";
 import { registerAll, resolvePublicUrl, similarPages, enrichmentReviewPages } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
 import { StubOAuthProvider } from "./auth/StubOAuthProvider.js";
@@ -184,87 +183,6 @@ function initUsageStats(): void {
   usageStats = new UsageStats();
 }
 
-// ─── Pre-warm caches ─────────────────────────────────────────────────
-
-// Structural/administrative AAT terms the Rijksmuseum resolver doesn't serve (404).
-// Excluded from pre-warming to avoid wasted HTTP requests on every startup.
-const UNRESOLVABLE_IDS = new Set([
-  "300404450", // primary
-  "300379012", // undetermined
-  "300404451", // secondary
-  "300078817", // rectos
-  "300010292", // versos
-  "300404269", // retired AAT term (404 since 2026-03)
-  "300404274", // retired AAT term (404 since 2026-03)
-  "300404286", // attribution qualifier (no resolver page)
-  "300435722", // attribution qualifier (no resolver page)
-  "300404283", // attribution qualifier (no resolver page)
-]);
-
-/** Pre-warm the top 200 vocabulary terms by frequency in the collection. */
-async function warmVocabCache(): Promise<void> {
-  if (!vocabDb?.available) return;
-
-  // Fetch 210 to get 200 after filtering 10 unresolvable terms
-  const uris = vocabDb.topTermUris(210).filter(
-    (uri) => !UNRESOLVABLE_IDS.has(uri.split("/").pop()!)
-  );
-  if (uris.length === 0) return;
-
-  const start = performance.now();
-  const resolved = await sharedApiClient.warmVocabCache(uris);
-  const ms = Math.round(performance.now() - start);
-  console.error(`Vocab cache pre-warmed: ${resolved}/${uris.length} terms in ${ms}ms`);
-}
-
-/**
- * Pre-warm vocabulary terms referenced by the museum's Top 100 artworks.
- * Resolves each artwork's Linked Art object, then resolves all vocabulary
- * URIs found (types, materials, techniques, places, subjects). The vocab
- * terms are cached at 1-hour TTL; the artwork objects themselves expire
- * after 5 minutes but that's fine — the value is in the vocab terms.
- */
-async function warmTopArtworkVocab(): Promise<void> {
-  try {
-    const lodUris = await collectSetLodUris(TOP_100_SET);
-    if (lodUris.length === 0) return;
-
-    // Resolve objects and their vocab terms in batches of 10
-    let vocabCount = 0;
-    for (let i = 0; i < lodUris.length; i += 10) {
-      const batch = lodUris.slice(i, i + 10);
-      const objects = await Promise.allSettled(
-        batch.map((uri) => sharedApiClient.resolveObject(uri))
-      );
-      const resolved = objects
-        .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled")
-        .map((r) => r.value);
-      const vocabResults = await Promise.all(
-        resolved.map((obj) => sharedApiClient.resolveVocabulary(obj).catch(() => null))
-      );
-      vocabCount += vocabResults.filter(Boolean).length;
-    }
-
-    console.error(`Top artwork vocab pre-warmed: ${vocabCount}/${lodUris.length} artworks`);
-  } catch (err) {
-    console.error(`Top artwork vocab pre-warm failed: ${err instanceof Error ? err.message : err}`);
-  }
-}
-
-/** Paginate through an OAI-PMH set and collect all Linked Art URIs. */
-async function collectSetLodUris(setSpec: string): Promise<string[]> {
-  const uris: string[] = [];
-  let result = await sharedOaiClient.listRecords({ set: setSpec });
-  while (true) {
-    for (const rec of result.records) {
-      if (rec.lodUri) uris.push(rec.lodUri);
-    }
-    if (!result.resumptionToken) break;
-    result = await sharedOaiClient.listRecords({ resumptionToken: result.resumptionToken });
-  }
-  return uris;
-}
-
 // ─── Create a configured McpServer ───────────────────────────────────
 
 function createServer(httpPort?: number): McpServer {
@@ -328,8 +246,6 @@ async function runStdio(): Promise<void> {
   initSharedClients();
   initUsageStats();
   const server = createServer();
-  // Pre-warm caches in background (non-blocking)
-  warmVocabCache().then(() => warmTopArtworkVocab());
   if (vocabDb?.available) vocabDb.warmSimilarCaches();
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -454,8 +370,6 @@ async function runHttp(): Promise<void> {
     console.error(`  MCP endpoint: POST /mcp`);
     console.error(`  Viewer:       GET  /viewer?iiif={id}&title={title}`);
     console.error(`  Health:       GET  /health`);
-    // Pre-warm response caches in background after server is accepting connections.
-    warmVocabCache().then(() => warmTopArtworkVocab());
     if (vocabDb?.available) vocabDb.warmSimilarCaches();
   });
 }
