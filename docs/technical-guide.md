@@ -26,7 +26,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-The vocabulary, Iconclass, and embeddings databases are downloaded automatically on first start (~260 MB + ~51 MB + ~589 MB compressed). The server works without them, but [vocabulary-backed search parameters](search-parameters.md), `lookup_iconclass` (local fallback), and `semantic_search` won't be available. The embedding model (~130 MB) is also downloaded on first use.
+The vocabulary and embeddings databases are downloaded automatically on first start (~260 MB + ~589 MB compressed). The server works without them, but [vocabulary-backed search parameters](search-parameters.md) and `semantic_search` won't be available. The embedding model (~130 MB) is also downloaded on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
 
 Restart your MCP client after updating the config.
 
@@ -68,7 +68,6 @@ See [mcp-tool-parameters.md](mcp-tool-parameters.md) for the full parameter refe
 | `search_provenance` | Search ownership and provenance history across ~48K artworks with parsed provenance records. Filter by party, transfer type, date range, location, price/currency, provenance gaps, and cross-references. Two layers: raw events and interpreted ownership periods. Sorting by price, date, event count, or duration. Includes provenance-of-provenance metadata (parse method, LLM enrichment reasoning). |
 | `collection_stats` | (see above) |
 | `find_similar` | Find artworks similar to a given artwork across five independent signals (Lineage, Iconclass, Description, Depicted Person, Depicted Place) plus a pooled column. Returns a URL/path to an HTML comparison page. Feature-gated via `ENABLE_FIND_SIMILAR`. |
-| `lookup_iconclass` | Local fallback for Iconclass search when the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp) is unavailable. Three modes: keyword search (`query`), notation browsing (`notation`), or semantic concept search (`semanticQuery`). The standalone Iconclass server offers richer tools (browse, resolve, expand_keys, search_prefix) and a larger embedding model. |
 | `list_curated_sets` | List 192 curated collection sets (exhibitions, scholarly groupings, thematic collections). Optional name filter. Via OAI-PMH. |
 | `browse_set` | Browse artworks in a curated set. Returns EDM records with titles, creators, dates, images, IIIF URLs, and iconographic subjects. Pagination via resumption token. |
 | `get_recent_changes` | Track additions and modifications by date range. Full EDM records or lightweight headers (`identifiersOnly`). Pagination via resumption token. |
@@ -129,7 +128,7 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 | Linked Art resolver | `https://id.rijksmuseum.nl/{id}` | Object metadata, vocabulary terms, and bibliography as JSON-LD |
 | IIIF Image API | `https://iiif.micr.io/{id}/info.json` | High-resolution image tiles |
 | OAI-PMH | `https://data.rijksmuseum.nl/oai` | Curated sets, EDM metadata records, date-based change tracking. 192 sets, 832K+ records. |
-| Iconclass (CC0) | `https://iconclass.org/` | ~40K iconographic classification notations with labels in 13 languages and keywords. Powers the local `lookup_iconclass` fallback. |
+| Iconclass (CC0) | `https://iconclass.org/` | ~40K iconographic classification notations. Accessed via the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp); Iconclass notation codes can be passed to `search_artwork`'s `iconclass` parameter. |
 
 **Image discovery chain (4 HTTP hops):** Object `.shows` > VisualItem `.digitally_shown_by` > DigitalObject `.access_point` > IIIF info.json
 
@@ -138,8 +137,6 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 **Subject discovery chain:** Object `.shows` > VisualItem `.represents_instance_of_type` (Iconclass concepts) + `.represents` (depicted persons and places). Subject URIs are batched with the existing vocabulary resolution pass.
 
 **Vocabulary database:** A pre-built SQLite database maps ~194,000 controlled vocabulary terms to ~832,000 artworks via ~13.7 million mappings. Built from OAI-PMH EDM records and Linked Art resolution (both vocabulary terms and full artwork records), it powers vocabulary-backed filters (`subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `birthPlace`, `deathPlace`, `profession`, `collectionSet`, `license`, `productionRole`, `attributionQualifier`), cross-filters (`material`, `technique`, `type`, `creator`), full-text search on artwork texts (`inscription`, `provenance`, `creditLine`, `curatorialNarrative`, `title`, `description`), date range filtering (`creationDate` with `dateMatch` modes), numeric dimension ranges (`minHeight`/`maxHeight`/`minWidth`/`maxWidth`), and geo proximity search (`nearPlace`, `nearLat`/`nearLon`, `nearPlaceRadius`). Includes ~31,000 geocoded places (96% coverage) with coordinates from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/), supplemented by coordinate inheritance from parent places via a spatial hierarchy. Place name queries support fuzzy matching with geo-disambiguation for ambiguous names. The database also contains biographical data for ~49,000 creators (birth/death years), ~64,000 gender annotations, ~11,000 biographical notes, and ~5,000 Wikidata identifiers, enriched from Rijksmuseum actor authority files and data dumps. Provenance data covers ~48,000 artworks with parsed ownership chains (events, parties, transfer types, dates, locations, prices).
-
-**Iconclass database:** A separate SQLite database contains ~41,000 Iconclass notations with ~279,000 texts in 13 languages and ~780,000 keywords. Each notation includes a pre-computed count of matching Rijksmuseum artworks (cross-referenced from the vocabulary database). Powers the local `lookup_iconclass` fallback for keyword search, hierarchy browsing, and semantic concept search. For primary Iconclass access, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
 
 **Embeddings database:** A pre-built SQLite database contains ~832,000 int8-quantized embeddings (384 dimensions) generated by [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small) from composite artwork text (title, inscriptions, description, curatorial narrative — subjects and creator names deliberately excluded). Vector search uses [sqlite-vec](https://github.com/asg017/sqlite-vec) with dual paths: vec0 virtual table for pure KNN, and `vec_distance_cosine()` on a regular table for filtered KNN (pre-filtered by type, material, technique, date, creator, subject, iconclass, depictedPerson, depictedPlace, productionPlace, collectionSet, aboutActor, or imageAvailable via the vocabulary database). Source text is not stored in the embeddings DB — it is reconstructed from the vocabulary database at query time, matching the original embedding generation format.
 
@@ -154,8 +151,6 @@ The server uses the Rijksmuseum's open APIs with no authentication required:
 | `PUBLIC_URL` | Base URL for viewer links in HTTP mode (e.g. `https://example.up.railway.app`) | `http://localhost:$PORT` |
 | `VOCAB_DB_PATH` | Path to vocabulary SQLite database | `data/vocabulary.db` |
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
-| `ICONCLASS_DB_PATH` | Path to Iconclass SQLite database | `data/iconclass.db` |
-| `ICONCLASS_DB_URL` | URL to download Iconclass DB on first start; gzip supported | *(none)* |
 | `EMBEDDINGS_DB_PATH` | Path to embeddings SQLite database | `data/embeddings.db` |
 | `EMBEDDINGS_DB_URL` | URL to download embeddings DB on first start; gzip supported | *(none)* |
 | `EMBEDDING_MODEL_ID` | HuggingFace model ID for query embedding | `Xenova/multilingual-e5-small` |

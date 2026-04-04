@@ -15,7 +15,6 @@ import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
-import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
@@ -80,14 +79,6 @@ const VOCAB_DB_SPEC: DbSpec = {
   urlEnvVar: "VOCAB_DB_URL",
   defaultFile: "vocabulary.db",
   validationQuery: "SELECT 1 FROM vocab_term_counts LIMIT 1",
-};
-
-const ICONCLASS_DB_SPEC: DbSpec = {
-  name: "Iconclass",
-  pathEnvVar: "ICONCLASS_DB_PATH",
-  urlEnvVar: "ICONCLASS_DB_URL",
-  defaultFile: "iconclass.db",
-  validationQuery: "SELECT 1 FROM notations LIMIT 1",
 };
 
 const EMBEDDINGS_DB_SPEC: DbSpec = {
@@ -157,19 +148,15 @@ async function ensureDb(spec: DbSpec): Promise<void> {
 // ─── Shared database instances (one read-only instance each) ─────────
 
 let vocabDb: VocabularyDb | null = null;
-let iconclassDb: IconclassDb | null = null;
 let embeddingsDb: EmbeddingsDb | null = null;
 let embeddingModel: EmbeddingModel | null = null;
 
 async function initDatabases(): Promise<void> {
   await ensureDb(VOCAB_DB_SPEC);
   vocabDb = new VocabularyDb();
-  await ensureDb(ICONCLASS_DB_SPEC);
-  iconclassDb = new IconclassDb();
   await ensureDb(EMBEDDINGS_DB_SPEC);
   embeddingsDb = new EmbeddingsDb();
-  // Init embedding model when any consumer needs it (artwork semantic search or iconclass semantic search)
-  const needsModel = embeddingsDb.available || iconclassDb?.embeddingsAvailable;
+  const needsModel = embeddingsDb.available;
   if (needsModel) {
     embeddingModel = new EmbeddingModel();
     const modelId = process.env.EMBEDDING_MODEL_ID ?? "Xenova/multilingual-e5-small";
@@ -330,7 +317,7 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, iconclassDb, embeddingsDb, embeddingModel, httpPort, usageStats);
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, usageStats);
   return server;
 }
 

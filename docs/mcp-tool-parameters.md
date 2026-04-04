@@ -189,22 +189,6 @@ Search ownership and provenance history across ~48K artworks with parsed provena
 
 ---
 
-## lookup_iconclass
-
-Local fallback for Iconclass search. Prefer the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp) when available. Provide exactly one of `query`, `notation`, or `semanticQuery`.
-
-| Parameter | Description |
-|---|---|
-| `query` | FTS keyword search across Iconclass labels in all 13 languages (exact word match, no stemming) |
-| `notation` | Browse a specific Iconclass notation and its children (e.g. `31A33`) |
-| `semanticQuery` | Semantic concept search — finds notations by meaning (e.g. `domestic animals` finds dogs, cats, horses) |
-| `onlyWithArtworks` | Only return notations with Rijksmuseum artworks (only applies to `semanticQuery` mode) |
-| `lang` | Preferred language for labels (default `en`; supports en, nl, de, fr, it, es, pt, fi, cz, hu, pl, jp, zh) |
-| `maxResults` | 1–50 (default 25) |
-| `offset` | Skip this many results (for pagination) |
-
----
-
 ## get_artwork_details
 
 | Parameter | Description |

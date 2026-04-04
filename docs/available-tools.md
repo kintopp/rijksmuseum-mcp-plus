@@ -20,7 +20,6 @@
 
 ## Classification & Curation
 
-- **`lookup_iconclass`** — Local fallback for Iconclass search (prefer the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp) when available)
 - **`list_curated_sets`** — Browse curated exhibitions and scholarly groupings
 - **`get_recent_changes`** — Track recent additions and modifications to the collection
 

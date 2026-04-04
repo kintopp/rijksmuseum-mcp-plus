@@ -14,7 +14,6 @@ import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, pluralize, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
-import { IconclassDb } from "./api/IconclassDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -44,7 +43,6 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
  */
 const TOOL_LIMITS = {
   search_artwork:     { max: 50,  default: 25 },
-  lookup_iconclass:   { max: 50,  default: 25 },
   search_vocabulary:  { max: 100, default: 25 },
   semantic_search:    { max: 50,  default: 15 },
   search_provenance:  { max: 50,  default: 1 },
@@ -570,13 +568,12 @@ export function registerAll(
   apiClient: RijksmuseumApiClient,
   oaiClient: OaiPmhClient,
   vocabDb: VocabularyDb | null,
-  iconclassDb: IconclassDb | null,
   embeddingsDb: EmbeddingsDb | null,
   embeddingModel: EmbeddingModel | null,
   httpPort?: number,
   stats?: UsageStats
 ): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, iconclassDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats));
+  registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats));
   registerResources(server);
   registerAppViewerResource(server);
   registerPrompts(server, apiClient);
@@ -749,29 +746,6 @@ const RecentChangesOutput = {
   identifiersOnly: z.boolean().optional(),
 };
 
-/** Factory — unique Zod instances per call to prevent $ref deduplication. */
-const IconclassEntryShape = () => z.object({
-  notation: z.string(),
-  text: z.string(),
-  path: z.array(z.object({ notation: z.string(), text: z.string() })),
-  children: z.array(z.string()),
-  refs: z.array(z.string()),
-  rijksCount: z.number().int(),
-  keywords: z.array(z.string()),
-});
-
-const LookupIconclassOutput = {
-  query: z.string().optional(),
-  totalResults: z.number().int().optional(),
-  notation: z.string().optional(),
-  entry: IconclassEntryShape().optional(),
-  subtree: z.array(IconclassEntryShape()).optional(),
-  results: z.array(IconclassEntryShape().extend({ distance: z.number().optional() })).optional(),
-  countsAsOf: z.string().nullable().optional()
-    .describe("Date when rijksCount values were computed (ISO 8601)."),
-  error: z.string().optional(),
-};
-
 const SemanticSearchOutput = {
   searchMode: z.enum(["semantic", "semantic+filtered"]),
   query: z.string(),
@@ -941,7 +915,6 @@ function registerTools(
   api: RijksmuseumApiClient,
   oai: OaiPmhClient,
   vocabDb: VocabularyDb | null,
-  iconclassDb: IconclassDb | null,
   embeddingsDb: EmbeddingsDb | null,
   embeddingModel: EmbeddingModel | null,
   httpPort: number | undefined,
@@ -2160,160 +2133,6 @@ function registerTools(
       return paginatedResponse(result, args.maxResults, "totalChanges", "get_recent_changes", extra, formatRecordLine, useIdentifiers);
     })
   );
-
-  // ── lookup_iconclass ────────────────────────────────────────────
-  // Guarded: tool only registered when iconclassDb is loaded. This is safe because
-  // initIconclassDb() completes before createServer() in both stdio and HTTP boot paths.
-  // Semantic search path is only available when both embeddingModel and iconclass embeddings
-  // are present — the tool gracefully degrades to FTS-only when they aren't.
-
-  if (iconclassDb?.available) {
-    const db = iconclassDb; // narrowed to non-null for the closure
-    const semanticAvailable = db.embeddingsAvailable && embeddingModel?.available;
-    server.registerTool(
-      "lookup_iconclass",
-      {
-        title: "Lookup Iconclass",
-        description:
-          "Search or browse the Iconclass classification system — a hierarchical art-subject taxonomy (~40K notations, 13 languages). " +
-          "Use this to discover notation codes by concept, then pass them to search_artwork's iconclass parameter. " +
-          "Notations are hierarchical: a parent covers all descendants, siblings distinguish related scenes. " +
-          "search_artwork AND-combines multiple codes for compound queries. " +
-          "rijksCount shows how many Rijksmuseum artworks carry each notation (pre-computed, approximate).\n\n" +
-          "Three modes (provide exactly one of query, notation, or semanticQuery):\n" +
-          "• query — FTS5 keyword search (exact word match, no stemming)\n" +
-          "• notation — browse a notation's hierarchy, children, and cross-references\n" +
-          "• semanticQuery — find notations by meaning (e.g. 'domestic animals' finds dogs, cats, horses)" +
-          (semanticAvailable ? "" : " [currently unavailable — embeddings not loaded]"),
-        inputSchema: z.object({
-          query: optStr()
-            .optional()
-            .describe(
-              "Text search across Iconclass labels and keywords in all 13 languages. " +
-              "Exact word matching (no stemming): 'crucifixion' won't match 'crucified' — try word variants if needed. " +
-              "Returns matching notations ranked by Rijksmuseum artwork count."
-            ),
-          notation: optStr()
-            .optional()
-            .describe(
-              "Browse a specific Iconclass notation (e.g. '31A33' for smell). " +
-              "Returns the entry with its hierarchy and direct children."
-            ),
-          semanticQuery: optStr()
-            .optional()
-            .describe(
-              "Semantic concept search across Iconclass — finds notations by meaning rather than exact words. " +
-              "Use when keyword search fails or for broad conceptual queries (e.g. 'domestic animals', 'religious suffering')."
-            ),
-          onlyWithArtworks: z
-            .boolean()
-            .default(false)
-            .optional()
-            .describe(
-              "Only return notations that have artworks in the Rijksmuseum collection (rijks_count > 0). " +
-              "Only applies to semanticQuery mode."
-            ),
-          lang: z
-            .string()
-            .default("en")
-            .describe("Preferred language for labels (default: 'en'). Available: en, nl, de, fr, it, es, pt, fi, cz, hu, pl, jp, zh."),
-          maxResults: z
-            .number()
-            .int()
-            .min(1)
-            .max(TOOL_LIMITS.lookup_iconclass.max)
-            .default(TOOL_LIMITS.lookup_iconclass.default)
-            .describe(`Maximum results for search mode (1-${TOOL_LIMITS.lookup_iconclass.max}, default ${TOOL_LIMITS.lookup_iconclass.default}).`),
-          offset: z.number().int().min(0).default(0).optional()
-            .describe("Skip this many results (for pagination). Use with maxResults."),
-        }).strict(),
-        ...withOutputSchema(LookupIconclassOutput),
-      },
-      withLogging("lookup_iconclass", async (args) => {
-        const modes = [args.query, args.notation, args.semanticQuery].filter(v => v !== undefined);
-        if (modes.length === 0) {
-          return errorResponse("Provide exactly one of: query, notation, or semanticQuery.");
-        }
-        if (modes.length > 1) {
-          return errorResponse("Provide exactly one of: query, notation, or semanticQuery — not multiple.");
-        }
-
-        // Semantic search mode
-        if (args.semanticQuery !== undefined) {
-          if (!embeddingModel?.available || !db.embeddingsAvailable) {
-            return errorResponse(
-              "Semantic search requires Iconclass embeddings and an embedding model (not available in current deployment). " +
-              "Use query (keyword search) or notation (browse) instead."
-            );
-          }
-
-          const queryVec = await embeddingModel.embed(args.semanticQuery);
-          // Reject if query vector dimensions don't match the iconclass embedding index
-          if (queryVec.length !== db.embeddingDimensions) {
-            return errorResponse(
-              `Iconclass semantic search requires ${db.embeddingDimensions}-dimensional query vectors, but the embedding model produced ${queryVec.length}d. ` +
-              "This can happen when artwork embeddings use MRL truncation to a different dimension. " +
-              "Use query (keyword search) or notation (browse) instead."
-            );
-          }
-          const result = db.semanticSearch(queryVec, args.maxResults, args.lang, args.onlyWithArtworks ?? false);
-          if (!result) {
-            return errorResponse("Semantic search failed — embeddings may be corrupted.");
-          }
-          result.query = args.semanticQuery;
-
-          const suffix = args.onlyWithArtworks ? " (with artworks only)" : "";
-          const header = `${result.results.length} semantic Iconclass matches for "${args.semanticQuery}"${suffix}`;
-          const lines = result.results.map((e, i) => {
-            const similarity = Math.round((1 - e.distance) * 1000) / 1000;
-            let line = `${i + 1}. [${similarity}] ${e.notation} (${e.rijksCount} artworks) "${e.text}"`;
-            if (e.path.length > 0) line += ` [${e.path.map((p) => p.notation).join(" > ")}]`;
-            return line;
-          });
-          const data: InferOutput<typeof LookupIconclassOutput> = result;
-          return structuredResponse(data, [header, ...lines].join("\n"));
-        }
-
-        // FTS search mode
-        if (args.query !== undefined) {
-          const result = db.search(args.query, args.maxResults, args.lang, args.offset);
-
-          const header = `${result.results.length} of ${result.totalResults} Iconclass matches for "${args.query}"`;
-          const lines = result.results.map((e, i) => {
-            let line = `${i + 1}. ${e.notation} (${e.rijksCount} artworks) "${e.text}"`;
-            if (e.path.length > 0) line += ` [${e.path.map((p) => p.notation).join(" > ")}]`;
-            return line;
-          });
-          const data: InferOutput<typeof LookupIconclassOutput> = result;
-          return structuredResponse(data, [header, ...lines].join("\n"));
-        }
-
-        // Browse mode
-        const result = db.browse(args.notation!, args.lang);
-        if (!result) {
-          return errorResponse(`Notation "${args.notation}" not found in Iconclass.`);
-        }
-
-        const { entry, subtree } = result;
-        const pathStr = entry.path.length > 0
-          ? entry.path.map((p) => `${p.notation} "${p.text}"`).join(" > ") + " > "
-          : "";
-        const header = `${pathStr}${entry.notation} "${entry.text}" (${entry.rijksCount} artworks)`;
-        const sections = [header];
-        if (entry.keywords.length > 0) {
-          sections.push(`Keywords: ${entry.keywords.join(", ")}`);
-        }
-        if (subtree.length > 0) {
-          const childLines = subtree.map((c) =>
-            `  ${c.notation} (${c.rijksCount}) "${c.text}"`
-          );
-          sections.push(`Children (${childLines.length}):`, ...childLines);
-        }
-        const browseData: InferOutput<typeof LookupIconclassOutput> = result;
-        return structuredResponse(browseData, sections.join("\n"));
-      })
-    );
-  }
 
   // ── search_provenance (conditionally registered when provenance tables exist) ──
 

@@ -33,7 +33,6 @@ Results are ranked differently depending on which filters are active:
 | `semantic_search` | 15 | 50 | `offset` | Similarity scores plateau after ~15 results |
 | `search_provenance` | 1 | 50 | `offset` | Each result includes the full provenance chain; response includes `totalArtworks` |
 | `collection_stats` | 25 | 500 | `offset` | Returns compact text tables; high max for comprehensive distributions |
-| `lookup_iconclass` | 25 | 50 | `offset` | Local fallback; prefer Iconclass MCP server |
 | `browse_set` | 10 | 50 | `resumptionToken` | OAI-PMH token-based pagination |
 | `get_recent_changes` | 10 | 50 | `resumptionToken` | OAI-PMH token-based pagination |
 | `find_similar` | 20 | 50 | — | Results per similarity signal; not pageable |

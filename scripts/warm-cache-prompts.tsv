@@ -23,7 +23,6 @@ search_artwork	{"provenance": "Napoleon"}
 search_artwork	{"productionRole": "after painting by"}
 search_artwork	{"creditLine": "bequest"}
 search_artwork	{"nearPlace": "Oude Kerk Amsterdam", "nearPlaceRadius": 0.1}
-lookup_iconclass	{"query": "fabulous animals"}
 search_artwork	{"inscription": "luctor et emergo"}
 search_artwork	{"type": "painting", "minWidth": 300}
 search_artwork	{"type": "sculpture", "birthPlace": "Leiden"}
@@ -151,13 +150,7 @@ search_artwork	{"nearPlace": "Haarlem", "nearPlaceRadius": 15, "creationDate": "
 search_artwork	{"curatorialNarrative": "dune"}
 search_artwork	{"curatorialNarrative": "bleaching"}
 
-# 27. Iconclass Concept Discovery
-lookup_iconclass	{"query": "smell"}
-lookup_iconclass	{"query": "crucifixion"}
-lookup_iconclass	{"notation": "34B11"}
-lookup_iconclass	{"query": "Schmerzensmann"}
-
-# 28. Semantic Search
+# 27. Semantic Search
 semantic_search	{"query": "vanitas symbolism and mortality"}
 semantic_search	{"query": "winter landscape with ice skating"}
 semantic_search	{"query": "loneliness and isolation"}

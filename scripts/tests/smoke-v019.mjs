@@ -52,12 +52,7 @@ sc = await call("search_artwork", { creator: "Rembrandt", material: "canvas", ma
 check("Returns results", (sc?.results?.length > 0 || sc?.ids?.length > 0));
 console.log(`    → ${sc?.totalResults ?? sc?.results?.length ?? 0} results`);
 
-console.log("\n6. lookup_iconclass");
-sc = await call("lookup_iconclass", { query: "crucifixion" });
-check("Returns results", sc?.results?.length > 0 || sc?.notations?.length > 0);
-if (sc) console.log(`    → keys: ${Object.keys(sc).join(", ")}`);
-
-console.log("\n7. get_artwork_details — Night Watch");
+console.log("\n6. get_artwork_details — Night Watch");
 sc = await call("get_artwork_details", { objectNumber: "SK-C-5" });
 check("Returns title", sc?.title != null);
 check("Has creator info", sc?.creators?.length > 0 || sc?.creator != null || sc?.creatorLabel != null);

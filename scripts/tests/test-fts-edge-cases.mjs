@@ -3,7 +3,7 @@
  * test-fts-edge-cases.mjs — Probe FTS5 query escaping with tricky inputs.
  *
  * Tests that punctuation, FTS5 operators, diacritics, and degenerate inputs
- * don't cause syntax errors or crashes in search_artwork / lookup_iconclass.
+ * don't cause syntax errors or crashes in search_artwork.
  * Every call should either return results or a clean "no results" — never
  * an FTS5 syntax error.
  */
@@ -146,17 +146,6 @@ check("Only whitespace — no FTS error", noFtsError(r));
 
 r = await call("search_artwork", { subject: "a" });
 check("Single char — no FTS error", noFtsError(r));
-
-// ── Iconclass with punctuation ────────────────────────────────────────
-console.log("\n8. Iconclass queries with punctuation");
-r = await call("lookup_iconclass", { query: "St. Sebastian" });
-check("St. — no FTS error", noFtsError(r));
-
-r = await call("lookup_iconclass", { query: "Mary (Madonna)" });
-check("Parentheses — no FTS error", noFtsError(r));
-
-r = await call("lookup_iconclass", { query: "Christ's entry" });
-check("Apostrophe — no FTS error", noFtsError(r));
 
 // ── Mixed filters with tricky text ────────────────────────────────────
 console.log("\n9. Tricky text combined with vocab filters");

@@ -777,17 +777,6 @@ console.log("\n--- 9e: JSON null on semantic_search filters ---");
   assert(!isError, "semantic_search accepts null filter params");
 }
 
-// 9f. JSON null on lookup_iconclass
-console.log("\n--- 9f: JSON null on lookup_iconclass ---");
-{
-  const r = await client.callTool({
-    name: "lookup_iconclass",
-    arguments: { query: "dog", notation: null, semanticQuery: null, maxResults: 5 },
-  });
-  const { isError } = parseResult(r);
-  assert(!isError, "lookup_iconclass accepts null notation + semanticQuery");
-}
-
 // ══════════════════════════════════════════════════════════════════
 //  10. provenanceChain in structuredContent — schema conformance
 // ══════════════════════════════════════════════════════════════════
