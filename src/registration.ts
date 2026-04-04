@@ -21,7 +21,7 @@ import { UsageStats } from "./utils/UsageStats.js";
 import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
-import type { SearchParams, LinkedArtObject } from "./types.js";
+import type { LinkedArtObject } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -605,7 +605,6 @@ const SearchResultOutput = {
   totalResults: z.number().int().nullable().optional()
     .describe("Total matching artworks (always present when vocabulary DB is available). Use with compact=true for efficient counting."),
   results: z.array(z.object({
-    id: z.string().optional().describe("Linked Art URI (present only when vocabulary DB is unavailable)."),
     objectNumber: z.string(),
     title: z.string(),
     creator: z.string(),
@@ -616,7 +615,7 @@ const SearchResultOutput = {
     distance_km: z.number().optional(),
   })).optional().describe("Artwork summaries. Absent when compact=true."),
   ids: z.array(z.string()).optional().describe("Object numbers (compact mode)."),
-  source: z.enum(["vocabulary", "search_api"]).optional(),
+  source: z.literal("vocabulary").optional(),
   referencePlace: z.string().optional(),
   facets: z.record(z.string(), z.array(z.object({
     label: z.string(),
@@ -1091,7 +1090,7 @@ function registerTools(
                   "'cat' matches 'cats' and 'painting' matches 'paint', but unrelated derivations like " +
                   "'crucifixion' vs 'crucified' are not linked. " +
                   "If a subject query returns 0 results, try different word forms " +
-                  "or use lookup_iconclass to find the canonical Iconclass notation code for more reliable matching. " +
+                  "or use the Iconclass server's search tool to find the canonical Iconclass notation code for more reliable matching. " +
                   "Also covers historical events using Dutch labels (e.g. 'Tweede Wereldoorlog', 'Tachtigjarige Oorlog'). " +
                   "Subject matching does not distinguish primary from incidental/decorative subjects — " +
                   "a mortar with an Annunciation relief will match 'Annunciation'. Combine with type (e.g. type: 'painting') to filter."
@@ -1099,7 +1098,7 @@ function registerTools(
               iconclass: stringOrArray()
                 .optional()
                 .describe(
-                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use lookup_iconclass to discover codes by concept."
+                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use the Iconclass server's search tool to discover codes by concept."
                 ),
               depictedPerson: stringOrArray()
                 .optional()
@@ -1318,137 +1317,92 @@ function registerTools(
       ...withOutputSchema(SearchResultOutput),
     },
     withLogging("search_artwork", async (args) => {
+      if (!vocabAvailable || !vocabDb) {
+        return errorResponse(
+          "search_artwork requires the vocabulary database. " +
+          "Ensure VOCAB_DB_PATH or VOCAB_DB_URL is configured."
+        );
+      }
+
       const argsRecord = args as Record<string, unknown>;
 
-      // Route ALL queries through vocab DB when available (v0.19 vocab-DB-only routing)
-      if (vocabAvailable && vocabDb) {
-        // At least one substantive filter required (prevent unfiltered full-collection scans).
-        const hasAnyFilter = vocabParamKeys.some(k =>
-            !MODIFIER_KEYS.has(k) && argsRecord[k] !== undefined
-          ) || argsRecord["query"] !== undefined;
-        if (!hasAnyFilter) {
-          return errorResponse(
-            "At least one search filter is required (creatorGender, creatorBornAfter/Before, imageAvailable, " +
-            "and expandPlaceHierarchy are modifiers that cannot be used alone). " +
-            "Add a filter like subject, creator, type, material, technique, depictedPerson, or creationDate. " +
-            "For concept-based search, try semantic_search instead."
-          );
-        }
+      // At least one substantive filter required (prevent unfiltered full-collection scans).
+      const hasAnyFilter = vocabParamKeys.some(k =>
+          !MODIFIER_KEYS.has(k) && argsRecord[k] !== undefined
+        ) || argsRecord["query"] !== undefined;
+      if (!hasAnyFilter) {
+        return errorResponse(
+          "At least one search filter is required (creatorGender, creatorBornAfter/Before, imageAvailable, " +
+          "and expandPlaceHierarchy are modifiers that cannot be used alone). " +
+          "Add a filter like subject, creator, type, material, technique, depictedPerson, or creationDate. " +
+          "For concept-based search, try semantic_search instead."
+        );
+      }
 
-        const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults, offset: args.offset };
-        for (const k of allVocabKeys) {
-          if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
-        }
-        if (args.facets) vocabArgs["facets"] = args.facets;
-        if (args.facetLimit != null) vocabArgs["facetLimit"] = args.facetLimit;
-        // Map query → title for vocab path (query searches by title)
-        if (argsRecord["query"] && !vocabArgs["title"]) {
-          vocabArgs["title"] = argsRecord["query"];
-        }
+      const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults, offset: args.offset };
+      for (const k of allVocabKeys) {
+        if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
+      }
+      if (args.facets) vocabArgs["facets"] = args.facets;
+      if (args.facetLimit != null) vocabArgs["facetLimit"] = args.facetLimit;
+      // Map query → title for vocab path (query searches by title)
+      if (argsRecord["query"] && !vocabArgs["title"]) {
+        vocabArgs["title"] = argsRecord["query"];
+      }
 
-        // Warn on deprecated pageToken (applies to both compact and full paths)
-        const pageTokenWarning = argsRecord["pageToken"]
-          ? "pageToken is deprecated — use maxResults to control result count."
-          : undefined;
+      // Warn on deprecated pageToken (applies to both compact and full paths)
+      const pageTokenWarning = argsRecord["pageToken"]
+        ? "pageToken is deprecated — use maxResults to control result count."
+        : undefined;
 
-        // Compact mode: return only IDs without enrichment
-        if (args.compact) {
-          const compactResult = vocabDb.searchCompact(vocabArgs as any);
-          if (pageTokenWarning) {
-            compactResult.warnings = [...(compactResult.warnings || []), pageTokenWarning];
-          }
-
-          const header = (compactResult.totalResults != null
-            ? `${compactResult.totalResults} results`
-            : `${compactResult.ids.length} results`) + " (compact)";
-          const textParts: string[] = [header];
-          if (compactResult.facets) {
-            addPercentages(compactResult.facets);
-            textParts.push(formatFacets(compactResult.facets));
-          }
-          if (compactResult.ids.length) textParts.push(compactResult.ids.join(", "));
-          if (compactResult.warnings?.length) textParts.push(...compactResult.warnings.map(w => `⚠ ${w}`));
-          const data: InferOutput<typeof SearchResultOutput> = compactResult;
-          return structuredResponse(data, textParts.join("\n"));
-        }
-
-        const result = vocabDb.search(vocabArgs as any);
+      // Compact mode: return only IDs without enrichment
+      if (args.compact) {
+        const compactResult = vocabDb.searchCompact(vocabArgs as any);
         if (pageTokenWarning) {
-          result.warnings = [...(result.warnings || []), pageTokenWarning];
+          compactResult.warnings = [...(compactResult.warnings || []), pageTokenWarning];
         }
 
-        // Suggest aboutActor when depictedPerson returns 0 results
-        if (result.results.length === 0 && argsRecord.depictedPerson) {
-          result.warnings = [...(result.warnings || []),
-            `depictedPerson:"${argsRecord.depictedPerson}" matched no results. ` +
-            `Try aboutActor for broader person matching (searches both depicted persons and creators).`];
-        }
-
-        // Detect component-record clustering (sketchbook folios, album pages, etc.)
-        const clusterNote = detectComponentClustering(result.results.map(r => r.objectNumber));
-        if (clusterNote) result.warnings = [...(result.warnings || []), clusterNote];
-
-        const header = `${result.results.length} results` +
-          (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
-          ` (vocabulary search)`;
+        const header = (compactResult.totalResults != null
+          ? `${compactResult.totalResults} results`
+          : `${compactResult.ids.length} results`) + " (compact)";
         const textParts: string[] = [header];
-        if (result.facets) {
-          addPercentages(result.facets);
-          textParts.push(formatFacets(result.facets));
+        if (compactResult.facets) {
+          addPercentages(compactResult.facets);
+          textParts.push(formatFacets(compactResult.facets));
         }
-        textParts.push(...result.results.map((r, i) => formatSearchLine(r, i)));
-        const structured: InferOutput<typeof SearchResultOutput> = result;
-        return structuredResponse(structured, textParts.join("\n"));
+        if (compactResult.ids.length) textParts.push(compactResult.ids.join(", "));
+        if (compactResult.warnings?.length) textParts.push(...compactResult.warnings.map(w => `⚠ ${w}`));
+        const data: InferOutput<typeof SearchResultOutput> = compactResult;
+        return structuredResponse(data, textParts.join("\n"));
       }
 
-      // Degraded fallback: use Search API when vocab DB is unavailable
-      // Search API only accepts single strings — take first element from arrays
-      const first = (v: unknown) => Array.isArray(v) ? v[0] as string : v as string | undefined;
-      const searchArgs: SearchParams = {
-        ...args,
-        creator: first(args.creator),
-        type: first(args.type),
-        material: first(args.material),
-        technique: first(args.technique),
-      };
-      const result = args.compact
-        ? await api.searchCompact(searchArgs)
-        : await api.searchAndResolve(searchArgs);
-
-      // Enrich resolved results with object type from vocab DB (free batch lookup)
-      if (!args.compact && "results" in result && vocabDb) {
-        const typeMap = vocabDb.lookupTypes(result.results.map(r => r.objectNumber));
-        for (const r of result.results) {
-          if (!r.type) r.type = typeMap.get(r.objectNumber);
-        }
+      const result = vocabDb.search(vocabArgs as any);
+      if (pageTokenWarning) {
+        result.warnings = [...(result.warnings || []), pageTokenWarning];
       }
 
-      // Hint when creator search returns 0 — the API is accent-sensitive
-      if (result.totalResults === 0 && args.creator) {
-        const withWarnings: InferOutput<typeof SearchResultOutput> = {
-          ...result,
-          warnings: [
-            "No results found. The Rijksmuseum Search API is accent-sensitive for creator names " +
-            "(e.g. 'Eugène Brands' not 'Eugene Brands'). Try the exact accented spelling.",
-          ],
-        };
-        return structuredResponse(withWarnings, "0 results");
+      // Suggest aboutActor when depictedPerson returns 0 results
+      if (result.results.length === 0 && argsRecord.depictedPerson) {
+        result.warnings = [...(result.warnings || []),
+          `depictedPerson:"${argsRecord.depictedPerson}" matched no results. ` +
+          `Try aboutActor for broader person matching (searches both depicted persons and creators).`];
       }
 
-      const resultCount = "results" in result ? result.results.length : (result.ids?.length ?? 0);
-      const header = `${result.totalResults} results` +
-        (args.creator ? ` for creator "${args.creator}"` : '') +
-        (result.nextPageToken ? ` (page token: ${result.nextPageToken})` : '');
-      const truncationNote = result.totalResults > resultCount && resultCount > 0
-        ? "\nNote: results are not ranked by relevance. Add filters to narrow, or use semantic_search for concept-ranked results."
-        : "";
-      const lines = ("results" in result ? result.results : []).map((r, i) => formatSearchLine(r, i));
-      if ("ids" in result && result.ids?.length && lines.length === 0) {
-        lines.push(result.ids.join(", "));
+      // Detect component-record clustering (sketchbook folios, album pages, etc.)
+      const clusterNote = detectComponentClustering(result.results.map(r => r.objectNumber));
+      if (clusterNote) result.warnings = [...(result.warnings || []), clusterNote];
+
+      const header = `${result.results.length} results` +
+        (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
+        ` (vocabulary search)`;
+      const textParts: string[] = [header];
+      if (result.facets) {
+        addPercentages(result.facets);
+        textParts.push(formatFacets(result.facets));
       }
-      const { nextPageToken, ...structured } = result;
-      const apiData: InferOutput<typeof SearchResultOutput> = { ...structured, source: "search_api" as const };
-      return structuredResponse(apiData, [header, ...lines].join("\n") + truncationNote);
+      textParts.push(...result.results.map((r, i) => formatSearchLine(r, i)));
+      const structured: InferOutput<typeof SearchResultOutput> = result;
+      return structuredResponse(structured, textParts.join("\n"));
     })
   );
 
@@ -2221,14 +2175,15 @@ function registerTools(
       {
         title: "Lookup Iconclass",
         description:
-          "Search or browse the Iconclass classification system — a universal vocabulary for art subject matter (~40K notations across 13 languages). " +
-          "Use this to discover Iconclass notation codes by concept (e.g. 'smell', 'crucifixion', 'Löwe'), " +
-          "then pass the notation to search_artwork's iconclass parameter for precise results. " +
-          "Artwork counts (rijksCount) are pre-computed and approximate; use search_artwork with the notation code for current results.\n\n" +
+          "Search or browse the Iconclass classification system — a hierarchical art-subject taxonomy (~40K notations, 13 languages). " +
+          "Use this to discover notation codes by concept, then pass them to search_artwork's iconclass parameter. " +
+          "Notations are hierarchical: a parent covers all descendants, siblings distinguish related scenes. " +
+          "search_artwork AND-combines multiple codes for compound queries. " +
+          "rijksCount shows how many Rijksmuseum artworks carry each notation (pre-computed, approximate).\n\n" +
           "Three modes (provide exactly one of query, notation, or semanticQuery):\n" +
           "• query — FTS5 keyword search (exact word match, no stemming)\n" +
-          "• notation — browse a specific notation and its children\n" +
-          "• semanticQuery — find notations by meaning/concept (e.g. 'domestic animals' finds dogs, cats, horses)" +
+          "• notation — browse a notation's hierarchy, children, and cross-references\n" +
+          "• semanticQuery — find notations by meaning (e.g. 'domestic animals' finds dogs, cats, horses)" +
           (semanticAvailable ? "" : " [currently unavailable — embeddings not loaded]"),
         inputSchema: z.object({
           query: optStr()
@@ -2903,7 +2858,7 @@ function registerTools(
 
   // ── find_similar (on by default; set ENABLE_FIND_SIMILAR=false to disable) ──
 
-  if (vocabAvailable && vocabDb!.available && process.env.ENABLE_FIND_SIMILAR !== "false") {
+  if (vocabAvailable && process.env.ENABLE_FIND_SIMILAR !== "false") {
     server.registerTool(
       "find_similar",
       {

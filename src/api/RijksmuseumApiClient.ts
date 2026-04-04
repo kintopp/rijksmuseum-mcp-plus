@@ -1124,66 +1124,6 @@ export class RijksmuseumApiClient {
     return { objectNumber, total, entries: bibEntries };
   }
 
-  // ── High-level methods for tools ──────────────────────────────
-
-  /** Search and resolve results to summaries */
-  async searchAndResolve(params: SearchParams): Promise<{
-    totalResults: number;
-    results: ArtworkSummary[];
-    nextPageToken?: string;
-  }> {
-    const searchResponse = await this.search(params);
-    const totalResults = searchResponse.partOf?.totalItems ?? searchResponse.orderedItems.length;
-    const maxResults = params.maxResults ?? RijksmuseumApiClient.DEFAULT_MAX_RESULTS;
-
-    // Take only up to maxResults items
-    const items = searchResponse.orderedItems.slice(0, maxResults);
-
-    // Resolve all items concurrently
-    const resolved = await Promise.all(
-      items.map(async (item) => {
-        try {
-          const obj = await this.resolveObject(item.id);
-          return RijksmuseumApiClient.toSummary(obj, item.id);
-        } catch {
-          // If resolution fails, return a minimal summary
-          return {
-            id: item.id,
-            objectNumber: "",
-            title: "Unable to resolve",
-            creator: "Unknown",
-            date: "Unknown",
-            url: item.id,
-          } as ArtworkSummary;
-        }
-      })
-    );
-
-    return {
-      totalResults,
-      results: resolved,
-      nextPageToken: extractPageToken(searchResponse.next),
-    };
-  }
-
-  /** Search in compact mode — returns just count + IDs, no resolution */
-  async searchCompact(params: SearchParams): Promise<{
-    totalResults: number;
-    ids: string[];
-    nextPageToken?: string;
-  }> {
-    const searchResponse = await this.search(params);
-    const totalResults = searchResponse.partOf?.totalItems ?? searchResponse.orderedItems.length;
-    const maxResults = params.maxResults ?? RijksmuseumApiClient.DEFAULT_MAX_RESULTS;
-    const items = searchResponse.orderedItems.slice(0, maxResults);
-
-    return {
-      totalResults,
-      ids: items.map((i) => i.id.split("/").pop() ?? i.id),
-      nextPageToken: extractPageToken(searchResponse.next),
-    };
-  }
-
   /** Pre-warm the vocabulary term cache by resolving URIs in parallel. */
   async warmVocabCache(uris: string[]): Promise<number> {
     const results = await Promise.allSettled(
