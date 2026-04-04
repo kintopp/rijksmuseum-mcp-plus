@@ -622,6 +622,7 @@ const ArtworkDetailOutput = {
   title: z.string(),
   creator: z.string(),
   date: z.string(),
+  type: z.string().optional(),
   url: z.string(),
   // ArtworkDetail fields
   description: z.string().nullable(),
@@ -1403,9 +1404,7 @@ function registerTools(
         : null;
 
       const text = formatDetailSummary({ ...detail, provenanceChain });
-      // Strip fields not in ArtworkDetailOutput schema
-      const { type: _, ...structuredDetail } = detail;
-      return structuredResponse(structuredDetail, text);
+      return structuredResponse(detail, text);
     })
   );
 

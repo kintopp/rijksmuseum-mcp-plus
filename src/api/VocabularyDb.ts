@@ -710,6 +710,11 @@ export function parseDateFilter(creationDate: string): { earliest: number; lates
 // ─── VocabularyDb ────────────────────────────────────────────────────
 
 export class VocabularyDb {
+  /** Resolve title from primary title + fallback title_all_text (first line). */
+  private static resolveTitle(title: string | null, titleAllText: string | null, fallback = ""): string {
+    return title || titleAllText?.split("\n")[0] || fallback;
+  }
+
   private db: DatabaseType | null = null;
   private hasFts5 = false;
   private hasTextFts = false;
@@ -979,7 +984,7 @@ export class VocabularyDb {
     if (!this.db || !this.stmtLookupArtwork) return null;
     const row = this.stmtLookupArtwork.get(objectNumber) as { title: string; title_all_text: string | null; creator_label: string; date_earliest: number | null; date_latest: number | null } | undefined;
     if (!row) return null;
-    return { title: row.title || row.title_all_text?.split("\n")[0] || "", creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
+    return { title: VocabularyDb.resolveTitle(row.title, row.title_all_text), creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
   }
 
   /** Look up enriched person info (birth/death/gender/bio/wikidata) by vocab IDs. */
@@ -1027,7 +1032,7 @@ export class VocabularyDb {
     if (!row) return null;
     return {
       objectNumber: row.object_number,
-      title: row.title || row.title_all_text?.split("\n")[0] || "Untitled",
+      title: VocabularyDb.resolveTitle(row.title, row.title_all_text, "Untitled"),
       creator: row.creator_label || "Unknown",
       date: formatDateRange(row.date_earliest, row.date_latest) ?? "",
       iiifId: row.iiif_id,
@@ -1081,8 +1086,9 @@ export class VocabularyDb {
     // Techniques
     const techniques = (byField.get("technique") ?? []).map(toTerm);
     // Collection sets
-    const collectionSets = (byField.get("collection_set") ?? []).map((m) => m.vocab_id);
-    const collectionSetLabels = (byField.get("collection_set") ?? []).map(toTerm);
+    const collectionSetMappings = byField.get("collection_set") ?? [];
+    const collectionSets = collectionSetMappings.map((m) => m.vocab_id);
+    const collectionSetLabels = collectionSetMappings.map(toTerm);
 
     // Subjects: split by type
     const subjectMappings = byField.get("subject") ?? [];
@@ -1135,7 +1141,7 @@ export class VocabularyDb {
     return {
       id: `https://id.rijksmuseum.nl/${row.art_id}`,
       objectNumber: row.object_number,
-      title: row.title || row.title_all_text?.split("\n")[0] || "Untitled",
+      title: VocabularyDb.resolveTitle(row.title, row.title_all_text, "Untitled"),
       creator: row.creator_label || "Unknown",
       date,
       type: objectTypes[0]?.label,
@@ -2642,7 +2648,7 @@ export class VocabularyDb {
         }
         return {
           objectNumber: r.object_number,
-          title: r.title || r.title_all_text?.split("\n")[0] || "",
+          title: VocabularyDb.resolveTitle(r.title, r.title_all_text),
           creator: r.creator_label || "",
           ...(date && { date }),
           ...(t && { type: t }),
