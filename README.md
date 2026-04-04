@@ -50,7 +50,7 @@ You can use rijksmuseum-mcp+ to explore artworks with the same (with minor excep
 
 1. **Additional metadata**
 
-This adds several additional curated metadata fields otherwise not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). These include full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all five `title` variants for an artwork, multiple attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), bibliographic citations, and [Iconclass](https://iconclass.org) notations. Over 1.3M Iconclass notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. New proximity searches on [enriched geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden") while physical dimension filters support queries on the size of an artwork (e.g. "paintings wider than 3 metres"). Finally, rijksmuseum-mcp+ is also able to produce many different kinds of aggregate statistics (e.g. counts, distributions, and cross-tabulations across arbitrary metadata categories) of the collecton which can then be passed on to the AI assistant for visualisation and other forms of analysis. For more details, please see the reference documents for [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md).
+This adds several additional curated metadata fields otherwise not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). These include full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all five `title` variants for an artwork, multiple attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), and [Iconclass](https://iconclass.org) notations. Over 1.3M Iconclass notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. New proximity searches on [enriched geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden") while physical dimension filters support queries on the size of an artwork (e.g. "paintings wider than 3 metres"). Finally, rijksmuseum-mcp+ is also able to produce many different kinds of aggregate statistics (e.g. counts, distributions, and cross-tabulations across arbitrary metadata categories) of the collecton which can then be passed on to the AI assistant for visualisation and other forms of analysis. For more details, please see the reference documents for [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md).
 
 2. **Semantic search** 
 
@@ -83,7 +83,7 @@ Note to developers: the rijksmuseum-mcp+ server can also be run locally in STDIO
 
 When you submit your question, the AI assistant decides on the basis of their [descriptions](/docs/mcp-server+tool-descriptions.md) which combination of [tools](/docs/available-tools.md) and [search parameters](/docs/mcp-tool-parameters.md) provided by rijksmuseum-mcp+ will best answer it from the museum's [metadata](/docs/metadata-categories.md). It might [search](/docs/search-parameters.md) the collection by structured filters (`search_artwork`), look up an artwork's full metadata (`get_artwork_details`), query ownership history (`search_provenance`), or find works by meaning rather than keyword (`semantic_search`) — often chaining several tools in sequence (the so-called 'agentic loop'), each result informing the next query. Most queries will go directly to a vocabulary database built from a periodic harvest of the museum's collection records, but concept-based queries are routed to a separate database with vector embeddings characterising how 'semantically similar' the query is to the metadata. Similarly, IconClass related queries are routed to a (if connected) separate [IconClass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp). The results come back as structured data and text, which the AI assistant interprets, contextualises, and finally presents in natural language to the user (where requested alongside an artwork displayed in an image viewer). At each step, the AI can combine the retrieved data with its own background knowledge — about artists, periods, iconographic traditions, and historical context — to offer interpretations that go beyond what the museum's metadata alone can provide. But the form and content of these statements will also be strongly 'grounded' and 'constrained' by the curated metadata it has retrieved, by the instructions to the AI assistant in the MCP server, and the further specialised domain knowledge and guidance it draws on from the optional 'skill' document. Together, these act as a 'harness' for the AI assistant, keeping it factually grounded and focused on addressing the user's queries.  
 
-The metadata collected in rijksmuseum-mcp+'s databases periodically harvested from the Rijksmuseum's [Linked Open Data](https://data.rijksmuseum.nl/docs/data-dumps/) and [OAI-PMH](https://data.rijksmuseum.nl/docs/oai-pmh/) interfaces, the museum's [Linked Art resolver](https://data.rijksmuseum.nl/docs/linked-art/) for individual artwork details, and public [Iconclass](https://iconclass.org) data. It is also able to drawn on extensive [IconClass](https://iconclass.org) metadata server provided by [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
+The metadata collected in rijksmuseum-mcp+'s databases is periodically harvested from the Rijksmuseum's [Linked Open Data](https://data.rijksmuseum.nl/docs/data-dumps/) and [OAI-PMH](https://data.rijksmuseum.nl/docs/oai-pmh/) interfaces, with the museum's [Linked Art resolver](https://data.rijksmuseum.nl/docs/linked-art/) used during the harvest to enrich vocabulary terms. At runtime, all metadata is served from local databases — no Linked Art resolution is needed. It is also able to draw on extensive [IconClass](https://iconclass.org) metadata provided by the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) server.
 
 Because rijksmuseum-mcp+ maintains its own copy of Rijksmuseum and (via rijksmuseum-iconclass-mcp) Iconclass metadata, it can subsequently organise, enrich, query and analyse this in ways that is simply not possible by only querying the Rijksmuseum API. It enables, for example: 
 
@@ -101,17 +101,14 @@ flowchart LR
 
     AI <-->|"MCP tool calls
     (agentic loop)"| Server["rijksmuseum-mcp+
-    15 tools"]
+    13 tools"]
 
     Server --> Search["Search & Discovery
     structured filters,
     semantic search,
-    Iconclass lookup,
     collection statistics"]
 
     Server --> Details["Details & Metadata
-    Linked Art resolution,
-    bibliography,
     provenance chains,
     similarity comparison"]
 
@@ -127,11 +124,6 @@ flowchart LR
     Search --> EmbeddingsDB[("Embeddings DB
     832K vectors
     semantic search")]
-    Search --> IconclassDB[("Iconclass DB
-    40K notations
-    + embeddings")]
-    Details --> LinkedArt["Linked Art resolver
-    id.rijksmuseum.nl"]
     Details --> VocabDB
     Images --> IIIF["IIIF Image API
     iiif.micr.io"]
@@ -139,11 +131,11 @@ flowchart LR
     subgraph Harvest ["Periodic harvest (offline)"]
         OAI["OAI-PMH
         data.rijksmuseum.nl/oai"]
-        LA2["Linked Art resolver
+        LA["Linked Art resolver
         id.rijksmuseum.nl"]
     end
     OAI -.->|"832K records"| VocabDB
-    LA2 -.->|"vocab + artwork
+    LA -.->|"vocab + artwork
     enrichment"| VocabDB
     VocabDB -.->|"embedding
     generation"| EmbeddingsDB
@@ -188,10 +180,8 @@ For local setup (stdio or HTTP), deployment, architecture, data sources, and con
 Soon:
 
 - update documentation (IconClass references -> rijksmuseum-iconclass-mcp). 
-- update SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file
+- update [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file
 - fix bugs and fine-tune queries and tool descriptions
-- reduce/remove use of the Linked Art resolver
-- remove artwork bibliography tool (replace later with its own MCP server)
 - v1.0 release
 - paper/presentation
 
