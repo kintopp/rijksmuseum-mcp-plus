@@ -1,7 +1,7 @@
 ---
 name: rijksmuseum-mcp
-version: "0.23.4"
-last_updated: 2026-03-29
+version: "0.23.5"
+last_updated: 2026-04-04
 description: >
   Research workflows for the Rijksmuseum MCP+ server. Use this skill whenever
   the user wants to search the Rijksmuseum collection, look up artwork details,
@@ -205,7 +205,7 @@ it expects exact notation codes. Use the **Iconclass server** to discover codes 
 - `resolve(notation=[...])` — batch lookup of known codes
 - `expand_keys` / `search_prefix` — key variants and subtree enumeration
 
-**Before handing off**, check `collectionCounts` — a code with 0 artworks returns nothing; a code with 2,000 vs 3 signals very different curatorial depth.
+**Before handing off**, check `collectionCounts` — a code with 0 artworks returns nothing; a code with 2,000 vs 3 signals very different curatorial depth. **Never truncate Iconclass discovery queries** — use the default `maxResults` (25) or higher so you can evaluate all returned notations and their counts before deciding which codes to hand off.
 
 **Searching with codes on this server:**
 ```
