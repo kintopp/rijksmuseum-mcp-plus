@@ -36,7 +36,6 @@ Avoid jumping directly to RETRIEVE without a DISCOVER or QUANTIFY step unless th
 | "How many artworks have LLM-mediated interpretations?" | `collection_stats` with `dimension: "categoryMethod"` |
 | "Of artworks with provenance, how many are paintings?" | `collection_stats` with `dimension: "type"` + `hasProvenance: true` |
 | "What does the Rijksmuseum say about this work?" | `get_artwork_details` |
-| "What scholarship exists on this work?" | `get_artwork_bibliography` |
 | "Examine this image closely / read this inscription" | `inspect_artwork_image` |
 | "Show me a curated group of works on X" | `list_curated_sets` → `browse_set` |
 | "Has anything changed / been acquired recently?" | `get_recent_changes` |
@@ -312,9 +311,8 @@ Provenance research moves through three levels of detail:
    for quick distributional context alongside chain results.
 
 3. **Single-object deep dive** — `search_provenance(objectNumber=...)` for the
-   full chain, then `get_artwork_details` for narrative text and
-   `get_artwork_bibliography` for scholarly references. Use `bibliographyCount`
-   in `get_artwork_details` to triage before committing to full citation fetches.
+   full chain, then `get_artwork_details` for narrative text and curatorial
+   context.
 
 **Cross-domain queries**: `hasProvenance: true` on `search_artwork` or
 `collection_stats` bridges the two systems — e.g.
@@ -335,17 +333,19 @@ time series), and enrichment methodology, see `references/provenance-patterns.md
 
 ### 7. Source–Copy Navigation
 
-`relatedObjects` in `get_artwork_details` provides direct links to associated
-works. Use it instead of a second search when tracing reproductive prints back
-to painted sources.
+To trace reproductive prints back to their painted sources, use `productionRole`
+to find copies, then search for the source artist's original:
 
 ```
 search_artwork(productionRole="after painting by", creator="Rembrandt van Rijn")
-# → get_artwork_details on a result
-# → relatedObjects includes the source painting's Linked Art URI
-# → get_artwork_details(uri="https://id.rijksmuseum.nl/200666460") for full source metadata
+# → get_artwork_details on a result to read its description (often names the source)
+# → search_artwork(creator="Rembrandt van Rijn", type="painting", title="...") to find the source
 # → get_artwork_image on both for side-by-side comparison
 ```
+
+Note: `relatedObjects` currently returns an empty array (not available from the
+vocabulary database). Use description text and title matching to navigate
+between related works.
 
 ### 8. Collection Depth Assessment
 
@@ -359,7 +359,7 @@ collection_stats(dimension="decade", type="print", productionPlace="Japan")
 # → temporal distribution
 
 list_curated_sets(query="Japan")                                       # curatorial groupings
-browse_set(setId="...")                                                # range of artists/dates
+browse_set(setSpec="...")                                               # range of artists/dates
 search_artwork(productionPlace="Japan", type="print", maxResults=10)  # sample works for closer inspection
 ```
 
@@ -388,7 +388,6 @@ collection_stats(dimension="creatorGender", type="painting", creationDateFrom=17
 | No `subject` results in English | Try the Dutch term — vocabulary is bilingual ("fotograaf" not "photographer") |
 | `semantic_search` skews toward prints/drawings | Filter with `type: "painting"` — prints and drawings outnumber paintings ~77:1 |
 | `semantic_search` with very broad filter | Single broad filters (`type: "print"`, `material: "paper"`) exceed the candidate limit — results are good but not exhaustive. Combine filters for better coverage. |
-| `bibliographyCount` is high but citations needed | Use `get_artwork_bibliography(full=false)` to get structured metadata without full text |
 | Inscription field empty in catalogue | Use `inspect_artwork_image` — AI vision can often read text directly from the image. Try `quality: "gray"` for better contrast on faded inscriptions or signatures. |
 | `facets` on `search_artwork` | 11 dimensions: type, material, technique, century, creatorGender, rights, imageAvailable, creator, depictedPerson, depictedPlace, productionPlace. Configure with `facetLimit` (1–50, default 5). Pass `facets=true` for all or `facets=["creator","type"]` for specific ones. All entries include percentage. |
 | `facets` on `search_provenance` | 5 dimensions: transferType, decade, location, transferCategory, partyPosition. Set `facets=true`. Percentages included. |
