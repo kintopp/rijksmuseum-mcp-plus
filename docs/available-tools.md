@@ -12,7 +12,6 @@
 - **`get_artwork_details`** — Full metadata for a specific artwork (by object number or Linked Art URI)
 - **`get_artwork_image`** — High-resolution interactive deep-zoom viewer
 - **`inspect_artwork_image`** — Fetch an artwork image as base64 for direct visual analysis
-- **`get_artwork_bibliography`** — Scholarly references and bibliography for a work
 
 ## Provenance
 

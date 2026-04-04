@@ -91,7 +91,6 @@ search_artwork	{"creatorGender": "female", "productionPlace": "Netherlands", "ex
 search_artwork	{"creator": "Johannes Vermeer", "type": "painting"}
 
 # 11. Building a Literature Review
-get_artwork_bibliography	{"objectNumber": "SK-A-4", "full": false}
 
 # 12. Iconographic Depth and Scholarly Attention
 search_artwork	{"iconclass": "73D82"}

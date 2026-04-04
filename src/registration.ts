@@ -354,17 +354,9 @@ function formatDetailSummary(d: DetailWithChain): string {
   }
   if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
 
-  if (d.bibliographyCount) lines.push(`\nBibliography: ${d.bibliographyCount} entries`);
   lines.push(`URL: ${d.url}`);
 
   return lines.join("\n");
-}
-
-/** Format a bibliography entry as a compact one-liner (Tier 2). */
-function formatBibliographyLine(e: { citation: string; pages?: string }, i: number): string {
-  let line = `${i + 1}. ${truncate(e.citation, 100)}`;
-  if (e.pages) line += ` ${e.pages}`;
-  return line;
 }
 
 /** Format a curated set as a compact one-liner (Tier 2). */
@@ -677,22 +669,6 @@ const ArtworkDetailOutput = {
     depictedPersons: z.array(ResolvedTermShape()),
     depictedPlaces: z.array(ResolvedTermShape()),
   }),
-  bibliographyCount: z.number().int(),
-  error: z.string().optional(),
-};
-
-const BibliographyOutput = {
-  objectNumber: z.string(),
-  total: z.number().int(),
-  entries: z.array(z.object({
-    sequence: z.number().int().nullable(),
-    citation: z.string(),
-    publicationUri: z.string().optional(),
-    pages: z.string().optional(),
-    isbn: z.union([z.string(), z.array(z.string())]).optional(),
-    worldcatUri: z.string().optional(),
-    libraryUrl: z.string().optional(),
-  })),
   error: z.string().optional(),
 };
 
@@ -975,7 +951,7 @@ function registerTools(
         "search_artwork(type: 'painting', subject/creator: ...) for painting queries. " +
         "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both subjects). " +
         "Each result includes an objectNumber for follow-up calls: " +
-        "get_artwork_details (full metadata), get_artwork_bibliography (scholarly references), " +
+        "get_artwork_details (full metadata) " +
         "or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; " +
         "do not open the viewer for list/count/summary requests)." +
         (vocabAvailable
@@ -1392,7 +1368,6 @@ function registerTools(
         "dimensions (text + structured), materials, object type, production details (with creator life dates, " +
         "gender, bio, and Wikidata ID where available), provenance, " +
         "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
-        "Also reports the bibliography count — use get_artwork_bibliography for full citations. " +
         "The relatedObjects field contains Linked Art URIs — pass them as uri to get full details of related works. " +
         "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",
       inputSchema: z.object({
@@ -1440,45 +1415,8 @@ function registerTools(
       const text = formatDetailSummary(detail);
       // Strip provenanceChain from structuredContent — too large for some clients.
       // The text channel still includes the provenance summary.
-      const { provenanceChain: _, ...structuredDetail } = detail as DetailWithChain & Record<string, unknown>;
+      const { provenanceChain: _, bibliographyCount: _b, ...structuredDetail } = detail as DetailWithChain & Record<string, unknown>;
       return structuredResponse(structuredDetail, text);
-    })
-  );
-
-  // ── get_artwork_bibliography ───────────────────────────────────
-
-  server.registerTool(
-    "get_artwork_bibliography",
-    {
-      title: "Get Artwork Bibliography",
-      description:
-        "Get bibliography and scholarly references for an artwork by its objectNumber " +
-        "(from search_artwork, browse_set, get_recent_changes, or get_artwork_details). " +
-        "By default returns a summary (total count + first 5 citations). " +
-        "Set full=true to retrieve all citations (can be 100+ entries for major works — consider the context window).",
-      inputSchema: z.object({
-        objectNumber: z
-          .string()
-          .describe(
-            "The object number of the artwork (e.g. 'SK-C-5')"
-          ),
-        full: z
-          .boolean()
-          .default(false)
-          .describe(
-            "If true, returns ALL bibliography entries (may be 100+). Default: first 5 entries with total count."
-          ),
-      }).strict(),
-      ...withOutputSchema(BibliographyOutput),
-    },
-    withLogging("get_artwork_bibliography", async (args) => {
-      const { object } = await api.findByObjectNumber(args.objectNumber);
-      const result: InferOutput<typeof BibliographyOutput> = await api.getBibliography(object, {
-        limit: args.full ? 0 : 5,
-      });
-      const header = `${result.objectNumber} — ${result.total} bibliography entries`;
-      const lines = result.entries.map((e, i) => formatBibliographyLine(e, i));
-      return structuredResponse(result, [header, ...lines].join("\n"));
     })
   );
 
@@ -2003,7 +1941,7 @@ function registerTools(
       description:
         "Browse artworks in a curated collection set. Returns parsed EDM records with titles, creators, dates, " +
         "image URLs, and IIIF service URLs. Each record includes an objectNumber that can be used with " +
-        "get_artwork_details, get_artwork_image, or get_artwork_bibliography for full Linked Art data. " +
+        "get_artwork_details or get_artwork_image for full metadata. " +
         "Supports pagination via resumptionToken.",
       inputSchema: z.object({
         setSpec: optStr()
@@ -2059,7 +1997,7 @@ function registerTools(
         "Track recent additions and modifications to the Rijksmuseum collection. " +
         "Returns records changed within a date range. Use identifiersOnly=true for a lightweight " +
         "listing (headers only, no full metadata). Each record includes an objectNumber for use with " +
-        "get_artwork_details, get_artwork_image, or get_artwork_bibliography.",
+        "get_artwork_details or get_artwork_image.",
       inputSchema: z.object({
         from: optStr()
           .optional()
