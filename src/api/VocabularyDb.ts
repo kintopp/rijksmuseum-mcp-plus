@@ -1867,6 +1867,28 @@ export class VocabularyDb {
     return map;
   }
 
+  /** Page in critical mmap regions so the first real query is fast.
+   *  Touches FTS index, mappings B-tree, and artworks table. */
+  warmCorePages(): void {
+    if (!this.db) return;
+    const t0 = Date.now();
+    try {
+      // FTS index pages
+      if (this.hasFts5) {
+        this.db.prepare("SELECT rowid FROM vocabulary_fts WHERE vocabulary_fts MATCH 'painting' LIMIT 1").get();
+      }
+      // Mappings B-tree — a narrow vocab→artwork lookup (the hot path for search)
+      this.db.prepare(
+        "SELECT artwork_id FROM mappings WHERE field_id = 1 AND vocab_rowid = 1 LIMIT 1"
+      ).get();
+      // Artworks table — a single row fetch
+      this.db.prepare("SELECT art_id FROM artworks LIMIT 1").get();
+      console.error(`  Vocab DB core pages warmed in ${Date.now() - t0}ms`);
+    } catch (err) {
+      console.error(`  Vocab DB warmup failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   /** Eagerly build all four IDF caches used by find_similar.
    *  Safe to call multiple times — each ensure* method no-ops if already built. */
   warmSimilarCaches(): void {

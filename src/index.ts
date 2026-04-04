@@ -246,7 +246,8 @@ async function runStdio(): Promise<void> {
   initSharedClients();
   initUsageStats();
   const server = createServer();
-  if (vocabDb?.available) vocabDb.warmSimilarCaches();
+  if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); }
+  if (embeddingsDb?.available) embeddingsDb.warmCorePages();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Rijksmuseum MCP server running on stdio");
@@ -357,6 +358,15 @@ async function runHttp(): Promise<void> {
     res.type("html").send(page.html);
   });
 
+  // ── Warm DB pages before accepting traffic ─────────────────────
+  //
+  // Page in critical mmap regions so the first real user query is fast.
+  // This runs before app.listen(), so Railway's healthcheck only passes
+  // once the DBs are warm.
+
+  if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); }
+  if (embeddingsDb?.available) embeddingsDb.warmCorePages();
+
   // ── Health check ────────────────────────────────────────────────
 
   app.get("/health", (_req: express.Request, res: express.Response) => {
@@ -370,7 +380,6 @@ async function runHttp(): Promise<void> {
     console.error(`  MCP endpoint: POST /mcp`);
     console.error(`  Viewer:       GET  /viewer?iiif={id}&title={title}`);
     console.error(`  Health:       GET  /health`);
-    if (vocabDb?.available) vocabDb.warmSimilarCaches();
   });
 }
 

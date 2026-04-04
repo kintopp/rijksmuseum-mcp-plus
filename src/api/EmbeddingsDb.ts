@@ -123,6 +123,22 @@ export class EmbeddingsDb {
   get available(): boolean { return this.db !== null && this.stmtQuantize !== null; }
   get vectorDimensions(): number { return this.dimensions; }
 
+  /** Page in vec0 data so the first real KNN query is fast.
+   *  Runs a single k=1 scan over the full vector index. */
+  warmCorePages(): void {
+    if (!this.db || !this.stmtQuantize || !this.stmtKnn) return;
+    const t0 = Date.now();
+    try {
+      // Encode a zero vector — content doesn't matter, we just need to scan the index
+      const zeros = new Float32Array(this.dimensions);
+      const quantized = this.stmtQuantize.get(zeros) as { v: Buffer };
+      this.stmtKnn.all(quantized.v, 1);
+      console.error(`  Embeddings vec0 pages warmed in ${Date.now() - t0}ms`);
+    } catch (err) {
+      console.error(`  Embeddings warmup failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   /**
    * Pure KNN search — no metadata filters.
    * Uses vec0 virtual table for best performance (2-3x faster than regular table).
