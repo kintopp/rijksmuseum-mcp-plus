@@ -37,7 +37,6 @@ Results are ranked differently depending on which filters are active:
 | `get_recent_changes` | 10 | 50 | `resumptionToken` | OAI-PMH token-based pagination |
 | `find_similar` | 20 | 50 | — | Results per similarity signal; not pageable |
 | `get_artwork_details` | — | — | — | Single artwork lookup |
-| `get_artwork_bibliography` | 5 | all | `full=true` | Default returns first 5 with total count |
 
 Tools with `offset` pagination return a total count in the response (`totalResults` or `totalArtworks`), allowing the client to page through the full result set. OAI-PMH tools use opaque `resumptionToken` values returned with each page.
 
@@ -193,4 +192,4 @@ Fields are concatenated as `[Title] ... [Inscriptions] ... [Description] ... [Na
 
 ## Artwork detail fields
 
-`get_artwork_details` returns [26 metadata categories](metadata-categories.md) per artwork, plus summary fields (`id`, `title`, `creator`, `date`, `url`). Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters — see the [metadata categories reference](metadata-categories.md) for the full list, including a table of search-only filters that have no corresponding return field.
+`get_artwork_details` returns [24 metadata categories](metadata-categories.md) per artwork, plus summary fields (`id`, `title`, `creator`, `date`, `url`). Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters — see the [metadata categories reference](metadata-categories.md) for the full list, including a table of search-only filters that have no corresponding return field.

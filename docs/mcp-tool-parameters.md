@@ -238,15 +238,6 @@ Navigate the artwork viewer to a specific region and/or add visual overlays.
 
 ---
 
-## get_artwork_bibliography
-
-| Parameter | Description |
-|---|---|
-| `objectNumber` | Object identifier |
-| `full` | `true` to return all citations; default returns first 5 with total count |
-
----
-
 ## find_similar
 
 Find artworks similar to a given artwork across multiple signals (feature-gated via `ENABLE_FIND_SIMILAR`). Returns a URL/path to an HTML comparison page.
