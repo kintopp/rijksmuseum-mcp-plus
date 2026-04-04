@@ -14,7 +14,7 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 >
 > Place searches support proximity (nearPlace), depicted places, and production places. 64% of places are geocoded. Multi-word queries like 'Oude Kerk Amsterdam' are resolved via progressive token splitting with geo-disambiguation.
 >
-> Iconclass covers 40,675 subject notations. Use lookup_iconclass to find notation codes by concept, then pass them to search_artwork for precise iconographic filtering.
+> Iconclass covers 40,675 subject notations. Use the Iconclass server's search tool to find notation codes by concept, then pass them to search_artwork for precise iconographic filtering.
 >
 > Descriptions (Dutch, cataloguer-written) cover 61% of artworks. Curatorial narratives (English, interpretive wall text) cover ~14K works. Both are searchable but use exact word matching — no stemming.
 >
@@ -68,7 +68,7 @@ Track recent additions and modifications to the Rijksmuseum collection. Returns 
 
 ### 11. `lookup_iconclass`
 
-Search or browse the Iconclass classification system — a universal vocabulary for art subject matter (~40K notations across 13 languages). Use this to discover Iconclass notation codes by concept (e.g. 'smell', 'crucifixion', 'Löwe'), then pass the notation to search_artwork's iconclass parameter for precise results. Artwork counts (rijksCount) are pre-computed and approximate; use search_artwork with the notation code for current results. Three modes (provide exactly one of query, notation, or semanticQuery): query — FTS5 keyword search (exact word match, no stemming); notation — browse a specific notation and its children; semanticQuery — find notations by meaning/concept (e.g. 'domestic animals' finds dogs, cats, horses).
+Local fallback for Iconclass search when the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp) is unavailable. Three modes (provide exactly one of query, notation, or semanticQuery): query — FTS5 keyword search (exact word match, no stemming); notation — browse a notation's hierarchy, children, and cross-references; semanticQuery — find notations by meaning (e.g. 'domestic animals' finds dogs, cats, horses). The standalone Iconclass server offers richer tools (browse, resolve, expand_keys, search_prefix) and a larger embedding model — prefer it when available.
 
 ### 12. `search_provenance`
 

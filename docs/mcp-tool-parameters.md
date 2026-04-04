@@ -191,7 +191,7 @@ Search ownership and provenance history across ~48K artworks with parsed provena
 
 ## lookup_iconclass
 
-Search or browse the Iconclass subject classification vocabulary. Provide exactly one of `query`, `notation`, or `semanticQuery`.
+Local fallback for Iconclass search. Prefer the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp) when available. Provide exactly one of `query`, `notation`, or `semanticQuery`.
 
 | Parameter | Description |
 |---|---|

@@ -20,7 +20,7 @@
 
 ## Classification & Curation
 
-- **`lookup_iconclass`** — Search the Iconclass vocabulary (universal iconographic classification system)
+- **`lookup_iconclass`** — Local fallback for Iconclass search (prefer the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp) when available)
 - **`list_curated_sets`** — Browse curated exhibitions and scholarly groupings
 - **`get_recent_changes`** — Track recent additions and modifications to the collection
 
@@ -35,6 +35,6 @@
 ---
 
 *15 tools total (13 standard + 2 internal app tools). `find_similar` is feature-gated
-via `ENABLE_FIND_SIMILAR` (default: true). `semantic_search` and `lookup_iconclass` are
-particularly powerful for humanities research — query conceptually rather than by keyword,
-and cross-reference the Iconclass taxonomy directly.*
+via `ENABLE_FIND_SIMILAR` (default: true). `semantic_search` is
+particularly powerful for humanities research — query conceptually rather than by keyword.
+For Iconclass taxonomy navigation, prefer the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).*

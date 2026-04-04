@@ -478,7 +478,7 @@
   <div class="container">
     <h2>Three ways to find a notation</h2>
     <p style="margin-bottom:1rem;">
-      The <code>lookup_iconclass</code> tool supports three search modes, each suited to a different
+      The Iconclass server (or the local <code>lookup_iconclass</code> fallback) supports multiple search modes, each suited to a different
       stage of research. Results include artwork counts so the user can gauge collection
       coverage before querying <code>search_artwork</code>.
     </p>
@@ -774,7 +774,7 @@
     <h2>The two-step workflow: lookup, then search</h2>
     <p style="margin-bottom:1rem;">
       Iconclass integrates into the broader search pipeline through a two-step pattern:
-      first discover the right notation code via <code>lookup_iconclass</code>, then pass it
+      first discover the right notation code via the Iconclass server (or the local <code>lookup_iconclass</code> fallback), then pass it
       to <code>search_artwork</code> as a structured filter. This separates the vocabulary
       navigation problem from the collection query problem.
     </p>
@@ -783,7 +783,7 @@
       <div class="pipe-step">
         <div class="step-num">Step 1</div>
         <h3>Discover notation</h3>
-        <p><code>lookup_iconclass</code><br>
+        <p>Iconclass server <code>search</code> / <code>browse</code><br>
           keyword / browse / semantic &rarr; notation code + artwork count</p>
       </div>
       <div class="pipe-arrow" style="font-size:1.5rem;">&rarr;</div>
@@ -800,7 +800,7 @@
       <div class="card">
         <h3>Example: finding Crucifixion prints from the 17th century</h3>
         <div class="example">
-          1. lookup_iconclass(query: "crucifixion")<br>
+          1. Iconclass search(query: "crucifixion")<br>
           &nbsp;&nbsp;&nbsp;&rarr; 73D6 (362 artworks)<br><br>
           2. search_artwork(<br>
           &nbsp;&nbsp;&nbsp;iconclass: "73D6",<br>
@@ -813,7 +813,7 @@
       <div class="card">
         <h3>Example: heraldic objects in silver</h3>
         <div class="example">
-          1. lookup_iconclass(query: "heraldry")<br>
+          1. Iconclass search(query: "heraldry")<br>
           &nbsp;&nbsp;&nbsp;&rarr; 46A122 (10,859 artworks)<br><br>
           2. search_artwork(<br>
           &nbsp;&nbsp;&nbsp;iconclass: "46A122",<br>

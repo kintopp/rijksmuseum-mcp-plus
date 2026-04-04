@@ -33,7 +33,7 @@ Results are ranked differently depending on which filters are active:
 | `semantic_search` | 15 | 50 | `offset` | Similarity scores plateau after ~15 results |
 | `search_provenance` | 1 | 50 | `offset` | Each result includes the full provenance chain; response includes `totalArtworks` |
 | `collection_stats` | 25 | 500 | `offset` | Returns compact text tables; high max for comprehensive distributions |
-| `lookup_iconclass` | 25 | 50 | `offset` | |
+| `lookup_iconclass` | 25 | 50 | `offset` | Local fallback; prefer Iconclass MCP server |
 | `browse_set` | 10 | 50 | `resumptionToken` | OAI-PMH token-based pagination |
 | `get_recent_changes` | 10 | 50 | `resumptionToken` | OAI-PMH token-based pagination |
 | `find_similar` | 20 | 50 | — | Results per similarity signal; not pageable |
@@ -53,7 +53,7 @@ Match against ~194,000 controlled terms. Labels are bilingual (English and Dutch
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `subject` | string **[]** | Subject matter (Iconclass themes, depicted scenes). Primary parameter for concept searches — use before `description` or `curatorialNarrative`. ~108K terms, ~722K artworks. Exact word matching with morphological stemming. | `"winter landscape"` |
-| `iconclass` | string **[]** | Exact Iconclass notation code. More precise than `subject` — use `lookup_iconclass` to discover codes by concept. ~25K notation codes. | `"73D82"` |
+| `iconclass` | string **[]** | Exact Iconclass notation code. More precise than `subject` — use the Iconclass server's search tool to discover codes by concept. ~25K notation codes. | `"73D82"` |
 | `depictedPerson` | string **[]** | Person depicted in the artwork. ~60K persons, ~217K artworks. Matches against 210K name variants including historical forms. | `"Willem van Oranje"` |
 | `depictedPlace` | string **[]** | Place depicted in the artwork. 20,689 places. Supports multi-word names with geo-disambiguation (e.g. "Oude Kerk Amsterdam" resolves to the Oude Kerk in Amsterdam). Distinct from `productionPlace` — a painting *depicting* Amsterdam may have been made in Haarlem. | `"Batavia"` |
 

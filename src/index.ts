@@ -311,7 +311,7 @@ function createServer(httpPort?: number): McpServer {
         "64% of places are geocoded. Multi-word queries like 'Oude Kerk Amsterdam' are resolved " +
         "via progressive token splitting with geo-disambiguation.\n\n" +
 
-        "Iconclass covers 40,675 subject notations. Use lookup_iconclass to find notation codes by concept, " +
+        "Iconclass covers 40,675 subject notations. Use the Iconclass server's search tool to find notation codes by concept, " +
         "then pass them to search_artwork for precise iconographic filtering.\n\n" +
 
         "Descriptions (Dutch, cataloguer-written) cover 61% of artworks. " +
