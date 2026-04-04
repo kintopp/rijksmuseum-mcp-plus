@@ -1,13 +1,14 @@
 ---
 name: rijksmuseum-mcp
-version: "0.23.5"
-last_updated: 2026-04-04
 description: >
   Research workflows for the Rijksmuseum MCP+ server. Use this skill whenever
   the user wants to search the Rijksmuseum collection, look up artwork details,
   explore iconographic themes, inspect high-resolution images, trace provenance,
   browse curated sets, or answer any art-historical question that could be
   addressed through the Rijksmuseum's holdings of ~832,000 artworks.
+metadata:
+  version: "0.23.5"
+  last_updated: "2026-04-04"
 ---
 
 # Rijksmuseum MCP+ Research Skill
