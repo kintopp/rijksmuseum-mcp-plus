@@ -1403,8 +1403,9 @@ function registerTools(
         : null;
 
       const text = formatDetailSummary({ ...detail, provenanceChain });
-      // provenanceChain excluded from structuredContent — too large for some clients
-      return structuredResponse(detail, text);
+      // Strip fields not in ArtworkDetailOutput schema
+      const { type: _, ...structuredDetail } = detail;
+      return structuredResponse(structuredDetail, text);
     })
   );
 
