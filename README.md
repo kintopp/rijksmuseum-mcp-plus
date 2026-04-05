@@ -5,7 +5,7 @@
 
 ## Overview
 
-**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). It then extends this data with semantic search, provenance analysis, similarity comparisons, and spatial reasoning. It is designed to be used in conjunction with a complementary [IconClass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).  
+**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). It then extends this data with semantic search, provenance analysis, similarity comparisons, and spatial reasoning. It is designed to be used in conjunction with a companion [IconClass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).  
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
@@ -27,7 +27,7 @@ Technically speaking, both rijksmuseum-mcp+ and rijksmuseum-iconclass-mcp are ba
 
 ## Sample Queries
 
-After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. The links below are to sample responses to these queries in Claude Desktop. However, such shared links only reproduce the textual portion of the original session (no image viewer or visualisations). 
+After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. The links below are to sample responses to these queries in Claude Desktop. Note: such shared links only reproduce the textual portion of the original session (no image viewer or visualisations). 
 
 - _What German artworks evoke vanitas and mortality?_ [link](https://claude.ai/share/2d38db0c-82e2-434a-a48b-cfe3cbbcfec5)
 - _List portrait photographs by American female photographers in the collection_ [link](https://claude.ai/share/704b1dd1-6591-4fc5-b6a8-80cf38ad1df3)
@@ -46,11 +46,11 @@ For examples of more complex sample queries and responses, please see the [resea
 
 ## Features
 
-You can use rijksmuseum-mcp+ to explore artworks with the same (with minor exceptions) search filters offered by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page. Beyond this, rijksmuseum-mcp+ provides the following features and capabilities:
+Rijksmuseum-mcp+ provides the following features and capabilities over and beyond those made available by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page:
 
 1. **Additional metadata**
 
-This adds several additional curated metadata fields otherwise not searchable from the museum's [search portal](https://www.rijksmuseum.nl/en/collection). These include full-text fields (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all five `title` variants for an artwork, multiple attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), and [Iconclass](https://iconclass.org) notations. Over 1.3M Iconclass notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. New proximity searches on [enriched geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden") while physical dimension filters support queries on the size of an artwork (e.g. "paintings wider than 3 metres"). Finally, rijksmuseum-mcp+ is also able to produce many different kinds of aggregate statistics (e.g. counts, distributions, and cross-tabulations across arbitrary metadata categories) of the collecton which can then be passed on to the AI assistant for visualisation and other forms of analysis. For more details, please see the reference documents for [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md).
+Several additional searchable metadata categories, including full-texts (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all `title` variants for an artwork, multiple attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), and [Iconclass](https://iconclass.org) notations. Iconclass notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. Proximity searches on [enriched geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). Physical dimension filters support queries about the size of an artwork (e.g. "paintings wider than 3 metres"). Finally, rijksmuseum-mcp+ is also able to produce aggregate statistics (e.g. counts, distributions, and cross-tabulations) across arbitrary metadata categories of the collection which can then be passed on to the AI assistant for visualisation and other forms of analysis. For more details, please see the reference documents for [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md).
 
 2. **Semantic search** 
 
@@ -62,20 +62,21 @@ Images from the Rijkmuseum's collections can be viewed in inline in your chat co
 
 4. **Find similar artworks** 
 
-A search for artworks `similar to` other artworks creates a comparison webpage that places an artwork alongside the works most similar to it, evaluated across six dimensions: visual appearance, semantic description, Iconclass subject classification, artistic lineage (shared creators, workshops, or attribution chains), depicted persons, and depicted places. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection. Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2350.html) of a `find_similar` analysis. Note: The generated comparison webpages are automatically deleted after 30 minutes. Use your browser's 'Save As' (not bookmark) feature to save a permanent copy.
+A search for artworks `similar to` other artworks creates a comparison webpage that places an artwork alongside the works most similar to it, evaluated across six dimensions: visual appearance, semantic description, Iconclass subject classification, artistic lineage (shared creators, workshops, or attribution chains), depicted persons, and depicted places. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection. Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2350.html) of a `find_similar` analysis. Note: The generated comparison webpage is automatically deleted from the server after 30 minutes. Use your browser's 'Save As' (not bookmark) feature to save a copy.
 
 5. **Analyse provenance events** (experimental)
 
 The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the [AAM punctuation convention](https://www.museumprovenance.org/pages/standard_v1/). Rijksmuseum-mcp+ has [parsed](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-parser-visualization.html) these narratives into over 100,000 structured events with a [CMOA-aligned transfer vocabulary](https://www.museumprovenance.org/reference/acquisition_methods/), making them searchable by party name, transfer type (e.g. sale, gift, bequest, inheritance, confiscation or restitution), date range, location, and price in the original historical currency. This enables  structured queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries. Every provenance record carries searchable provenance-of-provenance metadata tracking how it was enriched. For more details, please see the [provenance reference](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html) documentation.
 
-6. **Research skill (SKILL.md)**
+6. **Research skill**
 
 The [`rijksmuseum-mcp+` skill](docs/rijksmuseum-mcp+.skill.zip) (.zip archive) gives the AI assistant detailed guidance (written in natural language) on how best to use the rijksmuseum-mcp+ tools effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions (e.g. `subject` terms vs `iconclass` notations), and known limitations. It also includes a reference file with a full description of the available provenance search patterns. Installing the skill is optional but will significantly improve the quality and efficiency of the AI assistant's responses when exploring the collection. It can be installed in Claude by following [these instructions](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills). Skill files were originally developed by Anthropic for their Claude products but have since become an [open standard](https://agentskills.io/home). Even chatbots and applications without explicit support for skill packages can make use of the rijksmuseum-mcp+ skill by uploading/sharing [its components](/docs/rijksmuseum-mcp%2B) (`SKILL.md`, `provenance-patterns.md` reference file) with the AI assistant directly at the start of a research session. Some chatbots (e.g. Mistral's [LeChat](https://chat.mistral.ai/chat)) also allow you to permanently share files such as this across sessions by uploading it to your [personal library](https://help.mistral.ai/en/articles/347582-what-are-libraries-and-how-do-i-use-them-in-le-chat). 
 
 ## Choosing an AI system
 
-Technically speaking, rijksmuseum-mcp+ works with any chatbot or application supporting the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) and [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) standards. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is an example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector)) of a browser based chatbot with very good, basic support of the MCP standard. In addition, many desktop 'LLM client' applications, such as [Jan.ai](https://jan.ai), are also MCP-compatible, and can be used with many different LLM models. Many agentic coding applications (e.g. Claude Code, OpenAI Codex, Google Gemini CLI) also support the MCP standard. In contrast, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers, and while Google has announced MCP support for Gemini it has not indicated when this will be ready.  
-In practice, outside of Anthropic's Claude, the extent and quality of support for the still relatively new MCP standard varies widely. Significantly, none of the alternatives above allow you to view and interact with images directly in the chat timeline. In addition, most alternative AI assistants are also not as 'smart' in their use of MCP servers such as rijksmuseum-mcp+. For this reason, at this moment (April, 2026) the best way to use rijksmuseum-mcp+ is still via [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) combined with a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic. If that is not feasible, the current best, free alternative to Claude for most people is likely to be Mistral's [LeChat](https://chat.mistral.ai/chat). LeChat also works very well with the rijksmuseum-mcp+'s companion IconClass MCP server, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). 
+Technically speaking, rijksmuseum-mcp+ works with any chatbot or application supporting the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) and [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) standards. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is an example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector)) of a browser based chatbot with very good, basic support of the MCP standard. In addition, many desktop 'LLM client' applications, such as [Jan.ai](https://jan.ai), are also MCP-compatible, and can be used with many different LLM models (including local models). Many agentic coding applications (e.g. Claude Code, OpenAI Codex, Google Gemini CLI) also support the MCP standard. In contrast, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers, and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
+
+Overall, outside of Anthropic's Claude, the extent and quality of support for the still relatively new MCP standard varies widely. Significantly, none of the alternatives above allow you to view and interact with images directly in the chat timeline. In addition, most alternative AI assistants are also not as 'smart' in their use of MCP servers such as rijksmuseum-mcp+. For this reason, at this moment (April, 2026) the best way to use rijksmuseum-mcp+ is still via [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) combined with a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic. If that is not feasible, the current best, free alternative to Claude for most people is likely to be Mistral's [LeChat](https://chat.mistral.ai/chat). LeChat also works very well with the rijksmuseum-mcp+'s companion IconClass MCP server, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). 
 
 Note to developers: the rijksmuseum-mcp+ server can also be run locally in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
 
@@ -85,15 +86,15 @@ When you submit your question, the AI assistant decides on the basis of their [d
 
 The metadata collected in rijksmuseum-mcp+'s databases is periodically harvested from the Rijksmuseum's [Linked Open Data](https://data.rijksmuseum.nl/docs/data-dumps/) and [OAI-PMH](https://data.rijksmuseum.nl/docs/oai-pmh/) interfaces, with the museum's [Linked Art resolver](https://data.rijksmuseum.nl/docs/linked-art/) used during the harvest to enrich vocabulary terms. At runtime, all metadata is served from local databases — no Linked Art resolution is needed. It is also able to draw on extensive [IconClass](https://iconclass.org) metadata provided by the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) server.
 
-Because rijksmuseum-mcp+ maintains its own copy of Rijksmuseum and (via rijksmuseum-iconclass-mcp) Iconclass metadata, it can subsequently organise, enrich, query and analyse this in ways that is simply not possible by only querying the Rijksmuseum API. It enables, for example: 
+Because rijksmuseum-mcp+ maintains its own copy of Rijksmuseum and (via rijksmuseum-iconclass-mcp) Iconclass metadata, it can subsequently organise, enrich, query and analyse this in ways that is simply not possible by querying the Rijksmuseum collections portal or search API. This enables, for example: 
 
-- retrieving full-text metadata not exposed through the museum's search interface
-- searching metadata semantically by meaning and concept
+- retrieving full-text metadata in relevance ranked order
+- searching metadata semantically by meaning or concept
 - enriching toponyms (places) with long/lat data to permit proximity and region-based search
-- parsing provenance texts to create structured ownership chains with events, parties, prices, and dates
+- parsing provenance texts to create structured, searchable ownership chains
 - comparing artworks across multiple dimensions of 'similarity'
 
-In essence, rijksmuseum-mcp+ trades the conceptual simplicity of a traditional search interface, where you formulate a query, receive results, and interpret them yourself, for a more flexible and powerful but also much more complex scenario, where an AI assistant with direct access to curated metadata can search, combine, and interpret results together with a researcher. Crucially, because the AI assistant has access not only to what it retrieves but also the way this data was organised, it is able to provide a certain degree of 'introspection' on its actions – to explain 'how' and 'why' a query was conducted, what the data it retrieved looked-like, and to suggest options for analaysing it further.  
+In essence, rijksmuseum-mcp+ trades the conceptual simplicity of a traditional search interface, where you formulate a (keyword + filter) query, receive results, and interpret these yourself, for a more flexible and powerful but also much more complex scenario, where an AI assistant can search metadata, combine, and interpret the results in conjunction with a researcher. Crucially, because the AI assistant has access not only to what it retrieves but also the way this data is organised, it is also able to offer a certain degree of 'introspection' on its actions – to explain 'how' and 'why' a query was conducted, what the data it retrieved looked like, and  suggest options for analaysing it further.  
 
 ```mermaid
 flowchart LR
@@ -179,19 +180,22 @@ For local setup (stdio or HTTP), deployment, architecture, data sources, and con
 
 Soon:
 
-- update documentation (IconClass references -> rijksmuseum-iconclass-mcp). 
-- update [SKILL](https://support.claude.com/en/articles/12580051-teach-claude-your-way-of-working-using-skills) file
+- update documentation (temporary removal of get_artwork_bibliography)
 - fix bugs and fine-tune queries and tool descriptions
 - v1.0 release
+- test integration with rijksmuseum-iconclass-mcp
 - paper/presentation
 
 Later:
 
-- re-harvest metadata (OAI-PMH) to capture remaining metadata (e.g. location, relatedObjects)
+- re-harvest metadata (OAI-PMH) to capture remaining metadata (e.g. `attributed_by`, relatedObjects, )
 - investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after"
-- implement incremental updates via LDES endpoint
+- implement incremental metadata updates via the LDES endpoint
 - add provenance metadata for geolocated places
-- investigate adding `attributed_by` technical metadata (e.g. conservation and scientific analyses)
+- improve the `descripton` signal for find_similar (e.g. via LLM re-ranker)
+- incorporate metadata fixes from the Rijksmuseum
+- include authority IDs in search results
+- create bibliographic SRU MCP server (rijksmuseum-biblio-mcp)
 
 Maybe:
 
