@@ -743,6 +743,7 @@ export class VocabularyDb {
   private stmtArtworkMappings: Statement | null = null;
   private stmtFilterArtIds = new Map<string, Statement>();
 
+  private stmtObjectNumberByArtId: Statement | null = null;
   // ── find_similar shared ──
   private stmtLookupArtId: Statement | null = null; // cached: art_id + title + creator_label by object_number
   /** Shared prepared statement: SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ? */
@@ -857,6 +858,9 @@ export class VocabularyDb {
       this.stmtLookupArtId = this.db.prepare(
         "SELECT art_id, title, creator_label FROM artworks WHERE object_number = ?"
       );
+      this.stmtObjectNumberByArtId = this.db.prepare(
+        "SELECT object_number FROM artworks WHERE art_id = ?"
+      );
 
       // Detect person enrichment columns (birth_year, death_year, gender, bio, wikidata_id)
       if (this.columnExists("vocabulary", "birth_year") && this.columnExists("vocabulary", "gender")) {
@@ -890,6 +894,23 @@ export class VocabularyDb {
                  rl.uri AS rights_uri
           FROM artworks a
           LEFT JOIN rights_lookup rl ON a.rights_id = rl.id
+          WHERE a.object_number = ?
+        `);
+      } else {
+        this.stmtImageMetadata = this.db.prepare(`
+          SELECT a.object_number, a.title, a.title_all_text, a.creator_label,
+                 a.date_earliest, a.date_latest, a.iiif_id,
+                 a.height_cm, a.width_cm, a.rights_uri
+          FROM artworks a
+          WHERE a.object_number = ?
+        `);
+        this.stmtArtworkRow = this.db.prepare(`
+          SELECT a.object_number, a.art_id, a.title, a.title_all_text, a.creator_label,
+                 a.date_earliest, a.date_latest, a.description_text, a.inscription_text,
+                 a.provenance_text, a.credit_line, a.narrative_text,
+                 a.height_cm, a.width_cm, a.iiif_id,
+                 a.rights_uri
+          FROM artworks a
           WHERE a.object_number = ?
         `);
       }
@@ -1047,8 +1068,8 @@ export class VocabularyDb {
    * Used by get_artwork_details to support URI-based lookups (e.g. https://id.rijksmuseum.nl/8095).
    */
   getObjectNumberByArtId(artId: number): string | null {
-    if (!this.db) return null;
-    const row = this.db.prepare("SELECT object_number FROM artworks WHERE art_id = ?").get(artId) as { object_number: string } | undefined;
+    if (!this.stmtObjectNumberByArtId) return null;
+    const row = this.stmtObjectNumberByArtId.get(artId) as { object_number: string } | undefined;
     return row?.object_number ?? null;
   }
 
@@ -1113,11 +1134,19 @@ export class VocabularyDb {
       .map(toTerm);
 
     // Production participants: positional matching of creator/role/qualifier
+    // Only zip positionally when array lengths match (1:1 correspondence).
+    // When lengths differ, the mappings table lacks join keys to pair them
+    // correctly (#144), so we leave unmatched fields null to avoid fabrication.
     const creators = byField.get("creator") ?? [];
     const roles = byField.get("production_role") ?? [];
     const qualifiers = byField.get("attribution_qualifier") ?? [];
     const birthPlaces = byField.get("birth_place") ?? [];
     const spatials = byField.get("spatial") ?? [];
+
+    const safeRoles = roles.length === creators.length ? roles : [];
+    const safeQualifiers = qualifiers.length === creators.length ? qualifiers : [];
+    const safeSpatials = spatials.length === creators.length ? spatials : [];
+    const safeBirthPlaces = birthPlaces.length === creators.length ? birthPlaces : [];
 
     const production = creators.map((c, i) => {
       const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.bio || c.wikidata_id)
@@ -1125,9 +1154,9 @@ export class VocabularyDb {
         : undefined;
       return {
         name: label(c),
-        role: roles[i] ? label(roles[i]) : null,
-        attributionQualifier: qualifiers[i] ? label(qualifiers[i]) : null,
-        place: spatials[i] ? label(spatials[i]) : (birthPlaces[i] ? label(birthPlaces[i]) : null),
+        role: safeRoles[i] ? label(safeRoles[i]) : null,
+        attributionQualifier: safeQualifiers[i] ? label(safeQualifiers[i]) : null,
+        place: safeSpatials[i] ? label(safeSpatials[i]) : (safeBirthPlaces[i] ? label(safeBirthPlaces[i]) : null),
         actorUri: c.vocab_id,
         personInfo,
       };

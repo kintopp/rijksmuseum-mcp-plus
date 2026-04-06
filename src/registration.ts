@@ -55,6 +55,12 @@ const TOOL_LIMITS = {
 /** Params that narrow results but are too broad to stand alone as the only filter. */
 const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "creatorGender", "creatorBornAfter", "creatorBornBefore", "expandPlaceHierarchy"]);
 
+/** Provenance filter categorization by layer support. */
+const PROVENANCE_EVENT_ONLY_FILTERS = ["transferType", "excludeTransferType", "currency", "hasPrice", "hasGap", "relatedTo", "categoryMethod", "positionMethod"];
+const PROVENANCE_PERIOD_ONLY_FILTERS = ["ownerName", "acquisitionMethod", "minDuration", "maxDuration"];
+const PROVENANCE_SHARED_FILTERS = ["party", "location", "dateFrom", "dateTo", "objectNumber", "creator"];
+const PROVENANCE_ALL_FILTERS = [...PROVENANCE_SHARED_FILTERS, ...PROVENANCE_EVENT_ONLY_FILTERS, ...PROVENANCE_PERIOD_ONLY_FILTERS];
+
 /** Available facet dimensions for search_artwork. Single source of truth for preprocess + z.enum. */
 const FACET_DIMENSIONS = [
   "type", "material", "technique", "century", "creatorGender", "rights", "imageAvailable",
@@ -2310,16 +2316,25 @@ function registerTools(
         if (args.facets) params.facets = true;
 
         // At least one substantive filter required
-        const hasFilter = ["party", "transferType", "excludeTransferType", "location", "dateFrom", "dateTo",
-          "objectNumber", "creator", "currency", "hasPrice", "hasGap", "relatedTo",
-          "categoryMethod", "positionMethod",
-          "ownerName", "acquisitionMethod", "minDuration", "maxDuration"]
+        const hasFilter = PROVENANCE_ALL_FILTERS
           .some(k => (params as Record<string, unknown>)[k] !== undefined);
         if (!hasFilter) {
           return errorResponse(
             "At least one search filter is required (e.g. party, transferType, location, dateFrom/dateTo, creator, objectNumber, " +
             "ownerName, acquisitionMethod, minDuration). Modifiers like sortBy, sortOrder, maxResults, offset, and layer do not count. " +
             "Tip: use a broad filter such as dateFrom: 1400 for collection-wide ranking.",
+          );
+        }
+
+        // Reject filters that the chosen layer does not implement
+        const ignoredFilters = (layer === "periods" ? PROVENANCE_EVENT_ONLY_FILTERS : PROVENANCE_PERIOD_ONLY_FILTERS)
+          .filter(k => (params as Record<string, unknown>)[k] !== undefined);
+        if (ignoredFilters.length > 0) {
+          return errorResponse(
+            `The "${layer}" layer does not support these filters: ${ignoredFilters.join(", ")}. ` +
+            (layer === "periods"
+              ? `Switch to layer="events" for event-level filters, or use: ${[...PROVENANCE_SHARED_FILTERS, ...PROVENANCE_PERIOD_ONLY_FILTERS].join(", ")}.`
+              : `Switch to layer="periods" for period-level filters, or use: ${[...PROVENANCE_SHARED_FILTERS, ...PROVENANCE_EVENT_ONLY_FILTERS].join(", ")}.`),
           );
         }
 
