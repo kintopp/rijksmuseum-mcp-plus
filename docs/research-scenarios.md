@@ -5,7 +5,6 @@ The `search_artwork` tool combines [39 filters](search-parameters.md) — from b
 - [Searching the Collection](#searching-the-collection)
 - [Subject and Iconographic Search](#subject-and-iconographic-search)
 - [Artwork Details and Metadata](#artwork-details-and-metadata)
-- [Bibliographic References](#bibliographic-references)
 - [High-Resolution Images](#high-resolution-images)
 - [Artist Timelines](#artist-timelines)
 - [Curated Sets](#curated-sets)
@@ -13,7 +12,7 @@ The `search_artwork` tool combines [39 filters](search-parameters.md) — from b
 - [Semantic Search](#semantic-search)
 - [Provenance Research](#provenance-research)
 
-The links following each research question show how the query was answered in Claude Desktop. However, they only reproduce the textual portion of the response (no image viewer or visualisations). For some queries, 'extended thinking' had been enabled in Claude allowing one to trace (to some degree) the model's step-by-step 'reasoning' during a task.
+The links following each research question show how the query was answered in Claude Desktop. However, they only reproduce the textual portion of the response (no image viewer or visualisations). For some queries, 'extended thinking' had been enabled in Claude allowing you to trace (to some degree) the model's step-by-step 'reasoning' during a task.
 
 ## Searching the Collection
 
@@ -85,7 +84,7 @@ The links following each research question show how the query was answered in Cl
 
 ### 6. Iconographic Traditions Across Media
 
-*How does the iconography of *vanitas* function differently in painting versus printmaking? Do the same symbolic conventions — skulls, hourglasses, extinguished candles, musical instruments — appear with equal frequency in both media?* [Link](https://claude.ai/share/94d6f781-1328-46f3-8ca9-0723475f61db)
+*How does the iconography of "vanitas" function differently in painting versus printmaking? Do the same symbolic conventions — skulls, hourglasses, extinguished candles, musical instruments — appear with equal frequency in both media?* [Link](https://claude.ai/share/94d6f781-1328-46f3-8ca9-0723475f61db)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `subject: "vanitas"` to compare the distribution across painting, print, and drawing in a single call
@@ -141,42 +140,13 @@ The links following each research question show how the query was answered in Cl
 
 ---
 
-## Bibliographic References
-
-`get_artwork_bibliography` exposes the museum's scholarship tracking — from five references for minor works to over a hundred for masterpieces.
-
-### 10. Building a Literature Review
-
-*What is the complete published scholarship on Jan Asselijn's *The Threatened Swan*, and how has its interpretation changed over time?* [Link](https://claude.ai/share/0fad67bf-8aad-4d30-8d01-ee9196b2830a)
-
-**How the tools enable it:**
-- `get_artwork_bibliography` with `objectNumber: "SK-A-4"` and `full: true`
-- Review the chronological sequence of publications — early catalogue entries, monograph treatments, interpretive essays
-- Use ISBNs and WorldCat links to locate sources in university libraries
-
-**Why it matters:** The bibliography tool provides a structured starting point with publication metadata (authors, titles, years, ISBNs) that would otherwise require consulting the museum's paper files or visiting the Rijksprentenkabinet library.
-
-### 11. Iconographic Depth and Scholarly Attention
-
-*Which depictions of the Crucifixion in the Rijksmuseum have generated the most scholarly literature, and how does the depth of scholarship on major biblical scenes compare across Iconclass categories?* [Link](https://claude.ai/share/eb194bf0-1e04-443e-92b8-c8baac69f27a)
-
-**How the tools enable it:**
-- `search_artwork` with `iconclass: "73D82"` (Crucifixion) to find all Crucifixion scenes
-- `get_artwork_bibliography` with `full: false` on each result to compare citation counts
-- Repeat with `iconclass: "73A52"` (Annunciation) and `iconclass: "73D24"` (Last Supper) to compare across scenes
-- `get_artwork_details` on the most-cited works to examine how subject matter correlates with scholarly interest
-
-**Why it matters:** Iconclass notation codes provide precise iconographic categories that label-based subject search cannot match — `73D82` retrieves Crucifixion scenes regardless of whether the title or description mentions the word. Comparing bibliography depth across Iconclass codes reveals which biblical subjects have attracted disproportionate scholarly attention in the Rijksmuseum's holdings.
-
----
-
 ## High-Resolution Images
 
 `get_artwork_image` provides an interactive viewer with a high-resolution, deep-zoom feature. For some artworks, this is sufficient to examine individual brushstrokes, craquelure patterns, and inscriptions that are invisible in standard reproductions.
 
-### 12. Technical Art History at the Brushstroke Level
+### 10. Technical Art History at the Brushstroke Level
 
-*What materials, technique, and support were used in Rembrandt's *The Night Watch*, what are its exact dimensions, and what inscriptions does it carry? Open the high-resolution image for close examination of the paint surface.* [Link](https://claude.ai/share/344b8837-139a-4b2a-8846-990a88e6a912)
+*What materials, technique, and support were used in Rembrandt's "The Night Watch", what are its exact dimensions, and what inscriptions does it carry? Open the high-resolution image for close examination of the paint surface.* [Link](https://claude.ai/share/344b8837-139a-4b2a-8846-990a88e6a912)
 
 **How the tools enable it:**
 - `get_artwork_details` with `objectNumber: "SK-C-5"` returns materials, technique statement, structured dimensions, and inscriptions
@@ -185,7 +155,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** Technical metadata — support material, paint type, exact dimensions — frames what the viewer reveals. Knowing a canvas is 363 x 437 cm contextualises the scale of visible brushwork; knowing the inscription text lets the user verify it against the painted surface at full zoom. Direct image inspection by the AI adds a layer of visual analysis that goes beyond metadata alone.
 
-### 13. Comparative Detail Analysis Across Works
+### 11. Comparative Detail Analysis Across Works
 
 *How many paintings by Leiden-born painters versus Haarlem-born painters does the Rijksmuseum hold, and who are the leading artists from each school? Open a representative work from each — a Gerrit Dou and a Frans Hals — for side-by-side examination at high zoom.* [Link](https://claude.ai/share/383f023a-a3b3-449e-bedf-773525ae9c25)
 
@@ -196,9 +166,9 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** The `birthPlace` filter identifies artists by geographic origin without requiring the researcher to already know who belongs to which school. The quantitative comparison reveals the relative weight of each school in the collection, and the viewer delivers the images for visual analysis of their contrasting techniques.
 
-### 14. Reading Inscriptions and Examining Details with AI Vision
+### 12. Reading Inscriptions and Examining Details with AI Vision
 
-*Open Utamaro's *Waitress at the Matsu Higashi House* (RP-P-1956-605) and read the Japanese text on the print — the catalogue has no transcribed inscriptions for this work. Highlight the text areas you find and tell me if you notice anything missing that you'd expect on a print of this period.* [Link](https://claude.ai/share/00ae1128-7d23-4b97-9f64-d00a26c434ba)
+*Open Utamaro's "Waitress at the Matsu Higashi House" (RP-P-1956-605) and read the Japanese text on the print — the catalogue has no transcribed inscriptions for this work. Highlight the text areas you find and tell me if you notice anything missing that you'd expect on a print of this period.* [Link](https://claude.ai/share/00ae1128-7d23-4b97-9f64-d00a26c434ba)
 
 **How the tools enable it:**
 - `get_artwork_details` confirms the inscriptions field is empty — the catalogue has not transcribed the Japanese text
@@ -210,7 +180,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** The Rijksmuseum's catalogue metadata for Japanese prints typically does not include transcriptions of the printed Japanese text — artist signatures, establishment names, publisher marks, and poem cartouches are visible on the image but absent from the structured data. Direct image inspection by the AI can often read and translate this text, surfacing information that would otherwise require specialist knowledge of Japanese. It can also flag missing elements — a print without a publisher's seal raises questions about trimming or provenance that a researcher might want to investigate. 
 
-### 15. Reproductive Prints and Their Painted Sources
+### 13. Reproductive Prints and Their Painted Sources
 
 *How faithfully do reproductive prints translate the compositions of their painted sources? Find prints made "after" a specific painting and compare the print with the original at high magnification.* [Link](https://claude.ai/share/e822477d-6039-4103-8361-7ef77c7a523b)
 
@@ -228,7 +198,7 @@ The links following each research question show how the query was answered in Cl
 
 `search_artwork` with a `creator` filter returns results sorted by importance, which can be re-sorted by date to reveal career patterns invisible when browsing search results. The `generate-artist-timeline` prompt automates this workflow.
 
-### 16. Tracing Career Evolution Through Subject and Place
+### 14. Tracing Career Evolution Through Subject and Place
 
 *Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?* [Link](https://claude.ai/share/7f25a37c-f8e2-488d-9d19-9aba27f932af)
 
@@ -239,7 +209,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** Art historical narratives about career evolution are often based on a handful of securely dated works. A timeline across a full museum holding tests these narratives against a larger evidence base — and the production-place data can reveal whether the geographic move and the stylistic shift actually coincide.
 
-### 17. Medium Shifts Within a Career
+### 15. Medium Shifts Within a Career
 
 *George Hendrik Breitner worked as a painter, draughtsman, and photographer. Does the timeline of his works in the Rijksmuseum reveal a clear sequence — drawing first, then painting, then photography — or did he work across media simultaneously?* [Link](https://claude.ai/share/9c62f373-2dfc-4a63-bd87-26d376b1cac3)
 
@@ -257,7 +227,7 @@ The links following each research question show how the query was answered in Cl
 
 `list_curated_sets` and `browse_set` expose the museum's 192 curatorial groupings — thematic, scholarly, and exhibition-based. These sets encode expert knowledge about how objects relate to each other.
 
-### 18. Reconstructing Past Exhibitions
+### 16. Reconstructing Past Exhibitions
 
 *What objects were included in Rijksmuseum exhibitions related to Rembrandt, and how did the curatorial selection construct a narrative?* [Link](https://claude.ai/share/03dad0c4-731a-411a-9223-95ead26a5917)
 
@@ -268,7 +238,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** Exhibitions are arguments made with objects — the selection, sequencing, and juxtaposition of works constitutes an interpretation. Being able to retrieve the object list for a past exhibition enables historiographic analysis of curatorial practice.
 
-### 19. Finding Thematic Connections Curators Have Already Made
+### 17. Finding Thematic Connections Curators Have Already Made
 
 *Has the Rijksmuseum curated any groupings related to Dutch maritime trade, and what objects did they consider central to that story?* [Link](https://claude.ai/share/88ca435e-9854-457e-9738-a8f1423b0217)
 
@@ -278,7 +248,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** Curated sets cross media boundaries. These cross-media juxtapositions can reveal connections that medium-specific searches miss.
 
-### 20. Assessing Collection Depth for Grant Applications
+### 18. Assessing Collection Depth for Grant Applications
 
 *How many Japanese prints does the Rijksmuseum hold, what curated sets relate to Japanese art, what date range do the holdings cover, and which artists are best represented?* [Link](https://claude.ai/share/303fd236-da49-4e97-a7c0-ca1b484b3bc1)
 
@@ -296,7 +266,7 @@ The links following each research question show how the query was answered in Cl
 
 `get_recent_changes` tracks what the museum adds and updates, providing a live feed of cataloguing activity.
 
-### 21. Tracking New Acquisitions in a Research Area
+### 19. Tracking New Acquisitions in a Research Area
 
 *Has the Rijksmuseum added any new 17th-century paintings to its collection in the past six months? If so, who are the artists and what are the subjects?* [Link](https://claude.ai/share/beb8831b-b798-44b1-8347-fae35317f466)
 
@@ -313,9 +283,9 @@ The links following each research question show how the query was answered in Cl
 
 `semantic_search` finds artworks by meaning, concept, or theme using natural language — ranking all ~832,000 artworks by embedding similarity to a free-text query. Unlike the structured filters above, semantic search works with concepts that cannot be expressed as vocabulary terms, Iconclass notations, or keyword matches. It is most effective when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly. For full technical details, see [Semantic Search](semantic-search.md).
 
-### 22. Discovering Thematic Connections Beyond Formal Cataloguing
+### 20. Discovering Thematic Connections Beyond Formal Cataloguing
 
-*Which artworks in the Rijksmuseum engage with the theme of cultural exchange between Europe and Asia — not just objects *from* Asia or *depicting* Asia, but works where the mixing of cultures is the subject?* [Link](https://claude.ai/share/8316d9dc-27ac-4c40-a42f-b2c355df8b35)
+*Which artworks in the Rijksmuseum engage with the theme of cultural exchange between Europe and Asia — not just objects "from" Asia or "depicting" Asia, but works where the mixing of cultures is the subject?* [Link](https://claude.ai/share/8316d9dc-27ac-4c40-a42f-b2c355df8b35)
 
 **How the tools enable it:**
 - `semantic_search` with `query: "cultural exchange between East and West"` — returns artworks ranked by how closely their catalogued text relates to this concept
@@ -325,7 +295,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** "Cultural exchange" is not a vocabulary term, an Iconclass notation, or a keyword in any structured field. It is an interpretive concept that exists in curatorial narratives and descriptive texts. Semantic search is the only path to these works — and the source text grounding explains the connection, rather than leaving the researcher to guess why a result appeared.
 
-### 23. Atmospheric and Emotional Concepts in Art
+### 21. Atmospheric and Emotional Concepts in Art
 
 *Can we find artworks in the Rijksmuseum that evoke a sense of solitude or isolation — a single figure in an empty landscape, a lone ship on a vast sea, an abandoned building?* [Link](https://claude.ai/share/32e517fd-849e-4289-b5b9-13f88b0e6a05)
 
@@ -337,7 +307,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** Emotional and atmospheric qualities are not catalogued as metadata. No Iconclass code maps to "loneliness." The `description` and `curatorialNarrative` text filters require exact word matches and won't find synonyms or related concepts. Semantic search bridges this gap — imperfectly, since it depends on what curators have written, but it is often the only available path. The source text grounding makes this limitation transparent.
 
-### 24. Cross-Language Conceptual Search
+### 22. Cross-Language Conceptual Search
 
 *Ich suche Blumenstillleben — Gemälde von Blumensträußen in einer Vase, besonders aus dem 17. Jahrhundert. Welche Werke hat das Rijksmuseum?* [Link](https://claude.ai/share/5e2da910-6f33-43b7-94a4-689da7aa16f1)
 
@@ -355,7 +325,7 @@ The links following each research question show how the query was answered in Cl
 
 `search_provenance` exposes parsed ownership chains for ~48,000 artworks — structured events with parties, transfer types, dates, locations, prices, and provenance gaps. Two data layers are available: raw events (Layer 1) and interpreted ownership periods with durations (Layer 2). `collection_stats` provides aggregate provenance distributions (transfer type, decade, location, party) for quantitative analysis. 
 
-### 25. Wartime Transfers and Provenance Gaps
+### 23. Wartime Transfers and Provenance Gaps
 
 *Find artworks that changed hands between 1933 and 1945 through confiscation or restitution, and show me their full ownership chains. Which ones have gaps in their provenance during this period?* [Link](https://claude.ai/share/b6c4a4c2-de36-4f14-bc20-7a12a2832092)
 
@@ -368,7 +338,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** Provenance research for the period 1933–1945 is a legal and ethical obligation for museums holding works that may have been looted or forcibly sold. The combination of `transferType` filtering, `excludeTransferType` negation, and `hasGap` detection makes it possible to systematically identify works requiring further investigation — confiscated but not restituted, or with undocumented gaps during the critical years. Without structured provenance data, this work requires manually reading each artwork's free-text ownership history.
 
-### 26. Generational Ownership and Collection Dispersal
+### 24. Generational Ownership and Collection Dispersal
 
 *Find artworks that passed through four or more generations by descent within a single family, then were sold at auction. How long did these family collections typically survive before dispersal?* [Link](https://claude.ai/share/fb01bd2b-c6fb-4a5b-af74-05fb32ddd731)
 
@@ -381,7 +351,7 @@ The links following each research question show how the query was answered in Cl
 
 **Why it matters:** The history of art collecting is also a history of family wealth and its dispersal. Works that passed through multiple generations by inheritance before reaching the market represent long-lived private collections — their dispersal often marks historical inflection points (economic crises, wars, succession failures). The `by_descent` transfer type and duration-based sorting make these patterns systematically discoverable across the collection.
 
-### 27. Art Dealers as Intermediaries
+### 25. Art Dealers as Intermediaries
 
 *Which art dealers appear as both buyers and sellers in the Rijksmuseum provenance records? For each, show me what they sold to the museum versus what they bought from private collectors, and the price ranges involved.* [Link](https://claude.ai/share/59acc3af-dce5-428e-981c-3fdb8673371d)
 
