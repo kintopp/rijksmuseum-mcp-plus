@@ -133,7 +133,8 @@ flowchart LR
         OAI["OAI-PMH
         data.rijksmuseum.nl/oai"]
         LA["Linked Art resolver
-        id.rijksmuseum.nl"]
+        id.rijksmuseum.nl
+        (harvest-time only)"]
     end
     OAI -.->|"832K records"| VocabDB
     LA -.->|"vocab + artwork
@@ -180,7 +181,6 @@ For local setup (stdio or HTTP), deployment, architecture, data sources, and con
 
 Soon:
 
-- update documentation (temporary removal of get_artwork_bibliography)
 - fix bugs and fine-tune queries and tool descriptions
 - v1.0 release
 - test integration with rijksmuseum-iconclass-mcp
@@ -215,7 +215,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows. A `CITA
 
 **APA (7th ed.)**
 
-> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.23) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
+> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.23.1) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
 
 **BibTeX**
 ```bibtex
@@ -223,7 +223,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows. A `CITA
   author    = {Bosse, Arno},
   title     = {{rijksmuseum-mcp+}},
   year      = {2026},
-  version   = {0.23},
+  version   = {0.23.1},
   publisher = {Research and Infrastructure Support (RISE), University of Basel},
   url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
   orcid     = {0000-0003-3681-1289},

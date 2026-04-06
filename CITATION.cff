@@ -5,7 +5,7 @@ title: "rijksmuseum-mcp+"
 abstract: >
   An MCP server providing AI-mediated access to the Rijksmuseum collection
   via its Linked Open Data APIs, supporting search, iconographic exploration,
-  high-resolution image viewing, and bibliographic retrieval.
+  high-resolution image viewing, provenance analysis, and similarity comparison.
 authors:
   - family-names: Bosse
     given-names: Arno
@@ -14,8 +14,8 @@ authors:
 repository-code: "https://github.com/kintopp/rijksmuseum-mcp-plus"
 url: "https://rijksmuseum-mcp-plus-production.up.railway.app/mcp"
 license: MIT
-version: "0.23"
-date-released: "2026-03-23"
+version: "0.23.1"
+date-released: "2026-04-06"
 keywords:
   - digital humanities
   - museum collections
