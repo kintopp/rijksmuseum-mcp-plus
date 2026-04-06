@@ -197,6 +197,7 @@ Later:
 - incorporate metadata fixes from the Rijksmuseum
 - include authority IDs in search results
 - create bibliographic SRU MCP server (rijksmuseum-biblio-mcp)
+- upgrade sqlite-vec for DiskANN support; re-create embeddings with base models and 768dm
 
 Maybe:
 
