@@ -191,6 +191,7 @@ Later:
 - re-harvest metadata (OAI-PMH) to capture remaining metadata (e.g. `attributed_by`, relatedObjects)
 - investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after"
 - implement incremental metadata updates via the LDES endpoint
+- implement incremental updates of the vector embeddings database
 - add provenance metadata for geolocated places
 - improve the `description` signal for find_similar (e.g. via LLM re-ranker)
 - incorporate metadata fixes from the Rijksmuseum
