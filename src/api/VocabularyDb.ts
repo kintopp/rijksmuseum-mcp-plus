@@ -2205,9 +2205,27 @@ export class VocabularyDb {
     return null;
   }
 
-  /** Provenance-domain dimensions: count artworks grouped by event/party attribute. */
-  private provenanceDimensionSql(dim: string, topN: number, offset: number, binWidth: number): { sql: string; extraBindings: unknown[] } | null {
+  /** Provenance-domain dimensions: count artworks grouped by event/party attribute.
+   *  eventConditions/partyConditions filter at the row level so that only matching
+   *  events/parties contribute to the dimension counts (not all events for matching artworks). */
+  private provenanceDimensionSql(
+    dim: string, topN: number, offset: number, binWidth: number,
+    eventConditions?: { conds: string[]; bindings: unknown[] },
+    partyConditions?: { conds: string[]; bindings: unknown[] },
+  ): { sql: string; extraBindings: unknown[] } | null {
     if (!this.hasProvenanceTables_) return null;
+
+    // Build event-level WHERE fragment
+    const evExtra = eventConditions?.conds.length
+      ? " AND " + eventConditions.conds.join(" AND ")
+      : "";
+    const evBindings = eventConditions?.bindings ?? [];
+
+    // Build party-level WHERE fragment
+    const ppExtra = partyConditions?.conds.length
+      ? " AND " + partyConditions.conds.join(" AND ")
+      : "";
+    const ppBindings = partyConditions?.bindings ?? [];
 
     // Special case: provenanceDecade uses arithmetic binning
     if (dim === "provenanceDecade") {
@@ -2215,9 +2233,9 @@ export class VocabularyDb {
         sql: `SELECT (pe.date_year / ?) * ? AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
           FROM provenance_events pe
           WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-            AND pe.date_year IS NOT NULL
+            AND pe.date_year IS NOT NULL${evExtra}
           GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
-        extraBindings: [binWidth, binWidth, topN, offset],
+        extraBindings: [binWidth, binWidth, ...evBindings, topN, offset],
       };
     }
 
@@ -2229,14 +2247,16 @@ export class VocabularyDb {
     const tbl = def.table === "events" ? "provenance_events" : "provenance_parties";
     const alias = def.table === "events" ? "pe" : "pp";
     const notNull = def.notNull ? `AND ${alias}.${def.col} IS NOT NULL` : "";
+    const rowFilter = def.table === "events" ? evExtra : ppExtra;
+    const rowBindings = def.table === "events" ? evBindings : ppBindings;
 
     return {
       sql: `SELECT ${alias}.${def.col} AS label, COUNT(DISTINCT ${alias}.artwork_id) AS cnt
         FROM ${tbl} ${alias}
         WHERE ${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)
-          ${notNull}
+          ${notNull}${rowFilter}
         GROUP BY ${alias}.${def.col} ORDER BY cnt DESC LIMIT ? OFFSET ?`,
-      extraBindings: [topN, offset],
+      extraBindings: [...rowBindings, topN, offset],
     };
   }
 
@@ -2323,7 +2343,11 @@ export class VocabularyDb {
       bindings.push(params.creationDateTo);
     }
 
-    // Provenance-domain filters — merge event conditions into a single EXISTS to avoid N separate scans
+    // Provenance-domain filters — merge event conditions into a single EXISTS to avoid N separate scans.
+    // Event/party conditions are also saved for provenanceDimensionSql so dimension queries
+    // filter at the row level (not just the artwork level).
+    let provEventConds: { conds: string[]; bindings: unknown[] } | undefined;
+    let provPartyConds: { conds: string[]; bindings: unknown[] } | undefined;
     if (this.hasProvenanceTables_) {
       const evConds: string[] = [];
       const evBindings: unknown[] = [];
@@ -2334,19 +2358,29 @@ export class VocabularyDb {
       if (params.categoryMethod) { evConds.push("pe.category_method = ?"); evBindings.push(params.categoryMethod); }
 
       if (evConds.length > 0) {
+        provEventConds = { conds: evConds, bindings: evBindings };
         conditions.push(`EXISTS (SELECT 1 FROM provenance_events pe WHERE pe.artwork_id = a.art_id AND ${evConds.join(" AND ")})`);
         bindings.push(...evBindings);
       } else if (params.hasProvenance) {
         conditions.push("EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
       }
 
+      const ppConds: string[] = [];
+      const ppBindings: unknown[] = [];
       if (params.party && this.hasPartyTable_) {
+        ppConds.push("pp.party_name LIKE '%' || ? || '%'");
+        ppBindings.push(params.party);
         conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = a.art_id AND pp.party_name LIKE '%' || ? || '%')");
         bindings.push(params.party);
       }
       if (params.positionMethod && this.hasPartyTable_) {
+        ppConds.push("pp.position_method = ?");
+        ppBindings.push(params.positionMethod);
         conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = a.art_id AND pp.position_method = ?)");
         bindings.push(params.positionMethod);
+      }
+      if (ppConds.length > 0) {
+        provPartyConds = { conds: ppConds, bindings: ppBindings };
       }
     }
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
@@ -2379,7 +2413,7 @@ export class VocabularyDb {
       : `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM artworks`);
     try {
       const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth)
-        || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth);
+        || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth, provEventConds, provPartyConds);
 
       if (!dimQuery) {
         return {
@@ -3510,6 +3544,24 @@ export class VocabularyDb {
       }
     }
 
+    // Post-enrichment: re-evaluate positionMethod matching per event.
+    // positionMethod can't be checked in eventMatchesFilters() because position_method
+    // is only available after party enrichment above. Demote events that don't have
+    // any party with the requested positionMethod.
+    if (!allMatched && params?.positionMethod) {
+      matchedCount = 0;
+      for (const event of events) {
+        if (event.matched) {
+          const hasMatch = event.parties.some(p => p.positionMethod === params.positionMethod);
+          if (!hasMatch) {
+            event.matched = false;
+          } else {
+            matchedCount++;
+          }
+        }
+      }
+    }
+
     return {
       objectNumber: first.object_number,
       title: first.title ?? "",
@@ -3560,11 +3612,11 @@ export class VocabularyDb {
     const bindings: unknown[] = [];
 
     if (params.party) {
-      if (this.hasPartyTable_) {
-        conditions.push("pe.artwork_id IN (SELECT pp2.artwork_id FROM provenance_parties pp2 WHERE pp2.party_name LIKE '%' || ? || '%')");
-      } else {
-        conditions.push("pe.parties LIKE '%' || ? || '%'");
-      }
+      // Event-level filter: match on the event's own parties JSON, not artwork-level EXISTS.
+      // Artwork-level EXISTS would return events from artworks where the party appears
+      // *somewhere* in the chain, causing false positives when combined with event-level
+      // filters like transferType (the party might be on a different event).
+      conditions.push("pe.parties LIKE '%' || ? || '%'");
       bindings.push(params.party);
     }
     if (params.transferType) {
