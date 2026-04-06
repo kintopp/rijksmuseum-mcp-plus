@@ -916,6 +916,7 @@ function registerTools(
     "material", "technique", "type", "creator",
     "creationDate",
     "imageAvailable",
+    "hasProvenance",
     "aboutActor",
     // Creator demographic filters (require person enrichment)
     "creatorGender", "creatorBornAfter", "creatorBornBefore",
@@ -1351,6 +1352,7 @@ function registerTools(
         textParts.push(formatFacets(result.facets));
       }
       textParts.push(...result.results.map((r, i) => formatSearchLine(r, i)));
+      if (result.warnings?.length) textParts.push(...result.warnings.map(w => `⚠ ${w}`));
       const structured: InferOutput<typeof SearchResultOutput> = result;
       return structuredResponse(structured, textParts.join("\n"));
     })
@@ -1394,7 +1396,21 @@ function registerTools(
       const count = (args.objectNumber ? 1 : 0) + (args.uri ? 1 : 0);
       if (count !== 1) throw new Error("Provide exactly one of objectNumber or uri.");
 
-      const objNum = args.objectNumber ?? args.uri!.split("/").pop()!;
+      let objNum: string;
+      if (args.objectNumber) {
+        objNum = args.objectNumber;
+      } else {
+        // URI format: https://id.rijksmuseum.nl/{art_id}
+        const segment = args.uri!.split("/").pop()!;
+        // If the segment is purely numeric, it's an art_id — resolve to object_number
+        if (/^\d+$/.test(segment)) {
+          const resolved = vocabDb.getObjectNumberByArtId(Number(segment));
+          if (!resolved) throw new Error(`No artwork found for URI: ${args.uri}`);
+          objNum = resolved;
+        } else {
+          objNum = segment;
+        }
+      }
       const detail = vocabDb.getArtworkDetail(objNum);
       if (!detail) throw new Error(`No artwork found: ${objNum}`);
 

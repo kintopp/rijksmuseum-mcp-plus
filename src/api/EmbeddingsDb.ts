@@ -179,7 +179,7 @@ export class EmbeddingsDb {
     // The chunked vec_distance_cosine path scales linearly (~2.5ms/1K candidates)
     // and stays faster than the ~1.5s full vec0 scan up to ~600K candidates.
     // 200K is a conservative threshold (~500ms) that leaves headroom.
-    if (candidateArtIds.length > FILTER_ART_IDS_LIMIT) {
+    if (candidateArtIds.length >= FILTER_ART_IDS_LIMIT) {
       const allResults = this.search(queryEmbedding, 4096);
       const idSet = new Set(candidateArtIds);
       const filtered = allResults.filter(r => idSet.has(r.artId)).slice(0, k);

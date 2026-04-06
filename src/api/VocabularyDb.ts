@@ -1043,6 +1043,16 @@ export class VocabularyDb {
   }
 
   /**
+   * Resolve a numeric art_id to its object_number, or return null if not found.
+   * Used by get_artwork_details to support URI-based lookups (e.g. https://id.rijksmuseum.nl/8095).
+   */
+  getObjectNumberByArtId(artId: number): string | null {
+    if (!this.db) return null;
+    const row = this.db.prepare("SELECT object_number FROM artworks WHERE art_id = ?").get(artId) as { object_number: string } | undefined;
+    return row?.object_number ?? null;
+  }
+
+  /**
    * Full artwork detail from the vocab DB — replaces the Linked Art resolver +
    * toDetailEnriched() for get_artwork_details. Two queries: artwork row + mappings.
    */
