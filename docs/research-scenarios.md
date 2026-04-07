@@ -1,7 +1,5 @@
 ## Research Scenarios
 
-The `search_artwork` tool combines [39 filters](search-parameters.md) — from basic fields like creator, type, and date to vocabulary-backed parameters covering subject matter, production place, depicted persons, inscriptions, provenance, dimension ranges, creator demographics, attribution qualifiers, and place hierarchy — that can be composed to answer questions no single filter handles alone. The results are ranked by relevance (BM25) when text search filters are active (title, description, inscription, narrative, provenance), by geographic proximity for spatial queries, and by importance (a composite score reflecting image availability, curatorial attention, and metadata richness) for vocabulary-filter queries — so the most significant works surface first.
-
 - [Searching the Collection](#searching-the-collection)
 - [Subject and Iconographic Search](#subject-and-iconographic-search)
 - [Artwork Details and Metadata](#artwork-details-and-metadata)
@@ -12,7 +10,7 @@ The `search_artwork` tool combines [39 filters](search-parameters.md) — from b
 - [Semantic Search](#semantic-search)
 - [Provenance Research](#provenance-research)
 
-The links following each research question show how the query was answered in Claude Desktop. However, they only reproduce the textual portion of the response (no image viewer or visualisations). For some queries, 'extended thinking' had been enabled in Claude allowing you to trace (to some degree) the model's step-by-step 'reasoning' during a task.
+The links following each research question show you how the query was answered in Claude Desktop. However, they only reproduce the text of the response (no image viewer or visualisations). For some queries, 'extended thinking' had been enabled in Claude to allow you to trace (to some degree) the model's step-by-step 'reasoning' during a task.
 
 ## Searching the Collection
 
