@@ -56,7 +56,7 @@ Several additional searchable metadata categories, including full-texts (`descri
 
 2. **Semantic search** 
 
-Rijksmuseum-mcp+ adds support for multilingual, concept-based, exploratory searches drawing simultaneously on the full-texts of several metadata fields (`title`, `description`, `inscription`, `curatorialNarrative`). This allows for broad, interpretive queries of their contents by meaning (e.g. "a sense of loneliness in domestic interiors" or "vanitas symbolism") that go beyond what structured, keyword based searches or filters can reveal. Separate from this, semantic search has also been enabled for the c. 40K base concepts in IconClass, letting you find categories of artworks by concept ("mortality") rather than exact notation codes. For more details, please see [semantic search](/docs/semantic-search.md).
+Rijksmuseum-mcp+ adds support for multilingual, concept-based, exploratory searches drawing simultaneously on the full-texts of several metadata fields (`title`, `description`, `inscription`, `curatorialNarrative`). This allows for broad, interpretive queries of their contents by meaning (e.g. "a sense of loneliness in domestic interiors" that go beyond what structured, keyword based searches or filters can reveal. For more details, please see [semantic search](/docs/semantic-search.md). Semantic search is also available for Iconclass via [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
 
 3. **Interactive image viewer and AI analyses**
 
