@@ -2987,18 +2987,18 @@ function registerTools(
           ? vocabDb.reconstructSourceText(allArtIds)
           : new Map<number, string>();
 
+        // Batch-resolve artwork metadata (single chunked query instead of N point lookups)
+        const metaMap = vocabDb?.available
+          ? vocabDb.batchLookupByArtId(allArtIds)
+          : new Map<number, { objectNumber: string; title: string; creator: string; dateEarliest: number | null; dateLatest: number | null; iiifId: string | null }>();
+
         const results = candidates.map((c, i) => {
           const similarity = Math.round((1 - c.distance) * 1000) / 1000;
 
-          let title = "", creator = "", date: string | undefined;
-          if (vocabDb?.available) {
-            const info = vocabDb.lookupArtwork(c.objectNumber);
-            if (info) {
-              title = info.title || "";
-              creator = info.creator || "";
-              date = formatDateRange(info.dateEarliest, info.dateLatest);
-            }
-          }
+          const meta = metaMap.get(c.artId);
+          const title = meta?.title || "";
+          const creator = meta?.creator || "";
+          const date = meta ? formatDateRange(meta.dateEarliest, meta.dateLatest) : undefined;
 
           return {
             rank: i + 1,

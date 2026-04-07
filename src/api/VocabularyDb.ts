@@ -742,6 +742,12 @@ export class VocabularyDb {
   private stmtArtworkRow: Statement | null = null;
   private stmtArtworkMappings: Statement | null = null;
   private stmtFilterArtIds = new Map<string, Statement>();
+  // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
+  private stmtLookupTypesCache = new Map<number, Statement>();
+  private stmtReconstructSourceCache = new Map<number, Statement>();
+  private stmtBatchByArtIdCache = new Map<number, Statement>();
+  private stmtBatchTypesByArtIdCache = new Map<number, Statement>();
+  private stmtBatchDescByArtIdCache = new Map<number, Statement>();
 
   private stmtObjectNumberByArtId: Statement | null = null;
   // ── find_similar shared ──
@@ -808,9 +814,17 @@ export class VocabularyDb {
       this.db = new Database(dbPath, { readonly: true });
       this.db.pragma("mmap_size = 1610612736"); // 1.5 GB — vocab DB is ~1.1 GB, room for enrichment growth
       // Word-boundary matching for subject search (e.g. "cat" must not match "Catharijnekerk")
+      // Memoize the compiled RegExp — pattern is identical for every row within a single query,
+      // so this avoids O(rows) allocations on broad subject scans.
+      let cachedPattern = "";
+      let cachedRegex: RegExp | null = null;
       this.db.function("regexp_word", (pattern: string, value: string) => {
-        const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        return new RegExp(`\\b${escaped}\\b`, "i").test(value) ? 1 : 0;
+        if (pattern !== cachedPattern) {
+          const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          cachedRegex = new RegExp(`\\b${escaped}\\b`, "i");
+          cachedPattern = pattern;
+        }
+        return cachedRegex!.test(value) ? 1 : 0;
       });
       // Haversine distance in km for geo proximity search
       this.db.function("haversine_km", haversineKm);
@@ -984,15 +998,18 @@ export class VocabularyDb {
 
     for (let i = 0; i < objectNumbers.length; i += CHUNK) {
       const chunk = objectNumbers.slice(i, i + CHUNK);
-      const placeholders = chunk.map(() => "?").join(", ");
-
-      const sql = `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
-           FROM mappings m
-           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-           JOIN artworks a ON m.artwork_id = a.art_id
-           WHERE a.object_number IN (${placeholders}) AND ${fieldClause}`;
-
-      const rows = this.db.prepare(sql).all(...chunk, ...fieldBindings) as { object_number: string; label: string }[];
+      let stmt = this.stmtLookupTypesCache.get(chunk.length);
+      if (!stmt) {
+        const placeholders = chunk.map(() => "?").join(", ");
+        const sql = `SELECT a.object_number, COALESCE(v.label_en, v.label_nl, '') AS label
+             FROM mappings m
+             JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+             JOIN artworks a ON m.artwork_id = a.art_id
+             WHERE a.object_number IN (${placeholders}) AND ${fieldClause}`;
+        stmt = this.db.prepare(sql);
+        this.stmtLookupTypesCache.set(chunk.length, stmt);
+      }
+      const rows = stmt.all(...chunk, ...fieldBindings) as { object_number: string; label: string }[];
       for (const r of rows) {
         if (r.label && !map.has(r.object_number)) map.set(r.object_number, r.label);
       }
@@ -1227,13 +1244,17 @@ export class VocabularyDb {
 
     for (let i = 0; i < artIds.length; i += CHUNK) {
       const chunk = artIds.slice(i, i + CHUNK);
-      const placeholders = chunk.map(() => "?").join(", ");
-
+      let stmt = this.stmtReconstructSourceCache.get(chunk.length);
+      if (!stmt) {
+        const placeholders = chunk.map(() => "?").join(", ");
+        stmt = this.db.prepare(
+          `SELECT art_id, title, narrative_text, inscription_text, description_text
+           FROM artworks WHERE art_id IN (${placeholders})`
+        );
+        this.stmtReconstructSourceCache.set(chunk.length, stmt);
+      }
       // Query 1: artwork fields
-      const artRows = this.db.prepare(
-        `SELECT art_id, title, narrative_text, inscription_text, description_text
-         FROM artworks WHERE art_id IN (${placeholders})`
-      ).all(...chunk) as {
+      const artRows = stmt.all(...chunk) as {
         art_id: number;
         title: string | null;
         narrative_text: string | null;
@@ -1839,22 +1860,28 @@ export class VocabularyDb {
     if (!this.db || artIds.length === 0) return map;
     const hasIiif = !!this.stmtLookupIiifId; // cached at init
     const cols = hasIiif
-      ? "art_id, object_number, title, creator_label, date_earliest, date_latest, iiif_id"
-      : "art_id, object_number, title, creator_label, date_earliest, date_latest";
+      ? "art_id, object_number, title, title_all_text, creator_label, date_earliest, date_latest, iiif_id"
+      : "art_id, object_number, title, title_all_text, creator_label, date_earliest, date_latest";
     const CHUNK = 500;
     for (let i = 0; i < artIds.length; i += CHUNK) {
       const chunk = artIds.slice(i, i + CHUNK);
-      const placeholders = chunk.map(() => "?").join(", ");
-      const rows = this.db.prepare(
-        `SELECT ${cols} FROM artworks WHERE art_id IN (${placeholders})`
-      ).all(...chunk) as {
-        art_id: number; object_number: string; title: string; creator_label: string;
-        date_earliest: number | null; date_latest: number | null; iiif_id?: string | null;
+      let stmt = this.stmtBatchByArtIdCache.get(chunk.length);
+      if (!stmt) {
+        const placeholders = chunk.map(() => "?").join(", ");
+        stmt = this.db.prepare(
+          `SELECT ${cols} FROM artworks WHERE art_id IN (${placeholders})`
+        );
+        this.stmtBatchByArtIdCache.set(chunk.length, stmt);
+      }
+      const rows = stmt.all(...chunk) as {
+        art_id: number; object_number: string; title: string; title_all_text: string | null;
+        creator_label: string; date_earliest: number | null; date_latest: number | null;
+        iiif_id?: string | null;
       }[];
       for (const r of rows) {
         map.set(r.art_id, {
           objectNumber: r.object_number,
-          title: r.title || "",
+          title: VocabularyDb.resolveTitle(r.title, r.title_all_text),
           creator: r.creator_label || "",
           dateEarliest: r.date_earliest,
           dateLatest: r.date_latest,
@@ -1873,13 +1900,18 @@ export class VocabularyDb {
     const CHUNK = 500;
     for (let i = 0; i < artIds.length; i += CHUNK) {
       const chunk = artIds.slice(i, i + CHUNK);
-      const placeholders = chunk.map(() => "?").join(", ");
-      const rows = this.db.prepare(`
-        SELECT m.artwork_id, COALESCE(v.label_en, v.label_nl, '') as label
-        FROM mappings m
-        JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-        WHERE m.artwork_id IN (${placeholders}) AND +m.field_id = ?
-      `).all(...chunk, typeFieldId) as { artwork_id: number; label: string }[];
+      let stmt = this.stmtBatchTypesByArtIdCache.get(chunk.length);
+      if (!stmt) {
+        const placeholders = chunk.map(() => "?").join(", ");
+        stmt = this.db.prepare(`
+          SELECT m.artwork_id, COALESCE(v.label_en, v.label_nl, '') as label
+          FROM mappings m
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE m.artwork_id IN (${placeholders}) AND +m.field_id = ?
+        `);
+        this.stmtBatchTypesByArtIdCache.set(chunk.length, stmt);
+      }
+      const rows = stmt.all(...chunk, typeFieldId) as { artwork_id: number; label: string }[];
       for (const r of rows) {
         if (r.label && !map.has(r.artwork_id)) map.set(r.artwork_id, r.label);
       }
@@ -1894,11 +1926,16 @@ export class VocabularyDb {
     const CHUNK = 500;
     for (let i = 0; i < artIds.length; i += CHUNK) {
       const chunk = artIds.slice(i, i + CHUNK);
-      const placeholders = chunk.map(() => "?").join(", ");
-      const rows = this.db.prepare(`
-        SELECT art_id, description_text
-        FROM artworks WHERE art_id IN (${placeholders}) AND description_text IS NOT NULL
-      `).all(...chunk) as { art_id: number; description_text: string }[];
+      let stmt = this.stmtBatchDescByArtIdCache.get(chunk.length);
+      if (!stmt) {
+        const placeholders = chunk.map(() => "?").join(", ");
+        stmt = this.db.prepare(`
+          SELECT art_id, description_text
+          FROM artworks WHERE art_id IN (${placeholders}) AND description_text IS NOT NULL
+        `);
+        this.stmtBatchDescByArtIdCache.set(chunk.length, stmt);
+      }
+      const rows = stmt.all(...chunk) as { art_id: number; description_text: string }[];
       for (const r of rows) {
         if (r.description_text) map.set(r.art_id, r.description_text);
       }

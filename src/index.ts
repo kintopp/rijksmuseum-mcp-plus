@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
+import compression from "compression";
 import cors from "cors";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -269,6 +270,7 @@ async function runHttp(): Promise<void> {
       origin: allowedOrigins ? allowedOrigins.split(",") : "*",
     })
   );
+  app.use(compression({ threshold: 1024 })); // gzip responses ≥ 1 KB (skips small payloads + base64 images)
   app.use(express.json());
 
   // ── Stub OAuth endpoints (Claude mobile/desktop compatibility) ──
@@ -288,15 +290,28 @@ async function runHttp(): Promise<void> {
 
   // ── MCP endpoint (stateless — no sessions, no SSE streams) ─────
   //
-  // Each POST creates a fresh transport+server, processes the request,
-  // and responds. No long-lived connections to time out (#41).
+  // The McpServer (with all registered tools/resources/prompts) is created
+  // once and reused across requests. Only the transport is per-request.
+  // Protocol.connect() requires _transport to be unset, which transport.close()
+  // ensures via the _onclose callback. No long-lived connections to time out (#41).
+
+  const server = createServer(port);
+
+  // 30s safety net — respond 504 before Railway's proxy kills the connection silently
+  app.use("/mcp", (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+    res.setTimeout(30_000, () => {
+      if (!res.headersSent) {
+        res.status(504).json({ error: "Request timeout" });
+      }
+    });
+    next();
+  });
 
   app.post("/mcp", async (req: express.Request, res: express.Response) => {
     try {
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });
-      const server = createServer(port);
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       await transport.close();

@@ -147,6 +147,14 @@ export class RijksmuseumApiClient {
     quality: "default" | "gray" = "default",
   ): Promise<{ data: string; mimeType: string }> {
     const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/${region}/${size},/${rotation}/${quality}.jpg`;
+
+    // Cache full-image fetches (most commonly repeated in exploration sessions).
+    // Cropped regions vary too much to cache effectively.
+    if (region === "full") {
+      const cacheKey = `img:${iiifId}:${size}:${rotation}:${quality}`;
+      return this.cache.getOrFetch(cacheKey, () => this.fetchIiifAsBase64(url), 5 * 60_000);
+    }
+
     return this.fetchIiifAsBase64(url);
   }
 }
