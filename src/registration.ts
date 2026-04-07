@@ -217,9 +217,18 @@ interface VisualSearchArtObject {
   micrioImage?: { micrioId: string } | null;
 }
 
+// Module-scope caches for visual search HTTP calls (objectNumber→nodeId is
+// essentially immutable; visual results are stable for the duration of a session).
+const nodeIdCache = new Map<string, { value: string | null; expiresAt: number }>();
+const visualCache = new Map<string, { value: { candidates: SimilarCandidate[]; totalResults: number; searchUrl: string }; expiresAt: number }>();
+const NODE_ID_TTL = 60 * 60_000;  // 1 hour (mapping is immutable)
+const VISUAL_TTL = 30 * 60_000;   // 30 min (matches similarPages TTL)
+
 /** Resolve an objectNumber to the Rijksmuseum website's objectNodeId (hex hash).
  *  Returns null if the artwork is not in the website search index. */
 async function resolveObjectNodeId(objectNumber: string): Promise<string | null> {
+  const cached = nodeIdCache.get(objectNumber);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
   try {
     const resp = await axios.get("https://www.rijksmuseum.nl/api/v1/collection/search", {
       params: { query: objectNumber, language: "en", pageSize: 5 },
@@ -227,7 +236,9 @@ async function resolveObjectNodeId(objectNumber: string): Promise<string | null>
     });
     const objs: VisualSearchArtObject[] = resp.data?.artObjects ?? [];
     const match = objs.find(o => o.objectNumber === objectNumber);
-    return match?.objectNodeId ?? null;
+    const nodeId = match?.objectNodeId ?? null;
+    nodeIdCache.set(objectNumber, { value: nodeId, expiresAt: Date.now() + NODE_ID_TTL });
+    return nodeId;
   } catch {
     return null;
   }
@@ -239,6 +250,10 @@ async function fetchVisualSimilar(
   objectNodeId: string,
   maxResults: number,
 ): Promise<{ candidates: SimilarCandidate[]; totalResults: number; searchUrl: string }> {
+  const cacheKey = `${objectNodeId}:${maxResults}`;
+  const cached = visualCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
   const searchUrl = `https://www.rijksmuseum.nl/en/collection/visual/search?objectNodeId=${objectNodeId}`;
   try {
     const resp = await axios.get("https://www.rijksmuseum.nl/api/v1/collection/visualsearch", {
@@ -263,11 +278,13 @@ async function fetchVisualSimilar(
       };
     });
 
-    return {
+    const result = {
       candidates,
       totalResults: hasMore ? maxResults + 1 : objs.length, // indicate "more available"
       searchUrl,
     };
+    visualCache.set(cacheKey, { value: result, expiresAt: Date.now() + VISUAL_TTL });
+    return result;
   } catch {
     return { candidates: [], totalResults: 0, searchUrl };
   }
