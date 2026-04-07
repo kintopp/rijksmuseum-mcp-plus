@@ -62,14 +62,16 @@ export function extractPageToken(nextRef: { id: string } | undefined): string | 
  */
 export class RijksmuseumApiClient {
   private http: AxiosInstance;
-  private cache: ResponseCache;
+  private cache: ResponseCache;       // info.json metadata (~500 bytes each)
+  private imageCache: ResponseCache;  // full-image base64 (~300-800 KB each)
 
   private static readonly IIIF_BASE = "https://iiif.micr.io";
 
   private static readonly TTL_IMAGE = 30 * 60_000;   // 30 min
 
-  constructor(cache?: ResponseCache) {
+  constructor(cache?: ResponseCache, imageCache?: ResponseCache) {
     this.cache = cache ?? new ResponseCache(1000, RijksmuseumApiClient.TTL_IMAGE);
+    this.imageCache = imageCache ?? new ResponseCache(50, 5 * 60_000); // 50 entries, 5-min TTL
     this.http = axios.create({
       headers: { Accept: "application/ld+json" },
       timeout: 15_000,
@@ -152,7 +154,7 @@ export class RijksmuseumApiClient {
     // Cropped regions vary too much to cache effectively.
     if (region === "full") {
       const cacheKey = `img:${iiifId}:${size}:${rotation}:${quality}`;
-      return this.cache.getOrFetch(cacheKey, () => this.fetchIiifAsBase64(url), 5 * 60_000);
+      return this.imageCache.getOrFetch(cacheKey, () => this.fetchIiifAsBase64(url));
     }
 
     return this.fetchIiifAsBase64(url);

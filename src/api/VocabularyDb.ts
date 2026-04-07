@@ -707,6 +707,16 @@ export function parseDateFilter(creationDate: string): { earliest: number; lates
   return null;
 }
 
+/** Shape returned by VocabularyDb.batchLookupByArtId (one entry per artwork). */
+export interface ArtworkMeta {
+  objectNumber: string;
+  title: string;
+  creator: string;
+  dateEarliest: number | null;
+  dateLatest: number | null;
+  iiifId: string | null;
+}
+
 // ─── VocabularyDb ────────────────────────────────────────────────────
 
 export class VocabularyDb {
@@ -748,6 +758,9 @@ export class VocabularyDb {
   private stmtBatchByArtIdCache = new Map<number, Statement>();
   private stmtBatchTypesByArtIdCache = new Map<number, Statement>();
   private stmtBatchDescByArtIdCache = new Map<number, Statement>();
+  /** Column list for batchLookupByArtId — resolved once at construction so the
+   *  chunk-size-keyed statement cache doesn't need hasIiif in its key. */
+  private batchByArtIdCols = "";
 
   private stmtObjectNumberByArtId: Statement | null = null;
   // ── find_similar shared ──
@@ -813,9 +826,10 @@ export class VocabularyDb {
     try {
       this.db = new Database(dbPath, { readonly: true });
       this.db.pragma("mmap_size = 1610612736"); // 1.5 GB — vocab DB is ~1.1 GB, room for enrichment growth
-      // Word-boundary matching for subject search (e.g. "cat" must not match "Catharijnekerk")
+      // Word-boundary matching for subject search (e.g. "cat" must not match "Catharijnekerk").
       // Memoize the compiled RegExp — pattern is identical for every row within a single query,
-      // so this avoids O(rows) allocations on broad subject scans.
+      // so this avoids O(rows) allocations on broad subject scans. Safe because SQLite executes
+      // UDFs synchronously on a single thread; no concurrent access to the closure variables.
       let cachedPattern = "";
       let cachedRegex: RegExp | null = null;
       this.db.function("regexp_word", (pattern: string, value: string) => {
@@ -937,6 +951,11 @@ export class VocabularyDb {
         JOIN field_lookup f ON m.field_id = f.id
         WHERE m.artwork_id = ?
       `);
+
+      // Resolve batchLookupByArtId column list once (hasIiif is now fixed for the process lifetime)
+      this.batchByArtIdCols = this.stmtLookupIiifId
+        ? "art_id, object_number, title, title_all_text, creator_label, date_earliest, date_latest, iiif_id"
+        : "art_id, object_number, title, title_all_text, creator_label, date_earliest, date_latest";
 
       const features = [
         this.hasFts5 && "vocabFTS5",
@@ -1849,19 +1868,9 @@ export class VocabularyDb {
   }
 
   /** Batch-lookup artwork metadata by art_id. Includes iiif_id when available. Chunks at 500. */
-  batchLookupByArtId(artIds: number[]): Map<number, {
-    objectNumber: string; title: string; creator: string;
-    dateEarliest: number | null; dateLatest: number | null; iiifId: string | null;
-  }> {
-    const map = new Map<number, {
-      objectNumber: string; title: string; creator: string;
-      dateEarliest: number | null; dateLatest: number | null; iiifId: string | null;
-    }>();
+  batchLookupByArtId(artIds: number[]): Map<number, ArtworkMeta> {
+    const map = new Map<number, ArtworkMeta>();
     if (!this.db || artIds.length === 0) return map;
-    const hasIiif = !!this.stmtLookupIiifId; // cached at init
-    const cols = hasIiif
-      ? "art_id, object_number, title, title_all_text, creator_label, date_earliest, date_latest, iiif_id"
-      : "art_id, object_number, title, title_all_text, creator_label, date_earliest, date_latest";
     const CHUNK = 500;
     for (let i = 0; i < artIds.length; i += CHUNK) {
       const chunk = artIds.slice(i, i + CHUNK);
@@ -1869,7 +1878,7 @@ export class VocabularyDb {
       if (!stmt) {
         const placeholders = chunk.map(() => "?").join(", ");
         stmt = this.db.prepare(
-          `SELECT ${cols} FROM artworks WHERE art_id IN (${placeholders})`
+          `SELECT ${this.batchByArtIdCols} FROM artworks WHERE art_id IN (${placeholders})`
         );
         this.stmtBatchByArtIdCache.set(chunk.length, stmt);
       }

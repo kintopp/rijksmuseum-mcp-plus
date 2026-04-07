@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, formatDimensions, pluralize, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -2990,7 +2990,7 @@ function registerTools(
         // Batch-resolve artwork metadata (single chunked query instead of N point lookups)
         const metaMap = vocabDb?.available
           ? vocabDb.batchLookupByArtId(allArtIds)
-          : new Map<number, { objectNumber: string; title: string; creator: string; dateEarliest: number | null; dateLatest: number | null; iiifId: string | null }>();
+          : new Map<number, ArtworkMeta>();
 
         const results = candidates.map((c, i) => {
           const similarity = Math.round((1 - c.distance) * 1000) / 1000;
