@@ -78,7 +78,7 @@ The [`rijksmuseum-mcp+` skill](docs/rijksmuseum-mcp+.skill.zip) (.zip archive) g
 
 Technically speaking, rijksmuseum-mcp+ works with any chatbot or application supporting the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) and [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) standards. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**. Mistral's [LeChat](https://chat.mistral.ai/chat) is an example (follow [these instructions](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector)) of a browser based chatbot with very good, basic support of the MCP standard. In addition, many desktop 'LLM client' applications, such as [Jan.ai](https://jan.ai), are also MCP-compatible, and can be used with many different LLM models (including local models). Most agentic coding applications (e.g. Claude Code, OpenAI Codex, Google Gemini CLI) also support the MCP standard. In contrast, OpenAI's ChatGPT still only offers limited, 'developer mode' support for MCP servers, and while Google has announced MCP support for Gemini it has not indicated when this will be ready.
 
-Overall, outside of Anthropic's Claude, the extent and quality of support for the still relatively new MCP standard varies widely. Significantly, none of the alternatives above allow you to view and interact with images directly in the chat timeline. In addition, most alternative AI assistants are also not as 'smart' in their use of MCP servers such as rijksmuseum-mcp+. For this reason, at this moment (April, 2026) the best way to use rijksmuseum-mcp+ is still via [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) combined with a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic. If that is not feasible, the current best, free alternative to Claude for most people is likely to be Mistral's [LeChat](https://chat.mistral.ai/chat). LeChat also works very well with the rijksmuseum-mcp+'s companion IconClass MCP server, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). 
+Overall, outside of Anthropic's Claude, the extent and quality of support for the still relatively new MCP standard varies widely. None of the alternatives above allow you to view and interact with images directly in the chat timeline. Subjectively speaking, most LLMs powering the general purpose, browser-based AI assistants are also not as 'smart' in their use of MCP servers such as Anthropic's leading models. For this reason, at this moment, the best way to use rijksmuseum-mcp+ remains [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) combined with a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic. If that is not feasible, I recommend Mistral's [LeChat](https://chat.mistral.ai/chat) (which also works very well with the companion IconClass MCP server). LeChat also has a useful [personal library](https://help.mistral.ai/en/articles/347582-what-are-libraries-and-how-do-i-use-them-in-le-chat) feature where you can upload [research skills](#features) to better guide the AI assistant in its use of these resources.
 
 Note to developers: the rijksmuseum-mcp+ server can also be run locally in STDIO mode with local copies of its metadata and embedding databases. Please see the [technical notes](docs/technical-guide.md) for details.
 
@@ -173,6 +173,10 @@ sequenceDiagram
 
     AI->>You: "Here's how Vermeer uses a single light source…"
 ```
+## Tips and Known Limitations
+
+tba
+
 ## Technical notes
 
 For local setup (stdio or HTTP), deployment, architecture, data sources, and configuration, see the [technical guide](/docs/technical-guide.md). Further technical documentation TBA.
