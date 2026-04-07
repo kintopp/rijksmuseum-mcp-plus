@@ -5,7 +5,7 @@
 
 ## Overview
 
-**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). It then extends this data with semantic search, provenance analysis, similarity comparisons, and spatial reasoning. It is designed to be used in conjunction with a companion [IconClass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).  
+**rijksmuseum-mcp+** lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). It then extends this data with semantic search, provenance analysis, similarity comparisons, and spatial reasoning. It works best when used together with [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp), an analogous resource for [Iconclass](https://iconclass.org).
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API. 
 
@@ -21,13 +21,15 @@ https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
 Go to _Settings_ → _Connectors_ → _Add custom connector_ → Name it as you like and paste the URL into the _Remote MCP Server URL_ field. You can ignore the Authentication section. Once the connector is configured, optionally set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) for more details.
 
-Recommended: After that, follow the same procedure to install rijksmuseum-mcp+'s companion [IconClass](https://iconclass.org) resource, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). This allows you to automatically search and explore c. 1.3 million Iconclass notations, concepts, and descriptive texts alongside the Rijksmuseum's metadata. 
+Afterwards, follow the same procedure to install rijksmuseum-mcp+'s companion [IconClass](https://iconclass.org) resource, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). This allows you to automatically search and explore c. 1.3 million Iconclass notations, concepts, and descriptive texts alongside the Rijksmuseum's metadata. 
 
-Technically speaking, both rijksmuseum-mcp+ and rijksmuseum-iconclass-mcp are based on the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) standard. As such, they also work with generative large language models (LLMs) in other chatbots and applications which support this standard, including several which can be used **without a paid subscription**. However, none beside [Claude Desktop](https://claude.com/download) and [claude.ai](https://claude.ai) support viewing, analysing, and interacting with images and visualisations in the chat timeline. For more details, please see the [Choosing an AI system](#choosing-an-ai-system) section below.
+Recommended: The AI assistant will generate better results when it can draw on [research skills](https://support.claude.com/en/articles/12512176-what-are-skills) describing in detail how to make best use of this resource. To lean more, please see the [features](#features) section below.
+
+Technically speaking, both rijksmuseum-mcp+ and rijksmuseum-iconclass-mcp are based on the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) standard. As such, they also work with generative large language models (LLMs) in other chatbots and applications which support this standard, including several which can be used **without a paid subscription**. However, currently none beside [Claude Desktop](https://claude.com/download) and [claude.ai](https://claude.ai) support viewing, analysing, and interacting with images and visualisations in the chat timeline. For more details, please see the [Choosing an AI system](#choosing-an-ai-system) section below.
 
 ## Sample Queries
 
-After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. The links below are to sample responses to these queries in Claude Desktop. Note: such shared links only reproduce the textual portion of the original session (no image viewer or visualisations). 
+After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. The links below are to sample responses to these queries in Claude Desktop. Note: the shared links only reproduce the texts of these sessions (no image viewer or visualisations). 
 
 - _What German artworks evoke vanitas and mortality?_ [link](https://claude.ai/share/2d38db0c-82e2-434a-a48b-cfe3cbbcfec5)
 - _List portrait photographs by American female photographers in the collection_ [link](https://claude.ai/share/704b1dd1-6591-4fc5-b6a8-80cf38ad1df3)
