@@ -190,7 +190,7 @@ function createServer(httpPort?: number): McpServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION, title: "Rijksmuseum MCP+" },
     {
-      capabilities: { tools: {}, resources: {}, prompts: {} },
+      capabilities: { tools: {}, resources: {}, prompts: {}, logging: {} },
       instructions:
         "Rijksmuseum collection explorer — circa 830,000 artworks from antiquity to the present day " +
         "spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.\n\n" +
