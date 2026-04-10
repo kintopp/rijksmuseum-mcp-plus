@@ -9,14 +9,16 @@
  * Also updates the `parties` JSON column in provenance_events to stay in sync.
  *
  * Usage:
- *   node scripts/writeback-party-disambiguation.mjs [--dry-run] [--db PATH] [--input PATH]
+ *   node scripts/writeback-party-disambiguation.mjs [--dry-run] [--db PATH] [--input PATH] [--id-remap]
  */
 
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
+import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const idRemap = parseIdRemapFlag(args);
 const dbPath = args.includes("--db") ? args[args.indexOf("--db") + 1] : "data/vocabulary.db";
 const inputPath = args.includes("--input") ? args[args.indexOf("--input") + 1] : "data/audit-party-disambiguation-2026-03-22.json";
 
@@ -58,6 +60,7 @@ if (dryRun) {
 
 const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
+const resolve = createIdResolver(db, idRemap);
 
 // Prepared statements
 const getParties = db.prepare(`
@@ -90,7 +93,7 @@ function positionToRole(position) {
   return null;
 }
 
-let splitsDone = 0, renamesDone = 0, deletesDone = 0, errors = 0;
+let splitsDone = 0, renamesDone = 0, deletesDone = 0, errors = 0, skippedRemap = 0;
 
 // Group items by event to avoid read-after-write conflicts when multiple
 // disambiguations target the same (artwork_id, sequence).
@@ -103,12 +106,14 @@ for (const item of items) {
 
 const writeBatch = db.transaction(() => {
   for (const [, eventItems] of byEvent) {
-    const { artwork_id, event_sequence: seq } = eventItems[0];
+    const { artwork_id, object_number, event_sequence: seq } = eventItems[0];
+    const artworkId = resolve(artwork_id, object_number);
+    if (artworkId == null) { skippedRemap += eventItems.length; continue; }
 
     // Read parties ONCE for this event
-    let currentParties = getParties.all(artwork_id, seq);
+    let currentParties = getParties.all(artworkId, seq);
     if (currentParties.length === 0) {
-      console.warn(`  WARN: No parties for artwork ${artwork_id} seq ${seq} — skipping ${eventItems.length} item(s)`);
+      console.warn(`  WARN: No parties for artwork ${artworkId} seq ${seq} — skipping ${eventItems.length} item(s)`);
       errors += eventItems.length;
       continue;
     }
@@ -136,7 +141,7 @@ const writeBatch = db.transaction(() => {
 
       const origEntry = partyList.find(p => p._origIdx === origIdx);
       if (!origEntry) {
-        console.warn(`  WARN: No party at idx ${origIdx} for artwork ${artwork_id} seq ${seq} — skipping`);
+        console.warn(`  WARN: No party at idx ${origIdx} for artwork ${artworkId} seq ${seq} — skipping`);
         errors++;
         hadError = true;
         continue;
@@ -176,17 +181,17 @@ const writeBatch = db.transaction(() => {
     }
 
     // Write the final party list to DB
-    deleteAllPartiesForEvent.run(artwork_id, seq);
+    deleteAllPartiesForEvent.run(artworkId, seq);
     for (let i = 0; i < partyList.length; i++) {
       const p = partyList[i];
-      insertParty.run(artwork_id, seq, i, p.party_name, p.party_dates, p.party_role, p.party_position, p.position_method, p.uncertain);
+      insertParty.run(artworkId, seq, i, p.party_name, p.party_dates, p.party_role, p.party_position, p.position_method, p.uncertain);
     }
     // Update JSON column
     const jsonParties = partyList.map(p => ({
       name: p.party_name, dates: p.party_dates, uncertain: !!p.uncertain,
       role: p.party_role, position: p.party_position,
     }));
-    updatePartiesJson.run(JSON.stringify(jsonParties), artwork_id, seq);
+    updatePartiesJson.run(JSON.stringify(jsonParties), artworkId, seq);
   }
 });
 
@@ -207,3 +212,4 @@ console.log(`  Splits:  ${splitsDone}`);
 console.log(`  Renames: ${renamesDone}`);
 console.log(`  Deletes: ${deletesDone}`);
 console.log(`  Errors:  ${errors}`);
+if (skippedRemap > 0) console.log(`  Skipped (id-remap): ${skippedRemap}`);

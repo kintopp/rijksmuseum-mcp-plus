@@ -15,18 +15,21 @@
  * For type classification, reasoning is stored on the event row.
  *
  * Usage:
- *   node scripts/backfill-enrichment-reasoning.mjs [--dry-run] [--db PATH]
+ *   node scripts/backfill-enrichment-reasoning.mjs [--dry-run] [--db PATH] [--id-remap]
  */
 
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
+import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const idRemap = parseIdRemapFlag(args);
 const dbPath = args.includes("--db") ? args[args.indexOf("--db") + 1] : "data/vocabulary.db";
 
 const db = new Database(dbPath, dryRun ? { readonly: true } : undefined);
 if (!dryRun) db.pragma("journal_mode = WAL");
+const resolve = createIdResolver(db, idRemap);
 
 const stats = { typeClass: 0, posEnrich: 0, posCat: 0, disambig: 0, rule: 0 };
 
@@ -52,9 +55,11 @@ const updatePartyReasoningByMethod = dryRun ? null : db.prepare(`
 console.log("1. Type classifications...");
 const typeData = JSON.parse(readFileSync("data/audit-type-classification-2026-03-22.json", "utf-8"));
 for (const r of typeData.results) {
+  const artworkId = resolve(r.data.artwork_id, r.data.object_number);
+  if (artworkId == null) continue;
   for (const cls of r.data.classifications) {
     if (!dryRun) {
-      const result = updateEventReasoning.run(cls.reasoning, r.data.artwork_id, cls.event_sequence);
+      const result = updateEventReasoning.run(cls.reasoning, artworkId, cls.event_sequence);
       stats.typeClass += result.changes;
     } else stats.typeClass++;
   }
@@ -70,21 +75,22 @@ function backfillPositionEnrichment(filePath, label) {
 
   for (const r of data.results) {
     if (r.error) continue;
-    const { artwork_id } = r.data;
+    const artworkId = resolve(r.data.artwork_id, r.data.object_number);
+    if (artworkId == null) continue;
     for (const enr of r.data.enrichments || []) {
       // Party position reasoning
       for (const pu of enr.party_updates || []) {
         const pos = pu.position;
         if (pos == null || pos === "null" || pos === "None") continue;
         if (!dryRun) {
-          const result = updatePartyReasoning.run(pu.reasoning, artwork_id, enr.event_sequence, pu.party_idx);
+          const result = updatePartyReasoning.run(pu.reasoning, artworkId, enr.event_sequence, pu.party_idx);
           posCount += result.changes;
         } else posCount++;
       }
       // Category reasoning
       if (enr.category_update) {
         if (!dryRun) {
-          const result = updateEventReasoning.run(enr.category_update.reasoning, artwork_id, enr.event_sequence);
+          const result = updateEventReasoning.run(enr.category_update.reasoning, artworkId, enr.event_sequence);
           catCount += result.changes;
         } else catCount++;
       }
@@ -107,7 +113,8 @@ function backfillDisambiguation(filePath, label) {
 
   for (const r of data.results) {
     if (r.error) continue;
-    const { artwork_id } = r.data;
+    const artworkId = resolve(r.data.artwork_id, r.data.object_number);
+    if (artworkId == null) continue;
     for (const d of r.data.disambiguations || []) {
       // Build a rich reasoning string that explains the full decomposition
       const parts = [`[${d.action}] ${d.reasoning}`];
@@ -123,7 +130,7 @@ function backfillDisambiguation(filePath, label) {
 
       // Apply to all llm_disambiguation parties in this event
       if (!dryRun) {
-        const result = updatePartyReasoningByMethod.run(fullReasoning, artwork_id, d.event_sequence);
+        const result = updatePartyReasoningByMethod.run(fullReasoning, artworkId, d.event_sequence);
         count += result.changes;
       } else count++;
     }

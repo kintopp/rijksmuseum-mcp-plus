@@ -14,15 +14,18 @@
  *   --db PATH        Vocab DB path (default: data/vocabulary.db)
  *   --input PATH     Audit JSON from --mode field-correction
  *   --min-confidence N  Minimum confidence threshold (default: 0.7)
+ *   --id-remap       Resolve object_number → art_id (use after re-harvest)
  */
 
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
+import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const idRemap = parseIdRemapFlag(args);
 const dbIdx = args.indexOf("--db");
 const dbPath = dbIdx >= 0 ? args[dbIdx + 1] : "data/vocabulary.db";
 const inputIdx = args.indexOf("--input");
@@ -94,6 +97,7 @@ const ISSUE_TO_METHOD = {
 
 const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
+const resolve = createIdResolver(db, idRemap);
 
 // Verify correction_method column exists (added by batch-parse-provenance.mjs schema)
 try {
@@ -129,9 +133,12 @@ const updatePartiesJson = db.prepare(
 let locationUpdated = 0;
 let partyInserted = 0;
 let notFound = 0;
+let skippedRemap = 0;
 
 const writeBatch = db.transaction((rows) => {
   for (const row of rows) {
+    const artworkId = resolve(row.artwork_id, row.object_number);
+    if (artworkId == null) { skippedRemap++; continue; }
     const method = ISSUE_TO_METHOD[row.issue_type] ?? `llm_structural:${row.issue_type}`;
 
     if (row.field === "location") {
@@ -139,7 +146,7 @@ const writeBatch = db.transaction((rows) => {
         row.corrected_value,
         method,
         row.reasoning,
-        row.artwork_id,
+        artworkId,
         row.event_sequence,
         row.current_value  // safety: only update if current value matches
       );
@@ -147,15 +154,15 @@ const writeBatch = db.transaction((rows) => {
         locationUpdated++;
       } else {
         notFound++;
-        console.warn(`  WARN: Location mismatch at artwork_id=${row.artwork_id} seq=${row.event_sequence} (expected "${row.current_value}")`);
+        console.warn(`  WARN: Location mismatch at artwork_id=${artworkId} seq=${row.event_sequence} (expected "${row.current_value}")`);
       }
     } else if (row.field === "parties" && row.new_party) {
       // Insert new party
-      const { max_idx } = getMaxPartyIdx.get(row.artwork_id, row.event_sequence);
+      const { max_idx } = getMaxPartyIdx.get(artworkId, row.event_sequence);
       const newIdx = max_idx + 1;
 
       insertPartyStmt.run(
-        row.artwork_id,
+        artworkId,
         row.event_sequence,
         newIdx,
         row.new_party.name,
@@ -165,7 +172,7 @@ const writeBatch = db.transaction((rows) => {
       );
 
       // Sync parties JSON on provenance_events
-      const evtRow = getPartiesJson.get(row.artwork_id, row.event_sequence);
+      const evtRow = getPartiesJson.get(artworkId, row.event_sequence);
       if (evtRow) {
         let parties;
         try { parties = JSON.parse(evtRow.parties || "[]"); } catch { parties = []; }
@@ -178,7 +185,7 @@ const writeBatch = db.transaction((rows) => {
           JSON.stringify(parties),
           method,
           row.reasoning,
-          row.artwork_id,
+          artworkId,
           row.event_sequence
         );
       }
@@ -208,4 +215,5 @@ console.log(`Results:`);
 console.log(`  Locations updated: ${locationUpdated}`);
 console.log(`  Parties inserted:  ${partyInserted}`);
 console.log(`  Not found/mismatch: ${notFound}`);
+if (skippedRemap > 0) console.log(`  Skipped (id-remap): ${skippedRemap}`);
 console.log(`  Version info updated.`);

@@ -15,15 +15,18 @@
  *   --db PATH        Vocab DB path (default: data/vocabulary.db)
  *   --input PATH     Audit JSON from --mode event-splitting
  *   --min-confidence N  Minimum confidence threshold (default: 0.7)
+ *   --id-remap       Resolve object_number → art_id (use after re-harvest)
  */
 
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
+import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const idRemap = parseIdRemapFlag(args);
 const dbIdx = args.indexOf("--db");
 const dbPath = dbIdx >= 0 ? args[dbIdx + 1] : "data/vocabulary.db";
 const inputIdx = args.indexOf("--input");
@@ -99,6 +102,7 @@ if (dryRun) {
 
 const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
+const resolve = createIdResolver(db, idRemap);
 
 // Verify correction_method column exists
 try {
@@ -296,7 +300,10 @@ const processArtwork = db.transaction((artworkId, splits) => {
   }
 });
 
-for (const [artworkId, { object_number, splits }] of splitsByArtwork) {
+let skippedRemap = 0;
+for (const [auditArtworkId, { object_number, splits }] of splitsByArtwork) {
+  const artworkId = resolve(auditArtworkId, object_number);
+  if (artworkId == null) { skippedRemap++; continue; }
   try {
     processArtwork(artworkId, splits);
     artworksProcessed++;
@@ -327,4 +334,5 @@ console.log(`Results:`);
 console.log(`  Artworks processed: ${artworksProcessed}`);
 console.log(`  Events inserted:    ${eventsInserted}`);
 console.log(`  Errors:             ${errors}`);
+if (skippedRemap > 0) console.log(`  Skipped (id-remap): ${skippedRemap}`);
 console.log(`  Version info updated.`);

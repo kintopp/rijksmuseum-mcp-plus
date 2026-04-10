@@ -74,46 +74,46 @@ These are case-by-case fixes that no script covers. Source: `scripts/manual-corr
 -- Item 1: RP-T-00-232(R) — lot number 1346 parsed as year
 UPDATE provenance_events SET date_year = NULL, date_expression = NULL,
   enrichment_reasoning = 'Date removed: 1346 is a lot number (no. 1346), not a year. Artwork created 1640-1649.'
-WHERE artwork_id = 44310 AND sequence = 1;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'RP-T-00-232(R)') AND sequence = 1;
 UPDATE provenance_periods SET begin_year = NULL
-WHERE artwork_id = 44310 AND sequence = 1 AND begin_year = 1346;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'RP-T-00-232(R)') AND sequence = 1 AND begin_year = 1346;
 
 -- Item 3a: RP-T-1947-25 seq 11 — unsold auction without 'sale' prefix → sale
 UPDATE provenance_events SET transfer_type = 'sale', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Auction event at Gilhofer & Ranschburg with lot number — sale context despite missing "sale" prefix.'
-WHERE artwork_id = 13609 AND sequence = 11;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'RP-T-1947-25') AND sequence = 11;
 
 -- Item 3b: SK-A-345 seq 2 — false unsold flag on collection event
-UPDATE provenance_events SET unsold = 0 WHERE artwork_id = 173085 AND sequence = 2;
+UPDATE provenance_events SET unsold = 0 WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'SK-A-345') AND sequence = 2;
 
 -- Item 3c: SK-C-128 seq 1 — false unsold flag on loan event
-UPDATE provenance_events SET unsold = 0 WHERE artwork_id = 190572 AND sequence = 1;
+UPDATE provenance_events SET unsold = 0 WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'SK-C-128') AND sequence = 1;
 
 -- Item 4: AK-MAK-179 seq 3 — post-auction sale misclassified as unknown
 UPDATE provenance_events SET transfer_type = 'sale', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Reclassified: "bought in by Cassirer from whom, RM. 800, to the Vereniging" is a post-auction sale.'
-WHERE artwork_id = 152446 AND sequence = 3;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'AK-MAK-179') AND sequence = 3;
 
 -- Item 5: BK-NM-9720 seq 1 — bibliographic reference
 UPDATE provenance_events SET enrichment_reasoning = 'Bibliographic reference (De Gruyter 2010, p. 291) — not a provenance event.'
-WHERE artwork_id = 277996 AND sequence = 1;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'BK-NM-9720') AND sequence = 1;
 
 -- Item 6: BK-C-2018-2 seq 1 — object-part cross-reference
 UPDATE provenance_events SET is_cross_ref = 1,
   enrichment_reasoning = 'Object-part cross-reference label (BK-KOG-585 top section).'
-WHERE artwork_id = 816454 AND sequence = 1;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'BK-C-2018-2') AND sequence = 1;
 
 -- Item 7: E.C. Lorentz — bare name → collection
 UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Bare name in AAM convention — E.C. Lorentz held the artwork before passing it to his niece P. van Gilst.'
-WHERE artwork_id = 118239 AND sequence = 1;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'NG-2020-17') AND sequence = 1;
 
 -- Item 8: Charter Room parties — locations, not parties
 DELETE FROM provenance_parties WHERE party_name IN ('Charter Room in Leiden Town Hall', 'the Charter Room of this institution');
--- Then rebuild parties JSON for affected events (artwork_ids: 10076, 10991, 199081, 204376, 8606)
+-- Then rebuild parties JSON for affected events (object_numbers: SK-A-3741, SK-C-1477, SK-A-3742, SK-C-509, SK-A-177)
 ```
 
 ## Step 5: Credit-line reclassifications
@@ -127,52 +127,52 @@ Source: commit dd9999c, reconstructed from DB state 2026-04-02.
 UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Bare name with Lugt number (L.2987) and life dates — AAM convention for a collector/owner. Credit-line heuristic misclassified as purchase.'
-WHERE artwork_id = 21712 AND sequence = 1 AND parse_method = 'credit_line';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'RP-T-1967-90') AND sequence = 1 AND parse_method = 'credit_line';
 
 -- 5b. AK-MAK-361 — exchange, not purchase
 UPDATE provenance_events SET transfer_type = 'exchange', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Text explicitly states "partly in exchange for an unknown object". Credit-line heuristic misclassified as purchase.'
-WHERE artwork_id = 148342 AND sequence = 2 AND parse_method = 'credit_line';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'AK-MAK-361') AND sequence = 2 AND parse_method = 'credit_line';
 
 -- 5c. AK-MAK-1293 — citation fragment leak, not a provenance event
 UPDATE provenance_events SET transfer_type = 'unknown', transfer_category = 'ambiguous',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Citation fragment leak ("Note RMA.") — not a provenance event. Credit-line heuristic misclassified as purchase.'
-WHERE artwork_id = 150495 AND sequence = 4 AND parse_method = 'credit_line';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'AK-MAK-1293') AND sequence = 4 AND parse_method = 'credit_line';
 
 -- 5d. BK-1970-99 — physical event description, not ownership transfer
 UPDATE provenance_events SET transfer_type = 'unknown', transfer_category = 'ambiguous',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Physical event description (pulpit dismantled, 1874) — not an ownership transfer. Credit-line heuristic misclassified as purchase.'
-WHERE artwork_id = 275981 AND sequence = 2 AND parse_method = 'credit_line';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'BK-1970-99') AND sequence = 2 AND parse_method = 'credit_line';
 
 -- 5e. RP-P-1995-1 — bare name with city → collection
 UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Bare name with city (Schweinfurt) — AAM convention for a collector/owner. Credit-line heuristic misclassified as purchase.'
-WHERE artwork_id = 291046 AND sequence = 1 AND parse_method = 'credit_line';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'RP-P-1995-1') AND sequence = 1 AND parse_method = 'credit_line';
 
 -- 5f. RP-P-1997-116 — bare name → collection
 UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Bare name — collector/owner. Credit-line heuristic misclassified as purchase.'
-WHERE artwork_id = 329004 AND sequence = 2 AND parse_method = 'credit_line';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'RP-P-1997-116') AND sequence = 2 AND parse_method = 'credit_line';
 
 -- 5g. BK-NM-10513 — provenance origin from building facade → collection
 UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Uncertain provenance origin from a building facade — describes where the object was found, not a sale. Credit-line heuristic misclassified as purchase.'
-WHERE artwork_id = 556616 AND sequence = 1 AND parse_method = 'credit_line';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'BK-NM-10513') AND sequence = 1 AND parse_method = 'credit_line';
 
 -- 5h. RP-P-2021-37 — bare name → collection
 UPDATE provenance_events SET transfer_type = 'collection', transfer_category = 'ownership',
   category_method = 'llm_enrichment',
   enrichment_reasoning = 'Bare name — collector/owner. Credit-line heuristic misclassified as purchase.'
-WHERE artwork_id = 727109 AND sequence = 1 AND parse_method = 'credit_line';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'RP-P-2021-37') AND sequence = 1 AND parse_method = 'credit_line';
 
 -- 5i. RP-T-2025-20 — confirmed correct (sale to art dealer). No correction needed.
--- artwork_id = 813082, sequence = 2.
+-- object_number = RP-T-2025-20, sequence = 2.
 ```
 
 ## Step 6: Party corrections from null-position cleanup
@@ -186,44 +186,44 @@ They will be restored automatically when those writebacks re-run. The correction
 ones that were applied as ad-hoc SQL and are NOT covered by any writeback script.
 
 ```sql
--- 6a. BK-NM-8477 (artwork_id=50272) seq 2 — extract receiver "museum" from event text
+-- 6a. BK-NM-8477 seq 2 — extract receiver "museum" from event text
 --     Parser's parseRest() missed the tail party "to the museum".
 INSERT OR IGNORE INTO provenance_parties (artwork_id, sequence, party_idx, party_name,
   party_role, party_position, position_method, enrichment_reasoning)
-VALUES (50272, 2, 1, 'museum', 'buyer', 'receiver', 'llm_enrichment',
+VALUES ((SELECT art_id FROM artworks WHERE object_number = 'BK-NM-8477'), 2, 1, 'museum', 'buyer', 'receiver', 'llm_enrichment',
   'Extracted from event text: receiver "museum" found in "to the/to [Name]" pattern. Parser''s parseRest() missed this tail party.');
 
--- 6b. NG-2020-17 (artwork_id=118239) seq 1 — bare name E.C. Lorentz → receiver
+-- 6b. NG-2020-17 seq 1 — bare name E.C. Lorentz → receiver
 UPDATE provenance_parties SET party_position = 'receiver',
   position_method = 'llm_enrichment',
   enrichment_reasoning = 'Bare name in unknown event — person who held the artwork (receiver in AAM bare-name convention).'
-WHERE artwork_id = 118239 AND sequence = 1 AND party_name = 'E.C. Lorentz';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'NG-2020-17') AND sequence = 1 AND party_name = 'E.C. Lorentz';
 
--- 6c. SK-A-484 (artwork_id=182809) seq 5 — rename price fragment out of party name
+-- 6c. SK-A-484 seq 5 — rename price fragment out of party name
 UPDATE provenance_parties SET party_name = 'John Smith',
   party_position = 'agent', position_method = 'llm_enrichment',
   enrichment_reasoning = 'Renamed from "200 gns by the dealer John Smith" — price fragment (200 gns) merged into party name by parser. John Smith is the dealer (agent).'
-WHERE artwork_id = 182809 AND sequence = 5 AND party_idx = 0;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'SK-A-484') AND sequence = 5 AND party_idx = 0;
 
--- 6d. SK-A-1928 (artwork_id=194553) seq 10 — rename Reaelen-eiland out of party name
+-- 6d. SK-A-1928 seq 10 — rename Reaelen-eiland out of party name
 UPDATE provenance_parties SET party_name = 'Jan van Andel',
   party_position = 'receiver', position_method = 'llm_enrichment',
   enrichment_reasoning = 'Renamed from "Reaelen-eiland to Jan van Andel" — Reaelen-eiland is a location/estate ("sold with Reaelen-eiland"), Jan van Andel (Burgomaster of Vreeland) is the buyer.'
-WHERE artwork_id = 194553 AND sequence = 10 AND party_idx = 0;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'SK-A-1928') AND sequence = 10 AND party_idx = 0;
 
--- 6e. SK-A-1928 (artwork_id=194553) seq 11 — rename Realen-eiland out of party name
+-- 6e. SK-A-1928 seq 11 — rename Realen-eiland out of party name
 UPDATE provenance_parties SET party_name = 'Gerrit Gijsbertus van den Andel',
   party_position = 'receiver', position_method = 'llm_enrichment',
   enrichment_reasoning = 'Renamed from "Realen-eiland to his son Gerrit Gijsbertus van den Andel" — Realen-eiland is a location/estate, Gerrit Gijsbertus van den Andel is the heir ("his son").'
-WHERE artwork_id = 194553 AND sequence = 11 AND party_idx = 0;
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'SK-A-1928') AND sequence = 11 AND party_idx = 0;
 
--- 6f. BK-NM-8476 (artwork_id=50261) — Zierikzee city name → receiver
+-- 6f. BK-NM-8476 — Zierikzee city name → receiver
 --     Zierikzee is a city, not a person, but in AAM bare-name convention it indicates
 --     prior ownership/holding. Assigned position rather than deleted.
 UPDATE provenance_parties SET party_position = 'receiver',
   position_method = 'llm_enrichment',
   enrichment_reasoning = 'Zierikzee is a city name. Given the AAM bare-name convention and the subsequent donation event suggesting prior ownership, this likely indicates the artwork was held/owned by someone in Zierikzee. Following AAM convention, the named location represents the receiver/holder.'
-WHERE artwork_id = 50261 AND sequence = 1 AND party_name = 'Zierikzee';
+WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'BK-NM-8476') AND sequence = 1 AND party_name = 'Zierikzee';
 ```
 
 ## Step 7: LLM structural corrections

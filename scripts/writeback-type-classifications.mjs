@@ -12,16 +12,19 @@
  *   --db PATH        Vocab DB path (default: data/vocabulary.db)
  *   --input PATH     Classification JSON (default: data/audit-type-classification-2026-03-22.json)
  *   --min-confidence N  Minimum confidence threshold (default: 0.7)
+ *   --id-remap       Resolve object_number → art_id (use after re-harvest when artwork_ids change)
  */
 
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { TRANSFER_TYPE_TO_CATEGORY } from "../dist/provenance.js";
+import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const idRemap = parseIdRemapFlag(args);
 const dbIdx = args.indexOf("--db");
 const dbPath = dbIdx >= 0 ? args[dbIdx + 1] : "data/vocabulary.db";
 const inputIdx = args.indexOf("--input");
@@ -48,9 +51,9 @@ console.log();
 // Flatten all classifications
 const allClassifications = [];
 for (const result of data.results) {
-  const { artwork_id } = result.data;
+  const { artwork_id, object_number } = result.data;
   for (const cls of result.data.classifications) {
-    allClassifications.push({ artwork_id, ...cls });
+    allClassifications.push({ artwork_id, object_number, ...cls });
   }
 }
 
@@ -94,6 +97,7 @@ if (dryRun) {
 
 const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
+const resolve = createIdResolver(db, idRemap);
 
 const updateStmt = db.prepare(`
   UPDATE provenance_events
@@ -104,20 +108,24 @@ const updateStmt = db.prepare(`
 let updated = 0;
 let notFound = 0;
 
+let skippedRemap = 0;
+
 const writeBatch = db.transaction((rows) => {
   for (const row of rows) {
+    const artworkId = resolve(row.artwork_id, row.object_number);
+    if (artworkId == null) { skippedRemap++; continue; }
     const category = TRANSFER_TYPE_TO_CATEGORY[row.transfer_type] ?? null;
     const result = updateStmt.run(
       row.transfer_type,
       category,
-      row.artwork_id,
+      artworkId,
       row.event_sequence
     );
     if (result.changes > 0) {
       updated++;
     } else {
       notFound++;
-      console.warn(`  WARN: No unknown event at artwork_id=${row.artwork_id} seq=${row.event_sequence}`);
+      console.warn(`  WARN: No unknown event at artwork_id=${artworkId} seq=${row.event_sequence}`);
     }
   }
 });
@@ -140,4 +148,5 @@ db.close();
 console.log(`Results:`);
 console.log(`  Updated:   ${updated}`);
 console.log(`  Not found: ${notFound} (already reclassified or missing)`);
+if (skippedRemap > 0) console.log(`  Skipped (id-remap): ${skippedRemap}`);
 console.log(`  Version info updated.`);

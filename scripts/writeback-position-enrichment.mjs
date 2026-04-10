@@ -7,14 +7,16 @@
  * Skips null/None positions (parser artifacts — handled by disambiguation script).
  *
  * Usage:
- *   node scripts/writeback-position-enrichment.mjs [--dry-run] [--db PATH] [--input PATH]
+ *   node scripts/writeback-position-enrichment.mjs [--dry-run] [--db PATH] [--input PATH] [--id-remap]
  */
 
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
+import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const idRemap = parseIdRemapFlag(args);
 const dbPath = args.includes("--db") ? args[args.indexOf("--db") + 1] : "data/vocabulary.db";
 const inputPath = args.includes("--input") ? args[args.indexOf("--input") + 1] : "data/audit-position-enrichment-2026-03-22.json";
 
@@ -33,7 +35,7 @@ const categoryUpdates = [];
 
 for (const r of data.results) {
   if (r.error) continue;
-  const { artwork_id } = r.data;
+  const { artwork_id, object_number } = r.data;
 
   for (const enr of r.data.enrichments || []) {
     const seq = enr.event_sequence;
@@ -47,7 +49,7 @@ for (const r of data.results) {
         continue;
       }
       positionUpdates.push({
-        artwork_id,
+        artwork_id, object_number,
         sequence: seq,
         party_idx: pu.party_idx,
         position: pos,
@@ -62,7 +64,7 @@ for (const r of data.results) {
         continue;
       }
       categoryUpdates.push({
-        artwork_id,
+        artwork_id, object_number,
         sequence: seq,
         category: cu.category,
         confidence: cu.confidence,
@@ -92,6 +94,7 @@ if (dryRun) {
 
 const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
+const resolve = createIdResolver(db, idRemap);
 
 const updatePosition = db.prepare(`
   UPDATE provenance_parties
@@ -107,18 +110,22 @@ const updateCategory = db.prepare(`
     AND transfer_category = 'ambiguous'
 `);
 
-let posUpdated = 0, posSkipped = 0;
+let posUpdated = 0, posSkipped = 0, skippedRemap = 0;
 let catUpdated = 0, catSkipped = 0;
 
 const writeBatch = db.transaction(() => {
   for (const u of positionUpdates) {
-    const result = updatePosition.run(u.position, u.artwork_id, u.sequence, u.party_idx);
+    const artworkId = resolve(u.artwork_id, u.object_number);
+    if (artworkId == null) { skippedRemap++; continue; }
+    const result = updatePosition.run(u.position, artworkId, u.sequence, u.party_idx);
     if (result.changes > 0) posUpdated++;
     else posSkipped++;
   }
 
   for (const u of categoryUpdates) {
-    const result = updateCategory.run(u.category, u.artwork_id, u.sequence);
+    const artworkId = resolve(u.artwork_id, u.object_number);
+    if (artworkId == null) { skippedRemap++; continue; }
+    const result = updateCategory.run(u.category, artworkId, u.sequence);
     if (result.changes > 0) catUpdated++;
     else catSkipped++;
   }
@@ -137,3 +144,4 @@ db.close();
 console.log(`Results:`);
 console.log(`  Positions: ${posUpdated} updated, ${posSkipped} skipped (already set or missing)`);
 console.log(`  Categories: ${catUpdated} updated, ${catSkipped} skipped`);
+if (skippedRemap > 0) console.log(`  Skipped (id-remap): ${skippedRemap}`);

@@ -14,15 +14,18 @@
  *   --db PATH        Vocab DB path (default: data/vocabulary.db)
  *   --input PATH     Audit JSON from --mode event-reclassification
  *   --min-confidence N  Minimum confidence threshold (default: 0.7)
+ *   --id-remap       Resolve object_number → art_id (use after re-harvest)
  */
 
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
+import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const idRemap = parseIdRemapFlag(args);
 const dbIdx = args.indexOf("--db");
 const dbPath = dbIdx >= 0 ? args[dbIdx + 1] : "data/vocabulary.db";
 const inputIdx = args.indexOf("--input");
@@ -89,6 +92,7 @@ const ISSUE_TO_METHOD = {
 
 const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
+const resolve = createIdResolver(db, idRemap);
 
 // Verify correction_method column exists
 try {
@@ -127,45 +131,48 @@ let marked = 0;
 let merged = 0;
 let deleted = 0;
 let errors = 0;
+let skippedRemap = 0;
 
 const writeBatch = db.transaction((rows) => {
   for (const row of rows) {
+    const artworkId = resolve(row.artwork_id, row.object_number);
+    if (artworkId == null) { skippedRemap++; continue; }
     const method = ISSUE_TO_METHOD[row.issue_type] ?? `llm_structural:${row.issue_type}`;
 
     if (row.action === "mark_non_provenance") {
-      const result = markNonProvStmt.run(method, row.reasoning, row.artwork_id, row.event_sequence);
+      const result = markNonProvStmt.run(method, row.reasoning, artworkId, row.event_sequence);
       if (result.changes > 0) marked++;
-      else { errors++; console.warn(`  WARN: No event at artwork_id=${row.artwork_id} seq=${row.event_sequence}`); }
+      else { errors++; console.warn(`  WARN: No event at artwork_id=${artworkId} seq=${row.event_sequence}`); }
 
     } else if (row.action === "merge_with_adjacent") {
       if (row.merge_target_sequence == null) {
         errors++;
-        console.warn(`  WARN: merge_with_adjacent missing merge_target_sequence at artwork_id=${row.artwork_id} seq=${row.event_sequence}`);
+        console.warn(`  WARN: merge_with_adjacent missing merge_target_sequence at artwork_id=${artworkId} seq=${row.event_sequence}`);
         continue;
       }
       // Update target event if field updates provided
       if (row.merge_field_updates?.location) {
-        updateTargetLocationStmt.run(row.merge_field_updates.location, method, row.reasoning, row.artwork_id, row.merge_target_sequence);
+        updateTargetLocationStmt.run(row.merge_field_updates.location, method, row.reasoning, artworkId, row.merge_target_sequence);
       }
       // Delete source event + its parties
-      deletePartiesStmt.run(row.artwork_id, row.event_sequence);
-      const result = deleteEventStmt.run(row.artwork_id, row.event_sequence);
+      deletePartiesStmt.run(artworkId, row.event_sequence);
+      const result = deleteEventStmt.run(artworkId, row.event_sequence);
       if (result.changes > 0) { merged++; deleted++; }
-      else { errors++; console.warn(`  WARN: No event to delete at artwork_id=${row.artwork_id} seq=${row.event_sequence}`); }
+      else { errors++; console.warn(`  WARN: No event to delete at artwork_id=${artworkId} seq=${row.event_sequence}`); }
 
     } else if (row.action === "merge_alternatives") {
       if (row.merge_target_sequence == null) {
         errors++;
-        console.warn(`  WARN: merge_alternatives missing merge_target_sequence at artwork_id=${row.artwork_id} seq=${row.event_sequence}`);
+        console.warn(`  WARN: merge_alternatives missing merge_target_sequence at artwork_id=${artworkId} seq=${row.event_sequence}`);
         continue;
       }
       // Set uncertain on target
-      setUncertainStmt.run(method, row.reasoning, row.artwork_id, row.merge_target_sequence);
+      setUncertainStmt.run(method, row.reasoning, artworkId, row.merge_target_sequence);
       // Delete alternative event + its parties
-      deletePartiesStmt.run(row.artwork_id, row.event_sequence);
-      const result = deleteEventStmt.run(row.artwork_id, row.event_sequence);
+      deletePartiesStmt.run(artworkId, row.event_sequence);
+      const result = deleteEventStmt.run(artworkId, row.event_sequence);
       if (result.changes > 0) { merged++; deleted++; }
-      else { errors++; console.warn(`  WARN: No event to delete at artwork_id=${row.artwork_id} seq=${row.event_sequence}`); }
+      else { errors++; console.warn(`  WARN: No event to delete at artwork_id=${artworkId} seq=${row.event_sequence}`); }
     }
   }
 });
@@ -192,4 +199,5 @@ console.log(`  Marked non_provenance: ${marked}`);
 console.log(`  Merged (deleted):      ${merged}`);
 console.log(`  Events deleted:        ${deleted}`);
 console.log(`  Errors:                ${errors}`);
+if (skippedRemap > 0) console.log(`  Skipped (id-remap):    ${skippedRemap}`);
 console.log(`  Version info updated.`);
