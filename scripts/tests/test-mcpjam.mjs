@@ -7,7 +7,6 @@
 import { MCPClientManager } from "@mcpjam/sdk";
 
 const SERVER_ID = "rijksmuseum";
-let manager;
 let passed = 0;
 let failed = 0;
 const failures = [];
@@ -31,13 +30,15 @@ function section(name) {
 
 // ── Connect ───────────────────────────────────────────────────────
 
-manager = new MCPClientManager();
+const manager = new MCPClientManager();
 await manager.connectToServer(SERVER_ID, {
   command: "node",
   args: ["dist/index.js"],
   env: { ...process.env, STRUCTURED_CONTENT: "true", ENABLE_FIND_SIMILAR: "true" },
 });
 console.log("Connected to server via mcpjam MCPClientManager\n");
+
+try {
 
 // ══════════════════════════════════════════════════════════════════
 //  1. Tool listing
@@ -123,7 +124,7 @@ assert(detailText.includes("Nachtwacht") || detailText.includes("Night Watch"), 
 assert(detailText.includes("Rembrandt"), "Details include creator");
 
 // ══════════════════════════════════════════════════════════════════
-//  6. collection_stats — no filters
+//  6. collection_stats — type dimension
 // ══════════════════════════════════════════════════════════════════
 
 section("6. collection_stats — type dimension");
@@ -222,8 +223,9 @@ assert(imageText.includes("viewUUID") || imageText.includes("viewer"), "Response
 
 section("13. get_recent_changes");
 
+const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 const changesResult = await manager.executeTool(SERVER_ID, "get_recent_changes", {
-  from: "2026-04-01",
+  from: thirtyDaysAgo,
   maxResults: 3,
 });
 const changesText = changesResult.content?.[0]?.text ?? "";
@@ -246,6 +248,10 @@ assert(badResult.isError === true, "Unknown param 'bogusParam' is rejected by st
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 
+} finally {
+  await manager.disconnectServer(SERVER_ID);
+}
+
 console.log(`\n${"═".repeat(60)}`);
 console.log(`  Results: ${passed} passed, ${failed} failed`);
 if (failures.length) {
@@ -254,5 +260,4 @@ if (failures.length) {
 }
 console.log(`${"═".repeat(60)}\n`);
 
-await manager.disconnectServer(SERVER_ID);
 process.exit(failed > 0 ? 1 : 0);
