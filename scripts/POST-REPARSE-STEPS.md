@@ -230,11 +230,16 @@ WHERE artwork_id = (SELECT art_id FROM artworks WHERE object_number = 'BK-NM-847
 
 These restore LLM-based structural corrections from audit JSON files.
 Order within: field corrections first (don't depend on sequence numbers),
-then reclassifications (may delete events), then splits (renumber sequences).
+then party extraction (adds parties to existing events), then reclassifications
+(may delete events), then splits (renumber sequences).
 
 ```bash
 # 7a. Field corrections: locations + missing receivers (~55 events)
 node scripts/writeback-field-corrections.mjs --input data/audit/audit-field-correction-2026-03-25.json
+
+# 7d. Party extraction: extract parties from events with 0 extracted parties (#116 edge cases)
+#     Output uses the same format as 7a (missing_receiver actions) — fed through field-corrections writeback
+node scripts/writeback-field-corrections.mjs --input data/audit/audit-party-extraction-<DATE>.json
 
 # 7b. Event reclassifications: phantoms, location-as-event, alternatives (~25 events)
 node scripts/writeback-event-reclassification.mjs --input data/audit/audit-event-reclassification-2026-03-25.json
@@ -243,7 +248,23 @@ node scripts/writeback-event-reclassification.mjs --input data/audit/audit-event
 node scripts/writeback-event-splitting.mjs --input data/audit/audit-event-splitting-2026-03-25.json
 ```
 
-**Order rationale:** 7a modifies fields on existing events (safe). 7b deletes/merges events (may affect event counts but not sequences used by 7c). 7c renumbers sequences per artwork (must run last because it rebuilds the sequence space).
+**Order rationale:** 7a modifies fields on existing events (safe). 7d adds parties to events with no parties (safe, same writeback as 7a). 7b deletes/merges events (may affect event counts but not sequences used by 7c). 7c renumbers sequences per artwork (must run last because it rebuilds the sequence space).
+
+**Generating 7d audit JSON:**
+```bash
+ANTHROPIC_API_KEY=$(eval $(grep ANTHROPIC_API_KEY ~/.env | head -1) && echo "$ANTHROPIC_API_KEY") \
+  node scripts/audit-provenance-batch.mjs --mode party-extraction --sample-size 200
+```
+
+## Orphan Vocab Audit (harvest v0.24+)
+
+After Phase 4 but before Phase 3, the harvest script exports orphan vocab IDs to
+`data/audit/orphan-vocab-ids-v0.24.csv`. Review this file — any legitimate AAT codes
+should be added to `EXTERNAL_VOCAB` in `harvest-vocabulary-db.py` and re-seeded
+(Phase 0 is idempotent) before running Phase 3.
+
+Phase 3's integer-encoding JOIN silently drops orphan mappings, so this step
+prevents data loss.
 
 ## Verification
 

@@ -1,7 +1,7 @@
 /**
  * Automated provenance parser audit via Anthropic Message Batches API.
  *
- * Nine audit modes:
+ * Ten audit modes:
  *   silent-errors        Sample clean parses, find what the parser silently missed
  *   pattern-mining       Sample unknowns, find recurring grammar-fixable patterns
  *   semantic-catalogue   Sample hard cases, classify what KIND of reasoning is needed
@@ -11,6 +11,7 @@
  *   field-correction     Correct truncated/wrong locations and missing receivers
  *   event-reclassification  Reclassify phantom events, location labels, alternatives
  *   event-splitting      Split merged multi-transfer events into atomic events
+ *   party-extraction     Extract missing parties from events with zero extracted parties (#116)
  *
  * Usage:
  *   node scripts/audit-provenance-batch.mjs --mode <mode> [options]
@@ -36,7 +37,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // ─── Modes ──────────────────────────────────────────────────────────
 
-const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification", "field-correction", "event-reclassification", "event-splitting"];
+const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification", "field-correction", "event-reclassification", "event-splitting", "party-extraction"];
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -2171,6 +2172,232 @@ function printEventSplittingReport(report) {
 }
 
 
+// ─── Party Extraction (mode 7d) — #116 edge cases ────────────────
+
+function samplePartyExtraction() {
+  const db = openDb();
+  let artworkIds;
+  const corrFilter = hasCorrectionColumn() ? "AND pe.correction_method IS NULL" : "";
+
+  if (recordsList) {
+    artworkIds = lookupArtworkIds(recordsList);
+  } else {
+    // #116 remaining edge cases: transfer events with 0 extracted parties
+    // that likely need world knowledge to identify sender/receiver
+    artworkIds = db.prepare(`
+      SELECT DISTINCT pe.artwork_id FROM provenance_events pe
+      WHERE pe.transfer_type IN ('sale', 'gift', 'bequest', 'transfer', 'exchange', 'collection')
+        AND pe.is_cross_ref = 0
+        ${corrFilter}
+        AND NOT EXISTS (
+          SELECT 1 FROM provenance_parties pp
+          WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence
+        )
+        AND pe.raw_text IS NOT NULL AND LENGTH(pe.raw_text) > 10
+      ORDER BY RANDOM() LIMIT ?
+    `).all(sampleSize).map(r => r.artwork_id);
+  }
+  return fetchRecords(artworkIds, { periods: false });
+}
+
+const TOOL_PARTY_EXTRACTION = {
+  name: "report_party_extraction",
+  description: "Extract parties (sender, receiver, agent) from provenance events where the parser found no parties",
+  input_schema: {
+    type: "object",
+    properties: {
+      artwork_id: { type: "integer" },
+      object_number: { type: "string" },
+      extractions: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            event_sequence: { type: "integer" },
+            issue_type: {
+              type: "string",
+              enum: ["missing_all_parties", "missing_receiver", "missing_sender"],
+            },
+            parties: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  role: { type: ["string", "null"], enum: ["buyer", "seller", "recipient", "donor", "heir", "collector", "agent", null] },
+                  position: { type: "string", enum: ["sender", "receiver", "agent"] },
+                },
+                required: ["name", "position"],
+              },
+            },
+            raw_text_quote: { type: "string", description: "Relevant excerpt from raw text" },
+            confidence: { type: "number", description: "0.0-1.0" },
+            reasoning: { type: "string" },
+          },
+          required: ["event_sequence", "issue_type", "parties", "raw_text_quote", "confidence", "reasoning"],
+        },
+      },
+      no_extraction_possible: {
+        type: "array",
+        items: { type: "integer" },
+        description: "Sequence numbers of events where no parties can be identified from the text",
+      },
+    },
+    required: ["artwork_id", "object_number", "extractions", "no_extraction_possible"],
+  },
+};
+
+function buildPromptPartyExtraction(record) {
+  const eventsXml = buildEventsXml(record);
+
+  // Find candidate events (transfer events with no parties)
+  const candidates = record.events.filter(e => {
+    if (e.is_cross_ref) return false;
+    const parties = safeJson(e.parties) || [];
+    return ["sale", "gift", "bequest", "transfer", "exchange", "collection"].includes(e.transfer_type) &&
+      parties.length === 0 &&
+      e.raw_text && e.raw_text.length > 10;
+  });
+
+  const candidatesXml = candidates.map(e =>
+    `    <candidate sequence="${e.sequence}" type="${e.transfer_type}">${(e.raw_text || "").slice(0, 200)}</candidate>`
+  ).join("\n");
+
+  return `<role>You are a provenance researcher extracting party information from Rijksmuseum provenance records. The parser has already identified these as transfer events, but could not extract any parties. Your task is to identify who transferred the artwork and to whom, using the raw text and the full provenance chain for context.</role>
+
+<background>
+<aam_standard>
+The provenance text follows the AAM (American Alliance of Museums, 2001) convention:
+- Semicolons (;) separate events in chronological order (earliest → present)
+- Each segment names the new holder (receiver); the previous segment's party is implicitly the sender
+- "from X to Y" = X is sender, Y is receiver
+- A bare name with dates and location = the person/institution held the artwork (receiver)
+- "sale, City (Auction House), date" = auction house is agent, buyer may be in "to" clause
+</aam_standard>
+
+<context>
+These are edge cases where the parser found NO parties at all. Common reasons:
+1. The party name contains unusual characters or formatting the parser couldn't handle
+2. The event describes a transfer using oblique references ("to the above", "his widow")
+3. The party is an institution whose name was not recognized
+4. The text uses abbreviations or references to other events
+</context>
+</background>
+
+<artwork>
+Object number: ${record.objectNumber} (artwork_id: ${record.artworkId})
+</artwork>
+
+<raw_provenance>
+${record.provenanceText}
+</raw_provenance>
+
+<all_events>
+${eventsXml}
+</all_events>
+
+<candidate_events>
+${candidatesXml}
+</candidate_events>
+
+<examples>
+<example>
+<context>Bare name with no parties extracted</context>
+<event sequence="2" type="collection">
+  <raw_text>Adriaen van der Willigen (1766-1841), Haarlem</raw_text>
+</event>
+<extraction>
+  <party name="Adriaen van der Willigen" role="collector" position="receiver" />
+  <confidence>0.95</confidence>
+  <reasoning>Bare name in AAM convention — the named person held the artwork. Life dates and city confirm this is a collector.</reasoning>
+</extraction>
+</example>
+
+<example>
+<context>Oblique reference to previous event</context>
+<event sequence="5" type="bequest">
+  <raw_text>bequeathed to his widow, 1834</raw_text>
+</event>
+<extraction>
+  <party name="his widow" role="heir" position="receiver" />
+  <confidence>0.70</confidence>
+  <reasoning>"bequeathed to his widow" — the receiver is "his widow" (referring to the previous holder's wife). The name is not specific but this is the best we can extract from the text.</reasoning>
+</extraction>
+</example>
+
+<example>
+<context>No parties identifiable</context>
+<event sequence="3" type="sale">
+  <raw_text>sale</raw_text>
+</event>
+<no_extraction sequence="3" />
+</example>
+</examples>
+
+<task>
+For EACH event in candidate_events, try to extract parties by analyzing the raw text and its position in the full provenance chain.
+
+Report extractions using the report_party_extraction tool. For events where no parties can be identified even with context, include them in no_extraction_possible.
+
+This output will be fed into the field-corrections writeback (mode 7a) with issue_type "missing_receiver" actions. Format party extractions accordingly.
+
+Confidence calibration:
+- ≥ 0.9 — raw text explicitly names the party
+- 0.7–0.9 — clear from context but requires interpretation (oblique references, abbreviations)
+- 0.5–0.7 — ambiguous, party identity uncertain
+- < 0.5 — skip (include in no_extraction_possible instead)
+</task>`;
+}
+
+function aggregatePartyExtraction(results) {
+  const byIssue = {};
+  let totalExtractions = 0;
+  let totalPartiesFound = 0;
+  let totalChecked = 0;
+  let highConfidence = 0;
+  const allExtractions = [];
+
+  for (const r of results) {
+    if (r.error || !r.data) continue;
+    const { extractions = [], no_extraction_possible = [] } = r.data;
+    totalChecked += extractions.length + no_extraction_possible.length;
+    for (const ex of extractions) {
+      totalExtractions++;
+      totalPartiesFound += (ex.parties?.length ?? 0);
+      byIssue[ex.issue_type] = (byIssue[ex.issue_type] || 0) + 1;
+      if (ex.confidence >= 0.8) highConfidence++;
+      allExtractions.push({
+        objectNumber: r.data.object_number,
+        ...ex,
+      });
+    }
+  }
+  return { totalExtractions, totalPartiesFound, totalChecked, highConfidence, byIssue, allExtractions };
+}
+
+function printPartyExtractionReport(report) {
+  console.log(`\n## Party Extraction (${report.totalExtractions} extractions, ${report.totalPartiesFound} parties from ${report.totalChecked} candidates)\n`);
+  console.log(`| Metric | Value |`);
+  console.log(`|--------|-------|`);
+  console.log(`| Total extractions | ${report.totalExtractions} |`);
+  console.log(`| Total parties found | ${report.totalPartiesFound} |`);
+  console.log(`| High confidence (≥0.8) | ${report.highConfidence} |`);
+  console.log(`| Events checked | ${report.totalChecked} |`);
+
+  console.log(`\n### By issue type\n`);
+  for (const [type, count] of Object.entries(report.byIssue).sort((a, b) => b[1] - a[1])) {
+    console.log(`- **${type}**: ${count}`);
+  }
+
+  console.log(`\n### Sample extractions\n`);
+  for (const ex of report.allExtractions.slice(0, 15)) {
+    const partyNames = (ex.parties || []).map(p => `${p.name} (${p.position})`).join(", ");
+    console.log(`- **${ex.objectNumber}** seq ${ex.event_sequence} [${ex.issue_type}]: ${partyNames} (${(ex.confidence * 100).toFixed(0)}%)`);
+    console.log(`  _${ex.reasoning}_`);
+  }
+}
+
+
 // ─── Batch construction ─────────────────────────────────────────────
 
 function safeJson(val) {
@@ -2656,6 +2883,13 @@ const MODE_CONFIG = {
     buildPrompt: buildPromptEventSplitting,
     aggregate: aggregateEventSplitting,
     report: printEventSplittingReport,
+  },
+  "party-extraction": {
+    sample: samplePartyExtraction,
+    tool: TOOL_PARTY_EXTRACTION,
+    buildPrompt: buildPromptPartyExtraction,
+    aggregate: aggregatePartyExtraction,
+    report: printPartyExtractionReport,
   },
 };
 

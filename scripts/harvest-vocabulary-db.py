@@ -29,6 +29,7 @@ Output: data/vocabulary.db (~1 GB)
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -67,6 +68,7 @@ DUMP_CONFIGS = [
     ("organisation", "person"),
     ("place", "place"),
     ("event", "event"),
+    ("exhibition", "event"),
 ]
 
 OAI_BASE = "https://data.rijksmuseum.nl/oai"
@@ -92,6 +94,28 @@ WIDTH_URIS = {AAT_WIDTH, RM_WIDTH}
 AAT_NARRATIVE = "http://vocab.getty.edu/aat/300048722"
 AAT_DESCRIPTION = "http://vocab.getty.edu/aat/300435452"
 AAT_PRODUCTION_STATEMENT = "http://vocab.getty.edu/aat/300435416"
+AAT_DEPTH = "http://vocab.getty.edu/aat/300072633"
+AAT_WEIGHT = "http://vocab.getty.edu/aat/300056240"
+AAT_DIAMETER = "http://vocab.getty.edu/aat/300055624"
+RM_DEPTH = "https://id.rijksmuseum.nl/2203"
+RM_WEIGHT = "https://id.rijksmuseum.nl/220217"
+RM_DIAMETER = "https://id.rijksmuseum.nl/2205120"
+DEPTH_URIS = {AAT_DEPTH, RM_DEPTH}
+WEIGHT_URIS = {AAT_WEIGHT, RM_WEIGHT}
+DIAMETER_URIS = {AAT_DIAMETER, RM_DIAMETER}
+AAT_UNIT_G = "http://vocab.getty.edu/aat/300379225"     # grams
+AAT_UNIT_KG = "http://vocab.getty.edu/aat/300379226"    # kilograms
+
+# Exhibition N-Triples predicates
+P_BEGIN = "http://www.cidoc-crm.org/cidoc-crm/P82a_begin_of_the_begin"
+P_END = "http://www.cidoc-crm.org/cidoc-crm/P82b_end_of_the_end"
+P_HAS_MEMBER = "http://www.cidoc-crm.org/cidoc-crm/P46i_forms_part_of"  # inverse: artwork → exhibition
+
+# Title classification AAT URIs
+AAT_TITLE_FULL = "http://vocab.getty.edu/aat/300417200"
+AAT_TITLE_BRIEF = "http://vocab.getty.edu/aat/300417207"
+AAT_TITLE_DISPLAY = "http://vocab.getty.edu/aat/300404670"
+RM_TITLE_FORMER = "https://id.rijksmuseum.nl/22015528"
 
 # ─── N-Triples parsing (same as pilot) ──────────────────────────────
 
@@ -128,7 +152,7 @@ AAT_NAME_CLASSIFICATION = {
 # Linked Art type → vocabulary type
 LA_TYPE_MAP = {
     "Person": "person",
-    "Group": "person",
+    "Group": "group",
     "Actor": "person",
     "Place": "place",
     "Activity": "event",
@@ -162,6 +186,9 @@ EXTERNAL_VOCAB = {
     "300404287": {"type": "classification", "label_en": "copyist of", "label_nl": "imitator van", "external_id": "http://vocab.getty.edu/aat/300404287"},
     "300435722": {"type": "classification", "label_en": "possibly", "label_nl": "mogelijk", "external_id": "http://vocab.getty.edu/aat/300435722"},
     "300404283": {"type": "classification", "label_en": "circle of", "label_nl": "kring van", "external_id": "http://vocab.getty.edu/aat/300404283"},
+    # Additional attribution qualifiers — discovered via v0.24 schema discovery
+    "300404288": {"type": "classification", "label_en": "manner of", "label_nl": "op de manier van", "external_id": "http://vocab.getty.edu/aat/300404288"},
+    "300252887": {"type": "classification", "label_en": "falsification", "label_nl": "vervalsing", "external_id": "http://vocab.getty.edu/aat/300252887"},
 }
 
 # ─── XML Namespaces ──────────────────────────────────────────────────
@@ -232,7 +259,14 @@ CREATE TABLE IF NOT EXISTS artworks (
     title_all_text   TEXT,
     has_image        INTEGER DEFAULT 0,
     iiif_id          TEXT,
-    tier2_done       INTEGER DEFAULT 0
+    tier2_done       INTEGER DEFAULT 0,
+    date_display     TEXT,
+    current_location TEXT,
+    depth_cm         REAL,
+    weight_g         REAL,
+    diameter_cm      REAL,
+    dimension_note   TEXT,
+    provenance_text_hash TEXT
 );
 
 CREATE TABLE IF NOT EXISTS mappings (
@@ -256,6 +290,76 @@ CREATE TABLE IF NOT EXISTS person_names (
     UNIQUE(person_id, name, lang)
 );
 CREATE INDEX IF NOT EXISTS idx_person_names_id ON person_names(person_id);
+
+CREATE TABLE IF NOT EXISTS exhibitions (
+    exhibition_id INTEGER PRIMARY KEY,
+    title_en      TEXT,
+    title_nl      TEXT,
+    date_start    TEXT,
+    date_end      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS exhibition_members (
+    exhibition_id INTEGER NOT NULL,
+    hmo_id        TEXT NOT NULL,
+    PRIMARY KEY (exhibition_id, hmo_id)
+);
+
+CREATE TABLE IF NOT EXISTS modifications (
+    art_id       INTEGER NOT NULL,
+    seq          INTEGER NOT NULL,
+    modifier_uri TEXT,
+    date_display TEXT,
+    date_begin   TEXT,
+    date_end     TEXT,
+    description  TEXT,
+    PRIMARY KEY (art_id, seq)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS related_objects (
+    art_id           INTEGER NOT NULL,
+    related_la_uri   TEXT NOT NULL,
+    related_art_id   INTEGER,
+    relationship_en  TEXT NOT NULL,
+    relationship_nl  TEXT,
+    PRIMARY KEY (art_id, related_la_uri)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS examinations (
+    art_id          INTEGER NOT NULL,
+    seq             INTEGER NOT NULL,
+    examiner_name   TEXT,
+    report_type_id  TEXT NOT NULL,
+    report_type_en  TEXT,
+    date_display    TEXT,
+    date_begin      TEXT,
+    date_end        TEXT,
+    PRIMARY KEY (art_id, seq)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS title_variants (
+    art_id     INTEGER NOT NULL,
+    seq        INTEGER NOT NULL,
+    title_text TEXT NOT NULL,
+    language   TEXT,
+    qualifier  TEXT,
+    PRIMARY KEY (art_id, seq)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS assignment_pairs (
+    artwork_id   INTEGER NOT NULL,
+    qualifier_id TEXT NOT NULL,
+    creator_id   TEXT NOT NULL,
+    part_index   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (artwork_id, qualifier_id, creator_id)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS artwork_parent (
+    art_id        INTEGER NOT NULL,
+    parent_la_uri TEXT NOT NULL,
+    parent_art_id INTEGER,
+    PRIMARY KEY (art_id, parent_la_uri)
+) WITHOUT ROWID;
 """
 
 VOCAB_INSERT_SQL = (
@@ -319,6 +423,13 @@ def create_or_open_db() -> sqlite3.Connection:
         ("date_latest", "INTEGER"),
         ("title_all_text", "TEXT"),
         ("tier2_done", "INTEGER DEFAULT 0"),
+        ("date_display", "TEXT"),
+        ("current_location", "TEXT"),
+        ("depth_cm", "REAL"),
+        ("weight_g", "REAL"),
+        ("diameter_cm", "REAL"),
+        ("dimension_note", "TEXT"),
+        ("provenance_text_hash", "TEXT"),
     ]
     for col_name, col_type in tier2_cols:
         if col_name not in existing_cols:
@@ -454,8 +565,12 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
             lon = float(m_coord.group(1))
             lat = float(m_coord.group(2))
 
+    # For events, insert even without labels (the entity ID is the primary value)
     if not label_en and not label_nl:
-        return None
+        if vocab_type == "event":
+            label_en = entity_id  # Use entity ID as fallback label
+        else:
+            return None
 
     return {
         "id": entity_id,
@@ -498,6 +613,123 @@ def parse_dump_dir(dump_dir: Path, default_type: str) -> list[dict]:
     return records
 
 
+def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int, int]:
+    """Parse exhibition dump files and populate exhibitions + exhibition_members tables.
+
+    Exhibition entities are E7_Activity with ID namespace 241xxxx. Extracts:
+    - Title from P1_is_identified_by → P190_has_symbolic_content (EN/NL)
+    - Date range from P82a_begin_of_the_begin / P82b_end_of_the_end
+    - Member artwork IDs from has_member / forms_part_of HMO URIs
+
+    Returns (exhibition_count, member_count).
+    """
+    files = [f for f in os.listdir(dump_dir) if os.path.isfile(dump_dir / f) and not f.startswith(".")]
+    exhibition_count = 0
+    member_count = 0
+
+    for fname in files:
+        entity_id = fname
+        entity_uri = f"https://id.rijksmuseum.nl/{entity_id}"
+        filepath = dump_dir / fname
+
+        bnodes: dict[str, dict] = {}
+        date_begin = None
+        date_end = None
+        member_uris: list[str] = []
+
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except Exception:
+            continue
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            m = NT_PATTERN.match(line)
+            if m:
+                subj = m.group(1)
+                pred = m.group(2)
+                obj_uri = m.group(3)
+                obj_lit = m.group(4)
+
+                if subj == entity_uri:
+                    if pred == P_BEGIN and obj_lit:
+                        date_begin = obj_lit
+                    elif pred == P_END and obj_lit:
+                        date_end = obj_lit
+
+                # Artworks pointing to this exhibition (inverse membership)
+                if obj_uri == entity_uri and pred == P_HAS_MEMBER:
+                    # subj is the artwork HMO URI
+                    hmo_num = subj.split("/")[-1]
+                    if hmo_num.isdigit():
+                        member_uris.append(hmo_num)
+
+            bm = BNODE_PATTERN.match(line)
+            if bm:
+                bnode_id = bm.group(1)
+                pred = bm.group(2)
+                obj_uri = bm.group(3)
+                obj_lit = bm.group(4)
+
+                if bnode_id not in bnodes:
+                    bnodes[bnode_id] = {}
+
+                if pred == P_LABEL and obj_lit is not None:
+                    bnodes[bnode_id]["label"] = obj_lit
+                elif pred == P_LANGUAGE and obj_uri:
+                    bnodes[bnode_id]["language"] = obj_uri
+
+            # Also check for direct membership triples (exhibition → artwork)
+            if m and m.group(1) == entity_uri:
+                pred = m.group(2)
+                obj_uri = m.group(3)
+                if pred == "http://www.cidoc-crm.org/cidoc-crm/P46_is_composed_of" and obj_uri:
+                    hmo_num = obj_uri.split("/")[-1]
+                    if hmo_num.isdigit():
+                        member_uris.append(hmo_num)
+
+        # Extract EN/NL titles from bnodes
+        title_en = None
+        title_nl = None
+        for bdata in bnodes.values():
+            label = bdata.get("label")
+            if not label:
+                continue
+            lang = bdata.get("language")
+            if lang == LANG_EN and not title_en:
+                title_en = label
+            elif lang == LANG_NL and not title_nl:
+                title_nl = label
+
+        if not title_en and not title_nl:
+            continue
+
+        try:
+            exh_id = int(entity_id)
+        except ValueError:
+            continue
+
+        conn.execute(
+            "INSERT OR IGNORE INTO exhibitions (exhibition_id, title_en, title_nl, date_start, date_end) VALUES (?, ?, ?, ?, ?)",
+            (exh_id, title_en, title_nl, date_begin, date_end),
+        )
+        exhibition_count += 1
+
+        for hmo_id in member_uris:
+            conn.execute(
+                "INSERT OR IGNORE INTO exhibition_members (exhibition_id, hmo_id) VALUES (?, ?)",
+                (exh_id, hmo_id),
+            )
+            member_count += 1
+
+    conn.commit()
+    return exhibition_count, member_count
+
+
 def run_phase0(conn: sqlite3.Connection):
     """Phase 0: Parse all data dumps into vocabulary table."""
     # Always seed external vocabulary entries regardless of dump availability
@@ -523,6 +755,18 @@ def run_phase0(conn: sqlite3.Connection):
         dump_dir = extract_dump(tar_name)
         if dump_dir is None:
             print(f"    SKIP: {tar_name}.tar.gz not found")
+            continue
+
+        # Exhibition dump gets special parsing (structured tables, not just vocab)
+        if tar_name == "exhibition":
+            exh_count, mem_count = parse_exhibition_dump(dump_dir, conn)
+            # Also parse as regular vocab (for label lookup)
+            records = parse_dump_dir(dump_dir, default_type)
+            if records:
+                conn.executemany(VOCAB_INSERT_SQL, records)
+                conn.commit()
+                total_records += len(records)
+            print(f"    {exh_count:,} exhibitions, {mem_count:,} artwork memberships, {len(records):,} vocab records")
             continue
 
         records = parse_dump_dir(dump_dir, default_type)
@@ -1071,6 +1315,12 @@ UNIT_TO_CM = {
     AAT_UNIT_M: 100.0,
 }
 
+# Conversion factors from unit to grams (for weight)
+UNIT_TO_G = {
+    AAT_UNIT_G: 1.0,
+    AAT_UNIT_KG: 1000.0,
+}
+
 
 def extract_dimension_cm(dimensions: list | None, type_uris: set[str]) -> float | None:
     """Extract a dimension value in centimeters for a given dimension type (height/width)."""
@@ -1093,6 +1343,283 @@ def extract_dimension_cm(dimensions: list | None, type_uris: set[str]) -> float 
         factor = UNIT_TO_CM.get(unit_id, 1.0)  # default to cm
         return round(val * factor, 2) if factor != 1.0 else val
     return None
+
+
+def extract_weight_g(dimensions: list | None, type_uris: set[str]) -> float | None:
+    """Extract a weight value in grams for a given dimension type."""
+    if not dimensions:
+        return None
+    for dim in dimensions:
+        if not isinstance(dim, dict):
+            continue
+        value = dim.get("value")
+        if value is None:
+            continue
+        if not has_classification(dim.get("classified_as", []), type_uris):
+            continue
+        unit = dim.get("unit", {})
+        unit_id = unit.get("id", "") if isinstance(unit, dict) else ""
+        try:
+            val = float(value)
+        except (ValueError, TypeError):
+            continue
+        factor = UNIT_TO_G.get(unit_id, 1.0)  # default to grams
+        return round(val * factor, 2) if factor != 1.0 else val
+    return None
+
+
+def extract_dimension_note(dimensions: list | None) -> str | None:
+    """Extract annotation text from dimension referred_to_by entries."""
+    if not dimensions:
+        return None
+    notes = []
+    for dim in dimensions:
+        if not isinstance(dim, dict):
+            continue
+        for ref in dim.get("referred_to_by", []):
+            if not isinstance(ref, dict):
+                continue
+            content = ref.get("content", "")
+            if isinstance(content, list):
+                notes.extend(s for s in content if isinstance(s, str))
+            elif content:
+                notes.append(content)
+    return " | ".join(notes) if notes else None
+
+
+def extract_modifications(data: dict) -> list[dict]:
+    """Extract modification/treatment events from modified_by.
+
+    Returns list of dicts: {modifier_uri, date_display, date_begin, date_end, description}
+    """
+    modified_by = data.get("modified_by", [])
+    if not isinstance(modified_by, list):
+        return []
+    results = []
+    for entry in modified_by:
+        if not isinstance(entry, dict):
+            continue
+        # carried_out_by: bare URI strings
+        modifier_uri = None
+        for actor in entry.get("carried_out_by", []):
+            if isinstance(actor, str):
+                modifier_uri = actor
+                break
+            elif isinstance(actor, dict) and actor.get("id"):
+                modifier_uri = actor["id"]
+                break
+
+        # timespan
+        ts = entry.get("timespan", {})
+        date_display = None
+        date_begin = None
+        date_end = None
+        if isinstance(ts, dict):
+            date_begin = ts.get("begin_of_the_begin")
+            date_end = ts.get("end_of_the_end")
+            # Display label from identified_by
+            for ident in ts.get("identified_by", []):
+                if isinstance(ident, dict) and ident.get("type") == "Name":
+                    content = ident.get("content", "")
+                    if content:
+                        date_display = content
+                        break
+
+        # description from referred_to_by (prefer EN via AAT 300388277)
+        description = None
+        for ref in entry.get("referred_to_by", []):
+            if not isinstance(ref, dict):
+                continue
+            content = ref.get("content", "")
+            if isinstance(content, list):
+                content = " ".join(s for s in content if isinstance(s, str))
+            if content:
+                description = content
+                break
+
+        results.append({
+            "modifier_uri": modifier_uri,
+            "date_display": date_display,
+            "date_begin": date_begin,
+            "date_end": date_end,
+            "description": description,
+        })
+    return results
+
+
+def extract_attributed_by(data: dict) -> tuple[list[dict], list[dict]]:
+    """Extract attributed_by entries, splitting into related_objects and examinations.
+
+    Pattern A (no carried_out_by): Object relationships → related_objects
+    Pattern B (has carried_out_by): Examination reports → examinations
+
+    Returns (related_objects_list, examinations_list).
+    """
+    attributed_by = data.get("attributed_by", [])
+    if not isinstance(attributed_by, list):
+        return [], []
+
+    related_objects = []
+    examinations = []
+
+    for entry in attributed_by:
+        if not isinstance(entry, dict):
+            continue
+
+        has_examiner = bool(entry.get("carried_out_by"))
+
+        if has_examiner:
+            # Pattern B: Examination report
+            examiner_name = None
+            for actor in entry.get("carried_out_by", []):
+                if isinstance(actor, dict):
+                    # Try to get label from identified_by
+                    for ident in actor.get("identified_by", []):
+                        if isinstance(ident, dict):
+                            name = ident.get("content", "")
+                            if name:
+                                examiner_name = name
+                                break
+                    if not examiner_name and actor.get("id"):
+                        examiner_name = actor["id"].split("/")[-1]
+
+            report_type_id = ""
+            report_type_en = None
+            for cls in entry.get("classified_as", []):
+                if isinstance(cls, dict) and cls.get("id"):
+                    report_type_id = cls["id"]
+                    # Try to extract label
+                    for ident in cls.get("identified_by", []):
+                        if isinstance(ident, dict):
+                            report_type_en = ident.get("content")
+                            break
+                    break
+
+            ts = entry.get("timespan", {})
+            date_display = None
+            date_begin = None
+            date_end = None
+            if isinstance(ts, dict):
+                date_begin = ts.get("begin_of_the_begin")
+                date_end = ts.get("end_of_the_end")
+                for ident in ts.get("identified_by", []):
+                    if isinstance(ident, dict) and ident.get("type") == "Name":
+                        date_display = ident.get("content")
+                        break
+
+            if report_type_id:
+                examinations.append({
+                    "examiner_name": examiner_name,
+                    "report_type_id": report_type_id,
+                    "report_type_en": report_type_en,
+                    "date_display": date_display,
+                    "date_begin": date_begin,
+                    "date_end": date_end,
+                })
+        else:
+            # Pattern A: Object relationships
+            for assigned in entry.get("assigned", []):
+                if not isinstance(assigned, dict):
+                    continue
+                related_uri = assigned.get("id", "")
+                if not related_uri:
+                    continue
+
+                # Extract relationship labels from identified_by
+                relationship_en = None
+                relationship_nl = None
+                for ident in entry.get("identified_by", []):
+                    if not isinstance(ident, dict):
+                        continue
+                    content = ident.get("content", "")
+                    if not content:
+                        continue
+                    lang_uri = None
+                    for lang in ident.get("language", []):
+                        if isinstance(lang, dict):
+                            lang_uri = lang.get("id", "")
+                            break
+                    if lang_uri == LANG_EN:
+                        relationship_en = content
+                    elif lang_uri == LANG_NL:
+                        relationship_nl = content
+                    elif not relationship_en:
+                        relationship_en = content  # fallback
+
+                if relationship_en:
+                    related_objects.append({
+                        "related_la_uri": related_uri,
+                        "relationship_en": relationship_en,
+                        "relationship_nl": relationship_nl,
+                    })
+
+    return related_objects, examinations
+
+
+def extract_title_variants(data: dict) -> list[dict]:
+    """Extract title variants from identified_by Name entries.
+
+    Returns list of dicts: {title_text, language, qualifier}
+    """
+    results = []
+    for entry in data.get("identified_by", []):
+        if not isinstance(entry, dict) or entry.get("type") != "Name":
+            continue
+        content = entry.get("content", "")
+        if isinstance(content, list):
+            content = " ".join(s for s in content if isinstance(s, str))
+        if not content:
+            continue
+
+        # Language
+        language = None
+        for lang in entry.get("language", []):
+            if isinstance(lang, dict):
+                lid = lang.get("id", "")
+                if lid == LANG_EN:
+                    language = "en"
+                elif lid == LANG_NL:
+                    language = "nl"
+                elif lid:
+                    language = lid.split("/")[-1]
+                break
+
+        # Qualifier from classified_as
+        qualifier = None
+        for cls in entry.get("classified_as", []):
+            if isinstance(cls, dict):
+                cid = cls.get("id", "")
+                if cid == AAT_TITLE_FULL:
+                    qualifier = "full"
+                elif cid == AAT_TITLE_BRIEF:
+                    qualifier = "brief"
+                elif cid == AAT_TITLE_DISPLAY:
+                    qualifier = "display"
+                elif cid == RM_TITLE_FORMER:
+                    qualifier = "former"
+                if qualifier:
+                    break
+
+        results.append({
+            "title_text": content,
+            "language": language,
+            "qualifier": qualifier,
+        })
+    return results
+
+
+def extract_part_of(data: dict) -> list[str]:
+    """Extract parent HMO URIs from part_of.
+
+    Returns list of Linked Art URIs.
+    """
+    results = []
+    for entry in data.get("part_of", []):
+        if isinstance(entry, dict) and entry.get("type") == "HumanMadeObject":
+            uri = entry.get("id", "")
+            if uri:
+                results.append(uri)
+    return results
 
 
 def _pick_preferred_lang(by_lang: dict[str, str]) -> str | None:
@@ -1139,11 +1666,12 @@ def _extract_assigned_creators(items: list) -> list[tuple[str, str]]:
     return result
 
 
-def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
-    """Extract production roles, attribution qualifiers, and assigned creators from produced_by.
+def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str, int]]]:
+    """Extract production roles, attribution qualifiers, assigned creators, and assignment pairs from produced_by.
 
     Returns:
-        (roles, qualifiers, creators) where each is a list of (vocab_id, field) tuples.
+        (roles, qualifiers, creators, assignment_pairs) where roles/qualifiers/creators are
+        lists of (vocab_id, field) tuples, and assignment_pairs are (qualifier_id, creator_id, part_index) tuples.
 
     Production structure in Linked Art:
         produced_by: {
@@ -1172,23 +1700,21 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
     roles: list[tuple[str, str]] = []
     qualifiers: list[tuple[str, str]] = []
     creators: list[tuple[str, str]] = []
+    assignment_pairs: list[tuple[str, str, int]] = []  # (qualifier_id, creator_id, part_index)
 
     produced_by = data.get("produced_by")
     if not isinstance(produced_by, dict):
-        return roles, qualifiers, creators
+        return roles, qualifiers, creators, assignment_pairs
 
+    # Collect parts from both part[] and top-level assigned_by
     parts = produced_by.get("part", [])
     if not isinstance(parts, list):
         # Single production event without parts — check top level
         parts = [produced_by]
 
-    for part in parts:
-        if not isinstance(part, dict):
-            continue
-        roles.extend(_extract_ids(part.get("technique", []), "production_role"))
-        qualifiers.extend(_extract_ids(part.get("classified_as", []), "attribution_qualifier"))
-        # Extract assigned_by (AttributeAssignment pattern — #43)
-        for assignment in part.get("assigned_by", []):
+    def _process_assigned_by(assigned_by_list: list, part_idx: int):
+        """Process assigned_by entries, extracting creators, qualifiers, and pairs."""
+        for assignment in assigned_by_list:
             if not isinstance(assignment, dict):
                 continue
             if assignment.get("type") != "AttributeAssignment":
@@ -1196,10 +1722,29 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
             prop = assignment.get("assigned_property", "")
             if prop not in ("carried_out_by", "influenced_by"):
                 continue
-            creators.extend(_extract_assigned_creators(assignment.get("assigned", [])))
-            qualifiers.extend(_extract_ids(assignment.get("classified_as", []), "attribution_qualifier"))
+            assigned_creators = _extract_assigned_creators(assignment.get("assigned", []))
+            assigned_quals = _extract_ids(assignment.get("classified_as", []), "attribution_qualifier")
+            creators.extend(assigned_creators)
+            qualifiers.extend(assigned_quals)
 
-    return roles, qualifiers, creators
+            # Emit assignment_pairs: pair each qualifier with each creator
+            for q_id, _ in assigned_quals:
+                for c_id, _ in assigned_creators:
+                    assignment_pairs.append((q_id, c_id, part_idx))
+
+    for part_idx, part in enumerate(parts):
+        if not isinstance(part, dict):
+            continue
+        roles.extend(_extract_ids(part.get("technique", []), "production_role"))
+        qualifiers.extend(_extract_ids(part.get("classified_as", []), "attribution_qualifier"))
+        _process_assigned_by(part.get("assigned_by", []), part_idx)
+
+    # Also check top-level produced_by.assigned_by (#43 — some artworks have it at the top)
+    if produced_by.get("part") is not None:
+        # Only process top-level assigned_by if we didn't already treat produced_by as a single part
+        _process_assigned_by(produced_by.get("assigned_by", []), -1)
+
+    return roles, qualifiers, creators, assignment_pairs
 
 
 def extract_narrative(data: dict) -> str | None:
@@ -1275,9 +1820,13 @@ def resolve_artwork(uri: str) -> dict | None:
     dimensions = data.get("dimension", [])
     height_cm = extract_dimension_cm(dimensions, HEIGHT_URIS)
     width_cm = extract_dimension_cm(dimensions, WIDTH_URIS)
+    depth_cm = extract_dimension_cm(dimensions, DEPTH_URIS)
+    diameter_cm = extract_dimension_cm(dimensions, DIAMETER_URIS)
+    weight_g = extract_weight_g(dimensions, WEIGHT_URIS)
+    dimension_note = extract_dimension_note(dimensions)
 
-    # Production roles, attribution qualifiers, and assigned creators
-    roles, qualifiers, creators = extract_production_parts(data)
+    # Production roles, attribution qualifiers, assigned creators, and assignment pairs
+    roles, qualifiers, creators, assignment_pairs = extract_production_parts(data)
 
     # Creator label from production statement text (referred_to_by with AAT 300435416)
     # Contains the qualifier-prefixed creator name (e.g. "attributed to Claes van Beresteyn")
@@ -1351,6 +1900,61 @@ def resolve_artwork(uri: str) -> dict | None:
                 title_parts.append(content)
     title_all_text = "\n".join(title_parts) if title_parts else None
 
+    # Date display text from timespan.identified_by
+    date_display = None
+    produced_by_for_date = data.get("produced_by", {})
+    ts_for_display = produced_by_for_date.get("timespan", {}) if isinstance(produced_by_for_date, dict) else {}
+    if isinstance(ts_for_display, list):
+        # Multi-phase: concatenate display labels with "; "
+        display_parts = []
+        for ts_item in ts_for_display:
+            if isinstance(ts_item, dict):
+                for ident in ts_item.get("identified_by", []):
+                    if isinstance(ident, dict) and ident.get("type") == "Name":
+                        c = ident.get("content", "")
+                        if c:
+                            display_parts.append(c)
+                            break
+        date_display = "; ".join(display_parts) if display_parts else None
+    elif isinstance(ts_for_display, dict):
+        for ident in ts_for_display.get("identified_by", []):
+            if isinstance(ident, dict) and ident.get("type") == "Name":
+                c = ident.get("content", "")
+                if c:
+                    date_display = c
+                    break
+
+    # Current location
+    current_location = None
+    cur_loc = data.get("current_location", {})
+    if isinstance(cur_loc, dict):
+        # Try label from identified_by, then fall back to id
+        for ident in cur_loc.get("identified_by", []):
+            if isinstance(ident, dict):
+                c = ident.get("content", "")
+                if c:
+                    current_location = c
+                    break
+        if not current_location:
+            current_location = cur_loc.get("id")
+
+    # Provenance text hash (SHA-256 for incremental change detection)
+    provenance_text_hash = None
+    if provenance_text:
+        provenance_text_hash = hashlib.sha256(provenance_text.encode("utf-8")).hexdigest()
+
+    # Modifications (treatments/restorations)
+    modifications = extract_modifications(data)
+
+    # Related objects and examinations from attributed_by
+    related_objects, examinations = extract_attributed_by(data)
+
+    # Title variants (structured)
+    title_variants = extract_title_variants(data)
+
+    # Parent HMO URIs (part_of)
+    parent_uris = extract_part_of(data)
+
     return {
         "inscription_text": inscription_text,
         "provenance_text": provenance_text,
@@ -1358,14 +1962,27 @@ def resolve_artwork(uri: str) -> dict | None:
         "description_text": description_text,
         "height_cm": height_cm,
         "width_cm": width_cm,
+        "depth_cm": depth_cm,
+        "diameter_cm": diameter_cm,
+        "weight_g": weight_g,
+        "dimension_note": dimension_note,
         "narrative_text": narrative_text,
         "date_earliest": date_earliest,
         "date_latest": date_latest,
+        "date_display": date_display,
+        "current_location": current_location,
+        "provenance_text_hash": provenance_text_hash,
         "title_all_text": title_all_text,
         "creator_label": creator_label,
         "roles": roles,
         "qualifiers": qualifiers,
         "creators": creators,
+        "assignment_pairs": assignment_pairs,
+        "modifications": modifications,
+        "related_objects": related_objects,
+        "examinations": examinations,
+        "title_variants": title_variants,
+        "parent_uris": parent_uris,
     }
 
 
@@ -1424,6 +2041,12 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     role_count = 0
     qualifier_count = 0
     creator_count = 0
+    modification_count = 0
+    related_object_count = 0
+    examination_count = 0
+    title_variant_count = 0
+    assignment_pair_count = 0
+    parent_count = 0
     t0 = time.time()
 
     TIER2_UPDATE_SQL = """
@@ -1434,9 +2057,16 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
             description_text = ?,
             height_cm = ?,
             width_cm = ?,
+            depth_cm = ?,
+            diameter_cm = ?,
+            weight_g = ?,
+            dimension_note = ?,
             narrative_text = ?,
             date_earliest = ?,
             date_latest = ?,
+            date_display = ?,
+            current_location = ?,
+            provenance_text_hash = ?,
             title_all_text = ?,
             creator_label = COALESCE(?, creator_label),
             tier2_done = 1
@@ -1504,9 +2134,16 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     result["description_text"],
                     result["height_cm"],
                     result["width_cm"],
+                    result["depth_cm"],
+                    result["diameter_cm"],
+                    result["weight_g"],
+                    result["dimension_note"],
                     result["narrative_text"],
                     result["date_earliest"],
                     result["date_latest"],
+                    result["date_display"],
+                    result["current_location"],
+                    result["provenance_text_hash"],
                     result["title_all_text"],
                     result.get("creator_label"),
                     obj_num,
@@ -1518,6 +2155,61 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                 role_count += len(result["roles"])
                 qualifier_count += len(result["qualifiers"])
                 creator_count += len(result["creators"])
+
+                # Get art_id for the new table inserts
+                art_id_row = conn.execute(
+                    "SELECT art_id FROM artworks WHERE object_number = ?", (obj_num,)
+                ).fetchone()
+                art_id = art_id_row[0] if art_id_row else None
+
+                if art_id is not None:
+                    # Insert modifications
+                    for seq, mod in enumerate(result.get("modifications", [])):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO modifications (art_id, seq, modifier_uri, date_display, date_begin, date_end, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (art_id, seq, mod["modifier_uri"], mod["date_display"], mod["date_begin"], mod["date_end"], mod["description"]),
+                        )
+                    modification_count += len(result.get("modifications", []))
+
+                    # Insert related objects
+                    for ro in result.get("related_objects", []):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO related_objects (art_id, related_la_uri, relationship_en, relationship_nl) VALUES (?, ?, ?, ?)",
+                            (art_id, ro["related_la_uri"], ro["relationship_en"], ro.get("relationship_nl")),
+                        )
+                    related_object_count += len(result.get("related_objects", []))
+
+                    # Insert examinations
+                    for seq, exam in enumerate(result.get("examinations", [])):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO examinations (art_id, seq, examiner_name, report_type_id, report_type_en, date_display, date_begin, date_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (art_id, seq, exam["examiner_name"], exam["report_type_id"], exam.get("report_type_en"), exam.get("date_display"), exam.get("date_begin"), exam.get("date_end")),
+                        )
+                    examination_count += len(result.get("examinations", []))
+
+                    # Insert title variants
+                    for seq, tv in enumerate(result.get("title_variants", [])):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO title_variants (art_id, seq, title_text, language, qualifier) VALUES (?, ?, ?, ?, ?)",
+                            (art_id, seq, tv["title_text"], tv.get("language"), tv.get("qualifier")),
+                        )
+                    title_variant_count += len(result.get("title_variants", []))
+
+                    # Insert assignment pairs
+                    for q_id, c_id, part_idx in result.get("assignment_pairs", []):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO assignment_pairs (artwork_id, qualifier_id, creator_id, part_index) VALUES (?, ?, ?, ?)",
+                            (art_id, q_id, c_id, part_idx),
+                        )
+                    assignment_pair_count += len(result.get("assignment_pairs", []))
+
+                    # Insert parent URIs
+                    for parent_uri in result.get("parent_uris", []):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO artwork_parent (art_id, parent_la_uri) VALUES (?, ?)",
+                            (art_id, parent_uri),
+                        )
+                    parent_count += len(result.get("parent_uris", []))
 
             conn.commit()
             batch_start = batch_end
@@ -1548,6 +2240,12 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Prod. roles:  {role_count:,}")
     print(f"    Attr. quals:  {qualifier_count:,}")
     print(f"    Creators:     {creator_count:,} (from assigned_by)")
+    print(f"    Modifications:{modification_count:,}")
+    print(f"    Related obj:  {related_object_count:,}")
+    print(f"    Examinations: {examination_count:,}")
+    print(f"    Title vars:   {title_variant_count:,}")
+    print(f"    Assign. pairs:{assignment_pair_count:,}")
+    print(f"    Parent links: {parent_count:,}")
 
 
 # ─── Geocoding Import ────────────────────────────────────────────────
@@ -1773,6 +2471,141 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         import_geocoding(conn, geo_csv)
         print()
 
+    # ── New Phase 3 tables and post-harvest joins ──
+
+    # artwork_exhibitions junction table (from Phase 0 exhibition_members)
+    print("\n--- Artwork Exhibitions ---")
+    exh_mem_exists = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='exhibition_members'"
+    ).fetchone()[0]
+    if exh_mem_exists:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS artwork_exhibitions (
+                art_id        INTEGER NOT NULL,
+                exhibition_id INTEGER NOT NULL,
+                PRIMARY KEY (art_id, exhibition_id)
+            ) WITHOUT ROWID
+        """)
+        # Resolve hmo_id → art_id via artworks.object_number
+        # HMO IDs are the numeric portion of https://id.rijksmuseum.nl/200xxxxxx URIs
+        inserted = conn.execute("""
+            INSERT OR IGNORE INTO artwork_exhibitions (art_id, exhibition_id)
+            SELECT a.art_id, em.exhibition_id
+            FROM exhibition_members em
+            JOIN artworks a ON a.object_number = em.hmo_id
+            WHERE a.art_id IS NOT NULL
+        """).rowcount
+        conn.commit()
+        print(f"  artwork_exhibitions: {inserted:,} rows")
+
+        # Also try with object_number matching patterns (some may need prefix stripping)
+        total_ae = cur.execute("SELECT COUNT(*) FROM artwork_exhibitions").fetchone()[0]
+        total_em = cur.execute("SELECT COUNT(*) FROM exhibition_members").fetchone()[0]
+        if total_ae < total_em:
+            print(f"  Note: {total_em - total_ae:,} exhibition memberships could not be resolved to art_ids")
+    else:
+        print("  Skipping (no exhibition_members table)")
+
+    # Resolve related_objects.related_art_id
+    print("\n--- Resolving Related Object Art IDs ---")
+    ro_exists = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='related_objects'"
+    ).fetchone()[0]
+    if ro_exists:
+        ro_count = cur.execute("SELECT COUNT(*) FROM related_objects").fetchone()[0]
+        if ro_count > 0:
+            # Extract object_number from Linked Art URI (last path segment)
+            conn.execute("""
+                UPDATE related_objects SET related_art_id = (
+                    SELECT a.art_id FROM artworks a
+                    WHERE a.object_number = SUBSTR(related_objects.related_la_uri,
+                        INSTR(related_objects.related_la_uri, '/object/') + 8)
+                )
+                WHERE related_art_id IS NULL
+            """)
+            resolved = cur.execute("SELECT COUNT(*) FROM related_objects WHERE related_art_id IS NOT NULL").fetchone()[0]
+            print(f"  Resolved {resolved:,} of {ro_count:,} related objects to art_ids")
+        else:
+            print(f"  No related objects to resolve")
+        conn.commit()
+    else:
+        print("  Skipping (no related_objects table)")
+
+    # Resolve artwork_parent.parent_art_id
+    print("\n--- Resolving Artwork Parent Art IDs ---")
+    ap_exists = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='artwork_parent'"
+    ).fetchone()[0]
+    if ap_exists:
+        ap_count = cur.execute("SELECT COUNT(*) FROM artwork_parent").fetchone()[0]
+        if ap_count > 0:
+            conn.execute("""
+                UPDATE artwork_parent SET parent_art_id = (
+                    SELECT a.art_id FROM artworks a
+                    WHERE a.object_number = SUBSTR(artwork_parent.parent_la_uri,
+                        INSTR(artwork_parent.parent_la_uri, '/object/') + 8)
+                )
+                WHERE parent_art_id IS NULL
+            """)
+            resolved = cur.execute("SELECT COUNT(*) FROM artwork_parent WHERE parent_art_id IS NOT NULL").fetchone()[0]
+            print(f"  Resolved {resolved:,} of {ap_count:,} parent links to art_ids")
+        else:
+            print(f"  No parent links to resolve")
+        conn.commit()
+    else:
+        print("  Skipping (no artwork_parent table)")
+
+    # Museum rooms reference table (static data from #212 crawl)
+    print("\n--- Museum Rooms ---")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS museum_rooms (
+            room_hash  TEXT PRIMARY KEY,
+            room_id    TEXT NOT NULL,
+            floor      TEXT,
+            room_name  TEXT
+        )
+    """)
+    # Data is seeded from an external JSON/CSV file if available
+    rooms_json = PROJECT_DIR / "data" / "museum-rooms.json"
+    if rooms_json.exists():
+        rooms_data = json.loads(rooms_json.read_text(encoding="utf-8"))
+        for room in rooms_data:
+            conn.execute(
+                "INSERT OR IGNORE INTO museum_rooms (room_hash, room_id, floor, room_name) VALUES (?, ?, ?, ?)",
+                (room.get("room_hash", ""), room["room_id"], room.get("floor"), room.get("room_name")),
+            )
+        conn.commit()
+        print(f"  Seeded {len(rooms_data)} museum rooms from {rooms_json}")
+    else:
+        print(f"  Skipping room seeding ({rooms_json} not found)")
+
+    # sync_state table for LDES consumer (#205)
+    print("\n--- Sync State ---")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sync_state (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+    conn.commit()
+    print("  sync_state table ready")
+
+    # geocode_method column on vocabulary
+    vocab_cols = get_columns(conn, "vocabulary")
+    if "geocode_method" not in vocab_cols:
+        conn.execute("ALTER TABLE vocabulary ADD COLUMN geocode_method TEXT")
+        conn.commit()
+        print("  Added vocabulary.geocode_method column")
+
+    # Convert dimension 0.0 sentinels → NULL (#195)
+    print("\n--- Dimension Sentinel Cleanup ---")
+    for col in ["height_cm", "width_cm", "depth_cm", "diameter_cm"]:
+        if col in get_columns(conn, "artworks"):
+            updated = conn.execute(f"UPDATE artworks SET {col} = NULL WHERE {col} = 0.0").rowcount
+            if updated > 0:
+                print(f"  {col}: {updated:,} zero sentinels → NULL")
+    conn.commit()
+
     # ── Integer-encode mappings & normalize rights for ~1.2 GB savings ──
     print("\n--- Mappings Normalization ---")
     normalize_mappings(conn)
@@ -1801,6 +2634,17 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     for table in ["vocabulary", "artworks", "mappings"]:
         count = cur.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         print(f"  {table}: {count:,} rows")
+
+    # New table stats
+    for table in ["exhibitions", "artwork_exhibitions", "modifications", "related_objects",
+                   "examinations", "title_variants", "assignment_pairs", "artwork_parent"]:
+        exists = conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()[0]
+        if exists:
+            count = cur.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            if count > 0:
+                print(f"  {table}: {count:,} rows")
 
     print("\n--- Vocabulary by Type ---")
     rows = cur.execute("""
@@ -2011,6 +2855,11 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
             ("date_earliest",    "Dates"),
             ("height_cm",        "Height"),
             ("width_cm",         "Width"),
+            ("depth_cm",         "Depth"),
+            ("diameter_cm",      "Diameter"),
+            ("weight_g",         "Weight"),
+            ("date_display",     "Date display"),
+            ("current_location", "Current loc."),
         ]
         for col, label in text_cols:
             cnt = cur.execute(f"SELECT COUNT(*) FROM artworks WHERE {col} IS NOT NULL AND {col} != ''").fetchone()[0]
@@ -2255,6 +3104,34 @@ def main():
         run_phase2(conn)
         print(f"  Phase 2b took {time.time() - t0:.1f}s")
         print()
+
+    # ── Orphan vocab audit (before Phase 3 integer-encoding drops them) ──
+    print("=== Orphan Vocab Audit ===")
+    orphan_sql = """
+        SELECT m.vocab_id, m.field, COUNT(*) as cnt
+        FROM mappings m
+        LEFT JOIN vocabulary v ON m.vocab_id = v.id
+        WHERE v.id IS NULL
+        GROUP BY m.vocab_id, m.field
+        ORDER BY cnt DESC
+    """
+    mapping_cols = get_columns(conn, "mappings")
+    if "vocab_id" in mapping_cols:
+        orphans = conn.execute(orphan_sql).fetchall()
+        if orphans:
+            csv_path = PROJECT_DIR / "data" / "audit" / f"orphan-vocab-ids-v0.24.csv"
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(csv_path, "w") as f:
+                f.write("vocab_id,field,count\n")
+                for vid, field, cnt in orphans:
+                    f.write(f"{vid},{field},{cnt}\n")
+            print(f"  WARNING: {len(orphans)} orphan vocab IDs exported to {csv_path}")
+            print(f"  Review and add missing codes to EXTERNAL_VOCAB before re-running Phase 3.")
+        else:
+            print(f"  No orphan vocab IDs found — all mappings have matching vocabulary entries.")
+    else:
+        print(f"  Skipping (mappings already integer-encoded)")
+    print()
 
     print("=== Phase 3: Validation & Post-processing ===")
     run_phase3(conn, geo_csv=args.geo_csv)
