@@ -75,7 +75,7 @@ DUMP_CONFIGS = [
 OAI_BASE = "https://data.rijksmuseum.nl/oai"
 LINKED_ART_BASE = "https://data.rijksmuseum.nl"
 USER_AGENT = "rijksmuseum-mcp-harvest/1.0"
-DEFAULT_THREADS = 6
+DEFAULT_THREADS = 12
 BATCH_SIZE = 500  # Commit every N pages
 
 # ─── AAT URIs for Tier 2 Linked Art parsing ─────────────────────────
