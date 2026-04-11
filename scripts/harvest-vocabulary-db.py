@@ -24,6 +24,7 @@ Usage:
     python3 scripts/harvest-vocabulary-db.py --phase 4      # Run Phase 4 + 3 only
     python3 scripts/harvest-vocabulary-db.py --threads 16   # Phase 4 thread count
     python3 scripts/harvest-vocabulary-db.py --phase 3 --geo-csv data/backfills/geocoded-places.csv
+    python3 scripts/harvest-vocabulary-db.py --limit 1   # Test harvest: 1 page (~200 artworks), all phases
 
 Output: data/vocabulary.db (~1 GB)
 """
@@ -1023,8 +1024,8 @@ def load_checkpoint() -> tuple[str, int] | None:
         return None
 
 
-def run_phase1(conn: sqlite3.Connection, resume: bool = False):
-    """Phase 1: Harvest all OAI-PMH records."""
+def run_phase1(conn: sqlite3.Connection, resume: bool = False, max_pages: int | None = None):
+    """Phase 1: Harvest OAI-PMH records. If max_pages is set, stop after that many pages (~200 records/page)."""
     start_page = 0
     url = f"{OAI_BASE}?verb=ListRecords&metadataPrefix=edm"
 
@@ -1075,6 +1076,10 @@ def run_phase1(conn: sqlite3.Connection, resume: bool = False):
             # Save checkpoint
             save_checkpoint(token, page)
         else:
+            url = None
+
+        if max_pages and (page - start_page) >= max_pages:
+            print(f"  Reached page limit ({max_pages} pages, {total_artworks:,} artworks)")
             url = None
 
         if page % 10 == 0:
@@ -1998,6 +2003,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"  Resolving {total:,} artworks for Tier 2 fields ({threads} threads)...")
 
     # Detect schema for mappings inserts (production roles + attribution qualifiers)
+    artworks_cols = get_columns(conn, "artworks")
+    has_art_id = "art_id" in artworks_cols  # Only exists after Phase 3's normalize_mappings
     int_mappings = "field_id" in get_columns(conn, "mappings")
     if int_mappings:
         MAPPING_INSERT_SQL = """
@@ -2142,13 +2149,16 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                 qualifier_count += len(result["qualifiers"])
                 creator_count += len(result["creators"])
 
-                # Get art_id for the new table inserts.
-                # On a fresh full run, art_id is NULL (populated by Phase 3's normalize_mappings).
+                # New table inserts require art_id (added by Phase 3's normalize_mappings).
+                # On a fresh full run the column doesn't exist yet — skip entirely.
                 # These inserts only fire on incremental re-runs of Phase 4 after Phase 3.
-                art_id_row = conn.execute(
-                    "SELECT art_id FROM artworks WHERE object_number = ?", (obj_num,)
-                ).fetchone()
-                art_id = art_id_row[0] if art_id_row else None
+                if has_art_id:
+                    art_id_row = conn.execute(
+                        "SELECT art_id FROM artworks WHERE object_number = ?", (obj_num,)
+                    ).fetchone()
+                    art_id = art_id_row[0] if art_id_row else None
+                else:
+                    art_id = None
 
                 if art_id is not None:
                     # Insert modifications
@@ -2459,80 +2469,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         import_geocoding(conn, geo_csv)
         print()
 
-    # ── New Phase 3 tables and post-harvest joins ──
-
-    # artwork_exhibitions junction table (from Phase 0 exhibition_members)
-    print("\n--- Artwork Exhibitions ---")
-    if table_exists(conn, "exhibition_members"):
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS artwork_exhibitions (
-                art_id        INTEGER NOT NULL,
-                exhibition_id INTEGER NOT NULL,
-                PRIMARY KEY (art_id, exhibition_id)
-            ) WITHOUT ROWID
-        """)
-        # Resolve hmo_id → art_id via artworks.object_number
-        # HMO IDs are the numeric portion of https://id.rijksmuseum.nl/200xxxxxx URIs
-        inserted = conn.execute("""
-            INSERT OR IGNORE INTO artwork_exhibitions (art_id, exhibition_id)
-            SELECT a.art_id, em.exhibition_id
-            FROM exhibition_members em
-            JOIN artworks a ON a.object_number = em.hmo_id
-            WHERE a.art_id IS NOT NULL
-        """).rowcount
-        conn.commit()
-        print(f"  artwork_exhibitions: {inserted:,} rows")
-
-        # Also try with object_number matching patterns (some may need prefix stripping)
-        total_ae = cur.execute("SELECT COUNT(*) FROM artwork_exhibitions").fetchone()[0]
-        total_em = cur.execute("SELECT COUNT(*) FROM exhibition_members").fetchone()[0]
-        if total_ae < total_em:
-            print(f"  Note: {total_em - total_ae:,} exhibition memberships could not be resolved to art_ids")
-    else:
-        print("  Skipping (no exhibition_members table)")
-
-    # Resolve related_objects.related_art_id
-    print("\n--- Resolving Related Object Art IDs ---")
-    if table_exists(conn, "related_objects"):
-        ro_count = cur.execute("SELECT COUNT(*) FROM related_objects").fetchone()[0]
-        if ro_count > 0:
-            # Extract object_number from Linked Art URI (last path segment)
-            conn.execute("""
-                UPDATE related_objects SET related_art_id = (
-                    SELECT a.art_id FROM artworks a
-                    WHERE a.object_number = SUBSTR(related_objects.related_la_uri,
-                        INSTR(related_objects.related_la_uri, '/object/') + 8)
-                )
-                WHERE related_art_id IS NULL
-            """)
-            resolved = cur.execute("SELECT COUNT(*) FROM related_objects WHERE related_art_id IS NOT NULL").fetchone()[0]
-            print(f"  Resolved {resolved:,} of {ro_count:,} related objects to art_ids")
-        else:
-            print(f"  No related objects to resolve")
-        conn.commit()
-    else:
-        print("  Skipping (no related_objects table)")
-
-    # Resolve artwork_parent.parent_art_id
-    print("\n--- Resolving Artwork Parent Art IDs ---")
-    if table_exists(conn, "artwork_parent"):
-        ap_count = cur.execute("SELECT COUNT(*) FROM artwork_parent").fetchone()[0]
-        if ap_count > 0:
-            conn.execute("""
-                UPDATE artwork_parent SET parent_art_id = (
-                    SELECT a.art_id FROM artworks a
-                    WHERE a.object_number = SUBSTR(artwork_parent.parent_la_uri,
-                        INSTR(artwork_parent.parent_la_uri, '/object/') + 8)
-                )
-                WHERE parent_art_id IS NULL
-            """)
-            resolved = cur.execute("SELECT COUNT(*) FROM artwork_parent WHERE parent_art_id IS NOT NULL").fetchone()[0]
-            print(f"  Resolved {resolved:,} of {ap_count:,} parent links to art_ids")
-        else:
-            print(f"  No parent links to resolve")
-        conn.commit()
-    else:
-        print("  Skipping (no artwork_parent table)")
+    # ── New Phase 3 tables (art_id-independent) ──
 
     # Museum rooms reference table (static data from #212 crawl)
     print("\n--- Museum Rooms ---")
@@ -2589,6 +2526,77 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     print("\n--- Mappings Normalization ---")
     normalize_mappings(conn)
     normalize_rights(conn)
+
+    # ── Post-normalization joins (require art_id from normalize_mappings) ──
+
+    # artwork_exhibitions junction table (from Phase 0 exhibition_members)
+    print("\n--- Artwork Exhibitions ---")
+    if table_exists(conn, "exhibition_members"):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS artwork_exhibitions (
+                art_id        INTEGER NOT NULL,
+                exhibition_id INTEGER NOT NULL,
+                PRIMARY KEY (art_id, exhibition_id)
+            ) WITHOUT ROWID
+        """)
+        inserted = conn.execute("""
+            INSERT OR IGNORE INTO artwork_exhibitions (art_id, exhibition_id)
+            SELECT a.art_id, em.exhibition_id
+            FROM exhibition_members em
+            JOIN artworks a ON a.object_number = em.hmo_id
+            WHERE a.art_id IS NOT NULL
+        """).rowcount
+        conn.commit()
+        print(f"  artwork_exhibitions: {inserted:,} rows")
+
+        total_ae = cur.execute("SELECT COUNT(*) FROM artwork_exhibitions").fetchone()[0]
+        total_em = cur.execute("SELECT COUNT(*) FROM exhibition_members").fetchone()[0]
+        if total_ae < total_em:
+            print(f"  Note: {total_em - total_ae:,} exhibition memberships could not be resolved to art_ids")
+    else:
+        print("  Skipping (no exhibition_members table)")
+
+    # Resolve related_objects.related_art_id
+    print("\n--- Resolving Related Object Art IDs ---")
+    if table_exists(conn, "related_objects"):
+        ro_count = cur.execute("SELECT COUNT(*) FROM related_objects").fetchone()[0]
+        if ro_count > 0:
+            conn.execute("""
+                UPDATE related_objects SET related_art_id = (
+                    SELECT a.art_id FROM artworks a
+                    WHERE a.object_number = SUBSTR(related_objects.related_la_uri,
+                        INSTR(related_objects.related_la_uri, '/object/') + 8)
+                )
+                WHERE related_art_id IS NULL
+            """)
+            resolved = cur.execute("SELECT COUNT(*) FROM related_objects WHERE related_art_id IS NOT NULL").fetchone()[0]
+            print(f"  Resolved {resolved:,} of {ro_count:,} related objects to art_ids")
+        else:
+            print("  No related objects to resolve")
+        conn.commit()
+    else:
+        print("  Skipping (no related_objects table)")
+
+    # Resolve artwork_parent.parent_art_id
+    print("\n--- Resolving Artwork Parent Art IDs ---")
+    if table_exists(conn, "artwork_parent"):
+        ap_count = cur.execute("SELECT COUNT(*) FROM artwork_parent").fetchone()[0]
+        if ap_count > 0:
+            conn.execute("""
+                UPDATE artwork_parent SET parent_art_id = (
+                    SELECT a.art_id FROM artworks a
+                    WHERE a.object_number = SUBSTR(artwork_parent.parent_la_uri,
+                        INSTR(artwork_parent.parent_la_uri, '/object/') + 8)
+                )
+                WHERE parent_art_id IS NULL
+            """)
+            resolved = cur.execute("SELECT COUNT(*) FROM artwork_parent WHERE parent_art_id IS NOT NULL").fetchone()[0]
+            print(f"  Resolved {resolved:,} of {ap_count:,} parent links to art_ids")
+        else:
+            print("  No parent links to resolve")
+        conn.commit()
+    else:
+        print("  Skipping (no artwork_parent table)")
 
     # Drop harvest-only index (only useful during Phase 4 to find unresolved artworks)
     conn.execute("DROP INDEX IF EXISTS idx_artworks_tier2")
@@ -3024,14 +3032,27 @@ def parse_args() -> argparse.Namespace:
         help="Path to geocoded places CSV (id,place_name,label_en,label_nl,external_id,lat,lon,artwork_count). "
              "Imports geocoding data into vocabulary table during Phase 3.",
     )
+    parser.add_argument(
+        "--limit", type=int, default=None, dest="limit_pages",
+        help="Limit Phase 1 OAI-PMH harvest to N pages (~200 records/page). "
+             "Default: unlimited. Subsequent phases auto-scope to harvested data.",
+    )
+    parser.add_argument(
+        "--db", type=str, default=None,
+        help="Override output database path (default: data/vocabulary.db).",
+    )
     return parser.parse_args()
 
 
 def main():
+    global DB_PATH
     args = parse_args()
 
+    if args.db:
+        DB_PATH = Path(args.db)
+
     print(f"Database: {DB_PATH}")
-    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}")
+    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}, limit_pages={args.limit_pages}")
     print()
 
     conn = create_or_open_db()
@@ -3055,9 +3076,10 @@ def main():
         print()
 
     if args.start_phase <= 1:
-        print("=== Phase 1: Harvesting ALL OAI-PMH records ===")
+        label = f"Harvesting OAI-PMH records (limit: {args.limit_pages} pages)" if args.limit_pages else "Harvesting ALL OAI-PMH records"
+        print(f"=== Phase 1: {label} ===")
         t0 = time.time()
-        run_phase1(conn, resume=args.resume)
+        run_phase1(conn, resume=args.resume, max_pages=args.limit_pages)
         print(f"  Phase 1 took {time.time() - t0:.1f}s")
         print()
 
