@@ -138,7 +138,7 @@ P_BROADER = "http://www.w3.org/2004/02/skos/core#broader"
 P_HAS_TYPE = "http://www.cidoc-crm.org/cidoc-crm/P2_has_type"
 LANG_EN = "http://vocab.getty.edu/aat/300388277"
 LANG_NL = "http://vocab.getty.edu/aat/300388256"
-AAT_DISPLAY_NAME = "http://vocab.getty.edu/aat/300404670"
+AAT_DISPLAY_NAME = AAT_TITLE_DISPLAY  # same AAT concept (300404670)
 AAT_PREFERRED_NAME = "http://vocab.getty.edu/aat/300404671"
 AAT_INVERTED_NAME = "http://vocab.getty.edu/aat/300404672"
 
@@ -372,6 +372,13 @@ VOCAB_INSERT_SQL = (
 def get_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     """Return the set of column names for a given table."""
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    """Check if a table exists in the database."""
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone() is not None
 
 
 def create_or_open_db() -> sqlite3.Connection:
@@ -635,7 +642,7 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
         bnodes: dict[str, dict] = {}
         date_begin = None
         date_end = None
-        member_uris: list[str] = []
+        member_uris: set[str] = set()
 
         try:
             with open(filepath, "r", encoding="utf-8") as f:
@@ -666,7 +673,7 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                     # subj is the artwork HMO URI
                     hmo_num = subj.split("/")[-1]
                     if hmo_num.isdigit():
-                        member_uris.append(hmo_num)
+                        member_uris.add(hmo_num)
 
             bm = BNODE_PATTERN.match(line)
             if bm:
@@ -690,7 +697,7 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                 if pred == "http://www.cidoc-crm.org/cidoc-crm/P46_is_composed_of" and obj_uri:
                     hmo_num = obj_uri.split("/")[-1]
                     if hmo_num.isdigit():
-                        member_uris.append(hmo_num)
+                        member_uris.add(hmo_num)
 
         # Extract EN/NL titles from bnodes
         title_en = None
@@ -1322,8 +1329,8 @@ UNIT_TO_G = {
 }
 
 
-def extract_dimension_cm(dimensions: list | None, type_uris: set[str]) -> float | None:
-    """Extract a dimension value in centimeters for a given dimension type (height/width)."""
+def _extract_dimension_value(dimensions: list | None, type_uris: set[str], unit_map: dict[str, float]) -> float | None:
+    """Extract a dimension/weight value, converting via unit_map (default factor 1.0)."""
     if not dimensions:
         return None
     for dim in dimensions:
@@ -1340,32 +1347,19 @@ def extract_dimension_cm(dimensions: list | None, type_uris: set[str]) -> float 
             val = float(value)
         except (ValueError, TypeError):
             continue
-        factor = UNIT_TO_CM.get(unit_id, 1.0)  # default to cm
+        factor = unit_map.get(unit_id, 1.0)
         return round(val * factor, 2) if factor != 1.0 else val
     return None
+
+
+def extract_dimension_cm(dimensions: list | None, type_uris: set[str]) -> float | None:
+    """Extract a dimension value in centimeters for a given dimension type (height/width)."""
+    return _extract_dimension_value(dimensions, type_uris, UNIT_TO_CM)
 
 
 def extract_weight_g(dimensions: list | None, type_uris: set[str]) -> float | None:
     """Extract a weight value in grams for a given dimension type."""
-    if not dimensions:
-        return None
-    for dim in dimensions:
-        if not isinstance(dim, dict):
-            continue
-        value = dim.get("value")
-        if value is None:
-            continue
-        if not has_classification(dim.get("classified_as", []), type_uris):
-            continue
-        unit = dim.get("unit", {})
-        unit_id = unit.get("id", "") if isinstance(unit, dict) else ""
-        try:
-            val = float(value)
-        except (ValueError, TypeError):
-            continue
-        factor = UNIT_TO_G.get(unit_id, 1.0)  # default to grams
-        return round(val * factor, 2) if factor != 1.0 else val
-    return None
+    return _extract_dimension_value(dimensions, type_uris, UNIT_TO_G)
 
 
 def extract_dimension_note(dimensions: list | None) -> str | None:
@@ -1385,6 +1379,23 @@ def extract_dimension_note(dimensions: list | None) -> str | None:
             elif content:
                 notes.append(content)
     return " | ".join(notes) if notes else None
+
+
+def _extract_timespan(entry: dict) -> tuple[str | None, str | None, str | None]:
+    """Extract (date_display, date_begin, date_end) from a Linked Art timespan dict."""
+    ts = entry.get("timespan", {})
+    if not isinstance(ts, dict):
+        return None, None, None
+    date_begin = ts.get("begin_of_the_begin")
+    date_end = ts.get("end_of_the_end")
+    date_display = None
+    for ident in ts.get("identified_by", []):
+        if isinstance(ident, dict) and ident.get("type") == "Name":
+            content = ident.get("content", "")
+            if content:
+                date_display = content
+                break
+    return date_display, date_begin, date_end
 
 
 def extract_modifications(data: dict) -> list[dict]:
@@ -1409,21 +1420,7 @@ def extract_modifications(data: dict) -> list[dict]:
                 modifier_uri = actor["id"]
                 break
 
-        # timespan
-        ts = entry.get("timespan", {})
-        date_display = None
-        date_begin = None
-        date_end = None
-        if isinstance(ts, dict):
-            date_begin = ts.get("begin_of_the_begin")
-            date_end = ts.get("end_of_the_end")
-            # Display label from identified_by
-            for ident in ts.get("identified_by", []):
-                if isinstance(ident, dict) and ident.get("type") == "Name":
-                    content = ident.get("content", "")
-                    if content:
-                        date_display = content
-                        break
+        date_display, date_begin, date_end = _extract_timespan(entry)
 
         # description from referred_to_by (prefer EN via AAT 300388277)
         description = None
@@ -1495,17 +1492,7 @@ def extract_attributed_by(data: dict) -> tuple[list[dict], list[dict]]:
                             break
                     break
 
-            ts = entry.get("timespan", {})
-            date_display = None
-            date_begin = None
-            date_end = None
-            if isinstance(ts, dict):
-                date_begin = ts.get("begin_of_the_begin")
-                date_end = ts.get("end_of_the_end")
-                for ident in ts.get("identified_by", []):
-                    if isinstance(ident, dict) and ident.get("type") == "Name":
-                        date_display = ident.get("content")
-                        break
+            date_display, date_begin, date_end = _extract_timespan(entry)
 
             if report_type_id:
                 examinations.append({
@@ -1900,10 +1887,9 @@ def resolve_artwork(uri: str) -> dict | None:
                 title_parts.append(content)
     title_all_text = "\n".join(title_parts) if title_parts else None
 
-    # Date display text from timespan.identified_by
+    # Date display text from timespan.identified_by (reuse produced_by from above)
     date_display = None
-    produced_by_for_date = data.get("produced_by", {})
-    ts_for_display = produced_by_for_date.get("timespan", {}) if isinstance(produced_by_for_date, dict) else {}
+    ts_for_display = produced_by.get("timespan", {}) if isinstance(produced_by, dict) else {}
     if isinstance(ts_for_display, list):
         # Multi-phase: concatenate display labels with "; "
         display_parts = []
@@ -2156,7 +2142,9 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                 qualifier_count += len(result["qualifiers"])
                 creator_count += len(result["creators"])
 
-                # Get art_id for the new table inserts
+                # Get art_id for the new table inserts.
+                # On a fresh full run, art_id is NULL (populated by Phase 3's normalize_mappings).
+                # These inserts only fire on incremental re-runs of Phase 4 after Phase 3.
                 art_id_row = conn.execute(
                     "SELECT art_id FROM artworks WHERE object_number = ?", (obj_num,)
                 ).fetchone()
@@ -2475,10 +2463,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
     # artwork_exhibitions junction table (from Phase 0 exhibition_members)
     print("\n--- Artwork Exhibitions ---")
-    exh_mem_exists = conn.execute(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='exhibition_members'"
-    ).fetchone()[0]
-    if exh_mem_exists:
+    if table_exists(conn, "exhibition_members"):
         conn.execute("""
             CREATE TABLE IF NOT EXISTS artwork_exhibitions (
                 art_id        INTEGER NOT NULL,
@@ -2508,10 +2493,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
     # Resolve related_objects.related_art_id
     print("\n--- Resolving Related Object Art IDs ---")
-    ro_exists = conn.execute(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='related_objects'"
-    ).fetchone()[0]
-    if ro_exists:
+    if table_exists(conn, "related_objects"):
         ro_count = cur.execute("SELECT COUNT(*) FROM related_objects").fetchone()[0]
         if ro_count > 0:
             # Extract object_number from Linked Art URI (last path segment)
@@ -2533,10 +2515,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
 
     # Resolve artwork_parent.parent_art_id
     print("\n--- Resolving Artwork Parent Art IDs ---")
-    ap_exists = conn.execute(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='artwork_parent'"
-    ).fetchone()[0]
-    if ap_exists:
+    if table_exists(conn, "artwork_parent"):
         ap_count = cur.execute("SELECT COUNT(*) FROM artwork_parent").fetchone()[0]
         if ap_count > 0:
             conn.execute("""
@@ -2638,10 +2617,7 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     # New table stats
     for table in ["exhibitions", "artwork_exhibitions", "modifications", "related_objects",
                    "examinations", "title_variants", "assignment_pairs", "artwork_parent"]:
-        exists = conn.execute(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,)
-        ).fetchone()[0]
-        if exists:
+        if table_exists(conn, table):
             count = cur.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             if count > 0:
                 print(f"  {table}: {count:,} rows")

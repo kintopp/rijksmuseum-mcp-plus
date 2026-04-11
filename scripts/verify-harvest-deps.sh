@@ -16,9 +16,14 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# Python
-PY_V=$(python3 --version 2>/dev/null || echo "none")
-echo "OK  $PY_V"
+# Python (harvest uses the embeddings conda env)
+CONDA_PY=~/miniconda3/envs/embeddings/bin/python
+if [ -x "$CONDA_PY" ]; then
+  echo "OK  embeddings conda env: $($CONDA_PY --version)"
+else
+  echo "FAIL  ~/miniconda3/envs/embeddings/bin/python not found"
+  FAIL=$((FAIL + 1))
+fi
 
 # npm deps
 if [ -d node_modules/better-sqlite3 ]; then
@@ -28,12 +33,11 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# Build
+# Build (only needed for Step 7 LLM audit scripts, not for harvest itself)
 if [ -f dist/provenance-peg.js ]; then
-  echo "OK  TypeScript built"
+  echo "OK  TypeScript built (needed for Step 7 audit scripts)"
 else
-  echo "FAIL  Run: npm run build"
-  FAIL=$((FAIL + 1))
+  echo "WARN  TypeScript not built — run 'npm run build' if using Step 7 audit scripts"
 fi
 
 # Data dumps
