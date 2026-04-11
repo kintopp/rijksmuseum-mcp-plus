@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
 """
-Generate description-only embeddings with PCA dimensionality reduction using Modal A10G.
+Generate description-only embeddings using Modal A10G.
 
 Phase 1 (local):  Load description texts from vocab DB (only artworks with description_text)
-Phase 2 (Modal):  Embed with clips/e5-small-trm-nl on A10 GPU
-Phase 3 (local):  Fit PCA 384→256, transform, quantize to int8
-Phase 4 (local):  Write to description tables in existing embeddings.db
-Phase 5 (local):  Save PCA matrix for query-time use
-Phase 6 (local):  Validate with test queries
+Phase 2 (Modal):  Embed with clips/e5-small-trm-nl on A10 GPU → int8[384]
+Phase 3 (local):  Write to description tables in existing embeddings.db
+Phase 4 (local):  Validate with test queries
 
 Usage:
     modal run scripts/generate-description-embeddings-modal.py
     modal run scripts/generate-description-embeddings-modal.py --limit 5000  # quick test
-    modal run scripts/generate-description-embeddings-modal.py --dims 192    # smaller vectors
-    modal run scripts/generate-description-embeddings-modal.py --no-pca      # skip PCA, store native 384d
 
 Prerequisites:
-    pip install modal sqlite-vec numpy scikit-learn
+    pip install modal sqlite-vec numpy
     modal setup
 
 Output:
     Adds desc_embeddings + vec_desc_artworks tables to data/embeddings.db
-    Saves PCA matrix to data/desc-pca-matrix.npz
 """
 
 import os
@@ -52,8 +47,7 @@ DEFAULT_VOCAB_DB = PROJECT_DIR / "data" / "vocabulary.db"
 DEFAULT_EMBEDDINGS_DB = PROJECT_DIR / "data" / "embeddings.db"
 
 MODEL_NAME = "clips/e5-small-trm-nl"
-NATIVE_DIMS = 384
-DEFAULT_PCA_DIMS = 256
+DIMS = 384
 COMMIT_BATCH = 5000
 MODAL_BATCH_SIZE = 512
 
@@ -89,22 +83,19 @@ class Embedder:
 
     @modal.method()
     def embed(self, texts: list[str]) -> bytes:
-        """Embed passage texts → float32 → flat bytes.
-
-        Returns float32 (not int8) so PCA can be applied locally before quantization.
-        """
+        """Embed passage texts → int8 → flat bytes."""
         import numpy as np
         prefixed = [f"passage: {t}" for t in texts]
         embs = self.model.encode(prefixed, normalize_embeddings=True, show_progress_bar=False)
-        return embs.astype(np.float32).tobytes()
+        return np.clip(embs * 127, -127, 127).astype(np.int8).tobytes()
 
     @modal.method()
     def embed_queries(self, queries: list[str]) -> bytes:
-        """Embed query texts → float32 → flat bytes."""
+        """Embed query texts → int8 → flat bytes."""
         import numpy as np
         prefixed = [f"query: {q}" for q in queries]
         embs = self.model.encode(prefixed, normalize_embeddings=True, show_progress_bar=False)
-        return embs.astype(np.float32).tobytes()
+        return np.clip(embs * 127, -127, 127).astype(np.int8).tobytes()
 
 
 # ─── Local helpers ──────────────────────────────────────────────────────
@@ -142,39 +133,6 @@ def load_descriptions(vocab_db: str) -> list[tuple[int, str, str]]:
     return artworks
 
 
-def fit_pca(embeddings: np.ndarray, target_dims: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Fit PCA on embeddings and return (transformed, components, mean).
-
-    Uses sklearn PCA for numerical stability (handles centering, whitening).
-    Returns:
-        transformed: (n, target_dims) float32
-        components:  (target_dims, native_dims) float32 — projection matrix
-        mean:        (native_dims,) float32 — centering vector
-    """
-    from sklearn.decomposition import PCA
-
-    print(f"  Fitting PCA {embeddings.shape[1]}→{target_dims} on {len(embeddings):,} vectors...")
-    t0 = time.time()
-
-    pca = PCA(n_components=target_dims)
-    transformed = pca.fit_transform(embeddings).astype(np.float32)
-
-    explained = pca.explained_variance_ratio_.sum()
-    elapsed = time.time() - t0
-    print(f"    PCA fit in {elapsed:.1f}s — explained variance: {explained:.4f} ({explained*100:.1f}%)")
-
-    return transformed, pca.components_.astype(np.float32), pca.mean_.astype(np.float32)
-
-
-def quantize_int8(embeddings: np.ndarray) -> np.ndarray:
-    """Normalize then quantize float32 embeddings to int8."""
-    # Re-normalize after PCA (PCA can break unit-norm)
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    normalized = embeddings / norms
-    return np.clip(normalized * 127, -127, 127).astype(np.int8)
-
-
 def ensure_desc_tables(conn: sqlite3.Connection, dims: int):
     """Create description embedding tables (separate from main embeddings)."""
     conn.execute("""
@@ -209,7 +167,7 @@ def flush_desc_batch(conn, regular_rows, vec_rows):
     conn.commit()
 
 
-def validate_desc(output_path: str, pca_components, pca_mean, dims: int, embedder: Embedder):
+def validate_desc(output_path: str, embedder: Embedder):
     """Run test queries against description embeddings."""
     conn = open_vec_db(output_path)
     count = conn.execute("SELECT COUNT(*) FROM desc_embeddings").fetchone()[0]
@@ -230,17 +188,7 @@ def validate_desc(output_path: str, pca_components, pca_mean, dims: int, embedde
     ]
 
     query_bytes = embedder.embed_queries.remote(queries)
-    query_embs = np.frombuffer(query_bytes, dtype=np.float32).reshape(len(queries), NATIVE_DIMS)
-
-    # Apply PCA to queries
-    if pca_components is not None:
-        query_embs = (query_embs - pca_mean) @ pca_components.T
-        # Re-normalize + quantize
-        norms = np.linalg.norm(query_embs, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        query_embs = query_embs / norms
-
-    query_int8 = np.clip(query_embs * 127, -127, 127).astype(np.int8)
+    query_int8 = np.frombuffer(query_bytes, dtype=np.int8).reshape(len(queries), DIMS)
 
     # Look up titles for display
     vocab_db = str(DEFAULT_VOCAB_DB)
@@ -277,19 +225,15 @@ def validate_desc(output_path: str, pca_components, pca_mean, dims: int, embedde
 def main(
     limit: int = 0,
     batch_size: int = MODAL_BATCH_SIZE,
-    dims: int = DEFAULT_PCA_DIMS,
-    no_pca: bool = False,
 ):
     output = str(DEFAULT_EMBEDDINGS_DB)
     vocab_db = str(DEFAULT_VOCAB_DB)
-    use_pca = not no_pca
-    target_dims = NATIVE_DIMS if not use_pca else dims
 
     start = time.time()
     print("Description Embeddings via Modal (A10G GPU)")
     print(f"  Model:        {MODEL_NAME}")
-    print(f"  Native dims:  {NATIVE_DIMS}")
-    print(f"  PCA:          {'off' if not use_pca else f'{NATIVE_DIMS}→{target_dims}'}")
+    print(f"  Dimensions:   {DIMS}")
+    print(f"  Quantization: int8")
     print(f"  Output:       {output} (adding desc tables)")
 
     embedder = Embedder()
@@ -306,20 +250,20 @@ def main(
         print("Nothing to embed!")
         return
 
-    # ── Phase 2: Embed on Modal ───────────────────────────────────────
+    # ── Phase 2: Embed on Modal (returns int8 directly) ────────────────
     chunks = [artworks[i:i + batch_size] for i in range(0, len(artworks), batch_size)]
     text_chunks = [[t for _, _, t in chunk] for chunk in chunks]
 
     print(f"\nPhase 2: Embedding {len(artworks):,} descriptions in {len(chunks)} batches on Modal A10G...")
 
-    all_embeddings = np.empty((len(artworks), NATIVE_DIMS), dtype=np.float32)
+    all_int8 = np.empty((len(artworks), DIMS), dtype=np.int8)
     t0 = time.time()
     offset = 0
 
     for batch_idx, emb_bytes in enumerate(embedder.embed.map(text_chunks)):
         n = len(chunks[batch_idx])
-        batch_embs = np.frombuffer(emb_bytes, dtype=np.float32).reshape(n, NATIVE_DIMS)
-        all_embeddings[offset:offset + n] = batch_embs
+        batch_embs = np.frombuffer(emb_bytes, dtype=np.int8).reshape(n, DIMS)
+        all_int8[offset:offset + n] = batch_embs
         offset += n
 
         elapsed = time.time() - t0
@@ -332,20 +276,8 @@ def main(
     embed_elapsed = time.time() - t0
     print(f"  Embedding done in {embed_elapsed:.1f}s")
 
-    # ── Phase 3: PCA + quantize ───────────────────────────────────────
-    pca_components = None
-    pca_mean = None
-
-    if use_pca:
-        print(f"\nPhase 3: PCA {NATIVE_DIMS}→{target_dims}...")
-        all_embeddings, pca_components, pca_mean = fit_pca(all_embeddings, target_dims)
-
-    print("  Quantizing to int8...")
-    all_int8 = quantize_int8(all_embeddings)
-    del all_embeddings
-
-    # ── Phase 4: Write to DB ──────────────────────────────────────────
-    print(f"\nPhase 4: Writing {len(artworks):,} description embeddings to {output}...")
+    # ── Phase 3: Write to DB ──────────────────────────────────────────
+    print(f"\nPhase 3: Writing {len(artworks):,} description embeddings to {output}...")
 
     conn = open_vec_db(output)
     conn.execute("PRAGMA journal_mode=WAL")
@@ -359,7 +291,7 @@ def main(
         pass  # vec0 tables may need special handling
     conn.commit()
 
-    ensure_desc_tables(conn, target_dims)
+    ensure_desc_tables(conn, DIMS)
 
     batch_regular = []
     batch_vec = []
@@ -393,45 +325,32 @@ def main(
 
     desc_meta = [
         ("desc_model", MODEL_NAME),
-        ("desc_dimensions", str(target_dims)),
-        ("desc_native_dimensions", str(NATIVE_DIMS)),
-        ("desc_pca", f"{NATIVE_DIMS}→{target_dims}" if use_pca else "none"),
+        ("desc_dimensions", str(DIMS)),
         ("desc_quantization", "int8"),
         ("desc_artwork_count", str(len(artworks))),
         ("desc_built_at", datetime.now(timezone.utc).isoformat()),
         ("desc_vocab_db_built_at", vocab_built_at),
     ]
+    # Remove stale PCA-era keys if present
+    for stale_key in ("desc_native_dimensions", "desc_pca"):
+        conn.execute("DELETE FROM version_info WHERE key = ?", (stale_key,))
     conn.executemany(
         "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)", desc_meta
     )
     conn.commit()
     conn.close()
 
-    # ── Phase 5: Save PCA matrix ──────────────────────────────────────
-    if use_pca:
-        pca_path = str(PROJECT_DIR / "data" / "desc-pca-matrix.npz")
-        print(f"\nPhase 5: Saving PCA matrix to {pca_path}...")
-        np.savez_compressed(
-            pca_path,
-            components=pca_components,
-            mean=pca_mean,
-            source_dims=NATIVE_DIMS,
-            target_dims=target_dims,
-        )
-        pca_size_kb = os.path.getsize(pca_path) / 1024
-        print(f"    PCA matrix: {pca_size_kb:.0f} KB")
-
-    # ── Phase 6: Validate ─────────────────────────────────────────────
-    print(f"\nPhase 6: Validation...")
-    validate_desc(output, pca_components, pca_mean, target_dims, embedder)
+    # ── Phase 4: Validate ─────────────────────────────────────────────
+    print(f"\nPhase 4: Validation...")
+    validate_desc(output, embedder)
 
     # Final stats
     total_elapsed = time.time() - start
     db_size_mb = os.path.getsize(output) / (1024 * 1024)
     print(f"\nDone in {total_elapsed:.1f}s")
     print(f"  Embeddings DB size: {db_size_mb:.1f} MB")
-    print(f"  Description vectors: {len(artworks):,} × int8[{target_dims}]")
-    est_desc_size = len(artworks) * target_dims / (1024 * 1024)
+    print(f"  Description vectors: {len(artworks):,} × int8[{DIMS}]")
+    est_desc_size = len(artworks) * DIMS / (1024 * 1024)
     print(f"  Estimated description vector storage: {est_desc_size:.0f} MB")
 
 

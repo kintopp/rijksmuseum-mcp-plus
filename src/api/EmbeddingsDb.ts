@@ -98,7 +98,7 @@ export class EmbeddingsDb {
         this.db.prepare("SELECT 1 FROM desc_embeddings LIMIT 1").get();
         this.db.prepare("SELECT 1 FROM vec_desc_artworks LIMIT 1").get();
 
-        this.descDimensions = parseInt(metaMap.desc_dimensions ?? "256", 10);
+        this.descDimensions = parseInt(metaMap.desc_dimensions ?? "384", 10);
         this.descArtworkCount = parseInt(metaMap.desc_artwork_count ?? "0", 10);
 
         this.stmtDescLookup = this.db.prepare(

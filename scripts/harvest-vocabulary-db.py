@@ -107,6 +107,19 @@ DIAMETER_URIS = {AAT_DIAMETER, RM_DIAMETER}
 AAT_UNIT_G = "http://vocab.getty.edu/aat/300379225"     # grams
 AAT_UNIT_KG = "http://vocab.getty.edu/aat/300379226"    # kilograms
 
+# Source object types (used_object_of_type) — AAT concepts for the type of object
+# used as a source in production (e.g., "this print was made after a painting").
+# Only 6 distinct values across the collection; all are external AAT URIs not in the
+# Rijksmuseum vocabulary dump, so they must be seeded into the vocabulary table.
+AAT_SOURCE_TYPES = {
+    "300102051": "designs",
+    "300033973": "drawings",
+    "300033618": "paintings",
+    "300041273": "prints (visual works)",
+    "300047090": "sculpture (visual works)",
+    "300046300": "photographs",
+}
+
 # Exhibition N-Triples predicates
 P_BEGIN = "http://www.cidoc-crm.org/cidoc-crm/P82a_begin_of_the_begin"
 P_END = "http://www.cidoc-crm.org/cidoc-crm/P82b_end_of_the_end"
@@ -1658,12 +1671,16 @@ def _extract_assigned_creators(items: list) -> list[tuple[str, str]]:
     return result
 
 
-def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str, int]]]:
-    """Extract production roles, attribution qualifiers, assigned creators, and assignment pairs from produced_by.
+def extract_production_parts(data: dict) -> tuple[
+    list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]],
+    list[tuple[str, str, int]], list[tuple[str, str]], list[tuple[str, str]],
+]:
+    """Extract production roles, qualifiers, creators, assignment pairs, places, and source types from produced_by.
 
     Returns:
-        (roles, qualifiers, creators, assignment_pairs) where roles/qualifiers/creators are
-        lists of (vocab_id, field) tuples, and assignment_pairs are (qualifier_id, creator_id, part_index) tuples.
+        (roles, qualifiers, creators, assignment_pairs, places, source_types) where
+        roles/qualifiers/creators/places/source_types are lists of (vocab_id, field) tuples,
+        and assignment_pairs are (qualifier_id, creator_id, part_index) tuples.
 
     Production structure in Linked Art:
         produced_by: {
@@ -1672,6 +1689,8 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
                     carried_out_by: [{ id: "https://id.rijksmuseum.nl/31xxx" }],
                     technique: [{ id: "https://id.rijksmuseum.nl/12xxx" }],  # role (painter, printmaker)
                     classified_as: [{ id: "..." }],  # priority level (primary/secondary/undetermined)
+                    took_place_at: [{ id: "https://id.rijksmuseum.nl/230xxx", type: "Place" }],
+                    used_object_of_type: [{ id: "http://vocab.getty.edu/aat/300xxx", type: "Type" }],
                     assigned_by: [
                         {
                             type: "AttributeAssignment",
@@ -1693,10 +1712,12 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
     qualifiers: list[tuple[str, str]] = []
     creators: list[tuple[str, str]] = []
     assignment_pairs: list[tuple[str, str, int]] = []  # (qualifier_id, creator_id, part_index)
+    places: list[tuple[str, str]] = []
+    source_types: list[tuple[str, str]] = []
 
     produced_by = data.get("produced_by")
     if not isinstance(produced_by, dict):
-        return roles, qualifiers, creators, assignment_pairs
+        return roles, qualifiers, creators, assignment_pairs, places, source_types
 
     # Collect parts from both part[] and top-level assigned_by
     parts = produced_by.get("part", [])
@@ -1724,19 +1745,32 @@ def extract_production_parts(data: dict) -> tuple[list[tuple[str, str]], list[tu
                 for c_id, _ in assigned_creators:
                     assignment_pairs.append((q_id, c_id, part_idx))
 
+    def _normalise_list(val: object) -> list:
+        """Normalise a value that may be a dict, list, or absent into a list."""
+        if isinstance(val, dict):
+            return [val]
+        if isinstance(val, list):
+            return val
+        return []
+
     for part_idx, part in enumerate(parts):
         if not isinstance(part, dict):
             continue
         roles.extend(_extract_ids(part.get("technique", []), "production_role"))
         qualifiers.extend(_extract_ids(part.get("classified_as", []), "attribution_qualifier"))
         _process_assigned_by(part.get("assigned_by", []), part_idx)
+        places.extend(_extract_ids(_normalise_list(part.get("took_place_at")), "production_place"))
+        source_types.extend(_extract_ids(_normalise_list(part.get("used_object_of_type")), "source_type"))
 
     # Also check top-level produced_by.assigned_by (#43 — some artworks have it at the top)
     if produced_by.get("part") is not None:
         # Only process top-level assigned_by if we didn't already treat produced_by as a single part
         _process_assigned_by(produced_by.get("assigned_by", []), -1)
+        # Top-level took_place_at / used_object_of_type (rare but possible)
+        places.extend(_extract_ids(_normalise_list(produced_by.get("took_place_at")), "production_place"))
+        source_types.extend(_extract_ids(_normalise_list(produced_by.get("used_object_of_type")), "source_type"))
 
-    return roles, qualifiers, creators, assignment_pairs
+    return roles, qualifiers, creators, assignment_pairs, places, source_types
 
 
 def extract_narrative(data: dict) -> str | None:
@@ -1817,8 +1851,8 @@ def resolve_artwork(uri: str) -> dict | None:
     weight_g = extract_weight_g(dimensions, WEIGHT_URIS)
     dimension_note = extract_dimension_note(dimensions)
 
-    # Production roles, attribution qualifiers, assigned creators, and assignment pairs
-    roles, qualifiers, creators, assignment_pairs = extract_production_parts(data)
+    # Production roles, attribution qualifiers, assigned creators, assignment pairs, places, source types
+    roles, qualifiers, creators, assignment_pairs, places, source_types = extract_production_parts(data)
 
     # Creator label from production statement text (referred_to_by with AAT 300435416)
     # Contains the qualifier-prefixed creator name (e.g. "attributed to Claes van Beresteyn")
@@ -1969,6 +2003,8 @@ def resolve_artwork(uri: str) -> dict | None:
         "qualifiers": qualifiers,
         "creators": creators,
         "assignment_pairs": assignment_pairs,
+        "places": places,
+        "source_types": source_types,
         "modifications": modifications,
         "related_objects": related_objects,
         "examinations": examinations,
@@ -1988,6 +2024,42 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
         print("  To re-run Tier 2 resolution, start from a fresh Phase 1+2 harvest.")
         return
 
+    # Detect schema early — needed by seed step and MAPPING_INSERT_SQL below
+    int_mappings = "field_id" in get_columns(conn, "mappings")
+
+    # Seed AAT source-type vocabulary entries (used_object_of_type).
+    # These are external AAT URIs not present in the Rijksmuseum vocabulary dump.
+    # _extract_ids() emits the AAT suffix (e.g. "300102051") as vocab_id, so we insert
+    # with that as the primary key to match the MAPPING_INSERT_SQL JOIN.
+    # vocab_int_id is an explicit INTEGER column (NOT a rowid alias) used by the
+    # integer-schema MAPPING_INSERT_SQL — seeded rows must get a value.
+    if int_mappings:
+        max_vid = cur.execute("SELECT COALESCE(MAX(vocab_int_id), 0) FROM vocabulary").fetchone()[0]
+    seeded = 0
+    for aat_id, label_en in AAT_SOURCE_TYPES.items():
+        res = cur.execute(
+            "INSERT OR IGNORE INTO vocabulary (id, type, label_en) VALUES (?, 'classification', ?)",
+            (aat_id, label_en),
+        )
+        if res.rowcount and int_mappings:
+            max_vid += 1
+            cur.execute("UPDATE vocabulary SET vocab_int_id = ? WHERE id = ?", (max_vid, aat_id))
+        seeded += res.rowcount
+    if seeded:
+        print(f"  Seeded {seeded} AAT source-type vocabulary entries (vocab_int_id {max_vid - seeded + 1}–{max_vid}).")
+
+    # Ensure new field names exist in field_lookup (integer-schema DBs).
+    # The MAPPING_INSERT_SQL JOINs against field_lookup — missing entries cause silent drops.
+    if int_mappings:
+        fl_added = 0
+        for field_name in ("production_place", "source_type"):
+            res = cur.execute("INSERT OR IGNORE INTO field_lookup (name) VALUES (?)", (field_name,))
+            fl_added += res.rowcount
+        if fl_added:
+            print(f"  Added production_place + source_type to field_lookup.")
+
+    conn.commit()
+
     # Get all artworks that haven't been processed yet
     pending = cur.execute("""
         SELECT object_number, linked_art_uri
@@ -2005,7 +2077,6 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     # Detect schema for mappings inserts (production roles + attribution qualifiers)
     artworks_cols = get_columns(conn, "artworks")
     has_art_id = "art_id" in artworks_cols  # Only exists after Phase 3's normalize_mappings
-    int_mappings = "field_id" in get_columns(conn, "mappings")
     if int_mappings:
         MAPPING_INSERT_SQL = """
             INSERT OR IGNORE INTO mappings (artwork_id, vocab_rowid, field_id)
@@ -2040,6 +2111,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     title_variant_count = 0
     assignment_pair_count = 0
     parent_count = 0
+    place_count = 0
+    source_type_count = 0
     t0 = time.time()
 
     TIER2_UPDATE_SQL = """
@@ -2142,12 +2215,14 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     obj_num,
                 ))
 
-                # Insert production role, attribution qualifier, and creator mappings
-                for vocab_id, field in result["roles"] + result["qualifiers"] + result["creators"]:
+                # Insert production role, attribution qualifier, creator, place, and source type mappings
+                for vocab_id, field in result["roles"] + result["qualifiers"] + result["creators"] + result["places"] + result["source_types"]:
                     conn.execute(MAPPING_INSERT_SQL, (obj_num, vocab_id, field))
                 role_count += len(result["roles"])
                 qualifier_count += len(result["qualifiers"])
                 creator_count += len(result["creators"])
+                place_count += len(result["places"])
+                source_type_count += len(result["source_types"])
 
                 # New table inserts require art_id (added by Phase 3's normalize_mappings).
                 # On a fresh full run the column doesn't exist yet — skip entirely.
@@ -2244,6 +2319,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Title vars:   {title_variant_count:,}")
     print(f"    Assign. pairs:{assignment_pair_count:,}")
     print(f"    Parent links: {parent_count:,}")
+    print(f"    Prod. places: {place_count:,}")
+    print(f"    Source types: {source_type_count:,}")
 
 
 # ─── Geocoding Import ────────────────────────────────────────────────
