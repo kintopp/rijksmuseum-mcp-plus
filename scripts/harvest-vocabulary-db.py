@@ -36,6 +36,7 @@ import os
 import re
 import sqlite3
 import tarfile
+from itertools import chain
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -2033,6 +2034,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     # with that as the primary key to match the MAPPING_INSERT_SQL JOIN.
     # vocab_int_id is an explicit INTEGER column (NOT a rowid alias) used by the
     # integer-schema MAPPING_INSERT_SQL — seeded rows must get a value.
+    max_vid = 0
     if int_mappings:
         max_vid = cur.execute("SELECT COALESCE(MAX(vocab_int_id), 0) FROM vocabulary").fetchone()[0]
     seeded = 0
@@ -2046,7 +2048,10 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
             cur.execute("UPDATE vocabulary SET vocab_int_id = ? WHERE id = ?", (max_vid, aat_id))
         seeded += res.rowcount
     if seeded:
-        print(f"  Seeded {seeded} AAT source-type vocabulary entries (vocab_int_id {max_vid - seeded + 1}–{max_vid}).")
+        if int_mappings:
+            print(f"  Seeded {seeded} AAT source-type vocabulary entries (vocab_int_id {max_vid - seeded + 1}–{max_vid}).")
+        else:
+            print(f"  Seeded {seeded} AAT source-type vocabulary entries.")
 
     # Ensure new field names exist in field_lookup (integer-schema DBs).
     # The MAPPING_INSERT_SQL JOINs against field_lookup — missing entries cause silent drops.
@@ -2216,7 +2221,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                 ))
 
                 # Insert production role, attribution qualifier, creator, place, and source type mappings
-                for vocab_id, field in result["roles"] + result["qualifiers"] + result["creators"] + result["places"] + result["source_types"]:
+                for vocab_id, field in chain(result["roles"], result["qualifiers"], result["creators"], result["places"], result["source_types"]):
                     conn.execute(MAPPING_INSERT_SQL, (obj_num, vocab_id, field))
                 role_count += len(result["roles"])
                 qualifier_count += len(result["qualifiers"])

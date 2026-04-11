@@ -81,21 +81,21 @@ class Embedder:
         self.model = SentenceTransformer(MODEL_NAME, device="cuda")
         self.model.encode(["warmup"], normalize_embeddings=True)
 
+    def _encode_int8(self, texts: list[str]) -> bytes:
+        """Encode texts → normalized float32 → int8 quantized bytes."""
+        import numpy as np
+        embs = self.model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        return np.clip(embs * 127, -127, 127).astype(np.int8).tobytes()
+
     @modal.method()
     def embed(self, texts: list[str]) -> bytes:
         """Embed passage texts → int8 → flat bytes."""
-        import numpy as np
-        prefixed = [f"passage: {t}" for t in texts]
-        embs = self.model.encode(prefixed, normalize_embeddings=True, show_progress_bar=False)
-        return np.clip(embs * 127, -127, 127).astype(np.int8).tobytes()
+        return self._encode_int8([f"passage: {t}" for t in texts])
 
     @modal.method()
     def embed_queries(self, queries: list[str]) -> bytes:
         """Embed query texts → int8 → flat bytes."""
-        import numpy as np
-        prefixed = [f"query: {q}" for q in queries]
-        embs = self.model.encode(prefixed, normalize_embeddings=True, show_progress_bar=False)
-        return np.clip(embs * 127, -127, 127).astype(np.int8).tobytes()
+        return self._encode_int8([f"query: {q}" for q in queries])
 
 
 # ─── Local helpers ──────────────────────────────────────────────────────
