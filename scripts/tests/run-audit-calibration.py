@@ -25,7 +25,6 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from lib.harvest_audit import (  # noqa: E402
     EXPECTATIONS,
-    append_to_summary,
     final_summary,
     format_stdout_table,
     run_phase_audit,
@@ -48,7 +47,7 @@ def main():
     for phase in PHASES:
         results = run_phase_audit(conn, phase)
         if results:
-            append_to_summary(all_results, phase, results)
+            all_results[phase] = results
             format_stdout_table(results, phase)
 
     # Write calibration JSON to a separate path so it doesn't clobber a real run

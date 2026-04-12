@@ -19,10 +19,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Literal
+
+Status = Literal["PASS", "WARN", "FAIL", "SKIP"]
+Kind = Literal["table_count", "column_not_null", "mappings_field"]
 
 
 # ── Data shapes ─────────────────────────────────────────────────────────────
@@ -34,7 +37,7 @@ class AuditTarget:
 
     name: str                       # "phase4.modifications" — must be unique
     phase: str                      # "phase0" | "phase2" | "phase3.geocoding" | "phase3" | "phase4"
-    kind: str                       # "table_count" | "column_not_null" | "mappings_field"
+    kind: Kind
     table: str                      # e.g. "modifications" or "artworks" or "mappings"
     column: str | None              # None for table_count; column name otherwise; field name for mappings_field
     min_rows: int                   # inclusive lower bound; WARN below this (FAIL if 0)
@@ -47,7 +50,7 @@ class AuditTarget:
 class AuditResult:
     target: AuditTarget
     actual: int
-    status: str                     # "PASS" | "WARN" | "FAIL" | "SKIP"
+    status: Status
     note: str = ""
 
 
@@ -420,7 +423,9 @@ EXPECTATIONS: list[AuditTarget] = [
 ]
 
 
-# ── Schema introspection (duplicated here so the module is self-contained) ──
+# Self-contained copies of get_columns / table_exists so this module can be
+# imported without pulling in the harvest script (whose hyphenated filename
+# is import-hostile and would couple the audit tests to importlib hacks).
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -527,14 +532,6 @@ def run_phase_audit(conn: sqlite3.Connection, phase: str) -> list[AuditResult]:
 # ── Reporting ───────────────────────────────────────────────────────────────
 
 
-_STATUS_GLYPHS = {
-    "PASS": "PASS",
-    "WARN": "WARN",
-    "FAIL": "FAIL",
-    "SKIP": "SKIP",
-}
-
-
 def format_stdout_table(results: list[AuditResult], phase: str) -> None:
     """Print a one-phase audit table to stdout."""
 
@@ -555,7 +552,7 @@ def format_stdout_table(results: list[AuditResult], phase: str) -> None:
         actual_disp = f"{r.actual:,}" if r.actual else "0"
         print(
             f"  {r.target.name.ljust(name_width)}  "
-            f"{_STATUS_GLYPHS[r.status].ljust(7)}  "
+            f"{r.status.ljust(7)}  "
             f"{actual_disp.rjust(14)}  {rng}"
         )
         if r.note and r.status != "PASS":
@@ -564,14 +561,6 @@ def format_stdout_table(results: list[AuditResult], phase: str) -> None:
     counts = _tally(results)
     summary = "  ".join(f"{k}={v}" for k, v in counts.items() if v)
     print(f"  → {summary}")
-
-
-def append_to_summary(
-    all_results: dict[str, list[AuditResult]], phase: str, results: list[AuditResult]
-) -> None:
-    """Buffer per-phase results into the run-wide accumulator."""
-
-    all_results[phase] = list(results)
 
 
 def _tally(results: Iterable[AuditResult]) -> dict[str, int]:

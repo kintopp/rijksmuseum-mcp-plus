@@ -55,7 +55,6 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 from lib.harvest_audit import (  # noqa: E402
     AuditResult,
-    append_to_summary,
     final_summary,
     format_stdout_table,
     run_phase_audit,
@@ -2713,7 +2712,7 @@ def run_phase3(
         print()
         if audit_results is not None:
             geo_audit = run_phase_audit(conn, "phase3.geocoding")
-            append_to_summary(audit_results, "phase3.geocoding", geo_audit)
+            audit_results["phase3.geocoding"] = geo_audit
             format_stdout_table(geo_audit, "phase3.geocoding")
 
     # ── New Phase 3 tables (art_id-independent) ──
@@ -3252,7 +3251,7 @@ def run_phase3(
 
     if audit_results is not None:
         phase3_audit = run_phase_audit(conn, "phase3")
-        append_to_summary(audit_results, "phase3", phase3_audit)
+        audit_results["phase3"] = phase3_audit
         format_stdout_table(phase3_audit, "phase3")
 
 
@@ -3327,7 +3326,7 @@ def main():
         run_phase0(conn)
         print(f"  Phase 0 took {time.time() - t0:.1f}s")
         phase0_audit = run_phase_audit(conn, "phase0")
-        append_to_summary(all_audit_results, "phase0", phase0_audit)
+        all_audit_results["phase0"] = phase0_audit
         format_stdout_table(phase0_audit, "phase0")
         print()
 
@@ -3352,7 +3351,7 @@ def main():
         run_phase2(conn)
         print(f"  Phase 2 took {time.time() - t0:.1f}s")
         phase2_audit = run_phase_audit(conn, "phase2")
-        append_to_summary(all_audit_results, "phase2", phase2_audit)
+        all_audit_results["phase2"] = phase2_audit
         format_stdout_table(phase2_audit, "phase2")
         print()
 
@@ -3362,7 +3361,7 @@ def main():
         run_phase4(conn, threads=args.threads)
         print(f"  Phase 4 took {time.time() - t0:.1f}s")
         phase4_audit = run_phase_audit(conn, "phase4")
-        append_to_summary(all_audit_results, "phase4", phase4_audit)
+        all_audit_results["phase4"] = phase4_audit
         format_stdout_table(phase4_audit, "phase4")
         print()
 
@@ -3371,7 +3370,7 @@ def main():
         run_phase2(conn)
         print(f"  Phase 2b took {time.time() - t0:.1f}s")
         phase2b_audit = run_phase_audit(conn, "phase2")
-        append_to_summary(all_audit_results, "phase2b", phase2b_audit)
+        all_audit_results["phase2b"] = phase2b_audit
         format_stdout_table(phase2b_audit, "phase2b")
         print()
 
