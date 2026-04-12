@@ -124,7 +124,9 @@ AAT_SOURCE_TYPES = {
 # Exhibition N-Triples predicates
 P_BEGIN = "http://www.cidoc-crm.org/cidoc-crm/P82a_begin_of_the_begin"
 P_END = "http://www.cidoc-crm.org/cidoc-crm/P82b_end_of_the_end"
-P_HAS_MEMBER = "http://www.cidoc-crm.org/cidoc-crm/P46i_forms_part_of"  # inverse: artwork → exhibition
+P_HAS_MEMBER = "http://www.cidoc-crm.org/cidoc-crm/P46i_forms_part_of"  # legacy fallback: artwork → exhibition
+P_HAS_MEMBER_LA = "https://linked.art/ns/terms/has_member"              # actual predicate in exhibition dump
+P_USED_SPECIFIC_OBJECT = "http://www.cidoc-crm.org/cidoc-crm/P16_used_specific_object"  # exhibition → Set bnode
 
 # Title classification AAT URIs
 AAT_TITLE_FULL = "http://vocab.getty.edu/aat/300417200"
@@ -139,6 +141,14 @@ NT_PATTERN = re.compile(
 )
 BNODE_PATTERN = re.compile(
     r'^_:(\S+)\s+<([^>]+)>\s+(?:<([^>]+)>|"([^"]*)")\s*\.\s*$'
+)
+# Matches triples with URI subject and blank-node object: <uri> <uri> _:bnode .
+# Needed for exhibition dump parsing where <Exhibition> P16_used_specific_object _:Set .
+# NT_PATTERN's object alternation only accepts URIs/literals, so these triples
+# are invisible to it — without this pattern, the exhibition → Set link is lost
+# and has_member edges cannot be attributed to the right exhibition.
+NT_TO_BNODE_PATTERN = re.compile(
+    r'^<([^>]+)>\s+<([^>]+)>\s+_:(\S+)\s*\.\s*$'
 )
 NT_LANG_PATTERN = re.compile(
     r'^<([^>]+)>\s+<([^>]+)>\s+"([^"]*)"@(\w+)\s*\.\s*$'
@@ -641,7 +651,14 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
     Exhibition entities are E7_Activity with ID namespace 241xxxx. Extracts:
     - Title from P1_is_identified_by → P190_has_symbolic_content (EN/NL)
     - Date range from P82a_begin_of_the_begin / P82b_end_of_the_end
-    - Member artwork IDs from has_member / forms_part_of HMO URIs
+    - Member artwork IDs via the Linked Art two-hop chain:
+        <Exhibition> P16_used_specific_object _:Set
+        _:Set        https://linked.art/ns/terms/has_member <HMO>
+      The exhibition references a blank-node Set entity, and the Set carries
+      the has_member edges in the Linked Art namespace. Legacy CIDOC-CRM
+      direct/inverse membership predicates (P46_is_composed_of, P46i_forms_part_of)
+      are retained as defensive fallbacks but are not used by the current dump.
+      See issue #220 for the diagnosis.
 
     Returns (exhibition_count, member_count).
     """
@@ -658,6 +675,13 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
         date_begin = None
         date_end = None
         member_uris: set[str] = set()
+        # Blank nodes referenced by this exhibition via P16_used_specific_object.
+        # These are the Set entities whose has_member edges give us members.
+        set_bnodes: set[str] = set()
+        # Buffer: all bnode → HMO has_member edges seen in this file, keyed by bnode.
+        # Filtered against set_bnodes after the parse loop to keep only the ones
+        # that belong to this exhibition's Set(s).
+        bnode_members: dict[str, set[str]] = {}
 
         try:
             with open(filepath, "r", encoding="utf-8") as f:
@@ -670,6 +694,7 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
             if not line:
                 continue
 
+            # URI-subject, URI-object or literal: dates, labels, legacy membership
             m = NT_PATTERN.match(line)
             if m:
                 subj = m.group(1)
@@ -682,14 +707,30 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                         date_begin = obj_lit
                     elif pred == P_END and obj_lit:
                         date_end = obj_lit
+                    # Legacy direct membership — retained as defensive fallback
+                    elif pred == "http://www.cidoc-crm.org/cidoc-crm/P46_is_composed_of" and obj_uri:
+                        hmo_num = obj_uri.split("/")[-1]
+                        if hmo_num.isdigit():
+                            member_uris.add(hmo_num)
 
-                # Artworks pointing to this exhibition (inverse membership)
+                # Legacy inverse membership — retained as defensive fallback
                 if obj_uri == entity_uri and pred == P_HAS_MEMBER:
-                    # subj is the artwork HMO URI
                     hmo_num = subj.split("/")[-1]
                     if hmo_num.isdigit():
                         member_uris.add(hmo_num)
+                continue
 
+            # URI-subject, blank-node-object: the exhibition → Set link
+            mb = NT_TO_BNODE_PATTERN.match(line)
+            if mb:
+                subj = mb.group(1)
+                pred = mb.group(2)
+                bnode_id = mb.group(3)
+                if subj == entity_uri and pred == P_USED_SPECIFIC_OBJECT:
+                    set_bnodes.add(bnode_id)
+                continue
+
+            # Blank-node-subject: Set's has_member edges and title bnode fields
             bm = BNODE_PATTERN.match(line)
             if bm:
                 bnode_id = bm.group(1)
@@ -704,15 +745,17 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                     bnodes[bnode_id]["label"] = obj_lit
                 elif pred == P_LANGUAGE and obj_uri:
                     bnodes[bnode_id]["language"] = obj_uri
-
-            # Also check for direct membership triples (exhibition → artwork)
-            if m and m.group(1) == entity_uri:
-                pred = m.group(2)
-                obj_uri = m.group(3)
-                if pred == "http://www.cidoc-crm.org/cidoc-crm/P46_is_composed_of" and obj_uri:
+                elif pred == P_HAS_MEMBER_LA and obj_uri:
+                    # Buffer — filter against set_bnodes after the loop, since
+                    # the triple order in the N-Triples file is not guaranteed
+                    # and the P16 link may come after its has_member edges.
                     hmo_num = obj_uri.split("/")[-1]
                     if hmo_num.isdigit():
-                        member_uris.add(hmo_num)
+                        bnode_members.setdefault(bnode_id, set()).add(hmo_num)
+
+        # Resolve has_member edges: keep only those belonging to this exhibition's Set(s)
+        for bnode_id in set_bnodes:
+            member_uris.update(bnode_members.get(bnode_id, set()))
 
         # Extract EN/NL titles from bnodes
         title_en = None
