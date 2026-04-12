@@ -20,69 +20,34 @@ import sqlite3
 import sys
 from pathlib import Path
 
-# Make scripts/ importable so we can load the parser
-SCRIPT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(SCRIPT_DIR))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _test_helpers import load_harvest_module, create_exhibition_schema
 
-# The harvest script is at scripts/harvest-vocabulary-db.py — has a hyphen,
-# so it's not directly importable as a module. Load it via importlib.
-import importlib.util
+harvest = load_harvest_module()
 
-spec = importlib.util.spec_from_file_location(
-    "harvest_vocabulary_db",
-    SCRIPT_DIR / "harvest-vocabulary-db.py",
-)
-harvest = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(harvest)
-
-
-# ─── Fixtures ────────────────────────────────────────────────────────
 
 # Exhibition 2411023 — known ground truth from the 2026-04 dump.
 # Counted via: grep -c 'linked.art/ns/terms/has_member' /tmp/exhibition-probe/2411023
 #
-# Covers:
-#   - Issue #220 (has_member extraction via P16 → Set → has_member chain)
-#   - Issue #236 (title extraction via P1_is_identified_by chain)
-#   - Issue #236 (date extraction via P4_has_time-span chain)
+# Covers issues #220 (has_member via P16 → Set → has_member chain),
+# #236 (title via P1_is_identified_by chain), and #236 (date via P4_has_time-span chain).
 EXPECTED_FIXTURES = {
     "2411023": {
-        "expected_members": 28,
-        "expected_title": (
+        "members": 28,
+        "title": (
             "Rembrandt 400. Alle tekeningen van Rembrandt in het Rijksmuseum. "
             "Deel 1: De verteller"
         ),
-        "expected_date_start": "2006-08-11",
-        "expected_date_end": "2006-10-11",
+        "date_start": "2006-08-11",
+        "date_end": "2006-10-11",
     },
 }
 
 
-def create_minimal_schema(conn: sqlite3.Connection) -> None:
-    """Create just the exhibitions + exhibition_members tables the parser writes to."""
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS exhibitions (
-            exhibition_id INTEGER PRIMARY KEY,
-            title_en TEXT,
-            title_nl TEXT,
-            date_start TEXT,
-            date_end TEXT
-        );
-        CREATE TABLE IF NOT EXISTS exhibition_members (
-            exhibition_id INTEGER NOT NULL,
-            hmo_id TEXT NOT NULL,
-            PRIMARY KEY (exhibition_id, hmo_id)
-        );
-    """)
-
-
-def run_fixture_test(dump_dir: Path, exhibition_id: str, expected_members: int,
-                     expected_title: str, expected_date_start: str,
-                     expected_date_end: str) -> None:
+def run_fixture_test(dump_dir: Path, exhibition_id: str, expected: dict) -> None:
     """Parse a single-file dump directory containing one exhibition and assert."""
-    # Build an in-memory DB with the minimal schema
     conn = sqlite3.connect(":memory:")
-    create_minimal_schema(conn)
+    create_exhibition_schema(conn)
 
     # Create a scratch dir with only the target exhibition file, so the parser
     # iterates just that one entry. Symlink is fine and avoids copying.
@@ -116,36 +81,35 @@ def run_fixture_test(dump_dir: Path, exhibition_id: str, expected_members: int,
         (int(exhibition_id),),
     ).fetchone()
 
-    # Assertions — covers #220 (has_member) and #236 (title + date)
     errors = []
     if exh_count != 1:
         errors.append(f"parser reported {exh_count} exhibitions, expected 1")
     if db_exh_count != 1:
         errors.append(f"DB has {db_exh_count} exhibitions, expected 1")
-    if member_count != expected_members:
+    if member_count != expected["members"]:
         errors.append(
-            f"parser reported {member_count} members, expected {expected_members}"
+            f"parser reported {member_count} members, expected {expected['members']}"
         )
-    if db_member_count != expected_members:
+    if db_member_count != expected["members"]:
         errors.append(
-            f"DB has {db_member_count} members, expected {expected_members}"
+            f"DB has {db_member_count} members, expected {expected['members']}"
         )
     if row is None:
         errors.append("exhibition row not found in DB")
     else:
         title_en, title_nl, date_start, date_end = row
-        if title_en != expected_title:
+        if title_en != expected["title"]:
             errors.append(
-                f"title_en mismatch\n      expected: {expected_title!r}\n      got:      {title_en!r}"
+                f"title_en mismatch\n      expected: {expected['title']!r}\n      got:      {title_en!r}"
             )
-        if title_nl != expected_title:
+        if title_nl != expected["title"]:
             errors.append(
-                f"title_nl mismatch (expected same as title_en)\n      expected: {expected_title!r}\n      got:      {title_nl!r}"
+                f"title_nl mismatch (expected same as title_en)\n      expected: {expected['title']!r}\n      got:      {title_nl!r}"
             )
-        if date_start != expected_date_start:
-            errors.append(f"date_start = {date_start!r}, expected {expected_date_start!r}")
-        if date_end != expected_date_end:
-            errors.append(f"date_end = {date_end!r}, expected {expected_date_end!r}")
+        if date_start != expected["date_start"]:
+            errors.append(f"date_start = {date_start!r}, expected {expected['date_start']!r}")
+        if date_end != expected["date_end"]:
+            errors.append(f"date_end = {date_end!r}, expected {expected['date_end']!r}")
 
     if errors:
         print(f"FAIL: exhibition {exhibition_id}", file=sys.stderr)
@@ -179,14 +143,7 @@ def main() -> None:
     print(f"Testing parse_exhibition_dump against {dump_dir}")
     print()
     for exh_id, expected in EXPECTED_FIXTURES.items():
-        run_fixture_test(
-            dump_dir=dump_dir,
-            exhibition_id=exh_id,
-            expected_members=expected["expected_members"],
-            expected_title=expected["expected_title"],
-            expected_date_start=expected["expected_date_start"],
-            expected_date_end=expected["expected_date_end"],
-        )
+        run_fixture_test(dump_dir=dump_dir, exhibition_id=exh_id, expected=expected)
 
     print()
     print("All fixtures passed.")

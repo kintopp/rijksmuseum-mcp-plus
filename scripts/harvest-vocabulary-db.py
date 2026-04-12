@@ -125,10 +125,11 @@ AAT_SOURCE_TYPES = {
 P_BEGIN = "http://www.cidoc-crm.org/cidoc-crm/P82a_begin_of_the_begin"
 P_END = "http://www.cidoc-crm.org/cidoc-crm/P82b_end_of_the_end"
 P_HAS_MEMBER = "http://www.cidoc-crm.org/cidoc-crm/P46i_forms_part_of"  # legacy fallback: artwork → exhibition
+P_COMPOSED_OF = "http://www.cidoc-crm.org/cidoc-crm/P46_is_composed_of"  # legacy fallback: exhibition → artwork (direct)
 P_HAS_MEMBER_LA = "https://linked.art/ns/terms/has_member"              # actual predicate in exhibition dump
 P_USED_SPECIFIC_OBJECT = "http://www.cidoc-crm.org/cidoc-crm/P16_used_specific_object"  # exhibition → Set bnode
-P_IS_IDENTIFIED_BY = "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by"  # exhibition → title bnode (#236)
-P_HAS_TIME_SPAN = "http://www.cidoc-crm.org/cidoc-crm/P4_has_time-span"        # exhibition → timespan bnode (#236)
+P_IS_IDENTIFIED_BY = "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by"  # exhibition → title bnode
+P_HAS_TIME_SPAN = "http://www.cidoc-crm.org/cidoc-crm/P4_has_time-span"        # exhibition → timespan bnode
 
 # Title classification AAT URIs
 AAT_TITLE_FULL = "http://vocab.getty.edu/aat/300417200"
@@ -739,7 +740,6 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
             if not line:
                 continue
 
-            # URI-subject, URI-object or literal: dates, labels, legacy membership
             m = NT_PATTERN.match(line)
             if m:
                 subj = m.group(1)
@@ -753,7 +753,7 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                     elif pred == P_END and obj_lit:
                         date_end = obj_lit
                     # Legacy direct membership — retained as defensive fallback
-                    elif pred == "http://www.cidoc-crm.org/cidoc-crm/P46_is_composed_of" and obj_uri:
+                    elif pred == P_COMPOSED_OF and obj_uri:
                         hmo_num = obj_uri.split("/")[-1]
                         if hmo_num.isdigit():
                             member_uris.add(hmo_num)
@@ -765,7 +765,6 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                         member_uris.add(hmo_num)
                 continue
 
-            # URI-subject, blank-node-object: exhibition → Set / title / timespan
             mb = NT_TO_BNODE_PATTERN.match(line)
             if mb:
                 subj = mb.group(1)
@@ -780,8 +779,6 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                         timespan_bnodes.add(bnode_id)
                 continue
 
-            # Blank-node-subject: Set's has_member edges, title bnode labels,
-            # timespan bnode date literals
             bm = BNODE_PATTERN.match(line)
             if bm:
                 bnode_id = bm.group(1)
@@ -2217,6 +2214,16 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     # dynamic check so this function stays robust against schema drift.
     artworks_cols = get_columns(conn, "artworks")
     has_art_id = "art_id" in artworks_cols
+
+    # Pre-fetch {object_number → art_id} so the per-artwork loop can resolve
+    # art_id via dict lookup instead of N x "SELECT art_id FROM artworks WHERE
+    # object_number = ?". At 833K artworks, the pre-fetch saves ~833K SQLite
+    # round-trips (~minute+ of wall-clock time). Costs one full-table scan
+    # and ~60 MB of process memory.
+    art_id_map: dict[str, int] = {}
+    if has_art_id:
+        art_id_map = dict(conn.execute("SELECT object_number, art_id FROM artworks").fetchall())
+
     if int_mappings:
         MAPPING_INSERT_SQL = """
             INSERT OR IGNORE INTO mappings (artwork_id, vocab_rowid, field_id)
@@ -2368,15 +2375,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                 # of run_phase4 guarantees art_id exists, so has_art_id should be
                 # True — but keep the fallback so this function stays robust if
                 # the bootstrap is ever disabled or the caller reshapes the schema.
-                # Fix for #219 (v0.24 regression where art_id was only added by
-                # Phase 3's normalize_mappings after Phase 4 had already finished).
-                if has_art_id:
-                    art_id_row = conn.execute(
-                        "SELECT art_id FROM artworks WHERE object_number = ?", (obj_num,)
-                    ).fetchone()
-                    art_id = art_id_row[0] if art_id_row else None
-                else:
-                    art_id = None
+                art_id = art_id_map.get(obj_num) if has_art_id else None
 
                 if art_id is not None:
                     # Insert modifications

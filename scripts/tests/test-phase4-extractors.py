@@ -23,23 +23,16 @@ Usage:
     python3 scripts/tests/test-phase4-extractors.py
 """
 
-import importlib.util
 import json
 import sqlite3
 import sys
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).resolve().parent.parent
-FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
-FIXTURE_PATH = FIXTURES_DIR / "hmo-200117708-linked-art.json"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _test_helpers import FIXTURES_DIR, create_phase4_schema, load_harvest_module
 
-# Load the harvest module (filename has a hyphen, so importlib)
-spec = importlib.util.spec_from_file_location(
-    "harvest_vocabulary_db",
-    SCRIPT_DIR / "harvest-vocabulary-db.py",
-)
-harvest = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(harvest)
+FIXTURE_PATH = FIXTURES_DIR / "hmo-200117708-linked-art.json"
+harvest = load_harvest_module()
 
 
 # ─── Layer A: per-extractor tests against a real fixture ────────────
@@ -161,34 +154,9 @@ def test_run_phase4_bootstraps_art_id() -> None:
     that the bootstrap fires correctly on a fresh schema.
     """
     conn = sqlite3.connect(":memory:")
+    create_phase4_schema(conn)
 
-    # Minimal artworks schema that run_phase4 expects:
-    # - object_number PK
-    # - tier2_done column (gates pending query)
-    # - linked_art_uri column (gates pending query)
-    # - mappings table (int_mappings detection reads it via get_columns)
-    conn.executescript("""
-        CREATE TABLE artworks (
-            object_number TEXT PRIMARY KEY,
-            tier2_done INTEGER DEFAULT 0,
-            linked_art_uri TEXT
-        );
-        CREATE TABLE mappings (
-            object_number TEXT,
-            vocab_id TEXT,
-            field TEXT
-        );
-        CREATE TABLE vocabulary (
-            id TEXT PRIMARY KEY,
-            type TEXT,
-            label_en TEXT
-        );
-    """)
-    conn.commit()
-
-    # Pre-condition: art_id must not exist
-    cols_before = [r[1] for r in conn.execute("PRAGMA table_info(artworks)")]
-    if "art_id" in cols_before:
+    if "art_id" in harvest.get_columns(conn, "artworks"):
         print("FAIL: Layer B precondition — art_id already present in fresh DB", file=sys.stderr)
         sys.exit(1)
 
@@ -196,8 +164,7 @@ def test_run_phase4_bootstraps_art_id() -> None:
     # but should still execute the bootstrap block.
     harvest.run_phase4(conn, threads=1)
 
-    # Post-condition: art_id must now exist
-    cols_after = [r[1] for r in conn.execute("PRAGMA table_info(artworks)")]
+    cols_after = harvest.get_columns(conn, "artworks")
     if "art_id" not in cols_after:
         print(
             "FAIL: Layer B — run_phase4 did not add art_id column "
