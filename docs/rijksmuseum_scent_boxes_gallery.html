@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scent-boxes, pomanders & incense containers — Rijksmuseum Collection</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:       #1c1a16;
+    --ink-mid:   #4a463d;
+    --ink-light: #8c8577;
+    --paper:     #f7f4ee;
+    --paper-2:   #efe9dc;
+    --paper-3:   #e4dccf;
+    --amber:     #a0620a;
+    --amber-lt:  #e8b84b;
+    --rule:      rgba(28,26,22,.12);
+    --gap: 2rem;
+  }
+
+  html { font-size: 16px; background: var(--paper); color: var(--ink); }
+
+  body {
+    font-family: 'EB Garamond', Georgia, serif;
+    line-height: 1.65;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 3rem 2rem 5rem;
+  }
+
+  /* -- Header -- */
+  header {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.5rem 0 1.25rem;
+    margin-bottom: 2.5rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1rem;
+  }
+  header .eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: .7rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    margin-bottom: .4rem;
+  }
+  header h1 {
+    font-size: 1.9rem;
+    font-weight: 400;
+    line-height: 1.2;
+    font-style: italic;
+  }
+  header .meta {
+    font-family: 'DM Mono', monospace;
+    font-size: .68rem;
+    color: var(--ink-light);
+    text-align: right;
+    line-height: 1.6;
+  }
+
+  /* -- Section -- */
+  section {
+    margin-bottom: 3rem;
+  }
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: .6rem;
+    margin-bottom: 1.5rem;
+  }
+  .section-num {
+    font-family: 'DM Mono', monospace;
+    font-size: .72rem;
+    color: var(--amber);
+    letter-spacing: .05em;
+  }
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 500;
+    letter-spacing: .01em;
+  }
+  .section-note {
+    font-size: .875rem;
+    color: var(--ink-mid);
+    font-style: italic;
+    margin-bottom: 1.25rem;
+    padding-left: .1rem;
+  }
+
+  /* -- Cards grid -- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+  .grid.wide {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .card {
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+    transition: border-color .15s;
+  }
+  .card:hover { border-color: var(--amber-lt); }
+
+  .card a {
+    display: contents;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .card-img {
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--paper-3);
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card-img img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    padding: 10px;
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  .card-img img.loaded { opacity: 1; }
+  .card-img .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: .6rem;
+    color: var(--ink-light);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 1rem;
+  }
+
+  .card-body {
+    padding: .85rem 1rem 1rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+  }
+  .card-id {
+    font-family: 'DM Mono', monospace;
+    font-size: .62rem;
+    color: var(--amber);
+    letter-spacing: .04em;
+  }
+  .card-title {
+    font-size: .875rem;
+    line-height: 1.35;
+    font-style: italic;
+  }
+  .card-maker {
+    font-size: .78rem;
+    color: var(--ink-mid);
+    font-style: normal;
+  }
+  .card-date {
+    font-family: 'DM Mono', monospace;
+    font-size: .65rem;
+    color: var(--ink-light);
+    margin-top: auto;
+    padding-top: .4rem;
+  }
+  .card-desc {
+    font-size: .78rem;
+    color: var(--ink-mid);
+    line-height: 1.5;
+    margin-top: .3rem;
+  }
+  .tag {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: .58rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    background: var(--paper-3);
+    border: 1px solid var(--rule);
+    padding: .15em .5em;
+    color: var(--ink-mid);
+    margin-top: .4rem;
+    margin-right: .2rem;
+  }
+  .tag.highlight {
+    background: rgba(160,98,10,.08);
+    border-color: rgba(160,98,10,.3);
+    color: var(--amber);
+  }
+
+  /* -- Pomander row -- 2-column landscape cards -- */
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+  }
+  .pair .card { flex-direction: row; }
+  .pair .card-img {
+    width: 200px;
+    min-width: 200px;
+    aspect-ratio: auto;
+    height: auto;
+    align-self: stretch;
+  }
+  .pair .card-img img { padding: 8px; object-fit: contain; }
+
+  /* -- Prints sub-grid -- */
+  .prints-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1rem;
+  }
+  .print-card {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+  }
+  .print-card a { text-decoration: none; color: inherit; }
+  .print-card .print-img {
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--paper-3);
+    border: 1px solid var(--rule);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .print-card .print-img img {
+    width: 100%; height: 100%;
+    object-fit: contain; padding: 4px;
+    opacity: 0; transition: opacity .3s;
+  }
+  .print-card .print-img img.loaded { opacity: 1; }
+  .print-card .print-img .placeholder {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace; font-size: .55rem;
+    color: var(--ink-light); text-align: center;
+  }
+  .print-card .pid {
+    font-family: 'DM Mono', monospace;
+    font-size: .58rem; color: var(--amber); letter-spacing: .04em;
+  }
+  .print-card .ptitle {
+    font-size: .78rem; line-height: 1.3; font-style: italic;
+  }
+  .print-card .pdate {
+    font-family: 'DM Mono', monospace;
+    font-size: .6rem; color: var(--ink-light);
+  }
+
+  /* -- Callout -- */
+  .callout {
+    background: var(--paper-2);
+    border-left: 3px solid var(--amber-lt);
+    padding: .85rem 1.1rem;
+    margin: 1.5rem 0;
+    font-size: .875rem;
+    color: var(--ink-mid);
+    line-height: 1.6;
+  }
+  .callout strong {
+    font-weight: 500;
+    color: var(--ink);
+    font-style: normal;
+  }
+  code {
+    font-family: 'DM Mono', monospace;
+    font-size: .8em;
+    background: var(--paper-3);
+    padding: .1em .35em;
+    color: var(--amber);
+  }
+
+  /* -- Footer -- */
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.25rem;
+    margin-top: 3rem;
+    font-family: 'DM Mono', monospace;
+    font-size: .65rem;
+    color: var(--ink-light);
+    line-height: 1.8;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: 1fr; }
+    .pair { grid-template-columns: 1fr; }
+    .pair .card { flex-direction: column; }
+    .pair .card-img { width: 100%; min-width: unset; }
+    header { grid-template-columns: 1fr; }
+    header .meta { text-align: left; }
+    body { padding: 1.5rem 1rem 3rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <p class="eyebrow">Rijksmuseum collection search</p>
+    <h1>Scent-boxes, pomanders &amp; incense containers</h1>
+  </div>
+  <div class="meta">
+    <div>Iconclass <code>41C761</code> — scent-box</div>
+    <div>Search across type, subject,</div>
+    <div>description &amp; semantic fields</div>
+  </div>
+</header>
+
+<div class="callout">
+  The Iconclass notation <strong><code>41C761</code> (scent-box)</strong> returns zero Rijksmuseum artworks when queried directly. However, searching across Dutch type vocabulary (<code>reukdoos</code>, <code>reukbal</code>, <code>kogo</code>, <code>wierookdoos</code>), subject labels (<code>pomander</code>, <code>musk ball</code>), description text, and semantic search reveals <strong>four distinct groups</strong> totalling over 40 objects — none of which carry the Iconclass scent-box notation at all.
+</div>
+
+
+<!-- S1 — Reukdoos -->
+<section>
+  <div class="section-header">
+    <span class="section-num">01</span>
+    <span class="section-title">Reukdoos — the sole direct match</span>
+  </div>
+  <p class="section-note">
+    The only work in the collection carrying the Iconclass subject label <em>scent-box</em> directly.
+    Found via <code>subject: scent-box</code> and <code>query: reukdoos</code>.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/BK-NM-11177-107" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/PRobr/full/500,/0/default.jpg" alt="Reukdoos" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">BK-NM-11177-107</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">BK-NM-11177-107</div>
+          <div class="card-title">Reukdoos</div>
+          <div class="card-maker">Anonymous silversmith, Netherlands</div>
+          <div class="card-desc">Silver scent-box, h 3 cm. Chased with Faith, Hope and Charity; portrait of Admiral Zoutman; Dutch Maiden; and Christ at the well. Amsterdam maker's mark inside.</div>
+          <div class="card-date">1781–1800</div>
+          <span class="tag highlight">reukdoos</span>
+          <span class="tag">silver</span>
+          <span class="tag">miniature</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+
+<!-- S2 — Pomanders -->
+<section>
+  <div class="section-header">
+    <span class="section-num">02</span>
+    <span class="section-title">Reukbal / Pomander — physical objects &amp; depictions</span>
+  </div>
+  <p class="section-note">
+    Found via <code>description: pomander</code> and <code>subject: pomander / musk ball</code> (<code>31A51451</code>).
+    Includes two physical pomanders typed as <em>jewellery / reukbal</em>, and four prints and a drawing where pomanders are depicted or designed.
+  </p>
+
+  <p style="font-size:.8rem;color:var(--ink-mid);margin-bottom:.75rem;font-style:italic;">Physical objects</p>
+  <div class="pair">
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/BK-1960-1" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/ASOdt/full/500,/0/default.jpg" alt="Pomander gold" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">BK-1960-1</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">BK-1960-1</div>
+          <div class="card-title">Pomander</div>
+          <div class="card-maker">Anonymous jeweller</div>
+          <div class="card-desc">Gold, rubies, emeralds, diamonds, enamel. Pomegranate-shaped; six hinged compartments for aromatic balms. h 4.2 cm.</div>
+          <div class="card-date">1600–1625</div>
+          <span class="tag highlight">reukbal</span>
+          <span class="tag">gold</span>
+          <span class="tag">jewellery</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/BK-1959-45" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/eKThw/full/500,/0/default.jpg" alt="Pomander silver" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">BK-1959-45</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">BK-1959-45</div>
+          <div class="card-title">Pomander</div>
+          <div class="card-maker">Anonymous silversmith, Netherlands</div>
+          <div class="card-desc">Silver. Six sliding-lid segments on a profiled band, engraved with scrollwork and birds. h 7 cm.</div>
+          <div class="card-date">1600–1625</div>
+          <span class="tag highlight">reukbal</span>
+          <span class="tag">silver</span>
+          <span class="tag">jewellery</span>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <p style="font-size:.8rem;color:var(--ink-mid);margin:.9rem 0 .4rem;font-style:italic;">Prints &amp; drawings depicting pomanders (Iconclass <code>31A51451</code>)</p>
+  <div class="prints-grid">
+    <div class="print-card">
+      <a href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-2982" target="_blank">
+        <div class="print-img">
+          <img src="https://iiif.micr.io/sSehb/full/500,/0/default.jpg" alt="Pomander — Altdorfer" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">RP-P-OB-2982</div>
+        </div>
+        <div class="pid">RP-P-OB-2982</div>
+        <div class="ptitle">Pomander</div>
+        <div class="pdate">Albrecht Altdorfer · 1506–1538</div>
+      </a>
+    </div>
+    <div class="print-card">
+      <a href="https://www.rijksmuseum.nl/en/collection/RP-P-1920-2688" target="_blank">
+        <div class="print-img">
+          <img src="https://iiif.micr.io/kYIOR/full/500,/0/default.jpg" alt="Ornatus Muliebris Anglicanus" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">RP-P-1920-2688</div>
+        </div>
+        <div class="pid">RP-P-1920-2688</div>
+        <div class="ptitle">Ornatus Muliebris Anglicanus</div>
+        <div class="pdate">Wenceslaus Hollar · 1640</div>
+      </a>
+    </div>
+    <div class="print-card">
+      <a href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-11.550" target="_blank">
+        <div class="print-img">
+          <img src="https://iiif.micr.io/RAbIq/full/500,/0/default.jpg" alt="Virgo Tiguriensis" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">RP-P-OB-11.550</div>
+        </div>
+        <div class="pid">RP-P-OB-11.550</div>
+        <div class="ptitle">Virgo Tiguriensis</div>
+        <div class="pdate">Wenceslaus Hollar · 1649</div>
+      </a>
+    </div>
+    <div class="print-card">
+      <a href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-116.253" target="_blank">
+        <div class="print-img">
+          <img src="https://iiif.micr.io/azyWi/full/500,/0/default.jpg" alt="Engelse vrouw van stand met reukbal" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">RP-P-OB-116.253</div>
+        </div>
+        <div class="pid">RP-P-OB-116.253</div>
+        <div class="ptitle">Engelse vrouw van stand met reukbal</div>
+        <div class="pdate">Wenceslaus Hollar · 1640–1707</div>
+      </a>
+    </div>
+    <div class="print-card">
+      <a href="https://www.rijksmuseum.nl/en/collection/RP-T-1954-178" target="_blank">
+        <div class="print-img">
+          <img src="https://iiif.micr.io/zUArD/full/500,/0/default.jpg" alt="Drie ontwerpen voor hangers" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">RP-T-1954-178</div>
+        </div>
+        <div class="pid">RP-T-1954-178</div>
+        <div class="ptitle">Drie ontwerpen voor hangers in de vorm van pijpjes</div>
+        <div class="pdate">Circle of Erasmus Hornick · 1560–1570</div>
+      </a>
+    </div>
+    <div class="print-card">
+      <a href="https://www.rijksmuseum.nl/en/collection/RP-P-1964-1960" target="_blank">
+        <div class="print-img">
+          <img src="https://iiif.micr.io/lLobj/full/500,/0/default.jpg" alt="Zeventien ontwerpen voor juwelen" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">RP-P-1964-1960</div>
+        </div>
+        <div class="pid">RP-P-1964-1960</div>
+        <div class="ptitle">Zeventien ontwerpen voor juwelen, lakzegels en een doos</div>
+        <div class="pdate">Christian Engelbrecht · 1699–1724</div>
+      </a>
+    </div>
+  </div>
+</section>
+
+
+<!-- S3 — Japanese kogo / wierookdoos -->
+<section>
+  <div class="section-header">
+    <span class="section-num">03</span>
+    <span class="section-title">Kogo &amp; wierookdoos — Japanese incense containers</span>
+  </div>
+  <p class="section-note">
+    Found via <code>type: kogo</code>, <code>type: wierookdoos</code>, and semantic search.
+    32 objects in total — predominantly 18th–19th century Japanese ceramics and lacquerwork,
+    mostly from the Westendorp-Osieck bequest via the Koninklijke Vereniging van Vrienden der Aziatische Kunst.
+    None carries Iconclass <code>41C761</code>.
+  </p>
+
+  <p style="font-size:.8rem;color:var(--ink-mid);margin-bottom:.75rem;font-style:italic;">Figural &amp; zoomorphic kogo (ceramic)</p>
+  <div class="grid wide">
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-677" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/TmBJo/full/500,/0/default.jpg" alt="Kogo kingfisher" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-677</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-677</div>
+          <div class="card-title">Kogo — kingfisher on a stump</div>
+          <div class="card-maker">Anonymous · Bizen stoneware</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Bizen</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-707" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/maSOr/full/500,/0/default.jpg" alt="Kogo bird" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-707</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-707</div>
+          <div class="card-title">Incense box — young bird</div>
+          <div class="card-maker">Anonymous · Raku stoneware</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Raku</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-711" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/iNXel/full/500,/0/default.jpg" alt="Kogo crane" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-711</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-711</div>
+          <div class="card-title">Incense box — crane</div>
+          <div class="card-maker">Anonymous · Bizen stoneware</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Bizen</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-800" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/HMqug/full/500,/0/default.jpg" alt="Kogo goddess Uzume" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-800</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-800</div>
+          <div class="card-title">Incense box — goddess Uzume</div>
+          <div class="card-maker">Anonymous · Kyoyaki earthenware</div>
+          <div class="card-date">1800–1899</div>
+          <span class="tag highlight">kogo</span><span class="tag">Kyoyaki</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-708" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/UQePw/full/500,/0/default.jpg" alt="Kogo chestnut — Kenzan" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-708</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-708</div>
+          <div class="card-title">Incense box — chestnut</div>
+          <div class="card-maker">Signed Kenzan · Kyoyaki</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Kenzan</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-709" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/BBUdt/full/500,/0/default.jpg" alt="Kogo Mount Fuji — Kenzan" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-709</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-709</div>
+          <div class="card-title">Incense box — Mount Fuji</div>
+          <div class="card-maker">Signed Kenzan · Kyoyaki</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Kenzan</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-710" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/nybDe/full/500,/0/default.jpg" alt="Kogo pod" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-710</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-710</div>
+          <div class="card-title">Incense box — pod</div>
+          <div class="card-maker">Anonymous · Kyoyaki, ivory &amp; mother of pearl inlay</div>
+          <div class="card-date">1800–1899</div>
+          <span class="tag highlight">kogo</span><span class="tag">lacquer inlay</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-704" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/xcseR/full/500,/0/default.jpg" alt="Kogo square basket — Oribe" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-704</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-704</div>
+          <div class="card-title">Incense box — square basket</div>
+          <div class="card-maker">Anonymous · Oribe stoneware</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Oribe</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-705" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/YjUpr/full/500,/0/default.jpg" alt="Kogo bundle — Oribe" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-705</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-705</div>
+          <div class="card-title">Incense box — bundle</div>
+          <div class="card-maker">Anonymous · Oribe stoneware</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Oribe</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-706" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/fPgZg/full/500,/0/default.jpg" alt="Kogo flowering plants — Kyoyaki" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-706</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-706</div>
+          <div class="card-title">Round box — flowering plants</div>
+          <div class="card-maker">Anonymous · Kyoyaki stoneware</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Kyoyaki</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-834" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/xERed/full/500,/0/default.jpg" alt="Kogo carriage — Ninsei style" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-834</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-834</div>
+          <div class="card-title">Incense box — carriage scene</div>
+          <div class="card-maker">Anonymous · Style of Ninsei, Kyoyaki</div>
+          <div class="card-date">1700–1799</div>
+          <span class="tag highlight">kogo</span><span class="tag">Ninsei style</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-684" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/GPiXc/full/500,/0/default.jpg" alt="Kogo — Zokoku lacquer" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-684</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-684</div>
+          <div class="card-title">Kogo — guribori lacquer</div>
+          <div class="card-maker">Zokoku</div>
+          <div class="card-date">1825–1875</div>
+          <span class="tag highlight">kogo</span><span class="tag">lacquer</span><span class="tag">guribori</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-RAK-2020-23-1" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/jCRqw/full/500,/0/default.jpg" alt="Kogo roof tile — Raku" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-RAK-2020-23-1</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-RAK-2020-23-1</div>
+          <div class="card-title">Incense box — ornamental roof tile</div>
+          <div class="card-maker">Signed Buntei · Raku earthenware</div>
+          <div class="card-date">1700–1850</div>
+          <span class="tag highlight">kogo</span><span class="tag">Raku</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-RAK-2024-3" target="_blank">
+        <div class="card-img">
+          <div class="placeholder">AK-RAK-2024-3</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-RAK-2024-3</div>
+          <div class="card-title">Incense container — Ferns</div>
+          <div class="card-maker">Uzawa Shogetsu · lacquer on wood</div>
+          <div class="card-date">1887–1937</div>
+          <span class="tag highlight">kogo</span><span class="tag">lacquer</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-RAK-2024-4" target="_blank">
+        <div class="card-img">
+          <div class="placeholder">AK-RAK-2024-4</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-RAK-2024-4</div>
+          <div class="card-title">Incense container — Maple foliage</div>
+          <div class="card-maker">Futagi Seiho · lacquer on wood</div>
+          <div class="card-date">1894–1954</div>
+          <span class="tag highlight">kogo</span><span class="tag">lacquer</span>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <p style="font-size:.8rem;color:var(--ink-mid);margin:1.25rem 0 .75rem;font-style:italic;">Lacquer incense boxes &amp; kobako (15th–18th c.)</p>
+  <div class="grid wide">
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-139" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/qmGqH/full/500,/0/default.jpg" alt="Kobako — pine and orange blossom" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-139</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-139</div>
+          <div class="card-title">Rectangular box — pine &amp; orange blossom</div>
+          <div class="card-maker">Anonymous · lacquer on wood, tin rim</div>
+          <div class="card-date">1475–1500</div>
+          <span class="tag highlight">wierookdoos</span><span class="tag">kobako</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-140" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/styhU/full/500,/0/default.jpg" alt="Kobako — chrysanthemums" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-140</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-140</div>
+          <div class="card-title">Incense box — chrysanthemums</div>
+          <div class="card-maker">Anonymous · gold lacquer on wood</div>
+          <div class="card-date">1500–1600</div>
+          <span class="tag highlight">wierookdoos</span><span class="tag">kobako</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-1211" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/jqZcP/full/500,/0/default.jpg" alt="Incense or make-up box — trees by water" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-1211</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-1211</div>
+          <div class="card-title">Incense / make-up box — trees by water</div>
+          <div class="card-maker">Anonymous · smooth gold lacquer</div>
+          <div class="card-date">1500–1600</div>
+          <span class="tag highlight">wierookdoos</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-1210" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/sDdFe/full/500,/0/default.jpg" alt="Wierookdoos — chrysanthemum and maple" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-1210</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-1210</div>
+          <div class="card-title">Incense box — chrysanthemum &amp; maple</div>
+          <div class="card-maker">Anonymous · gold lacquer on wood</div>
+          <div class="card-date">1700–1800</div>
+          <span class="tag highlight">wierookdoos</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-878" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/vmRdt/full/500,/0/default.jpg" alt="Incense cinder container" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-878</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-878</div>
+          <div class="card-title">Incense cinder container</div>
+          <div class="card-maker">Anonymous · bamboo, lacquer, tin lining</div>
+          <div class="card-date">1600–1899</div>
+          <span class="tag highlight">takagaraire</span><span class="tag">wierookdoos</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+
+<!-- S4 — Lacquer incense cabinets & game sets -->
+<section>
+  <div class="section-header">
+    <span class="section-num">04</span>
+    <span class="section-title">Lacquer incense cabinets &amp; the incense game</span>
+  </div>
+  <p class="section-note">
+    Found via semantic search. These are Japanese export-quality lacquer objects for storing
+    multiple incense types, distinct from the single-compartment kogo.
+    The <em>kodo</em> game set involves identifying or associating scents with literary references.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-RAK-2017-21" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/KXUsp/full/500,/0/default.jpg" alt="Lacquer incense cabinet" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-RAK-2017-21</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-RAK-2017-21</div>
+          <div class="card-title">Incense cabinet</div>
+          <div class="card-maker">Anonymous · gold lacquer, silver mounts</div>
+          <div class="card-desc">Rectangular box with door opening onto six drawers for different incense types. Gold lacquer with flowering plants in relief; engraved silver hinges. h 10.2 x w 14.5 cm. Marie-Antoinette owned a box of this type.</div>
+          <div class="card-date">c. 1700</div>
+          <span class="tag highlight">lacquer cabinet</span><span class="tag">Japan</span>
+        </div>
+      </a>
+    </div>
+    <div class="card">
+      <a href="https://www.rijksmuseum.nl/en/collection/AK-MAK-154" target="_blank">
+        <div class="card-img">
+          <img src="https://iiif.micr.io/YaLvd/full/500,/0/default.jpg" alt="Incense game set" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none'">
+          <div class="placeholder">AK-MAK-154</div>
+        </div>
+        <div class="card-body">
+          <div class="card-id">AK-MAK-154</div>
+          <div class="card-title">Box for the incense game (kodo)</div>
+          <div class="card-maker">Anonymous · lacquer on wood</div>
+          <div class="card-desc">Round box containing eight round sub-boxes and a tray. Used in <em>kodo</em> — the art of appreciating incense — where players identify scents or guess their literary associations. Steinmetz bequest.</div>
+          <div class="card-date">1800–1900</div>
+          <span class="tag highlight">kodo game set</span><span class="tag">Japan</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+
+<div class="callout" style="margin-top:2rem;">
+  <strong>Cataloguing note:</strong> None of the 40+ objects identified here carries the Iconclass notation <code>41C761</code> (scent-box). The Japanese ceramics are typed as <code>kogo</code> / <code>wierookdoos</code>; the European pomanders as <code>jewellery</code> / <code>reukbal</code>; the lacquer cabinets as <code>lakdoos</code>. The Iconclass notation applies only to the one Dutch silver scent-box (S1), reached via its subject label — not its type field. The notation <code>41C761</code> is therefore a near-useless retrieval handle for this material class in the Rijksmuseum system; object-type vocabulary is the correct entry point.
+</div>
+
+
+<footer>
+  <div>Data: Rijksmuseum Data API · rijksmuseum-mcp-plus</div>
+  <div>Images via <a href="https://iiif.io" target="_blank" rel="noopener" style="color:var(--amber);text-decoration:none;">IIIF</a> deep-zoom (iiif.micr.io)</div>
+  <div>Generated 7 April 2026</div>
+</footer>
+
+</body>
+</html>
