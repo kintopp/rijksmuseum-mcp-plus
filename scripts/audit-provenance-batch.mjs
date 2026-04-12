@@ -39,6 +39,20 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const MODES = ["silent-errors", "pattern-mining", "semantic-catalogue", "position-enrichment", "structural-signals", "type-classification", "field-correction", "event-reclassification", "event-splitting", "party-extraction"];
 
+// ─── Mode-specific default models ───────────────────────────────────
+//
+// Different modes benefit from different model tiers. Field-correction (7a)
+// is a structured classification task with short prompts and simple output,
+// so Haiku 4.5 handles it adequately at ~3× lower cost than Sonnet. The rest
+// of the modes involve heavier reasoning about event structure, attribution
+// chains, or PLOD semantic mapping and use Sonnet 4.6 by default.
+//
+// CLI --model overrides both the mode-specific default and the global fallback.
+const GLOBAL_DEFAULT_MODEL = "claude-sonnet-4-6";
+const MODE_DEFAULT_MODELS = {
+  "field-correction": "claude-haiku-4-5-20251001",
+};
+
 // ─── CLI args ───────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -52,7 +66,7 @@ function opt(name, fallback) {
 const mode = opt("--mode", null);
 const sampleSize = parseInt(opt("--sample-size", "200"), 10);
 const dbPath = opt("--db", "data/vocabulary.db");
-const model = opt("--model", "claude-sonnet-4-20250514");
+const model = opt("--model", MODE_DEFAULT_MODELS[mode] || GLOBAL_DEFAULT_MODEL);
 const resumeBatchId = opt("--resume", null);
 const dryRun = flag("--dry-run");
 const stratify = flag("--stratify");
@@ -70,7 +84,8 @@ if (!mode || !MODES.includes(mode)) {
   console.error(`  --sample-size N      Records to sample (default: 200)`);
   console.error(`  --db PATH            Vocab DB path (default: data/vocabulary.db)`);
   console.error(`  --output PATH        JSON output file`);
-  console.error(`  --model MODEL        Anthropic model (default: claude-sonnet-4-20250514)`);
+  console.error(`  --model MODEL        Anthropic model (default: claude-sonnet-4-6, except`);
+  console.error(`                       field-correction which defaults to claude-haiku-4-5-20251001)`);
   console.error(`  --resume BATCH_ID    Resume polling an existing batch`);
   console.error(`  --dry-run            Build prompts only, don't submit`);
   console.error(`  --stratify           Mode 1: stratify by parse_method + century`);
@@ -2712,7 +2727,9 @@ function estimateCost(results) {
   // Batch API pricing (50% of standard)
   const RATES = {
     "claude-sonnet-4-20250514": { input: 1.50, output: 7.50 },
+    "claude-sonnet-4-6": { input: 1.50, output: 7.50 },
     "claude-sonnet-4-6-20250514": { input: 1.50, output: 7.50 },
+    "claude-opus-4-6": { input: 7.50, output: 37.50 },
     "claude-opus-4-20250514": { input: 7.50, output: 37.50 },
     "claude-haiku-4-5-20251001": { input: 0.50, output: 2.50 },
   };

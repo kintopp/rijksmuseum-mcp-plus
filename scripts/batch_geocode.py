@@ -307,6 +307,12 @@ def main():
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
         updated = 0
+        # `AND lat IS NULL` is trust-tier enforcement: this script runs the
+        # fast bulk authority-ID passes (Wikidata SPARQL, GeoNames, Getty TGN)
+        # and must not overwrite any place that already has coordinates from
+        # a prior pass — whether from this script's own earlier phases or
+        # from geocode_places.py's higher-confidence phases. See #218 and
+        # geocode_places.update_coords for the full rationale.
         for vocab_id, (lat, lon) in all_results.items():
             cursor.execute(
                 "UPDATE vocabulary SET lat = ?, lon = ? WHERE id = ? AND lat IS NULL",

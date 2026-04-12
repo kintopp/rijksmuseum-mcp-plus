@@ -214,7 +214,18 @@ def get_ungeocoded(conn: sqlite3.Connection, category: str | None = None
 
 def update_coords(conn: sqlite3.Connection, updates: dict[str, tuple[float, float]],
                   dry_run: bool = False) -> int:
-    """Write lat/lon to vocabulary table. Returns count updated."""
+    """Write lat/lon to vocabulary table. Returns count updated.
+
+    The `AND lat IS NULL` guard is trust-tier enforcement, not a performance
+    optimisation: phases run in priority order (1a GeoNames API → 1b Wikidata
+    P-property lookup → 1c Getty TGN → 2 self-ref → 3 Wikidata reconciliation →
+    3b WHG reconciliation), and this clause prevents a lower-confidence phase
+    from overwriting a higher-confidence phase's earlier write. Removing it
+    would let fuzzy-match reconciliation (Phase 3/3b) clobber authority-ID
+    lookups (Phase 1a/b/c) — which historically pointed e.g. "Exmouth" at a
+    peninsula in Western Australia while Phase 1a had correctly placed it in
+    Devon. See issue #218 and the v0.24 feasibility-check notes.
+    """
     if dry_run or not updates:
         return 0
     cursor = conn.cursor()
@@ -232,7 +243,11 @@ def update_coords(conn: sqlite3.Connection, updates: dict[str, tuple[float, floa
 def update_coords_and_ids(conn: sqlite3.Connection,
                           updates: dict[str, tuple[float, float, str]],
                           dry_run: bool = False) -> int:
-    """Write lat/lon + external_id to vocabulary table. Returns count updated."""
+    """Write lat/lon + external_id to vocabulary table. Returns count updated.
+
+    Same trust-tier enforcement as `update_coords` — see its docstring. The
+    `AND lat IS NULL` guard is load-bearing, not a perf trick.
+    """
     if dry_run or not updates:
         return 0
     cursor = conn.cursor()
