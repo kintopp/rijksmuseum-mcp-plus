@@ -35,6 +35,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import tarfile
 from itertools import chain
 import time
@@ -48,6 +49,19 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
+
+# Make scripts/lib importable as a namespace package (#222 audit module).
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+from lib.harvest_audit import (  # noqa: E402
+    AuditResult,
+    append_to_summary,
+    final_summary,
+    format_stdout_table,
+    run_phase_audit,
+)
+
+HARVEST_VERSION = "v0.24"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 CHECKPOINT_PATH = SCRIPT_DIR / ".harvest-checkpoint"
 DUMPS_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps"
@@ -2678,8 +2692,18 @@ def normalize_rights(conn: sqlite3.Connection):
 
 # ─── Phase 3: Validation ─────────────────────────────────────────────
 
-def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
-    """Phase 3: Post-processing (geocoding import, FTS, stats)."""
+def run_phase3(
+    conn: sqlite3.Connection,
+    geo_csv: str | None = None,
+    audit_results: dict[str, list[AuditResult]] | None = None,
+):
+    """Phase 3: Post-processing (geocoding import, FTS, stats).
+
+    ``audit_results`` is the run-wide accumulator threaded through from main();
+    when present, two audit checkpoints fire — once after import_geocoding
+    (catches #218 ``geocode_method`` regressions) and once at end of phase 3
+    (catches downstream zero-row regressions like #220 → artwork_exhibitions).
+    """
     cur = conn.cursor()
 
     # Import geocoding data if CSV provided
@@ -2687,6 +2711,10 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
         print("\n--- Geocoding Import ---")
         import_geocoding(conn, geo_csv)
         print()
+        if audit_results is not None:
+            geo_audit = run_phase_audit(conn, "phase3.geocoding")
+            append_to_summary(audit_results, "phase3.geocoding", geo_audit)
+            format_stdout_table(geo_audit, "phase3.geocoding")
 
     # ── New Phase 3 tables (art_id-independent) ──
 
@@ -3222,6 +3250,11 @@ def run_phase3(conn: sqlite3.Connection, geo_csv: str | None = None):
     conn.execute("VACUUM")
     print(f"  VACUUM complete in {time.time() - t0:.1f}s")
 
+    if audit_results is not None:
+        phase3_audit = run_phase_audit(conn, "phase3")
+        append_to_summary(audit_results, "phase3", phase3_audit)
+        format_stdout_table(phase3_audit, "phase3")
+
 
 # ─── Main ────────────────────────────────────────────────────────────
 
@@ -3260,6 +3293,10 @@ def parse_args() -> argparse.Namespace:
         "--db", type=str, default=None,
         help="Override output database path (default: data/vocabulary.db).",
     )
+    parser.add_argument(
+        "--strict-audit", action="store_true",
+        help="Exit with non-zero status at end of run if any audit target fails (default: warn only). See #222.",
+    )
     return parser.parse_args()
 
 
@@ -3276,6 +3313,10 @@ def main():
 
     conn = create_or_open_db()
 
+    # Audit accumulator (#222) — each phase appends its results; final_summary
+    # writes the JSON artifact and (if --strict-audit) exits non-zero on FAIL.
+    all_audit_results: dict[str, list[AuditResult]] = {}
+
     # Phase ordering: 0 → 0.5 → 1 → 2 → 4 → 2b → 3
     # Phase 2b re-resolves after Phase 4 (which introduces new vocab refs).
     # Phase 3 runs last because it builds FTS indexes and stats on all data.
@@ -3285,6 +3326,9 @@ def main():
         t0 = time.time()
         run_phase0(conn)
         print(f"  Phase 0 took {time.time() - t0:.1f}s")
+        phase0_audit = run_phase_audit(conn, "phase0")
+        append_to_summary(all_audit_results, "phase0", phase0_audit)
+        format_stdout_table(phase0_audit, "phase0")
         print()
 
     if args.start_phase <= 0:
@@ -3307,6 +3351,9 @@ def main():
         t0 = time.time()
         run_phase2(conn)
         print(f"  Phase 2 took {time.time() - t0:.1f}s")
+        phase2_audit = run_phase_audit(conn, "phase2")
+        append_to_summary(all_audit_results, "phase2", phase2_audit)
+        format_stdout_table(phase2_audit, "phase2")
         print()
 
     if args.start_phase <= 4:
@@ -3314,12 +3361,18 @@ def main():
         t0 = time.time()
         run_phase4(conn, threads=args.threads)
         print(f"  Phase 4 took {time.time() - t0:.1f}s")
+        phase4_audit = run_phase_audit(conn, "phase4")
+        append_to_summary(all_audit_results, "phase4", phase4_audit)
+        format_stdout_table(phase4_audit, "phase4")
         print()
 
         print("=== Phase 2b: Resolving new vocabulary URIs from Phase 4 ===")
         t0 = time.time()
         run_phase2(conn)
         print(f"  Phase 2b took {time.time() - t0:.1f}s")
+        phase2b_audit = run_phase_audit(conn, "phase2")
+        append_to_summary(all_audit_results, "phase2b", phase2b_audit)
+        format_stdout_table(phase2b_audit, "phase2b")
         print()
 
     # ── Orphan vocab audit (before Phase 3 integer-encoding drops them) ──
@@ -3351,7 +3404,16 @@ def main():
     print()
 
     print("=== Phase 3: Validation & Post-processing ===")
-    run_phase3(conn, geo_csv=args.geo_csv)
+    run_phase3(conn, geo_csv=args.geo_csv, audit_results=all_audit_results)
+
+    # Final audit summary (#222) — writes JSON artifact and exits non-zero on
+    # FAIL when --strict-audit is set. Runs after run_phase3 so phase 3 drops
+    # and final counts are reflected.
+    final_summary(
+        all_audit_results,
+        strict_mode=args.strict_audit,
+        version=HARVEST_VERSION,
+    )
 
     conn.close()
     print(f"\nDone. Database at: {DB_PATH}")
