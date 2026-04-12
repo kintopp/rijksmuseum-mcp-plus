@@ -2106,6 +2106,21 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
         if fl_added:
             print(f"  Added production_place + source_type to field_lookup.")
 
+    # Ensure art_id exists on artworks before Phase 4's main loop — the six
+    # new-table inserts (modifications, related_objects, examinations,
+    # title_variants, assignment_pairs, artwork_parent) are keyed by art_id
+    # and would otherwise be silently skipped on a fresh harvest because
+    # Phase 3's normalize_mappings() doesn't run until AFTER Phase 4.
+    #
+    # This block is idempotent — normalize_mappings() has the same guard and
+    # will skip the art_id bootstrap if it's already in place. Fix for #219
+    # (six Phase 4 tables returned 0 rows in v0.24).
+    if "art_id" not in get_columns(conn, "artworks"):
+        print("  Adding stable art_id column (so Phase 4 new-table inserts work)...")
+        conn.execute("ALTER TABLE artworks ADD COLUMN art_id INTEGER")
+        conn.execute("UPDATE artworks SET art_id = rowid")
+        conn.execute("CREATE UNIQUE INDEX idx_artworks_art_id ON artworks(art_id)")
+
     conn.commit()
 
     # Get all artworks that haven't been processed yet
@@ -2122,9 +2137,11 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     total = len(pending)
     print(f"  Resolving {total:,} artworks for Tier 2 fields ({threads} threads)...")
 
-    # Detect schema for mappings inserts (production roles + attribution qualifiers)
+    # Detect schema for mappings inserts (production roles + attribution qualifiers).
+    # art_id is guaranteed present by the bootstrap block above — but keep the
+    # dynamic check so this function stays robust against schema drift.
     artworks_cols = get_columns(conn, "artworks")
-    has_art_id = "art_id" in artworks_cols  # Only exists after Phase 3's normalize_mappings
+    has_art_id = "art_id" in artworks_cols
     if int_mappings:
         MAPPING_INSERT_SQL = """
             INSERT OR IGNORE INTO mappings (artwork_id, vocab_rowid, field_id)
@@ -2272,9 +2289,12 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                 place_count += len(result["places"])
                 source_type_count += len(result["source_types"])
 
-                # New table inserts require art_id (added by Phase 3's normalize_mappings).
-                # On a fresh full run the column doesn't exist yet — skip entirely.
-                # These inserts only fire on incremental re-runs of Phase 4 after Phase 3.
+                # New-table inserts require art_id. The bootstrap block at the top
+                # of run_phase4 guarantees art_id exists, so has_art_id should be
+                # True — but keep the fallback so this function stays robust if
+                # the bootstrap is ever disabled or the caller reshapes the schema.
+                # Fix for #219 (v0.24 regression where art_id was only added by
+                # Phase 3's normalize_mappings after Phase 4 had already finished).
                 if has_art_id:
                     art_id_row = conn.execute(
                         "SELECT art_id FROM artworks WHERE object_number = ?", (obj_num,)
