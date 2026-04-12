@@ -41,13 +41,19 @@ spec.loader.exec_module(harvest)
 # Exhibition 2411023 — known ground truth from the 2026-04 dump.
 # Counted via: grep -c 'linked.art/ns/terms/has_member' /tmp/exhibition-probe/2411023
 #
-# This test is scoped to issue #220 (has_member extraction). Title and date
-# extraction are known to be broken with the same structural root cause
-# (parser doesn't follow P1_is_identified_by and P4_has_time-span blank-node
-# chains), but those are pre-existing bugs tracked separately.
+# Covers:
+#   - Issue #220 (has_member extraction via P16 → Set → has_member chain)
+#   - Issue #236 (title extraction via P1_is_identified_by chain)
+#   - Issue #236 (date extraction via P4_has_time-span chain)
 EXPECTED_FIXTURES = {
     "2411023": {
         "expected_members": 28,
+        "expected_title": (
+            "Rembrandt 400. Alle tekeningen van Rembrandt in het Rijksmuseum. "
+            "Deel 1: De verteller"
+        ),
+        "expected_date_start": "2006-08-11",
+        "expected_date_end": "2006-10-11",
     },
 }
 
@@ -70,7 +76,9 @@ def create_minimal_schema(conn: sqlite3.Connection) -> None:
     """)
 
 
-def run_fixture_test(dump_dir: Path, exhibition_id: str, expected_members: int) -> None:
+def run_fixture_test(dump_dir: Path, exhibition_id: str, expected_members: int,
+                     expected_title: str, expected_date_start: str,
+                     expected_date_end: str) -> None:
     """Parse a single-file dump directory containing one exhibition and assert."""
     # Build an in-memory DB with the minimal schema
     conn = sqlite3.connect(":memory:")
@@ -108,7 +116,7 @@ def run_fixture_test(dump_dir: Path, exhibition_id: str, expected_members: int) 
         (int(exhibition_id),),
     ).fetchone()
 
-    # Assertions — scoped to #220 (has_member extraction)
+    # Assertions — covers #220 (has_member) and #236 (title + date)
     errors = []
     if exh_count != 1:
         errors.append(f"parser reported {exh_count} exhibitions, expected 1")
@@ -124,6 +132,20 @@ def run_fixture_test(dump_dir: Path, exhibition_id: str, expected_members: int) 
         )
     if row is None:
         errors.append("exhibition row not found in DB")
+    else:
+        title_en, title_nl, date_start, date_end = row
+        if title_en != expected_title:
+            errors.append(
+                f"title_en mismatch\n      expected: {expected_title!r}\n      got:      {title_en!r}"
+            )
+        if title_nl != expected_title:
+            errors.append(
+                f"title_nl mismatch (expected same as title_en)\n      expected: {expected_title!r}\n      got:      {title_nl!r}"
+            )
+        if date_start != expected_date_start:
+            errors.append(f"date_start = {date_start!r}, expected {expected_date_start!r}")
+        if date_end != expected_date_end:
+            errors.append(f"date_end = {date_end!r}, expected {expected_date_end!r}")
 
     if errors:
         print(f"FAIL: exhibition {exhibition_id}", file=sys.stderr)
@@ -132,8 +154,11 @@ def run_fixture_test(dump_dir: Path, exhibition_id: str, expected_members: int) 
         conn.close()
         sys.exit(1)
 
-    print(f"PASS: exhibition {exhibition_id} — "
-          f"{db_member_count} members recovered via P16_used_specific_object → Set → has_member chain")
+    print(
+        f"PASS: exhibition {exhibition_id} — "
+        f"{db_member_count} members, dates {date_start}..{date_end}"
+    )
+    print(f"       title: {title_en!r}")
     conn.close()
 
 
@@ -158,6 +183,9 @@ def main() -> None:
             dump_dir=dump_dir,
             exhibition_id=exh_id,
             expected_members=expected["expected_members"],
+            expected_title=expected["expected_title"],
+            expected_date_start=expected["expected_date_start"],
+            expected_date_end=expected["expected_date_end"],
         )
 
     print()

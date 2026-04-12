@@ -127,6 +127,8 @@ P_END = "http://www.cidoc-crm.org/cidoc-crm/P82b_end_of_the_end"
 P_HAS_MEMBER = "http://www.cidoc-crm.org/cidoc-crm/P46i_forms_part_of"  # legacy fallback: artwork → exhibition
 P_HAS_MEMBER_LA = "https://linked.art/ns/terms/has_member"              # actual predicate in exhibition dump
 P_USED_SPECIFIC_OBJECT = "http://www.cidoc-crm.org/cidoc-crm/P16_used_specific_object"  # exhibition → Set bnode
+P_IS_IDENTIFIED_BY = "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by"  # exhibition → title bnode (#236)
+P_HAS_TIME_SPAN = "http://www.cidoc-crm.org/cidoc-crm/P4_has_time-span"        # exhibition → timespan bnode (#236)
 
 # Title classification AAT URIs
 AAT_TITLE_FULL = "http://vocab.getty.edu/aat/300417200"
@@ -137,10 +139,13 @@ RM_TITLE_FORMER = "https://id.rijksmuseum.nl/22015528"
 # ─── N-Triples parsing (same as pilot) ──────────────────────────────
 
 NT_PATTERN = re.compile(
-    r'^<([^>]+)>\s+<([^>]+)>\s+(?:<([^>]+)>|"([^"]*)")\s*\.\s*$'
+    # Object can be <uri> or "literal" optionally followed by a datatype
+    # suffix ^^<datatype> (e.g. xsd:dateTime on P82a/P82b literals).
+    # The datatype group is non-capturing — we don't use it.
+    r'^<([^>]+)>\s+<([^>]+)>\s+(?:<([^>]+)>|"([^"]*)"(?:\^\^<[^>]+>)?)\s*\.\s*$'
 )
 BNODE_PATTERN = re.compile(
-    r'^_:(\S+)\s+<([^>]+)>\s+(?:<([^>]+)>|"([^"]*)")\s*\.\s*$'
+    r'^_:(\S+)\s+<([^>]+)>\s+(?:<([^>]+)>|"([^"]*)"(?:\^\^<[^>]+>)?)\s*\.\s*$'
 )
 # Matches triples with URI subject and blank-node object: <uri> <uri> _:bnode .
 # Needed for exhibition dump parsing where <Exhibition> P16_used_specific_object _:Set .
@@ -645,20 +650,49 @@ def parse_dump_dir(dump_dir: Path, default_type: str) -> list[dict]:
     return records
 
 
+def _strip_time(iso_literal: str) -> str:
+    """Normalize an ISO datetime literal to YYYY-MM-DD.
+
+    P82a_begin_of_the_begin / P82b_end_of_the_end values in the exhibition
+    dump are typically '2006-08-11T00:00:00Z'. Consumers of the exhibitions
+    table want a plain date string, so we strip the time portion.
+    """
+    return iso_literal.split("T")[0]
+
+
 def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int, int]:
     """Parse exhibition dump files and populate exhibitions + exhibition_members tables.
 
-    Exhibition entities are E7_Activity with ID namespace 241xxxx. Extracts:
-    - Title from P1_is_identified_by → P190_has_symbolic_content (EN/NL)
-    - Date range from P82a_begin_of_the_begin / P82b_end_of_the_end
-    - Member artwork IDs via the Linked Art two-hop chain:
-        <Exhibition> P16_used_specific_object _:Set
-        _:Set        https://linked.art/ns/terms/has_member <HMO>
-      The exhibition references a blank-node Set entity, and the Set carries
-      the has_member edges in the Linked Art namespace. Legacy CIDOC-CRM
-      direct/inverse membership predicates (P46_is_composed_of, P46i_forms_part_of)
-      are retained as defensive fallbacks but are not used by the current dump.
-      See issue #220 for the diagnosis.
+    Exhibition entities are E7_Activity with ID namespace 241xxxx. The dump uses
+    three parallel blank-node chains from the exhibition entity — the parser
+    must follow all three:
+
+    1. Titles via P1_is_identified_by chain:
+         <Exhibition> P1_is_identified_by _:titleBnode
+         _:titleBnode  P190_has_symbolic_content "real title"
+       Title bnodes typically carry NO P72_has_language tag, so the real
+       disambiguator is reachability from the exhibition entity via
+       P1_is_identified_by — NOT language-based filtering. (The timespan's
+       nested display-name bnodes DO carry language tags with date-range
+       strings like "2006-08-11 - 2006-10-11" which historically got wrongly
+       picked up as titles.)
+
+    2. Dates via P4_has_time-span chain:
+         <Exhibition> P4_has_time-span _:timespanBnode
+         _:timespanBnode P82a_begin_of_the_begin "2006-08-11T00:00:00Z"
+         _:timespanBnode P82b_end_of_the_end     "2006-10-11T23:59:59Z"
+       Dates are on the timespan bnode, not on the exhibition entity itself.
+       The legacy direct-entity path (NT_PATTERN P_BEGIN/P_END) is retained
+       as a defensive fallback but does not trigger on current dumps.
+
+    3. Members via P16_used_specific_object → has_member chain (#220):
+         <Exhibition> P16_used_specific_object _:Set
+         _:Set        https://linked.art/ns/terms/has_member <HMO>
+       Legacy CIDOC-CRM direct/inverse membership predicates
+       (P46_is_composed_of, P46i_forms_part_of) are retained as defensive
+       fallbacks but are not used by the current dump.
+
+    See issues #220 (has_member) and #236 (titles/dates) for the diagnosis.
 
     Returns (exhibition_count, member_count).
     """
@@ -678,10 +712,21 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
         # Blank nodes referenced by this exhibition via P16_used_specific_object.
         # These are the Set entities whose has_member edges give us members.
         set_bnodes: set[str] = set()
+        # Blank nodes referenced by this exhibition via P1_is_identified_by.
+        # These are the title entities whose P190 labels give us real titles.
+        # Distinct from the timespan's nested display-name bnodes, which would
+        # otherwise wrongly win a language-based title race.
+        title_bnodes: set[str] = set()
+        # Blank nodes referenced by this exhibition via P4_has_time-span.
+        # These are the timespan entities whose P82a/P82b literals give us dates.
+        timespan_bnodes: set[str] = set()
         # Buffer: all bnode → HMO has_member edges seen in this file, keyed by bnode.
         # Filtered against set_bnodes after the parse loop to keep only the ones
         # that belong to this exhibition's Set(s).
         bnode_members: dict[str, set[str]] = {}
+        # Buffer: all bnode → begin/end date literals seen in this file, keyed
+        # by bnode. Filtered against timespan_bnodes after the parse loop.
+        bnode_dates: dict[str, dict[str, str]] = {}
 
         try:
             with open(filepath, "r", encoding="utf-8") as f:
@@ -720,17 +765,23 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                         member_uris.add(hmo_num)
                 continue
 
-            # URI-subject, blank-node-object: the exhibition → Set link
+            # URI-subject, blank-node-object: exhibition → Set / title / timespan
             mb = NT_TO_BNODE_PATTERN.match(line)
             if mb:
                 subj = mb.group(1)
                 pred = mb.group(2)
                 bnode_id = mb.group(3)
-                if subj == entity_uri and pred == P_USED_SPECIFIC_OBJECT:
-                    set_bnodes.add(bnode_id)
+                if subj == entity_uri:
+                    if pred == P_USED_SPECIFIC_OBJECT:
+                        set_bnodes.add(bnode_id)
+                    elif pred == P_IS_IDENTIFIED_BY:
+                        title_bnodes.add(bnode_id)
+                    elif pred == P_HAS_TIME_SPAN:
+                        timespan_bnodes.add(bnode_id)
                 continue
 
-            # Blank-node-subject: Set's has_member edges and title bnode fields
+            # Blank-node-subject: Set's has_member edges, title bnode labels,
+            # timespan bnode date literals
             bm = BNODE_PATTERN.match(line)
             if bm:
                 bnode_id = bm.group(1)
@@ -752,23 +803,47 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
                     hmo_num = obj_uri.split("/")[-1]
                     if hmo_num.isdigit():
                         bnode_members.setdefault(bnode_id, set()).add(hmo_num)
+                elif pred == P_BEGIN and obj_lit:
+                    # Buffer — filter against timespan_bnodes after the loop.
+                    # Triple order is not guaranteed; the P4 link may appear
+                    # after the P82a/P82b literals in the file.
+                    bnode_dates.setdefault(bnode_id, {})["begin"] = obj_lit
+                elif pred == P_END and obj_lit:
+                    bnode_dates.setdefault(bnode_id, {})["end"] = obj_lit
 
         # Resolve has_member edges: keep only those belonging to this exhibition's Set(s)
         for bnode_id in set_bnodes:
             member_uris.update(bnode_members.get(bnode_id, set()))
 
-        # Extract EN/NL titles from bnodes
-        title_en = None
-        title_nl = None
-        for bdata in bnodes.values():
-            label = bdata.get("label")
-            if not label:
-                continue
-            lang = bdata.get("language")
-            if lang == LANG_EN and not title_en:
-                title_en = label
-            elif lang == LANG_NL and not title_nl:
-                title_nl = label
+        # Resolve dates: filter buffered P82a/P82b to this exhibition's timespan bnodes.
+        # date_begin / date_end may already be set from the legacy NT_PATTERN direct-
+        # entity path above; the timespan-bnode path is the real one for current dumps.
+        for ts_bnode in timespan_bnodes:
+            d = bnode_dates.get(ts_bnode, {})
+            if "begin" in d and date_begin is None:
+                date_begin = _strip_time(d["begin"])
+            if "end" in d and date_end is None:
+                date_end = _strip_time(d["end"])
+
+        # Resolve titles: filter labels to this exhibition's title bnodes. Title bnodes
+        # typically have no P72_has_language tag (the real disambiguator is
+        # P1_is_identified_by reachability, not language). Sample data shows exactly
+        # one title bnode per exhibition, so we take the first non-empty label and
+        # write it to both title_en and title_nl — the language is indeterminate and
+        # the Rijksmuseum stores a single canonical title per exhibition.
+        #
+        # LATENT LIMITATION: if a future dump emits bilingual title variants on separate
+        # bnodes (two bnodes reachable via P1_is_identified_by with different language
+        # tags), this loop's `break` would take only the first. Refine at that point.
+        title_text = None
+        for t_bnode in title_bnodes:
+            label = bnodes.get(t_bnode, {}).get("label")
+            if label:
+                title_text = label
+                break
+
+        title_en = title_text
+        title_nl = title_text
 
         if not title_en and not title_nl:
             continue
