@@ -2536,17 +2536,17 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
             skipped_not_place += 1
             continue
 
-        # Update coords, and external_id if the CSV provides a different one
+        # Update coords, geocode_method, and external_id if the CSV provides a different one
         should_update_ext = ext_id and ext_id != existing[1]
         if should_update_ext:
             conn.execute(
-                "UPDATE vocabulary SET lat = ?, lon = ?, external_id = ? WHERE id = ?",
+                "UPDATE vocabulary SET lat = ?, lon = ?, geocode_method = 'csv', external_id = ? WHERE id = ?",
                 (lat, lon, ext_id, vocab_id),
             )
             updated_ext_id += 1
         else:
             conn.execute(
-                "UPDATE vocabulary SET lat = ?, lon = ? WHERE id = ?",
+                "UPDATE vocabulary SET lat = ?, lon = ?, geocode_method = 'csv' WHERE id = ?",
                 (lat, lon, vocab_id),
             )
         updated_coords += 1
@@ -2705,6 +2705,13 @@ def run_phase3(
     """
     cur = conn.cursor()
 
+    # geocode_method column must exist before import_geocoding() writes to it
+    # and before the phase3.geocoding audit fires.
+    vocab_cols = get_columns(conn, "vocabulary")
+    if "geocode_method" not in vocab_cols:
+        conn.execute("ALTER TABLE vocabulary ADD COLUMN geocode_method TEXT")
+        conn.commit()
+
     # Import geocoding data if CSV provided
     if geo_csv:
         print("\n--- Geocoding Import ---")
@@ -2752,13 +2759,6 @@ def run_phase3(
     conn.commit()
     print("  sync_state table ready")
 
-    # geocode_method column on vocabulary
-    vocab_cols = get_columns(conn, "vocabulary")
-    if "geocode_method" not in vocab_cols:
-        conn.execute("ALTER TABLE vocabulary ADD COLUMN geocode_method TEXT")
-        conn.commit()
-        print("  Added vocabulary.geocode_method column")
-
     # Convert dimension 0.0 sentinels → NULL (#195)
     print("\n--- Dimension Sentinel Cleanup ---")
     for col in ["height_cm", "width_cm", "depth_cm", "diameter_cm"]:
@@ -2785,13 +2785,24 @@ def run_phase3(
                 PRIMARY KEY (art_id, exhibition_id)
             ) WITHOUT ROWID
         """)
-        inserted = conn.execute("""
-            INSERT OR IGNORE INTO artwork_exhibitions (art_id, exhibition_id)
-            SELECT a.art_id, em.exhibition_id
-            FROM exhibition_members em
-            JOIN artworks a ON a.object_number = em.hmo_id
-            WHERE a.art_id IS NOT NULL
-        """).rowcount
+        # hmo_id is the numeric suffix of the Linked Art URI (e.g. "200421947"),
+        # not the object_number (e.g. "AK-BR-324"). Join via linked_art_uri while
+        # it is still present; it is dropped later in Phase 3.
+        if "linked_art_uri" in get_columns(conn, "artworks"):
+            inserted = conn.execute("""
+                INSERT OR IGNORE INTO artwork_exhibitions (art_id, exhibition_id)
+                SELECT a.art_id, em.exhibition_id
+                FROM exhibition_members em
+                JOIN artworks a
+                  ON SUBSTR(a.linked_art_uri,
+                       INSTR(a.linked_art_uri, '/objects/') + 9) = em.hmo_id
+                WHERE a.art_id IS NOT NULL
+                  AND a.linked_art_uri IS NOT NULL
+                  AND a.linked_art_uri != ''
+            """).rowcount
+        else:
+            print("  Note: linked_art_uri not available (Phase 3 re-run) — skipping insert")
+            inserted = conn.execute("SELECT COUNT(*) FROM artwork_exhibitions").fetchone()[0]
         conn.commit()
         print(f"  artwork_exhibitions: {inserted:,} rows")
 
