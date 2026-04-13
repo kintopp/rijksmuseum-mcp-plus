@@ -2810,6 +2810,33 @@ def run_phase3(
         total_em = cur.execute("SELECT COUNT(*) FROM exhibition_members").fetchone()[0]
         if total_ae < total_em:
             print(f"  Note: {total_em - total_ae:,} exhibition memberships could not be resolved to art_ids")
+
+        # Write hmo_id → art_id + object_number mapping CSV while linked_art_uri is
+        # still available. Includes unresolved rows (art_id=NULL) so future bugs in
+        # artwork_exhibitions can be diagnosed and backfilled without a full re-harvest.
+        if "linked_art_uri" in get_columns(conn, "artworks"):
+            import csv as _csv
+            hmo_map_path = PROJECT_DIR / "data" / "backfills" / "exhibition-hmo-id-map.csv"
+            hmo_map_path.parent.mkdir(parents=True, exist_ok=True)
+            rows = conn.execute("""
+                SELECT em.hmo_id,
+                       a.art_id,
+                       a.object_number
+                FROM exhibition_members em
+                LEFT JOIN artworks a
+                  ON SUBSTR(a.linked_art_uri,
+                       INSTR(a.linked_art_uri, '/objects/') + 9) = em.hmo_id
+                  AND a.linked_art_uri IS NOT NULL
+                  AND a.linked_art_uri != ''
+                GROUP BY em.hmo_id
+                ORDER BY em.hmo_id
+            """).fetchall()
+            with open(hmo_map_path, "w", newline="", encoding="utf-8") as f:
+                writer = _csv.writer(f)
+                writer.writerow(["hmo_id", "art_id", "object_number"])
+                writer.writerows(rows)
+            resolved = sum(1 for r in rows if r[1] is not None)
+            print(f"  Wrote {len(rows):,} rows to {hmo_map_path.name} ({resolved:,} resolved, {len(rows)-resolved:,} unresolved)")
     else:
         print("  Skipping (no exhibition_members table)")
 
