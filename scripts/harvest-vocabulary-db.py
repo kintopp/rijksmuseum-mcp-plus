@@ -30,6 +30,7 @@ Output: data/vocabulary.db (~1 GB)
 """
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -2486,8 +2487,6 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
     Updates lat, lon, and (optionally) external_id for existing place records.
     Only updates external_id if the CSV has a non-empty value that differs from the DB.
     """
-    import csv
-
     csv_file = Path(csv_path)
     if not csv_file.exists():
         print(f"  ERROR: Geocoding CSV not found: {csv_path}")
@@ -2789,54 +2788,58 @@ def run_phase3(
         # not the object_number (e.g. "AK-BR-324"). Join via linked_art_uri while
         # it is still present; it is dropped later in Phase 3.
         if "linked_art_uri" in get_columns(conn, "artworks"):
+            # Materialise the suffix once so both the INSERT and the CSV export
+            # share one full-scan pass instead of two.
+            conn.execute("""
+                CREATE TEMP TABLE _tmp_hmo_art AS
+                SELECT art_id, object_number,
+                       SUBSTR(linked_art_uri,
+                           INSTR(linked_art_uri, '/objects/') + 9) AS hmo_id
+                FROM artworks
+                WHERE linked_art_uri IS NOT NULL
+                  AND linked_art_uri != ''
+                  AND art_id IS NOT NULL
+            """)
+            conn.execute("CREATE INDEX _tmp_hmo_art_idx ON _tmp_hmo_art(hmo_id)")
             inserted = conn.execute("""
                 INSERT OR IGNORE INTO artwork_exhibitions (art_id, exhibition_id)
-                SELECT a.art_id, em.exhibition_id
+                SELECT t.art_id, em.exhibition_id
                 FROM exhibition_members em
-                JOIN artworks a
-                  ON SUBSTR(a.linked_art_uri,
-                       INSTR(a.linked_art_uri, '/objects/') + 9) = em.hmo_id
-                WHERE a.art_id IS NOT NULL
-                  AND a.linked_art_uri IS NOT NULL
-                  AND a.linked_art_uri != ''
+                JOIN _tmp_hmo_art t ON t.hmo_id = em.hmo_id
             """).rowcount
-        else:
-            print("  Note: linked_art_uri not available (Phase 3 re-run) — skipping insert")
-            inserted = conn.execute("SELECT COUNT(*) FROM artwork_exhibitions").fetchone()[0]
-        conn.commit()
-        print(f"  artwork_exhibitions: {inserted:,} rows")
+            conn.commit()
+            print(f"  artwork_exhibitions: {inserted:,} rows")
 
-        total_ae = cur.execute("SELECT COUNT(*) FROM artwork_exhibitions").fetchone()[0]
-        total_em = cur.execute("SELECT COUNT(*) FROM exhibition_members").fetchone()[0]
-        if total_ae < total_em:
-            print(f"  Note: {total_em - total_ae:,} exhibition memberships could not be resolved to art_ids")
+            total_ae = cur.execute("SELECT COUNT(*) FROM artwork_exhibitions").fetchone()[0]
+            total_em = cur.execute("SELECT COUNT(*) FROM exhibition_members").fetchone()[0]
+            if total_ae < total_em:
+                print(f"  Note: {total_em - total_ae:,} exhibition memberships could not be resolved to art_ids")
 
-        # Write hmo_id → art_id + object_number mapping CSV while linked_art_uri is
-        # still available. Includes unresolved rows (art_id=NULL) so future bugs in
-        # artwork_exhibitions can be diagnosed and backfilled without a full re-harvest.
-        if "linked_art_uri" in get_columns(conn, "artworks"):
-            import csv as _csv
+            # Write hmo_id → art_id + object_number mapping CSV while linked_art_uri is
+            # still available. Includes unresolved rows (art_id=NULL) so future bugs in
+            # artwork_exhibitions can be diagnosed and backfilled without a full re-harvest.
             hmo_map_path = PROJECT_DIR / "data" / "backfills" / "exhibition-hmo-id-map.csv"
             hmo_map_path.parent.mkdir(parents=True, exist_ok=True)
             rows = conn.execute("""
-                SELECT em.hmo_id,
-                       a.art_id,
-                       a.object_number
+                SELECT em.hmo_id, t.art_id, t.object_number
                 FROM exhibition_members em
-                LEFT JOIN artworks a
-                  ON SUBSTR(a.linked_art_uri,
-                       INSTR(a.linked_art_uri, '/objects/') + 9) = em.hmo_id
-                  AND a.linked_art_uri IS NOT NULL
-                  AND a.linked_art_uri != ''
+                LEFT JOIN _tmp_hmo_art t ON t.hmo_id = em.hmo_id
                 GROUP BY em.hmo_id
                 ORDER BY em.hmo_id
             """).fetchall()
             with open(hmo_map_path, "w", newline="", encoding="utf-8") as f:
-                writer = _csv.writer(f)
+                writer = csv.writer(f)
                 writer.writerow(["hmo_id", "art_id", "object_number"])
                 writer.writerows(rows)
             resolved = sum(1 for r in rows if r[1] is not None)
             print(f"  Wrote {len(rows):,} rows to {hmo_map_path.name} ({resolved:,} resolved, {len(rows)-resolved:,} unresolved)")
+
+            conn.execute("DROP TABLE _tmp_hmo_art")
+        else:
+            print("  Note: linked_art_uri not available (Phase 3 re-run) — skipping insert")
+            inserted = conn.execute("SELECT COUNT(*) FROM artwork_exhibitions").fetchone()[0]
+            conn.commit()
+            print(f"  artwork_exhibitions: {inserted:,} rows")
     else:
         print("  Skipping (no exhibition_members table)")
 
