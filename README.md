@@ -11,6 +11,8 @@
 
 The tool was developed as a technology demo by the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel and complements our ongoing work on [benchmarking](https://github.com/RISE-UNIBAS/humanities_data_benchmark) and [optimizing](https://github.com/kintopp/dspy-rise-humbench) humanities research tasks carried out by large language models (LLMs). We are particularly interested in exploring the research opportunities, methodological risks, and technical challenges posed by retrieving and analysing data with LLMs. If you are interested in collaborating with us in this area, please [get in touch](mailto:rise@unibas.ch).
 
+N.B. Please do not treat the data made available by this resource as current and authoritative. For this, please use the Rijksmuseum's own [search portal](https://www.rijksmuseum.nl/en/collection/) and [APIs](https://data.rijksmuseum.nl). Nor have the (in part, LLM based) enrichments of the museum's geospatial and provenance data been reviewed or endorsed by the Rijksmuseum. This is an early pre-release of a technology demo that is still in active development.
+
 <br/><p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion with highlighted panels" width="500"></p>
 
 ## Quick Start
@@ -84,17 +86,17 @@ Note to developers: the rijksmuseum-mcp+ server can also be run locally in STDIO
 
 ## How it works
 
-When you submit your question, the AI assistant decides on the basis of their [descriptions](/docs/mcp-server+tool-descriptions.md) which combination of [tools](/docs/available-tools.md) and [search parameters](/docs/mcp-tool-parameters.md) provided by rijksmuseum-mcp+ will best answer it from the museum's [metadata](/docs/metadata-categories.md). It might [search](/docs/search-parameters.md) the collection by structured filters (`search_artwork`), look up an artwork's full metadata (`get_artwork_details`), query ownership history (`search_provenance`), or find works by meaning rather than keyword (`semantic_search`) — often chaining several tools in sequence (the so-called 'agentic loop'), each result informing the next query. The results come back as structured data and text, which the AI assistant interprets, contextualises, and finally presents in natural language to the user (where requested alongside an artwork displayed in an image viewer). At each step, the it can combine the retrieved data with its own background knowledge — about artists, periods, iconographic traditions, and historical context — to offer interpretations that go beyond what the museum's metadata alone can provide. But the form and content of these statements will also be 'grounded' and 'constrained' by the curated metadata it has retrieved, by the instructions to the AI assistant in the MCP server, and the further specialised domain knowledge and guidance it draws on from the optional research skill document. Together, these act as a 'harness' for the AI assistant, keeping it factually grounded on the curated metadata and the user's query.  
+When you submit your question, the AI assistant decides on the basis of their [descriptions](/docs/mcp-server+tool-descriptions.md) which combination of [tools](/docs/available-tools.md) and [search parameters](/docs/mcp-tool-parameters.md) provided by rijksmuseum-mcp+ will best answer it by drawing on the the museum's [metadata](/docs/metadata-categories.md). The assistant might [search](/docs/search-parameters.md) the collection using structured filters (`search_artwork`), look up an artwork's full metadata (`get_artwork_details`), query ownership history (`search_provenance`), or find artworks by meaning or concept (`semantic_search`). During this process, it will often chain several tools together in sequence (the so-called 'agentic loop'), each result informing the next query. The results from each tool come back as structured data and text, which the AI assistant interprets, contextualises, and when satisfied, finally sends back as an answer in natural language. At each step, the AI assistant can combine the retrieved data with its own background knowledge — about artists, periods, iconographic traditions, and historical context — to offer interpretations that go beyond what the museum's metadata alone can provide. But the form and content of these statements will also be 'grounded' and 'constrained' by the curated metadata it has retrieved, by the instructions given to the AI assistant in the MCP server, and by the specialised domain knowledge and guidance it draws on from the optional [research skill](#research-skill) document. Together, these act as a kind of 'harness' for the AI assistant, keeping it factually grounded on the curated metadata and the user's query.  
 
-Because rijksmuseum-mcp+ maintains its own copy of Rijksmuseum and (via rijksmuseum-iconclass-mcp) Iconclass metadata, it can organise, enrich, query and analyse this in ways that are simply not possible by querying the Rijksmuseum collections portal or search API. This enables, for example: 
+Because rijksmuseum-mcp+ maintains its own copy of Rijksmuseum and (via rijksmuseum-iconclass-mcp) Iconclass metadata, it can organise, enrich, query and analyse this in ways that are not possible by querying the Rijksmuseum collections portal or search API. A separate database enables, for example: 
 
-- retrieving full-text metadata in relevance ranked order
-- searching metadata semantically by meaning or concept
+- searching full-text metadata in relevance ranked order
+- retrieving metadata semantically by meaning or concept
 - enriching toponyms (places) with long/lat data to permit proximity and region-based search
 - parsing provenance texts to create structured, searchable ownership chains
 - comparing artworks across multiple dimensions of 'similarity'
 
-In essence, rijksmuseum-mcp+ trades the conceptual simplicity of a traditional search interface, where you formulate a keyword-based query, receive results, and interpret these yourself, for a more flexible and powerful but also more complex scenario, where an AI assistant can search metadata, combine, and interpret the results on your behalf. Importantly, because the AI assistant has access not only to what it retrieves but also the way this data is organised, it is able to offer you a certain degree of 'introspection' on its actions – to explain how and why a query was conducted, what the data it retrieved looked like, and recommend options for analyzing it further.
+In essence, rijksmuseum-mcp+ trades the conceptual simplicity of a traditional search interface, where you formulate a keyword-based query, receive results, and interpret these yourself, for a more flexible and powerful but also more complex scenario, where an AI assistant can search metadata, combine, and interpret the results on your behalf. Importantly, because the AI assistant has access not only to what it retrieves but also the way this data is organised, it is also able to offer a certain degree of 'introspection' on its actions – to explain how and why a query was conducted, what the data it retrieved looked like, and recommend options for how best to carry out a query.
 
 ```mermaid
 flowchart LR
@@ -143,39 +145,13 @@ flowchart LR
     generation"| EmbeddingsDB
 ```
 
-**The agentic loop:** the AI assistant doesn't make one call to the MCP server and stop — it chains tools iteratively, each result informing the next. A single question like *"show me how Vermeer uses light"* might trigger:
+## Tips and Limitations
 
-```mermaid
-sequenceDiagram
-    participant You
-    participant AI
-    participant MCP as rijksmuseum-mcp+
+- **If a tool call fails unexpectedly, try disconnecting and reconnecting the connector.** Because rijksmuseum-mcp+ runs as a hosted remote MCP server, changes to its configuration from recent updates can leave the connector in a stale state — symptoms include queries never being answered, generic error messages, or the AI assistant reporting that a tool is unavailable. In Claude Desktop or claude.ai, go to _Settings_ → _Connectors_, toggle rijksmuseum-mcp+ off and back on, and retry your question. If that does not resolve the issue, remove the connector entirely and re-add it using the URL in the [Quick Start](#quick-start) section. Most errors clear up this way; if they persist, the server itself may be restarting. Please try again in 5-10 minutes.
 
-    You->>AI: "Show me how Vermeer uses light"
+- **The collection data is a periodic snapshot, not a live feed.** Rijksmuseum-mcp+ queries its own harvested copy of the museum's metadata rather than the live Rijksmuseum APIs. This is what makes semantic search, provenance parsing, proximity queries, and cross-tabulations possible — but it also means that very recent cataloguing changes, new acquisitions, or corrections made by Rijksmuseum curators may not be reflected in the AI assistant's responses. For definitive, up-to-the-minute information about a specific artwork, always cross-check against the Rijksmuseum's own [collection portal](https://www.rijksmuseum.nl/en/collection/). N.B. The LLM-assisted enrichments (geocoded places, structured provenance events, transfer vocabulary) have not been reviewed or endorsed by the Rijksmuseum and should be treated as exploratory rather than authoritative.
 
-    AI->>MCP: search_artwork(creator: "Vermeer", type: "painting")
-    MCP-->>AI: 35 paintings found
-
-    AI->>MCP: get_artwork_details("SK-A-2860")
-    MCP-->>AI: The Milkmaid — title, date, materials, description…
-
-    AI->>MCP: get_artwork_image("SK-A-2860")
-    MCP-->>AI: interactive deep-zoom viewer opened for you
-
-    AI->>MCP: inspect_artwork_image("SK-A-2860", region: "full")
-    MCP-->>AI: base64 image (AI can see the painting)
-
-    AI->>MCP: inspect_artwork_image("SK-A-2860", region: "pct:30,10,40,50")
-    MCP-->>AI: cropped detail of the light from the window
-
-    AI->>MCP: navigate_viewer(commands: [{action: "add_overlay", ...}])
-    MCP-->>AI: overlay placed, viewer zoomed to region
-
-    AI->>You: "Here's how Vermeer uses a single light source…"
-```
-## Tips and Known Limitations
-
-tba
+- **Ask the assistant to explain which tools and filters it used — and steer it if the first answer looks off.** Because rijksmuseum-mcp+ exposes many overlapping search patterns (keyword filters, semantic search, Iconclass notations, provenance events, spatial queries), the AI assistant sometimes picks a narrower or broader strategy than you intended. If a result seems incomplete, surprising, or suspiciously tidy, ask follow-ups like _"let me the see other matching artworks for this query as well"_, or _"try this again using semantic search instead of keyword filters"_. Installing the optional [research skill](#research-skill) substantially reduces the frequency of poor queries, and being explicit in your prompt about whether you want a structured search (e.g. "all paintings by X made in Y") versus an exploratory search (e.g. "works evoking X") helps the AI assistant route your question correctly.
 
 ## Technical notes
 
