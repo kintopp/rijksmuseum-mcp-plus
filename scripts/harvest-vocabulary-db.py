@@ -35,11 +35,13 @@ import hashlib
 import json
 import os
 import re
+import socket
 import sqlite3
 import sys
 import tarfile
 from itertools import chain
 import time
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -405,6 +407,17 @@ CREATE TABLE IF NOT EXISTS artwork_parent (
     parent_art_id INTEGER,
     PRIMARY KEY (art_id, parent_la_uri)
 ) WITHOUT ROWID;
+
+-- Phase 2 URI resolution failures (#239). Survives Phase 3 integer encoding
+-- so a targeted backfill can re-run resolve_uri against just these URIs
+-- without a full re-harvest. Reasons distinguish transient (timeout, http_5xx)
+-- from permanent (http_404, unsupported_type:*) failures so retries can be
+-- scoped intelligently.
+CREATE TABLE IF NOT EXISTS phase2_failures (
+    uri        TEXT PRIMARY KEY,
+    reason     TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
 """
 
 VOCAB_INSERT_SQL = (
@@ -1248,8 +1261,25 @@ def run_phase1(conn: sqlite3.Connection, resume: bool = False, max_pages: int | 
 
 # ─── Phase 2: Resolve unmatched URIs ─────────────────────────────────
 
-def resolve_uri(entity_id: str) -> dict | None:
-    """Resolve a Rijksmuseum entity URI via the Linked Art API."""
+def resolve_uri(entity_id: str) -> tuple[dict | None, str | None]:
+    """Resolve a Rijksmuseum entity URI via the Linked Art API.
+
+    Returns ``(result, reason)``. On success: ``(dict, None)``. On failure:
+    ``(None, reason)`` where ``reason`` is one of:
+
+    - ``"timeout"`` — socket/HTTP read timeout (transient, retry candidate)
+    - ``"http_404"`` — entity gone or never existed (permanent)
+    - ``"http_5xx"`` — upstream server error (transient, retry candidate)
+    - ``"http_<code>"`` — other HTTP status (treat as permanent unless 429)
+    - ``"parse_error"`` — response wasn't valid JSON (likely transient/HTML
+      error page)
+    - ``"unsupported_type:<la_type>"`` — JSON parsed but the Linked Art type
+      isn't in ``LA_TYPE_MAP`` (permanent — usually a schema-drift signal)
+
+    See #239 for context. Failures are captured into the ``phase2_failures``
+    table by ``run_phase2`` so a targeted backfill can re-run resolution
+    against just the transient ones without a full re-harvest.
+    """
     url = f"{LINKED_ART_BASE}/{entity_id}"
     req = urllib.request.Request(url, headers={
         "Accept": "application/ld+json",
@@ -1258,14 +1288,27 @@ def resolve_uri(entity_id: str) -> dict | None:
     })
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
+            raw = resp.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None, "http_404"
+        if 500 <= e.code < 600:
+            return None, "http_5xx"
+        return None, f"http_{e.code}"
+    except (urllib.error.URLError, TimeoutError, socket.timeout):
+        return None, "timeout"
     except Exception:
-        return None
+        return None, "timeout"
+
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None, "parse_error"
 
     la_type = data.get("type", "")
     vocab_type = LA_TYPE_MAP.get(la_type)
     if not vocab_type:
-        return None
+        return None, f"unsupported_type:{la_type or 'missing'}"
 
     label_en = None
     label_nl = None
@@ -1345,7 +1388,7 @@ def resolve_uri(entity_id: str) -> dict | None:
         "lat": lat,
         "lon": lon,
         "name_variants": name_variants,
-    }
+    }, None
 
 
 def run_phase2(conn: sqlite3.Connection):
@@ -1380,13 +1423,23 @@ def run_phase2(conn: sqlite3.Connection):
     person_names_count = 0
     t0 = time.time()
 
+    # #239: capture failed URIs with their reason so a targeted backfill can
+    # re-run resolution against just the transient ones (timeout / http_5xx)
+    # without a full re-harvest.
+    FAILURES_INSERT = (
+        "INSERT OR REPLACE INTO phase2_failures (uri, reason) VALUES (?, ?)"
+    )
+    failure_batch: list[tuple[str, str]] = []
+    failures_by_reason: dict[str, int] = {}
+
     with ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as pool:
         futures = {pool.submit(resolve_uri, eid): eid for eid in unmatched}
         batch = []
         name_batch = []
 
         for i, future in enumerate(as_completed(futures), 1):
-            result = future.result()
+            eid = futures[future]
+            result, reason = future.result()
             if result:
                 batch.append(result)
                 # Collect person name variants
@@ -1397,12 +1450,19 @@ def run_phase2(conn: sqlite3.Connection):
                 resolved += 1
             else:
                 failed += 1
+                failure_batch.append((eid, reason or "unknown"))
+                failures_by_reason[reason or "unknown"] = (
+                    failures_by_reason.get(reason or "unknown", 0) + 1
+                )
 
             if len(batch) >= 200:
                 conn.executemany(VOCAB_INSERT_SQL, batch)
                 if name_batch:
                     conn.executemany(PERSON_NAMES_INSERT, name_batch)
                     name_batch = []
+                if failure_batch:
+                    conn.executemany(FAILURES_INSERT, failure_batch)
+                    failure_batch = []
                 conn.commit()
                 batch = []
 
@@ -1420,12 +1480,21 @@ def run_phase2(conn: sqlite3.Connection):
         conn.executemany(VOCAB_INSERT_SQL, batch)
     if name_batch:
         conn.executemany(PERSON_NAMES_INSERT, name_batch)
+    if failure_batch:
+        conn.executemany(FAILURES_INSERT, failure_batch)
     conn.commit()
 
     elapsed = time.time() - t0
     print(f"  Resolution complete: {resolved:,} resolved, {failed:,} failed, {elapsed:.0f}s")
     if person_names_count:
         print(f"  Person name variants collected: {person_names_count:,}")
+    if failures_by_reason:
+        breakdown = ", ".join(
+            f"{reason}={count:,}"
+            for reason, count in sorted(failures_by_reason.items(), key=lambda kv: -kv[1])
+        )
+        print(f"  Failure breakdown: {breakdown}")
+        print(f"  → {failed:,} URIs recorded in phase2_failures table for backfill review")
 
 
 # ─── Phase 4: Linked Art Resolution (Tier 2) ─────────────────────────
