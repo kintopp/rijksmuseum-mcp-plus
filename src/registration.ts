@@ -103,10 +103,6 @@ type StructuredToolResponse = ToolResponse & { structuredContent: Record<string,
 /** Infer a TypeScript type from a Zod shape (plain object of ZodTypes used for outputSchema). */
 type InferOutput<T extends Record<string, z.ZodTypeAny>> = z.infer<z.ZodObject<T>>;
 
-function jsonResponse(data: unknown): ToolResponse {
-  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-}
-
 function errorResponse(message: string) {
   // Never emit structuredContent here — a bare { error } won't conform to
   // any tool's outputSchema (which has required fields like totalResults,
@@ -591,7 +587,7 @@ export function registerAll(
   registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats));
   registerResources(server);
   registerAppViewerResource(server);
-  registerPrompts(server, apiClient);
+  registerPrompts(server);
 
   // Log whether the connected client supports MCP Apps (SHOULD-level capability negotiation)
   server.server.oninitialized = () => {
@@ -761,48 +757,6 @@ const SemanticSearchOutput = {
     sourceText: z.string().optional(),
     url: z.string(),
   })),
-  warnings: z.array(z.string()).optional(),
-  error: z.string().optional(),
-};
-
-const FindSimilarOutput = {
-  mode: z.enum(["iconclass", "lineage", "depicted_person", "description"]),
-  queryObjectNumber: z.string(),
-  queryTitle: z.string(),
-  querySignals: z.array(z.object({
-    label: z.string(),
-    notation: z.string().optional(),
-    depth: z.number().int().optional(),
-    strength: z.number().optional(),
-  })).describe("Query artwork's Iconclass notations (iconclass mode) or lineage pairs (lineage mode)."),
-  returnedCount: z.number().int(),
-  results: z.array(z.object({
-    rank: z.number().int(),
-    objectNumber: z.string(),
-    title: z.string(),
-    creator: z.string(),
-    date: z.string().optional(),
-    type: z.string().optional(),
-    score: z.number(),
-    sharedMotifs: z.array(z.object({
-      notation: z.string(),
-      label: z.string(),
-      weight: z.number(),
-    })).optional().describe("Shared Iconclass notations (iconclass mode only)."),
-    sharedLineage: z.array(z.object({
-      qualifierLabel: z.string(),
-      creatorLabel: z.string(),
-      strength: z.number(),
-    })).optional().describe("Shared (qualifier, creator) pairs (lineage mode only)."),
-    sharedPersons: z.array(z.object({
-      label: z.string(),
-      weight: z.number(),
-    })).optional().describe("Shared depicted persons (depicted_person mode only)."),
-    descriptionExcerpt: z.string().optional().describe("Candidate's catalogue description in Dutch (description mode only). Use these to re-rank: discard candidates whose descriptions are similar only due to generic structural phrases."),
-    url: z.string(),
-  })),
-  queryDescription: z.string().optional().describe("Query artwork's catalogue description (description mode only)."),
-  rerankerNote: z.string().optional().describe("Instructions for LLM re-ranking (description mode only)."),
   warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 };
@@ -995,7 +949,7 @@ function registerTools(
           ),
         title: optStr()
           .optional()
-          .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Equivalent to query but explicit."),
+          .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Equivalent to query but explicit. Note: only ~4% of artworks have an English title (~35K of 833K)."),
         creator: stringOrArray()
           .optional()
           .describe("Search by artist name, e.g. 'Rembrandt van Rijn'."),
@@ -3129,7 +3083,7 @@ function registerAppViewerResource(server: McpServer): void {
 
 // ─── Prompts ────────────────────────────────────────────────────────
 
-function registerPrompts(server: McpServer, api: RijksmuseumApiClient): void {
+function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     "generate-artist-timeline",
     {

@@ -112,6 +112,15 @@ The parameter description suggests combining `attributionQualifier` with `creato
 - `depictedPerson`: who is *shown* in it — matches 210K name variants including historical forms
 - `aboutActor`: broader cross-field search; more tolerant of name variants and cross-language forms ("Louis XIV" finds "Lodewijk XIV")
 
+### Title language coverage — the catalogue is mostly Dutch
+
+The Rijksmuseum has translated only **~4% of artwork titles into English** (~35K of 833K works). The remaining ~96% have Dutch titles only — typically medals, coins, prints, decorative arts, and other minor objects. Famous paintings and curatorially-prominent works almost always have both languages; the long tail does not.
+
+**Implications for research:**
+
+- **Result presentation**: when reporting results to the user, use whatever title language exists rather than insisting on English. For an 18th-century medal, "Wilhelmina Koningin der Nederlanden" *is* the canonical title — there is no English version, and inventing one would misrepresent the catalogue.
+- **Ranking**: title BM25 scores are computed across both languages, so an English title query against a Dutch-only object scores zero on title (but the object may still surface via `description`, `subject`, `iconclass`, or `semantic_search`, all of which have stronger English coverage).
+
 ### `search_provenance`: two query layers
 
 `search_provenance` has two data layers that answer fundamentally different questions.
