@@ -8,7 +8,7 @@ The core pipeline that produces the three databases from scratch.
 
 | Script | Lang | Description |
 |--------|------|-------------|
-| `harvest-vocabulary-db.py` | Python | Full vocabulary DB builder. 6 phases: data dump parsing, OAI-PMH harvest (836K records), vocab resolution, Linked Art enrichment, post-processing (FTS5, importance, geocoding import). Hours to run. |
+| `harvest-vocabulary-db.py` | Python | Full vocabulary DB builder. 6 phases: data dump parsing, OAI-PMH harvest (836K records), vocab resolution, Linked Art enrichment, post-processing (FTS5, importance, geocoding import, **offline-dump enrichment** — actor bios, wikidata, place/concept hierarchy, coordinate inheritance). Hours to run. Pass `--skip-enrichment` to bypass the dump-based enrichment step. |
 | `build-iconclass-db.py` | Python | Builds `iconclass.db` from the CC0 Iconclass data dump + artwork counts from vocab DB. |
 | `compute_importance.py` | Python | Computes the `importance` column on artworks. Called by harvest Phase 3 but also runnable standalone. |
 | `harvest-person-names.py` | Python | Harvests person name variants from Linked Art into `person_names` table + FTS5 index. |
@@ -19,7 +19,7 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 
 | Script | Lang | Description |
 |--------|------|-------------|
-| `enrich-vocab-from-dumps.py` | Python | Enriches vocab DB from Rijksmuseum data dumps: actor bios (birth/death/gender/bio/wikidata), place hierarchy (`broader_id`), coordinate inheritance. Requires files in `offline/data-dumps/`. |
+| `enrich-vocab-from-dumps.py` | Python | **LEGACY** (v0.24+). Enrichment (actor bios, wikidata links, place/concept hierarchy, coordinate inheritance) is now folded into `harvest-vocabulary-db.py` Phase 3 (`run_enrichment()`) and runs automatically. This script is retained for ad-hoc re-enrichment against an existing DB without a full re-harvest. See issue #242 part 3. |
 | `backfill-dates.py` | Python | Backfills missing `date_earliest`/`date_latest` via Search API + Linked Art resolution. Hits live APIs. |
 | `backfill-iiif-ids.py` | Python | Backfills `iiif_id` from OAI-PMH `edm:isShownBy` URLs. No extra HTTP beyond OAI-PMH pages. |
 | `reimport-snapshots.py` | Python | Reimports all supplementary data from snapshot CSVs in `data/` after a fresh harvest. COALESCE semantics (fills NULLs only). Supports `--only actors|broader|geo|dates` and `--dry-run`. |

@@ -164,6 +164,17 @@ EXPECTATIONS: list[AuditTarget] = [
         max_rows=20_000_000,
         rationale="v0.24=14,652,650 post-normalize",
     ),
+    AuditTarget(
+        name="phase3.enrichment_birth_year",
+        phase="phase3",
+        kind="column_not_null",
+        table="vocabulary",
+        column="birth_year",
+        min_rows=30000,
+        max_rows=None,
+        rationale="#242 part 3 — EDM actors dump populates ~30K+ birth years when dumps are present. SKIPs cleanly when --skip-enrichment or dumps absent (required=False).",
+        required=False,
+    ),
 
     # ── Phase 4 — scalar columns on artworks ─────────────────────────────
     AuditTarget(

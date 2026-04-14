@@ -32,12 +32,14 @@ Output: data/vocabulary.db (~1 GB)
 import argparse
 import csv
 import hashlib
+import html
 import json
 import os
 import re
 import socket
 import sqlite3
-from collections import Counter
+import zipfile
+from collections import Counter, defaultdict
 import sys
 import tarfile
 from itertools import chain
@@ -68,6 +70,17 @@ HARVEST_VERSION = "v0.24"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 CHECKPOINT_PATH = SCRIPT_DIR / ".harvest-checkpoint"
 DUMPS_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps"
+
+# ── Enrichment dump artefacts (#242 part 3) ──
+# Phase 3 enrichment (folded in from scripts/enrich-vocab-from-dumps.py) reads
+# these four artefacts from DUMPS_DIR to populate person bio data, Wikidata
+# links, place hierarchy, and concept hierarchy. When any artefact is missing,
+# the corresponding enrichment phase is skipped with a warning — the DB still
+# opens because the column stubs are added unconditionally in run_phase3().
+ENRICH_EDM_ACTORS_ZIP = "201911-rma-edm-actors.zip"
+ENRICH_SKOS_THESAURUS_ZIP = "201911-rma-skos-thesaurus.zip"
+ENRICH_PLACE_DIR = "place_extracted"
+ENRICH_PERSON_DIR = "person_extracted"
 
 # Dump files to parse in Phase 0, with their vocabulary type mappings.
 # NOTE on ID namespaces:
@@ -2739,19 +2752,614 @@ def normalize_rights(conn: sqlite3.Connection):
         print("    Note: Could not drop rights_uri (SQLite < 3.35.0), column retained")
 
 
+# ─── Enrichment (folded in from enrich-vocab-from-dumps.py, #242 part 3) ───
+#
+# These functions enrich the vocabulary table from the four offline data dumps
+# in DUMPS_DIR. They run inside run_phase3() after integer encoding, and are
+# idempotent (every UPDATE is gated on `AND <col> IS NULL`). When dump artefacts
+# are missing, each phase logs a warning and returns; the Part-1 column stubs
+# ensure the server can still open the DB.
+
+_ENRICH_NS = {
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "rdaGr2": "http://rdvocab.info/ElementsGr2/",
+    "edm": "http://www.europeana.eu/schemas/edm/",
+}
+
+_ENRICH_RE_FALLS_WITHIN = re.compile(
+    r"<https://id\.rijksmuseum\.nl/(\d+)>\s+"
+    r"<http://www\.cidoc-crm\.org/cidoc-crm/P89_falls_within>\s+"
+    r"<https://id\.rijksmuseum\.nl/(\d+)>"
+)
+_ENRICH_RE_EQUIVALENT = re.compile(
+    r"<https://id\.rijksmuseum\.nl/(\d+)>\s+"
+    r"<https://linked\.art/ns/terms/equivalent>\s+"
+    r"<(http[^>]+)>"
+)
+_ENRICH_RE_SCHEMA_NAME = re.compile(
+    r"<https://id\.rijksmuseum\.nl/(\d+)>\s+"
+    r"<http://schema\.org/name>\s+"
+    r'"([^"]*)"'
+)
+_ENRICH_RE_SCHEMA_ALT_NAME = re.compile(
+    r"<https://id\.rijksmuseum\.nl/(\d+)>\s+"
+    r"<http://schema\.org/alternateName>\s+"
+    r'"([^"]*)"'
+)
+_ENRICH_RE_SCHEMA_SAME_AS = re.compile(
+    r"<https://id\.rijksmuseum\.nl/(\d+)>\s+"
+    r"<http://schema\.org/sameAs>\s+"
+    r"<(http[^>]+)>"
+)
+_ENRICH_RE_YEAR = re.compile(r"\b(\d{4})\b")
+_ENRICH_RE_WIKIDATA_QID = re.compile(r"wikidata\.org/entity/(Q\d+)")
+
+
+def _enrich_parse_year(text):
+    if not text:
+        return None
+    m = _ENRICH_RE_YEAR.search(text)
+    return int(m.group(1)) if m else None
+
+
+def _enrich_clean_bio(text):
+    if not text:
+        return None
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</?[iI]>", "", text)
+    text = html.unescape(text)
+    text = text.strip()
+    return text if text else None
+
+
+def enrich_places_from_dump(conn: sqlite3.Connection, dumps_dir: Path) -> None:
+    """Enrich places with broader_id and external_id from the 2025 place dump.
+
+    Matches dump files by filename (filename IS the place id) against
+    vocabulary entries of type='place'. Prefers Wikidata > TGN for external_id.
+    """
+    place_dir = dumps_dir / ENRICH_PLACE_DIR
+    if not place_dir.exists():
+        print(f"  [enrich places] {place_dir} not found — skipping.")
+        return
+
+    vocab_place_ids = {
+        r[0] for r in conn.execute(
+            "SELECT id FROM vocabulary WHERE type='place'"
+        ).fetchall()
+    }
+    print(f"  [enrich places] Vocab places: {len(vocab_place_ids):,}")
+
+    files = os.listdir(place_dir)
+    print(f"  [enrich places] Place dump files: {len(files):,}")
+
+    batch = []
+    skipped_not_in_vocab = 0
+    for i, fname in enumerate(files):
+        if i % 5000 == 0 and i > 0:
+            print(f"    ... processed {i:,}/{len(files):,}")
+        fpath = place_dir / fname
+        try:
+            text = fpath.read_text()
+        except Exception:
+            continue
+        place_id = fname
+        if place_id not in vocab_place_ids:
+            skipped_not_in_vocab += 1
+            continue
+
+        parent_id = None
+        for m in _ENRICH_RE_FALLS_WITHIN.finditer(text):
+            if m.group(1) == place_id:
+                parent_id = m.group(2)
+                break
+
+        external_uris = []
+        for m in _ENRICH_RE_EQUIVALENT.finditer(text):
+            if m.group(1) == place_id:
+                uri = m.group(2)
+                if not uri.startswith("https://id.rijksmuseum.nl/330"):
+                    external_uris.append(uri)
+        best_external = None
+        for uri in external_uris:
+            if "wikidata.org" in uri:
+                best_external = uri
+                break
+        if not best_external:
+            for uri in external_uris:
+                if "getty.edu/tgn" in uri:
+                    best_external = uri
+                    break
+
+        batch.append((place_id, parent_id, best_external))
+
+    updates_broader = 0
+    updates_external = 0
+    for place_id, parent_id, best_external in batch:
+        if parent_id:
+            cur = conn.execute(
+                "UPDATE vocabulary SET broader_id = ? WHERE id = ? AND broader_id IS NULL",
+                (parent_id, place_id),
+            )
+            updates_broader += cur.rowcount
+        if best_external:
+            cur = conn.execute(
+                "UPDATE vocabulary SET external_id = ? WHERE id = ? AND external_id IS NULL",
+                (best_external, place_id),
+            )
+            updates_external += cur.rowcount
+    conn.commit()
+    print(
+        f"  [enrich places] Updated {updates_broader:,} broader_id, "
+        f"{updates_external:,} external_id "
+        f"(dump IDs not in vocab: {skipped_not_in_vocab:,})"
+    )
+
+
+def enrich_actors_from_edm(conn: sqlite3.Connection, dumps_dir: Path) -> None:
+    """Enrich persons with birth_year/death_year/gender/bio from 2019 EDM actors dump.
+
+    Matches by prefLabel then altLabels against person_names. When multiple
+    dump entries hit the same vocab id, keeps the richest (most non-NULL fields).
+    """
+    zip_path = dumps_dir / ENRICH_EDM_ACTORS_ZIP
+    if not zip_path.exists():
+        print(f"  [enrich actors] {zip_path} not found — skipping.")
+        return
+
+    # person_names table must exist; early harvest runs may not have it yet.
+    try:
+        conn.execute("SELECT 1 FROM person_names LIMIT 1").fetchone()
+    except sqlite3.OperationalError:
+        print("  [enrich actors] person_names table not present — skipping.")
+        return
+
+    print("  [enrich actors] Building name lookup...")
+    name_to_ids = defaultdict(set)
+    for person_id, name in conn.execute("SELECT person_id, name FROM person_names"):
+        if name:
+            name_to_ids[name].add(person_id)
+    print(
+        f"  [enrich actors] Name lookup: {len(name_to_ids):,} names → "
+        f"{len(set().union(*name_to_ids.values())) if name_to_ids else 0:,} persons"
+    )
+
+    actors = []
+    with zipfile.ZipFile(zip_path) as z:
+        with z.open(z.namelist()[0]) as f:
+            context = ET.iterparse(f, events=("end",))
+            for _event, elem in context:
+                if elem.tag == f"{{{_ENRICH_NS['edm']}}}Agent":
+                    pref_label = None
+                    alt_labels = []
+                    birth = None
+                    death = None
+                    gender = None
+                    bio = None
+                    for child in elem:
+                        tag = child.tag
+                        if tag == f"{{{_ENRICH_NS['skos']}}}prefLabel":
+                            pref_label = child.text
+                        elif tag == f"{{{_ENRICH_NS['skos']}}}altLabel":
+                            if child.text:
+                                alt_labels.append(child.text)
+                        elif tag == f"{{{_ENRICH_NS['rdaGr2']}}}dateOfBirth":
+                            birth = _enrich_parse_year(child.text)
+                        elif tag == f"{{{_ENRICH_NS['rdaGr2']}}}dateOfDeath":
+                            death = _enrich_parse_year(child.text)
+                        elif tag == f"{{{_ENRICH_NS['rdaGr2']}}}gender":
+                            gender = child.text
+                        elif tag == f"{{{_ENRICH_NS['rdaGr2']}}}biographicalInformation":
+                            bio = _enrich_clean_bio(child.text)
+                    if pref_label:
+                        richness = sum(
+                            x is not None for x in (birth, death, gender, bio)
+                        )
+                        actors.append(
+                            (pref_label, alt_labels, birth, death, gender, bio, richness)
+                        )
+                    elem.clear()
+    print(f"  [enrich actors] Parsed {len(actors):,} EDM agents")
+
+    vocab_id_to_data = {}
+    matched = 0
+    for pref_label, alt_labels, birth, death, gender, bio, richness in actors:
+        candidate_ids = name_to_ids.get(pref_label, set())
+        if not candidate_ids:
+            for alt in alt_labels:
+                candidate_ids = name_to_ids.get(alt, set())
+                if candidate_ids:
+                    break
+        if not candidate_ids:
+            continue
+        matched += 1
+        for vid in candidate_ids:
+            existing = vocab_id_to_data.get(vid)
+            if existing is None or richness > existing[4]:
+                vocab_id_to_data[vid] = (birth, death, gender, bio, richness)
+    print(
+        f"  [enrich actors] Matched {matched:,} dump entries → "
+        f"{len(vocab_id_to_data):,} unique vocab ids"
+    )
+
+    updates = {"birth_year": 0, "death_year": 0, "gender": 0, "bio": 0}
+    for vid, (birth, death, gender, bio, _) in vocab_id_to_data.items():
+        if birth is not None:
+            updates["birth_year"] += conn.execute(
+                "UPDATE vocabulary SET birth_year = ? WHERE id = ? AND birth_year IS NULL",
+                (birth, vid),
+            ).rowcount
+        if death is not None:
+            updates["death_year"] += conn.execute(
+                "UPDATE vocabulary SET death_year = ? WHERE id = ? AND death_year IS NULL",
+                (death, vid),
+            ).rowcount
+        if gender is not None:
+            updates["gender"] += conn.execute(
+                "UPDATE vocabulary SET gender = ? WHERE id = ? AND gender IS NULL",
+                (gender, vid),
+            ).rowcount
+        if bio is not None:
+            updates["bio"] += conn.execute(
+                "UPDATE vocabulary SET bio = ? WHERE id = ? AND bio IS NULL",
+                (bio, vid),
+            ).rowcount
+    conn.commit()
+    print(f"  [enrich actors] Updates: {updates}")
+
+
+def enrich_wikidata_from_person_dump(conn: sqlite3.Connection, dumps_dir: Path) -> None:
+    """Enrich persons with wikidata_id from the 2025 person dump.
+
+    Tries direct filename-ID match first, then falls back to schema:name /
+    schema:alternateName lookups against person_names.
+    """
+    person_dir = dumps_dir / ENRICH_PERSON_DIR
+    if not person_dir.exists():
+        print(f"  [enrich wikidata] {person_dir} not found — skipping.")
+        return
+
+    try:
+        conn.execute("SELECT 1 FROM person_names LIMIT 1").fetchone()
+    except sqlite3.OperationalError:
+        print("  [enrich wikidata] person_names table not present — skipping.")
+        return
+
+    vocab_person_ids = {
+        r[0] for r in conn.execute(
+            "SELECT id FROM vocabulary WHERE type='person'"
+        ).fetchall()
+    }
+    name_to_ids = defaultdict(set)
+    for person_id, name in conn.execute("SELECT person_id, name FROM person_names"):
+        if name:
+            name_to_ids[name].add(person_id)
+    files = os.listdir(person_dir)
+    print(
+        f"  [enrich wikidata] Vocab persons: {len(vocab_person_ids):,}, "
+        f"dump files: {len(files):,}"
+    )
+
+    wikidata_updates = {}
+    direct_matches = 0
+    name_matches = 0
+    for i, fname in enumerate(files):
+        if i % 20000 == 0 and i > 0:
+            print(f"    ... processed {i:,}/{len(files):,}")
+        fpath = person_dir / fname
+        try:
+            text = fpath.read_text()
+        except Exception:
+            continue
+        dump_id = fname
+
+        wikidata_qid = None
+        for m in _ENRICH_RE_SCHEMA_SAME_AS.finditer(text):
+            if m.group(1) == dump_id:
+                uri = m.group(2)
+                qm = _ENRICH_RE_WIKIDATA_QID.search(uri)
+                if qm:
+                    wikidata_qid = qm.group(1)
+                    break
+        if not wikidata_qid:
+            continue
+
+        if dump_id in vocab_person_ids:
+            wikidata_updates[dump_id] = wikidata_qid
+            direct_matches += 1
+            continue
+
+        names = []
+        for m in _ENRICH_RE_SCHEMA_NAME.finditer(text):
+            if m.group(1) == dump_id:
+                names.append(m.group(2))
+        for m in _ENRICH_RE_SCHEMA_ALT_NAME.finditer(text):
+            if m.group(1) == dump_id:
+                names.append(m.group(2))
+        matched_ids = set()
+        for name in names:
+            matched_ids.update(name_to_ids.get(name, set()))
+        if matched_ids:
+            name_matches += 1
+            for vid in matched_ids:
+                if vid not in wikidata_updates:
+                    wikidata_updates[vid] = wikidata_qid
+
+    print(
+        f"  [enrich wikidata] Direct: {direct_matches:,}, "
+        f"name: {name_matches:,}, unique targets: {len(wikidata_updates):,}"
+    )
+    updates = 0
+    for vid, qid in wikidata_updates.items():
+        updates += conn.execute(
+            "UPDATE vocabulary SET wikidata_id = ? WHERE id = ? AND wikidata_id IS NULL",
+            (qid, vid),
+        ).rowcount
+    conn.commit()
+    print(f"  [enrich wikidata] Updated {updates:,} wikidata_id values")
+
+
+def enrich_concepts_from_skos(conn: sqlite3.Connection, dumps_dir: Path) -> None:
+    """Enrich classification concepts with broader_id from 2019 SKOS thesaurus.
+
+    Matches via AAT exactMatch first, then label_nl fallback (unambiguous only).
+    """
+    zip_path = dumps_dir / ENRICH_SKOS_THESAURUS_ZIP
+    if not zip_path.exists():
+        print(f"  [enrich concepts] {zip_path} not found — skipping.")
+        return
+
+    aat_to_vocab = {}
+    for vid, ext_id in conn.execute(
+        "SELECT id, external_id FROM vocabulary "
+        "WHERE external_id LIKE 'http://vocab.getty.edu/aat/%'"
+    ):
+        aat_to_vocab[ext_id] = vid
+
+    label_to_vocab = defaultdict(set)
+    for vid, label in conn.execute(
+        "SELECT id, label_nl FROM vocabulary "
+        "WHERE type='classification' AND label_nl IS NOT NULL"
+    ):
+        label_to_vocab[label].add(vid)
+    print(
+        f"  [enrich concepts] AAT lookup: {len(aat_to_vocab):,}, "
+        f"label lookup: {len(label_to_vocab):,}"
+    )
+
+    concepts = []
+    with zipfile.ZipFile(zip_path) as z:
+        with z.open(z.namelist()[0]) as f:
+            context = ET.iterparse(f, events=("end",))
+            for _event, elem in context:
+                if elem.tag == f"{{{_ENRICH_NS['skos']}}}Concept":
+                    about = elem.get(f"{{{_ENRICH_NS['rdf']}}}about", "")
+                    thesaurus_id = (
+                        about.rsplit(".", 1)[-1] if "THESAU." in about else None
+                    )
+                    pref_nl = None
+                    broader_handle = None
+                    exact_match_aat = None
+                    for child in elem:
+                        if child.tag == f"{{{_ENRICH_NS['skos']}}}prefLabel":
+                            lang = child.get(
+                                "{http://www.w3.org/XML/1998/namespace}lang", ""
+                            )
+                            if lang == "nl" and child.text:
+                                pref_nl = child.text
+                        elif child.tag == f"{{{_ENRICH_NS['skos']}}}broader":
+                            broader_handle = child.get(
+                                f"{{{_ENRICH_NS['rdf']}}}resource", ""
+                            )
+                        elif child.tag == f"{{{_ENRICH_NS['skos']}}}exactMatch":
+                            uri = child.get(
+                                f"{{{_ENRICH_NS['rdf']}}}resource", ""
+                            )
+                            if "vocab.getty.edu/aat/" in uri:
+                                exact_match_aat = uri
+                    if broader_handle:
+                        broader_thesaurus_id = (
+                            broader_handle.rsplit(".", 1)[-1]
+                            if "THESAU." in broader_handle
+                            else None
+                        )
+                        concepts.append(
+                            (thesaurus_id, pref_nl, exact_match_aat, broader_thesaurus_id)
+                        )
+                    elem.clear()
+    print(f"  [enrich concepts] Parsed {len(concepts):,} concepts with broader links")
+
+    thesaurus_to_vocab = {}
+    for thesaurus_id, pref_nl, exact_match_aat, _ in concepts:
+        if not thesaurus_id:
+            continue
+        if exact_match_aat and exact_match_aat in aat_to_vocab:
+            thesaurus_to_vocab[thesaurus_id] = aat_to_vocab[exact_match_aat]
+        elif pref_nl and pref_nl in label_to_vocab:
+            ids = label_to_vocab[pref_nl]
+            if len(ids) == 1:
+                thesaurus_to_vocab[thesaurus_id] = next(iter(ids))
+    print(
+        f"  [enrich concepts] Thesaurus→vocab mapping: {len(thesaurus_to_vocab):,}"
+    )
+
+    updates = 0
+    for thesaurus_id, _, _, broader_thesaurus_id in concepts:
+        if not thesaurus_id or not broader_thesaurus_id:
+            continue
+        vocab_id = thesaurus_to_vocab.get(thesaurus_id)
+        broader_vocab_id = thesaurus_to_vocab.get(broader_thesaurus_id)
+        if vocab_id and broader_vocab_id:
+            updates += conn.execute(
+                "UPDATE vocabulary SET broader_id = ? WHERE id = ? AND broader_id IS NULL",
+                (broader_vocab_id, vocab_id),
+            ).rowcount
+    conn.commit()
+    print(f"  [enrich concepts] Updated {updates:,} broader_id values")
+
+
+def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
+    """Propagate lat/lon from geocoded parent places to ungeocoded children.
+
+    Walks vocabulary.broader_id up to depth 10. Idempotent.
+    """
+    total = 0
+    max_depth = 10
+    for depth in range(1, max_depth + 1):
+        cur = conn.execute(
+            """UPDATE vocabulary SET lat = (
+                   SELECT p.lat FROM vocabulary p WHERE p.id = vocabulary.broader_id
+               ), lon = (
+                   SELECT p.lon FROM vocabulary p WHERE p.id = vocabulary.broader_id
+               )
+               WHERE type = 'place'
+                 AND lat IS NULL
+                 AND broader_id IS NOT NULL
+                 AND EXISTS (
+                     SELECT 1 FROM vocabulary p
+                     WHERE p.id = vocabulary.broader_id AND p.lat IS NOT NULL
+                 )"""
+        )
+        inherited = cur.rowcount
+        if inherited == 0:
+            break
+        print(f"  [enrich coords] Depth {depth}: {inherited:,} places inherited")
+        total += inherited
+    conn.commit()
+    print(f"  [enrich coords] Total inherited: {total:,}")
+
+
+def log_enrichment_stats(conn: sqlite3.Connection) -> None:
+    """Print coverage stats for enriched columns (informational — not an audit)."""
+    for col in ("birth_year", "death_year", "gender", "bio", "wikidata_id"):
+        count = conn.execute(
+            f"SELECT COUNT(*) FROM vocabulary WHERE {col} IS NOT NULL"
+        ).fetchone()[0]
+        print(f"  [enrich stats] {col}: {count:,} non-NULL")
+    places_with_broader = conn.execute(
+        "SELECT COUNT(*) FROM vocabulary WHERE type='place' AND broader_id IS NOT NULL"
+    ).fetchone()[0]
+    places_with_coords = conn.execute(
+        "SELECT COUNT(*) FROM vocabulary WHERE type='place' AND lat IS NOT NULL"
+    ).fetchone()[0]
+    total_places = conn.execute(
+        "SELECT COUNT(*) FROM vocabulary WHERE type='place'"
+    ).fetchone()[0]
+    print(
+        f"  [enrich stats] Places: {places_with_broader:,}/{total_places:,} "
+        f"broader_id, {places_with_coords:,}/{total_places:,} lat"
+    )
+    cycles = conn.execute(
+        "SELECT COUNT(*) FROM vocabulary WHERE broader_id = id"
+    ).fetchone()[0]
+    if cycles:
+        print(f"  [enrich stats] WARNING: {cycles} self-referencing broader_id")
+
+
+def _create_enrichment_indexes(conn: sqlite3.Connection) -> None:
+    """Create partial indexes on enriched columns, gated on data presence.
+
+    `idx_vocab_broader_id` is created earlier in run_phase3 (Part 1 of #242)
+    so it is not re-created here.
+    """
+    index_specs = [
+        (
+            "SELECT COUNT(*) FROM vocabulary WHERE gender IS NOT NULL",
+            "idx_vocab_gender",
+            "CREATE INDEX IF NOT EXISTS idx_vocab_gender ON vocabulary(gender) "
+            "WHERE gender IS NOT NULL",
+        ),
+        (
+            "SELECT COUNT(*) FROM vocabulary WHERE birth_year IS NOT NULL",
+            "idx_vocab_birth_year",
+            "CREATE INDEX IF NOT EXISTS idx_vocab_birth_year ON vocabulary(birth_year) "
+            "WHERE birth_year IS NOT NULL",
+        ),
+        (
+            "SELECT COUNT(*) FROM vocabulary WHERE wikidata_id IS NOT NULL",
+            "idx_vocab_wikidata",
+            "CREATE INDEX IF NOT EXISTS idx_vocab_wikidata ON vocabulary(wikidata_id) "
+            "WHERE wikidata_id IS NOT NULL",
+        ),
+    ]
+    for count_sql, name, ddl in index_specs:
+        count = conn.execute(count_sql).fetchone()[0]
+        if count > 0:
+            conn.execute(ddl)
+            print(f"  [enrich indexes] Created {name} ({count:,} qualifying rows)")
+        else:
+            print(f"  [enrich indexes] Skipping {name} (no data)")
+    conn.commit()
+
+
+def run_enrichment(conn: sqlite3.Connection, dumps_dir: Path) -> bool:
+    """Run the full vocab enrichment pipeline from offline dumps.
+
+    Returns True if any enrichment phase actually executed against a dump,
+    False if dumps_dir is missing entirely (so the caller can skip audit
+    thresholds that only make sense after enrichment ran).
+
+    Idempotent: every UPDATE is gated on `<col> IS NULL`, so re-running
+    against an already-enriched DB is a no-op.
+    """
+    if not dumps_dir.exists():
+        print(
+            f"  [enrichment] Dumps dir not found: {dumps_dir}\n"
+            f"  [enrichment] Skipping — DB will still open (column stubs present)\n"
+            f"  [enrichment] but creator bio, wikidata, and place hierarchy will be empty."
+        )
+        return False
+
+    print(f"  [enrichment] Using dumps dir: {dumps_dir}")
+    t0 = time.time()
+    enrich_places_from_dump(conn, dumps_dir)
+    enrich_actors_from_edm(conn, dumps_dir)
+    enrich_wikidata_from_person_dump(conn, dumps_dir)
+    enrich_concepts_from_skos(conn, dumps_dir)
+    propagate_place_coordinates(conn)
+    _create_enrichment_indexes(conn)
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES ('enriched_at', ?)",
+        (now,),
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO version_info (key, value) "
+        "VALUES ('enrichment_sources', ?)",
+        ("2019-edm-actors+2019-skos-thesaurus+2025-person-dump+2025-place-dump",),
+    )
+    conn.commit()
+
+    log_enrichment_stats(conn)
+    print(f"  [enrichment] Complete in {time.time() - t0:.1f}s")
+    return True
+
+
 # ─── Phase 3: Validation ─────────────────────────────────────────────
 
 def run_phase3(
     conn: sqlite3.Connection,
     geo_csv: str | None = None,
     audit_results: dict[str, list[AuditResult]] | None = None,
+    skip_enrichment: bool = False,
+    dumps_dir: Path | None = None,
 ):
-    """Phase 3: Post-processing (geocoding import, FTS, stats).
+    """Phase 3: Post-processing (geocoding import, enrichment, FTS, stats).
 
     ``audit_results`` is the run-wide accumulator threaded through from main();
     when present, two audit checkpoints fire — once after import_geocoding
     (catches #218 ``geocode_method`` regressions) and once at end of phase 3
     (catches downstream zero-row regressions like #220 → artwork_exhibitions).
+
+    Enrichment (#242 part 3) folds the former ``enrich-vocab-from-dumps.py``
+    pipeline into harvest. It runs after mappings/rights normalization so
+    ``vocabulary.id`` is stable, and before the FTS / conditional-index /
+    VACUUM blocks so the inherited place coordinates are captured by the
+    ``idx_vocab_lat_lon`` partial index. Pass ``skip_enrichment=True`` to
+    bypass (the DB still opens because the column stubs are added below).
     """
     cur = conn.cursor()
 
@@ -2760,6 +3368,33 @@ def run_phase3(
     vocab_cols = get_columns(conn, "vocabulary")
     if "geocode_method" not in vocab_cols:
         conn.execute("ALTER TABLE vocabulary ADD COLUMN geocode_method TEXT")
+        conn.commit()
+
+    # Person-enrichment columns must exist at server open() time — VocabularyDb.ts
+    # caches `stmtArtworkMappings` against v.birth_year/death_year/gender/bio/wikidata_id
+    # unconditionally. Populated later by enrich-vocab-from-dumps.py (Phases 2a/2b);
+    # leaving them NULL is sufficient for the server to open the DB. See issue #242.
+    person_enrichment_cols = [
+        ("birth_year", "INTEGER"),
+        ("death_year", "INTEGER"),
+        ("gender", "TEXT"),
+        ("bio", "TEXT"),
+        ("wikidata_id", "TEXT"),
+    ]
+    for col_name, col_type in person_enrichment_cols:
+        if col_name not in vocab_cols:
+            conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} {col_type}")
+    conn.commit()
+
+    # broader_id index: silences the `expandPlaceHierarchy will be slow` startup
+    # warning and makes nearPlace / place-hierarchy expansion fast on freshly-
+    # harvested DBs. Partial index is safe even when broader_id is all NULL
+    # (populated by enrich-vocab-from-dumps.py Phases 2c/2d). See issue #242.
+    if "broader_id" in vocab_cols:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vocab_broader_id "
+            "ON vocabulary(broader_id) WHERE broader_id IS NOT NULL"
+        )
         conn.commit()
 
     # Import geocoding data if CSV provided
@@ -2822,6 +3457,15 @@ def run_phase3(
     print("\n--- Mappings Normalization ---")
     normalize_mappings(conn)
     normalize_rights(conn)
+
+    # ── Vocab enrichment from offline dumps (#242 part 3) ──
+    print("\n--- Vocabulary Enrichment ---")
+    if skip_enrichment:
+        print("  Skipping enrichment (--skip-enrichment). DB will still open")
+        print("  (column stubs present), but creator bio, wikidata, and place")
+        print("  hierarchy will be empty.")
+    else:
+        run_enrichment(conn, dumps_dir or DUMPS_DIR)
 
     # ── Post-normalization joins (require art_id from normalize_mappings) ──
 
@@ -3388,6 +4032,18 @@ def parse_args() -> argparse.Namespace:
         "--strict-audit", action="store_true",
         help="Exit with non-zero status at end of run if any audit target fails (default: warn only). See #222.",
     )
+    parser.add_argument(
+        "--skip-enrichment", action="store_true",
+        help="Skip the Phase 3 vocab enrichment step (person bios, wikidata, place/concept hierarchy). "
+             "DB will still open — column stubs are added unconditionally — but enriched fields will be empty. "
+             "Useful for fast iteration when you don't need the offline dumps. See #242.",
+    )
+    parser.add_argument(
+        "--dumps-dir", type=str, default=None, dest="dumps_dir",
+        help=f"Override the default enrichment dumps directory (default: {DUMPS_DIR}). "
+             "Expected to contain 201911-rma-edm-actors.zip, 201911-rma-skos-thesaurus.zip, "
+             "place_extracted/, and person_extracted/. Missing artefacts are logged and skipped.",
+    )
     return parser.parse_args()
 
 
@@ -3399,7 +4055,7 @@ def main():
         DB_PATH = Path(args.db)
 
     print(f"Database: {DB_PATH}")
-    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}, limit_pages={args.limit_pages}")
+    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}, limit_pages={args.limit_pages}, skip_enrichment={args.skip_enrichment}, dumps_dir={args.dumps_dir or DUMPS_DIR}")
     print()
 
     conn = create_or_open_db()
@@ -3495,7 +4151,14 @@ def main():
     print()
 
     print("=== Phase 3: Validation & Post-processing ===")
-    run_phase3(conn, geo_csv=args.geo_csv, audit_results=all_audit_results)
+    dumps_dir_override = Path(args.dumps_dir) if args.dumps_dir else None
+    run_phase3(
+        conn,
+        geo_csv=args.geo_csv,
+        audit_results=all_audit_results,
+        skip_enrichment=args.skip_enrichment,
+        dumps_dir=dumps_dir_override,
+    )
 
     # Final audit summary (#222) — writes JSON artifact and exits non-zero on
     # FAIL when --strict-audit is set. Runs after run_phase3 so phase 3 drops

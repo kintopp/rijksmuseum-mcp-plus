@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 """
+LEGACY as of v0.24 re-harvest (2026-04-14, issue #242 part 3):
+    Enrichment is now folded into ``scripts/harvest-vocabulary-db.py`` and runs
+    automatically inside ``run_phase3()``. Normal release flow should not invoke
+    this script. It is retained for ad-hoc re-enrichment of an existing DB
+    (e.g. when a new offline dump is released and a full re-harvest is not
+    warranted). The logic here and the in-harvest ``run_enrichment()`` wrapper
+    share the same algorithms but are maintained as separate copies.
+
 Enrich vocabulary database with actor bios, place hierarchy, and concept hierarchy
 from Rijksmuseum data dumps.
 
