@@ -942,10 +942,20 @@ export class VocabularyDb {
           WHERE a.object_number = ?
         `);
       }
+      // Person-enrichment columns may be absent on a bare-harvest DB that
+      // hasn't been through enrichment. Emit NULL placeholders so the
+      // statement still compiles and downstream callers get the same
+      // result shape. Mirrors the guard on stmtLookupPersonInfo above. #243.
+      const hasPersonEnrichment =
+        this.columnExists("vocabulary", "birth_year") &&
+        this.columnExists("vocabulary", "gender");
+      const personEnrichmentCols = hasPersonEnrichment
+        ? "v.birth_year, v.death_year, v.gender, v.bio, v.wikidata_id"
+        : "NULL AS birth_year, NULL AS death_year, NULL AS gender, NULL AS bio, NULL AS wikidata_id";
       this.stmtArtworkMappings = this.db.prepare(`
         SELECT f.name AS field, v.label_en, v.label_nl, v.id AS vocab_id,
                v.notation, v.external_id, v.type AS vocab_type,
-               v.birth_year, v.death_year, v.gender, v.bio, v.wikidata_id
+               ${personEnrichmentCols}
         FROM mappings m
         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
         JOIN field_lookup f ON m.field_id = f.id
