@@ -7,8 +7,8 @@ description: >
   browse curated sets, or answer any art-historical question that could be
   addressed through the Rijksmuseum's holdings of ~832,000 artworks.
 metadata:
-  version: "0.23.5"
-  last_updated: "2026-04-04"
+  version: "0.23.6"
+  last_updated: "2026-04-14"
 ---
 
 # Rijksmuseum MCP+ Research Skill
