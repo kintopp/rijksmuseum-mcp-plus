@@ -87,6 +87,12 @@ EXPECTATIONS: list[AuditTarget] = [
         max_rows=12000,
         rationale="2026-04-13 harvest: 5,136 members for 868 exhibitions (~5.9/exh). #220 smoke-test extrapolation was high",
     ),
+    # NB: phase0.vocabulary range is contingent on the Schema.org parsing gap
+    # (#238) remaining unfixed. When parse_nt_file learns to read the
+    # person/org/topical_term dumps, the Phase 0 count will jump from ~72k to
+    # ~210k+ and this range MUST be re-tightened upward (likely 270k–350k for
+    # Phase 0 alone). The full ~195k post-Phase-2 total is also undercounted
+    # against the current range — see #238 for the full discussion.
     AuditTarget(
         name="phase0.vocabulary",
         phase="phase0",
@@ -95,7 +101,7 @@ EXPECTATIONS: list[AuditTarget] = [
         column=None,
         min_rows=60000,
         max_rows=90000,
-        rationale="Phase-0-only count: 2026-04-13 harvest=72,364 (Linked Art dumps). Person/org/topical_term Schema.org dumps not parsed (#238); full ~195k total only after Phase 2/2b",
+        rationale="Phase-0-only count: 2026-04-13 harvest=72,364 (Linked Art dumps). Person/org/topical_term Schema.org dumps not parsed (#238); recalibrate when #238 lands",
     ),
 
     # ── Phase 2 / Phase 2b (vocab URI resolution) ────────────────────────
