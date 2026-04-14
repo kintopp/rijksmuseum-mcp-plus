@@ -2794,7 +2794,7 @@ def run_phase3(
                 CREATE TEMP TABLE _tmp_hmo_art AS
                 SELECT art_id, object_number,
                        SUBSTR(linked_art_uri,
-                           INSTR(linked_art_uri, '/objects/') + 9) AS hmo_id
+                           INSTR(linked_art_uri, '.nl/') + 4) AS hmo_id
                 FROM artworks
                 WHERE linked_art_uri IS NOT NULL
                   AND linked_art_uri != ''
@@ -2851,8 +2851,8 @@ def run_phase3(
             conn.execute("""
                 UPDATE related_objects SET related_art_id = (
                     SELECT a.art_id FROM artworks a
-                    WHERE a.object_number = SUBSTR(related_objects.related_la_uri,
-                        INSTR(related_objects.related_la_uri, '/object/') + 8)
+                    WHERE SUBSTR(a.linked_art_uri, INSTR(a.linked_art_uri, '.nl/') + 4) =
+                          SUBSTR(related_objects.related_la_uri, INSTR(related_objects.related_la_uri, '.nl/') + 4)
                 )
                 WHERE related_art_id IS NULL
             """)
@@ -2872,8 +2872,8 @@ def run_phase3(
             conn.execute("""
                 UPDATE artwork_parent SET parent_art_id = (
                     SELECT a.art_id FROM artworks a
-                    WHERE a.object_number = SUBSTR(artwork_parent.parent_la_uri,
-                        INSTR(artwork_parent.parent_la_uri, '/object/') + 8)
+                    WHERE SUBSTR(a.linked_art_uri, INSTR(a.linked_art_uri, '.nl/') + 4) =
+                          SUBSTR(artwork_parent.parent_la_uri, INSTR(artwork_parent.parent_la_uri, '.nl/') + 4)
                 )
                 WHERE parent_art_id IS NULL
             """)
