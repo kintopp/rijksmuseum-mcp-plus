@@ -314,6 +314,20 @@ EXTERNAL_VOCAB = {
     # Additional attribution qualifiers — discovered via v0.24 schema discovery
     "300404288": {"type": "classification", "label_en": "manner of", "label_nl": "op de manier van", "external_id": "http://vocab.getty.edu/aat/300404288"},
     "300252887": {"type": "classification", "label_en": "falsification", "label_nl": "vervalsing", "external_id": "http://vocab.getty.edu/aat/300252887"},
+    # free-form: AAT form/shape attribute, not a maker-relation qualifier.
+    # Seeded here because v0.24 found it referenced from attribution_qualifier
+    # mappings — probable upstream classification quirk, see #227.
+    "300312150": {"type": "classification", "label_en": "free-form", "label_nl": "free-form", "external_id": "http://vocab.getty.edu/aat/300312150"},
+}
+
+# Rijksmuseum vocab IDs confirmed 404 on id.rijksmuseum.nl. Excluded from
+# the orphan audit so they stop re-triggering pre-harvest review. If an
+# ID starts returning 200 on a future harvest, remove it from the set.
+KNOWN_DEAD_URIS = {
+    "2109224",    # 404 verified 2026-04-15
+    "21053496",   # 404 verified 2026-04-15
+    "21016167",   # 404 verified 2026-04-15
+    "2306041",    # 404 verified 2026-04-15
 }
 
 # ─── XML Namespaces ──────────────────────────────────────────────────
@@ -506,6 +520,22 @@ CREATE TABLE IF NOT EXISTS phase2_failures (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_phase2_failures_reason ON phase2_failures(reason);
+
+-- #226: Unified persistent failure log across phases 2, 2b, and 4.
+-- Survives Phase 3 integer-encoding (which drops `tier2_done`), so post-harvest
+-- diagnostics and targeted repair scripts have a stable query surface. Populated
+-- after the Phase 2 retry sweep (#225) so only *persistent* failures land here —
+-- transient ones already recovered on retry are removed.
+CREATE TABLE IF NOT EXISTS phase_failures (
+    phase         INTEGER NOT NULL,  -- 2, 4 (Phase 2b folds into 2)
+    uri_or_objnum TEXT NOT NULL,
+    failure_type  TEXT NOT NULL,     -- 'timeout', 'http_404', 'http_5xx', 'parse_error', 'unsupported_type:*', 'unknown'
+    error_message TEXT,
+    attempted_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    retry_count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (phase, uri_or_objnum)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_phase_failures_type ON phase_failures(failure_type);
 """
 
 VOCAB_INSERT_SQL = (
@@ -1483,15 +1513,23 @@ def run_phase1(conn: sqlite3.Connection, resume: bool = False, max_pages: int | 
 
 # ─── Phase 2: Resolve unmatched URIs ─────────────────────────────────
 
+# Reasons the retry sweep will replay. MUST stay in sync with the return
+# strings emitted by `resolve_uri` defined immediately below — specifically
+# the three branches that raise on network/server faults rather than
+# classify the response. Any new transient reason added to `resolve_uri`
+# must be added here or it will be silently skipped by retries.
+TRANSIENT_FAILURE_REASONS = frozenset({"timeout", "http_5xx", "unknown"})
+
+
 def resolve_uri(entity_id: str) -> tuple[dict | None, str | None]:
     """Resolve a Rijksmuseum entity URI via the Linked Art API.
 
     Returns ``(result, reason)``. On success: ``(dict, None)``. On failure:
     ``(None, reason)`` where ``reason`` is one of: ``timeout``, ``http_404``,
     ``http_5xx``, ``http_<code>``, ``parse_error``, ``unsupported_type:<la_type>``,
-    ``unknown``. Transient (``timeout``, ``http_5xx``) vs permanent
-    (``http_404``, ``unsupported_type:*``) is the axis a backfill script uses
-    to scope retries.
+    ``unknown``. Transient (``timeout``, ``http_5xx``, ``unknown``) vs permanent
+    (``http_404``, ``unsupported_type:*``) is the axis `retry_transient_failures`
+    uses to scope retries — see ``TRANSIENT_FAILURE_REASONS``.
     """
     url = f"{LINKED_ART_BASE}/{entity_id}"
     req = urllib.request.Request(url, headers={
@@ -1604,6 +1642,105 @@ def resolve_uri(entity_id: str) -> tuple[dict | None, str | None]:
     }, None
 
 
+def retry_transient_failures(conn: sqlite3.Connection, max_rounds: int = 3) -> int:
+    """#225: Replay Phase 2 transient failures from the `phase2_failures` table.
+
+    Called after the main Phase 2 / Phase 2b resolution loop completes. Loads
+    all rows whose `reason` is in TRANSIENT_FAILURE_REASONS, retries them with
+    exponential backoff (2s, 4s, 8s), upserts successes into the vocabulary
+    table, removes recovered URIs from `phase2_failures`, and updates the
+    reason column for URIs that transitioned from transient to permanent
+    (e.g. a server that was 5xx is now 404).
+
+    Permanent failures (404, parse_error, unsupported_type:*, http_4xx) are
+    not touched — retrying them wastes requests and shifts no outcome.
+
+    Returns the number of URIs successfully recovered.
+    """
+    rows = conn.execute(
+        f"SELECT uri, reason FROM phase2_failures "
+        f"WHERE reason IN ({','.join('?' * len(TRANSIENT_FAILURE_REASONS))})",
+        tuple(TRANSIENT_FAILURE_REASONS),
+    ).fetchall()
+    if not rows:
+        return 0
+
+    # phase2_failures.uri always holds a bare Rijksmuseum entity ID — the main
+    # run_phase2 loop inserts `eid` from `SELECT DISTINCT m.vocab_id`, which is
+    # never URL-prefixed. No entity_id extraction needed.
+    remaining: list[str] = [uri for uri, _reason in rows]
+    recovered = 0
+    print(f"  Retry sweep: {len(remaining)} transient failures to replay")
+
+    # Retry rounds run in parallel within a round (HTTP in pool, SQL in main
+    # thread via as_completed) and serialise across rounds so the backoff
+    # sleep has any effect. Thread count is intentionally lower than
+    # DEFAULT_THREADS — a retry sweep is second contact with a service we
+    # just hammered, so be politer.
+    RETRY_THREADS = min(6, DEFAULT_THREADS)
+    PERSON_NAMES_INSERT = (
+        "INSERT OR IGNORE INTO person_names "
+        "(person_id, name, lang, classification) "
+        "VALUES (:person_id, :name, :lang, :classification)"
+    )
+
+    for round_num in range(1, max_rounds + 1):
+        if not remaining:
+            break
+        time.sleep(2 ** round_num)  # 2s, 4s, 8s
+        print(f"    Round {round_num}/{max_rounds}: {len(remaining)} URIs", flush=True)
+
+        next_remaining: list[str] = []
+        recovered_this_round = 0
+        with ThreadPoolExecutor(max_workers=RETRY_THREADS) as pool:
+            futures = {pool.submit(resolve_uri, uri): uri for uri in remaining}
+            for future in as_completed(futures):
+                uri = futures[future]
+                result, new_reason = future.result()
+                if result:
+                    conn.execute(VOCAB_INSERT_SQL, result)
+                    conn.execute("DELETE FROM phase2_failures WHERE uri = ?", (uri,))
+                    variants = result.get("name_variants") or []
+                    if variants:
+                        conn.executemany(PERSON_NAMES_INSERT, variants)
+                    recovered += 1
+                    recovered_this_round += 1
+                elif new_reason in TRANSIENT_FAILURE_REASONS:
+                    next_remaining.append(uri)
+                else:
+                    # Transitioned to permanent — pin the new reason so the
+                    # next harvest doesn't retry it again.
+                    conn.execute(
+                        "UPDATE phase2_failures SET reason = ? WHERE uri = ?",
+                        (new_reason or "unknown", uri),
+                    )
+        conn.commit()
+        print(f"      Recovered {recovered_this_round}, {len(next_remaining)} still transient")
+        remaining = next_remaining
+
+    return recovered
+
+
+def sync_phase_failures(conn: sqlite3.Connection) -> None:
+    """#226: Mirror persistent Phase 2 failures into the unified `phase_failures`
+    table so post-harvest diagnostics have a stable query surface after Phase 3
+    integer-encoding drops `tier2_done` and other resume markers.
+
+    Called at end of `run_phase2` after `retry_transient_failures` has already
+    removed recovered URIs — everything left in `phase2_failures` is either
+    permanent (404, unsupported_type, parse_error) or persistently-transient
+    (still failing after 3 retry rounds). Both are worth preserving.
+    """
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO phase_failures
+            (phase, uri_or_objnum, failure_type, error_message, retry_count)
+        SELECT 2, uri, reason, NULL, 0 FROM phase2_failures
+        """
+    )
+    conn.commit()
+
+
 def run_phase2(conn: sqlite3.Connection):
     """Phase 2: Resolve all unmapped vocabulary URIs."""
     cur = conn.cursor()
@@ -1702,6 +1839,16 @@ def run_phase2(conn: sqlite3.Connection):
         )
         print(f"  Failure breakdown: {breakdown}")
         print(f"  → {failed:,} URIs recorded in phase2_failures table for backfill review")
+
+    # #225: retry sweep for transient failures. Runs before sync_phase_failures
+    # so recovered URIs are removed from phase2_failures before the mirror copy.
+    recovered = retry_transient_failures(conn)
+    if recovered:
+        print(f"  Retry sweep recovered {recovered:,} previously-failed URIs")
+
+    # #226: mirror persistent failures into the unified phase_failures table
+    # so they survive Phase 3 integer-encoding for post-harvest diagnostics.
+    sync_phase_failures(conn)
 
 
 # ─── Phase 4: Linked Art Resolution (Tier 2) ─────────────────────────
@@ -3631,8 +3778,15 @@ def run_phase3(
             room_name  TEXT
         )
     """)
-    # Data is seeded from an external JSON/CSV file if available
-    rooms_json = PROJECT_DIR / "data" / "museum-rooms.json"
+    # #229 Part A: seed file now lives under data/seed/ so it can be
+    # committed to the repo without conflicting with the gitignored data/
+    # convention. Fall back to the legacy location for backwards compat
+    # with any operator still pointing at the old path.
+    rooms_json = PROJECT_DIR / "data" / "seed" / "museum-rooms.json"
+    if not rooms_json.exists():
+        legacy = PROJECT_DIR / "data" / "museum-rooms.json"
+        if legacy.exists():
+            rooms_json = legacy
     if rooms_json.exists():
         rooms_data = json.loads(rooms_json.read_text(encoding="utf-8"))
         for room in rooms_data:
@@ -4346,15 +4500,22 @@ def main():
     """
     mapping_cols = get_columns(conn, "mappings")
     if "vocab_id" in mapping_cols:
-        orphans = conn.execute(orphan_sql).fetchall()
-        if orphans:
+        all_orphans = conn.execute(orphan_sql).fetchall()
+        # #224: separate investigated-dead URIs so they don't retrigger pre-harvest review
+        live_orphans = [(v, f, c) for v, f, c in all_orphans if v not in KNOWN_DEAD_URIS]
+        dead_orphans = [(v, f, c) for v, f, c in all_orphans if v in KNOWN_DEAD_URIS]
+        if dead_orphans:
+            dead_mappings = sum(c for _, _, c in dead_orphans)
+            print(f"  Known-dead URIs: {len(dead_orphans)} rows, {dead_mappings:,} mappings "
+                  f"(excluded from orphan audit, see KNOWN_DEAD_URIS / #224)")
+        if live_orphans:
             csv_path = PROJECT_DIR / "data" / "audit" / f"orphan-vocab-ids-v0.24.csv"
             csv_path.parent.mkdir(parents=True, exist_ok=True)
             with open(csv_path, "w") as f:
                 f.write("vocab_id,field,count\n")
-                for vid, field, cnt in orphans:
+                for vid, field, cnt in live_orphans:
                     f.write(f"{vid},{field},{cnt}\n")
-            print(f"  WARNING: {len(orphans)} orphan vocab IDs exported to {csv_path}")
+            print(f"  WARNING: {len(live_orphans)} orphan vocab IDs exported to {csv_path}")
             print(f"  Review and add missing codes to EXTERNAL_VOCAB before re-running Phase 3.")
         else:
             print(f"  No orphan vocab IDs found — all mappings have matching vocabulary entries.")

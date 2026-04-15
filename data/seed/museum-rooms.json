@@ -1,0 +1,452 @@
+[
+  {
+    "room_hash": "aefd12ccb29d4f9aecbbf422216facf7",
+    "room_id": "0.1",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "32a4c8896202736db51828e4ed4bf7e1",
+    "room_id": "0.10",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "a5617948b6fdc0cff495a84241465026",
+    "room_id": "0.11",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "f50fc0a75ded368a7edffaa068a19441",
+    "room_id": "0.12",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "e914a76e98999ae54d3e102a4063895f",
+    "room_id": "0.13",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "fffc88dee902684342c60264a637abd8",
+    "room_id": "0.2",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "b53c2f936ac490b4845b2edae27c5dc4",
+    "room_id": "0.3",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "d26b7336101abe55fb3894f6754b9d61",
+    "room_id": "0.38",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "c45d8e23cf3e2e087b300e652b129487",
+    "room_id": "0.4",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "a511429e48a44a5eb2d6859c5edcb96e",
+    "room_id": "0.5",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "3decadb57d1b55e43d1bd6cf03919172",
+    "room_id": "0.6",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "4277ea2c83441d2ce4a9b5176118ef83",
+    "room_id": "0.7",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "079b0a2117ebcedb699aa43ea5cb0dd8",
+    "room_id": "0.8",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "017c0cd4761e0c130503ac1d4931d875",
+    "room_id": "0.9",
+    "floor": "ground",
+    "room_name": null
+  },
+  {
+    "room_hash": "e95dcb6982b03fe47b747a0f98165c7e",
+    "room_id": "1.1",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "62fa53311afbb2195e5933ce6c1d6dad",
+    "room_id": "1.10",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "9e659f968a91ff89f45b9f60291fd6ba",
+    "room_id": "1.11",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "5cdf4dbd29ad28623c1c2fe15520623d",
+    "room_id": "1.12",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "2e814f19bc393df9c6e16451256bbca2",
+    "room_id": "1.13",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "d526afce8af2c2f3ebbc1f990b5b60b7",
+    "room_id": "1.14",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "2ae5c3ddb38e67702e2c9de878079b43",
+    "room_id": "1.15",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "1afb9e5f5683f41c7c10ec407040a3c0",
+    "room_id": "1.16",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "032ecef72025ed73f93c38849248dcb5",
+    "room_id": "1.17",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "083c8d081bd40dc7ef4256331ecd09f0",
+    "room_id": "1.18",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "69616ed83299dc26b4118390d54acb00",
+    "room_id": "1.2",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "af9ac44ce0489b45c48b3b1437403c10",
+    "room_id": "1.3",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "daf9bc4b1b29021992379eb6cb81743f",
+    "room_id": "1.4",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "f13843e1211475976f182f3ee17781c2",
+    "room_id": "1.5",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "e7fa58b1d0be13c5448657a2566aa231",
+    "room_id": "1.6",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "204949b8ac089c80c4768fc564a1ea50",
+    "room_id": "1.7",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "055c973dc8ab24624e061c2006370280",
+    "room_id": "1.8",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "6954f1b974347047802df1110e18f03d",
+    "room_id": "1.9",
+    "floor": "first",
+    "room_name": null
+  },
+  {
+    "room_hash": "22672b805223b2b46d9715923a8ee6e6",
+    "room_id": "2.1",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "55c3c46f09a2b609787a2ae8d40f6000",
+    "room_id": "2.10",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "9850589f6384b52f3f137357dbe1dabf",
+    "room_id": "2.11",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "5becda534275c25ad158a7d845544b85",
+    "room_id": "2.12",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "d14c031e89d48fe4a9a4bc5fea5565ab",
+    "room_id": "2.13",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "47dfa645b2a31b5feb4a5000071baf20",
+    "room_id": "2.14",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "121258490a81f9391fe1faf2774fabf6",
+    "room_id": "2.15",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "dbff8c012c896f5d3a329808f5c27526",
+    "room_id": "2.16",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "842bd506ad5b5fac3c46afc7860ee8c8",
+    "room_id": "2.17",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "42738917ce94a170f3c93178d5133ed0",
+    "room_id": "2.18",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "4a5c64c891e6c8c74df41cab7bcc9e7b",
+    "room_id": "2.19",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "00f48eb2feb140890d10733e5a263757",
+    "room_id": "2.2",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "4bec09398f56cfffade33408b3f8f9c4",
+    "room_id": "2.20",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "0a18fbcc735e54673e4b5faaf77bea7d",
+    "room_id": "2.21",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "f89a00f540a0866e1d3f57002b39e268",
+    "room_id": "2.22",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "8fec5303b3661d6894ad96e37b540cc0",
+    "room_id": "2.23",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "5512b186c1a70c85b0d7d86dbdf352ea",
+    "room_id": "2.24",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "198689b331d70126759d6c600b02f08c",
+    "room_id": "2.25",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "cbe7886aead4717e04c67314b560e90f",
+    "room_id": "2.26",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "c0dc04b6c799d06e2e6ba504c54c350e",
+    "room_id": "2.27",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "11ce904ae126f27d0705b84d3fb59d05",
+    "room_id": "2.28",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "d730afca61aabafefe26de3e2cb55c1e",
+    "room_id": "2.3",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "fda5243f694c77ed700b581598b14bc1",
+    "room_id": "2.32",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "266be6fb59ca76ee0deb03336437491c",
+    "room_id": "2.4",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "4701727a2699d9f8cbbf2705bb35f5a1",
+    "room_id": "2.5",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "e0db44d4a02b530c05ec05c7fe350d86",
+    "room_id": "2.6",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "6c4bd450840137c0f561593f3374c90b",
+    "room_id": "2.7",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "9355cd411efffc7fc164557ed0d40ae7",
+    "room_id": "2.8",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "68c9533b7b8c77bddc6412a871aa27c3",
+    "room_id": "2.9",
+    "floor": "second",
+    "room_name": null
+  },
+  {
+    "room_hash": "34dd3440929500b3d09620e00f6fd4f5",
+    "room_id": "3.1",
+    "floor": "third",
+    "room_name": null
+  },
+  {
+    "room_hash": "e088bfe0b0c35185176174d36f7ca80c",
+    "room_id": "3.2",
+    "floor": "third",
+    "room_name": null
+  },
+  {
+    "room_hash": "903406832097d7384b9058e7ac53bbb2",
+    "room_id": "3.3",
+    "floor": "third",
+    "room_name": null
+  },
+  {
+    "room_hash": "2764307ff880437c7033be082539d718",
+    "room_id": "3.4",
+    "floor": "third",
+    "room_name": null
+  },
+  {
+    "room_hash": "78beae7dbe2e0291a76cc2ee5aa0fab3",
+    "room_id": "AP-1",
+    "floor": "asian_pavilion",
+    "room_name": null
+  },
+  {
+    "room_hash": "be22f3aedaa31166c14965cbabf7a246",
+    "room_id": "AP-2",
+    "floor": "asian_pavilion",
+    "room_name": null
+  },
+  {
+    "room_hash": "c94aafe794120035aca21cf248d43c6c",
+    "room_id": "Gallery of Honour",
+    "floor": null,
+    "room_name": "Gallery of Honour"
+  },
+  {
+    "room_hash": "cf5523894dc7b78c458493d32f2004d6",
+    "room_id": "Night Watch Gallery",
+    "floor": null,
+    "room_name": "Night Watch Gallery"
+  },
+  {
+    "room_hash": "130d14c5a354b19fe04400e803ff467f",
+    "room_id": "PV-0.1",
+    "floor": "philips_wing",
+    "room_name": null
+  },
+  {
+    "room_hash": "c1817242bb59c5419776dd89b1831cec",
+    "room_id": "PV-0.2",
+    "floor": "philips_wing",
+    "room_name": null
+  },
+  {
+    "room_hash": "3eaf96a5316143d63c689cff98ff7a72",
+    "room_id": "PV-0.3",
+    "floor": "philips_wing",
+    "room_name": null
+  },
+  {
+    "room_hash": "98693015d5cfd129f65ec6cf64ee4609",
+    "room_id": "PV-1.1",
+    "floor": "philips_wing",
+    "room_name": null
+  },
+  {
+    "room_hash": "33df849935646e5cc66504ee0413161a",
+    "room_id": "PV-1.2",
+    "floor": "philips_wing",
+    "room_name": null
+  },
+  {
+    "room_hash": "4b24744b0f182590d6630b4fee62672d",
+    "room_id": "PV-1.8",
+    "floor": "philips_wing",
+    "room_name": null
+  }
+]

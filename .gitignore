@@ -27,5 +27,11 @@ CLAUDE.md
 CLAUDE.md.bak
 
 # Vocabulary database (generated, ~1 GB)
-data/
+# Using data/* instead of data/ so we can negate seed/ below — git won't
+# recurse into a wholly-ignored directory, which breaks subsequent re-
+# inclusions.
+data/*
+# Exception: hand-curated seed files that are inputs to the harvest, not
+# outputs of it (#229 Part A). Small, stable, versioned.
+!data/seed/
 __pycache__/
