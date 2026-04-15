@@ -253,6 +253,24 @@ SCHEMA_TYPE_MAP = {
 }
 
 
+# (substring, authority) pairs — order matters only for efficiency (more
+# common first). Both sws.geonames.org and www.geonames.org fold into
+# "geonames" via the shared `geonames.org/` needle.
+_AUTHORITY_NEEDLES: tuple[tuple[str, str], ...] = (
+    ("wikidata.org/entity/",   "wikidata"),
+    ("viaf.org/viaf/",         "viaf"),
+    ("rkd.nl",                 "rkd"),
+    ("vocab.getty.edu/ulan/",  "ulan"),
+    ("vocab.getty.edu/tgn/",   "tgn"),
+    ("vocab.getty.edu/aat/",   "aat"),
+    ("iconclass.org/",         "iconclass"),
+    ("geonames.org/",          "geonames"),
+    ("biografischportaal.nl",  "biografisch_portaal"),
+    ("cerl.org",               "cerl"),
+    ("pic.nypl.org",           "nypl"),
+)
+
+
 def classify_authority(uri: str) -> tuple[str, str]:
     """Classify an external sameAs URI into (authority, local_id).
 
@@ -262,32 +280,12 @@ def classify_authority(uri: str) -> tuple[str, str]:
     """
     if not uri:
         return ("other", uri)
-    # Strip trailing slash once so e.g. `http://viaf.org/viaf/19908139/`
-    # still yields `19908139` after `rsplit("/", 1)`.
+    # Normalize trailing-slash and no-slash variants so `viaf/19908139/`
+    # and `viaf/19908139` both yield `19908139`.
     u = uri.rstrip("/")
-    if "wikidata.org/entity/" in u:
-        return ("wikidata", u.rsplit("/", 1)[-1])
-    if "viaf.org/viaf/" in u:
-        return ("viaf", u.rsplit("/", 1)[-1])
-    if "rkd.nl" in u:
-        return ("rkd", u.rsplit("/", 1)[-1])
-    if "vocab.getty.edu/ulan/" in u:
-        return ("ulan", u.rsplit("/", 1)[-1])
-    if "vocab.getty.edu/tgn/" in u:
-        return ("tgn", u.rsplit("/", 1)[-1])
-    if "vocab.getty.edu/aat/" in u:
-        return ("aat", u.rsplit("/", 1)[-1])
-    if "iconclass.org/" in u:
-        return ("iconclass", u.rsplit("/", 1)[-1])
-    # Both sws.geonames.org and www.geonames.org normalise to the same authority
-    if "geonames.org/" in u:
-        return ("geonames", u.rsplit("/", 1)[-1])
-    if "biografischportaal.nl" in u:
-        return ("biografisch_portaal", u.rsplit("/", 1)[-1])
-    if "cerl.org" in u:
-        return ("cerl", u.rsplit("/", 1)[-1])
-    if "pic.nypl.org" in u:
-        return ("nypl", u.rsplit("/", 1)[-1])
+    for needle, authority in _AUTHORITY_NEEDLES:
+        if needle in u:
+            return (authority, u.rsplit("/", 1)[-1])
     return ("other", uri)
 
 
@@ -787,14 +785,9 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
 
     # Merge `schema:sameAs` URIs with Linked Art `linked.art/equivalent`
     # URIs into a single ordered list for authority classification + the
-    # legacy `external_id` column pick.
-    all_external_uris: list[str] = []
-    for uri in equivalents:
-        if uri not in all_external_uris:
-            all_external_uris.append(uri)
-    for uri in schema_same_as:
-        if uri not in all_external_uris:
-            all_external_uris.append(uri)
+    # legacy `external_id` column pick. `dict.fromkeys` preserves insertion
+    # order (Python ≥3.7) while deduping in O(n).
+    all_external_uris: list[str] = list(dict.fromkeys(equivalents + schema_same_as))
 
     # Pick best external ID (prefer Wikidata, Iconclass) — legacy column,
     # used as a hint by src/api/VocabularyDb.ts toWikidataUri()
@@ -1106,9 +1099,8 @@ def _flush_vocab_batch(conn: sqlite3.Connection, records: list[dict]) -> int:
     """
     ext_rows: list[tuple[str, str, str, str]] = []
     for r in records:
-        ext = r.pop("_external_ids", None) or []
         vocab_id = r["id"]
-        for authority, local_id, uri in ext:
+        for authority, local_id, uri in r.pop("_external_ids"):
             ext_rows.append((vocab_id, authority, local_id, uri))
     conn.executemany(VOCAB_INSERT_SQL, records)
     if ext_rows:

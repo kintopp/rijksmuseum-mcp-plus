@@ -8,41 +8,21 @@ and asserts on the returned dict. No database, no harvest — just the parser.
 Run with:
     ~/miniconda3/envs/embeddings/bin/python scripts/tests/test_parse_schema_dumps.py
 or just `python3 scripts/tests/test_parse_schema_dumps.py` (stdlib only).
-
-Why importlib: harvest-vocabulary-db.py has a hyphen in its name and isn't
-a regular Python module. Import via importlib.util so we don't have to
-rename or package it.
 """
 
-import importlib.util
 import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-HARVEST_PY = REPO_ROOT / "scripts" / "harvest-vocabulary-db.py"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _test_helpers import CheckRecorder, load_harvest_module
 
-spec = importlib.util.spec_from_file_location("harvest_mod", HARVEST_PY)
-harvest_mod = importlib.util.module_from_spec(spec)
-# Suppress module-level side-effects: harvest-vocabulary-db.py might print
-# banner lines on import. We don't mind if it does; this is just a note.
-spec.loader.exec_module(harvest_mod)
-
+harvest_mod = load_harvest_module()
 parse_nt_file = harvest_mod.parse_nt_file
 classify_authority = harvest_mod.classify_authority
 
-
-# ─── Test infrastructure ──────────────────────────────────────────────
-
-FAILURES: list[str] = []
-PASSES: list[str] = []
-
-
-def check(name: str, cond: bool, detail: str = "") -> None:
-    if cond:
-        PASSES.append(name)
-    else:
-        FAILURES.append(f"{name}: {detail}")
+recorder = CheckRecorder()
+check = recorder.check
 
 
 def find_fixture(root: str, matcher) -> Path | None:
@@ -315,10 +295,9 @@ if os.path.isdir(EVENT_DUMP):
 
 print()
 print("=" * 60)
-print(f"PASS: {len(PASSES)}")
-print(f"FAIL: {len(FAILURES)}")
-for f in FAILURES:
+print(recorder.summary())
+for f in recorder.failures:
     print(f"  ✗ {f}")
 print("=" * 60)
 
-sys.exit(0 if not FAILURES else 1)
+sys.exit(recorder.exit_code())

@@ -55,6 +55,34 @@ def create_exhibition_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+class CheckRecorder:
+    """Minimal assertion tally for framework-less tests.
+
+    The project convention (CLAUDE.md "Tests") is standalone scripts with
+    hand-rolled assertions rather than pytest/unittest. This class is the
+    canonical form of the `check()` + pass/fail-list pattern that was
+    previously copy-pasted across several test files. Use it via the
+    module-level `check` convenience when you want one recorder per test
+    run, or instantiate directly for nested suites.
+    """
+
+    def __init__(self) -> None:
+        self.passes: list[str] = []
+        self.failures: list[str] = []
+
+    def check(self, name: str, cond: bool, detail: str = "") -> None:
+        if cond:
+            self.passes.append(name)
+        else:
+            self.failures.append(f"{name}: {detail}")
+
+    def summary(self) -> str:
+        return f"PASS: {len(self.passes)}  FAIL: {len(self.failures)}"
+
+    def exit_code(self) -> int:
+        return 0 if not self.failures else 1
+
+
 def create_phase4_schema(conn: sqlite3.Connection) -> None:
     """Create the minimal artworks/mappings/vocabulary schema used by
     run_phase4's bootstrap block. Used by the Phase 4 extractor regression test.
