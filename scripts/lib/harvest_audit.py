@@ -93,9 +93,19 @@ EXPECTATIONS: list[AuditTarget] = [
         kind="table_count",
         table="vocabulary",
         column=None,
-        min_rows=60000,
-        max_rows=90000,
-        rationale="Phase-0-only count: 2026-04-13 harvest=72,364 (Linked Art dumps only). Schema.org person/org/topical_term dumps not parsed (#238); when #238 lands, re-tighten upward to ~270k–350k",
+        min_rows=250000,
+        max_rows=400000,
+        rationale="Post-#238 prediction: 2026-04-13 bare harvest was 72,364 (Linked Art only); full #238 sweep estimates ~222K additional Schema.org entities (181K person + 28K org + 8K topical_term + 4.5K Schema.org place), so expected ~294K. Range is intentionally generous — TIGHTEN after first post-#238 harvest confirms the real number.",
+    ),
+    AuditTarget(
+        name="phase0.vocabulary_external_ids",
+        phase="phase0",
+        kind="table_count",
+        table="vocabulary_external_ids",
+        column=None,
+        min_rows=100000,
+        max_rows=250000,
+        rationale="New table landed with #238. Schema.org sweep floor: ~59K (48K person + 0.6K org + 5.4K topical + 4.9K Schema.org place). Linked Art side adds ~90K–120K from `linked.art/equivalent` triples on classification/concept/place/event (not directly sampled). Initial range 100K–250K is a prediction — TIGHTEN after first post-#238 harvest.",
     ),
 
     # ── Phase 2 / Phase 2b (vocab URI resolution) ────────────────────────

@@ -97,7 +97,7 @@ DUMP_CONFIGS = [
     ("concept", "classification"),
     ("topical_term", "classification"),
     ("person", "person"),
-    ("organisation", "person"),
+    ("organisation", "organisation"),  # #238: was "person", incorrect for Schema.org org dumps
     ("place", "place"),
     ("event", "event"),
     ("exhibition", "event"),
@@ -187,7 +187,11 @@ NT_TO_BNODE_PATTERN = re.compile(
     r'^<([^>]+)>\s+<([^>]+)>\s+_:(\S+)\s*\.\s*$'
 )
 NT_LANG_PATTERN = re.compile(
-    r'^<([^>]+)>\s+<([^>]+)>\s+"([^"]*)"@(\w+)\s*\.\s*$'
+    # Language tag follows BCP 47: primary subtag plus optional region/script
+    # subtags separated by hyphens (e.g. `@nl`, `@nl-NL`, `@zh-Hans-CN`).
+    # The earlier `\w+` form silently dropped topical_term `@nl-NL` labels,
+    # which contributed to the Schema.org dump parsing gap (#238).
+    r'^<([^>]+)>\s+<([^>]+)>\s+"([^"]*)"@([A-Za-z][A-Za-z0-9-]*)\s*\.\s*$'
 )
 
 P_LABEL = "http://www.cidoc-crm.org/cidoc-crm/P190_has_symbolic_content"
@@ -224,6 +228,68 @@ LA_TYPE_MAP = {
     "Language": "classification",
     "Currency": "classification",
 }
+
+# ─── Schema.org dump constants (#238) ───────────────────────────────
+#
+# The person / organisation / topical_term dumps use Schema.org shape
+# (`schema:name` directly on the entity, `schema:sameAs` for external
+# authority links, `rdf:type schema:Person|Organization|DefinedTerm`).
+# The place dump is a hybrid: ~12% Schema.org shape, ~88% Linked Art.
+# Before #238, these were silently dropped by parse_nt_file because the
+# function only handled Linked Art / CIDOC-CRM with blank-node appellations.
+
+P_SCHEMA_NAME = "http://schema.org/name"
+P_SCHEMA_ALTERNATE_NAME = "http://schema.org/alternateName"
+P_SCHEMA_SAME_AS = "http://schema.org/sameAs"
+RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+
+# Schema.org rdf:type values that mark an entity as "Schema.org shape".
+# Place is included because the place dump is a hybrid — see #238.
+SCHEMA_TYPE_MAP = {
+    "http://schema.org/Person":       "person",
+    "http://schema.org/Organization": "organisation",
+    "http://schema.org/DefinedTerm":  "classification",
+    "http://schema.org/Place":        "place",
+}
+
+
+def classify_authority(uri: str) -> tuple[str, str]:
+    """Classify an external sameAs URI into (authority, local_id).
+
+    Covers all authorities observed in the Nov 2024 data dumps across
+    person / organisation / topical_term / place (see #238 sweep).
+    Unknown authorities fall through to ('other', uri).
+    """
+    if not uri:
+        return ("other", uri)
+    # Strip trailing slash once so e.g. `http://viaf.org/viaf/19908139/`
+    # still yields `19908139` after `rsplit("/", 1)`.
+    u = uri.rstrip("/")
+    if "wikidata.org/entity/" in u:
+        return ("wikidata", u.rsplit("/", 1)[-1])
+    if "viaf.org/viaf/" in u:
+        return ("viaf", u.rsplit("/", 1)[-1])
+    if "rkd.nl" in u:
+        return ("rkd", u.rsplit("/", 1)[-1])
+    if "vocab.getty.edu/ulan/" in u:
+        return ("ulan", u.rsplit("/", 1)[-1])
+    if "vocab.getty.edu/tgn/" in u:
+        return ("tgn", u.rsplit("/", 1)[-1])
+    if "vocab.getty.edu/aat/" in u:
+        return ("aat", u.rsplit("/", 1)[-1])
+    if "iconclass.org/" in u:
+        return ("iconclass", u.rsplit("/", 1)[-1])
+    # Both sws.geonames.org and www.geonames.org normalise to the same authority
+    if "geonames.org/" in u:
+        return ("geonames", u.rsplit("/", 1)[-1])
+    if "biografischportaal.nl" in u:
+        return ("biografisch_portaal", u.rsplit("/", 1)[-1])
+    if "cerl.org" in u:
+        return ("cerl", u.rsplit("/", 1)[-1])
+    if "pic.nypl.org" in u:
+        return ("nypl", u.rsplit("/", 1)[-1])
+    return ("other", uri)
+
 
 # External vocabulary IDs (e.g. Getty AAT) used directly in OAI-PMH dc:type.
 # The Rijksmuseum API returns 404 for these since they aren't Rijksmuseum entities.
@@ -301,6 +367,20 @@ CREATE TABLE IF NOT EXISTS vocabulary (
     label_en_norm   TEXT,
     label_nl_norm   TEXT
 );
+
+-- #238: Multi-valued external authority IDs (Wikidata, VIAF, RKD, ULAN, TGN, AAT, Iconclass, GeoNames, etc).
+-- The legacy `vocabulary.external_id` column is kept as a single-pick hint (Wikidata preferred) for
+-- backwards-compatible reads (src/api/VocabularyDb.ts), but this table holds the full set and is the
+-- source of truth for reconciliation and authority-scoped lookups.
+CREATE TABLE IF NOT EXISTS vocabulary_external_ids (
+    vocab_id    TEXT NOT NULL,
+    authority   TEXT NOT NULL,
+    id          TEXT NOT NULL,
+    uri         TEXT NOT NULL,
+    PRIMARY KEY (vocab_id, authority, id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_vei_authority_id ON vocabulary_external_ids (authority, id);
+CREATE INDEX IF NOT EXISTS idx_vei_uri          ON vocabulary_external_ids (uri);
 
 CREATE TABLE IF NOT EXISTS artworks (
     object_number    TEXT PRIMARY KEY,
@@ -436,6 +516,11 @@ VOCAB_INSERT_SQL = (
     "VALUES (:id, :type, :label_en, :label_nl, :external_id, :broader_id, :notation, :lat, :lon)"
 )
 
+VEI_INSERT_SQL = (
+    "INSERT OR IGNORE INTO vocabulary_external_ids "
+    "(vocab_id, authority, id, uri) VALUES (?, ?, ?, ?)"
+)
+
 
 def get_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     """Return the set of column names for a given table."""
@@ -518,7 +603,26 @@ def create_or_open_db() -> sqlite3.Connection:
 # ─── Phase 0: Parse data dumps ────────────────────────────────────────
 
 def parse_nt_file(filepath: str, default_type: str) -> dict | None:
-    """Parse a single N-Triples entity file into a vocabulary record."""
+    """Parse a single N-Triples entity file into a vocabulary record.
+
+    Handles two coexisting shapes in the dumps:
+
+    1. Linked Art / CIDOC-CRM — blank-node appellation chains
+       (`E33_E41_Linguistic_Appellation` → `P190_has_symbolic_content`
+       with `P72_has_language` pointing at an AAT language URI).
+       Used by classification, concept, event dumps and ~88% of place.
+
+    2. Schema.org — direct-on-subject `schema:name` literal + optional
+       `schema:alternateName` + `schema:sameAs` authority links, with
+       `rdf:type schema:{Person|Organization|DefinedTerm|Place}`.
+       Used by person, organisation, topical_term dumps and ~12% of
+       place (the hybrid place subset with TGN/Wikidata cross-refs).
+
+    Returns a dict ready for VOCAB_INSERT_SQL binding, plus a special
+    `_external_ids` key (leading underscore — not for SQL bind; the
+    caller pops it before executemany) carrying a list of
+    (authority, local_id, uri) tuples for vocabulary_external_ids.
+    """
     entity_id = os.path.basename(filepath)
     entity_uri = f"https://id.rijksmuseum.nl/{entity_id}"
 
@@ -530,6 +634,14 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
     rdf_type: str | None = None
     skos_label_en: str | None = None
     skos_label_nl: str | None = None
+
+    # Schema.org shape collectors (#238)
+    schema_types: set[str] = set()
+    schema_names_bare: list[str] = []           # literals with no language tag
+    schema_names_by_lang: dict[str, str] = {}   # primary-subtag → text (first wins)
+    schema_alt_names_bare: list[str] = []
+    schema_alt_names_by_lang: dict[str, str] = {}
+    schema_same_as: list[str] = []
 
     try:
         with open(filepath, "r", encoding="utf-8") as f:
@@ -553,8 +665,20 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
                 broader_id = obj_uri.split("/")[-1]
             elif pred == "http://www.cidoc-crm.org/cidoc-crm/P168_place_is_defined_by" and obj_lit:
                 defined_by = obj_lit
-            elif pred == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" and obj_uri:
+            elif pred == RDF_TYPE and obj_uri:
                 rdf_type = obj_uri
+                if obj_uri in SCHEMA_TYPE_MAP:
+                    schema_types.add(obj_uri)
+            # Schema.org: bare-literal variants (no language tag) match NT_PATTERN's
+            # literal branch because there's no `@lang` suffix. Person/Organization
+            # names come through here. Topical_term / place labels are language-tagged
+            # and go through NT_LANG_PATTERN below instead.
+            elif pred == P_SCHEMA_NAME and obj_lit is not None:
+                schema_names_bare.append(obj_lit)
+            elif pred == P_SCHEMA_ALTERNATE_NAME and obj_lit is not None:
+                schema_alt_names_bare.append(obj_lit)
+            elif pred == P_SCHEMA_SAME_AS and obj_uri:
+                schema_same_as.append(obj_uri)
 
         m = BNODE_PATTERN.match(line)
         if m:
@@ -576,7 +700,7 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
                 if obj_uri == "http://www.cidoc-crm.org/cidoc-crm/E42_Identifier":
                     bnodes[bnode_id]["is_identifier"] = True
 
-        # Match language-tagged literals (skos:prefLabel, rdfs:label)
+        # Match language-tagged literals (skos:prefLabel, rdfs:label, schema:name)
         m = NT_LANG_PATTERN.match(line)
         if m and m.group(1) == entity_uri:
             pred = m.group(2)
@@ -587,6 +711,15 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
                     skos_label_en = text
                 elif lang_tag == "nl" and not skos_label_nl:
                     skos_label_nl = text
+            elif pred == P_SCHEMA_NAME and text:
+                # BCP 47 primary subtag (e.g. `nl-NL` → `nl`, `zh-Hans-CN` → `zh`)
+                primary = lang_tag.split("-", 1)[0].lower()
+                if primary not in schema_names_by_lang:
+                    schema_names_by_lang[primary] = text
+            elif pred == P_SCHEMA_ALTERNATE_NAME and text:
+                primary = lang_tag.split("-", 1)[0].lower()
+                if primary not in schema_alt_names_by_lang:
+                    schema_alt_names_by_lang[primary] = text
 
     label_en = None
     label_nl = None
@@ -618,17 +751,76 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
         if type_name in LA_TYPE_MAP:
             vocab_type = LA_TYPE_MAP[type_name]
 
-    # Pick best external ID (prefer Wikidata, Iconclass)
+    # Schema.org branch: if the entity declares a schema:* type, overlay the
+    # Schema.org-derived labels/type/sameAs on top of anything picked up
+    # above. Schema.org and Linked Art don't co-occur in the same file
+    # (verified via full-sweep: 0 entities have both a direct schema:name
+    # and a blank-node appellation), but place files can carry both
+    # `rdf:type schema:Place` AND `rdf:type E53_Place`, so the
+    # type-precedence rule is: Schema.org type wins when present.
+    if schema_types:
+        for st in schema_types:
+            vocab_type = SCHEMA_TYPE_MAP[st]
+            break  # files only ever have one schema type in practice
+
+        # Label selection: prefer language-tagged (nl first, then en),
+        # then bare literals, then alternateName as a last resort (covers
+        # the 8 anonymous entities — 7 persons + 1 organisation — whose
+        # `schema:name` is absent entirely, #238 full sweep).
+        if not label_nl:
+            label_nl = schema_names_by_lang.get("nl")
+        if not label_en:
+            label_en = schema_names_by_lang.get("en")
+        if not label_nl and not label_en and schema_names_bare:
+            # Bare literal: assign as label_en by convention (persons/orgs
+            # carry no language tag and labels like "Ahrendts" are
+            # effectively language-agnostic).
+            label_en = schema_names_bare[0]
+        if not label_nl and not label_en:
+            # Last-resort alternateName fallback for anonymous entities
+            if schema_alt_names_by_lang.get("nl"):
+                label_nl = schema_alt_names_by_lang["nl"]
+            elif schema_alt_names_by_lang.get("en"):
+                label_en = schema_alt_names_by_lang["en"]
+            elif schema_alt_names_bare:
+                label_en = schema_alt_names_bare[0]
+
+    # Merge `schema:sameAs` URIs with Linked Art `linked.art/equivalent`
+    # URIs into a single ordered list for authority classification + the
+    # legacy `external_id` column pick.
+    all_external_uris: list[str] = []
+    for uri in equivalents:
+        if uri not in all_external_uris:
+            all_external_uris.append(uri)
+    for uri in schema_same_as:
+        if uri not in all_external_uris:
+            all_external_uris.append(uri)
+
+    # Pick best external ID (prefer Wikidata, Iconclass) — legacy column,
+    # used as a hint by src/api/VocabularyDb.ts toWikidataUri()
     external_id = None
-    for eq in equivalents:
+    for eq in all_external_uris:
         if "iconclass.org" in eq:
             external_id = eq
             break
         if "wikidata.org" in eq:
             external_id = eq
             break
-    if not external_id and equivalents:
-        external_id = equivalents[0]
+    if not external_id and all_external_uris:
+        external_id = all_external_uris[0]
+
+    # Classify all URIs for the multi-valued vocabulary_external_ids table.
+    # Deduplicate on (authority, local_id) — a single entity sometimes
+    # carries two URIs that normalise to the same authority-local pair.
+    external_ids_out: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for uri in all_external_uris:
+        authority, local_id = classify_authority(uri)
+        key = (authority, local_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        external_ids_out.append((authority, local_id, uri))
 
     # Parse coordinates for places
     lat = None
@@ -657,6 +849,7 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
         "notation": notation,
         "lat": lat,
         "lon": lon,
+        "_external_ids": external_ids_out,  # popped by run_phase0 before SQL bind
     }
 
 
@@ -904,6 +1097,25 @@ def parse_exhibition_dump(dump_dir: Path, conn: sqlite3.Connection) -> tuple[int
     return exhibition_count, member_count
 
 
+def _flush_vocab_batch(conn: sqlite3.Connection, records: list[dict]) -> int:
+    """Insert a batch of parsed records into vocabulary + vocabulary_external_ids.
+
+    Mutates `records` in place by popping `_external_ids` off each dict so
+    the remaining keys match VOCAB_INSERT_SQL's named bindings. Returns
+    the number of external-ID rows inserted.
+    """
+    ext_rows: list[tuple[str, str, str, str]] = []
+    for r in records:
+        ext = r.pop("_external_ids", None) or []
+        vocab_id = r["id"]
+        for authority, local_id, uri in ext:
+            ext_rows.append((vocab_id, authority, local_id, uri))
+    conn.executemany(VOCAB_INSERT_SQL, records)
+    if ext_rows:
+        conn.executemany(VEI_INSERT_SQL, ext_rows)
+    return len(ext_rows)
+
+
 def run_phase0(conn: sqlite3.Connection):
     """Phase 0: Parse all data dumps into vocabulary table."""
     # Always seed external vocabulary entries regardless of dump availability
@@ -914,6 +1126,11 @@ def run_phase0(conn: sqlite3.Connection):
             "external_id": ext_data["external_id"],
             "broader_id": None, "notation": None, "lat": None, "lon": None,
         })
+        # Also seed into vocabulary_external_ids so the new table is
+        # consistent with the legacy column for these hand-curated entries.
+        if ext_data.get("external_id"):
+            authority, local_id = classify_authority(ext_data["external_id"])
+            conn.execute(VEI_INSERT_SQL, (ext_id, authority, local_id, ext_data["external_id"]))
     conn.commit()
     print(f"  Seeded {len(EXTERNAL_VOCAB)} external vocabulary entries (Getty AAT)")
 
@@ -923,6 +1140,7 @@ def run_phase0(conn: sqlite3.Connection):
         return
 
     total_records = 0
+    total_ext_ids = 0
 
     for tar_name, default_type in DUMP_CONFIGS:
         print(f"  Processing {tar_name} dump (type={default_type})...")
@@ -937,9 +1155,10 @@ def run_phase0(conn: sqlite3.Connection):
             # Also parse as regular vocab (for label lookup)
             records = parse_dump_dir(dump_dir, default_type)
             if records:
-                conn.executemany(VOCAB_INSERT_SQL, records)
+                ext_count = _flush_vocab_batch(conn, records)
                 conn.commit()
                 total_records += len(records)
+                total_ext_ids += ext_count
             print(f"    {exh_count:,} exhibitions, {mem_count:,} artwork memberships, {len(records):,} vocab records")
             continue
 
@@ -948,14 +1167,15 @@ def run_phase0(conn: sqlite3.Connection):
             print(f"    No records parsed")
             continue
 
-        conn.executemany(VOCAB_INSERT_SQL, records)
+        with_notation = sum(1 for r in records if r.get("notation"))
+        ext_count = _flush_vocab_batch(conn, records)
         conn.commit()
 
-        with_notation = sum(1 for r in records if r.get("notation"))
-        print(f"    {len(records):,} records ({with_notation:,} with notation)")
+        print(f"    {len(records):,} records ({with_notation:,} with notation, {ext_count:,} external IDs)")
         total_records += len(records)
+        total_ext_ids += ext_count
 
-    print(f"  Total: {total_records:,} vocabulary records from dumps")
+    print(f"  Total: {total_records:,} vocabulary records, {total_ext_ids:,} external IDs from dumps")
 
 
 # ─── Phase 0.5: Seed Set Names ───────────────────────────────────────
