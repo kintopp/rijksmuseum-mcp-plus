@@ -46,6 +46,8 @@ from itertools import chain
 import time
 import urllib.error
 import urllib.request
+import requests
+import requests.adapters
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -108,6 +110,30 @@ LINKED_ART_BASE = "https://data.rijksmuseum.nl"
 USER_AGENT = "rijksmuseum-mcp-harvest/1.0"
 DEFAULT_THREADS = 12
 BATCH_SIZE = 500  # Commit every N pages
+
+# Module-level HTTP session with a connection pool shared across threads.
+# Amortises TCP+TLS handshake cost (~90 ms/request) across the Phase 4 worker
+# pool — the previous urllib.request-based path opened a fresh connection for
+# every artwork, pinning ~9 cores on TLS crypto and capping throughput at ~5/s.
+# Pool sized for 32 concurrent workers (generous headroom over DEFAULT_THREADS).
+# Callers handle their own retries (_resolve_one, resolve_artwork have distinct
+# error-categorisation semantics), so max_retries=0 on the adapter.
+_HTTP_SESSION: requests.Session | None = None
+
+
+def get_http_session() -> requests.Session:
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        s = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=32,
+            pool_maxsize=32,
+            max_retries=0,
+        )
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
+        _HTTP_SESSION = s
+    return _HTTP_SESSION
 
 # ─── AAT URIs for Tier 2 Linked Art parsing ─────────────────────────
 
@@ -1532,27 +1558,26 @@ def resolve_uri(entity_id: str) -> tuple[dict | None, str | None]:
     uses to scope retries — see ``TRANSIENT_FAILURE_REASONS``.
     """
     url = f"{LINKED_ART_BASE}/{entity_id}"
-    req = urllib.request.Request(url, headers={
-        "Accept": "application/ld+json",
-        "Profile": "https://linked.art/ns/v1/linked-art.json",
-        "User-Agent": USER_AGENT,
-    })
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = resp.read()
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None, "http_404"
-        if 500 <= e.code < 600:
-            return None, "http_5xx"
-        return None, f"http_{e.code}"
-    except (urllib.error.URLError, TimeoutError, socket.timeout):
+        resp = get_http_session().get(url, headers={
+            "Accept": "application/ld+json",
+            "Profile": "https://linked.art/ns/v1/linked-art.json",
+            "User-Agent": USER_AGENT,
+        }, timeout=15)
+    except (requests.Timeout, requests.ConnectionError):
         return None, "timeout"
-    except Exception:
+    except requests.RequestException:
         return None, "unknown"
 
+    if resp.status_code == 404:
+        return None, "http_404"
+    if 500 <= resp.status_code < 600:
+        return None, "http_5xx"
+    if not resp.ok:
+        return None, f"http_{resp.status_code}"
+
     try:
-        data = json.loads(raw)
+        data = resp.json()
     except (json.JSONDecodeError, ValueError):
         return None, "parse_error"
 
@@ -2365,21 +2390,26 @@ def extract_narrative(data: dict) -> str | None:
 
 def resolve_artwork(uri: str) -> dict | None:
     """Resolve a single artwork's Linked Art JSON-LD and extract Tier 2 fields."""
-    req = urllib.request.Request(uri, headers={
-        "Accept": "application/ld+json",
-        "Profile": "https://linked.art/ns/v1/linked-art.json",
-        "User-Agent": USER_AGENT,
-    })
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return {"_status": "not_found"}
-        # Log non-404 HTTP errors for diagnostics (500s, 503s, rate limits)
-        print(f"    HTTP {e.code} for {uri}", flush=True)
+        resp = get_http_session().get(uri, headers={
+            "Accept": "application/ld+json",
+            "Profile": "https://linked.art/ns/v1/linked-art.json",
+            "User-Agent": USER_AGENT,
+        }, timeout=30)
+    except requests.RequestException as e:
+        print(f"    Error for {uri}: {e}", flush=True)
         return None
-    except Exception as e:
+
+    if resp.status_code == 404:
+        return {"_status": "not_found"}
+    if not resp.ok:
+        # Log non-404 HTTP errors for diagnostics (500s, 503s, rate limits)
+        print(f"    HTTP {resp.status_code} for {uri}", flush=True)
+        return None
+
+    try:
+        data = resp.json()
+    except ValueError as e:
         print(f"    Error for {uri}: {e}", flush=True)
         return None
 
