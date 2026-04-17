@@ -2,8 +2,22 @@
 """Compare Iconclass subjects from OAI-PMH vs Linked Art VisualItem.represents_instance_of_type.
 
 Runs against all artworks in the Top 100 curated set (133 records).
+
+BUG FIXED 2026-04-17: The original `search_linked_art_uri` helper used
+`data.rijksmuseum.nl/search/collection?objectNumber=X` and took the first match.
+That endpoint returns prefix/substring matches, not exact matches — so for
+NG-2011-1 it returned HMO 200101886 (which is actually NG-2011-18-1-1, a
+completely different artwork). The VI fetch then retrieved iconclass for the
+wrong artwork, producing spurious "VI-only" divergences that drove the #203
+0.9% yield figure. With the fix, measured divergence is ~0 across 1,137 tested
+artworks. See #203 closing comment for the full analysis.
+
+Fix: resolve HMO URIs directly from the vocab DB. Supports two schemas:
+  - Pre-Phase-3 DBs (v0.23.1, pre-drops): read `artworks.linked_art_uri`
+  - Post-Phase-3 DBs with #253 lookup: join `artwork_hmo_ids`
 """
 
+import argparse
 import json
 import sqlite3
 import sys
@@ -11,7 +25,7 @@ import time
 import urllib.parse
 import urllib.request
 
-DB_PATH = "data/vocabulary.db"
+DEFAULT_DB_PATH = "data/vocabulary.db"
 LINKED_ART_BASE = "https://id.rijksmuseum.nl"
 USER_AGENT = "rijksmuseum-mcp-plus/probe"
 
@@ -57,18 +71,70 @@ def fetch_json(url):
         return json.loads(resp.read())
 
 
-def search_linked_art_uri(object_number):
-    """Get Linked Art URI for an object number via the search API."""
+def lookup_linked_art_uri(conn, object_number):
+    """Get the authoritative HMO Linked Art URI for an artwork.
+
+    Resolution order:
+      1. `artworks.linked_art_uri` column (pre-Phase-3 schema)
+      2. `artwork_hmo_ids` lookup (post-Phase-3 + #253)
+      3. Search API with result verification (legacy DBs)
+
+    The search-API path verifies each candidate against the exact object_number
+    via `identified_by`. Required because the API's `objectNumber=` filter is
+    prefix-based, not exact — NG-2011-1 returns 100 prefix matches with the
+    wrong one first. The verification adds a few HTTP calls on prefix-colliding
+    object numbers only; single-result searches are unaffected.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(artworks)")}
+    if "linked_art_uri" in cols:
+        row = conn.execute(
+            "SELECT linked_art_uri FROM artworks WHERE object_number = ?",
+            (object_number,),
+        ).fetchone()
+        if row and row[0]:
+            return row[0]
+
+    has_lookup = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='artwork_hmo_ids'"
+    ).fetchone()
+    if has_lookup:
+        row = conn.execute(
+            "SELECT 'https://id.rijksmuseum.nl/' || h.hmo_id "
+            "FROM artworks a JOIN artwork_hmo_ids h ON h.art_id = a.art_id "
+            "WHERE a.object_number = ?",
+            (object_number,),
+        ).fetchone()
+        if row:
+            return row[0]
+
+    # Legacy DB fallback: search API with verification
+    return search_and_verify_hmo(object_number)
+
+
+def search_and_verify_hmo(object_number, max_verify=20):
+    """Resolve object_number → HMO URI via the search API, verifying each candidate."""
     url = f"https://data.rijksmuseum.nl/search/collection?objectNumber={urllib.parse.quote(object_number)}"
-    req = urllib.request.Request(url, headers={"Accept": "application/ld+json", "User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-        items = data.get("orderedItems", [])
-        if items:
-            return items[0].get("id")
+        data = fetch_json(url)
     except Exception:
-        pass
+        return None
+    items = data.get("orderedItems", []) or []
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0].get("id")
+    for item in items[:max_verify]:
+        item_id = item.get("id")
+        if not item_id:
+            continue
+        try:
+            obj = fetch_json(item_id)
+        except Exception:
+            continue
+        for n in obj.get("identified_by", []) or []:
+            if (isinstance(n, dict) and n.get("type") == "Identifier"
+                    and n.get("content") == object_number):
+                return item_id
     return None
 
 
@@ -153,7 +219,15 @@ def get_vi_iconclass(linked_art_uri):
 
 
 def main():
-    conn = sqlite3.connect(DB_PATH)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--db", default=DEFAULT_DB_PATH,
+                        help=f"Path to vocabulary DB (default: {DEFAULT_DB_PATH})")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Limit to first N artworks (for quick checks)")
+    args = parser.parse_args()
+
+    print(f"Using DB: {args.db}")
+    conn = sqlite3.connect(args.db)
 
     total_oai = 0
     total_vi = 0
@@ -173,6 +247,8 @@ def main():
             seen.add(on)
             object_numbers.append(on)
 
+    if args.limit is not None:
+        object_numbers = object_numbers[:args.limit]
     total = len(object_numbers)
     print(f"Top 100 set: {total} unique object numbers\n")
 
@@ -186,8 +262,8 @@ def main():
             skipped += 1
             continue
 
-        # Get Linked Art URI
-        la_uri = search_linked_art_uri(obj_num)
+        # Get Linked Art URI from the DB (not the search API — see module docstring)
+        la_uri = lookup_linked_art_uri(conn, obj_num)
         if not la_uri:
             skipped += 1
             print(f"  [{i+1}/{total}] {obj_num}: no Linked Art URI — skipped")
