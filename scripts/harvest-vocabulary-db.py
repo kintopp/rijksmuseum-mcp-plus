@@ -3766,10 +3766,27 @@ def run_phase3(
 
     # geocode_method column must exist before import_geocoding() writes to it
     # and before the phase3.geocoding audit fires.
+    # NOTE: geocode_method is deprecated as of #218 in favor of the three
+    # per-field method columns below (coord_method, external_id_method,
+    # broader_method). Kept for schema compatibility during migration; to be
+    # dropped in a later cleanup pass.
     vocab_cols = get_columns(conn, "vocabulary")
     if "geocode_method" not in vocab_cols:
         conn.execute("ALTER TABLE vocabulary ADD COLUMN geocode_method TEXT")
         conn.commit()
+
+    # #218: per-field enrichment provenance. NULL = as-is from Rijksmuseum
+    # (LDES may overwrite); 'authority' = our direct canonical lookup
+    # (Wikidata P625, GeoNames, Getty TGN) — preserve across LDES updates;
+    # 'derived' = our heuristic (reconciliation, parent-fallback, validation
+    # fix) — preserve; 'human' = manual review — never auto-overwrite.
+    # See scripts/enrichment_methods.py for the detail-value vocabulary that
+    # backs each coarse tier.
+    enrichment_method_cols = ("coord_method", "external_id_method", "broader_method")
+    for col_name in enrichment_method_cols:
+        if col_name not in vocab_cols:
+            conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} TEXT")
+    conn.commit()
 
     # Person-enrichment columns must exist at server open() time — VocabularyDb.ts
     # caches `stmtArtworkMappings` against v.birth_year/death_year/gender/bio/wikidata_id
