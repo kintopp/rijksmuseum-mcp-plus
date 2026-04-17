@@ -127,11 +127,25 @@ def extract_geonames_id(uri: str) -> str | None:
     return None
 
 
-def geocode_geonames(places: list[dict]) -> dict[str, tuple[float, float]]:
+def geocode_geonames(places: list[dict],
+                     username: str | None = None) -> dict[str, tuple[float, float]]:
     """
     Geocode places via GeoNames JSON API.
     Free tier: 1000 req/hour, 1 req at a time.
+
+    ``username`` must be an activated GeoNames account with free-webservice
+    access enabled. Defaults to $GEONAMES_USERNAME from the env; falls back
+    to the shared 'demo' account which is almost always rate-limited out
+    and will silently yield 0 resolutions (the error response is a valid
+    JSON with ``status.value=18`` but no lat/lng). Use a real username.
     """
+    import os as _os
+    if not username:
+        username = _os.environ.get("GEONAMES_USERNAME", "demo")
+    if username == "demo":
+        print("WARNING: using 'demo' GeoNames account — will hit rate limit",
+              file=sys.stderr)
+
     gn_to_vocab: dict[str, list[str]] = {}
     for p in places:
         gn_id = extract_geonames_id(p["external_id"])
@@ -141,24 +155,33 @@ def geocode_geonames(places: list[dict]) -> dict[str, tuple[float, float]]:
     if not gn_to_vocab:
         return {}
 
-    print(f"GeoNames: {len(gn_to_vocab)} IDs to geocode", file=sys.stderr)
+    print(f"GeoNames: {len(gn_to_vocab)} IDs to geocode (user={username})",
+          file=sys.stderr)
 
     results: dict[str, tuple[float, float]] = {}
+    rate_limited_warned = False
     for i, gn_id in enumerate(gn_to_vocab):
         try:
-            url = f"{GEONAMES_API}?geonameId={gn_id}&username=demo"
+            url = f"{GEONAMES_API}?geonameId={gn_id}&username={username}"
             data = fetch_json(url)
             if "lat" in data and "lng" in data:
                 lat = float(data["lat"])
                 lon = float(data["lng"])
                 for vocab_id in gn_to_vocab[gn_id]:
                     results[vocab_id] = (lat, lon)
+            elif "status" in data and not rate_limited_warned:
+                # Surface the API error once (e.g. rate limit, bad username).
+                print(f"  GeoNames API error for {gn_id}: "
+                      f"{data['status'].get('message', 'unknown')}",
+                      file=sys.stderr)
+                rate_limited_warned = True
         except Exception as e:
             print(f"  GeoNames {gn_id} error: {e}", file=sys.stderr)
 
         # Rate limit: ~1 req/sec for free tier
         if (i + 1) % 100 == 0:
-            print(f"  ... {i + 1}/{len(gn_to_vocab)} done", file=sys.stderr)
+            print(f"  ... {i + 1}/{len(gn_to_vocab)} done ({len(results)} resolved)",
+                  file=sys.stderr)
         time.sleep(0.5)
 
     print(f"GeoNames: resolved {len(results)} places", file=sys.stderr)
