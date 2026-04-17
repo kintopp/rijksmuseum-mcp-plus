@@ -100,7 +100,7 @@ def main() -> int:
             hmo_id TEXT NOT NULL
         )
     """)
-    conn.execute("""
+    cur = conn.execute("""
         INSERT OR IGNORE INTO artwork_hmo_ids (art_id, hmo_id)
         SELECT art_id,
                SUBSTR(linked_art_uri, INSTR(linked_art_uri, '.nl/') + 4)
@@ -109,11 +109,11 @@ def main() -> int:
           AND linked_art_uri IS NOT NULL AND linked_art_uri != ''
           AND art_id IS NOT NULL
     """)
+    inserted = cur.rowcount
     conn.commit()
 
-    post_count = conn.execute("SELECT COUNT(*) FROM artwork_hmo_ids").fetchone()[0]
-    print(f"artwork_hmo_ids now has: {post_count:,} rows")
-    print(f"  inserted this run: {post_count - pre_count:,}")
+    print(f"artwork_hmo_ids now has: {pre_count + inserted:,} rows")
+    print(f"  inserted this run: {inserted:,}")
     print(f"  elapsed: {time.time() - t0:.1f}s")
 
     # Sanity check — pick 3 random rows and confirm URI reconstruction

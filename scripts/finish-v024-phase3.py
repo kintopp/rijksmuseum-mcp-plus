@@ -140,7 +140,7 @@ def preserve_artwork_hmo_ids(conn: sqlite3.Connection) -> None:
     linked_art_uri column is dropped, so decoupled post-harvest backfills (e.g.
     VI-iconclass #203) can still derive per-artwork HMO URIs.
     """
-    t0 = step("Preserving art_id → hmo_id lookup (#253)")
+    t0 = step("Preserving art_id → hmo_id lookup")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS artwork_hmo_ids (
             art_id INTEGER PRIMARY KEY,
