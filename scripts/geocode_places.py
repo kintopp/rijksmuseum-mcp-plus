@@ -192,7 +192,14 @@ def extract_rijks_id(uri: str) -> str | None:
 
 def get_ungeocoded(conn: sqlite3.Connection, category: str | None = None
                    ) -> list[dict]:
-    """Get places missing coordinates, optionally filtered by category."""
+    """Get places missing coordinates, optionally filtered by category.
+
+    Legacy helper: reads from ``vocabulary.external_id`` only. Phases 1a/1b/1c
+    should use ``get_ungeocoded_by_authority`` instead, which also picks up
+    authority links stored exclusively in ``vocabulary_external_ids``
+    (~2,000 TGN + ~48 GeoNames rows added by #238). Still used by self-ref
+    (Phase 2) and no_external (Phase 3) paths.
+    """
     base = """
         SELECT v.id, v.label_en, v.label_nl, v.external_id,
                COALESCE(NULLIF(v.label_en, ''), v.label_nl) AS name
@@ -215,6 +222,91 @@ def get_ungeocoded(conn: sqlite3.Connection, category: str | None = None
 
     rows = conn.execute(base).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_ungeocoded_by_authority(conn: sqlite3.Connection, authority: str
+                                ) -> list[dict]:
+    """Get ungeocoded places with an authority link, unified across both sources.
+
+    Reads from ``vocabulary_external_ids`` (primary — bare IDs, multi-ID support)
+    UNION with ``vocabulary.external_id`` (legacy — single URI per row, pre-#238).
+    Returns one row per vocab_id; prefers the ``vocabulary_external_ids`` entry
+    when both sources have it.
+
+    ``authority`` is one of the ``vocabulary_external_ids.authority`` values:
+    ``'wikidata'``, ``'geonames'``, ``'tgn'``, etc.
+
+    Returns dicts with: ``id`` (vocab_id), ``label_en``, ``label_nl``, ``name``,
+    ``authority_id`` (bare entity ID, already parsed), ``authority_uri``
+    (full URI, when available).
+    """
+    # Legacy column mapping: authority → LIKE pattern + extractor name.
+    # Only the three external-coord authorities are supported here; self-ref
+    # is handled separately (Phase 2).
+    legacy_like = {
+        "wikidata": "%wikidata%",
+        "geonames": "%geonames%",
+        "tgn":      "%getty.edu/tgn%",
+    }[authority]
+
+    # Primary: vocabulary_external_ids has the bare id + uri directly.
+    # A handful of places carry multiple entries for the same authority
+    # (e.g. merged records with two Wikidata IDs); keep only the first
+    # encountered row per vocab_id.
+    primary = conn.execute("""
+        SELECT v.id, v.label_en, v.label_nl,
+               COALESCE(NULLIF(v.label_en, ''), v.label_nl) AS name,
+               vei.id AS authority_id,
+               vei.uri AS authority_uri
+        FROM vocabulary v
+        JOIN vocabulary_external_ids vei ON vei.vocab_id = v.id
+        WHERE v.type = 'place' AND v.lat IS NULL AND vei.authority = ?
+    """, (authority,)).fetchall()
+
+    seen: set[str] = set()
+    result: list[dict] = []
+    for r in primary:
+        vocab_id = r["id"]
+        if vocab_id in seen:
+            continue
+        seen.add(vocab_id)
+        result.append(dict(r))
+
+    # Legacy: vocabulary.external_id only. Extract the bare ID in Python
+    # via the authority-specific extractor.
+    legacy_rows = conn.execute(f"""
+        SELECT v.id, v.label_en, v.label_nl,
+               COALESCE(NULLIF(v.label_en, ''), v.label_nl) AS name,
+               v.external_id
+        FROM vocabulary v
+        WHERE v.type = 'place' AND v.lat IS NULL
+          AND v.external_id LIKE ?
+    """, (legacy_like,)).fetchall()
+
+    extractor = {
+        "wikidata": extract_qid,
+        "geonames": extract_geonames_id,
+        "tgn":      extract_tgn_id,
+    }[authority]
+
+    for r in legacy_rows:
+        vocab_id = r["id"]
+        if vocab_id in seen:
+            continue  # already covered via vocabulary_external_ids
+        authority_id = extractor(r["external_id"] or "")
+        if not authority_id:
+            continue
+        result.append({
+            "id":            vocab_id,
+            "label_en":      r["label_en"],
+            "label_nl":      r["label_nl"],
+            "name":          r["name"],
+            "authority_id":  authority_id,
+            "authority_uri": r["external_id"],
+        })
+        seen.add(vocab_id)
+
+    return result
 
 
 def update_coords(conn: sqlite3.Connection,
@@ -318,18 +410,24 @@ def get_coverage(conn: sqlite3.Connection) -> tuple[int, int]:
 
 def phase_1a_geonames(conn: sqlite3.Connection, username: str,
                       dry_run: bool = False) -> int:
-    """Geocode places with GeoNames IDs via the GeoNames API."""
-    places = get_ungeocoded(conn, "geonames")
+    """Geocode places with GeoNames IDs via the GeoNames API.
+
+    Sources authority IDs from both ``vocabulary_external_ids`` (primary,
+    post-#238) and ``vocabulary.external_id`` (legacy). See
+    ``get_ungeocoded_by_authority``.
+    """
+    places = get_ungeocoded_by_authority(conn, "geonames")
     if not places:
         print("Phase 1a: No GeoNames entries to geocode", file=sys.stderr)
         return 0
 
-    # Build ID → vocab_id mapping
+    # Build ID → vocab_id mapping. authority_id is already the bare GeoNames
+    # numeric ID thanks to the helper's extractor logic.
     gn_to_vocab: dict[str, list[str]] = {}
     for p in places:
-        gn_id = extract_geonames_id(p["external_id"] or "")
-        if gn_id and gn_id.isdigit():
-            gn_to_vocab.setdefault(gn_id, []).append(p["id"])
+        gn_id = p["authority_id"]
+        if gn_id and str(gn_id).isdigit():
+            gn_to_vocab.setdefault(str(gn_id), []).append(p["id"])
 
     print(f"Phase 1a: {len(gn_to_vocab)} GeoNames IDs to geocode", file=sys.stderr)
 
@@ -374,17 +472,28 @@ def phase_1a_geonames(conn: sqlite3.Connection, username: str,
 
 def phase_1b_wikidata_alt(conn: sqlite3.Connection,
                           dry_run: bool = False) -> int:
-    """Geocode Wikidata entries missing P625 via alternative properties."""
-    places = get_ungeocoded(conn, "wikidata")
+    """Geocode Wikidata entries missing P625 via alternative properties.
+
+    Fires for QIDs where the direct P625 lookup failed (handled earlier by
+    ``batch_geocode.geocode_wikidata``). Tries three alternative paths in
+    priority order — P159 (headquarters) → P276 (location) → P131 (admin
+    territory) — and tags each write with the specific property that won
+    (so downstream consumers can distinguish e.g. a parent-admin fallback
+    from a direct headquarters match).
+
+    Sources QIDs from both ``vocabulary_external_ids`` and the legacy
+    ``vocabulary.external_id`` column.
+    """
+    places = get_ungeocoded_by_authority(conn, "wikidata")
     if not places:
         print("Phase 1b: No Wikidata entries to geocode", file=sys.stderr)
         return 0
 
-    # Build QID → vocab_id mapping
+    # Build QID → vocab_id mapping.
     qid_to_vocab: dict[str, list[str]] = {}
     for p in places:
-        qid = extract_qid(p["external_id"] or "")
-        if qid:
+        qid = p["authority_id"]
+        if qid and str(qid).startswith("Q"):
             qid_to_vocab.setdefault(qid, []).append(p["id"])
 
     print(f"Phase 1b: {len(qid_to_vocab)} Wikidata QIDs without P625",
@@ -393,7 +502,15 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
     if dry_run:
         return 0
 
-    results: dict[str, tuple[float, float]] = {}
+    # Per-result: {vocab_id: (lat, lon, detail)}. Priority order enforces
+    # P159 > P276 > P131 if a QID has multiple alt-paths.
+    PROP_PRIORITY = {em.WIKIDATA_P159: 0, em.WIKIDATA_P276: 1, em.WIKIDATA_P131: 2}
+    PROP_FROM_SPARQL = {
+        "P159": em.WIKIDATA_P159,
+        "P276": em.WIKIDATA_P276,
+        "P131": em.WIKIDATA_P131,
+    }
+    per_qid: dict[str, tuple[float, float, str]] = {}
     qids = list(qid_to_vocab.keys())
     batch_size = 200
 
@@ -401,22 +518,23 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
         batch = qids[i:i + batch_size]
         values = " ".join(f"wd:{qid}" for qid in batch)
 
-        # Try three alternative property paths:
-        # P159 (headquarters location) → P625
-        # P131 (located in admin territory) → P625
-        # P276 (location) → P625
+        # Same three UNION branches as before, now with a ?prop binding so
+        # we know which path produced each coordinate.
         query = f"""
-        SELECT ?item ?lat ?lon WHERE {{
+        SELECT ?item ?lat ?lon ?prop WHERE {{
           VALUES ?item {{ {values} }}
           {{
             ?item wdt:P159 ?hq .
             ?hq wdt:P625 ?coord .
+            BIND("P159" AS ?prop)
           }} UNION {{
             ?item wdt:P276 ?loc .
             ?loc wdt:P625 ?coord .
+            BIND("P276" AS ?prop)
           }} UNION {{
             ?item wdt:P131 ?admin .
             ?admin wdt:P625 ?coord .
+            BIND("P131" AS ?prop)
           }}
           BIND(geof:latitude(?coord) AS ?lat)
           BIND(geof:longitude(?coord) AS ?lon)
@@ -429,11 +547,14 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
                 qid = b["item"]["value"].rsplit("/", 1)[-1]
                 lat = float(b["lat"]["value"])
                 lon = float(b["lon"]["value"])
-                if qid in qid_to_vocab and qid not in results:
-                    # Take first result per QID (prefer P159 over P131)
-                    for vocab_id in qid_to_vocab[qid]:
-                        if vocab_id not in results:
-                            results[vocab_id] = (lat, lon)
+                prop_raw = b["prop"]["value"]
+                detail = PROP_FROM_SPARQL.get(prop_raw)
+                if detail is None:
+                    continue
+                # Keep the highest-priority (lowest number) detail per QID.
+                existing = per_qid.get(qid)
+                if existing is None or PROP_PRIORITY[detail] < PROP_PRIORITY[existing[2]]:
+                    per_qid[qid] = (lat, lon, detail)
 
             print(f"  Batch {i // batch_size + 1}: {len(batch)} QIDs → "
                   f"{len(bindings)} with alt coords", file=sys.stderr)
@@ -442,11 +563,22 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
 
         time.sleep(2)
 
-    # TODO step 3: track which P-property won (P625 / P159 / P131 / P276)
-    # per-result and tag individually instead of bulk-tagging as P625.
-    updated = update_coords(conn, results, em.WIKIDATA_P625, dry_run)
-    print(f"Phase 1b: {updated} places updated", file=sys.stderr)
-    return updated
+    # Fan out per-QID results to vocab_ids, bucketed by detail tag for
+    # separate UPDATE calls (update_coords takes one detail per call).
+    by_detail: dict[str, dict[str, tuple[float, float]]] = defaultdict(dict)
+    for qid, (lat, lon, detail) in per_qid.items():
+        for vocab_id in qid_to_vocab[qid]:
+            by_detail[detail][vocab_id] = (lat, lon)
+
+    total = 0
+    for detail, results in by_detail.items():
+        total += update_coords(conn, results, detail, dry_run)
+    print(f"Phase 1b: {total} places updated "
+          f"(P159={len(by_detail.get(em.WIKIDATA_P159, {}))}, "
+          f"P276={len(by_detail.get(em.WIKIDATA_P276, {}))}, "
+          f"P131={len(by_detail.get(em.WIKIDATA_P131, {}))})",
+          file=sys.stderr)
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -455,18 +587,30 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
 
 def phase_1c_getty_crossref(conn: sqlite3.Connection,
                             dry_run: bool = False) -> int:
-    """Cross-reference Getty TGN IDs to Wikidata via P1667."""
-    places = get_ungeocoded(conn, "getty_tgn")
+    """Cross-reference Getty TGN IDs to Wikidata via P1667.
+
+    This is the *indirect* TGN path — Wikidata entities that reference a TGN
+    ID via their P1667 ("Getty Thesaurus of Geographic Names ID") property,
+    from which we pull P625. The *direct* TGN path (dereferencing Getty's
+    own SPARQL for coords) is handled by ``batch_geocode.geocode_getty()``
+    and tagged ``em.TGN_DIRECT``. This phase fires as the fallback for TGN
+    IDs that direct lookup failed to geocode — tagged ``em.TGN_VIA_WIKIDATA``.
+
+    Sources TGN IDs from both ``vocabulary_external_ids`` (primary — where
+    most TGN links live post-#238) and legacy ``vocabulary.external_id``.
+    """
+    places = get_ungeocoded_by_authority(conn, "tgn")
     if not places:
         print("Phase 1c: No Getty TGN entries to geocode", file=sys.stderr)
         return 0
 
-    # Build TGN ID → vocab_id mapping
+    # Build TGN ID → vocab_id mapping. authority_id is already the bare
+    # numeric TGN ID from the helper.
     tgn_to_vocab: dict[str, list[str]] = {}
     for p in places:
-        tgn_id = extract_tgn_id(p["external_id"] or "")
+        tgn_id = p["authority_id"]
         if tgn_id:
-            tgn_to_vocab.setdefault(tgn_id, []).append(p["id"])
+            tgn_to_vocab.setdefault(str(tgn_id), []).append(p["id"])
 
     print(f"Phase 1c: {len(tgn_to_vocab)} Getty TGN IDs to cross-reference",
           file=sys.stderr)
@@ -509,8 +653,9 @@ def phase_1c_getty_crossref(conn: sqlite3.Connection,
 
         time.sleep(2)
 
-    # TODO step 3: distinguish tgn_direct vs tgn_via_wikidata_p1667 sub-paths
-    # based on which resolution branch yielded coords.
+    # Phase 1c is the via-Wikidata-P1667 path by construction; the direct
+    # TGN path (tgn_direct) lives in batch_geocode.geocode_getty(). No
+    # per-result sub-path distinction needed here.
     updated = update_coords(conn, results, em.TGN_VIA_WIKIDATA, dry_run)
     print(f"Phase 1c: {updated} places updated", file=sys.stderr)
     return updated
