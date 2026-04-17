@@ -254,27 +254,76 @@ def main():
         print(f"DB not found: {args.db}", file=sys.stderr)
         sys.exit(1)
 
-    # Get all places missing coordinates but having external IDs
+    # Get ungeocoded places with external-authority links. Source of truth
+    # is vocabulary_external_ids (populated by #238's Schema.org sweep); we
+    # also union the legacy vocabulary.external_id column for pre-#238 rows.
+    # After a cold re-run reset, vocabulary.external_id is NULL for every
+    # non-Rijksmuseum-self-ref place, so the primary source here is the
+    # vei table.
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
-    rows = conn.execute("""
+
+    # Primary: vocabulary_external_ids (authority-keyed). Dedup per vocab_id.
+    primary = conn.execute("""
+        SELECT v.id,
+               vei.authority,
+               vei.uri AS external_id,
+               v.label_en, v.label_nl
+        FROM vocabulary v
+        JOIN vocabulary_external_ids vei ON vei.vocab_id = v.id
+        WHERE v.type = 'place' AND v.lat IS NULL
+          AND vei.authority IN ('wikidata', 'geonames', 'tgn')
+    """).fetchall()
+
+    by_vocab: dict[str, dict] = {}
+    for r in primary:
+        vid = r["id"]
+        if vid not in by_vocab:
+            by_vocab[vid] = dict(r)
+
+    # Legacy: any remaining places with a matching substring in
+    # vocabulary.external_id that we haven't covered yet (mostly empty
+    # after a cold-reset; kept for robustness).
+    legacy_rows = conn.execute("""
         SELECT id, external_id, label_en, label_nl
         FROM vocabulary
-        WHERE type = 'place'
-          AND lat IS NULL
-          AND external_id IS NOT NULL
-          AND external_id != ''
+        WHERE type = 'place' AND lat IS NULL
+          AND external_id IS NOT NULL AND external_id != ''
+          AND (external_id LIKE '%wikidata%'
+               OR external_id LIKE '%geonames%'
+               OR external_id LIKE '%getty.edu/tgn%')
     """).fetchall()
-    places = [dict(r) for r in rows]
+    for r in legacy_rows:
+        vid = r["id"]
+        if vid in by_vocab:
+            continue
+        uri = r["external_id"] or ""
+        if "wikidata" in uri:
+            auth = "wikidata"
+        elif "geonames" in uri:
+            auth = "geonames"
+        elif "getty.edu/tgn" in uri:
+            auth = "tgn"
+        else:
+            continue
+        by_vocab[vid] = dict(
+            id=vid,
+            authority=auth,
+            external_id=uri,
+            label_en=r["label_en"],
+            label_nl=r["label_nl"],
+        )
+
+    places = list(by_vocab.values())
     conn.close()
 
     print(f"Found {len(places)} places missing coordinates with external IDs",
           file=sys.stderr)
 
-    # Categorize
-    wikidata = [p for p in places if "wikidata" in (p["external_id"] or "")]
-    geonames = [p for p in places if "geonames" in (p["external_id"] or "")]
-    getty = [p for p in places if "getty.edu/tgn" in (p["external_id"] or "")]
+    # Categorize by authority (not substring).
+    wikidata = [p for p in places if p["authority"] == "wikidata"]
+    geonames = [p for p in places if p["authority"] == "geonames"]
+    getty    = [p for p in places if p["authority"] == "tgn"]
 
     print(f"  Wikidata: {len(wikidata)}", file=sys.stderr)
     print(f"  GeoNames: {len(geonames)}", file=sys.stderr)
