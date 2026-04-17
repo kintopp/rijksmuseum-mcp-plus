@@ -38,6 +38,11 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 
+# Local module for #218 enrichment-provenance constants (tier_for, detail values).
+# Sibling file, same dir.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import enrichment_methods as em  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Load .env from project root (no external dependency)
 # ---------------------------------------------------------------------------
@@ -212,9 +217,17 @@ def get_ungeocoded(conn: sqlite3.Connection, category: str | None = None
     return [dict(r) for r in rows]
 
 
-def update_coords(conn: sqlite3.Connection, updates: dict[str, tuple[float, float]],
+def update_coords(conn: sqlite3.Connection,
+                  updates: dict[str, tuple[float, float]],
+                  coord_method_detail: str,
                   dry_run: bool = False) -> int:
-    """Write lat/lon to vocabulary table. Returns count updated.
+    """Write lat/lon + coord_method to vocabulary. Returns count updated.
+
+    ``coord_method_detail`` is one of the fine-grained constants from
+    ``enrichment_methods`` (e.g. ``em.GEONAMES_API``, ``em.WIKIDATA_P625``).
+    The coarse tier (authority / derived / human) is derived via
+    ``em.tier_for(coord_method_detail)`` and written to ``coord_method``.
+    The detail value itself is CSV-only per #218 (not stored in the DB).
 
     The `AND lat IS NULL` guard is trust-tier enforcement, not a performance
     optimisation: phases run in priority order (1a GeoNames API → 1b Wikidata
@@ -228,12 +241,14 @@ def update_coords(conn: sqlite3.Connection, updates: dict[str, tuple[float, floa
     """
     if dry_run or not updates:
         return 0
+    coord_tier = em.tier_for(coord_method_detail)  # raises on unknown — fail fast
     cursor = conn.cursor()
     updated = 0
     for vocab_id, (lat, lon) in updates.items():
         cursor.execute(
-            "UPDATE vocabulary SET lat = ?, lon = ? WHERE id = ? AND lat IS NULL",
-            (lat, lon, vocab_id),
+            "UPDATE vocabulary SET lat = ?, lon = ?, coord_method = ? "
+            "WHERE id = ? AND lat IS NULL",
+            (lat, lon, coord_tier, vocab_id),
         )
         updated += cursor.rowcount
     conn.commit()
@@ -242,21 +257,27 @@ def update_coords(conn: sqlite3.Connection, updates: dict[str, tuple[float, floa
 
 def update_coords_and_ids(conn: sqlite3.Connection,
                           updates: dict[str, tuple[float, float, str]],
+                          coord_method_detail: str,
+                          external_id_method_detail: str,
                           dry_run: bool = False) -> int:
-    """Write lat/lon + external_id to vocabulary table. Returns count updated.
+    """Write lat/lon + external_id + both method tiers to vocabulary.
 
-    Same trust-tier enforcement as `update_coords` — see its docstring. The
-    `AND lat IS NULL` guard is load-bearing, not a perf trick.
+    Both detail parameters are required and validated via ``em.tier_for()``.
+    Same trust-tier enforcement as ``update_coords`` — see its docstring.
+    The ``AND lat IS NULL`` guard is load-bearing, not a perf trick.
     """
     if dry_run or not updates:
         return 0
+    coord_tier = em.tier_for(coord_method_detail)
+    ext_id_tier = em.tier_for(external_id_method_detail)
     cursor = conn.cursor()
     updated = 0
     for vocab_id, (lat, lon, ext_id) in updates.items():
         cursor.execute(
-            "UPDATE vocabulary SET lat = ?, lon = ?, external_id = ? "
+            "UPDATE vocabulary SET lat = ?, lon = ?, external_id = ?, "
+            "coord_method = ?, external_id_method = ? "
             "WHERE id = ? AND lat IS NULL",
-            (lat, lon, ext_id, vocab_id),
+            (lat, lon, ext_id, coord_tier, ext_id_tier, vocab_id),
         )
         updated += cursor.rowcount
     conn.commit()
@@ -342,7 +363,7 @@ def phase_1a_geonames(conn: sqlite3.Connection, username: str,
             print(f"  ... {i + 1}/{len(gn_to_vocab)} done ({len(results)} found)",
                   file=sys.stderr)
 
-    updated = update_coords(conn, results, dry_run)
+    updated = update_coords(conn, results, em.GEONAMES_API, dry_run)
     print(f"Phase 1a: {updated} places updated ({errors} errors)", file=sys.stderr)
     return updated
 
@@ -421,7 +442,9 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
 
         time.sleep(2)
 
-    updated = update_coords(conn, results, dry_run)
+    # TODO step 3: track which P-property won (P625 / P159 / P131 / P276)
+    # per-result and tag individually instead of bulk-tagging as P625.
+    updated = update_coords(conn, results, em.WIKIDATA_P625, dry_run)
     print(f"Phase 1b: {updated} places updated", file=sys.stderr)
     return updated
 
@@ -486,7 +509,9 @@ def phase_1c_getty_crossref(conn: sqlite3.Connection,
 
         time.sleep(2)
 
-    updated = update_coords(conn, results, dry_run)
+    # TODO step 3: distinguish tgn_direct vs tgn_via_wikidata_p1667 sub-paths
+    # based on which resolution branch yielded coords.
+    updated = update_coords(conn, results, em.TGN_VIA_WIKIDATA, dry_run)
     print(f"Phase 1c: {updated} places updated", file=sys.stderr)
     return updated
 
@@ -521,7 +546,7 @@ def phase_2_self_refs(conn: sqlite3.Connection,
         return 0
 
     results = {r["src_id"]: (r["lat"], r["lon"]) for r in rows}
-    updated = update_coords(conn, results, dry_run)
+    updated = update_coords(conn, results, em.SELF_REF, dry_run)
     print(f"Phase 2: {updated} places updated", file=sys.stderr)
     return updated
 
@@ -985,7 +1010,12 @@ def phase_3_reconciliation(conn: sqlite3.Connection,
         ext_id = f"http://www.wikidata.org/entity/{qid}"
         updates[vocab_id] = (lat, lon, ext_id)
 
-    updated = update_coords_and_ids(conn, updates, dry_run)
+    updated = update_coords_and_ids(
+        conn, updates,
+        coord_method_detail=em.WIKIDATA_RECONCILIATION,
+        external_id_method_detail=em.WIKIDATA_RECONCILIATION,
+        dry_run=dry_run,
+    )
     print(f"Phase 3d: {updated} places updated with Wikidata matches",
           file=sys.stderr)
     return updated
@@ -1354,7 +1384,12 @@ def phase_3b_whg(conn: sqlite3.Connection,
         whg_uri = f"https://whgazetteer.org/entity/{eid}/"
         updates[vid] = (lat, lon, whg_uri)
 
-    updated = update_coords_and_ids(conn, updates, dry_run)
+    updated = update_coords_and_ids(
+        conn, updates,
+        coord_method_detail=em.WHG_RECONCILIATION,
+        external_id_method_detail=em.WHG_RECONCILIATION,
+        dry_run=dry_run,
+    )
     print(f"Phase 3b-5: {updated} places updated with WHG matches",
           file=sys.stderr)
     return updated
@@ -1685,7 +1720,12 @@ def phase_3c_whg_bridge(conn: sqlite3.Connection,
             best_ext_id = f"https://whgazetteer.org/entity/{t['entity_id']}/"
         updates[row["vid"]] = (t["lat"], t["lon"], best_ext_id)
 
-    updated = update_coords_and_ids(conn, updates, dry_run)
+    updated = update_coords_and_ids(
+        conn, updates,
+        coord_method_detail=em.WHG_BRIDGE,
+        external_id_method_detail=em.WHG_BRIDGE,
+        dry_run=dry_run,
+    )
     print(f"Phase 3c-5: {updated} places updated", file=sys.stderr)
     return updated
 
@@ -1741,7 +1781,16 @@ def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
     if dry_run:
         return 0
 
-    updated = update_coords_and_ids(conn, updates, dry_run)
+    # TODO step 4: differentiate the three HUMAN-tier details
+    # (RECONCILED_REVIEW_ACCEPTED, WHG_REVIEW_ACCEPTED, WHG_BRIDGE_REVIEW_ACCEPTED)
+    # based on csv_path filename. Currently 0 rows use this path; using the
+    # Wikidata-review detail as the placeholder tag.
+    updated = update_coords_and_ids(
+        conn, updates,
+        coord_method_detail=em.RECONCILED_REVIEW_ACCEPTED,
+        external_id_method_detail=em.RECONCILED_REVIEW_ACCEPTED,
+        dry_run=dry_run,
+    )
     print(f"Apply reviewed: {updated} places updated", file=sys.stderr)
     return updated
 

@@ -284,26 +284,32 @@ def main():
         print("Dry run — not updating database", file=sys.stderr)
         return
 
-    all_results: dict[str, tuple[float, float]] = {}
+    # #218: each source is tagged with its own fine-grained detail value so
+    # downstream consumers can distinguish "direct Wikidata P625" from
+    # "direct Getty TGN" etc. The coarse tier (AUTHORITY) is derived via
+    # em.tier_for() at write time. Keep the three result dicts separate so
+    # source attribution isn't lost at merge.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import enrichment_methods as em  # local import
+
+    result_sets: list[tuple[dict[str, tuple[float, float]], str]] = []
 
     # 1. Wikidata (fastest — batch SPARQL)
     if wikidata:
-        wd_results = geocode_wikidata(wikidata)
-        all_results.update(wd_results)
+        result_sets.append((geocode_wikidata(wikidata), em.WIKIDATA_P625))
 
     # 2. Getty TGN (batch SPARQL)
     if getty:
-        getty_results = geocode_getty(getty)
-        all_results.update(getty_results)
+        result_sets.append((geocode_getty(getty), em.TGN_DIRECT))
 
     # 3. GeoNames (slow — one-by-one API, skip by default)
     if geonames and not args.skip_geonames:
-        gn_results = geocode_geonames(geonames)
-        all_results.update(gn_results)
+        result_sets.append((geocode_geonames(geonames), em.GEONAMES_API))
 
     # Update the database
-    if all_results:
-        print(f"\nUpdating {len(all_results)} places in database...", file=sys.stderr)
+    total_rows = sum(len(r) for r, _ in result_sets)
+    if total_rows:
+        print(f"\nUpdating {total_rows} places in database...", file=sys.stderr)
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
         updated = 0
@@ -313,12 +319,17 @@ def main():
         # a prior pass — whether from this script's own earlier phases or
         # from geocode_places.py's higher-confidence phases. See #218 and
         # geocode_places.update_coords for the full rationale.
-        for vocab_id, (lat, lon) in all_results.items():
-            cursor.execute(
-                "UPDATE vocabulary SET lat = ?, lon = ? WHERE id = ? AND lat IS NULL",
-                (lat, lon, vocab_id),
-            )
-            updated += cursor.rowcount
+        for results, detail in result_sets:
+            if not results:
+                continue
+            coord_tier = em.tier_for(detail)
+            for vocab_id, (lat, lon) in results.items():
+                cursor.execute(
+                    "UPDATE vocabulary SET lat = ?, lon = ?, coord_method = ? "
+                    "WHERE id = ? AND lat IS NULL",
+                    (lat, lon, coord_tier, vocab_id),
+                )
+                updated += cursor.rowcount
         conn.commit()
         conn.close()
         print(f"Updated {updated} rows", file=sys.stderr)
