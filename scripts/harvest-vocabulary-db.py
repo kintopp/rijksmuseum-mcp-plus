@@ -3600,6 +3600,11 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
     """Propagate lat/lon from geocoded parent places to ungeocoded children.
 
     Walks vocabulary.broader_id up to depth 10. Idempotent.
+
+    #218: inherited coords are tagged ``coord_method = 'derived'`` (detail
+    ``parent_fallback`` lives only in the backfill CSV). NULL means
+    Rijksmuseum-originated; our inheritance is a local derivation that
+    should survive LDES updates.
     """
     total = 0
     max_depth = 10
@@ -3609,7 +3614,7 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
                    SELECT p.lat FROM vocabulary p WHERE p.id = vocabulary.broader_id
                ), lon = (
                    SELECT p.lon FROM vocabulary p WHERE p.id = vocabulary.broader_id
-               )
+               ), coord_method = 'derived'
                WHERE type = 'place'
                  AND lat IS NULL
                  AND broader_id IS NOT NULL

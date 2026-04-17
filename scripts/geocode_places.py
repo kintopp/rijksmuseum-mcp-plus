@@ -1926,17 +1926,27 @@ def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
     if dry_run:
         return 0
 
-    # TODO step 4: differentiate the three HUMAN-tier details
-    # (RECONCILED_REVIEW_ACCEPTED, WHG_REVIEW_ACCEPTED, WHG_BRIDGE_REVIEW_ACCEPTED)
-    # based on csv_path filename. Currently 0 rows use this path; using the
-    # Wikidata-review detail as the placeholder tag.
+    # Pick the HUMAN-tier detail based on which review CSV was supplied.
+    # Three shapes per #218 §"Phase → method assignment":
+    #   reconciled_review.csv  → RECONCILED_REVIEW_ACCEPTED
+    #   whg_review.csv         → WHG_REVIEW_ACCEPTED
+    #   whg_bridge_review.csv  → WHG_BRIDGE_REVIEW_ACCEPTED
+    name = path.name.lower()
+    if "bridge" in name:
+        review_detail = em.WHG_BRIDGE_REVIEW_ACCEPTED
+    elif "whg" in name:
+        review_detail = em.WHG_REVIEW_ACCEPTED
+    else:
+        review_detail = em.RECONCILED_REVIEW_ACCEPTED
+
     updated = update_coords_and_ids(
         conn, updates,
-        coord_method_detail=em.RECONCILED_REVIEW_ACCEPTED,
-        external_id_method_detail=em.RECONCILED_REVIEW_ACCEPTED,
+        coord_method_detail=review_detail,
+        external_id_method_detail=review_detail,
         dry_run=dry_run,
     )
-    print(f"Apply reviewed: {updated} places updated", file=sys.stderr)
+    print(f"Apply reviewed ({review_detail}): {updated} places updated",
+          file=sys.stderr)
     return updated
 
 

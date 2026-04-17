@@ -639,12 +639,14 @@ def phase_3_coord_inheritance(conn, dry_run=False):
                 break
             total_inherited += count
         else:
+            # #218: inherited coords tagged coord_method='derived'
+            # (detail parent_fallback, CSV-only).
             cur = conn.execute(
                 """UPDATE vocabulary SET lat = (
                        SELECT p.lat FROM vocabulary p WHERE p.id = vocabulary.broader_id
                    ), lon = (
                        SELECT p.lon FROM vocabulary p WHERE p.id = vocabulary.broader_id
-                   )
+                   ), coord_method = 'derived'
                    WHERE type = 'place'
                      AND lat IS NULL
                      AND broader_id IS NOT NULL
