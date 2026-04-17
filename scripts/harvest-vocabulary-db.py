@@ -3710,6 +3710,11 @@ def run_enrichment(conn: sqlite3.Connection, dumps_dir: Path) -> bool:
     propagate_place_coordinates(conn)
     _create_enrichment_indexes(conn)
 
+    # Ensure version_info exists — enrichment runs before the main version_info
+    # block later in run_phase3, so we can't assume the table is already there.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS version_info (key TEXT PRIMARY KEY, value TEXT)"
+    )
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
         "INSERT OR REPLACE INTO version_info (key, value) VALUES ('enriched_at', ?)",
