@@ -135,6 +135,34 @@ def resolve_art_ids_via_temp_join(conn: sqlite3.Connection) -> None:
     cur.execute("DROP TABLE _tmp_hmo_art")
 
 
+def preserve_artwork_hmo_ids(conn: sqlite3.Connection) -> None:
+    """Fix #253: copy (art_id, hmo_id) into a permanent lookup table BEFORE the
+    linked_art_uri column is dropped, so decoupled post-harvest backfills (e.g.
+    VI-iconclass #203) can still derive per-artwork HMO URIs.
+    """
+    t0 = step("Preserving art_id → hmo_id lookup (#253)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS artwork_hmo_ids (
+            art_id INTEGER PRIMARY KEY,
+            hmo_id TEXT NOT NULL
+        )
+    """)
+    if "linked_art_uri" in get_columns(conn, "artworks"):
+        conn.execute("""
+            INSERT OR IGNORE INTO artwork_hmo_ids (art_id, hmo_id)
+            SELECT art_id,
+                   SUBSTR(linked_art_uri, INSTR(linked_art_uri, '.nl/') + 4)
+            FROM artworks
+            WHERE tier2_done = 1
+              AND linked_art_uri IS NOT NULL AND linked_art_uri != ''
+              AND art_id IS NOT NULL
+        """)
+    count = conn.execute("SELECT COUNT(*) FROM artwork_hmo_ids").fetchone()[0]
+    print(f"  {count:,} rows", flush=True)
+    conn.commit()
+    done(t0)
+
+
 def drop_harvest_only_indexes_and_columns(conn: sqlite3.Connection) -> None:
     t0 = step("Dropping harvest-only indexes")
     for idx in ("idx_artworks_tier2", "idx_mappings_field_artwork", "idx_mappings_vocab"):
@@ -368,6 +396,7 @@ def main() -> int:
 
     try:
         resolve_art_ids_via_temp_join(conn)
+        preserve_artwork_hmo_ids(conn)
         drop_harvest_only_indexes_and_columns(conn)
         build_vocab_term_counts(conn)
         build_vocabulary_fts(conn)

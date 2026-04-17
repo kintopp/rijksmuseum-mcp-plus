@@ -154,6 +154,16 @@ EXPECTATIONS: list[AuditTarget] = [
         rationale="Junction of artworks ∩ exhibition_members; 2026-04-13 backfill: 5,131 (5 hmo_ids HTTP 410/404 — upstream attrition)",
     ),
     AuditTarget(
+        name="phase3.artwork_hmo_ids",
+        phase="phase3",
+        kind="table_count",
+        table="artwork_hmo_ids",
+        column=None,
+        min_rows=800000,
+        max_rows=900000,
+        rationale="#253: permanent (art_id → hmo_id) lookup populated from linked_art_uri just before column drops. Expected near-total artwork coverage (matches phase4.title_all_text range of ~833K).",
+    ),
+    AuditTarget(
         name="phase3.museum_rooms",
         phase="phase3",
         kind="table_count",

@@ -3988,6 +3988,30 @@ def run_phase3(
     else:
         print("  Skipping (no artwork_parent table)")
 
+    # #253: preserve (art_id → hmo_id) mapping before the linked_art_uri column is
+    # dropped, so decoupled post-harvest backfills (e.g. VI-iconclass #203) can still
+    # derive per-artwork HMO URIs without a fresh OAI-PMH re-harvest.
+    print("\n--- Preserving art_id → hmo_id lookup ---")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS artwork_hmo_ids (
+            art_id INTEGER PRIMARY KEY,
+            hmo_id TEXT NOT NULL
+        )
+    """)
+    if "linked_art_uri" in get_columns(conn, "artworks"):
+        conn.execute("""
+            INSERT OR IGNORE INTO artwork_hmo_ids (art_id, hmo_id)
+            SELECT art_id,
+                   SUBSTR(linked_art_uri, INSTR(linked_art_uri, '.nl/') + 4)
+            FROM artworks
+            WHERE tier2_done = 1
+              AND linked_art_uri IS NOT NULL AND linked_art_uri != ''
+              AND art_id IS NOT NULL
+        """)
+    count = cur.execute("SELECT COUNT(*) FROM artwork_hmo_ids").fetchone()[0]
+    print(f"  artwork_hmo_ids: {count:,} rows")
+    conn.commit()
+
     # Drop harvest-only index (only useful during Phase 4 to find unresolved artworks)
     conn.execute("DROP INDEX IF EXISTS idx_artworks_tier2")
 
