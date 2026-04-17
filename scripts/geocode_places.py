@@ -216,7 +216,18 @@ def get_ungeocoded(conn: sqlite3.Connection, category: str | None = None
         base += " AND v.external_id LIKE '%id.rijksmuseum.nl%'"
     elif category == "no_external_used":
         base += " AND (v.external_id IS NULL OR v.external_id = '')"
-        base += " AND EXISTS (SELECT 1 FROM mappings m WHERE m.vocab_id = v.id)"
+        # Integer-encoded schema (v0.21+): mappings.vocab_rowid FKs to
+        # vocabulary.vocab_int_id, not the text id. The old m.vocab_id
+        # reference predated the schema migration and silently crashed
+        # whenever Phase 3 fired against a post-v0.21 DB. See #105.
+        #
+        # Correlated EXISTS is catastrophic here (7.9K outer rows × full
+        # scan of idx_mappings_field_vocab — ~10 min observed); the only
+        # mappings index is (field_id, vocab_rowid) so a lookup by
+        # vocab_rowid alone is an index scan. IN (SELECT DISTINCT …)
+        # materialises the vocab_rowid set once (~1.6s) and the planner
+        # then does a bounded IN check per outer row.
+        base += " AND v.vocab_int_id IN (SELECT DISTINCT vocab_rowid FROM mappings)"
     elif category == "no_external":
         base += " AND (v.external_id IS NULL OR v.external_id = '')"
 
