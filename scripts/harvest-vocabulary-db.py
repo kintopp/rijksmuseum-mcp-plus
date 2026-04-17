@@ -53,6 +53,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Force line-buffered stdout/stderr so progress prints appear in `tee` output
+# immediately, regardless of how the interpreter was invoked. See CLAUDE.md
+# "Python stdout buffering when piped to `tee`" — caused an hour of "is it
+# stuck?" confusion on the 2026-04-17 recovery run.
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
 # ─── Configuration ───────────────────────────────────────────────────
 
 SCRIPT_DIR = Path(__file__).parent

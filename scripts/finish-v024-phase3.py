@@ -41,6 +41,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Force line-buffered stdout so progress prints appear in `tee` output
+# immediately, regardless of whether the interpreter is invoked with `-u`.
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
