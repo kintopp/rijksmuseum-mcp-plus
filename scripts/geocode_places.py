@@ -1185,11 +1185,19 @@ WHG_PLACE_TYPE = "https://whgazetteer.org/static/whg_schema.jsonld#Place"
 
 
 def _whg_post(params: dict[str, str], retries: int = 3) -> dict:
-    """POST form-encoded params to the WHG reconciliation endpoint with retries."""
+    """POST form-encoded params to the WHG reconciliation endpoint with retries.
+
+    WHG switched to ORCID-gated auth in 2024-2025; /reconcile now requires
+    Authorization: Bearer <token>. Token generated from the WHG Profile page
+    after linking an ORCID account. Set via WHG_TOKEN env var.
+    """
     body = urllib.parse.urlencode(params).encode()
     req = urllib.request.Request(WHG_RECONCILE_URL, data=body, method="POST")
     req.add_header("User-Agent", USER_AGENT)
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    token = os.environ.get("WHG_TOKEN", "").strip().strip('"').strip("'")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
 
     for attempt in range(retries):
         try:
@@ -1324,9 +1332,13 @@ def phase_3b_whg(conn: sqlite3.Connection,
     Targets places without external IDs that still lack coordinates
     (i.e. whatever Phase 3 didn't resolve).
 
-    Uses the WHG Reconciliation Service API v0.2 (auth-free):
+    Uses the WHG Reconciliation Service API v0.2 (Bearer token):
     - POST /reconcile with queries → fuzzy name matching
     - POST /reconcile with extend → batch coordinate fetching
+
+    Daily quota: 4,977 requests. Phase 3b uses ~150-200 requests
+    (7,444 places / 50-query batches + extend passes); Phase 3c adds
+    similar. Plenty of headroom.
     """
     places = get_ungeocoded(conn, "no_external_used")
     if not places:
@@ -2152,6 +2164,7 @@ Examples:
       --apply-reviewed offline/geo/reconciled_review.csv
   python3 scripts/geocode_places.py --db data/vocabulary.db \\
       --apply-reviewed offline/geo/whg_review.csv
+  python3 scripts/geocode_places.py --db data/vocabulary.db --propagate-coords
         """,
     )
     parser.add_argument("--db", default="data/vocabulary.db",
@@ -2172,6 +2185,11 @@ Examples:
     parser.add_argument("--apply-reviewed",
                         help="Path to reviewed CSV with 'decision' column "
                              "(supports both Wikidata and WHG review formats)")
+    parser.add_argument("--propagate-coords", action="store_true",
+                        help="Run broader_id coord inheritance (Step 7). "
+                             "Uses areal-parent filter — parents with ≥2 geocoded "
+                             "children spanning ≥75 km are excluded. Standalone; "
+                             "skips all other phases.")
     parser.add_argument("--output-dir", default="offline/geo",
                         help="Output directory for CSVs and reports")
     args = parser.parse_args()
@@ -2208,6 +2226,32 @@ Examples:
         conn.close()
         return
 
+    # Handle --propagate-coords mode (Step 7: broader_id coord inheritance)
+    if args.propagate_coords:
+        if args.dry_run:
+            print("--propagate-coords is currently write-only; skipping under --dry-run",
+                  file=sys.stderr)
+            conn.close()
+            return
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        # Import lazily: the harvest module has heavy top-level imports we don't
+        # need for the other geocode phases.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "harvest_vocab_db",
+            Path(__file__).resolve().parent / "harvest-vocabulary-db.py",
+        )
+        harvest_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(harvest_mod)
+        print("\n--- Step 7: Coord inheritance (broader_id propagation) ---",
+              file=sys.stderr)
+        harvest_mod.propagate_place_coordinates(conn)
+        total, with_coords = get_coverage(conn)
+        print(f"\nFinal coverage: {with_coords:,} / {total:,} "
+              f"({with_coords/total*100:.1f}%)", file=sys.stderr)
+        conn.close()
+        return
+
     total_updated = 0
     run_phase = args.phase
 
@@ -2238,7 +2282,7 @@ Examples:
         total_updated += phase_3_reconciliation(
             conn, args.dry_run, args.output_dir)
 
-    # Phase 3b: World Historical Gazetteer reconciliation (auth-free)
+    # Phase 3b: World Historical Gazetteer reconciliation (requires WHG_TOKEN)
     if run_phase in (None, "3b") and not args.skip_whg:
         print(f"\n--- Phase 3b: WHG reconciliation ---", file=sys.stderr)
         total_updated += phase_3b_whg(

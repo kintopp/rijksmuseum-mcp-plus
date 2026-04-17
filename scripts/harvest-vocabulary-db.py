@@ -3605,7 +3605,41 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
     ``parent_fallback`` lives only in the backfill CSV). NULL means
     Rijksmuseum-originated; our inheritance is a local derivation that
     should survive LDES updates.
+
+    Areal-parent filter (added post-v0.24 based on empirical analysis —
+    see offline issue #254 for design, #255 for data-model anomalies):
+    a parent is treated as areal (and excluded from inheritance) when it
+    has ≥2 geocoded children whose bounding-box diagonal exceeds 75 km.
+    Parents with <2 geocoded children are not blocked — we lack evidence
+    to judge them. This uses observable child-spread rather than external
+    placetype data; #254 will replace it with an authoritative TGN/Wikidata
+    placetype signal.
     """
+    conn.execute("DROP TABLE IF EXISTS _areal_parents")
+    conn.execute(
+        """CREATE TEMP TABLE _areal_parents AS
+           SELECT p.id AS id
+           FROM vocabulary p
+           JOIN vocabulary c
+             ON c.broader_id = p.id
+            AND c.type = 'place'
+            AND c.lat IS NOT NULL
+           WHERE p.type = 'place' AND p.lat IS NOT NULL
+           GROUP BY p.id
+           HAVING COUNT(c.id) >= 2
+              AND sqrt(
+                   pow((MAX(c.lat) - MIN(c.lat)) * 111.2, 2) +
+                   pow((MAX(c.lon) - MIN(c.lon)) * 111.2
+                        * cos(radians((MIN(c.lat) + MAX(c.lat)) / 2.0)), 2)
+                  ) >= 75"""
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_areal_parents_id ON _areal_parents(id)"
+    )
+    n_areal = conn.execute("SELECT COUNT(*) FROM _areal_parents").fetchone()[0]
+    print(f"  [enrich coords] {n_areal:,} parents flagged as areal "
+          f"(spread ≥ 75 km) — blocked from inheritance")
+
     total = 0
     max_depth = 10
     for depth in range(1, max_depth + 1):
@@ -3618,6 +3652,7 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
                WHERE type = 'place'
                  AND lat IS NULL
                  AND broader_id IS NOT NULL
+                 AND broader_id NOT IN (SELECT id FROM _areal_parents)
                  AND EXISTS (
                      SELECT 1 FROM vocabulary p
                      WHERE p.id = vocabulary.broader_id AND p.lat IS NOT NULL
@@ -3629,6 +3664,7 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
         print(f"  [enrich coords] Depth {depth}: {inherited:,} places inherited")
         total += inherited
     conn.commit()
+    conn.execute("DROP TABLE IF EXISTS _areal_parents")
     print(f"  [enrich coords] Total inherited: {total:,}")
 
 
