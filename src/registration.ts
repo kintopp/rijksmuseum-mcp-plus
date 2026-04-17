@@ -929,6 +929,8 @@ function registerTools(
         "but note that paintings are underrepresented there, so combine it with " +
         "search_artwork(type: 'painting', subject/creator: ...) for painting queries. " +
         "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both subjects). " +
+        "If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; " +
+        "narrow with type/material filters or treat the shared prefix as the unit. " +
         "Each result includes an objectNumber for follow-up calls: " +
         "get_artwork_details (full metadata) " +
         "or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; " +

@@ -406,6 +406,7 @@ collection_stats(dimension="creatorGender", type="painting", creationDateFrom=17
 | `attributionQualifier` + `creator` | Does not work — use `aboutActor` instead. See Critical Parameter Distinctions above. |
 | `attributionQualifier: "manner of"` | Not a valid value — returns zero results. Use `aboutActor`. |
 | Canonical artist name forms | Some artists use historical spellings (e.g. "Jheronimus Bosch"). If a known artist returns no results, check the canonical form via `get_artwork_details` on a known work. |
+| Multi-folio works dominate results (sketchbooks, albums, print series) | The Rijksmuseum catalogues sketchbooks/albums/print-series as a parent record plus child records per folio, so a single physical object can fill the first page of results. When this happens, the response's `warnings` field flags it (e.g. "8 results are folios/components of BI-1898-1748A"). Narrow with `type` / `material` filters, or treat the shared parent number as the unit of interest rather than each folio separately. Affects ~4.6% of artworks (object numbers with parenthetical suffixes). |
 
 ---
 
