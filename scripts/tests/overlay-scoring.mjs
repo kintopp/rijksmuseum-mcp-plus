@@ -18,12 +18,21 @@ export function iou(a, b) {
   return union > 0 ? inter / union : 0;
 }
 
-/** Euclidean distance between bbox centers, in pct of image width (same unit as inputs). */
-export function centerOffsetPct(a, b) {
+/**
+ * Euclidean distance between bbox centers, expressed in % of image width.
+ * The y-component is normalised by `imageAspect` (= width / height) so both
+ * dimensions contribute to the distance in the same physical unit. Default
+ * imageAspect = 1 (square image) treats x and y equally.
+ *
+ * Example: for a 1200×663 image (aspect ≈ 1.81), a (dx=0, dy=10) pct offset
+ * is physically 66 px vertical, which is 5.5% of image width.
+ * centerOffsetPct([0,0,10,10], [0,10,10,10], 1200/663) ≈ 5.53
+ */
+export function centerOffsetPct(a, b, imageAspect = 1) {
   const [ax, ay, aw, ah] = a;
   const [bx, by, bw, bh] = b;
   const dx = (ax + aw / 2) - (bx + bw / 2);
-  const dy = (ay + ah / 2) - (by + bh / 2);
+  const dy = ((ay + ah / 2) - (by + bh / 2)) / imageAspect;
   return Math.sqrt(dx * dx + dy * dy);
 }
 

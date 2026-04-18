@@ -21,6 +21,12 @@ assert.equal(
 
 assert.equal(centerOffsetPct([0, 0, 10, 10], [0, 0, 10, 10]), 0, "same center → 0");
 assert.equal(centerOffsetPct([0, 0, 10, 10], [10, 0, 10, 10]), 10, "10% horiz offset");
+assert.equal(centerOffsetPct([0, 0, 10, 10], [0, 10, 10, 10]), 10, "10% vert offset (aspect=1)");
+assert.equal(
+  Math.round(centerOffsetPct([0, 0, 10, 10], [0, 10, 10, 10], 2) * 100) / 100,
+  5,
+  "10% vert offset (aspect=2 → halved)",
+);
 
 assert.equal(sizeRatio([0, 0, 10, 10], [0, 0, 10, 10]), 1, "equal sizes");
 assert.equal(sizeRatio([0, 0, 10, 10], [0, 0, 20, 20]), 0.25, "predicted is quarter-size");
@@ -57,4 +63,4 @@ const c3 = clampToImage([-5, 10, 20, 20], 100);
 assert.equal(c3.clamped, true, "negative x clamped");
 assert.deepEqual(c3.bbox, [0, 10, 15, 20], "clamped negative x");
 
-console.log("test-overlay-scoring: PASS ( 14 assertions)");
+console.log("test-overlay-scoring: PASS ( 16 assertions)");
