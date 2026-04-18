@@ -775,7 +775,7 @@ const CuratedSetsOutput = {
 
 // ─── Shared IIIF region validation ───────────────────────────────────
 
-const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+)$/;
+const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+|crop_pixels:\d+,\d+,\d+,\d+)$/;
 
 // ─── Viewer command queue (module-scoped — survives across HTTP requests) ─
 
@@ -846,6 +846,106 @@ export function parsePctRegion(region: string): [number, number, number, number]
   const m = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
   if (!m) return null;
   return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]), parseFloat(m[4])];
+}
+
+// Exported for testing
+export function parseCropPixelsRegion(region: string): [number, number, number, number] | null {
+  const m = region.match(/^crop_pixels:(\d+),(\d+),(\d+),(\d+)$/);
+  if (!m) return null;
+  return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), parseInt(m[4], 10)];
+}
+
+// Exported for testing
+/** Strip `crop_pixels:` prefix, return plain IIIF pixel region. */
+export function cropPixelsToIiifPixels(region: string): string | null {
+  const p = parseCropPixelsRegion(region);
+  if (!p) return null;
+  return `${p[0]},${p[1]},${p[2]},${p[3]}`;
+}
+
+export interface OobWarning {
+  warning: "overlay_region_out_of_bounds";
+  details: {
+    requested: string;
+    clamped_to: string;
+    issue: string;
+    valid_range: string;
+  };
+}
+
+// Exported for testing
+/**
+ * Validate region bounds. Returns null if in-bounds (or bounds-check skipped).
+ * For pct: always checkable. For crop_pixels/plain-pixels: requires imgW/imgH.
+ */
+export function checkRegionBounds(
+  region: string,
+  imgW?: number,
+  imgH?: number,
+): OobWarning | null {
+  if (region === "full" || region === "square") return null;
+
+  const pct = parsePctRegion(region);
+  if (pct) {
+    const [x, y, w, h] = pct;
+    const issues: string[] = [];
+    if (x < 0 || x > 100) issues.push(`x=${x} outside 0–100`);
+    if (y < 0 || y > 100) issues.push(`y=${y} outside 0–100`);
+    if (w <= 0) issues.push(`w=${w} must be > 0`);
+    if (h <= 0) issues.push(`h=${h} must be > 0`);
+    if (x + w > 100.01) issues.push(`x+w=${(x + w).toFixed(2)} exceeds 100`);
+    if (y + h > 100.01) issues.push(`y+h=${(y + h).toFixed(2)} exceeds 100`);
+    if (issues.length === 0) return null;
+    const cx = Math.max(0, Math.min(100, x));
+    const cy = Math.max(0, Math.min(100, y));
+    const cw = Math.max(0, Math.min(100 - cx, w));
+    const ch = Math.max(0, Math.min(100 - cy, h));
+    return {
+      warning: "overlay_region_out_of_bounds",
+      details: {
+        requested: region,
+        clamped_to: `pct:${cx},${cy},${cw},${ch}`,
+        issue: issues.join("; "),
+        valid_range: "each value must be between 0 and 100, and x+w, y+h must not exceed 100",
+      },
+    };
+  }
+
+  // crop_pixels: or plain IIIF pixels
+  const cp = parseCropPixelsRegion(region);
+  const plainPixels = region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
+  const pixelMatch: [number, number, number, number] | null =
+    cp ?? (plainPixels
+      ? [parseInt(plainPixels[1], 10), parseInt(plainPixels[2], 10), parseInt(plainPixels[3], 10), parseInt(plainPixels[4], 10)]
+      : null);
+  if (!pixelMatch) return null;
+  const [x, y, w, h] = pixelMatch;
+  const issues: string[] = [];
+  if (w <= 0) issues.push(`w=${w} must be > 0`);
+  if (h <= 0) issues.push(`h=${h} must be > 0`);
+  if (imgW != null && imgH != null) {
+    if (x < 0 || x >= imgW) issues.push(`x=${x} outside 0–${imgW - 1}`);
+    if (y < 0 || y >= imgH) issues.push(`y=${y} outside 0–${imgH - 1}`);
+    if (x + w > imgW) issues.push(`x+w=${x + w} exceeds imageWidth=${imgW}`);
+    if (y + h > imgH) issues.push(`y+h=${y + h} exceeds imageHeight=${imgH}`);
+  }
+  if (issues.length === 0) return null;
+  const prefix = cp ? "crop_pixels:" : "";
+  const cx = imgW != null ? Math.max(0, Math.min(imgW - 1, x)) : x;
+  const cy = imgH != null ? Math.max(0, Math.min(imgH - 1, y)) : y;
+  const cw = imgW != null ? Math.max(0, Math.min(imgW - cx, w)) : Math.max(0, w);
+  const ch = imgH != null ? Math.max(0, Math.min(imgH - cy, h)) : Math.max(0, h);
+  return {
+    warning: "overlay_region_out_of_bounds",
+    details: {
+      requested: region,
+      clamped_to: `${prefix}${cx},${cy},${cw},${ch}`,
+      issue: issues.join("; "),
+      valid_range: imgW != null
+        ? `x in [0, ${imgW}), y in [0, ${imgH}), x+w ≤ ${imgW}, y+h ≤ ${imgH}, w>0, h>0`
+        : "w>0, h>0 (image dimensions unknown — open the viewer with get_artwork_image for stricter checking)",
+    },
+  };
 }
 
 // Exported for testing
@@ -1530,9 +1630,9 @@ function registerTools(
           .default("full")
           .refine(
             (v) => IIIF_REGION_RE.test(v),
-            { message: "Invalid IIIF region. Use 'full', 'square', 'x,y,w,h' (pixels), or 'pct:x,y,w,h' (percentages)." }
+            { message: "Invalid IIIF region. Use 'full', 'square', 'x,y,w,h' (pixels), 'pct:x,y,w,h' (percentages), or 'crop_pixels:x,y,w,h' (explicit full-image pixels)." }
           )
-          .describe("IIIF region: 'full', 'square', 'pct:x,y,w,h' (percentage), or 'x,y,w,h' (pixels). E.g. 'pct:0,60,40,40' for bottom-left 40%."),
+          .describe("IIIF region: 'full', 'square', 'pct:x,y,w,h' (percentage), 'crop_pixels:x,y,w,h' (pixels of the full image — use with nativeWidth/nativeHeight from a prior response), or 'x,y,w,h' (legacy IIIF pixels, equivalent to crop_pixels). E.g. 'pct:0,60,40,40' for bottom-left 40%."),
         size: z
           .number()
           .int()
@@ -1748,7 +1848,7 @@ function registerTools(
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
         commands: z.array(z.object({
           action: z.enum(["navigate", "add_overlay", "clear_overlays"]),
-          region: optStr().optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', or 'x,y,w,h'"),
+          region: optStr().optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', 'crop_pixels:x,y,w,h', or 'x,y,w,h'"),
           relativeTo: optStr().optional().describe(
             "Crop region from a prior inspect_artwork_image call. When provided, " +
             "'region' is interpreted as coordinates within that crop's local space " +
@@ -1791,10 +1891,10 @@ function registerTools(
       for (const cmd of args.commands) {
         if (cmd.action === "navigate" || cmd.action === "add_overlay") {
           if (!cmd.region) {
-            return navError(`'${cmd.action}' requires a region. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`);
+            return navError(`'${cmd.action}' requires a region. Use 'full', 'square', 'x,y,w,h', 'pct:x,y,w,h', or 'crop_pixels:x,y,w,h'.`);
           }
           if (!IIIF_REGION_RE.test(cmd.region)) {
-            return navError(`Invalid region '${cmd.region}'. Use 'full', 'square', 'x,y,w,h', or 'pct:x,y,w,h'.`);
+            return navError(`Invalid region '${cmd.region}'. Use 'full', 'square', 'x,y,w,h', 'pct:x,y,w,h', or 'crop_pixels:x,y,w,h'.`);
           }
         }
         if (cmd.relativeTo && !parsePctRegion(cmd.relativeTo)) {
@@ -1812,6 +1912,14 @@ function registerTools(
           cmd.region = projected;
         }
         delete cmd.relativeTo; // Never forward to viewer
+      }
+
+      // Strip crop_pixels: prefix before forwarding — viewer understands plain IIIF pixels (P2, #247)
+      for (const cmd of args.commands) {
+        if (cmd.region?.startsWith("crop_pixels:")) {
+          const plain = cropPixelsToIiifPixels(cmd.region);
+          if (plain) cmd.region = plain;
+        }
       }
 
       queue.commands.push(...args.commands);
