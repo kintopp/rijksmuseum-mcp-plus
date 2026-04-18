@@ -391,6 +391,109 @@ const r4i = await client.callTool({
 assert(r4i.isError === true, "relativeTo 'full' → error (must be pct:)");
 
 // ══════════════════════════════════════════════════════════════════
+//  4bis. navigate_viewer — crop_pixels format + OOB rejection (#247)
+// ══════════════════════════════════════════════════════════════════
+
+section("4bis. crop_pixels format + OOB rejection (#247)");
+
+// Open a fresh viewer to keep queue counts in later sections stable.
+const r4bis0 = await client.callTool({
+  name: "get_artwork_image",
+  arguments: { objectNumber: "SK-A-2152" },
+});
+const img4bis = r4bis0.structuredContent ?? JSON.parse(r4bis0.content[0].text);
+const viewUUIDcp = img4bis.viewUUID;
+assert(typeof viewUUIDcp === "string" && viewUUIDcp.length === 36,
+  `Fresh viewUUID for crop_pixels tests (${viewUUIDcp?.slice(0, 8)}...)`);
+
+// 4bis-a. add_overlay with crop_pixels: format succeeds; prefix stripped before forwarding
+console.log("\n--- 4bis-a: crop_pixels format accepted ---");
+const r4bisA = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [
+      { action: "add_overlay", region: "crop_pixels:100,200,300,400", label: "cp-test" },
+    ],
+  },
+});
+assert(!r4bisA.isError, "crop_pixels add_overlay should succeed");
+const polledA = await client.callTool({
+  name: "poll_viewer_commands",
+  arguments: { viewUUID: viewUUIDcp },
+});
+const pollA = polledA.structuredContent ?? JSON.parse(polledA.content[0].text);
+const cpOverlay = pollA.commands?.find((c) => c.action === "add_overlay" && c.label === "cp-test");
+assert(cpOverlay != null, "cp-test overlay is in queue");
+assert(cpOverlay?.region === "100,200,300,400", `crop_pixels: prefix stripped (got "${cpOverlay?.region}")`);
+
+// 4bis-b. add_overlay with OOB pct returns structured warning + isError
+console.log("\n--- 4bis-b: OOB pct (y=325) rejected with structured warning ---");
+const r4bisB = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [
+      { action: "add_overlay", region: "pct:36,325,35,30", label: "oob-pct" },
+    ],
+  },
+});
+assert(r4bisB.isError === true, "OOB pct returns isError");
+const oobText = r4bisB.content?.[0]?.text ?? "";
+assert(oobText.includes("overlay_region_out_of_bounds"), "error text includes warning code");
+assert(oobText.includes("y=325 outside 0–100"), "error text identifies y=325 issue");
+assert(oobText.includes("clamped_to"), "error text includes clamped_to preview");
+assert(oobText.includes("please re-examine the image"), "error text carries retry cue");
+
+// 4bis-c. add_overlay with x+w > 100 rejected
+console.log("\n--- 4bis-c: OOB pct (x+w=110) rejected ---");
+const r4bisC = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [
+      { action: "add_overlay", region: "pct:80,10,30,20", label: "oob-width" },
+    ],
+  },
+});
+assert(r4bisC.isError === true, "OOB x+w=110 returns isError");
+const oobCText = r4bisC.content?.[0]?.text ?? "";
+assert(oobCText.includes("x+w=110"), "error text identifies x+w overflow");
+
+// 4bis-d. OOB call does not mutate queue
+console.log("\n--- 4bis-d: OOB rejection does not queue commands ---");
+// First queue a known-good overlay
+await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [{ action: "add_overlay", region: "pct:0,0,50,50", label: "ok" }],
+  },
+});
+// Drain, record baseline
+const drained1 = await client.callTool({
+  name: "poll_viewer_commands",
+  arguments: { viewUUID: viewUUIDcp },
+});
+const drainedCmds = drained1.structuredContent?.commands ?? JSON.parse(drained1.content[0].text).commands;
+assert(drainedCmds.length === 1, `One ok command drained (got ${drainedCmds.length})`);
+// Now send an OOB call — should reject, queue should remain empty
+const r4bisD = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [{ action: "add_overlay", region: "pct:10,10,0,50", label: "bad-w" }],
+  },
+});
+assert(r4bisD.isError === true, "Zero-width region rejected");
+const afterBad = await client.callTool({
+  name: "poll_viewer_commands",
+  arguments: { viewUUID: viewUUIDcp },
+});
+const afterBadCmds = afterBad.structuredContent?.commands ?? JSON.parse(afterBad.content[0].text).commands;
+assert(afterBadCmds.length === 0, `OOB call did not queue commands (got ${afterBadCmds.length})`);
+
+// ══════════════════════════════════════════════════════════════════
 //  5. poll_viewer_commands — queue draining
 // ══════════════════════════════════════════════════════════════════
 
