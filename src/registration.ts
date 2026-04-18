@@ -1715,6 +1715,12 @@ function registerTools(
           return cropError("No image available for this artwork");
         }
 
+        // Strip crop_pixels: prefix before forwarding — IIIF upstream understands
+        // plain pixels only (P2, #247). Mirrors navigate_viewer's strip step.
+        const iiifRegion = args.region.startsWith("crop_pixels:")
+          ? (cropPixelsToIiifPixels(args.region) ?? args.region)
+          : args.region;
+
         // Clamp size to region width — iiif.micr.io rejects upscaling.
         // For pct: regions, the IIIF server's internal rounding (implementation-
         // specific) can yield a pixel region up to 3px narrower than our
@@ -1722,13 +1728,13 @@ function registerTools(
         let effectiveSize = args.size;
         if (imageInfo.width) {
           let regionWidth = imageInfo.width;
-          const pctMatch = args.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-          const pxMatch = args.region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
+          const pctMatch = iiifRegion.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+          const pxMatch = iiifRegion.match(/^(\d+),(\d+),(\d+),(\d+)$/);
           if (pctMatch) {
             regionWidth = Math.max(1, Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 3);
           } else if (pxMatch) {
             regionWidth = parseInt(pxMatch[3]);
-          } else if (args.region === "square") {
+          } else if (iiifRegion === "square") {
             regionWidth = Math.min(imageInfo.width, imageInfo.height ?? imageInfo.width);
           }
           // region === "full" keeps regionWidth = imageInfo.width
@@ -1741,7 +1747,7 @@ function registerTools(
         try {
           ({ data: base64, mimeType } = await api.fetchRegionBase64(
             imageInfo.iiifId,
-            args.region,
+            iiifRegion,
             effectiveSize,
             args.rotation,
             args.quality,
@@ -1757,10 +1763,10 @@ function registerTools(
 
         // Auto-navigate viewer to inspected region (non-full only)
         let viewerNavigated = false;
-        if (args.navigateViewer && activeViewUUID && args.region !== "full") {
+        if (args.navigateViewer && activeViewUUID && iiifRegion !== "full") {
           const queue = viewerQueues.get(activeViewUUID);
           if (queue) {
-            queue.commands.push({ action: "navigate", region: args.region });
+            queue.commands.push({ action: "navigate", region: iiifRegion });
             queue.lastAccess = Date.now();
             viewerNavigated = true;
           }
@@ -1770,6 +1776,9 @@ function registerTools(
           `"${artwork.title}" by ${artwork.creator} — ${args.objectNumber}`,
           `(${regionLabel}, ${effectiveSize}px${sizeNote}, ${fetchTimeMs}ms)`,
         ];
+        if (imageInfo.width && imageInfo.height) {
+          captionParts.push(`| native ${imageInfo.width}×${imageInfo.height}px`);
+        }
         if (viewerNavigated) captionParts.push("| viewer navigated");
         else if (activeViewUUID) captionParts.push(`| viewer open (${activeViewUUID.slice(0, 8)})`);
         const caption = captionParts.join(" ");

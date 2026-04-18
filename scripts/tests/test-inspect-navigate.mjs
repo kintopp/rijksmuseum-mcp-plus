@@ -127,6 +127,17 @@ const r2c = await client.callTool({
 });
 assert(r2c.content.find(c => c.type === "image") != null, "Pixel region returns image");
 
+// 2c-bis. crop_pixels: region — same coords, prefixed form must be stripped before IIIF fetch
+console.log("\n--- 2c-bis: crop_pixels region (SK-C-5, crop_pixels:1000,800,500,500, 500px) ---");
+const r2cCp = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: { objectNumber: "SK-C-5", region: "crop_pixels:1000,800,500,500", size: 500, navigateViewer: false },
+});
+assert(!r2cCp.isError, "crop_pixels region does not error");
+assert(r2cCp.content.find(c => c.type === "image") != null, "crop_pixels region returns image");
+const caption2cCp = r2cCp.content.find(c => c.type === "text")?.text ?? "";
+assert(/native \d+×\d+px/.test(caption2cCp), `caption echoes native dimensions (${caption2cCp.slice(0, 120)}…)`);
+
 // 2d. Square region
 console.log("\n--- 2d: Square region (SK-C-5, 600px) ---");
 const r2d = await client.callTool({
