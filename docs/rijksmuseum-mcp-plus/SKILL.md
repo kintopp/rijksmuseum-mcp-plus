@@ -301,6 +301,8 @@ navigate_viewer(viewUUID=..., commands=[{
 
 The `relativeTo` parameter eliminates manual coordinate conversion — specify where the feature is within the crop, and the server handles the projection. Both `region` and `relativeTo` must use `pct:` format.
 
+For pixel-precision work on dense compositions (e.g. cataloguing several insects on a flower piece), use `crop_pixels:x,y,w,h` instead — coordinates are full-image pixels, so no `relativeTo` projection is needed. `inspect_artwork_image` echoes `nativeWidth`/`nativeHeight` in both the structured payload and the caption so you can bound pixel values to the actual image.
+
 Use `region="full"` for an initial composition overview before cropping to
 details. `inspect_artwork_image` can surface content **absent from structured
 metadata** — unsigned Japanese prints often have readable artist signatures,
