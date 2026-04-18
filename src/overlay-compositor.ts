@@ -14,6 +14,17 @@ export interface Rect {
 }
 
 /**
+ * Coordinate reference for a single inspect call: the crop's pixel rect within
+ * the full image, plus the full image's own dimensions (needed to resolve any
+ * pct-formatted overlay regions back to pixels).
+ */
+export interface CropFrame {
+  rect: Rect;
+  imageWidth: number;
+  imageHeight: number;
+}
+
+/**
  * Resolve an IIIF region string to a pixel rect within the full image.
  * Accepts "full", "square", "x,y,w,h", or "pct:x,y,w,h". The `crop_pixels:`
  * prefix is already stripped upstream, so plain pixels are the form we see.
@@ -59,31 +70,29 @@ export function computeCropRect(
 
 /**
  * Project an overlay region (in full-image coordinates) into crop-local pixel
- * coordinates. `scale` is the ratio of the rendered crop's pixel width to the
- * crop's full-image pixel width. Returns null if the overlay region is not
- * parseable or if the overlay falls entirely outside the crop.
+ * coordinates. `cropPxWidth`/`cropPxHeight` are the rendered crop's actual
+ * JPEG dimensions. Returns null if the overlay is unparseable, zero-area, or
+ * falls entirely outside the crop.
  */
 export function projectOverlayToCrop(
   overlayRegion: string,
-  imageWidth: number,
-  imageHeight: number,
-  cropRect: Rect,
+  frame: CropFrame,
   cropPxWidth: number,
   cropPxHeight: number,
 ): Rect | null {
-  const oFull = computeCropRect(overlayRegion, imageWidth, imageHeight);
+  const oFull = computeCropRect(overlayRegion, frame.imageWidth, frame.imageHeight);
   if (!oFull) return null;
   if (oFull.w <= 0 || oFull.h <= 0) return null;
 
-  const scaleX = cropPxWidth / cropRect.w;
-  const scaleY = cropPxHeight / cropRect.h;
+  const scaleX = cropPxWidth / frame.rect.w;
+  const scaleY = cropPxHeight / frame.rect.h;
   const local: Rect = {
-    x: (oFull.x - cropRect.x) * scaleX,
-    y: (oFull.y - cropRect.y) * scaleY,
+    x: (oFull.x - frame.rect.x) * scaleX,
+    y: (oFull.y - frame.rect.y) * scaleY,
     w: oFull.w * scaleX,
     h: oFull.h * scaleY,
   };
-  // Reject overlays that miss the crop entirely. SVG viewBox will clip the
+  // Reject overlays that miss the crop entirely. SVG viewBox clips the
   // partially-visible ones, so we keep anything that intersects.
   if (
     local.x + local.w <= 0 ||
@@ -116,6 +125,9 @@ export interface CompositeResult {
   skipped: number;
 }
 
+const JPEG_MIME = "image/jpeg";
+const DEFAULT_OVERLAY_COLOR = "#ff6b35";
+
 /**
  * Draw stroke-only rectangles for each visible overlay onto the crop JPEG.
  * Overlays that fall outside the crop are silently skipped (counted).
@@ -123,25 +135,21 @@ export interface CompositeResult {
 export async function compositeOverlays(
   jpegBytes: Buffer,
   overlays: OverlayInput[],
-  cropRect: Rect,
-  imageWidth: number,
-  imageHeight: number,
-  { strokeWidth = 3, defaultColor = "#ff6b35" }: { strokeWidth?: number; defaultColor?: string } = {},
+  frame: CropFrame,
+  { strokeWidth = 3, defaultColor = DEFAULT_OVERLAY_COLOR }: { strokeWidth?: number; defaultColor?: string } = {},
 ): Promise<CompositeResult> {
   const image = sharp(jpegBytes);
   const meta = await image.metadata();
   const jpegW = meta.width;
   const jpegH = meta.height;
   if (jpegW == null || jpegH == null) {
-    return { buffer: jpegBytes, mimeType: "image/jpeg", rendered: 0, skipped: overlays.length };
+    return { buffer: jpegBytes, mimeType: JPEG_MIME, rendered: 0, skipped: overlays.length };
   }
 
   const rects: string[] = [];
   let skipped = 0;
   for (const overlay of overlays) {
-    const local = projectOverlayToCrop(
-      overlay.region, imageWidth, imageHeight, cropRect, jpegW, jpegH,
-    );
+    const local = projectOverlayToCrop(overlay.region, frame, jpegW, jpegH);
     if (!local) { skipped++; continue; }
     const color = escapeXml(overlay.color ?? defaultColor);
     rects.push(
@@ -152,7 +160,7 @@ export async function compositeOverlays(
   }
 
   if (rects.length === 0) {
-    return { buffer: jpegBytes, mimeType: "image/jpeg", rendered: 0, skipped };
+    return { buffer: jpegBytes, mimeType: JPEG_MIME, rendered: 0, skipped };
   }
 
   const svg =
@@ -163,5 +171,5 @@ export async function compositeOverlays(
     .jpeg({ quality: 85 })
     .toBuffer();
 
-  return { buffer, mimeType: "image/jpeg", rendered: rects.length, skipped };
+  return { buffer, mimeType: JPEG_MIME, rendered: rects.length, skipped };
 }

@@ -332,8 +332,8 @@ section("projectOverlayToCrop");
 // Crop is pct:25,25,50,50 = (250,200,500,400). Rendered crop is 400×320 px → scale 0.8.
 // Overlay local = ((400-250)*0.8, (320-200)*0.8, 200*0.8, 160*0.8) = (120, 96, 160, 128).
 {
-  const cropRect = { x: 250, y: 200, w: 500, h: 400 };
-  const local = projectOverlayToCrop("pct:40,40,20,20", 1000, 800, cropRect, 400, 320);
+  const frame = { rect: { x: 250, y: 200, w: 500, h: 400 }, imageWidth: 1000, imageHeight: 800 };
+  const local = projectOverlayToCrop("pct:40,40,20,20", frame, 400, 320);
   assert(local != null, "overlay projects into crop");
   assertEq(Math.round(local.x), 120, "local x");
   assertEq(Math.round(local.y), 96, "local y");
@@ -343,16 +343,16 @@ section("projectOverlayToCrop");
 
 // Overlay fully outside crop → null
 {
-  const cropRect = { x: 0, y: 0, w: 200, h: 200 };
-  const local = projectOverlayToCrop("pct:80,80,10,10", 1000, 800, cropRect, 200, 200);
+  const frame = { rect: { x: 0, y: 0, w: 200, h: 200 }, imageWidth: 1000, imageHeight: 800 };
+  const local = projectOverlayToCrop("pct:80,80,10,10", frame, 200, 200);
   assertEq(local, null, "overlay outside crop → null");
 }
 
 // Overlay straddling crop boundary → returned (SVG viewBox clips on render)
 {
-  const cropRect = { x: 100, y: 100, w: 200, h: 200 };
+  const frame = { rect: { x: 100, y: 100, w: 200, h: 200 }, imageWidth: 1000, imageHeight: 800 };
   // Overlay at (50, 50) with size 100×100 in full image — extends off crop's top-left.
-  const local = projectOverlayToCrop("50,50,100,100", 1000, 800, cropRect, 200, 200);
+  const local = projectOverlayToCrop("50,50,100,100", frame, 200, 200);
   assert(local != null, "straddling overlay returned (clipped by SVG on render)");
   assertEq(Math.round(local.x), -50, "straddling x is negative");
   assertEq(Math.round(local.y), -50, "straddling y is negative");
@@ -360,9 +360,9 @@ section("projectOverlayToCrop");
 
 // Zero-dimension overlay → null
 {
-  const cropRect = { x: 0, y: 0, w: 1000, h: 800 };
-  assertEq(projectOverlayToCrop("pct:10,10,0,10", 1000, 800, cropRect, 1000, 800), null, "zero-width overlay → null");
-  assertEq(projectOverlayToCrop("pct:10,10,10,0", 1000, 800, cropRect, 1000, 800), null, "zero-height overlay → null");
+  const frame = { rect: { x: 0, y: 0, w: 1000, h: 800 }, imageWidth: 1000, imageHeight: 800 };
+  assertEq(projectOverlayToCrop("pct:10,10,0,10", frame, 1000, 800), null, "zero-width overlay → null");
+  assertEq(projectOverlayToCrop("pct:10,10,10,0", frame, 1000, 800), null, "zero-height overlay → null");
 }
 
 // ── escapeFts5Token ─────────────────────────────────────────────

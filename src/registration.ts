@@ -817,6 +817,8 @@ function sweepTtlMap<T extends { lastAccess: number }>(map: Map<string, T>, ttlM
 const viewerQueues = new Map<string, ViewerQueue>();
 sweepTtlMap(viewerQueues);
 
+const ACTIVE_OVERLAYS_CAP = 64;
+
 export const similarPages = new Map<string, { html: string; lastAccess: number }>();
 sweepTtlMap(similarPages);
 
@@ -1722,9 +1724,8 @@ function registerTools(
           return cropError("No image available for this artwork");
         }
 
-        // OOB check — symmetric with navigate_viewer (P7, #247). Checked before
-        // prefix stripping so the `requested` field in the warning echoes what
-        // the user sent.
+        // Checked before prefix stripping so `requested` in the warning echoes
+        // the user's exact input, not the normalized form.
         {
           const oob = checkRegionBounds(args.region, imageInfo.width, imageInfo.height);
           if (oob) {
@@ -1736,20 +1737,14 @@ function registerTools(
           }
         }
 
-        // Strip crop_pixels: prefix before forwarding — IIIF upstream understands
-        // plain pixels only (P2, #247). Mirrors navigate_viewer's strip step.
         const iiifRegion = args.region.startsWith("crop_pixels:")
           ? (cropPixelsToIiifPixels(args.region) ?? args.region)
           : args.region;
 
-        // Clamp size to region width — iiif.micr.io rejects upscaling.
-        // For pct: regions, the IIIF server's internal rounding (implementation-
-        // specific) can yield a pixel region up to 3px narrower than our
-        // estimate. Subtract 3 to avoid hitting the boundary.
-        //
-        // Force-clamp to 448 when show_overlays is requested — the composite is
-        // for the LLM only, and a small crop keeps context cost minimal. Users
-        // who need a full-resolution composite should make a second call.
+        // iiif.micr.io rejects upscaling; pct regions suffer from implementation-
+        // specific rounding that can yield up to 3px less than the ideal pixel
+        // width, so we subtract 3 to stay inside the boundary. The 448 clamp
+        // when show_overlays is on is an LLM-only context-cost guard.
         let effectiveSize = args.show_overlays ? Math.min(args.size, 448) : args.size;
         if (imageInfo.width) {
           let regionWidth = imageInfo.width;
@@ -1783,9 +1778,6 @@ function registerTools(
         }
         const fetchTimeMs = Math.round(performance.now() - fetchStart);
 
-        // Composite active-viewer overlays onto the crop (P1, #247). Opt-in via
-        // show_overlays. Silent no-op when no viewer or no overlays — the
-        // returned image matches the uncomposited crop and overlaysRendered=0.
         let overlaysRendered: number | undefined;
         let overlaysSkipped: number | undefined;
         if (args.show_overlays && imageInfo.width && imageInfo.height) {
@@ -1793,20 +1785,18 @@ function registerTools(
           const overlays = queueForOverlays?.activeOverlays ?? [];
           const cropRect = computeCropRect(iiifRegion, imageInfo.width, imageInfo.height);
           if (overlays.length > 0 && cropRect) {
+            const frame = { rect: cropRect, imageWidth: imageInfo.width, imageHeight: imageInfo.height };
             try {
-              const composite = await compositeOverlays(
-                Buffer.from(base64, "base64"),
-                overlays,
-                cropRect,
-                imageInfo.width,
-                imageInfo.height,
-              );
+              const composite = await compositeOverlays(Buffer.from(base64, "base64"), overlays, frame);
               base64 = composite.buffer.toString("base64");
               mimeType = composite.mimeType;
               overlaysRendered = composite.rendered;
               overlaysSkipped = composite.skipped;
-            } catch {
-              // Compositor failure is non-fatal — return the plain crop.
+            } catch (err) {
+              // Non-fatal: return the plain crop and log so the failure isn't
+              // indistinguishable from "all overlays fell outside the crop".
+              const message = err instanceof Error ? err.message : String(err);
+              console.warn(`[inspect_artwork_image] overlay composite failed: ${message}`);
               overlaysRendered = 0;
               overlaysSkipped = overlays.length;
             }
@@ -2032,11 +2022,16 @@ function registerTools(
       queue.commands.push(...args.commands);
       queue.lastAccess = Date.now();
 
-      // Maintain server-side shadow overlay list
+      // Maintain server-side shadow overlay list. Capped at 64 so a long
+      // session can't grow the array unboundedly — the compositor iterates
+      // all entries on every show_overlays call.
       for (const cmd of args.commands) {
         if (cmd.action === "clear_overlays") queue.activeOverlays = [];
         else if (cmd.action === "add_overlay") {
           queue.activeOverlays.push({ label: cmd.label, region: cmd.region!, color: cmd.color });
+          if (queue.activeOverlays.length > ACTIVE_OVERLAYS_CAP) {
+            queue.activeOverlays = queue.activeOverlays.slice(-ACTIVE_OVERLAYS_CAP);
+          }
         }
       }
 
