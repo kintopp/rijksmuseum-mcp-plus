@@ -1604,8 +1604,10 @@ function registerTools(
         "about the image immediately.\n\n" +
         "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
         "region to zoom into details, read inscriptions, or examine specific areas.\n\n" +
-        "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended) " +
-        "or 'x,y,w,h' (pixel coordinates). Quick reference:\n" +
+        "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), " +
+        "'crop_pixels:x,y,w,h' (pixel coordinates of the full image — use with " +
+        "nativeWidth/nativeHeight from a prior response), or 'x,y,w,h' (legacy IIIF " +
+        "pixels, equivalent to crop_pixels). Quick reference:\n" +
         "- Top-left quarter: pct:0,0,50,50\n" +
         "- Bottom-right quarter: pct:50,50,50,50\n" +
         "- Center strip: pct:25,25,50,50\n" +
@@ -1837,6 +1839,15 @@ function registerTools(
         "For accurate overlay placement: inspect the target area with inspect_artwork_image first, " +
         "verify the region contains what you expect, then use the same or refined coordinates here. " +
         "Do not estimate overlay positions from memory — always inspect first.\n\n" +
+        "Region formats:\n" +
+        "- 'pct:x,y,w,h' — percentage of full image (recommended default).\n" +
+        "- 'crop_pixels:x,y,w,h' — pixel coordinates of the full image. Measurement shows this is " +
+        "typically more accurate on larger models (Opus +79%, Sonnet +28–34% centroid accuracy vs pct). " +
+        "Use the nativeWidth/nativeHeight returned by inspect_artwork_image to bound values.\n" +
+        "- 'x,y,w,h' — equivalent to crop_pixels: (legacy IIIF form, kept for compatibility).\n" +
+        "- 'full' | 'square' — whole image shortcuts.\n\n" +
+        "Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — " +
+        "correct the coordinates and retry.\n\n" +
         "Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set. " +
         "Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for " +
         "30 minutes of idle inactivity — any polling or navigation resets the clock.\n\n" +
