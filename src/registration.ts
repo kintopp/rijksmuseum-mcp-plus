@@ -21,6 +21,7 @@ import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
 import { parseProvenance } from "./provenance.js";
+import { compositeOverlays, computeCropRect } from "./overlay-compositor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -720,6 +721,8 @@ const InspectImageOutput = {
   fetchTimeMs: z.number().int().optional().describe("Time spent fetching from IIIF server (ms)"),
   viewUUID: z.string().optional().describe("Active viewer session ID (if a viewer is open for this artwork)"),
   viewerNavigated: z.boolean().optional().describe("Whether the viewer was auto-navigated to the inspected region"),
+  overlaysRendered: z.number().int().optional().describe("Number of viewer overlays composited onto the returned image (show_overlays only)"),
+  overlaysSkipped: z.number().int().optional().describe("Number of viewer overlays that fell outside the inspected region and were not drawn (show_overlays only)"),
   error: z.string().optional(),
 };
 
@@ -1654,6 +1657,10 @@ function registerTools(
           .boolean()
           .default(true)
           .describe("Auto-navigate the open viewer to the inspected region (default: true). Only effective when a viewer is open for this artwork."),
+        show_overlays: z
+          .boolean()
+          .default(false)
+          .describe("Composite active-viewer overlays onto the returned crop (opt-in). Response size is clamped to 448 px when enabled."),
         viewUUID: optStr()
           .optional()
           .describe("Target a specific viewer session (from get_artwork_image). When omitted, auto-discovers a viewer for this artwork."),
@@ -1661,7 +1668,7 @@ function registerTools(
       ...withOutputSchema(InspectImageOutput),
     },
     withLogging("inspect_artwork_image", async (args) => {
-      const cropError = (error: string) => {
+      const cropError = (error: string, text?: string) => {
         const data: InferOutput<typeof InspectImageOutput> = {
           objectNumber: args.objectNumber,
           region: args.region,
@@ -1671,7 +1678,7 @@ function registerTools(
           error,
         };
         return {
-          ...structuredResponse(data, error),
+          ...structuredResponse(data, text ?? error),
           isError: true as const,
         };
       };
@@ -1715,6 +1722,20 @@ function registerTools(
           return cropError("No image available for this artwork");
         }
 
+        // OOB check — symmetric with navigate_viewer (P7, #247). Checked before
+        // prefix stripping so the `requested` field in the warning echoes what
+        // the user sent.
+        {
+          const oob = checkRegionBounds(args.region, imageInfo.width, imageInfo.height);
+          if (oob) {
+            const payload = JSON.stringify(oob, null, 2);
+            return cropError(
+              `overlay_region_out_of_bounds: ${oob.details.issue}`,
+              `${payload}\n\nYour coordinates fall outside valid bounds — please re-examine the region and retry with a corrected bounding box.`,
+            );
+          }
+        }
+
         // Strip crop_pixels: prefix before forwarding — IIIF upstream understands
         // plain pixels only (P2, #247). Mirrors navigate_viewer's strip step.
         const iiifRegion = args.region.startsWith("crop_pixels:")
@@ -1725,7 +1746,11 @@ function registerTools(
         // For pct: regions, the IIIF server's internal rounding (implementation-
         // specific) can yield a pixel region up to 3px narrower than our
         // estimate. Subtract 3 to avoid hitting the boundary.
-        let effectiveSize = args.size;
+        //
+        // Force-clamp to 448 when show_overlays is requested — the composite is
+        // for the LLM only, and a small crop keeps context cost minimal. Users
+        // who need a full-resolution composite should make a second call.
+        let effectiveSize = args.show_overlays ? Math.min(args.size, 448) : args.size;
         if (imageInfo.width) {
           let regionWidth = imageInfo.width;
           const pctMatch = iiifRegion.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
@@ -1758,6 +1783,39 @@ function registerTools(
         }
         const fetchTimeMs = Math.round(performance.now() - fetchStart);
 
+        // Composite active-viewer overlays onto the crop (P1, #247). Opt-in via
+        // show_overlays. Silent no-op when no viewer or no overlays — the
+        // returned image matches the uncomposited crop and overlaysRendered=0.
+        let overlaysRendered: number | undefined;
+        let overlaysSkipped: number | undefined;
+        if (args.show_overlays && imageInfo.width && imageInfo.height) {
+          const queueForOverlays = activeViewUUID ? viewerQueues.get(activeViewUUID) : undefined;
+          const overlays = queueForOverlays?.activeOverlays ?? [];
+          const cropRect = computeCropRect(iiifRegion, imageInfo.width, imageInfo.height);
+          if (overlays.length > 0 && cropRect) {
+            try {
+              const composite = await compositeOverlays(
+                Buffer.from(base64, "base64"),
+                overlays,
+                cropRect,
+                imageInfo.width,
+                imageInfo.height,
+              );
+              base64 = composite.buffer.toString("base64");
+              mimeType = composite.mimeType;
+              overlaysRendered = composite.rendered;
+              overlaysSkipped = composite.skipped;
+            } catch {
+              // Compositor failure is non-fatal — return the plain crop.
+              overlaysRendered = 0;
+              overlaysSkipped = overlays.length;
+            }
+          } else {
+            overlaysRendered = 0;
+            overlaysSkipped = 0;
+          }
+        }
+
         const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
         const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
 
@@ -1781,6 +1839,9 @@ function registerTools(
         }
         if (viewerNavigated) captionParts.push("| viewer navigated");
         else if (activeViewUUID) captionParts.push(`| viewer open (${activeViewUUID.slice(0, 8)})`);
+        if (overlaysRendered != null) {
+          captionParts.push(`| overlays: ${overlaysRendered} rendered, ${overlaysSkipped} skipped`);
+        }
         const caption = captionParts.join(" ");
 
         const content = [
@@ -1800,6 +1861,8 @@ function registerTools(
           fetchTimeMs,
           viewUUID: activeViewUUID,
           viewerNavigated: viewerNavigated || undefined,
+          overlaysRendered,
+          overlaysSkipped,
         };
         return {
           content,
@@ -1849,10 +1912,9 @@ function registerTools(
         "verify the region contains what you expect, then use the same or refined coordinates here. " +
         "Do not estimate overlay positions from memory — always inspect first.\n\n" +
         "Region formats:\n" +
-        "- 'pct:x,y,w,h' — percentage of full image (recommended default).\n" +
-        "- 'crop_pixels:x,y,w,h' — pixel coordinates of the full image. Measurement shows this is " +
-        "typically more accurate on larger models (Opus +79%, Sonnet +28–34% centroid accuracy vs pct). " +
-        "Use the nativeWidth/nativeHeight returned by inspect_artwork_image to bound values.\n" +
+        "- 'pct:x,y,w,h' — percentage of full image.\n" +
+        "- 'crop_pixels:x,y,w,h' — pixel coordinates of the full image. Use the nativeWidth/nativeHeight " +
+        "returned by inspect_artwork_image to bound values.\n" +
         "- 'x,y,w,h' — equivalent to crop_pixels: (legacy IIIF form, kept for compatibility).\n" +
         "- 'full' | 'square' — whole image shortcuts.\n\n" +
         "Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — " +

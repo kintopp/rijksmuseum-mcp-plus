@@ -138,6 +138,18 @@ assert(r2cCp.content.find(c => c.type === "image") != null, "crop_pixels region 
 const caption2cCp = r2cCp.content.find(c => c.type === "text")?.text ?? "";
 assert(/native \d+×\d+px/.test(caption2cCp), `caption echoes native dimensions (${caption2cCp.slice(0, 120)}…)`);
 
+// 2c-ter. inspect with OOB pct is rejected with structured warning (#247, symmetric with navigate_viewer)
+console.log("\n--- 2c-ter: inspect OOB pct (y=325) rejected with structured warning ---");
+const r2cOob = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: { objectNumber: "SK-C-5", region: "pct:10,325,20,20", size: 400, navigateViewer: false },
+});
+assert(r2cOob.isError === true, "inspect OOB pct returns isError");
+const oobInspectText = r2cOob.content?.find(c => c.type === "text")?.text ?? "";
+assert(oobInspectText.includes("overlay_region_out_of_bounds"), "inspect error text includes warning code");
+assert(oobInspectText.includes("y=325 outside 0–100"), "inspect error text identifies y=325 issue");
+assert(oobInspectText.includes("please re-examine"), "inspect error text carries retry cue");
+
 // 2d. Square region
 console.log("\n--- 2d: Square region (SK-C-5, 600px) ---");
 const r2d = await client.callTool({
@@ -503,6 +515,107 @@ const afterBad = await client.callTool({
 });
 const afterBadCmds = afterBad.structuredContent?.commands ?? JSON.parse(afterBad.content[0].text).commands;
 assert(afterBadCmds.length === 0, `OOB call did not queue commands (got ${afterBadCmds.length})`);
+
+// 4bis-e. crop_pixels OOB against known image dims is rejected with structured warning
+// Uses a deliberately oversized x (50000) that no real IIIF image will match. The viewer
+// queue carries imageWidth/imageHeight from the prior get_artwork_image call.
+console.log("\n--- 4bis-e: crop_pixels OOB with known dims rejected ---");
+const r4bisE = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [
+      { action: "add_overlay", region: "crop_pixels:50000,0,100,100", label: "oob-cp" },
+    ],
+  },
+});
+assert(r4bisE.isError === true, "crop_pixels OOB returns isError");
+const oobCpText = r4bisE.content?.[0]?.text ?? "";
+assert(oobCpText.includes("overlay_region_out_of_bounds"), "crop_pixels OOB text includes warning code");
+assert(/exceeds imageWidth/.test(oobCpText), "crop_pixels OOB text identifies imageWidth overflow");
+assert(oobCpText.includes("please re-examine the image"), "crop_pixels OOB carries retry cue");
+
+// ══════════════════════════════════════════════════════════════════
+//  4ter. inspect_artwork_image show_overlays (P1, #247)
+// ══════════════════════════════════════════════════════════════════
+
+section("4ter. inspect show_overlays compositing (#247)");
+
+// Fresh viewer so activeOverlays state is deterministic.
+const r4ter0 = await client.callTool({
+  name: "get_artwork_image",
+  arguments: { objectNumber: "SK-A-2152" },
+});
+const img4ter = r4ter0.structuredContent ?? JSON.parse(r4ter0.content[0].text);
+const viewUUIDov = img4ter.viewUUID;
+
+// Queue one known-good overlay.
+await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDov,
+    commands: [
+      { action: "add_overlay", region: "pct:10,10,20,20", label: "p1-target", color: "red" },
+    ],
+  },
+});
+
+// Baseline: show_overlays=false returns a plain crop.
+console.log("\n--- 4ter-a: show_overlays=false → plain crop ---");
+const r4terA = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: {
+    objectNumber: "SK-A-2152",
+    region: "full",
+    size: 448,
+    navigateViewer: false,
+    show_overlays: false,
+    viewUUID: viewUUIDov,
+  },
+});
+assert(!r4terA.isError, "plain inspect succeeds");
+const plainSC = r4terA.structuredContent ?? JSON.parse(r4terA.content.find(c => c.type === "text").text);
+assert(plainSC.overlaysRendered == null, "plain response omits overlaysRendered");
+const plainImage = r4terA.content.find(c => c.type === "image");
+assert(plainImage != null, "plain response has image");
+
+// Composite: show_overlays=true composites the queued overlay.
+console.log("\n--- 4ter-b: show_overlays=true → composited crop ---");
+const r4terB = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: {
+    objectNumber: "SK-A-2152",
+    region: "full",
+    size: 448,
+    navigateViewer: false,
+    show_overlays: true,
+    viewUUID: viewUUIDov,
+  },
+});
+assert(!r4terB.isError, "composite inspect succeeds");
+const compSC = r4terB.structuredContent ?? JSON.parse(r4terB.content.find(c => c.type === "text").text);
+assert(compSC.overlaysRendered >= 1, `overlaysRendered ≥ 1 (got ${compSC.overlaysRendered})`);
+assert(compSC.overlaysSkipped === 0, `overlaysSkipped == 0 (got ${compSC.overlaysSkipped})`);
+assert(compSC.requestedSize === 448, `requestedSize clamped to 448 (got ${compSC.requestedSize})`);
+const compImage = r4terB.content.find(c => c.type === "image");
+assert(compImage != null, "composite response has image");
+assert(compImage.data !== plainImage.data, "composite bytes differ from plain bytes");
+
+// Size clamp: passing size=1200 with show_overlays=true still clamps to 448.
+console.log("\n--- 4ter-c: size=1200 force-clamped to 448 when show_overlays=true ---");
+const r4terC = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: {
+    objectNumber: "SK-A-2152",
+    region: "full",
+    size: 1200,
+    navigateViewer: false,
+    show_overlays: true,
+    viewUUID: viewUUIDov,
+  },
+});
+const clampSC = r4terC.structuredContent ?? JSON.parse(r4terC.content.find(c => c.type === "text").text);
+assert(clampSC.requestedSize === 448, `size=1200 clamped to 448 when show_overlays=true (got ${clampSC.requestedSize})`);
 
 // ══════════════════════════════════════════════════════════════════
 //  5. poll_viewer_commands — queue draining

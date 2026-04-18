@@ -33,6 +33,7 @@
     "express": "^5.1.0",
     "fast-xml-parser": "^5.3.5",
     "openseadragon": "^6.0.2",
+    "sharp": "^0.34.5",
     "sqlite-vec": "0.1.9",
     "zod": "^3.25.0"
   },
@@ -49,7 +50,6 @@
     "eslint": "^10.0.2",
     "image-size": "^2.0.2",
     "peggy": "^5.1.0",
-    "sharp": "^0.34.5",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1",
