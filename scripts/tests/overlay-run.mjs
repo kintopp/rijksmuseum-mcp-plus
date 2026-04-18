@@ -24,7 +24,7 @@ const isPilot = args.includes("--pilot");
 const skipConfirm = args.includes("--yes");
 const modelFlag = (() => {
   const i = args.indexOf("--model");
-  return i >= 0 ? args[i + 1] : null;
+  return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : null;
 })();
 
 const experiment = await loadExperiment(path.join(expDir, "config.mjs"));
