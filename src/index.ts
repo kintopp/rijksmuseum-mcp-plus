@@ -382,10 +382,23 @@ async function runHttp(): Promise<void> {
   if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); }
   if (embeddingsDb?.available) embeddingsDb.warmCorePages();
 
-  // ── Health check ────────────────────────────────────────────────
+  // ── Health + readiness ──────────────────────────────────────────
+  //
+  // /health is the Railway liveness probe — passes as soon as express is
+  // listening (DB core pages already warmed above).
+  // /ready is an informational readiness flag: flips true once the ONNX
+  // embedding model has done one inference and the filtered-KNN path is
+  // warm. Railway is NOT configured to gate on /ready — the flag is purely
+  // for observability so cold-path spikes are attributable.
+
+  let ready = false;
 
   app.get("/health", (_req: express.Request, res: express.Response) => {
     res.json({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION, commit: GIT_COMMIT });
+  });
+
+  app.get("/ready", (_req: express.Request, res: express.Response) => {
+    res.json({ ready, status: ready ? "warm" : "warming" });
   });
 
   // ── Start ───────────────────────────────────────────────────────
@@ -395,6 +408,30 @@ async function runHttp(): Promise<void> {
     console.error(`  MCP endpoint: POST /mcp`);
     console.error(`  Viewer:       GET  /viewer?iiif={id}&title={title}`);
     console.error(`  Health:       GET  /health`);
+    console.error(`  Ready:        GET  /ready`);
+
+    // Post-listen warm-up — healthcheck already passes, so this doesn't delay
+    // deployment. Covers the ONNX first-inference cost + filtered-KNN page
+    // faults that warmCorePages() doesn't touch.
+    void (async () => {
+      const t0 = Date.now();
+      try {
+        let warmVec: Float32Array | undefined;
+        if (embeddingModel?.available) {
+          warmVec = await embeddingModel.embed("warmup");
+          console.error(`  Embedding model first-inference warmed in ${Date.now() - t0}ms`);
+        }
+        if (embeddingsDb?.available) {
+          const vec = warmVec ?? new Float32Array(embeddingsDb.vectorDimensions);
+          embeddingsDb.warmFilteredPath(vec);
+        }
+        ready = true;
+        console.error(`  Post-listen warmup complete in ${Date.now() - t0}ms — /ready now true`);
+      } catch (err) {
+        console.error(`  Post-listen warmup failed: ${err instanceof Error ? err.message : err}`);
+        ready = true; // don't leave /ready stuck — failure is logged
+      }
+    })();
   });
 }
 

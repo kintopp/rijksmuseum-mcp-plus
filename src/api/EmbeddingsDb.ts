@@ -139,6 +139,24 @@ export class EmbeddingsDb {
     }
   }
 
+  /** Page in the `artwork_embeddings` table + compile the filtered-KNN prepared
+   *  statement. Runs a one-shot filtered query against a small slice of real
+   *  art_ids so the first filtered semantic_search doesn't pay cold-page cost. */
+  warmFilteredPath(queryEmbedding: Float32Array): void {
+    if (!this.db || !this.stmtQuantize) return;
+    const t0 = Date.now();
+    try {
+      const rows = this.db.prepare(
+        "SELECT art_id FROM artwork_embeddings LIMIT 100"
+      ).all() as { art_id: number }[];
+      if (rows.length === 0) return;
+      this.searchFiltered(queryEmbedding, rows.map(r => r.art_id), 1);
+      console.error(`  Embeddings filtered path warmed in ${Date.now() - t0}ms`);
+    } catch (err) {
+      console.error(`  Embeddings filtered warmup failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   /**
    * Pure KNN search — no metadata filters.
    * Uses vec0 virtual table for best performance (2-3x faster than regular table).
