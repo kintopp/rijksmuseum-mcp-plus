@@ -1537,9 +1537,9 @@ function registerTools(
           .number()
           .int()
           .min(200)
-          .max(2000)
-          .default(1200)
-          .describe("Width of returned image in pixels (200-2000, default 1200)"),
+          .max(2016)
+          .default(1568)
+          .describe("Width of returned image in pixels (200–2016, default 1568). Defaults align to multiples of 28 for clean LLM coordinate handling: 1568 is Sonnet 4.6's native resolution cap, 2016 is the highest ×28 multiple that stays within Opus 4.7's per-image token budget across common aspect ratios."),
         rotation: z
           .union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)])
           .default(0)
