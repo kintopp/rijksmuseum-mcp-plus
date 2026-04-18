@@ -1902,6 +1902,23 @@ function registerTools(
         }
       }
 
+      // OOB check — reject rather than silent-clamp (P7, #247).
+      // Skip when relativeTo is used: the projected coordinates are validated
+      // post-projection (see below).
+      for (const cmd of args.commands) {
+        if (cmd.action !== "navigate" && cmd.action !== "add_overlay") continue;
+        if (!cmd.region) continue;
+        if (cmd.relativeTo) continue;
+        const oob = checkRegionBounds(cmd.region, queue.imageWidth, queue.imageHeight);
+        if (oob) {
+          const payload = JSON.stringify(oob, null, 2);
+          return navError(
+            `overlay_region_out_of_bounds: ${oob.details.issue}`,
+            `${payload}\n\nYour coordinates fall outside valid bounds — please re-examine the image and return a corrected bounding box.`,
+          );
+        }
+      }
+
       // Project relativeTo coordinates to full-image space
       for (const cmd of args.commands) {
         if (cmd.relativeTo && cmd.region) {
@@ -1910,6 +1927,14 @@ function registerTools(
             return navError(`relativeTo requires both 'region' and 'relativeTo' in pct: format. Got region='${cmd.region}', relativeTo='${cmd.relativeTo}'.`);
           }
           cmd.region = projected;
+          const oobPost = checkRegionBounds(cmd.region);
+          if (oobPost) {
+            const payload = JSON.stringify(oobPost, null, 2);
+            return navError(
+              `overlay_region_out_of_bounds: ${oobPost.details.issue}`,
+              `${payload}\n\nProjected coordinates fall outside 0-100 — the source region or relativeTo box extends outside the image.`,
+            );
+          }
         }
         delete cmd.relativeTo; // Never forward to viewer
       }
