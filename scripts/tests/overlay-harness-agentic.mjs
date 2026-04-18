@@ -72,7 +72,11 @@ for (let turn = 0; turn < 8; turn++) {
     }
     try {
       const out = await client.callTool({ name: tu.name, arguments: tu.input });
-      toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(out).slice(0, 4000) });
+      // Raw-stringify truncation — may land mid-JSON-string, which is OK for a smoke
+      // test (the model sees garbled text but doesn't error). 16 KB is enough to carry
+      // a full inspect_artwork_image text caption; base64 image data is stripped by
+      // the server-side structuredContent path before it would land in `out`.
+      toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(out).slice(0, 16000) });
     } catch (err) {
       toolResults.push({ type: "tool_result", tool_use_id: tu.id, is_error: true, content: String(err?.message ?? err) });
     }
