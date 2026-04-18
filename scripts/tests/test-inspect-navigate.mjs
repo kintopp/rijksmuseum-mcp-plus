@@ -560,13 +560,14 @@ await client.callTool({
   },
 });
 
-// Baseline: show_overlays=false returns a plain crop.
+// Baseline: show_overlays=false returns a plain crop at a non-full region
+// (show_overlays + region=full is rejected — see 4ter-d).
 console.log("\n--- 4ter-a: show_overlays=false → plain crop ---");
 const r4terA = await client.callTool({
   name: "inspect_artwork_image",
   arguments: {
     objectNumber: "SK-A-2152",
-    region: "full",
+    region: "pct:0,0,50,50",
     size: 448,
     navigateViewer: false,
     show_overlays: false,
@@ -579,13 +580,14 @@ assert(plainSC.overlaysRendered == null, "plain response omits overlaysRendered"
 const plainImage = r4terA.content.find(c => c.type === "image");
 assert(plainImage != null, "plain response has image");
 
-// Composite: show_overlays=true composites the queued overlay.
+// Composite: show_overlays=true composites the queued overlay (pct:10,10,20,20
+// falls inside the pct:0,0,50,50 inspect region).
 console.log("\n--- 4ter-b: show_overlays=true → composited crop ---");
 const r4terB = await client.callTool({
   name: "inspect_artwork_image",
   arguments: {
     objectNumber: "SK-A-2152",
-    region: "full",
+    region: "pct:0,0,50,50",
     size: 448,
     navigateViewer: false,
     show_overlays: true,
@@ -596,6 +598,7 @@ assert(!r4terB.isError, "composite inspect succeeds");
 const compSC = r4terB.structuredContent ?? JSON.parse(r4terB.content.find(c => c.type === "text").text);
 assert(compSC.overlaysRendered >= 1, `overlaysRendered ≥ 1 (got ${compSC.overlaysRendered})`);
 assert(compSC.overlaysSkipped === 0, `overlaysSkipped == 0 (got ${compSC.overlaysSkipped})`);
+assert(compSC.overlaysError == null, `no overlaysError on happy path (got ${compSC.overlaysError})`);
 assert(compSC.requestedSize === 448, `requestedSize clamped to 448 (got ${compSC.requestedSize})`);
 const compImage = r4terB.content.find(c => c.type === "image");
 assert(compImage != null, "composite response has image");
@@ -607,7 +610,7 @@ const r4terC = await client.callTool({
   name: "inspect_artwork_image",
   arguments: {
     objectNumber: "SK-A-2152",
-    region: "full",
+    region: "pct:0,0,50,50",
     size: 1200,
     navigateViewer: false,
     show_overlays: true,
@@ -616,6 +619,62 @@ const r4terC = await client.callTool({
 });
 const clampSC = r4terC.structuredContent ?? JSON.parse(r4terC.content.find(c => c.type === "text").text);
 assert(clampSC.requestedSize === 448, `size=1200 clamped to 448 when show_overlays=true (got ${clampSC.requestedSize})`);
+
+// show_overlays on region="full" is rejected — feature-scale verification only.
+console.log("\n--- 4ter-d: show_overlays + region=full rejected ---");
+const r4terD = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: {
+    objectNumber: "SK-A-2152",
+    region: "full",
+    show_overlays: true,
+    navigateViewer: false,
+    viewUUID: viewUUIDov,
+  },
+});
+assert(r4terD.isError === true, "show_overlays on full returns isError");
+const fullErrText = r4terD.content?.find(c => c.type === "text")?.text ?? "";
+assert(fullErrText.includes("show_overlays_on_full_not_supported"), "error text includes reject code");
+assert(fullErrText.includes("feature-scale"), "error text explains the 'why'");
+
+// Recency tie-break: opening a second viewer for the same artwork + adding
+// an overlay there should make inspect (without viewUUID) pick the newer
+// viewer, not collapse to 'ambiguous' as the old matchCount>1 logic did.
+console.log("\n--- 4ter-e: recency tie-break on multi-viewer auto-discovery ---");
+const r4terE0 = await client.callTool({
+  name: "get_artwork_image",
+  arguments: { objectNumber: "SK-A-2152" },
+});
+const img4terE = r4terE0.structuredContent ?? JSON.parse(r4terE0.content[0].text);
+const viewUUIDov2 = img4terE.viewUUID;
+assert(viewUUIDov2 !== viewUUIDov, "second viewer has a distinct UUID");
+
+// Place a distinct overlay on the NEW viewer only.
+await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDov2,
+    commands: [
+      { action: "add_overlay", region: "pct:20,20,10,10", label: "recent-only", color: "blue" },
+    ],
+  },
+});
+
+// Inspect without viewUUID — must auto-discover viewUUIDov2 (most recent).
+const r4terE = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: {
+    objectNumber: "SK-A-2152",
+    region: "pct:0,0,50,50",
+    size: 448,
+    navigateViewer: false,
+    show_overlays: true,
+  },
+});
+const recentSC = r4terE.structuredContent ?? JSON.parse(r4terE.content.find(c => c.type === "text").text);
+assert(recentSC.viewUUID === viewUUIDov2, `auto-discovered most recent viewer (expected ${viewUUIDov2?.slice(0, 8)}, got ${recentSC.viewUUID?.slice(0, 8)})`);
+assert(recentSC.overlaysRendered === 1, `picked up the recent viewer's overlay (got ${recentSC.overlaysRendered} rendered)`);
+assert(recentSC.overlaysError == null, "no overlaysError when viewer resolves cleanly");
 
 // ══════════════════════════════════════════════════════════════════
 //  5. poll_viewer_commands — queue draining

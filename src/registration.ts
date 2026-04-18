@@ -723,6 +723,7 @@ const InspectImageOutput = {
   viewerNavigated: z.boolean().optional().describe("Whether the viewer was auto-navigated to the inspected region"),
   overlaysRendered: z.number().int().optional().describe("Number of viewer overlays composited onto the returned image (show_overlays only)"),
   overlaysSkipped: z.number().int().optional().describe("Number of viewer overlays that fell outside the inspected region and were not drawn (show_overlays only)"),
+  overlaysError: z.string().optional().describe("Reason the composite couldn't proceed when show_overlays was requested (e.g. 'no_active_viewer', 'compositor_failed')"),
   error: z.string().optional(),
 };
 
@@ -1697,8 +1698,11 @@ function registerTools(
           ? await api.getImageInfoFast(artwork.iiifId)
           : null;
 
-        // Find active viewer — prefer explicit viewUUID (validated), fall back to
-        // objectNumber scan only when there's exactly one unambiguous match.
+        // Find active viewer — prefer explicit viewUUID, else pick the most
+        // recently accessed queue for this artwork. Recency tie-break is safe
+        // for reads (inspect) even though it would be risky for writes; if the
+        // caller just placed overlays via navigate_viewer, that queue will be
+        // the most recent by construction.
         let activeViewUUID: string | undefined;
         if (args.viewUUID) {
           const q = viewerQueues.get(args.viewUUID);
@@ -1708,20 +1712,33 @@ function registerTools(
           }
           // don't navigate wrong viewer
         } else {
-          // Auto-discover: only use if exactly one viewer exists for this artwork
-          let matchCount = 0;
+          // Tie-break on lastAccess using `>=` so the later-inserted viewer wins
+          // when two calls landed in the same millisecond (Map iterates in
+          // insertion order — later insertions appear later in the loop).
+          let bestLastAccess = -Infinity;
           for (const [uuid, q] of viewerQueues) {
-            if (q.objectNumber === args.objectNumber) {
+            if (q.objectNumber === args.objectNumber && q.lastAccess >= bestLastAccess) {
               activeViewUUID = uuid;
-              q.lastAccess = Date.now();
-              matchCount++;
+              bestLastAccess = q.lastAccess;
             }
           }
-          if (matchCount > 1) activeViewUUID = undefined; // ambiguous — skip
+          if (activeViewUUID) {
+            viewerQueues.get(activeViewUUID)!.lastAccess = Date.now();
+          }
         }
 
         if (!imageInfo) {
           return cropError("No image available for this artwork");
+        }
+
+        // show_overlays on region="full" hits a degenerate case: at the 448 px
+        // clamp, a feature-scale overlay shrinks to a few pixels and reveals
+        // nothing. Nudge the caller to inspect a feature-scale region instead.
+        if (args.show_overlays && args.region === "full") {
+          return cropError(
+            "show_overlays_on_full_not_supported",
+            "show_overlays_on_full_not_supported: show_overlays is a feature-scale verification aid — at the 448 px clamp, small overlays on a full-image view shrink below visual threshold. Inspect a region that encloses the overlay(s) you want to check (e.g. 'pct:' around the target area).",
+          );
         }
 
         // Checked before prefix stripping so `requested` in the warning echoes
@@ -1780,29 +1797,37 @@ function registerTools(
 
         let overlaysRendered: number | undefined;
         let overlaysSkipped: number | undefined;
+        let overlaysError: string | undefined;
         if (args.show_overlays && imageInfo.width && imageInfo.height) {
           const queueForOverlays = activeViewUUID ? viewerQueues.get(activeViewUUID) : undefined;
-          const overlays = queueForOverlays?.activeOverlays ?? [];
-          const cropRect = computeCropRect(iiifRegion, imageInfo.width, imageInfo.height);
-          if (overlays.length > 0 && cropRect) {
-            const frame = { rect: cropRect, imageWidth: imageInfo.width, imageHeight: imageInfo.height };
-            try {
-              const composite = await compositeOverlays(Buffer.from(base64, "base64"), overlays, frame);
-              base64 = composite.buffer.toString("base64");
-              mimeType = composite.mimeType;
-              overlaysRendered = composite.rendered;
-              overlaysSkipped = composite.skipped;
-            } catch (err) {
-              // Non-fatal: return the plain crop and log so the failure isn't
-              // indistinguishable from "all overlays fell outside the crop".
-              const message = err instanceof Error ? err.message : String(err);
-              console.warn(`[inspect_artwork_image] overlay composite failed: ${message}`);
-              overlaysRendered = 0;
-              overlaysSkipped = overlays.length;
-            }
-          } else {
+          if (!queueForOverlays) {
+            overlaysError = "no_active_viewer";
             overlaysRendered = 0;
             overlaysSkipped = 0;
+          } else {
+            const overlays = queueForOverlays.activeOverlays;
+            const cropRect = computeCropRect(iiifRegion, imageInfo.width, imageInfo.height);
+            if (overlays.length > 0 && cropRect) {
+              const frame = { rect: cropRect, imageWidth: imageInfo.width, imageHeight: imageInfo.height };
+              try {
+                const composite = await compositeOverlays(Buffer.from(base64, "base64"), overlays, frame);
+                base64 = composite.buffer.toString("base64");
+                mimeType = composite.mimeType;
+                overlaysRendered = composite.rendered;
+                overlaysSkipped = composite.skipped;
+              } catch (err) {
+                // Non-fatal: return the plain crop and flag so the failure
+                // isn't indistinguishable from "all overlays fell outside".
+                const message = err instanceof Error ? err.message : String(err);
+                console.warn(`[inspect_artwork_image] overlay composite failed: ${message}`);
+                overlaysError = "compositor_failed";
+                overlaysRendered = 0;
+                overlaysSkipped = overlays.length;
+              }
+            } else {
+              overlaysRendered = 0;
+              overlaysSkipped = 0;
+            }
           }
         }
 
@@ -1830,7 +1855,8 @@ function registerTools(
         if (viewerNavigated) captionParts.push("| viewer navigated");
         else if (activeViewUUID) captionParts.push(`| viewer open (${activeViewUUID.slice(0, 8)})`);
         if (overlaysRendered != null) {
-          captionParts.push(`| overlays: ${overlaysRendered} rendered, ${overlaysSkipped} skipped`);
+          const errNote = overlaysError ? ` (${overlaysError})` : "";
+          captionParts.push(`| overlays: ${overlaysRendered} rendered, ${overlaysSkipped} skipped${errNote}`);
         }
         const caption = captionParts.join(" ");
 
@@ -1853,6 +1879,7 @@ function registerTools(
           viewerNavigated: viewerNavigated || undefined,
           overlaysRendered,
           overlaysSkipped,
+          overlaysError,
         };
         return {
           content,
