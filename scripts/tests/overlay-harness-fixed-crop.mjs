@@ -196,7 +196,7 @@ export function cropPixelsToLocalPct(bbox_px, cropPxSize) {
 export async function runFixedCropHarness({ experiment, groundTruth, featureSubset, runsOverride, onProgress }) {
   const started_at = new Date().toISOString();
   const runs = runsOverride ?? experiment.runsPerCondition;
-  const features = featureSubset ?? groundTruth.features.filter((f) => f.label);
+  const features = featureSubset ?? groundTruth.features.filter((f) => f.label || f.layer);
 
   const anthropic = new Anthropic({ apiKey: await loadAnthropicKey() });
   const { client, transport } = await openMcpClient();
