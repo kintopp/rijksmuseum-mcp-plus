@@ -24,6 +24,9 @@ import {
   regionToPixels,
   parsePctRegion,
   projectToFullImage,
+  parseCropPixelsRegion,
+  cropPixelsToIiifPixels,
+  checkRegionBounds,
 } from "../../dist/registration.js";
 
 import { escapeFts5, escapeFts5Token, generateMorphVariants, expandFtsQuery } from "../../dist/utils/db.js";
@@ -226,6 +229,84 @@ section("projectToFullImage");
 }
 assertEq(projectToFullImage("full", "pct:50,50,50,50"), null, "invalid local → null");
 assertEq(projectToFullImage("pct:50,50,50,50", "garbage"), null, "invalid relativeTo → null");
+
+// ── parseCropPixelsRegion ───────────────────────────────────────
+
+section("parseCropPixelsRegion");
+
+assertDeepEq(parseCropPixelsRegion("crop_pixels:100,200,300,400"), [100, 200, 300, 400], "valid → 4-tuple");
+assertEq(parseCropPixelsRegion("pct:10,20,30,40"), null, "pct: → null");
+assertEq(parseCropPixelsRegion("100,200,300,400"), null, "no prefix → null");
+assertEq(parseCropPixelsRegion("crop_pixels:1.5,2,3,4"), null, "decimals → null");
+assertEq(parseCropPixelsRegion(""), null, "empty → null");
+
+// ── cropPixelsToIiifPixels ──────────────────────────────────────
+
+section("cropPixelsToIiifPixels");
+
+assertEq(cropPixelsToIiifPixels("crop_pixels:10,20,30,40"), "10,20,30,40", "strip prefix");
+assertEq(cropPixelsToIiifPixels("pct:10,20,30,40"), null, "pct: → null");
+assertEq(cropPixelsToIiifPixels("full"), null, "full → null");
+
+// ── checkRegionBounds ───────────────────────────────────────────
+
+section("checkRegionBounds");
+
+// Happy path
+assertEq(checkRegionBounds("pct:10,20,30,40"), null, "pct in-bounds → null");
+assertEq(checkRegionBounds("full"), null, "full → null");
+assertEq(checkRegionBounds("square"), null, "square → null");
+assertEq(checkRegionBounds("pct:0,0,100,100"), null, "pct edge 0,0,100,100 → null");
+
+// pct OOB — y out of range
+{
+  const oob = checkRegionBounds("pct:36,325,35,30");
+  assert(oob != null, "pct:36,325,35,30 → OOB warning");
+  assertEq(oob?.warning, "overlay_region_out_of_bounds", "warning code");
+  assert(oob?.details.issue.includes("y=325 outside 0–100"), "issue mentions y=325");
+  assertEq(oob?.details.clamped_to, "pct:36,100,35,0", "clamped_to value");
+}
+
+// pct — x+w exceeds 100
+{
+  const oob = checkRegionBounds("pct:80,10,30,20");
+  assert(oob != null, "pct:80,10,30,20 → OOB");
+  assert(oob?.details.issue.includes("x+w=110"), "issue mentions x+w=110");
+}
+
+// Note: negative-pct inputs (e.g. "pct:-10,50,20,20") are rejected upstream
+// by IIIF_REGION_RE format validation in navigate_viewer — they never reach
+// checkRegionBounds.
+
+// pct — zero dimensions
+{
+  const oob = checkRegionBounds("pct:10,10,0,20");
+  assert(oob != null, "w=0 → OOB");
+  assert(oob?.details.issue.includes("w=0"), "issue mentions w=0");
+}
+
+// crop_pixels with imageWidth/Height — exceeds bounds
+{
+  const oob = checkRegionBounds("crop_pixels:100,200,50,50", 120, 400);
+  assert(oob != null, "crop_pixels exceeds imgW → OOB");
+  assert(oob?.details.issue.includes("x+w=150 exceeds imageWidth=120"), "issue mentions x+w vs imageWidth");
+  assertEq(oob?.details.clamped_to, "crop_pixels:100,200,20,50", "clamped preserves prefix");
+}
+
+// crop_pixels — unknown image dims, best-effort (only checks w,h > 0)
+assertEq(checkRegionBounds("crop_pixels:100,200,50,50"), null, "crop_pixels no dims → null (best-effort)");
+{
+  const oob = checkRegionBounds("crop_pixels:100,200,0,50");
+  assert(oob != null, "crop_pixels w=0 → OOB even without dims");
+  assert(oob?.details.issue.includes("w=0"), "issue mentions w=0");
+}
+
+// Plain IIIF pixels (legacy) — equivalent to crop_pixels for bounds-check
+{
+  const oob = checkRegionBounds("100,200,50,50", 120, 400);
+  assert(oob != null, "plain pixels OOB with dims");
+  assertEq(oob?.details.clamped_to, "100,200,20,50", "clamped has no prefix for plain pixels");
+}
 
 // ── escapeFts5Token ─────────────────────────────────────────────
 
