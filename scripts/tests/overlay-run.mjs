@@ -31,7 +31,7 @@ const experiment = await loadExperiment(path.join(expDir, "config.mjs"));
 if (modelFlag) experiment.model = modelFlag;
 
 const gt = JSON.parse(await readFile(experiment.case.groundTruthFile, "utf8"));
-const labeledFeatures = gt.features.filter((f) => f.label);
+const labeledFeatures = gt.features.filter((f) => f.label || f.layer);
 
 let featureSubset = null;
 let runsOverride = null;
