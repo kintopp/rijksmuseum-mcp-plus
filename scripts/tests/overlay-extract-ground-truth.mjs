@@ -20,7 +20,7 @@
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { argv } from "node:process";
+import process from "node:process";
 
 import AdmZip from "adm-zip";
 import bplistParser from "bplist-parser";
@@ -65,7 +65,7 @@ function toFeature(g, layers, imageBounds) {
   const b = parseBounds(g.Bounds);
   const [ix, iy, iw, ih] = imageBounds;
   const [bx, by, bw, bh] = b;
-  const bounds_px = [round1(bx), round1(by), round1(bw), round1(bh)];
+  const bounds_px = [round1(bx - ix), round1(by - iy), round1(bw), round1(bh)];
   const bbox_pct = [
     round2(((bx - ix) / iw) * 100),
     round2(((by - iy) / ih) * 100),
@@ -112,8 +112,8 @@ function round2(n) { return Math.round(n * 100) / 100; }
 
 // ── CLI ──────────────────────────────────────────────────────────────
 
-if (import.meta.url === `file://${fileURLToPath(import.meta.url)}` && argv[1]?.endsWith("overlay-extract-ground-truth.mjs")) {
-  const [, , inPath, outPath] = argv;
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const [, , inPath, outPath] = process.argv;
   if (!inPath) {
     console.error("usage: overlay-extract-ground-truth.mjs <in.graffle> [out.json]");
     process.exit(2);
