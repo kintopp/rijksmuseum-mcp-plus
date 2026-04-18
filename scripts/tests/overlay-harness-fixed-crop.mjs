@@ -194,6 +194,7 @@ export function cropPixelsToLocalPct(bbox_px, cropPxSize) {
 
 /** Run the full Phase A sweep. Returns the aggregate results object. */
 export async function runFixedCropHarness({ experiment, groundTruth, featureSubset, runsOverride, onProgress }) {
+  const started_at = new Date().toISOString();
   const runs = runsOverride ?? experiment.runsPerCondition;
   const features = featureSubset ?? groundTruth.features.filter((f) => f.label);
 
@@ -240,7 +241,7 @@ export async function runFixedCropHarness({ experiment, groundTruth, featureSubs
 
   return {
     experiment_id: experiment.id,
-    started_at: new Date().toISOString(),
+    started_at,
     model: experiment.model,
     case_id: experiment.case.id,
     runs_per_condition: runs,
@@ -257,6 +258,7 @@ async function singleRun({ anthropic, model, feature, condition, crop, runIdx })
     : 1;
   const t0 = Date.now();
   let apiResult, parseResult, predictedLocal, predictedFull, scores;
+  let oobClamped = false, predictedFullClamped;
   let error = null;
   try {
     apiResult = await promptAnthropic({ anthropic, model, image: crop.image, prompt });
@@ -268,10 +270,13 @@ async function singleRun({ anthropic, model, feature, condition, crop, runIdx })
         ? parseResult.bbox
         : cropPixelsToLocalPct(parseResult.bbox, crop.cropPxSize);
       predictedFull = projectLocalToFull(predictedLocal, crop.regionBbox);
+      const clampResult = clampToImage(predictedFull, 100);
+      oobClamped = clampResult.clamped;
+      predictedFullClamped = clampResult.bbox;
       scores = {
-        iou: iou(predictedFull, feature.bbox_pct),
-        center_offset_pct: centerOffsetPct(predictedFull, feature.bbox_pct, imageAspect),
-        size_ratio: sizeRatio(predictedFull, feature.bbox_pct),
+        iou: iou(predictedFullClamped, feature.bbox_pct),
+        center_offset_pct: centerOffsetPct(predictedFullClamped, feature.bbox_pct, imageAspect),
+        size_ratio: sizeRatio(predictedFullClamped, feature.bbox_pct),
       };
     }
   } catch (err) {
@@ -288,6 +293,8 @@ async function singleRun({ anthropic, model, feature, condition, crop, runIdx })
     llm_raw: apiResult?.text,
     predicted_local: predictedLocal,
     predicted_full_pct: predictedFull,
+    predicted_full_pct_clamped: predictedFullClamped,
+    oob_clamped: oobClamped ?? false,
     ground_truth_pct: feature.bbox_pct,
     scores,
     error,
@@ -316,6 +323,7 @@ function aggregate(records, conditions) {
   return out;
 }
 
+// Upper-median for even n. Both conditions see the same bias, so condition-to-condition deltas are unaffected.
 function median(a) { return a.length ? a[Math.floor(a.length / 2)] : NaN; }
 function mean(a)   { return a.reduce((s, x) => s + x, 0) / (a.length || 1); }
 function quantile(a, q) {
