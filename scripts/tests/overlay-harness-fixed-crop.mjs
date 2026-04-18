@@ -105,7 +105,7 @@ export async function fetchCrop(client, objectNumber, regionPct) {
   };
 }
 
-const ANTHROPIC_MAX_RETRIES = 3;
+const ANTHROPIC_MAX_ATTEMPTS = 3;    // total attempts including the first try
 const ANTHROPIC_BASE_DELAY_MS = 1000;
 
 /** Read ANTHROPIC_API_KEY from env or ~/.env (handles the quoted-value case). */
@@ -126,7 +126,7 @@ export async function loadAnthropicKey() {
  */
 export async function promptAnthropic({ anthropic, model, image, prompt }) {
   let lastError = null;
-  for (let attempt = 0; attempt < ANTHROPIC_MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt < ANTHROPIC_MAX_ATTEMPTS; attempt++) {
     try {
       const resp = await anthropic.messages.create({
         model,
@@ -150,8 +150,10 @@ export async function promptAnthropic({ anthropic, model, image, prompt }) {
       lastError = err;
       const status = err?.status ?? err?.response?.status;
       if (status && status < 500 && status !== 429) break;
-      const delay = ANTHROPIC_BASE_DELAY_MS * Math.pow(2, attempt);
-      await new Promise((r) => setTimeout(r, delay));
+      if (attempt < ANTHROPIC_MAX_ATTEMPTS - 1) {
+        const delay = ANTHROPIC_BASE_DELAY_MS * Math.pow(2, attempt);
+        await new Promise((r) => setTimeout(r, delay));
+      }
     }
   }
   throw lastError ?? new Error("Anthropic API failed after retries");
@@ -162,6 +164,10 @@ export async function promptAnthropic({ anthropic, model, image, prompt }) {
  * Returns { format, bbox: [x,y,w,h] } or null.
  */
 export function parseLlmCoords(text) {
+  // Note: [^{}] excludes nested braces — if the LLM emits a nested object alongside
+  // `region` (e.g. `{"region":"pct:...", "confidence":{"level":"high"}}`), this
+  // regex returns null and the caller logs a parse_error. The system prompt asks
+  // for a flat object, so nested output is off-policy.
   const jsonMatch = text.match(/\{[^{}]*"region"\s*:\s*"([^"]+)"[^{}]*\}/);
   if (!jsonMatch) return null;
   const regionStr = jsonMatch[1].trim();
