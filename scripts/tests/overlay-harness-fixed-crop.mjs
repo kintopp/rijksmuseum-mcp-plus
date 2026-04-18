@@ -16,6 +16,7 @@
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { access } from "node:fs/promises";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -46,6 +47,12 @@ export function formatPctRegion(bbox) {
 
 /** Spawn the MCP server over stdio and return a connected client + transport. */
 export async function openMcpClient() {
+  const distPath = path.join(PROJECT_DIR, "dist/index.js");
+  try {
+    await access(distPath);
+  } catch {
+    throw new Error(`dist/index.js not found at ${distPath} — run \`npm run build\` first`);
+  }
   const transport = new StdioClientTransport({
     command: "node",
     args: ["dist/index.js"],
@@ -68,6 +75,13 @@ export async function fetchCrop(client, objectNumber, regionPct) {
     name: "inspect_artwork_image",
     arguments: { objectNumber, region: regionPct, size: 1200 },
   });
+  if (!Array.isArray(result?.content)) {
+    throw new Error(`inspect_artwork_image returned no content for ${objectNumber} @ ${regionPct}`);
+  }
+  if (result.isError) {
+    const errText = result.content.find((c) => c.type === "text")?.text ?? "unknown error";
+    throw new Error(`inspect_artwork_image error for ${objectNumber} @ ${regionPct}: ${errText}`);
+  }
   const imgBlock = result.content.find((c) => c.type === "image");
   if (!imgBlock) throw new Error(`No image in inspect_artwork_image response for ${regionPct}`);
 
