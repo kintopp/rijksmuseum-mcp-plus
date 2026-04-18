@@ -16,7 +16,7 @@
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, writeFile, mkdir } from "node:fs/promises";
 
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -24,7 +24,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { imageSize } from "image-size";
 
-import { clampToImage } from "./overlay-scoring.mjs";
+import { clampToImage, iou, centerOffsetPct, sizeRatio, projectLocalToFull } from "./overlay-scoring.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = path.resolve(HERE, "../..");
@@ -191,3 +191,175 @@ export function cropPixelsToLocalPct(bbox_px, cropPxSize) {
     (h / cropPxSize.height) * 100,
   ];
 }
+
+/** Run the full Phase A sweep. Returns the aggregate results object. */
+export async function runFixedCropHarness({ experiment, groundTruth, featureSubset, runsOverride, onProgress }) {
+  const runs = runsOverride ?? experiment.runsPerCondition;
+  const features = featureSubset ?? groundTruth.features.filter((f) => f.label);
+
+  const anthropic = new Anthropic({ apiKey: await loadAnthropicKey() });
+  const { client, transport } = await openMcpClient();
+
+  const records = [];
+  const crops = new Map();
+
+  try {
+    // Pre-fetch one crop per feature (reused across conditions + runs)
+    for (const f of features) {
+      const regionBbox = computeCropRegion(f.bbox_pct, experiment.cropExpandFactor);
+      const region = formatPctRegion(regionBbox);
+      const crop = await fetchCrop(client, experiment.case.objectNumber, region);
+      crops.set(f.id, {
+        regionUsed: crop.regionUsed,
+        regionBbox,
+        image: { base64: crop.base64, mimeType: crop.mimeType },
+        cropPxSize: { width: crop.widthPx, height: crop.heightPx },
+        nativeWidth: crop.nativeWidth,
+        nativeHeight: crop.nativeHeight,
+      });
+      onProgress?.({ phase: "crop-fetched", featureId: f.id, region });
+    }
+
+    // Run conditions × features × N
+    for (const f of features) {
+      const c = crops.get(f.id);
+      for (const cond of experiment.conditions) {
+        for (let runIdx = 0; runIdx < runs; runIdx++) {
+          const rec = await singleRun({
+            anthropic, model: experiment.model,
+            feature: f, condition: cond, crop: c, runIdx,
+          });
+          records.push(rec);
+          onProgress?.({ phase: "run-done", rec });
+        }
+      }
+    }
+  } finally {
+    await transport.close();
+  }
+
+  return {
+    experiment_id: experiment.id,
+    started_at: new Date().toISOString(),
+    model: experiment.model,
+    case_id: experiment.case.id,
+    runs_per_condition: runs,
+    crop_expand_factor: experiment.cropExpandFactor,
+    runs: records,
+    aggregates: aggregate(records, experiment.conditions),
+  };
+}
+
+async function singleRun({ anthropic, model, feature, condition, crop, runIdx }) {
+  const prompt = condition.promptTemplate({ feature, crop: crop.cropPxSize });
+  const imageAspect = (crop.nativeWidth && crop.nativeHeight)
+    ? crop.nativeWidth / crop.nativeHeight
+    : 1;
+  const t0 = Date.now();
+  let apiResult, parseResult, predictedLocal, predictedFull, scores;
+  let error = null;
+  try {
+    apiResult = await promptAnthropic({ anthropic, model, image: crop.image, prompt });
+    parseResult = parseLlmCoords(apiResult.text);
+    if (!parseResult) {
+      error = { type: "parse_error", raw: apiResult.text };
+    } else {
+      predictedLocal = parseResult.format === "pct"
+        ? parseResult.bbox
+        : cropPixelsToLocalPct(parseResult.bbox, crop.cropPxSize);
+      predictedFull = projectLocalToFull(predictedLocal, crop.regionBbox);
+      scores = {
+        iou: iou(predictedFull, feature.bbox_pct),
+        center_offset_pct: centerOffsetPct(predictedFull, feature.bbox_pct, imageAspect),
+        size_ratio: sizeRatio(predictedFull, feature.bbox_pct),
+      };
+    }
+  } catch (err) {
+    error = { type: "api_error", message: err?.message ?? String(err) };
+  }
+  return {
+    feature_id: feature.id,
+    feature_label: feature.label,
+    condition: condition.id,
+    run_idx: runIdx,
+    crop_region: crop.regionUsed,
+    crop_px_size: crop.cropPxSize,
+    image_aspect: imageAspect,
+    llm_raw: apiResult?.text,
+    predicted_local: predictedLocal,
+    predicted_full_pct: predictedFull,
+    ground_truth_pct: feature.bbox_pct,
+    scores,
+    error,
+    elapsed_ms: Date.now() - t0,
+    usage: apiResult?.usage,
+  };
+}
+
+function aggregate(records, conditions) {
+  const out = {};
+  for (const cond of conditions) {
+    const ok = records.filter((r) => r.condition === cond.id && r.scores);
+    if (ok.length === 0) { out[cond.id] = { n: 0 }; continue; }
+    const iouVals = ok.map((r) => r.scores.iou).sort((a, b) => a - b);
+    const coVals  = ok.map((r) => r.scores.center_offset_pct).sort((a, b) => a - b);
+    const srVals  = ok.map((r) => r.scores.size_ratio).sort((a, b) => a - b);
+    out[cond.id] = {
+      n: ok.length,
+      iou: { median: median(iouVals), mean: mean(iouVals), p25: quantile(iouVals, 0.25), p75: quantile(iouVals, 0.75) },
+      center_offset_pct: { median: median(coVals), mean: mean(coVals), p25: quantile(coVals, 0.25), p75: quantile(coVals, 0.75) },
+      size_ratio: { median: median(srVals), mean: mean(srVals), p25: quantile(srVals, 0.25), p75: quantile(srVals, 0.75) },
+      parse_errors: records.filter((r) => r.condition === cond.id && r.error?.type === "parse_error").length,
+      api_errors:   records.filter((r) => r.condition === cond.id && r.error?.type === "api_error").length,
+    };
+  }
+  return out;
+}
+
+function median(a) { return a.length ? a[Math.floor(a.length / 2)] : NaN; }
+function mean(a)   { return a.reduce((s, x) => s + x, 0) / (a.length || 1); }
+function quantile(a, q) {
+  if (!a.length) return NaN;
+  const i = Math.min(a.length - 1, Math.floor(q * a.length));
+  return a[i];
+}
+
+/** Write results JSON + markdown summary to `<outDir>/<ts>-<model>.{json,md}`. */
+export async function writeResults(outDir, results) {
+  await mkdir(outDir, { recursive: true });
+  const ts = results.started_at.replace(/[:.]/g, "-");
+  const base = path.join(outDir, `${ts}-${results.model}`);
+  await writeFile(`${base}.json`, JSON.stringify(results, null, 2) + "\n");
+  await writeFile(`${base}.md`, renderMarkdown(results));
+  return { json: `${base}.json`, md: `${base}.md` };
+}
+
+function renderMarkdown(r) {
+  const lines = [];
+  lines.push(`# Experiment: ${r.experiment_id}`);
+  lines.push(`- Model: \`${r.model}\``);
+  lines.push(`- Case: \`${r.case_id}\``);
+  lines.push(`- Runs per condition: ${r.runs_per_condition}`);
+  lines.push(`- Crop expand factor: ${r.crop_expand_factor}`);
+  lines.push(`- Started: ${r.started_at}`);
+  lines.push("");
+  lines.push("## Aggregates");
+  lines.push("");
+  lines.push("| Condition | n | IoU median | Center offset median (%) | Size ratio median | Parse err | API err |");
+  lines.push("|-----------|---|-----------:|--------------------------:|------------------:|----------:|--------:|");
+  for (const [cond, a] of Object.entries(r.aggregates)) {
+    lines.push(`| ${cond} | ${a.n ?? 0} | ${fmt(a.iou?.median)} | ${fmt(a.center_offset_pct?.median)} | ${fmt(a.size_ratio?.median)} | ${a.parse_errors ?? 0} | ${a.api_errors ?? 0} |`);
+  }
+  lines.push("");
+  lines.push("## Per-run detail");
+  lines.push("");
+  lines.push("| Feature | Cond | Run | IoU | Offset | Size ratio |");
+  lines.push("|---------|------|-----|----:|-------:|-----------:|");
+  for (const rec of r.runs) {
+    const s = rec.scores ?? {};
+    lines.push(`| ${rec.feature_label ?? rec.feature_id} | ${rec.condition} | ${rec.run_idx} | ${fmt(s.iou)} | ${fmt(s.center_offset_pct)} | ${fmt(s.size_ratio)} |`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+function fmt(n) { return typeof n === "number" ? n.toFixed(3) : "—"; }
