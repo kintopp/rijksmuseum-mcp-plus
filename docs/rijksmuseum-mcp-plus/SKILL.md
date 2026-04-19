@@ -5,10 +5,10 @@ description: >
   the user wants to search the Rijksmuseum collection, look up artwork details,
   explore iconographic themes, inspect high-resolution images, trace provenance,
   browse curated sets, or answer any art-historical question that could be
-  addressed through the Rijksmuseum's holdings of ~832,000 artworks.
+  addressed through the Rijksmuseum's holdings of ~833,000 artworks.
 metadata:
-  version: "0.23.7"
-  last_updated: "2026-04-17"
+  version: "0.24.0"
+  last_updated: "2026-04-19"
 ---
 
 # Rijksmuseum MCP+ Research Skill

@@ -29,9 +29,9 @@ Technically speaking, both rijksmuseum-mcp+ and rijksmuseum-iconclass-mcp are ba
 
 ## Research skill
 
-The [`rijksmuseum-mcp+` skill](docs/rijksmuseum-mcp-plus.skill.zip) file (.zip archive) gives the AI assistant [detailed guidance](https://support.claude.com/en/articles/12512176-what-are-skills) (in natural language) on how best to use the rijksmuseum-mcp+ tools effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions (e.g. `subject` terms vs `iconclass` notations), and known limitations. This particular research skill includes a reference file with a full description of the available provenance search patterns. Installing the skill is optional but will significantly improve the quality and efficiency of your AI assistant's responses when exploring the collection. 
+The `rijksmuseum-mcp+` [skill](https://support.claude.com/en/articles/12512176-what-are-skills) file ([.zip archive](docs/rijksmuseum-mcp-plus.skill.zip)) gives the AI assistant detailed guidance in natural language on how to use rijksmuseum-mcp+ effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions (e.g. `subject` terms vs `iconclass` notations), and known limitations. The package also includes a reference file with a full description of the available provenance search patterns. Making use of a skill is optional but will significantly improve the quality and efficiency of your AI assistant's responses when exploring the collection. 
 
-It can be installed in Claude by following [these instructions](https://claude.com/resources/tutorials/teach-claude-your-way-of-working-using-skills). Skill files were originally developed by Anthropic for their Claude products but have since become an [open standard](https://agentskills.io/home). Even chatbots and applications without explicit support for skill packages can make use of the rijksmuseum-mcp+ skill by uploading/sharing [its components](/docs/rijksmuseum-mcp-plus) (`SKILL.md`, `provenance-patterns.md` reference file) with the AI assistant directly at the start of a research session. Some chatbots (e.g. Mistral's [LeChat](https://chat.mistral.ai/chat)) also allow you to permanently share files such as this across sessions by uploading it to your [personal library](https://help.mistral.ai/en/articles/347582-what-are-libraries-and-how-do-i-use-them-in-le-chat).
+The downloaded skill file can be installed in Claude by following [these instructions](https://claude.com/resources/tutorials/teach-claude-your-way-of-working-using-skills). Skills were originally developed by Anthropic for their Claude products but have since become an [open standard](https://agentskills.io/home). Even chatbots and applications without explicit support for skill packages can make use of the rijksmuseum-mcp+ skill by uploading/sharing [its components](/docs/rijksmuseum-mcp-plus) (`SKILL.md`, `provenance-patterns.md` reference file) with an AI assistant at the start of a research session. Some chatbots (e.g. Mistral's [LeChat](https://chat.mistral.ai/chat)) allow you to permanently share files such as this with an LLM across sessions by uploading it to a [personal library](https://help.mistral.ai/en/articles/347582-what-are-libraries-and-how-do-i-use-them-in-le-chat).
 
 ## Sample Queries
 
@@ -121,11 +121,11 @@ flowchart LR
     overlay annotations"]
 
     Search --> VocabDB[("Vocab DB
-    832K artworks
-    194K vocab terms
-    13.7M mappings")]
+    833K artworks
+    417K vocab terms
+    14.7M mappings")]
     Search --> EmbeddingsDB[("Embeddings DB
-    832K vectors
+    833K vectors
     semantic search")]
     Details --> VocabDB
     Images --> IIIF["IIIF Image API
@@ -138,7 +138,7 @@ flowchart LR
         id.rijksmuseum.nl
         (harvest-time only)"]
     end
-    OAI -.->|"832K records"| VocabDB
+    OAI -.->|"833K records"| VocabDB
     LA -.->|"vocab + artwork
     enrichment"| VocabDB
     VocabDB -.->|"embedding
@@ -172,7 +172,6 @@ Later:
 - investigate adding `attributionQualifier`: "Signed by", "Manner of", "Rejected maker", "Falsification after"
 - implement incremental metadata updates via the LDES endpoint
 - implement incremental updates of the vector embeddings database
-- add provenance metadata for geolocated places
 - improve the `description` signal for find_similar (e.g. via LLM re-ranker)
 - incorporate metadata fixes from the Rijksmuseum
 - include authority IDs in search results
@@ -197,7 +196,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
 
 **APA (7th ed.)**
 
-> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.23.1) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
+> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.24.0) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
 
 **BibTeX**
 ```bibtex
@@ -205,7 +204,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
   author    = {Bosse, Arno},
   title     = {{rijksmuseum-mcp+}},
   year      = {2026},
-  version   = {0.23.1},
+  version   = {0.24.0},
   publisher = {Research and Infrastructure Support (RISE), University of Basel},
   url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
   orcid     = {0000-0003-3681-1289},

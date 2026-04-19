@@ -1,6 +1,6 @@
 # Artwork Metadata Categories
 
-The `get_artwork_details` tool returns up to **24 metadata categories** for each artwork. All data is served from the local vocabulary database (built from periodic harvests of the Rijksmuseum's Linked Art and OAI-PMH APIs). Categories include artwork identification, creation details with biographical data, physical characteristics, provenance with parsed ownership chains, iconographic subjects, and rights information.
+The `get_artwork_details` tool returns up to **25 metadata categories** for each artwork. All data is served from the local vocabulary database (built from periodic harvests of the Rijksmuseum's Linked Art and OAI-PMH APIs). Categories include artwork identification, creation details with biographical data, physical characteristics, provenance with parsed ownership chains, iconographic subjects, and rights information.
 
 Nearly all categories have corresponding search parameters in `search_artwork` — see the [full search parameter reference](search-parameters.md) for filters grouped by type, or the [tool parameters reference](mcp-tool-parameters.md) for all tools.
 
@@ -13,7 +13,7 @@ Nearly all categories have corresponding search parameters in `search_artwork` �
 | 1 | **Title variants** | `titles` | Title variants with language and qualifier tags. Currently returns an empty array — the vocabulary database stores combined title text (`title_all_text`) but not per-title language/qualifier tags. The primary display title is always available via the `title` field. |
 | 2 | **Object number** | `objectNumber` | The museum's inventory number (e.g. `SK-C-5` for The Night Watch). This is the primary identifier used across all tools. |
 | 3 | **Persistent identifier** | `persistentId` | Stable handle.net URI for long-term citation (e.g. `http://hdl.handle.net/10934/RM0001.COLLECT.5216`). |
-| 4 | **External identifiers** | `externalIds` | Identifier map. Currently returns an empty object — structured identifier extraction requires the Linked Art resolver which is no longer used at runtime. The object number is always available via the `objectNumber` field. |
+| 4 | **External identifiers** | `externalIds` | Identifier map. Currently returns an empty object — the vocabulary database does carry ~156K cross-authority identifiers for vocab terms (AAT, TGN, Wikidata, GeoNames, ULAN, VIAF, RKD, Iconclass, and others) in a `vocabulary_external_ids` table, but they are not yet surfaced per-artwork via this field. The object number is always available via the `objectNumber` field. |
 
 ## Creation
 
@@ -21,7 +21,7 @@ Nearly all categories have corresponding search parameters in `search_artwork` �
 |---|----------|-------|-------------|
 | 5 | **Creator** | `creator` | Creator name or attribution statement in English (e.g. "Rembrandt van Rijn"). Falls back to Dutch if no English version exists. |
 | 6 | **Date** | `date` | Creation date as a human-readable string (e.g. "1642"). Prefers English date labels; falls back to Dutch or raw year. |
-| 7 | **Production details** | `production` | Structured list of all production participants. Each entry includes: `name` (English label from vocabulary), `role` (e.g. "painter", "printmaker"), `attributionQualifier` (e.g. "attributed to", "workshop of", or null for primary), `place` (e.g. "Amsterdam"), `actorUri` (vocabulary identifier), and an optional `personInfo` sub-object with biographical data: `birthYear`, `deathYear` (integers), `gender` (`"male"`, `"female"`, or null), `bio` (biographical note, predominantly in Dutch), and `wikidataId` (e.g. `"Q5598"`). Person info is available for creators whose records could be matched to the Rijksmuseum's actor authority files (~49K with life dates, ~11K with biographical notes). Production participants are matched positionally (first creator gets first role/qualifier), which covers 95%+ of artworks. |
+| 7 | **Production details** | `production` | Structured list of all production participants. Each entry includes: `name` (English label from vocabulary), `role` (e.g. "painter", "printmaker"), `attributionQualifier` (e.g. "attributed to", "workshop of", or null for primary), `place` (e.g. "Amsterdam"), `actorUri` (vocabulary identifier), and an optional `personInfo` sub-object with biographical data: `birthYear`, `deathYear` (integers), `gender` (`"male"`, `"female"`, or null), `bio` (biographical note, predominantly in Dutch), and `wikidataId` (e.g. `"Q5598"`). Person info is available for creators whose records could be matched to the Rijksmuseum's actor authority files (~49K with life dates, ~9.9K with biographical notes, ~15.5K with Wikidata IDs). Production participants are matched positionally (first creator gets first role/qualifier), which covers 95%+ of artworks. |
 
 ## Description
 
@@ -89,4 +89,4 @@ Note: The following `search_artwork` filters are searchable but currently have *
 ---
 ## Data Model
 
-These categories originate from the [Linked Art](https://linked.art/) data model, a community standard for describing cultural heritage objects as JSON-LD. The Rijksmuseum's Linked Open Data APIs serve artwork records in this format during the offline harvest. At runtime, all data is served from the local vocabulary database — no Linked Art resolution is performed. Some fields that require runtime Linked Art resolution (title variants with language tags, external identifiers, current location, related objects) are absent or empty in the current implementation. A future re-harvest could capture these into the database.
+These categories originate from the [Linked Art](https://linked.art/) data model, a community standard for describing cultural heritage objects as JSON-LD. The Rijksmuseum's Linked Open Data APIs serve artwork records in this format during the offline harvest. At runtime, all data is served from the local vocabulary database — no Linked Art resolution is performed. Some fields (title variants with language tags, per-artwork external identifiers, current location, related objects) are not yet surfaced via `get_artwork_details`; the underlying data is partially present in the database (e.g. `vocabulary_external_ids` for vocab terms, `title_variants` for titles) and will be exposed in a future release.

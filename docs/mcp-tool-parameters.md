@@ -21,7 +21,7 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 | Parameter | Description |
 |---|---|
 | `title` | Search all title variants (brief, full, former × EN/NL) |
-| `subject` | Primary concept/theme search — searches ~832K artworks via Iconclass vocabulary. Start here for thematic queries |
+| `subject` | Primary concept/theme search — searches ~833K artworks via Iconclass vocabulary. Start here for thematic queries |
 | `iconclass` | Exact Iconclass notation code (e.g. `34B11` for dogs). More precise than `subject` |
 | `description` | Full-text search on cataloguer descriptions (~510K artworks) |
 | `curatorialNarrative` | Full-text search on museum wall text (~14K artworks) |
@@ -67,7 +67,7 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 |---|---|
 | `aboutActor` | Artworks about a person — broader recall than `depictedPerson`, searches both subject and creator vocabulary |
 | `imageAvailable` | `true` to return only works with a digital image |
-| `hasProvenance` | `true` to return only works with parsed provenance records (~48K of 832K) |
+| `hasProvenance` | `true` to return only works with parsed provenance records (~48.5K of 833K) |
 | `maxResults` | 1–50 (default 25) |
 | `offset` | Skip this many results (for pagination) |
 | `compact` | `true` returns IDs only without full metadata (faster) |

@@ -53,7 +53,7 @@ The links following each research question show you how the query was answered i
 
 ## Subject and Iconographic Search
 
-`search_artwork` includes [37 database-backed filters](search-parameters.md) drawn from a vocabulary database of ~194,000 controlled terms mapped to ~832,000 artworks via ~13.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations) and a spatial place hierarchy (~31K geocoded places). These enable searches by what is depicted, where it was made, who made it (including life dates, gender, and production roles), what is written on it, what the museum says about it, and how large it is.
+`search_artwork` includes [40 database-backed filters](search-parameters.md) drawn from a vocabulary database of ~417,000 controlled terms mapped to ~833,000 artworks via ~14.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~29.7K geocoded places, 81% of known places). These enable searches by what is depicted, where it was made, who made it (including life dates, gender, and production roles), what is written on it, what the museum says about it, and how large it is.
 
 ### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -279,7 +279,7 @@ The links following each research question show you how the query was answered i
 
 ## Semantic Search
 
-`semantic_search` finds artworks by meaning, concept, or theme using natural language — ranking all ~832,000 artworks by embedding similarity to a free-text query. Unlike the structured filters above, semantic search works with concepts that cannot be expressed as vocabulary terms, Iconclass notations, or keyword matches. It is most effective when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly. For full technical details, see [Semantic Search](semantic-search.md).
+`semantic_search` finds artworks by meaning, concept, or theme using natural language — ranking all ~833,000 artworks by embedding similarity to a free-text query. Unlike the structured filters above, semantic search works with concepts that cannot be expressed as vocabulary terms, Iconclass notations, or keyword matches. It is most effective when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly. For full technical details, see [Semantic Search](semantic-search.md).
 
 ### 20. Discovering Thematic Connections Beyond Formal Cataloguing
 

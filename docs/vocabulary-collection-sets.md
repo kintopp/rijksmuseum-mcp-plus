@@ -10,7 +10,7 @@
 | affiches | 7,824 | kranten en tijdschriften | 361 |
 | Against Opacity | ~19,000 | kunstnijverheid | 243 |
 | Album Ankersmit | 1 | L.J. Veen | 3,375 |
-| Alle gepubliceerde objecten | ~832,000 | lakwerk | 101 |
+| Alle gepubliceerde objecten | ~833,000 | lakwerk | 101 |
 | ambtskostuums | 99 | Leeuwarden serie | 41 |
 | archeologische vondsten | 15 | lijsten | 2,065 |
 | archief Bonger | 691 | linnendamast | 2,942 |

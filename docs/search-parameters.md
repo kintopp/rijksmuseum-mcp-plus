@@ -1,16 +1,16 @@
 # Search Parameters
 
-`search_artwork` accepts 39 search filters and 5 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
+`search_artwork` accepts 40 search filters and 5 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
 
 Parameters that accept arrays (marked **[]**) AND-combine their values: `subject: ["landscape", "seascape"]` returns artworks tagged with *both* subjects.
 
-All searches are backed by a vocabulary database of ~194,000 controlled terms mapped to ~832,000 artworks via ~13.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations) and a spatial place hierarchy (~31K geocoded places).
+All searches are backed by a vocabulary database of ~417,000 controlled terms mapped to ~833,000 artworks via ~14.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~29.7K geocoded places, 81% of known places).
 
 - [Ranking](#ranking)
 - [Result limits and pagination](#result-limits-and-pagination)
 - [1. Vocabulary label filters](#1-vocabulary-label-filters) (17 parameters)
 - [2. Full-text search filters](#2-full-text-search-filters) (7 parameters)
-- [3. Column and metadata filters](#3-column-and-metadata-filters) (15 parameters)
+- [3. Column and metadata filters](#3-column-and-metadata-filters) (16 parameters)
 - [4. Output controls](#4-output-controls) (5 parameters)
 - [Semantic search](#semantic-search)
 - [Artwork detail fields](#artwork-detail-fields)
@@ -44,7 +44,7 @@ Tools with `offset` pagination return a total count in the response (`totalResul
 
 ## 1. Vocabulary label filters
 
-Match against ~194,000 controlled terms. Labels are bilingual (English and Dutch) — try the Dutch term if English returns no results (e.g. "fotograaf" instead of "photographer").
+Match against ~417,000 controlled terms. Labels are bilingual (English and Dutch) — try the Dutch term if English returns no results (e.g. "fotograaf" instead of "photographer").
 
 ### Subject and iconography
 
@@ -117,7 +117,7 @@ Direct filters on artwork table columns, JOIN-based demographic filters, and spa
 | `creationDate` | string | Creation date. ~628K artworks with dates (3000 BCE–2025). Exact year or wildcard. | `"1642"`, `"16*"`, `"164*"` |
 | `dateMatch` | string | How `creationDate` matches artwork date ranges. `"overlaps"` (default): artwork range overlaps query range — inclusive, but broadly-dated objects appear in multiple bins. `"within"`: artwork range falls entirely within query range — exclusive bins, but drops ~43% of collection with ranges >1 decade. `"midpoint"`: assigns each artwork to one bin by midpoint — every object counted exactly once. Best for statistical comparisons. | `"midpoint"` |
 | `imageAvailable` | boolean | When `true`, only artworks with a digital image (~728K artworks). *Modifier.* | `true` |
-| `hasProvenance` | boolean | When `true`, only artworks with parsed provenance records (~48K of 832K). *Modifier.* | `true` |
+| `hasProvenance` | boolean | When `true`, only artworks with parsed provenance records (~48.5K of 833K). *Modifier.* | `true` |
 
 ### Dimensions
 
@@ -142,7 +142,7 @@ Based on enrichment data from Rijksmuseum actor authority files (~49K with life 
 
 ### Geographic proximity
 
-Searches both depicted and production places within the specified radius, using coordinates from ~31,000 geocoded places ([Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), [World Historical Gazetteer](https://whgazetteer.org/)).
+Searches both depicted and production places within the specified radius, using coordinates from ~29,700 geocoded places ([Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), [World Historical Gazetteer](https://whgazetteer.org/)).
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -175,7 +175,7 @@ Not filters — these control how results are returned.
 
 ## Semantic search
 
-For concepts that cannot be expressed as structured vocabulary terms — atmosphere, emotion, composition, art-historical interpretation — use the `semantic_search` tool instead. It accepts free-text queries in any language and ranks all ~832,000 artworks by embedding similarity. It supports pre-filtering by `type`, `material`, `technique`, `creationDate`, `dateMatch`, `creator`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, and `imageAvailable` — a subset of those listed above. See the [tool parameters reference](mcp-tool-parameters.md#semantic_search) for the full parameter list.
+For concepts that cannot be expressed as structured vocabulary terms — atmosphere, emotion, composition, art-historical interpretation — use the `semantic_search` tool instead. It accepts free-text queries in any language and ranks all ~833,000 artworks by embedding similarity. It supports pre-filtering by `type`, `material`, `technique`, `creationDate`, `dateMatch`, `creator`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, and `imageAvailable` — a subset of those listed above. See the [tool parameters reference](mcp-tool-parameters.md#semantic_search) for the full parameter list.
 
 Each artwork's embedding is generated from a composite source text built from four metadata fields (the "no-subjects" strategy — subject vocabulary is excluded to avoid duplicating the structured search path):
 
