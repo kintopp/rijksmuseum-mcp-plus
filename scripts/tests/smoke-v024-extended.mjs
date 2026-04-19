@@ -12,6 +12,7 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { readFileSync } from "fs";
 
 const transport = new StdioClientTransport({
   command: "node",
@@ -78,6 +79,22 @@ if (setSpecForBrowse) {
   // Missing args: should return structured error
   r = await call("browse_set", {});
   check("Empty args returns structured error", r.isError === true || r.sc?.error);
+
+  // Pagination round-trip: capture resumptionToken, verify page 2 is non-overlapping.
+  // OAI-PMH resumptionTokens are opaque — only assertable property is page-to-page disjointness.
+  r = await call("browse_set", { setSpec: setSpecForBrowse, maxResults: 3 });
+  const page1Nums = (r.sc?.records ?? []).map(rec => rec.objectNumber);
+  const token = r.sc?.resumptionToken;
+  if (token && page1Nums.length >= 3) {
+    r = await call("browse_set", { resumptionToken: token, maxResults: 3 });
+    const page2Nums = (r.sc?.records ?? []).map(rec => rec.objectNumber);
+    check("Pagination returns non-empty second page", page2Nums.length > 0);
+    const overlap = page1Nums.filter(n => page2Nums.includes(n));
+    check("Pages 1 and 2 do not overlap", overlap.length === 0);
+    console.log(`    → page1: [${page1Nums.slice(0,2).join(", ")}...]  page2: [${page2Nums.slice(0,2).join(", ")}...]`);
+  } else {
+    skip("browse_set pagination", `set too small or no token (records=${page1Nums.length}, hasToken=${!!token})`);
+  }
 } else {
   skip("browse_set", "no setSpec available from list_curated_sets");
 }
@@ -91,8 +108,9 @@ console.log(`    → since 2020-01-01: ${r.sc?.totalChanges ?? "?"} changes, ${r
 
 // Wide future window should return 0 cleanly
 r = await call("get_recent_changes", { from: "2030-01-01", maxResults: 5 });
-check("Future date returns 0 without error", !r._error && !r.isError);
-console.log(`    → since 2030-01-01: ${r.sc?.totalChanges ?? "?"} changes (expected 0)`);
+check("Future date returns without error", !r._error && !r.isError);
+check("Future date returns zero records", (r.sc?.records?.length ?? -1) === 0);
+console.log(`    → since 2030-01-01: ${r.sc?.records?.length ?? "?"} records, totalChanges=${r.sc?.totalChanges ?? "?"}`);
 
 // identifiersOnly path
 r = await call("get_recent_changes", { from: "2020-01-01", identifiersOnly: true, maxResults: 5 });
@@ -151,10 +169,15 @@ if (process.env.SKIP_NETWORK === "1") {
   r = await call("inspect_artwork_image", { objectNumber: "SK-C-5", region: "pct:0,0,10,10", size: 400 });
   check("pct-crop region returns without error", !r._error && !r.isError);
 
-  // Upscaling clamp — request an absurdly large size; server should clamp, not 400
-  r = await call("inspect_artwork_image", { objectNumber: "SK-C-5", region: "full", size: 2000 });
-  check("Large size returns without error (clamp fires)", !r._error && !r.isError);
-  console.log(`    → requested 2000px, native width: ${r.sc?.nativeWidth ?? "?"}`);
+  // Upscaling clamp — small region + large size should be clamped to region width,
+  // NOT forwarded as an IIIF upscale (iiif.micr.io rejects upscaling with 400).
+  // SK-C-5 is 14645×12158 native; pct:0,0,2,2 ≈ 293×243 source pixels.
+  // A clamped 293-px JPEG is small; an upscaled 2000-px JPEG would be ~10× larger.
+  r = await call("inspect_artwork_image", { objectNumber: "SK-C-5", region: "pct:0,0,2,2", size: 2000 });
+  check("Upscale request on tiny region returns without error (clamp fires)", !r._error && !r.isError);
+  const clampB64 = r.raw?.content?.find?.(c => c.type === "image")?.data?.length ?? 0;
+  check("Clamped image is small (not upscaled to 2000 px)", clampB64 > 0 && clampB64 < 40_000);
+  console.log(`    → pct:0,0,2,2 @ size=2000 (requested) → ${Math.round(clampB64/1024)} KB b64 (clamped)`);
 }
 
 // ─── 7. find_similar ─────────────────────────────────────────────────────
@@ -168,7 +191,39 @@ if (!toolList.includes("find_similar")) {
   const text7 = r.raw?.content?.[0]?.text ?? "";
   check("Response mentions an html path or /similar/ URL",
         /\.html/.test(text7) || /\/similar\//.test(text7));
+  // SK-C-5 exercises Iconclass (well-annotated), Description (has desc embedding),
+  // and depicted Person (militiamen). It does NOT exercise Lineage (directly
+  // attributed to Rembrandt — no assignment_pairs qualifier like workshop-of /
+  // after) or depicted Place (interior group portrait — no depicted landscape).
+  // Visual is best-effort external HTTP; don't assert on it.
+  // The #144 spot-check below covers Lineage on a different artwork.
+  const signals = ["Iconclass", "Description", "Person"];
+  for (const s of signals) {
+    const m = text7.match(new RegExp(`${s}:\\s*(\\d+)`));
+    const n = m ? parseInt(m[1]) : -1;
+    check(`SK-C-5 signal ${s} > 0`, n > 0);
+  }
+  console.log(`    → ${text7.split("\n").find(l => /Lineage:/.test(l))?.slice(0, 120) ?? "(no counts line)"}`);
   console.log(`    → ${text7.split("\n").find(l => /html|similar/.test(l))?.slice(0, 120) ?? "(no path line)"}`);
+}
+
+// ─── 7b. find_similar — #144 regression on RP-F-2018-183-9 ──────────────
+// RP-F-2018-183-9 has 9 real (qualifier, creator) pairs in assignment_pairs.
+// Pre-fix cartesian bug (#144, closed 2026-04-19 commit 8740b2c) fabricated 10.
+// Deep truth verification lives in scripts/tests/verify_lineage_144.mjs
+// (direct VocabularyDb call). This MCP-level check confirms the tool still
+// produces non-zero lineage results for the artwork post-fix.
+console.log("\n7b. find_similar — RP-F-2018-183-9 (#144 regression)");
+if (toolList.includes("find_similar")) {
+  r = await call("find_similar", { objectNumber: "RP-F-2018-183-9", maxResults: 50 });
+  check("Call returns without error", !r._error && !r.isError);
+  const text7b = r.raw?.content?.[0]?.text ?? "";
+  const lineageMatch = text7b.match(/Lineage:\s*(\d+)/);
+  const lineageN = lineageMatch ? parseInt(lineageMatch[1]) : -1;
+  check("Lineage count is positive (non-zero after #144 fix)", lineageN > 0);
+  console.log(`    → Lineage: ${lineageN} (truth: 9 pairs; deep check: verify_lineage_144.mjs)`);
+} else {
+  skip("find_similar #144 check", "find_similar not registered");
 }
 
 // ─── 8. search_provenance ────────────────────────────────────────────────
@@ -189,15 +244,91 @@ if (!toolList.includes("search_provenance")) {
   r = await call("search_provenance", {});
   check("No-filter call returns structured error", r.isError === true || !!r.sc?.error);
 
-  // Check that expected event fields are present on results (enrichment restoration sanity)
-  r = await call("search_provenance", { party: "Six", maxResults: 2 });
+  // Check expected event + party fields (#244: enrichment survival check).
+  // Two levels: field *existence* (schema drift) + at least one LLM-enriched event
+  // across returned artworks (data survival — catches the #185 scenario where a
+  // fresh harvest silently wipes LLM enrichments).
+  r = await call("search_provenance", { party: "Six", maxResults: 5 });
   const firstEvent = r.sc?.results?.[0]?.events?.[0];
   if (firstEvent) {
-    check("Events carry parseMethod", typeof firstEvent.parseMethod === "string" || firstEvent.parseMethod === null);
-    console.log(`    → first Six event: parseMethod=${firstEvent.parseMethod}, transferType=${firstEvent.transferType}`);
+    check("Events carry parseMethod (non-null string per schema)", typeof firstEvent.parseMethod === "string");
+    check("Events expose transferCategory field", "transferCategory" in firstEvent);
+    check("Events expose categoryMethod field", "categoryMethod" in firstEvent);
+    check("Events expose enrichmentReasoning field", "enrichmentReasoning" in firstEvent);
+    const firstParty = firstEvent.parties?.[0];
+    if (firstParty) {
+      check("Parties expose position field", "position" in firstParty);
+      // positionMethod is .nullable().optional() — legitimately absent when unset.
+      // Assert type only if present.
+      if ("positionMethod" in firstParty) {
+        check("positionMethod type is string or null when present",
+          firstParty.positionMethod === null || typeof firstParty.positionMethod === "string");
+      }
+    } else {
+      skip("party field sanity", "first event has no parties");
+    }
+    console.log(`    → first Six event: parseMethod=${firstEvent.parseMethod}, transferType=${firstEvent.transferType}, category=${firstEvent.transferCategory}`);
   } else {
     skip("event field sanity (parseMethod/party_position)", "no Six results");
   }
+
+  // Enrichment survival — direct probe via categoryMethod filter.
+  // "Six" happens to have only deterministically-parsed events (PEG/regex).
+  // categoryMethod='llm_enrichment' queries the whole collection for LLM-mediated
+  // classifications. If this returns 0 on v0.24+, the re-harvest trampled
+  // enrichments (→ #185 urgent). Memory note: 100% enrichment_reasoning coverage
+  // on LLM/rule rows post-Step 7 (2026-04-19).
+  r = await call("search_provenance", { categoryMethod: "llm_enrichment", maxResults: 3 });
+  check("LLM-enriched events exist (direct categoryMethod probe)", r.sc?.totalArtworks > 0);
+  console.log(`    → categoryMethod='llm_enrichment': ${r.sc?.totalArtworks ?? 0} artworks`);
+}
+
+// ─── 9. #145 probe — organisation (VOC) as depicted_person ──────────────
+// SK-A-2350 ("VOC Senior Merchant with his Wife and an Enslaved Servant")
+// has Verenigde Oostindische Compagnie (VOC, type='group') mapped as a
+// subject. get_artwork_details correctly filters groups out of
+// depictedPersons (only Jacob Mathieusen surfaces). But find_similar's
+// Person signal does NOT filter — VOC appears as a matched entity in the
+// generated HTML page. That's #145 (LA_TYPE_MAP["Group"] = "person" in the
+// harvester leaks groups into the person index used by find_similar).
+// Known failure until #145 lands — skip() with a pointer, don't hard-fail.
+console.log("\n9. #145 probe — VOC (organisation) in find_similar depicted_person (SK-A-2350)");
+
+// 9a. get_artwork_details should exclude VOC from depictedPersons.
+r = await call("get_artwork_details", { objectNumber: "SK-A-2350" });
+const depPersons9 = r.sc?.subjects?.depictedPersons ?? [];
+const vocInDetails = depPersons9.some(p => /Oostindische|VOC/i.test(p.label ?? p.name ?? ""));
+check("get_artwork_details filters groups out of depictedPersons", !vocInDetails);
+console.log(`    → get_artwork_details.depictedPersons: [${depPersons9.map(p => p.label ?? p.name).join(", ")}]`);
+
+// 9b. find_similar's Person signal — check via HTML inspection (stdio mode).
+if (toolList.includes("find_similar")) {
+  r = await call("find_similar", { objectNumber: "SK-A-2350", maxResults: 20 });
+  const text9 = r.raw?.content?.[0]?.text ?? "";
+  const pathMatch = text9.match(/\/\S+\.html/);
+  const pagePath = pathMatch?.[0];
+  if (pagePath) {
+    try {
+      const html = readFileSync(pagePath, "utf-8");
+      const vocMatches = (html.match(/Verenigde Oostindische Compagnie/gi) ?? []).length;
+      const personMatch = text9.match(/Person:\s*(\d+)/);
+      if (vocMatches > 0) {
+        // Known failure — don't fail the sweep, but log clearly.
+        console.log(`  ⊘ #145 STILL REPRODUCES: VOC appears ${vocMatches}× in find_similar HTML`);
+        console.log(`    → depicted_person signal count=${personMatch?.[1] ?? "?"}; HTML: ${pagePath}`);
+        skipped++;
+      } else {
+        check("#145 appears fixed: VOC not found in find_similar HTML", true);
+        console.log(`    → find_similar Person count=${personMatch?.[1] ?? "?"}, VOC mentions in HTML: 0`);
+      }
+    } catch (e) {
+      skip("#145 HTML inspection", `could not read HTML at ${pagePath}: ${e.message}`);
+    }
+  } else {
+    skip("#145 HTML inspection", "no .html path found in find_similar response");
+  }
+} else {
+  skip("#145 probe", "find_similar not registered");
 }
 
 console.log(`\n═══════════════════════════════════════`);
