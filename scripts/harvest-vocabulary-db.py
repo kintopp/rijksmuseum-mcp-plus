@@ -34,6 +34,7 @@ import csv
 import hashlib
 import html
 import json
+import math
 import os
 import re
 import socket
@@ -3596,6 +3597,66 @@ def enrich_concepts_from_skos(conn: sqlite3.Connection, dumps_dir: Path) -> None
     print(f"  [enrich concepts] Updated {updates:,} broader_id values")
 
 
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in km, antimeridian-safe.
+
+    Uses the standard atan2 form of haversine. `math.radians` of the
+    longitude delta naturally folds into sin²(dlam/2), so the dateline
+    (lon=180↔-180) is handled correctly without any modular arithmetic.
+    """
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return 6371.0 * c
+
+
+def _compute_areal_parents(conn: sqlite3.Connection, threshold_km: float = 75.0
+                           ) -> list[str]:
+    """Identify parents whose geocoded children span ≥ threshold_km pairwise.
+
+    Replaces the SQL GROUP BY HAVING approach which used naive
+    ``MAX(lon) - MIN(lon)`` and returned 360° for antimeridian-straddling
+    sets (Fiji: spurious 40,051 km diagonal per 2026-04-17 findings, #255).
+
+    Early-exit once the threshold is exceeded — for a parent whose first
+    two children are already far apart, no more pairs are tested.
+    """
+    rows = conn.execute(
+        """SELECT p.id AS parent_id, c.lat AS c_lat, c.lon AS c_lon
+           FROM vocabulary p
+           JOIN vocabulary c
+             ON c.broader_id = p.id
+            AND c.type = 'place'
+            AND c.lat IS NOT NULL
+           WHERE p.type = 'place' AND p.lat IS NOT NULL"""
+    ).fetchall()
+
+    children: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    for r in rows:
+        children[r["parent_id"]].append((r["c_lat"], r["c_lon"]))
+
+    areal: list[str] = []
+    for parent_id, pts in children.items():
+        if len(pts) < 2:
+            continue
+        exceeded = False
+        for i in range(len(pts)):
+            lat1, lon1 = pts[i]
+            for j in range(i + 1, len(pts)):
+                lat2, lon2 = pts[j]
+                if _haversine_km(lat1, lon1, lat2, lon2) >= threshold_km:
+                    exceeded = True
+                    break
+            if exceeded:
+                break
+        if exceeded:
+            areal.append(parent_id)
+    return areal
+
+
 def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
     """Propagate lat/lon from geocoded parent places to ungeocoded children.
 
@@ -3609,36 +3670,29 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
     Areal-parent filter (added post-v0.24 based on empirical analysis —
     see offline issue #254 for design, #255 for data-model anomalies):
     a parent is treated as areal (and excluded from inheritance) when it
-    has ≥2 geocoded children whose bounding-box diagonal exceeds 75 km.
-    Parents with <2 geocoded children are not blocked — we lack evidence
-    to judge them. This uses observable child-spread rather than external
-    placetype data; #254 will replace it with an authoritative TGN/Wikidata
-    placetype signal.
+    has ≥2 geocoded children whose *pairwise* great-circle distance
+    exceeds 75 km. Parents with <2 geocoded children are not blocked —
+    we lack evidence to judge them. Pairwise haversine replaced the SQL
+    bbox-diagonal approach (#255) because the latter returned spurious
+    ~40,000 km diagonals for antimeridian-straddling sets (Fiji, Oceania).
+
+    Once #254 populates ``vocabulary.is_areal``, this spread heuristic
+    stays as a belt-and-braces fallback for rows with NULL placetype.
     """
     conn.execute("DROP TABLE IF EXISTS _areal_parents")
-    conn.execute(
-        """CREATE TEMP TABLE _areal_parents AS
-           SELECT p.id AS id
-           FROM vocabulary p
-           JOIN vocabulary c
-             ON c.broader_id = p.id
-            AND c.type = 'place'
-            AND c.lat IS NOT NULL
-           WHERE p.type = 'place' AND p.lat IS NOT NULL
-           GROUP BY p.id
-           HAVING COUNT(c.id) >= 2
-              AND sqrt(
-                   pow((MAX(c.lat) - MIN(c.lat)) * 111.2, 2) +
-                   pow((MAX(c.lon) - MIN(c.lon)) * 111.2
-                        * cos(radians((MIN(c.lat) + MAX(c.lat)) / 2.0)), 2)
-                  ) >= 75"""
-    )
+    conn.execute("CREATE TEMP TABLE _areal_parents (id TEXT PRIMARY KEY)")
+    areal_ids = _compute_areal_parents(conn, threshold_km=75.0)
+    if areal_ids:
+        conn.executemany(
+            "INSERT INTO _areal_parents (id) VALUES (?)",
+            [(aid,) for aid in areal_ids],
+        )
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_areal_parents_id ON _areal_parents(id)"
     )
     n_areal = conn.execute("SELECT COUNT(*) FROM _areal_parents").fetchone()[0]
     print(f"  [enrich coords] {n_areal:,} parents flagged as areal "
-          f"(spread ≥ 75 km) — blocked from inheritance")
+          f"(pairwise spread ≥ 75 km, antimeridian-safe) — blocked from inheritance")
 
     total = 0
     max_depth = 10
