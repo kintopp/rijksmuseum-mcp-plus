@@ -227,20 +227,23 @@
 <div class="hero">
   <div class="container">
     <h1>Place Geocoding</h1>
-    <div class="subtitle">Adding coordinates to 32,000 place names from five centuries of art history</div>
+    <div class="subtitle">Adds geographic coordinates to 37,000 curated place names</div>
     <p style="color:#d6d3d1; font-size:0.9rem; max-width:700px;">
-      The Rijksmuseum's collection metadata references over 32,000 distinct places &mdash; production sites,
+      The Rijksmuseum's collection metadata references nearly 37,000 distinct places &mdash; production sites,
       depicted locations, and artist birthplaces spanning five continents and five centuries.
-      Most arrive as bare names without coordinates.
+      Most include geographic authority IDs but no latitude/longitude coordinates.
       <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" style="color:#93c5fd;">rijksmuseum-mcp+</a>
       geocodes these places by cascading through multiple authority databases, enabling
-      proximity search, geographic analysis, and spatial reasoning over the entire collection.
+      proximity search, geographic analysis, and spatial reasoning over the entire collection. Every geocoded
+      coordinate carries a three-tier provenance tag (<code style="color:#fde68a; font-size:0.85em;">authority</code> /
+      <code style="color:#fde68a; font-size:0.85em;">derived</code> / <code style="color:#fde68a; font-size:0.85em;">manual</code>) so its
+      source can be audited.
     </p>
     <div class="stats-row">
-      <div class="stat"><div class="num">32,347</div><div class="desc">distinct places</div></div>
-      <div class="stat"><div class="num">31,033</div><div class="desc">geocoded (96%)</div></div>
+      <div class="stat"><div class="num">36,907</div><div class="desc">distinct places</div></div>
+      <div class="stat"><div class="num">29,726</div><div class="desc">geocoded (81%)</div></div>
       <div class="stat"><div class="num">5</div><div class="desc">authority sources</div></div>
-      <div class="stat"><div class="num">485K</div><div class="desc">artwork&ndash;place links</div></div>
+      <div class="stat"><div class="num">1.9M</div><div class="desc">artwork&ndash;place links</div></div>
     </div>
   </div>
 </div>
@@ -260,10 +263,10 @@
 
     <h3 style="margin-top:1.2rem;">How places connect to artworks</h3>
     <div class="field-grid">
-      <div class="field-item"><span class="f-name">Production place</span><span class="f-count">485,429 links</span></div>
-      <div class="field-item"><span class="f-name">Depicted place</span><span class="f-count">309,502 links</span></div>
-      <div class="field-item"><span class="f-name">Creator birth place</span><span class="f-count">196,234 links</span></div>
-      <div class="field-item"><span class="f-name">Creator death place</span><span class="f-count">180,185 links</span></div>
+      <div class="field-item"><span class="f-name">Production place</span><span class="f-count">486,521 links</span></div>
+      <div class="field-item"><span class="f-name">Depicted place</span><span class="f-count">310,098 links</span></div>
+      <div class="field-item"><span class="f-name">Creator birth place</span><span class="f-count">195,957 links</span></div>
+      <div class="field-item"><span class="f-name">Creator death place</span><span class="f-count">180,653 links</span></div>
     </div>
 
     <p class="muted" style="margin-top:0.8rem;">
@@ -322,7 +325,7 @@
     </div>
 
     <div style="margin-top:1rem;">
-      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Coordinate sources across 31,033 geocoded places</div>
+      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Coordinate sources — v0.23 build across 31,033 geocoded places (see v0.24 note below)</div>
       <div class="method-bar">
         <div class="bar-wikidata" style="width:33%;" title="Wikidata: 10,264">Wikidata 33%</div>
         <div class="bar-inherit" style="width:31%;" title="Hierarchy: ~9,460">Hierarchy 31%</div>
@@ -342,6 +345,10 @@
     <h2>Authority sources in detail</h2>
     <p style="margin-bottom:0.5rem;">Each source contributes coordinates with different strengths. The pipeline queries them
       in order of precision and batch efficiency.</p>
+    <p class="muted" style="margin-bottom:1rem; padding:0.6rem 0.8rem; border-left:3px solid #94a3b8; background:#f8fafc; font-size:0.85rem;">
+      Per-source counts in this table reflect the v0.23 build. v0.24's three-tier summary appears in
+      <a href="#building-coverage" style="color:#2563eb;">Building coverage</a> below.
+    </p>
 
     <div style="overflow-x:auto;">
     <table class="source-table">
@@ -388,7 +395,7 @@
           <td>Recursive CTE<br><span class="muted">broader_id &rarr; parent coords</span></td>
           <td class="mono">~9,460</td>
           <td class="mono">~9,460</td>
-          <td style="font-size:0.82rem;">Streets, buildings, landmarks inherit city-level coordinates from parent place. 79% of places have a parent.</td>
+          <td style="font-size:0.82rem;">Streets, buildings, landmarks inherit city-level coordinates from parent place. 82% of places have a parent.</td>
         </tr>
       </tbody>
     </table>
@@ -489,14 +496,15 @@
     <p style="margin-bottom:1rem;">
       The vocabulary database links places into a parent&ndash;child tree via <code>broader_id</code>,
       derived from the Rijksmuseum's place hierarchy (<code>P89_falls_within</code> in CIDOC-CRM).
-      79% of places have a parent. This hierarchy serves two purposes.
+      82% of places have a parent. This hierarchy serves two purposes.
     </p>
 
     <div class="cards">
       <div class="card">
         <h3>Coordinate inheritance</h3>
         <p>Streets, buildings, and landmarks that no authority can geocode directly inherit coordinates from their
-          nearest geocoded ancestor. Precision drops to city-level, but coverage jumps from 64% to 96%.</p>
+          nearest geocoded ancestor. Precision drops to city-level, but coverage jumps significantly — in v0.24,
+          direct authority lookups cover about 64% of places, with hierarchy inheritance lifting the overall total to 81%.</p>
         <div class="example">
           "Spin- en Nieuwe Werkhuis"<br>
           &rarr; no coordinates in any authority<br>
@@ -652,10 +660,18 @@
 <!-- ════════════════════════════════════════════════════════════ -->
 <section>
   <div class="container">
-    <h2>Building coverage: from 0% to 96%</h2>
+    <h2 id="building-coverage">Building coverage: from 0% to 81%</h2>
     <p style="margin-bottom:0.5rem;">
       Each phase of the pipeline adds coordinates to a new tranche of places.
       Authority ID resolution handles the bulk; hierarchy inheritance closes the long tail.
+    </p>
+    <p class="muted" style="margin-bottom:1rem; padding:0.6rem 0.8rem; border-left:3px solid #94a3b8; background:#f8fafc; font-size:0.85rem;">
+      Note: the per-source counts below reflect the v0.23 build of this pipeline. In v0.24 the cascade
+      was re-run against a larger, enrichment-expanded vocabulary (36,907 places, up from 32,347), and the
+      result is summarised with a three-tier audit schema (23,666 <em>authority</em> / 6,060 <em>derived</em> /
+      0 <em>manual</em> = 29,726 geocoded = 81% coverage). A full v0.24 per-source redraw is planned for a
+      future release; the shape of the story — authority lookups handle most, hierarchy inheritance closes
+      the tail — is unchanged.
     </p>
 
     <div class="waterfall">
@@ -715,55 +731,6 @@
 </section>
 
 <!-- ════════════════════════════════════════════════════════════ -->
-<!--  VALIDATION                                                 -->
-<!-- ════════════════════════════════════════════════════════════ -->
-<section>
-  <div class="container">
-    <h2>Validation and edge cases</h2>
-    <p style="margin-bottom:1rem;">
-      Geocoding at this scale surfaces errors that are invisible in text-only metadata.
-      Phase&nbsp;4 runs systematic validation checks; several caught real errors in the source data.
-    </p>
-
-    <div class="callout-amber">
-      <h3 style="margin-bottom:0.7rem;">Errors caught by validation</h3>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin-top:0.5rem;">
-        <div>
-          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Authority misidentification</div>
-          <p style="font-size:0.82rem; color:#78350f;">
-            Tewkesbury (England) linked to Getty TGN&nbsp;7821058 &mdash; which is Tewkesbury,
-            <em>Tasmania</em>. Invisible without coordinates; detected by distance outlier
-            analysis (16,000&nbsp;km from co-occurring English places).
-          </p>
-        </div>
-        <div>
-          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Hemisphere and sign errors</div>
-          <p style="font-size:0.82rem; color:#78350f;">
-            6 Caribbean/Dutch locations had latitude/longitude swaps placing them near the Falkland
-            Islands. 2 negative-latitude signs inverted Northern Hemisphere locations to the Southern.
-            All 8 caught by systematic hemisphere checks.
-          </p>
-        </div>
-        <div>
-          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Null Island false positives</div>
-          <p style="font-size:0.82rem; color:#78350f;">
-            Places geocoded to 0&deg;N,&nbsp;0&deg;E (a point in the Gulf of Guinea) indicate a
-            missing-data default, not a real location. Flagged and excluded.
-          </p>
-        </div>
-        <div>
-          <div class="label" style="color:#92400e; margin-bottom:0.3rem;">Celestial false positive</div>
-          <p style="font-size:0.82rem; color:#78350f;">
-            A vocabulary entry for "Moon" was geocoded to Moon Township, Pennsylvania.
-            Manually corrected.
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ════════════════════════════════════════════════════════════ -->
 <!--  FOOTER                                                     -->
 <!-- ════════════════════════════════════════════════════════════ -->
 <footer>
@@ -773,8 +740,6 @@
     <a href="https://rise.unibas.ch/en/">RISE, University of Basel</a>
     &nbsp;&middot;&nbsp;
     Data: <a href="https://data.rijksmuseum.nl">Rijksmuseum, Amsterdam</a>
-    &nbsp;&middot;&nbsp;
-    Historical gazetteer: <a href="https://whgazetteer.org">WHG</a>
   </div>
 </footer>
 

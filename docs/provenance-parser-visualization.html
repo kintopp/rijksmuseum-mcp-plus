@@ -239,7 +239,7 @@
 <div class="hero">
   <div class="container">
     <h1>Provenance Parser</h1>
-    <div class="subtitle">Turning free-text ownership histories into structured data</div>
+    <div class="subtitle">Converts semi-structured, free-text ownership histories into structured data</div>
     <p style="color:#cbd5e1; font-size:0.9rem; max-width:680px;">
       The Rijksmuseum records the ownership history of ~48,000 artworks as free-text narratives
       following the <a href="https://www.museumprovenance.org/pages/standard_v1/" style="color:#93c5fd;">AAM
@@ -249,11 +249,11 @@
       by party, transfer type, date, location, and price.
     </p>
     <div class="stats-row">
-      <div class="stat"><div class="num">48,313</div><div class="desc">artworks with provenance</div></div>
-      <div class="stat"><div class="num">100,727</div><div class="desc">events parsed</div></div>
-      <div class="stat"><div class="num">19</div><div class="desc">transfer types</div></div>
-      <div class="stat"><div class="num">10</div><div class="desc">currencies recognised</div></div>
-      <div class="stat"><div class="num">3</div><div class="desc">unresolved events</div></div>
+      <div class="stat"><div class="num">48,539</div><div class="desc">artworks with provenance</div></div>
+      <div class="stat"><div class="num">101,092</div><div class="desc">events parsed</div></div>
+      <div class="stat"><div class="num">20</div><div class="desc">transfer types</div></div>
+      <div class="stat"><div class="num">14</div><div class="desc">currencies recognised</div></div>
+      <div class="stat"><div class="num">7</div><div class="desc">unresolved events</div></div>
     </div>
   </div>
 </div>
@@ -300,12 +300,11 @@
     </div>
 
     <div style="margin-top:1rem;">
-      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Parse method distribution (100,727 events)</div>
+      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Parse method distribution (101,092 events)</div>
       <div class="method-bar">
-        <div class="bar-peg" style="width:58%;" title="PEG grammar: 58%">Parsing Expression Grammar (PEG) &nbsp;58%</div>
-        <div class="bar-regex" style="width:19%;" title="Regex fallback: 19%">Regex &nbsp;19%</div>
-        <div class="bar-crossref" style="width:20%;" title="Cross-references: 20%">Cross-ref &nbsp;20%</div>
-        <div class="bar-llm" style="width:3%;" title="LLM enrichment: 3%">LLM</div>
+        <div class="bar-peg" style="width:80%;" title="PEG grammar: 80%">Parsing Expression Grammar (PEG) &nbsp;80%</div>
+        <div class="bar-crossref" style="width:19.7%;" title="Cross-references: 19.7%">Cross-ref &nbsp;20%</div>
+        <div class="bar-llm" style="width:0.3%;" title="LLM / credit-line: 0.3%">LLM</div>
       </div>
     </div>
   </div>
@@ -403,8 +402,8 @@
       <div class="card">
         <div class="card-icon">&oplus;</div>
         <h3>Locations</h3>
-        <p>Place names matched against 27,237 verified toponyms from the vocabulary database.
-          64% are geocoded for proximity search.</p>
+        <p>Place names matched against the vocabulary database's place terms. 81% of known places are
+          geocoded, enabling proximity search and region-based queries.</p>
         <div class="example">
           "Amsterdam" &rarr; loc: Amsterdam (52.37&deg;N, 4.89&deg;E)<br>
           "Delft" &rarr; loc: Delft (52.01&deg;N, 4.36&deg;E)
@@ -415,8 +414,9 @@
       <div class="card">
         <div class="card-icon">&curren;</div>
         <h3>Prices &amp; currencies</h3>
-        <p>Amounts in original historical currency. Ten currencies recognised: guilders, pounds, francs,
-          marks, euros, dollars, lire, yen, kronen, reis. A <code>batch_price</code> flag marks
+        <p>Amounts in original historical currency. 14 currencies recognised — dominant ones are guilders,
+          euros, pounds, francs, yen, and dollars; smaller tails for deutschmarks, Swiss francs, guineas,
+          reichsmarks, livres, marks, Belgian francs, and napoléons. A <code>batch_price</code> flag marks
           <em>en bloc</em> totals for multiple works.</p>
         <div class="example">
           "fl. 175" &rarr; 175 guilders<br>
@@ -556,37 +556,40 @@
 
     <h3 style="margin-top:1.2rem;">Ownership transfers</h3>
     <div class="type-grid">
-      <div class="type-item"><span class="t-name">sale</span><span class="t-count">12,886</span></div>
-      <div class="type-item"><span class="t-name">collection</span><span class="t-count">17,883</span></div>
-      <div class="type-item"><span class="t-name">gift</span><span class="t-count">10,663</span></div>
-      <div class="type-item"><span class="t-name">by_descent</span><span class="t-count">9,344</span></div>
+      <div class="type-item"><span class="t-name">sale</span><span class="t-count">15,657</span></div>
+      <div class="type-item"><span class="t-name">collection</span><span class="t-count">18,561</span></div>
+      <div class="type-item"><span class="t-name">gift</span><span class="t-count">10,897</span></div>
+      <div class="type-item"><span class="t-name">by_descent</span><span class="t-count">13,663</span></div>
       <div class="type-item"><span class="t-name">bequest</span><span class="t-count">4,378</span></div>
-      <div class="type-item"><span class="t-name">inheritance</span><span class="t-count">4,366</span></div>
-      <div class="type-item"><span class="t-name">widowhood</span><span class="t-count">3,423</span></div>
-      <div class="type-item"><span class="t-name">commission</span><span class="t-count">574</span></div>
-      <div class="type-item"><span class="t-name">recuperation</span><span class="t-count">852</span></div>
+      <div class="type-item"><span class="t-name">widowhood</span><span class="t-count">3,455</span></div>
+      <div class="type-item"><span class="t-name">commission</span><span class="t-count">580</span></div>
+      <div class="type-item"><span class="t-name">recuperation</span><span class="t-count">853</span></div>
       <div class="type-item"><span class="t-name">restitution</span><span class="t-count">86</span></div>
-      <div class="type-item"><span class="t-name">inventory</span><span class="t-count">75</span></div>
-      <div class="type-item"><span class="t-name">confiscation</span><span class="t-count">21</span></div>
-      <div class="type-item"><span class="t-name">exchange</span><span class="t-count">4</span></div>
-      <div class="type-item"><span class="t-name">theft / looting</span><span class="t-count">5</span></div>
+      <div class="type-item"><span class="t-name">inventory</span><span class="t-count">122</span></div>
+      <div class="type-item"><span class="t-name">inheritance</span><span class="t-count">41</span></div>
+      <div class="type-item"><span class="t-name">confiscation</span><span class="t-count">19</span></div>
+      <div class="type-item"><span class="t-name">looting</span><span class="t-count">5</span></div>
+      <div class="type-item"><span class="t-name">exchange</span><span class="t-count">5</span></div>
+      <div class="type-item"><span class="t-name">theft</span><span class="t-count">4</span></div>
     </div>
 
     <h3 style="margin-top:1.2rem;">Custody transfers</h3>
     <div class="type-grid">
-      <div class="type-item"><span class="t-name">loan</span><span class="t-count">6,333</span></div>
-      <div class="type-item"><span class="t-name">deposit</span><span class="t-count">246</span></div>
+      <div class="type-item"><span class="t-name">loan</span><span class="t-count">6,301</span></div>
+      <div class="type-item"><span class="t-name">deposit</span><span class="t-count">244</span></div>
     </div>
 
-    <h3 style="margin-top:1.2rem;">Ambiguous / unresolved</h3>
+    <h3 style="margin-top:1.2rem;">Other / unresolved</h3>
     <div class="type-grid">
-      <div class="type-item"><span class="t-name">transfer</span> <span class="muted" style="font-size:0.75rem;">(administrative)</span><span class="t-count">6,052</span></div>
-      <div class="type-item"><span class="t-name">unknown</span> <span class="muted" style="font-size:0.75rem;">(incl. cross-refs)</span><span class="t-count">21,436</span></div>
+      <div class="type-item"><span class="t-name">transfer</span> <span class="muted" style="font-size:0.75rem;">(administrative)</span><span class="t-count">6,275</span></div>
+      <div class="type-item"><span class="t-name">non_provenance</span> <span class="muted" style="font-size:0.75rem;">(Step 7 reclassification)</span><span class="t-count">67</span></div>
+      <div class="type-item"><span class="t-name">unknown</span> <span class="muted" style="font-size:0.75rem;">(incl. cross-refs)</span><span class="t-count">19,879</span></div>
     </div>
 
     <p class="muted" style="margin-top:1rem;">
-      The 21,436 <em>unknown</em> events include 19,871 cross-references (<code>"see provenance of SK-A-XXXX"</code>)
-      that link to companion works and are not true unknowns. After excluding cross-references, only 3 events remain genuinely unresolved.
+      The 19,879 <em>unknown</em> events include 19,872 cross-references (<code>"see provenance of SK-A-XXXX"</code>)
+      that link to companion works and are not true unknowns. After excluding cross-references, only 7 events remain
+      genuinely unresolved.
     </p>
   </div>
 </section>
@@ -650,7 +653,7 @@
     </div>
 
     <!-- Waterfall -->
-    <h3 style="margin-top:1.5rem;">From 3,192 unknowns to 3</h3>
+    <h3 style="margin-top:1.5rem;">From 3,192 unknowns to 7</h3>
     <p style="margin-bottom:0.5rem; font-size:0.88rem; color:#555;">
       In the end, a series of grammar improvements, structural signal detection, deterministic rules,
       and targeted LLM passes reduced the (non-cross-reference) unknowns by 99.9%.
@@ -689,7 +692,7 @@
       </div>
       <div class="wf-row">
         <div class="wf-label" style="font-weight:700;">Remaining</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:0.7%; background:#ef4444; min-width:24px;">3</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:0.7%; background:#ef4444; min-width:24px;">7</div></div>
         <div class="wf-note"></div>
       </div>
     </div>
