@@ -23,6 +23,8 @@ Thumbs.db
 # Local files
 offline/
 .claude/
+.agents/
+skills-lock.json
 CLAUDE.md
 CLAUDE.md.bak
 
