@@ -3883,6 +3883,29 @@ def run_phase3(
             conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} TEXT")
     conn.commit()
 
+    # #254: placetype provenance for the "centroid not meaningful for
+    # point-based queries" signal. Covers both (a) admin polygons with
+    # wide trimmed spread and (b) region-scale entities (oceans, empires,
+    # historical colonial territories) where no centroid is useful.
+    #   placetype        — AAT URI (TGN) or Wikidata QID
+    #   placetype_source — 'tgn' | 'wikidata' | 'manual' | 'label_heuristic'
+    #   is_areal         — 1 | 0 | NULL (NULL = we have no opinion yet)
+    # Populated by scripts/harvest-placetypes.py (SPARQL side-pass) and
+    # scripts/apply_areal_overrides.py (manual TSV). Side-pass is idempotent
+    # via WHERE placetype_source IS NULL guards; manual overrides take
+    # precedence over authority-sourced values. Survives cold-reset of
+    # lat/lon/coord_method since these are attributes of the entity, not
+    # of any given geocoding run.
+    placetype_cols = (
+        ("placetype",        "TEXT"),
+        ("placetype_source", "TEXT"),
+        ("is_areal",         "INTEGER"),
+    )
+    for col_name, col_type in placetype_cols:
+        if col_name not in vocab_cols:
+            conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} {col_type}")
+    conn.commit()
+
     # Person-enrichment columns must exist at server open() time — VocabularyDb.ts
     # caches `stmtArtworkMappings` against v.birth_year/death_year/gender/bio/wikidata_id
     # unconditionally. Populated later by enrich-vocab-from-dumps.py (Phases 2a/2b);
