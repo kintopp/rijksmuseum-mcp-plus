@@ -1,0 +1,101 @@
+# Manual areal overrides for #254 / #256.
+# Flags vocab rows whose centroid is not meaningful for
+# point-based runtime queries (oceans, continents,
+# historical polities, region-scale entities).
+# Applied by scripts/apply_areal_overrides.py.
+# Format: vocab_id<TAB>label<TAB>category<TAB>reason
+# Categories: continent, ocean, sea, historical_polity,
+#             modern_country, river, mountain_range, other
+# HUMAN REVIEW: please verify the sweep rows before running
+# the unattended clean re-geocode run. See build script for
+# the seed patterns vs sweep patterns distinction.
+130256	Afrika	continent	seed: Africa
+330133514	Afrika	continent	seed: Africa
+2301304	Afrika	continent	seed: Africa
+330133736	Azië	continent	seed: Asia
+230129	Azië	continent	seed: Asia
+13032	Azië	continent	seed: Asia
+23012097	Caraïben	continent	seed: Caribbean
+330134680	Europa	continent	seed: Europe
+23026	Europe	continent	seed: Europe
+1302	Europe	continent	seed: Europe
+330135958	Midden-Oosten	continent	seed: Middle East
+130848	Midden-Oosten	continent	seed: Middle East
+2306923	Midden-Oosten	continent	seed: Middle East
+2306683	Noord- en Centraal Amerika	continent	seed: North and Central America
+330136338	Oceanië	continent	seed: Oceania
+2306657	Oceanië	continent	seed: Oceania
+130820	Oceanië	continent	seed: Oceania
+330136998	Scandinavië	continent	seed: Scandinavia
+2301105	Scandinavië	continent	seed: Scandinavia
+130233	Scandinavië	continent	seed: Scandinavia
+23039	West-Europa	continent	seed: Western Europe
+330138031	Zuid-Amerika	continent	seed: South America
+230154	Zuid-Amerika	continent	seed: South America
+13038	Zuid-Amerika	continent	seed: South America
+330138038	Zuidoost-Azië	continent	seed: Southeast Asia
+13028	southeast Asia	continent	seed: Southeast Asia
+230111	southeast Asia	continent	seed: Southeast Asia
+23028748	Britse Rijk	historical_polity	sweep: rijk (nl, word-boundary)
+330134124	Byzantijnse Rijk	historical_polity	sweep: rijk (nl, word-boundary)
+230193	Dutch East Indies, The	historical_polity	seed: Dutch East Indies
+23012947	Holy Roman Empire	historical_polity	seed: Holy Roman Empire
+23025982	Koninkrijk Hawaï	historical_polity	sweep: koninkrijk (nl)
+23012456	Koninkrijk Holland	historical_polity	sweep: koninkrijk (nl)
+23023316	Koninkrijk Lombardije-Venetië	historical_polity	sweep: koninkrijk (nl)
+23023317	Koninkrijk Napels	historical_polity	seed: Kingdom of Naples
+23022636	Koninkrijk Sardinië	historical_polity	sweep: koninkrijk (nl)
+23026391	Koninkrijk Sicilië	historical_polity	sweep: koninkrijk (nl)
+23025908	Koninkrijk Slavonië	historical_polity	sweep: koninkrijk (nl)
+23025895	Koninkrijk der Beide Siciliën	historical_polity	sweep: koninkrijk (nl)
+2305235	Koninkrijk der Nederlanden	historical_polity	sweep: koninkrijk (nl)
+130317	Nederlandse Antillen	historical_polity	seed: Netherlands Antilles
+330136163	Nederlandse Antillen	historical_polity	seed: Netherlands Antilles
+2301743	Nederlandse Antillen	historical_polity	seed: Netherlands Antilles
+23023120	Oost-Frankische Rijk	historical_polity	sweep: rijk (nl, word-boundary)
+2306629	Oostenrijk-Hongarije	historical_polity	seed: Austria-Hungary
+23018084	Ottomaanse Rijk	historical_polity	seed: Ottoman Empire
+330136813	Romeinse Rijk	historical_polity	seed: Roman Empire
+23013386	Romeinse Rijk	historical_polity	seed: Roman Empire
+23022832	Sint Eustatius- Nederlandse Antillen	historical_polity	seed: Netherlands Antilles
+230287	Sovjet-Unie	historical_polity	seed: Soviet Union
+13066	Sovjet-Unie	historical_polity	seed: Soviet Union
+23026510	Timoeridische rijk	historical_polity	sweep: rijk (nl, word-boundary)
+2308617	Arctische Oceaan	ocean	sweep: ocean labels (nl)
+2301210	Atlantic Ocean	ocean	seed: Atlantic Ocean
+23030859	Brits Indische Oceaanterritorium	ocean	seed: Indian Ocean
+2301307	Grote Oceaan	ocean	seed: Pacific Ocean
+2301211	Indische Oceaan	ocean	seed: Indian Ocean
+330135226	Indische Oceaan	ocean	seed: Indian Ocean
+330136264	Noordelijke IJszee	ocean	seed: Arctic Ocean
+2308616	Noordelijke IJszee	ocean	seed: Arctic Ocean
+330137321	Stille Oceaan	ocean	seed: Pacific Ocean
+330133509	Adriatische Zee	sea	sweep: sea labels (nl)
+23011492	Adriatische zee	sea	sweep: sea labels (nl)
+330133804	Barentszee	sea	sweep: sea labels ('zee' suffix, nl)
+23013935	Barentszzee	sea	seed: Barents Sea
+23026981	Caraïbische Zee	sea	seed: Caribbean Sea
+2301308	Caribische Zee	sea	sweep: sea labels (nl)
+23014180	Dode Zee	sea	sweep: sea labels (nl)
+23012648	Egeïsche Zee	sea	sweep: sea labels (nl)
+23017025	Gele Zee	sea	sweep: sea labels (nl)
+23027710	Ionische Zee	sea	sweep: sea labels (nl)
+23021065	Lauwerszee	sea	sweep: sea labels ('zee' suffix, nl)
+23021784	Ligurische Zee	sea	sweep: sea labels (nl)
+130252	Middellandse Zee	sea	seed: Mediterranean Sea
+2301292	Middellandse Zee	sea	seed: Mediterranean Sea
+330135955	Middellandse Zee	sea	seed: Mediterranean Sea
+23029369	Noord-Oostzeekanaal	sea	seed: Baltic Sea
+2301324	Noordzee	sea	seed: North Sea
+130257	Noordzee	sea	seed: North Sea
+330136270	Noordzee	sea	seed: North Sea
+23013962	Noorse Zee	sea	sweep: sea labels (nl)
+23017024	Oost-Chinese Zee	sea	sweep: sea labels (nl)
+2304908	Oostzeegebied	sea	seed: Baltic Sea
+330136388	Oostzeegebied	sea	seed: Baltic Sea
+2309160	Rode Zee	sea	sweep: sea labels (nl)
+330138033	Zuid-Chinese zee	sea	sweep: sea labels (nl)
+230393	Zuiderzee	sea	seed: Zuiderzee
+23012689	Zwarte Zee	sea	sweep: sea labels (nl)
+130997	Zwarte Zee	sea	sweep: sea labels (nl)
+330138045	Zwarte Zee	sea	sweep: sea labels (nl)
