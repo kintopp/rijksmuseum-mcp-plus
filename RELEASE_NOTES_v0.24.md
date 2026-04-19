@@ -4,7 +4,7 @@ Draft release notes for v0.24. Not committed.
 
 ## v0.24.0
 
-First full re-harvest since v0.21. Backward-compatible with v0.23.1 — no tool-schema changes, no removed tools.
+First full re-harvest (April 19, 2026) since v0.21. Backward-compatible with v0.23.1 — no tool-schema changes, no removed tools.
 
 ### Highlights
 
@@ -57,5 +57,5 @@ First full re-harvest since v0.21. Backward-compatible with v0.23.1 — no tool-
 
 ### Companion Iconclass MCP server
 
-Iconclass is no longer embedded in this server. It now lives in a standalone companion — [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) — covering ~1.3M notations across 13 languages, with semantic and keyword search, hierarchical browsing, batch notation resolution, and per-collection presence counts so you can see which notations actually have artworks in a given collection. Install it alongside rijksmuseum-mcp+ for richer subject search; the AI assistant will route Iconclass questions to it automatically when both are connected.
+Iconclass is no longer embedded in this server. It now lives in a standalone companion — [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) — covering ~1.3M notations across 13 languages, with semantic and keyword search, hierarchical browsing, batch notation resolution, and per-collection presence counts so you can see which notations actually have artworks in a given collection. 
 
