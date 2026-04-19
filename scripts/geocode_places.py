@@ -264,53 +264,57 @@ def get_ungeocoded(conn: sqlite3.Connection, category: str | None = None
     return [dict(r) for r in rows]
 
 
-def _derive_country_qid(conn: sqlite3.Connection, place_id: str,
-                        max_depth: int = 6) -> str | None:
-    """Walk broader_id chain to find an ancestor's country QID.
+def _build_country_derivation_maps(
+    conn: sqlite3.Connection,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Preload the two lookups needed to walk broader_id chains in pure Python.
 
-    Returns a QID present in ``COUNTRY_QID_TO_ISO2`` when found, None otherwise.
-    At each step, checks ``vocabulary_external_ids`` (primary) and
-    ``vocabulary.external_id`` (legacy) for a Wikidata QID; returns the
-    first ancestor whose QID is recognised as a country.
+    Returns ``(broader_by_id, wd_qid_by_id)``. Both dicts cover every
+    place row, so a depth-N walk costs N dict gets instead of 2N SQL
+    queries. The full place set is ~417K rows → a few hundred MB of
+    dict overhead, comfortably cheap vs the ~84K-query N+1 it replaces.
+    """
+    broader_by_id = dict(conn.execute(
+        "SELECT id, broader_id FROM vocabulary "
+        "WHERE type = 'place' AND broader_id IS NOT NULL"
+    ))
+    wd_qid_by_id: dict[str, str] = dict(conn.execute(
+        "SELECT vocab_id, id FROM vocabulary_external_ids "
+        "WHERE authority = 'wikidata'"
+    ))
+    # Fold the legacy vocabulary.external_id column into the same map
+    # for any place not yet covered via vocabulary_external_ids.
+    legacy_rows = conn.execute(
+        "SELECT id, external_id FROM vocabulary "
+        "WHERE type = 'place' AND external_id LIKE '%wikidata%'"
+    )
+    for vid, ext in legacy_rows:
+        if vid not in wd_qid_by_id:
+            qid = extract_qid(ext or "")
+            if qid:
+                wd_qid_by_id[vid] = qid
+    return broader_by_id, wd_qid_by_id
 
-    #257 layer A: the result is passed to WHG as a P17 property hint.
-    #257 layer B: the result is also mapped via COUNTRY_QID_TO_ISO2 to
-    compare against WHG's ``description: "Country: XX"`` field.
+
+def _derive_country_qid(
+    place_id: str,
+    broader_by_id: dict[str, str],
+    wd_qid_by_id: dict[str, str],
+    max_depth: int = 6,
+) -> str | None:
+    """Walk broader_id chain in memory to find an ancestor's country QID.
+
+    #257 layer A: the QID becomes a P17 hint on the WHG query.
+    #257 layer B: it's mapped via COUNTRY_QID_TO_ISO2 to compare against
+    WHG's ``description: "Country: XX"`` field.
     """
     current_id: str | None = place_id
     for _ in range(max_depth):
-        row = conn.execute(
-            "SELECT broader_id FROM vocabulary WHERE id = ?",
-            (current_id,),
-        ).fetchone()
-        if not row:
-            return None
-        next_id = row["broader_id"] if isinstance(row, sqlite3.Row) else row[0]
+        next_id = broader_by_id.get(current_id)
         if not next_id or next_id == current_id:
             return None
         current_id = next_id
-
-        # Check vocabulary_external_ids first (primary, post-#238)
-        qid_row = conn.execute(
-            "SELECT id FROM vocabulary_external_ids "
-            "WHERE vocab_id = ? AND authority = 'wikidata' LIMIT 1",
-            (current_id,),
-        ).fetchone()
-        qid: str | None = None
-        if qid_row:
-            qid = qid_row["id"] if isinstance(qid_row, sqlite3.Row) else qid_row[0]
-
-        # Legacy fallback
-        if not qid:
-            legacy = conn.execute(
-                "SELECT external_id FROM vocabulary "
-                "WHERE id = ? AND external_id LIKE '%wikidata%'",
-                (current_id,),
-            ).fetchone()
-            if legacy:
-                ext = legacy["external_id"] if isinstance(legacy, sqlite3.Row) else legacy[0]
-                qid = extract_qid(ext or "")
-
+        qid = wd_qid_by_id.get(current_id)
         if qid and qid in COUNTRY_QID_TO_ISO2:
             return qid
     return None
@@ -1522,9 +1526,10 @@ def phase_3b_whg(conn: sqlite3.Connection,
     # becomes a no-op for them (preserves prior behaviour for those rows).
     print("Phase 3b-0: Deriving country hints from broader_id chains...",
           file=sys.stderr)
+    broader_by_id, wd_qid_by_id = _build_country_derivation_maps(conn)
     country_hints: dict[str, str] = {}
     for vid, _ in candidates:
-        qid = _derive_country_qid(conn, vid)
+        qid = _derive_country_qid(vid, broader_by_id, wd_qid_by_id)
         if qid:
             country_hints[vid] = qid
     print(f"  Derived country for {len(country_hints)}/{len(candidates)} "

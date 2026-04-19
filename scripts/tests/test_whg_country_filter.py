@@ -78,7 +78,8 @@ def run_test_derive_via_external_ids(gp, check: CheckRecorder) -> None:
     )
     conn.commit()
 
-    qid = gp._derive_country_qid(conn, "AMS")
+    broader, wd = gp._build_country_derivation_maps(conn)
+    qid = gp._derive_country_qid("AMS", broader, wd)
     check.check(
         "derive: Amsterdam → Q55",
         qid == "Q55",
@@ -103,7 +104,8 @@ def run_test_derive_via_legacy_external_id(gp, check: CheckRecorder) -> None:
     )
     conn.commit()
 
-    qid = gp._derive_country_qid(conn, "CHILD")
+    broader, wd = gp._build_country_derivation_maps(conn)
+    qid = gp._derive_country_qid("CHILD", broader, wd)
     check.check(
         "derive: legacy external_id → Q142 (France)",
         qid == "Q142",
@@ -124,7 +126,8 @@ def run_test_derive_returns_none_when_chain_ends_without_country(
     )
     conn.commit()
 
-    qid = gp._derive_country_qid(conn, "A")
+    broader, wd = gp._build_country_derivation_maps(conn)
+    qid = gp._derive_country_qid("A", broader, wd)
     check.check(
         "derive: no country in chain → None",
         qid is None,
@@ -142,7 +145,8 @@ def run_test_derive_handles_self_referencing_broader(gp, check: CheckRecorder) -
     )
     conn.commit()
 
-    qid = gp._derive_country_qid(conn, "SELF", max_depth=3)
+    broader, wd = gp._build_country_derivation_maps(conn)
+    qid = gp._derive_country_qid("SELF", broader, wd, max_depth=3)
     check.check(
         "derive: self-ref chain → None (no infinite loop)",
         qid is None,

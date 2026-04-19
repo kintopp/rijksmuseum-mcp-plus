@@ -75,6 +75,7 @@ from lib.harvest_audit import (  # noqa: E402
     format_stdout_table,
     run_phase_audit,
 )
+import enrichment_methods as em  # noqa: E402
 
 HARVEST_VERSION = "v0.24"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
@@ -3597,22 +3598,6 @@ def enrich_concepts_from_skos(conn: sqlite3.Connection, dumps_dir: Path) -> None
     print(f"  [enrich concepts] Updated {updates:,} broader_id values")
 
 
-def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in km, antimeridian-safe.
-
-    Uses the standard atan2 form of haversine. `math.radians` of the
-    longitude delta naturally folds into sin²(dlam/2), so the dateline
-    (lon=180↔-180) is handled correctly without any modular arithmetic.
-    """
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return 6371.0 * c
-
-
 def _compute_areal_parents(conn: sqlite3.Connection, threshold_km: float = 75.0
                            ) -> list[str]:
     """Identify parents whose geocoded children span ≥ threshold_km pairwise.
@@ -3620,10 +3605,9 @@ def _compute_areal_parents(conn: sqlite3.Connection, threshold_km: float = 75.0
     Replaces the SQL GROUP BY HAVING approach which used naive
     ``MAX(lon) - MIN(lon)`` and returned 360° for antimeridian-straddling
     sets (Fiji: spurious 40,051 km diagonal per 2026-04-17 findings, #255).
-
-    Early-exit once the threshold is exceeded — for a parent whose first
-    two children are already far apart, no more pairs are tested.
     """
+    from lib.geo_math import max_pairwise_km
+
     rows = conn.execute(
         """SELECT p.id AS parent_id, c.lat AS c_lat, c.lon AS c_lon
            FROM vocabulary p
@@ -3638,23 +3622,9 @@ def _compute_areal_parents(conn: sqlite3.Connection, threshold_km: float = 75.0
     for r in rows:
         children[r["parent_id"]].append((r["c_lat"], r["c_lon"]))
 
-    areal: list[str] = []
-    for parent_id, pts in children.items():
-        if len(pts) < 2:
-            continue
-        exceeded = False
-        for i in range(len(pts)):
-            lat1, lon1 = pts[i]
-            for j in range(i + 1, len(pts)):
-                lat2, lon2 = pts[j]
-                if _haversine_km(lat1, lon1, lat2, lon2) >= threshold_km:
-                    exceeded = True
-                    break
-            if exceeded:
-                break
-        if exceeded:
-            areal.append(parent_id)
-    return areal
+    return [pid for pid, pts in children.items()
+            if len(pts) >= 2
+            and max_pairwise_km(pts, early_exit_km=threshold_km) >= threshold_km]
 
 
 def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
@@ -3702,8 +3672,8 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
                    SELECT p.lat FROM vocabulary p WHERE p.id = vocabulary.broader_id
                ), lon = (
                    SELECT p.lon FROM vocabulary p WHERE p.id = vocabulary.broader_id
-               ), coord_method = 'derived',
-               coord_method_detail = 'parent_fallback'
+               ), coord_method = ?,
+               coord_method_detail = ?
                WHERE type = 'place'
                  AND lat IS NULL
                  AND broader_id IS NOT NULL
@@ -3711,7 +3681,8 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
                  AND EXISTS (
                      SELECT 1 FROM vocabulary p
                      WHERE p.id = vocabulary.broader_id AND p.lat IS NOT NULL
-                 )"""
+                 )""",
+            (em.tier_for(em.PARENT_FALLBACK), em.PARENT_FALLBACK),
         )
         inherited = cur.rowcount
         if inherited == 0:

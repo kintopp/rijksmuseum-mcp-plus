@@ -32,71 +32,14 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 import sqlite3
 import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-
-def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in km. Antimeridian-safe (sin²(dlam/2) folds)."""
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return 6371.0 * c
-
-
-def max_pairwise_km(pts: list[tuple[float, float]]) -> tuple[float, int, int]:
-    """Max great-circle distance across every pair of points.
-
-    Returns (max_km, i, j) with i<j the indices of the farthest pair.
-    For N points this is O(N²); the v0.24 worst parent has 301 children
-    (~45,000 pairs) → still microseconds in pure Python.
-    """
-    if len(pts) < 2:
-        return (0.0, -1, -1)
-    best = 0.0
-    best_i = 0
-    best_j = 1
-    for i in range(len(pts)):
-        for j in range(i + 1, len(pts)):
-            d = haversine_km(pts[i][0], pts[i][1], pts[j][0], pts[j][1])
-            if d > best:
-                best = d
-                best_i = i
-                best_j = j
-    return (best, best_i, best_j)
-
-
-def trimmed_pairwise_km(pts: list[tuple[float, float]], drop: int = 2) -> float:
-    """Max pairwise km after dropping the ``drop`` points contributing most.
-
-    Strategy: compute each point's *sum of distances to every other point*
-    as an "eccentricity" score, drop the top ``drop`` scorers, then
-    recompute max pairwise. Preserves genuine wide spreads while
-    neutralising 1-2 lone outliers.
-    """
-    if len(pts) <= drop + 1:
-        return max_pairwise_km(pts)[0]
-
-    scores: list[float] = []
-    for i in range(len(pts)):
-        s = 0.0
-        for j in range(len(pts)):
-            if i == j:
-                continue
-            s += haversine_km(pts[i][0], pts[i][1], pts[j][0], pts[j][1])
-        scores.append(s)
-
-    # Drop the `drop` highest-scoring indices.
-    drop_idxs = set(sorted(range(len(pts)), key=lambda i: scores[i], reverse=True)[:drop])
-    kept = [p for i, p in enumerate(pts) if i not in drop_idxs]
-    return max_pairwise_km(kept)[0]
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.geo_math import haversine_km, trimmed_pairwise_km  # noqa: E402
 
 
 def column_exists(conn: sqlite3.Connection, table: str, col: str) -> bool:

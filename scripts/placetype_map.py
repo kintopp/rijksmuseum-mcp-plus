@@ -86,7 +86,7 @@ AAT_IS_AREAL: dict[str, bool] = {
     "300007000": False,  # castles (individual structures)
     "300007546": False,  # palaces
     "300005225": False,  # monasteries
-    "300005225": False,  # abbeys
+    "300005211": False,  # abbeys
     "300005768": False,  # museums (single-site)
     "300006891": False,  # theaters (venues)
     "300007469": False,  # mosques
@@ -207,12 +207,10 @@ WD_IS_AREAL: dict[str, bool] = {
     "Q12280":     False,  # bridge
     "Q44782":     False,  # port
     "Q55488":     False,  # railway station
-    "Q4989906":   False,  # monument (single-site)
     "Q8502":      False,  # mountain (individual — conventionally peak point)
     "Q34763":     False,  # peninsula
     "Q23442":     False,  # island (individual; see AAT note about edge cases)
     "Q23444":     False,  # promontory (point-like)
-    "Q4022":      True,   # river (repeat of above — sanity: areal)
     "Q1076486":   False,  # sports venue
     "Q839954":    False,  # street
     "Q34442":     False,  # road

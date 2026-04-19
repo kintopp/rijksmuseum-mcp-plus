@@ -17,20 +17,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.geo_math import haversine_km  # noqa: E402
+
 VALID_TIERS = {"authority", "derived", "human"}
-
-
-def haversine_km(lat1, lon1, lat2, lon2) -> float:
-    phi1 = math.radians(lat1); phi2 = math.radians(lat2)
-    dphi = math.radians(lat2 - lat1); dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    return 6371.0 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 def compute_whg_distance_rate(conn: sqlite3.Connection,
@@ -39,6 +34,18 @@ def compute_whg_distance_rate(conn: sqlite3.Connection,
     if not whg_csv.exists():
         return {"total": 0, "over_500km": 0, "rate": 0.0, "no_parent_coords": 0,
                 "csv_missing": True}
+
+    # Preload vid → (parent_lat, parent_lon) in a single JOIN, so the
+    # CSV walk below does no DB work. Fixes the prior N+1 where one
+    # query fired per accepted row (~7K round-trips).
+    parent_map: dict[str, tuple[float, float]] = {
+        vid: (plat, plon) for vid, plat, plon in conn.execute(
+            "SELECT c.id, p.lat, p.lon FROM vocabulary c "
+            "JOIN vocabulary p ON p.id = c.broader_id "
+            "WHERE p.lat IS NOT NULL"
+        )
+    }
+
     total = 0
     over_500 = 0
     no_parent = 0
@@ -51,17 +58,11 @@ def compute_whg_distance_rate(conn: sqlite3.Connection,
                 lat = float(row["lat"]); lon = float(row["lon"])
             except (KeyError, ValueError, TypeError):
                 continue
-            # Walk to nearest geocoded ancestor.
-            parent_row = conn.execute(
-                "SELECT p.lat, p.lon FROM vocabulary c "
-                "JOIN vocabulary p ON p.id = c.broader_id "
-                "WHERE c.id = ? AND p.lat IS NOT NULL",
-                (vid,),
-            ).fetchone()
-            if not parent_row or parent_row[0] is None:
+            coords = parent_map.get(vid)
+            if not coords:
                 no_parent += 1
                 continue
-            d = haversine_km(lat, lon, parent_row[0], parent_row[1])
+            d = haversine_km(lat, lon, coords[0], coords[1])
             if d > 500:
                 over_500 += 1
     rate = (over_500 / total) if total else 0.0
@@ -72,56 +73,45 @@ def compute_whg_distance_rate(conn: sqlite3.Connection,
 def compute_areal_pollution(conn: sqlite3.Connection) -> dict:
     """Fraction of is_areal=1 rows that would un-flag after trimmed-spread test.
 
-    Approximates the findings-doc's 47% pollution share by re-running the
-    pairwise-haversine spread check on each areal-flagged parent.
+    Spread-derived flags only — TGN/Wikidata/manual-sourced rows aren't
+    "pollution" candidates by definition. Approximates the findings doc's
+    47% pollution share by re-running the pairwise-haversine spread check.
     """
-    areal_ids = [r[0] for r in conn.execute(
-        "SELECT id FROM vocabulary WHERE is_areal = 1 "
-        "  AND placetype_source NOT IN ('tgn', 'wikidata', 'manual')"
-    ).fetchall()]
-    # Spread-derived flags only — TGN/Wikidata/manual-sourced rows aren't
-    # "pollution" candidates by definition.
-    if not areal_ids:
+    from lib.geo_math import trimmed_pairwise_km
+
+    # One JOIN pulls every (flagged parent, child) pair. Avoids the prior
+    # per-parent SELECT loop; worst case on v0.24 is ~1K parents × avg
+    # ~40 children ≈ 40K rows, cheap.
+    rows = conn.execute(
+        "SELECT p.id AS parent_id, c.lat AS c_lat, c.lon AS c_lon "
+        "FROM vocabulary p JOIN vocabulary c ON c.broader_id = p.id "
+        "WHERE p.is_areal = 1 "
+        "  AND (p.placetype_source IS NULL "
+        "       OR p.placetype_source NOT IN ('tgn', 'wikidata', 'manual')) "
+        "  AND c.type = 'place' AND c.lat IS NOT NULL"
+    ).fetchall()
+
+    children: dict[str, list[tuple[float, float]]] = {}
+    for pid, lat, lon in rows:
+        children.setdefault(pid, []).append((lat, lon))
+
+    if not children:
         return {"total_spread_flagged": 0, "pollution_share": 0.0,
+                "pollution_count": 0,
                 "note": "no spread-derived flags to audit"}
 
-    # For each flagged parent, compute trimmed pairwise max.
     pollution = 0
-    for pid in areal_ids:
-        children = conn.execute(
-            "SELECT lat, lon FROM vocabulary WHERE broader_id = ? "
-            "  AND type = 'place' AND lat IS NOT NULL",
-            (pid,),
-        ).fetchall()
-        pts = [(c[0], c[1]) for c in children]
+    for pts in children.values():
         if len(pts) <= 3:
             continue
-        # Sort-by-eccentricity, drop top 2
-        scores = []
-        for i, p in enumerate(pts):
-            s = 0.0
-            for j, q in enumerate(pts):
-                if i != j:
-                    s += haversine_km(p[0], p[1], q[0], q[1])
-            scores.append((s, i))
-        scores.sort(reverse=True)
-        drop = {i for (_, i) in scores[:2]}
-        trimmed_pts = [p for i, p in enumerate(pts) if i not in drop]
-        # Max pairwise
-        if len(trimmed_pts) < 2:
-            continue
-        max_d = 0.0
-        for i in range(len(trimmed_pts)):
-            for j in range(i + 1, len(trimmed_pts)):
-                d = haversine_km(trimmed_pts[i][0], trimmed_pts[i][1],
-                                 trimmed_pts[j][0], trimmed_pts[j][1])
-                if d > max_d:
-                    max_d = d
-        if max_d < 75.0:
+        # early_exit_km=75 short-circuits the O(N²) loop as soon as one
+        # trimmed pair crosses the threshold — matches the harvest
+        # script's _compute_areal_parents early-exit for consistency.
+        if trimmed_pairwise_km(pts, drop=2, early_exit_km=75.0) < 75.0:
             pollution += 1
     return {
-        "total_spread_flagged": len(areal_ids),
-        "pollution_share": pollution / len(areal_ids) if areal_ids else 0.0,
+        "total_spread_flagged": len(children),
+        "pollution_share": pollution / len(children),
         "pollution_count": pollution,
     }
 
