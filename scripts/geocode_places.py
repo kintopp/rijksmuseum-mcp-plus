@@ -430,9 +430,10 @@ def update_coords(conn: sqlite3.Connection,
     updated = 0
     for vocab_id, (lat, lon) in updates.items():
         cursor.execute(
-            "UPDATE vocabulary SET lat = ?, lon = ?, coord_method = ? "
+            "UPDATE vocabulary SET lat = ?, lon = ?, "
+            "coord_method = ?, coord_method_detail = ? "
             "WHERE id = ? AND lat IS NULL",
-            (lat, lon, coord_tier, vocab_id),
+            (lat, lon, coord_tier, coord_method_detail, vocab_id),
         )
         updated += cursor.rowcount
     conn.commit()
@@ -459,9 +460,11 @@ def update_coords_and_ids(conn: sqlite3.Connection,
     for vocab_id, (lat, lon, ext_id) in updates.items():
         cursor.execute(
             "UPDATE vocabulary SET lat = ?, lon = ?, external_id = ?, "
-            "coord_method = ?, external_id_method = ? "
+            "coord_method = ?, coord_method_detail = ?, "
+            "external_id_method = ?, external_id_method_detail = ? "
             "WHERE id = ? AND lat IS NULL",
-            (lat, lon, ext_id, coord_tier, ext_id_tier, vocab_id),
+            (lat, lon, ext_id, coord_tier, coord_method_detail,
+             ext_id_tier, external_id_method_detail, vocab_id),
         )
         updated += cursor.rowcount
     conn.commit()

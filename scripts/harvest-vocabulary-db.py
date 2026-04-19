@@ -3702,7 +3702,8 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
                    SELECT p.lat FROM vocabulary p WHERE p.id = vocabulary.broader_id
                ), lon = (
                    SELECT p.lon FROM vocabulary p WHERE p.id = vocabulary.broader_id
-               ), coord_method = 'derived'
+               ), coord_method = 'derived',
+               coord_method_detail = 'parent_fallback'
                WHERE type = 'place'
                  AND lat IS NULL
                  AND broader_id IS NOT NULL
@@ -3879,6 +3880,20 @@ def run_phase3(
     # backs each coarse tier.
     enrichment_method_cols = ("coord_method", "external_id_method", "broader_method")
     for col_name in enrichment_method_cols:
+        if col_name not in vocab_cols:
+            conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} TEXT")
+    conn.commit()
+
+    # #218 fine-grained detail — paired with the coarse method columns above.
+    # coord_method stores the coarse tier ('authority' / 'derived' / 'human'),
+    # *_detail stores the specific phase identifier ('wikidata_p625',
+    # 'geonames_api', 'whg_reconciliation', 'parent_fallback', etc. from
+    # scripts/enrichment_methods.py). Both layers live in the DB so the
+    # v0.24 backfill CSV export can surface them for downstream consumers.
+    enrichment_detail_cols = (
+        "coord_method_detail", "external_id_method_detail", "broader_method_detail",
+    )
+    for col_name in enrichment_detail_cols:
         if col_name not in vocab_cols:
             conn.execute(f"ALTER TABLE vocabulary ADD COLUMN {col_name} TEXT")
     conn.commit()

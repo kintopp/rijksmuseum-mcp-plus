@@ -54,7 +54,9 @@ def make_conn(rows: list[tuple[str, str]]) -> sqlite3.Connection:
             lon REAL,
             external_id TEXT,
             coord_method TEXT,
-            external_id_method TEXT
+            coord_method_detail TEXT,
+            external_id_method TEXT,
+            external_id_method_detail TEXT
         );
         CREATE TABLE vocabulary_external_ids (
             id TEXT NOT NULL,
