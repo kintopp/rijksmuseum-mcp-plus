@@ -132,18 +132,12 @@ def derive_country(vid, broader_by_id, wd_qid_by_id, labels_by_id, max_depth=8):
     return (None, None)
 
 
-def fetch_json(url, headers=None, retries=3):
-    headers = headers or {}
-    headers.setdefault("User-Agent", USER_AGENT)
-    req = urllib.request.Request(url, headers=headers)
-    for attempt in range(retries):
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                return json.loads(resp.read().decode())
-        except Exception as e:
-            if attempt == retries - 1:
-                raise
-            time.sleep(2 ** (attempt + 1))
+# fetch_json reused from scripts/geocode_places.py (same signature + retry logic).
+
+# Errors from HTTP calls that mean "API problem" rather than "no result".
+# Narrow the catch so unexpected exceptions (KeyError on response shape, etc.)
+# still surface as crashes.
+_API_ERRORS = (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError)
 
 
 def _name_similar(a: str, b: str) -> bool:
@@ -173,7 +167,7 @@ def geonames_search(name, iso2, username):
         "username": username,
     })
     try:
-        resp = fetch_json(f"{GEONAMES_SEARCH}?{qs}")
+        resp = geocode_mod.fetch_json(f"{GEONAMES_SEARCH}?{qs}")
         results = resp.get("geonames", []) or []
         # Iterate top-5 and pick the first that passes the name-similarity guard
         for r in results:
@@ -181,7 +175,7 @@ def geonames_search(name, iso2, username):
             if _name_similar(name, matched_name):
                 return (float(r["lat"]), float(r["lng"]), matched_name)
         return None  # no similar-enough match
-    except Exception as e:
+    except _API_ERRORS as e:
         print(f"    [geonames err] {name}: {e}", file=sys.stderr)
         return None
 
@@ -199,7 +193,7 @@ SELECT ?item ?coord WHERE {{
 '''
         url = f"{WIKIDATA_SPARQL}?query={urllib.parse.quote(query)}"
         try:
-            resp = fetch_json(url, headers={"Accept": "application/sparql-results+json"})
+            resp = geocode_mod.fetch_json(url, headers={"Accept": "application/sparql-results+json"})
             bindings = resp.get("results", {}).get("bindings", []) or []
             if bindings:
                 coord = bindings[0].get("coord", {}).get("value", "")
@@ -207,7 +201,7 @@ SELECT ?item ?coord WHERE {{
                 m = re.match(r"Point\(([-\d.]+)\s+([-\d.]+)\)", coord)
                 if m:
                     return (float(m.group(2)), float(m.group(1)), name)  # lat, lon
-        except Exception as e:
+        except _API_ERRORS as e:
             print(f"    [wikidata err] {name}/{lang}: {e}", file=sys.stderr)
     return None
 
@@ -231,7 +225,7 @@ def whg_search(name, country_qid, country_iso2):
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
-    except Exception as e:
+    except _API_ERRORS as e:
         print(f"    [whg err] {name}: {e}", file=sys.stderr)
         return None
 
@@ -263,7 +257,7 @@ def whg_search(name, country_qid, country_iso2):
                     m2 = re.match(r"POINT\(([-\d.]+)\s+([-\d.]+)\)", gstr, re.IGNORECASE)
                     if m2:
                         return (float(m2.group(2)), float(m2.group(1)), r.get("name", ""))
-            except Exception as e:
+            except _API_ERRORS as e:
                 print(f"    [whg extend err] {entity_id}: {e}", file=sys.stderr)
             break  # only try top country-matched result
     return None
