@@ -31,6 +31,7 @@ import re
 import sqlite3
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -447,8 +448,40 @@ def phase_1a_geonames(conn: sqlite3.Connection, username: str,
 
     results: dict[str, tuple[float, float]] = {}
     errors = 0
+    errors_429 = 0
+    # Free-tier limits are hourly (1000) and daily (20000). GeoNames returns 200
+    # OK with a ``status.message`` body on limit hits; it may also return 429 if
+    # hammered. Both paths funnel into the same exponential-backoff loop,
+    # capped at one hour. After ``hard_stop_threshold`` consecutive limit hits
+    # *at the cap*, the phase soft-exits: rows not yet processed will be
+    # picked up on the next rerun via the ``AND lat IS NULL`` resume guard.
+    GEONAMES_LIMIT_PHRASES = (
+        "hourly limit",
+        "daily limit",
+        "the daily limit",
+        "credits have expired",
+        "limit of credits",
+        "limit for this service",
+    )
+    hard_stop_threshold = 3
+    max_backoff_s = 3600
+    consecutive_limit_hits = 0
+    backoff_until = 0.0
+    hard_stop = False
+    cutoff_gn_id: str | None = None
 
-    for i, gn_id in enumerate(gn_to_vocab):
+    gn_ids_list = list(gn_to_vocab.keys())
+    for i, gn_id in enumerate(gn_ids_list):
+        if hard_stop:
+            cutoff_gn_id = gn_id
+            break
+
+        now = time.time()
+        if backoff_until > now:
+            time.sleep(backoff_until - now)
+
+        limit_hit = False
+        hit_msg = ""
         try:
             url = f"{GEONAMES_API}?geonameId={gn_id}&username={username}"
             data = fetch_json(url)
@@ -458,22 +491,65 @@ def phase_1a_geonames(conn: sqlite3.Connection, username: str,
                 if lat != 0 or lon != 0:  # Skip null island
                     for vocab_id in gn_to_vocab[gn_id]:
                         results[vocab_id] = (lat, lon)
+                consecutive_limit_hits = 0
             elif "status" in data:
-                print(f"  GeoNames {gn_id}: {data['status'].get('message', 'error')}",
-                      file=sys.stderr)
+                msg = (data["status"].get("message") or "").lower()
+                if any(phrase in msg for phrase in GEONAMES_LIMIT_PHRASES):
+                    limit_hit = True
+                    hit_msg = msg
+                else:
+                    print(f"  GeoNames {gn_id}: "
+                          f"{data['status'].get('message', 'error')}",
+                          file=sys.stderr)
+                    errors += 1
+                    consecutive_limit_hits = 0
+            else:
+                consecutive_limit_hits = 0
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                errors_429 += 1
+                limit_hit = True
+                hit_msg = f"HTTP 429 ({e.reason})"
+            else:
+                print(f"  GeoNames {gn_id} HTTP {e.code}: {e}", file=sys.stderr)
                 errors += 1
+                consecutive_limit_hits = 0
         except Exception as e:
             print(f"  GeoNames {gn_id} error: {e}", file=sys.stderr)
             errors += 1
+            consecutive_limit_hits = 0
+
+        if limit_hit:
+            consecutive_limit_hits += 1
+            wait = min(60 * (2 ** (consecutive_limit_hits - 1)), max_backoff_s)
+            print(f"  GeoNames limit hit: {hit_msg.strip()!r} — "
+                  f"backing off {wait}s (consecutive={consecutive_limit_hits})",
+                  file=sys.stderr)
+            backoff_until = time.time() + wait
+            if consecutive_limit_hits >= hard_stop_threshold and wait >= max_backoff_s:
+                print(f"  Sustained limit failures at {max_backoff_s}s cap; "
+                      f"halting Phase 1a at gn_id={gn_id} "
+                      f"({i}/{len(gn_ids_list)} processed). "
+                      f"Rerun later — `AND lat IS NULL` resume will pick up the rest.",
+                      file=sys.stderr)
+                hard_stop = True
+                cutoff_gn_id = gn_id
+            # Do NOT sleep the 1 req/sec here — the backoff already covered it.
+            continue
 
         # Rate limit: 1 req/sec for free tier
         time.sleep(1.0)
         if (i + 1) % 50 == 0:
-            print(f"  ... {i + 1}/{len(gn_to_vocab)} done ({len(results)} found)",
+            print(f"  ... {i + 1}/{len(gn_ids_list)} done ({len(results)} found)",
                   file=sys.stderr)
 
     updated = update_coords(conn, results, em.GEONAMES_API, dry_run)
-    print(f"Phase 1a: {updated} places updated ({errors} errors)", file=sys.stderr)
+    summary = [f"{updated} places updated", f"{errors} errors"]
+    if errors_429:
+        summary.append(f"{errors_429} 429s")
+    if hard_stop:
+        summary.append(f"HALTED at gn_id={cutoff_gn_id}")
+    print(f"Phase 1a: {', '.join(summary)}", file=sys.stderr)
     return updated
 
 
