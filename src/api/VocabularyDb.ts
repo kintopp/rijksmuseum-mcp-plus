@@ -126,9 +126,8 @@ export interface DepictedSimilarResult {
   warnings?: string[];
 }
 
-/** AAT qualifier URIs that carry visual-similarity signal, with strength weights.
- *  URI set is a subset of AAT_QUALIFIER_LABELS in types.ts — keep in sync. */
-const LINEAGE_QUALIFIERS: ReadonlyMap<string, number> = new Map([
+/** AAT qualifier URIs that carry visual-similarity signal, with strength weights. */
+export const LINEAGE_QUALIFIERS: ReadonlyMap<string, number> = new Map([
   ["http://vocab.getty.edu/aat/300404286", 3.0],  // after
   ["http://vocab.getty.edu/aat/300404287", 3.0],  // copyist of
   ["http://vocab.getty.edu/aat/300404274", 2.0],  // workshop of
@@ -770,10 +769,11 @@ export class VocabularyDb {
   // ── find_similar caches (initialised lazily on first call) ──
   private notationDf: Map<number, number> | null = null; // vocab_rowid → document frequency
   private iconclassN = 0; // total artworks with any Iconclass notation
-  private lineageCreatorDf: Map<number, number> | null = null; // creator vocab_rowid → df
+  private lineageCreatorDf: Map<string, number> | null = null; // creator vocabulary.id → df
   private lineageN = 0; // total artworks with any visual-lineage qualifier
-  private lineageQualifierMap: Map<number, { label: string; strength: number; aatUri: string }> | null = null; // vocab_rowid → info
-  private stmtLineageShared: Statement | null = null; // cached: artwork_id by qualifier+creator pair
+  private lineageQualifierMap: Map<string, { label: string; strength: number; aatUri: string }> | null = null; // vocabulary.id → info
+  private stmtLineageShared: Statement | null = null; // cached: artwork_id by (qualifier_id, creator_id) — assignment_pairs
+  private hasAssignmentPairs = false; // #144: v0.24+ harvest persists qualifier↔creator assignments
   private iconclassNoiseIds: Set<number> | null = null; // vocab_rowids to exclude
   // Depicted person cache
   private personDf: Map<number, number> | null = null; // person vocab_rowid → document frequency
@@ -873,11 +873,17 @@ export class VocabularyDb {
         `);
       }
 
+      // #144: detect v0.24+ assignment_pairs table for the lineage similarity rewrite
+      this.hasAssignmentPairs = this.tableExists("assignment_pairs");
+
       // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
         this.warnIfIndexMissing("idx_vocab_lat_lon", "nearPlace queries may be slower. Re-run harvest Phase 3 to create it.");
       }
       this.warnIfIndexMissing("idx_vocab_broader_id", "expandPlaceHierarchy will be slow. Run enrichment script to create it.");
+      if (this.hasAssignmentPairs) {
+        this.warnIfIndexMissing("idx_assignment_pairs_qualifier", "find_similar mode=lineage IDF aggregation will be slower. Re-run harvest to create it.");
+      }
 
       // Cache frequently-used prepared statements
       this.stmtLookupArtwork = this.db.prepare(
@@ -1459,50 +1465,52 @@ export class VocabularyDb {
 
   // ── find_similar: Attribution lineage ──────────────────────────────
 
-  /** Lazily initialise lineage qualifier map and creator IDF cache. */
+  /** Lazily initialise lineage qualifier map and creator IDF cache.
+   *  Reads from `assignment_pairs` (v0.24+) — preserves the actual qualifier↔creator
+   *  assignment. The pre-v0.24 mappings self-JOIN fabricated cartesian pairs whenever
+   *  an artwork had multiple qualifiers AND multiple creators (issue #144). */
   private ensureLineageCache(): void {
     if (this.lineageQualifierMap || !this.db) return;
-    const qualFieldId = this.requireFieldId("attribution_qualifier");
-    const creatorFieldId = this.requireFieldId("creator");
+    if (!this.hasAssignmentPairs) return; // #144: gracefully handled by findSimilarByLineage
 
-    // Resolve AAT URIs → vocab_int_id for lineage qualifiers
+    // Resolve AAT URIs → vocabulary.id (TEXT) for lineage qualifiers
     this.lineageQualifierMap = new Map();
     for (const [uri, strength] of LINEAGE_QUALIFIERS) {
       const row = this.db.prepare(
-        "SELECT vocab_int_id, COALESCE(label_en, label_nl, '') as label FROM vocabulary WHERE external_id = ?"
-      ).get(uri) as { vocab_int_id: number; label: string } | undefined;
+        "SELECT id, COALESCE(label_en, label_nl, '') as label FROM vocabulary WHERE external_id = ?"
+      ).get(uri) as { id: string; label: string } | undefined;
       if (row) {
-        this.lineageQualifierMap.set(row.vocab_int_id, { label: row.label, strength, aatUri: uri });
+        this.lineageQualifierMap.set(row.id, { label: row.label, strength, aatUri: uri });
       }
     }
     const qualIds = [...this.lineageQualifierMap.keys()];
     if (qualIds.length === 0) return;
 
-    // Creator IDF: for each creator that appears alongside a visual qualifier
+    // Creator IDF: for each creator that co-appears with a visual-lineage qualifier
+    // on the SAME assignment (not just the same artwork). Uses idx_assignment_pairs_qualifier.
     this.lineageCreatorDf = new Map();
     const placeholders = qualIds.map(() => "?").join(", ");
     const rows = this.db.prepare(`
-      SELECT m_c.vocab_rowid as creator_id, COUNT(DISTINCT m_c.artwork_id) as df
-      FROM mappings m_q
-      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND +m_c.field_id = ?
-      WHERE m_q.field_id = ? AND m_q.vocab_rowid IN (${placeholders})
-      GROUP BY m_c.vocab_rowid
-    `).all(creatorFieldId, qualFieldId, ...qualIds) as { creator_id: number; df: number }[];
+      SELECT creator_id, COUNT(DISTINCT artwork_id) as df
+      FROM assignment_pairs
+      WHERE qualifier_id IN (${placeholders})
+      GROUP BY creator_id
+    `).all(...qualIds) as { creator_id: string; df: number }[];
 
     for (const r of rows) this.lineageCreatorDf.set(r.creator_id, r.df);
 
     // Total artworks with any visual-lineage qualifier
     const countRow = this.db.prepare(`
-      SELECT COUNT(DISTINCT artwork_id) as n FROM mappings
-      WHERE field_id = ? AND vocab_rowid IN (${placeholders})
-    `).get(qualFieldId, ...qualIds) as { n: number };
+      SELECT COUNT(DISTINCT artwork_id) as n FROM assignment_pairs
+      WHERE qualifier_id IN (${placeholders})
+    `).get(...qualIds) as { n: number };
     this.lineageN = countRow.n;
-    // Cache the per-pair candidate lookup statement (called N times per query)
+    // Cache the per-pair candidate lookup statement (called N times per query).
+    // PK is (artwork_id, qualifier_id, creator_id) — each artwork appears at
+    // most once per (qualifier_id, creator_id), so no DISTINCT needed.
     this.stmtLineageShared = this.db.prepare(`
-      SELECT DISTINCT m_q.artwork_id
-      FROM mappings m_q
-      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND +m_c.field_id = ?
-      WHERE m_q.field_id = ? AND m_q.vocab_rowid = ? AND m_c.vocab_rowid = ?
+      SELECT artwork_id FROM assignment_pairs
+      WHERE qualifier_id = ? AND creator_id = ?
     `);
     console.error(`[find_similar] Lineage IDF cache: ${this.lineageCreatorDf.size} creators, ${this.lineageN.toLocaleString()} artworks`);
   }
@@ -1513,39 +1521,49 @@ export class VocabularyDb {
    */
   findSimilarByLineage(objectNumber: string, maxResults: number): LineageSimilarResult | null {
     if (!this.db) return null;
+    if (!this.hasAssignmentPairs) {
+      // #144: pre-v0.24 DBs lack the assignment_pairs table. Returning a graceful
+      // warning is preferable to running the old self-JOIN that fabricated cartesian
+      // pairs for multi-attribution artworks.
+      const artRow = this.stmtLookupArtId!.get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
+      return {
+        queryObjectNumber: objectNumber,
+        queryTitle: artRow?.title ?? "",
+        queryLineage: [],
+        results: [],
+        warnings: ["Lineage similarity requires vocabulary DB v0.24+ (assignment_pairs table). The deployed DB does not include it."],
+      };
+    }
     this.ensureLineageCache();
     if (!this.lineageQualifierMap || !this.lineageCreatorDf) return null;
-
-    const qualFieldId = this.requireFieldId("attribution_qualifier");
-    const creatorFieldId = this.requireFieldId("creator");
 
     // 1. Resolve art_id
     const artRow = this.stmtLookupArtId!.get(objectNumber) as { art_id: number; title: string; creator_label: string } | undefined;
     if (!artRow) return null;
     const queryArtId = artRow.art_id;
 
-    // 2. Get query artwork's (qualifier, creator) pairs
-    //    Only visual-similarity qualifiers (not "primary", "attributed to", etc.)
+    // 2. Get query artwork's actual (qualifier, creator) assignments from v0.24+
+    //    assignment_pairs. Only visual-similarity qualifiers (not "primary",
+    //    "attributed to", etc.).
     const qualIds = [...this.lineageQualifierMap.keys()];
     const qualPlaceholders = qualIds.map(() => "?").join(", ");
 
     const queryPairs = this.db.prepare(`
-      SELECT m_q.vocab_rowid as qualifier_id, m_c.vocab_rowid as creator_id,
-             COALESCE(v_c.label_en, v_c.label_nl, '') as creator_label
-      FROM mappings m_q
-      JOIN mappings m_c ON m_c.artwork_id = m_q.artwork_id AND +m_c.field_id = ?
-      JOIN vocabulary v_c ON v_c.vocab_int_id = m_c.vocab_rowid
-      WHERE m_q.artwork_id = ? AND +m_q.field_id = ? AND m_q.vocab_rowid IN (${qualPlaceholders})
-    `).all(creatorFieldId, queryArtId, qualFieldId, ...qualIds) as {
-      qualifier_id: number; creator_id: number; creator_label: string;
+      SELECT ap.qualifier_id, ap.creator_id,
+             COALESCE(v.label_en, v.label_nl, '') as creator_label
+      FROM assignment_pairs ap
+      JOIN vocabulary v ON v.id = ap.creator_id
+      WHERE ap.artwork_id = ? AND ap.qualifier_id IN (${qualPlaceholders})
+    `).all(queryArtId, ...qualIds) as {
+      qualifier_id: string; creator_id: string; creator_label: string;
     }[];
 
     if (queryPairs.length === 0) {
-      // Check if artwork has any qualifiers at all (to give informative message)
-      const anyQual = this.db.prepare(
-        "SELECT 1 FROM mappings WHERE artwork_id = ? AND +field_id = ? LIMIT 1"
-      ).get(queryArtId, qualFieldId);
-      const msg = anyQual
+      // Check if the artwork has any assignment pairs at all (to give an informative message)
+      const anyAssignment = this.db.prepare(
+        "SELECT 1 FROM assignment_pairs WHERE artwork_id = ? LIMIT 1"
+      ).get(queryArtId);
+      const msg = anyAssignment
         ? "This artwork has direct attribution — no visual-lineage qualifiers to search by."
         : "No attribution qualifiers found for this artwork.";
       return {
@@ -1579,7 +1597,7 @@ export class VocabularyDb {
       }
 
       // Find artworks sharing this (qualifier, creator) pair
-      const rows = this.stmtLineageShared!.all(creatorFieldId, qualFieldId, pair.qualifier_id, pair.creator_id) as { artwork_id: number }[];
+      const rows = this.stmtLineageShared!.all(pair.qualifier_id, pair.creator_id) as { artwork_id: number }[];
 
       for (const r of rows) {
         if (r.artwork_id === queryArtId) continue;

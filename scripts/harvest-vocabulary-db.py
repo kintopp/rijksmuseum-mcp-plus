@@ -541,6 +541,11 @@ CREATE TABLE IF NOT EXISTS assignment_pairs (
     part_index   INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (artwork_id, qualifier_id, creator_id)
 ) WITHOUT ROWID;
+-- #144: qualifier-led aggregation index for findSimilarByLineage.
+-- Covers (qualifier_id) for IDF, (qualifier_id, creator_id) for shared-pair
+-- lookup. Without this, aggregation queries scan the PK in PK order.
+CREATE INDEX IF NOT EXISTS idx_assignment_pairs_qualifier
+  ON assignment_pairs(qualifier_id, creator_id, artwork_id);
 
 CREATE TABLE IF NOT EXISTS artwork_parent (
     art_id        INTEGER NOT NULL,
@@ -4085,21 +4090,41 @@ def run_phase3(
     else:
         print("  Skipping (no exhibition_members table)")
 
+    # #251: Resolve via an indexed temp table. The straightforward
+    # `WHERE SUBSTR(...) = SUBSTR(...)` is O(N×M) — no index can cover
+    # SUBSTR on both join sides. Same pattern as the artwork_exhibitions
+    # block above and scripts/finish-v024-phase3.py.
+    has_la_uri = "linked_art_uri" in get_columns(conn, "artworks")
+    if has_la_uri:
+        conn.execute("""
+            CREATE TEMP TABLE _tmp_hmo_art AS
+            SELECT art_id,
+                   SUBSTR(linked_art_uri, INSTR(linked_art_uri, '.nl/') + 4) AS hmo_id
+            FROM artworks
+            WHERE linked_art_uri IS NOT NULL
+              AND linked_art_uri != ''
+              AND art_id IS NOT NULL
+        """)
+        conn.execute("CREATE INDEX _tmp_hmo_art_idx ON _tmp_hmo_art(hmo_id)")
+
     # Resolve related_objects.related_art_id
     print("\n--- Resolving Related Object Art IDs ---")
     if table_exists(conn, "related_objects"):
         ro_count = cur.execute("SELECT COUNT(*) FROM related_objects").fetchone()[0]
         if ro_count > 0:
-            conn.execute("""
-                UPDATE related_objects SET related_art_id = (
-                    SELECT a.art_id FROM artworks a
-                    WHERE SUBSTR(a.linked_art_uri, INSTR(a.linked_art_uri, '.nl/') + 4) =
-                          SUBSTR(related_objects.related_la_uri, INSTR(related_objects.related_la_uri, '.nl/') + 4)
-                )
-                WHERE related_art_id IS NULL
-            """)
-            resolved = cur.execute("SELECT COUNT(*) FROM related_objects WHERE related_art_id IS NOT NULL").fetchone()[0]
-            print(f"  Resolved {resolved:,} of {ro_count:,} related objects to art_ids")
+            if has_la_uri:
+                conn.execute("""
+                    UPDATE related_objects SET related_art_id = (
+                        SELECT hmo.art_id FROM _tmp_hmo_art hmo
+                        WHERE hmo.hmo_id = SUBSTR(related_objects.related_la_uri,
+                                                  INSTR(related_objects.related_la_uri, '.nl/') + 4)
+                    )
+                    WHERE related_art_id IS NULL
+                """)
+                resolved = cur.execute("SELECT COUNT(*) FROM related_objects WHERE related_art_id IS NOT NULL").fetchone()[0]
+                print(f"  Resolved {resolved:,} of {ro_count:,} related objects to art_ids")
+            else:
+                print(f"  Skipping (linked_art_uri not available — Phase 3 re-run, {ro_count:,} rows untouched)")
         else:
             print("  No related objects to resolve")
         conn.commit()
@@ -4111,21 +4136,27 @@ def run_phase3(
     if table_exists(conn, "artwork_parent"):
         ap_count = cur.execute("SELECT COUNT(*) FROM artwork_parent").fetchone()[0]
         if ap_count > 0:
-            conn.execute("""
-                UPDATE artwork_parent SET parent_art_id = (
-                    SELECT a.art_id FROM artworks a
-                    WHERE SUBSTR(a.linked_art_uri, INSTR(a.linked_art_uri, '.nl/') + 4) =
-                          SUBSTR(artwork_parent.parent_la_uri, INSTR(artwork_parent.parent_la_uri, '.nl/') + 4)
-                )
-                WHERE parent_art_id IS NULL
-            """)
-            resolved = cur.execute("SELECT COUNT(*) FROM artwork_parent WHERE parent_art_id IS NOT NULL").fetchone()[0]
-            print(f"  Resolved {resolved:,} of {ap_count:,} parent links to art_ids")
+            if has_la_uri:
+                conn.execute("""
+                    UPDATE artwork_parent SET parent_art_id = (
+                        SELECT hmo.art_id FROM _tmp_hmo_art hmo
+                        WHERE hmo.hmo_id = SUBSTR(artwork_parent.parent_la_uri,
+                                                  INSTR(artwork_parent.parent_la_uri, '.nl/') + 4)
+                    )
+                    WHERE parent_art_id IS NULL
+                """)
+                resolved = cur.execute("SELECT COUNT(*) FROM artwork_parent WHERE parent_art_id IS NOT NULL").fetchone()[0]
+                print(f"  Resolved {resolved:,} of {ap_count:,} parent links to art_ids")
+            else:
+                print(f"  Skipping (linked_art_uri not available — Phase 3 re-run, {ap_count:,} rows untouched)")
         else:
             print("  No parent links to resolve")
         conn.commit()
     else:
         print("  Skipping (no artwork_parent table)")
+
+    if has_la_uri:
+        conn.execute("DROP TABLE _tmp_hmo_art")
 
     # #253: preserve (art_id → hmo_id) mapping before the linked_art_uri column is
     # dropped, so decoupled post-harvest backfills (e.g. VI-iconclass #203) can still
