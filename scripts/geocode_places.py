@@ -269,18 +269,20 @@ def _build_country_derivation_maps(
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Preload the two lookups needed to walk broader_id chains in pure Python.
 
-    Returns ``(broader_by_id, wd_qid_by_id)``. Both dicts cover every
-    place row, so a depth-N walk costs N dict gets instead of 2N SQL
-    queries. The full place set is ~417K rows → a few hundred MB of
-    dict overhead, comfortably cheap vs the ~84K-query N+1 it replaces.
+    Returns ``(broader_by_id, wd_qid_by_id)``. Both dicts are restricted
+    to ``type='place'`` rows so non-place Wikidata QIDs (persons,
+    concepts) can't accidentally match entries in ``COUNTRY_QID_TO_ISO2``
+    during the chain walk. At ~400K vocab rows this is ~30-50 MB of
+    dict overhead — cheap vs the ~84K-query N+1 it replaces.
     """
     broader_by_id = dict(conn.execute(
         "SELECT id, broader_id FROM vocabulary "
         "WHERE type = 'place' AND broader_id IS NOT NULL"
     ))
     wd_qid_by_id: dict[str, str] = dict(conn.execute(
-        "SELECT vocab_id, id FROM vocabulary_external_ids "
-        "WHERE authority = 'wikidata'"
+        "SELECT vei.vocab_id, vei.id FROM vocabulary_external_ids vei "
+        "JOIN vocabulary v ON v.id = vei.vocab_id "
+        "WHERE vei.authority = 'wikidata' AND v.type = 'place'"
     ))
     # Fold the legacy vocabulary.external_id column into the same map
     # for any place not yet covered via vocabulary_external_ids.
