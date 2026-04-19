@@ -121,6 +121,34 @@ NON_GEOGRAPHIC_TYPES = {
 
 
 # ---------------------------------------------------------------------------
+# Country QID → ISO 3166-1 alpha-2 lookup (#257 layer B)
+# ---------------------------------------------------------------------------
+# Loaded once at module import. Populated by scripts/fetch_country_qid_to_iso2.py
+# and committed as scripts/country_qid_to_iso2.tsv. Used to:
+#   (a) Recognise whether a broader_id ancestor QID is a country (presence → yes).
+#   (b) Convert the derived country QID to the ISO-2 code used by WHG's
+#       response description field ("Country: XX") for post-filter comparison.
+
+def _load_country_qid_to_iso2() -> dict[str, str]:
+    """Load the committed country QID → ISO-2 TSV. Empty dict on failure."""
+    path = Path(__file__).resolve().parent / "country_qid_to_iso2.tsv"
+    result: dict[str, str] = {}
+    if not path.exists():
+        return result
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) == 2 and parts[0].startswith("Q"):
+            result[parts[0]] = parts[1].upper()
+    return result
+
+
+COUNTRY_QID_TO_ISO2: dict[str, str] = _load_country_qid_to_iso2()
+
+
+# ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
@@ -234,6 +262,58 @@ def get_ungeocoded(conn: sqlite3.Connection, category: str | None = None
 
     rows = conn.execute(base).fetchall()
     return [dict(r) for r in rows]
+
+
+def _derive_country_qid(conn: sqlite3.Connection, place_id: str,
+                        max_depth: int = 6) -> str | None:
+    """Walk broader_id chain to find an ancestor's country QID.
+
+    Returns a QID present in ``COUNTRY_QID_TO_ISO2`` when found, None otherwise.
+    At each step, checks ``vocabulary_external_ids`` (primary) and
+    ``vocabulary.external_id`` (legacy) for a Wikidata QID; returns the
+    first ancestor whose QID is recognised as a country.
+
+    #257 layer A: the result is passed to WHG as a P17 property hint.
+    #257 layer B: the result is also mapped via COUNTRY_QID_TO_ISO2 to
+    compare against WHG's ``description: "Country: XX"`` field.
+    """
+    current_id: str | None = place_id
+    for _ in range(max_depth):
+        row = conn.execute(
+            "SELECT broader_id FROM vocabulary WHERE id = ?",
+            (current_id,),
+        ).fetchone()
+        if not row:
+            return None
+        next_id = row["broader_id"] if isinstance(row, sqlite3.Row) else row[0]
+        if not next_id or next_id == current_id:
+            return None
+        current_id = next_id
+
+        # Check vocabulary_external_ids first (primary, post-#238)
+        qid_row = conn.execute(
+            "SELECT id FROM vocabulary_external_ids "
+            "WHERE vocab_id = ? AND authority = 'wikidata' LIMIT 1",
+            (current_id,),
+        ).fetchone()
+        qid: str | None = None
+        if qid_row:
+            qid = qid_row["id"] if isinstance(qid_row, sqlite3.Row) else qid_row[0]
+
+        # Legacy fallback
+        if not qid:
+            legacy = conn.execute(
+                "SELECT external_id FROM vocabulary "
+                "WHERE id = ? AND external_id LIKE '%wikidata%'",
+                (current_id,),
+            ).fetchone()
+            if legacy:
+                ext = legacy["external_id"] if isinstance(legacy, sqlite3.Row) else legacy[0]
+                qid = extract_qid(ext or "")
+
+        if qid and qid in COUNTRY_QID_TO_ISO2:
+            return qid
+    return None
 
 
 def get_ungeocoded_by_authority(conn: sqlite3.Connection, authority: str
@@ -1430,6 +1510,24 @@ def phase_3b_whg(conn: sqlite3.Connection,
         return 0
 
     # ------------------------------------------------------------------
+    # Step 0: Derive country hints from broader_id chains (#257 layer A)
+    # ------------------------------------------------------------------
+    # For each candidate place, walk its broader_id chain until an ancestor
+    # with a country QID is found. The QID becomes a P17 hint on the WHG
+    # query (layer A) AND drives the post-filter at accept time (layer B).
+    # Places with no derivable country → hint-free query; layer B also
+    # becomes a no-op for them (preserves prior behaviour for those rows).
+    print("Phase 3b-0: Deriving country hints from broader_id chains...",
+          file=sys.stderr)
+    country_hints: dict[str, str] = {}
+    for vid, _ in candidates:
+        qid = _derive_country_qid(conn, vid)
+        if qid:
+            country_hints[vid] = qid
+    print(f"  Derived country for {len(country_hints)}/{len(candidates)} "
+          f"places via broader_id walk", file=sys.stderr)
+
+    # ------------------------------------------------------------------
     # Step 1: Batch reconciliation (50 queries/batch, auth-free)
     # ------------------------------------------------------------------
     print("Phase 3b-1: Reconciling via WHG...", file=sys.stderr)
@@ -1442,11 +1540,16 @@ def phase_3b_whg(conn: sqlite3.Connection,
         batch_map: dict[str, tuple[str, str]] = {}
         for j, (vid, name) in enumerate(batch):
             key = f"q{j}"
-            queries[key] = {
+            q: dict = {
                 "query": name,
                 "type": WHG_PLACE_TYPE,
                 "limit": 5,
             }
+            # Layer A: attach P17 country hint when derivable.
+            country_qid = country_hints.get(vid)
+            if country_qid:
+                q["properties"] = [{"pid": "P17", "v": country_qid}]
+            queries[key] = q
             batch_map[key] = (vid, name)
 
         try:
@@ -1520,6 +1623,12 @@ def phase_3b_whg(conn: sqlite3.Connection,
     accepted: list[tuple] = []
     review: list[tuple] = []
     rejected: list[tuple] = []
+    country_mismatch: list[tuple] = []  # #257 layer B rejections
+
+    # Pattern matches WHG's description string: "Country: XX" (ISO-2 alpha)
+    # or "Country: GB, FR" (rare multi-country). We look for the first
+    # two-letter uppercase code in the first 40 chars of the description.
+    country_re = re.compile(r"Country:\s*([A-Z]{2})")
 
     for vid, results in all_matches.items():
         name = name_lookup.get(vid, "")
@@ -1534,6 +1643,7 @@ def phase_3b_whg(conn: sqlite3.Connection,
             whg_name = r.get("name", "")
             whg_score = float(r.get("score", 0))
             whg_match = bool(r.get("match", False))
+            whg_description = r.get("description", "") or ""
             coords = entity_coords.get(eid)
 
             sim = string_similarity(name, whg_name)
@@ -1546,6 +1656,10 @@ def phase_3b_whg(conn: sqlite3.Connection,
                          + sim * 0.30
                          + (100 if coords else 0) * 0.20)
 
+            # Extract WHG's country code from description (layer B input).
+            m = country_re.search(whg_description)
+            whg_country = m.group(1) if m else None
+
             scored.append({
                 "entity_id": eid,
                 "name": whg_name,
@@ -1555,12 +1669,33 @@ def phase_3b_whg(conn: sqlite3.Connection,
                 "composite": composite,
                 "lat": coords[0] if coords else None,
                 "lon": coords[1] if coords else None,
+                "description": whg_description,
+                "whg_country": whg_country,
             })
 
         scored.sort(key=lambda x: x["composite"], reverse=True)
         top = scored[0]
         gap = top["composite"] - scored[1]["composite"] if len(scored) > 1 else 100
         has_coords = top["lat"] is not None
+
+        # Layer B: reject top candidate if WHG's country disagrees with the
+        # one we derived via broader_id walk. Only fires when both are known;
+        # if either side is None, the filter is a no-op (preserves prior
+        # behaviour for uncountried places / countries WHG didn't annotate).
+        derived_qid = country_hints.get(vid)
+        expected_iso = COUNTRY_QID_TO_ISO2.get(derived_qid) if derived_qid else None
+        if expected_iso and top["whg_country"] and top["whg_country"] != expected_iso:
+            country_mismatch.append((
+                vid, name, top["entity_id"], top["name"],
+                top["whg_country"], expected_iso,
+                f"{top['composite']:.0f}",
+            ))
+            # Demote to rejected — keep the mismatch tracked separately for audit.
+            rejected.append((
+                vid, name,
+                f"country_mismatch:{top['whg_country']}!={expected_iso}",
+            ))
+            continue
 
         if top["composite"] >= 80 and has_coords and (top["whg_match"] or gap >= 15):
             accepted.append((vid, name, top["entity_id"],
@@ -1571,7 +1706,8 @@ def phase_3b_whg(conn: sqlite3.Connection,
             rejected.append((vid, name, f"low_score:{top['composite']:.0f}"))
 
     print(f"Phase 3b-3: {len(accepted)} accepted, {len(review)} review, "
-          f"{len(rejected)} rejected", file=sys.stderr)
+          f"{len(rejected)} rejected ({len(country_mismatch)} country-mismatch)",
+          file=sys.stderr)
 
     # ------------------------------------------------------------------
     # Step 4: Write output CSVs
@@ -1613,6 +1749,17 @@ def phase_3b_whg(conn: sqlite3.Connection,
             w.writerow(row)
     print(f"  Wrote {out / 'whg_rejected.csv'} ({len(rejected)} entries)",
           file=sys.stderr)
+
+    # #257 layer B: country-mismatch rejects go to their own CSV so the
+    # post-run diagnostics can track how many candidates layer B caught.
+    with open(out / "whg_country_mismatch.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["vocab_id", "name", "whg_entity_id", "whg_label",
+                    "whg_country", "derived_country", "score"])
+        for row in country_mismatch:
+            w.writerow(row)
+    print(f"  Wrote {out / 'whg_country_mismatch.csv'} "
+          f"({len(country_mismatch)} entries)", file=sys.stderr)
 
     # ------------------------------------------------------------------
     # Step 5: Apply accepted matches
