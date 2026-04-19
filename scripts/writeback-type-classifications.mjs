@@ -10,7 +10,7 @@
  * Options:
  *   --dry-run        Report what would change, don't write
  *   --db PATH        Vocab DB path (default: data/vocabulary.db)
- *   --input PATH     Classification JSON (default: data/audit-type-classification-2026-03-22.json)
+ *   --input PATH     Classification JSON (default: data/audit/audit-type-classification-2026-03-22.json)
  *   --min-confidence N  Minimum confidence threshold (default: 0.7)
  *   --id-remap       Resolve object_number → art_id (use after re-harvest when artwork_ids change)
  */
@@ -28,7 +28,7 @@ const idRemap = parseIdRemapFlag(args);
 const dbIdx = args.indexOf("--db");
 const dbPath = dbIdx >= 0 ? args[dbIdx + 1] : "data/vocabulary.db";
 const inputIdx = args.indexOf("--input");
-const inputPath = inputIdx >= 0 ? args[inputIdx + 1] : "data/audit-type-classification-2026-03-22.json";
+const inputPath = inputIdx >= 0 ? args[inputIdx + 1] : "data/audit/audit-type-classification-2026-03-22.json";
 const confIdx = args.indexOf("--min-confidence");
 const minConfidence = confIdx >= 0 ? parseFloat(args[confIdx + 1]) : 0.7;
 

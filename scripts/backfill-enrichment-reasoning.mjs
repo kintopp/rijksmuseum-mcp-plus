@@ -53,7 +53,7 @@ const updatePartyReasoningByMethod = dryRun ? null : db.prepare(`
 // ─── 1. Type classifications → provenance_events ────────────────────
 
 console.log("1. Type classifications...");
-const typeData = JSON.parse(readFileSync("data/audit-type-classification-2026-03-22.json", "utf-8"));
+const typeData = JSON.parse(readFileSync("data/audit/audit-type-classification-2026-03-22.json", "utf-8"));
 for (const r of typeData.results) {
   const artworkId = resolve(r.data.artwork_id, r.data.object_number);
   if (artworkId == null) continue;
@@ -101,8 +101,8 @@ function backfillPositionEnrichment(filePath, label) {
   console.log(`   ${posCount} parties, ${catCount} category updates`);
 }
 
-backfillPositionEnrichment("data/audit-position-enrichment-r1.json", "R1");
-backfillPositionEnrichment("data/audit-position-enrichment-r2.json", "R2");
+backfillPositionEnrichment("data/audit/audit-position-enrichment-r1.json", "R1");
+backfillPositionEnrichment("data/audit/audit-position-enrichment-r2.json", "R2");
 
 // ─── 3. Party disambiguation (both rounds) → provenance_parties ─────
 
@@ -139,8 +139,12 @@ function backfillDisambiguation(filePath, label) {
   console.log(`   ${count} parties`);
 }
 
-backfillDisambiguation("data/audit-party-disambiguation-r1.json", "R1");
-backfillDisambiguation("data/audit-party-disambiguation-r2.json", "R2");
+backfillDisambiguation("data/audit/audit-party-disambiguation-r1.json", "R1");
+backfillDisambiguation("data/audit/audit-party-disambiguation-r2.json", "R2");
+// v0.24 addition: 128-residual re-disambiguation batch (2026-04-19) resolved
+// the 347→0 null-position-parties gap post-reparse. Its inserted split/rename
+// parties need reasoning populated by the same mechanism.
+backfillDisambiguation("data/audit/audit-party-disambiguation-v0.24-128residuals-2026-04-19.json", "v0.24-128res");
 
 // ─── 4. Transfer category rule → provenance_events ──────────────────
 

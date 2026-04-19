@@ -3646,23 +3646,41 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
     bbox-diagonal approach (#255) because the latter returned spurious
     ~40,000 km diagonals for antimeridian-straddling sets (Fiji, Oceania).
 
-    Once #254 populates ``vocabulary.is_areal``, this spread heuristic
-    stays as a belt-and-braces fallback for rows with NULL placetype.
+    Blocker sources are unioned into the ``_areal_parents`` temp table:
+    1. ``vocabulary.is_areal = 1`` — principled signal from the placetype
+       harvest (#254) covering TGN/Wikidata/manual-sourced areal entities
+       like constituent countries (England), provinces, continents.
+    2. Spread heuristic — any parent with ≥2 geocoded children whose
+       pairwise great-circle distance ≥ 75 km. Belt-and-braces for rows
+       with NULL placetype. Pairwise haversine vs. bbox-diagonal is
+       antimeridian-safe (Fiji/Oceania fix, #255).
     """
     conn.execute("DROP TABLE IF EXISTS _areal_parents")
     conn.execute("CREATE TEMP TABLE _areal_parents (id TEXT PRIMARY KEY)")
+
+    # Source 1: rows flagged is_areal=1 by placetype harvest (#254)
+    r = conn.execute("""
+        INSERT OR IGNORE INTO _areal_parents (id)
+        SELECT id FROM vocabulary WHERE type='place' AND is_areal = 1
+    """)
+    n_placetype = r.rowcount
+
+    # Source 2: spread-based heuristic (#218 original logic)
     areal_ids = _compute_areal_parents(conn, threshold_km=75.0)
+    n_spread = 0
     if areal_ids:
-        conn.executemany(
-            "INSERT INTO _areal_parents (id) VALUES (?)",
+        cur = conn.executemany(
+            "INSERT OR IGNORE INTO _areal_parents (id) VALUES (?)",
             [(aid,) for aid in areal_ids],
         )
+        n_spread = cur.rowcount
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_areal_parents_id ON _areal_parents(id)"
     )
     n_areal = conn.execute("SELECT COUNT(*) FROM _areal_parents").fetchone()[0]
     print(f"  [enrich coords] {n_areal:,} parents flagged as areal "
-          f"(pairwise spread ≥ 75 km, antimeridian-safe) — blocked from inheritance")
+          f"(placetype: {n_placetype:,}, spread ≥ 75 km: +{n_spread:,} new) — "
+          f"blocked from inheritance")
 
     total = 0
     max_depth = 10

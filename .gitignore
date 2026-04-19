@@ -36,4 +36,10 @@ data/*
 # Exception: hand-curated seed files that are inputs to the harvest, not
 # outputs of it (#229 Part A). Small, stable, versioned.
 !data/seed/
+# Exception: audit manifest (documents which LLM batches were collected,
+# by date/model/cost) — small, stable, versioned, enables cross-session
+# reconstruction when the audit JSON files themselves are regenerated.
+!data/audit/
+data/audit/*
+!data/audit/MANIFEST.md
 __pycache__/

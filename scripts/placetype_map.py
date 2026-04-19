@@ -52,6 +52,7 @@ AAT_IS_AREAL: dict[str, bool] = {
     "300387069": True,   # provinces (top-level admin; polygon)
     "300387126": True,   # departments (France etc., top-level admin)
     "300000776": True,   # first-level admin divisions (generic)
+    "300387506": True,   # constituent countries (England, Scotland, Wales, N. Ireland)
     "300235093": True,   # archipelagos
     # Bodies of water — centroid is hydrographically meaningless.
     "300008804": True,   # bodies of water (aggregate)

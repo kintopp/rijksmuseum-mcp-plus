@@ -69,11 +69,17 @@ gpu_image = (
         "torch",
         "numpy",
     )
-    .run_function(download_model)
+    .run_function(download_model, secrets=[modal.Secret.from_name("huggingface-secret")])
 )
 
 
-@app.cls(gpu="A10G", image=gpu_image, scaledown_window=60, timeout=3600)
+@app.cls(
+    gpu="A10G",
+    image=gpu_image,
+    scaledown_window=60,
+    timeout=3600,
+    secrets=[modal.Secret.from_name("huggingface-secret")],
+)
 class Embedder:
     @modal.enter()
     def load(self):

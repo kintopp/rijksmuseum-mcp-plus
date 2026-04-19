@@ -4,12 +4,11 @@ All scripts operate on the databases in `data/`. Python scripts use the `embeddi
 
 ## Harvest & DB Build
 
-The core pipeline that produces the three databases from scratch.
+The core pipeline that produces the two databases (vocabulary + embeddings) from scratch. Iconclass moved to its own service in v0.23.1 — see `legacy/` below.
 
 | Script | Lang | Description |
 |--------|------|-------------|
 | `harvest-vocabulary-db.py` | Python | Full vocabulary DB builder. 6 phases: data dump parsing, OAI-PMH harvest (836K records), vocab resolution, Linked Art enrichment, post-processing (FTS5, importance, geocoding import, **offline-dump enrichment** — actor bios, wikidata, place/concept hierarchy, coordinate inheritance). Hours to run. Pass `--skip-enrichment` to bypass the dump-based enrichment step. |
-| `build-iconclass-db.py` | Python | Builds `iconclass.db` from the CC0 Iconclass data dump + artwork counts from vocab DB. |
 | `compute_importance.py` | Python | Computes the `importance` column on artworks. Called by harvest Phase 3 but also runnable standalone. |
 | `harvest-person-names.py` | Python | Harvests person name variants from Linked Art into `person_names` table + FTS5 index. |
 
@@ -38,7 +37,6 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 |--------|------|-------------|
 | `generate-embeddings-mps.py` | Python | Generates artwork embeddings locally using Apple MPS GPU. Streaming to SQLite. |
 | `generate-vocabulary-embeddings-modal.py` | Python | Generates artwork embeddings on Modal cloud GPUs (A10) under different source text strategies. Production script for `no-subjects` strategy. |
-| `generate-iconclass-embeddings-modal.py` | Python | Generates Iconclass notation embeddings on Modal cloud GPU. |
 | `generate-description-embeddings-modal.py` | Python | Generates description-only embeddings on Modal A10G. PCA dimensionality reduction (384→256), int8 quantisation. Writes `desc_embeddings` + `vec_desc_artworks` tables to embeddings DB. |
 | `generate-embeddings-outdated.py` | Python | **Superseded** by `generate-embeddings-mps.py`. Original non-streaming version. |
 
@@ -121,6 +119,15 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 | `warm-cache-local.mjs` | Node | Local cache warming via stdio transport. Same TSV, no running server needed. |
 | `warm-cache-prompts.tsv` | Data | Tool call definitions used by both warm-cache scripts. |
 | `insights-tui.mjs` | Node | TUI for reviewing and pruning `offline/INSIGHTS.md` entries. |
+
+## Legacy (`legacy/`)
+
+Scripts retained for reference but no longer part of any release path. Do not run as part of the v0.24+ pipeline.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `legacy/build-iconclass-db.py` | Python | Built the standalone `iconclass.db` from the CC0 Iconclass data dump + artwork counts from vocab DB. Iconclass moved to its own MCP service in v0.23.1 (`kintopp/rijksmuseum-iconclass-mcp`). Counts sidecar refresh now lives in that repo — see RELEASE.md Phase B-bis. |
+| `legacy/generate-iconclass-embeddings-modal.py` | Python | Generated Iconclass notation embeddings on Modal. Same Iconclass-MCP split — embedding generation now belongs to that repo. |
 
 ## Tests (`tests/`)
 
