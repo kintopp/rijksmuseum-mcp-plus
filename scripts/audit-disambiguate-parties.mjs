@@ -2,7 +2,7 @@
  * Re-run LLM on 213 parser-artifact parties to extract structured
  * sender/receiver/agent names from merged party text.
  *
- * Input:  data/disambig-targets.json (from position-enrichment nulls)
+ * Input:  data/backfills/disambig-targets.json (from position-enrichment nulls)
  * Output: data/audit-party-disambiguation-2026-03-22.json
  *
  * Usage:
@@ -21,7 +21,7 @@ const outputPath = "data/audit-party-disambiguation-2026-03-22.json";
 
 // ─── Load targets ───────────────────────────────────────────────────
 
-const targets = JSON.parse(readFileSync("data/disambig-targets.json", "utf-8"));
+const targets = JSON.parse(readFileSync("data/backfills/disambig-targets.json", "utf-8"));
 console.log(`Party disambiguation batch`);
 console.log(`  Targets:  ${targets.length} events across ${new Set(targets.map(t => t.artwork_id)).size} artworks`);
 console.log(`  Model:    ${model}`);
