@@ -4,14 +4,14 @@ Draft release notes for v0.24. Not committed.
 
 ## v0.24.0
 
-First full re-harvest (April 19, 2026) since v0.21. Backward-compatible with v0.23.1 — no tool-schema changes, no removed tools.
+First full re-harvest (April 16, 2026) since v0.21. Backward-compatible with v0.23.1 — no tool-schema changes, no removed tools.
 
 ### Highlights
 
 - **Image annotation with self-verification:** `inspect_artwork_image` can now draw overlays on the returned IIIF region and rejects out-of-bounds coordinates with a structured warning. An LLM can propose a region, see the annotated result, and correct itself.
-- **Provenance corrections applied:** LLM-audited fixes for truncated locations, phantom events, bequest chains, and multi-transfer sequences. 
-- **Full geo re-enrichment:** coordinates, hierarchy, and external IDs re-derived from TGN, Wikidata, GeoNames, and World Historical Gazetteer. Every enriched field carries a provenance tag (`authority` / `derived` / `manual`).
-- **In-harvest vocabulary additions:** person records gain birth/death years, gender, short bio, and Wikidata ID at harvest time rather than via a separate pass. These new vocabulary additions aren't accessible yet from the MCP server's tools (deferred to v0.25).
+- **Provenance corrections:** LLM-audited fixes for truncated locations, phantom events, bequest chains, and multi-transfer sequences. 
+- **Improved geo enrichments:** coordinates, hierarchy, and external IDs re-derived from TGN, Wikidata, GeoNames, and World Historical Gazetteer. Every enriched field carries a provenance tag (`authority` / `derived` / `manual`).
+- **In-harvest vocabulary additions:** person records gain birth/death years, gender, short bio, and Wikidata ID at harvest time rather than via a separate pass. These new vocabulary additions aren't yet queryable (deferred to v0.25).
 
 ### Image annotation
 
