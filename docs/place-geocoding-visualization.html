@@ -326,13 +326,12 @@
     </div>
 
     <div style="margin-top:1rem;">
-      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Share of resolution methods — v0.23 build (32,090 method assignments across 31,033 geocoded places; places reachable by &gt;1 method counted in each)</div>
+      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Share of resolution methods — v0.24 build (29,726 geocoded places; each attributed to the first cascade source that produced its coordinates. WHG adds zero in this cycle — all candidates routed to human review.)</div>
       <div class="method-bar">
-        <div class="bar-wikidata" style="width:32%;" title="Wikidata: 10,264">Wikidata 32%</div>
-        <div class="bar-inherit" style="width:29%;" title="Hierarchy: ~9,460">Hierarchy 29%</div>
-        <div class="bar-tgn" style="width:28%;" title="Getty TGN: 8,882">Getty TGN 28%</div>
-        <div class="bar-whg" style="width:7%;" title="WHG: ~2,283">WHG 7%</div>
-        <div class="bar-geonames" style="width:4%;" title="GeoNames: 1,201">GN 4%</div>
+        <div class="bar-tgn" style="width:48%;" title="Getty TGN: 14,190">Getty TGN 48%</div>
+        <div class="bar-wikidata" style="width:27%;" title="Wikidata: 7,994">Wikidata 27%</div>
+        <div class="bar-inherit" style="width:20%;" title="Hierarchy: 6,060">Hierarchy 20%</div>
+        <div class="bar-geonames" style="width:5%;" title="GeoNames: 1,392">GN 5%</div>
       </div>
     </div>
   </div>
@@ -344,12 +343,8 @@
 <section>
   <div class="container">
     <h2>Authority sources in detail</h2>
-    <p style="margin-bottom:0.5rem;">Each source contributes coordinates with different strengths. The pipeline queries them
+    <p style="margin-bottom:1rem;">Each source contributes coordinates with different strengths. The pipeline queries them
       in order of precision and batch efficiency.</p>
-    <p class="muted" style="margin-bottom:1rem; padding:0.6rem 0.8rem; border-left:3px solid #94a3b8; background:#f8fafc; font-size:0.85rem;">
-      Per-source counts in this table reflect the v0.23 build. v0.24's three-tier summary appears in
-      <a href="#building-coverage" style="color:#2563eb;">Building coverage</a> below.
-    </p>
 
     <div style="overflow-x:auto;">
     <table class="source-table">
@@ -366,36 +361,36 @@
         <tr>
           <td><span class="auth-badge auth-tgn">Getty TGN</span></td>
           <td>SPARQL endpoint<br><span class="muted">foaf:focus &rarr; wgs84:lat/long</span></td>
-          <td class="mono">8,884</td>
-          <td class="mono">8,882 <span class="muted">(99.98%)</span></td>
-          <td style="font-size:0.82rem;">Art-world standard. Curated by Getty. Includes historical place names and hierarchies.</td>
+          <td class="mono">14,417</td>
+          <td class="mono">14,286 <span class="muted">(99.1%)</span></td>
+          <td style="font-size:0.82rem;">Art-world standard. Curated by Getty. Includes historical place names and hierarchies. Primary source in v0.24 &mdash; largest cross-reference pool after the Schema.org places dump.</td>
         </tr>
         <tr>
           <td><span class="auth-badge auth-wikidata">Wikidata</span></td>
           <td>SPARQL endpoint<br><span class="muted">P625 + P159/P131/P276 fallbacks</span></td>
-          <td class="mono">10,308</td>
-          <td class="mono">10,264 <span class="muted">(99.6%)</span></td>
-          <td style="font-size:0.82rem;">Largest coverage. Fallback properties (headquarters, admin territory) resolve institutions and districts.</td>
+          <td class="mono">8,442</td>
+          <td class="mono">8,375 <span class="muted">(99.2%)</span></td>
+          <td style="font-size:0.82rem;">Fallback properties (headquarters, admin territory, location) resolve institutions and districts that lack P625 directly.</td>
         </tr>
         <tr>
           <td><span class="auth-badge auth-geonames">GeoNames</span></td>
           <td>REST JSON API<br><span class="muted">by numeric ID</span></td>
-          <td class="mono">1,215</td>
-          <td class="mono">1,201 <span class="muted">(98.8%)</span></td>
+          <td class="mono">1,506</td>
+          <td class="mono">1,503 <span class="muted">(99.8%)</span></td>
           <td style="font-size:0.82rem;">Good for modern administrative units. Free tier rate-limited (1,000 req/hour).</td>
         </tr>
         <tr>
           <td><span class="auth-badge auth-whg">World Historical Gazetteer</span></td>
           <td>Reconciliation API<br><span class="muted">fuzzy name matching</span></td>
-          <td class="mono">~2,283</td>
-          <td class="mono">~2,283 <span class="muted">(accepted)</span></td>
-          <td style="font-size:0.82rem;">Resolves historical variants (Batavia&rarr;Jakarta, Leyden&rarr;Leiden). Bridges to other authorities.</td>
+          <td class="mono">3,789</td>
+          <td class="mono">0 <span class="muted">(review queue)</span></td>
+          <td style="font-size:0.82rem;">Resolves historical variants (Batavia&rarr;Jakarta, Leyden&rarr;Leiden). The v0.24 country-context filter routes every candidate to a human-review CSV; none are auto-merged into the production DB yet.</td>
         </tr>
         <tr>
           <td><span class="auth-badge auth-inherit">Hierarchy inheritance</span></td>
           <td>Recursive CTE<br><span class="muted">broader_id &rarr; parent coords</span></td>
-          <td class="mono">~9,460</td>
-          <td class="mono">~9,460</td>
+          <td class="mono">6,060</td>
+          <td class="mono">6,060</td>
           <td style="font-size:0.82rem;">Streets, buildings, landmarks inherit city-level coordinates from parent place. 82% of places have a parent.</td>
         </tr>
       </tbody>
@@ -689,7 +684,7 @@
       <div class="wf-row">
         <div class="wf-label">Manual</div>
         <div class="wf-bar-track"><div class="wf-bar-fill" style="width:1%; background:#7c3aed; min-width:40px;">0</div></div>
-        <div class="wf-note muted">human override</div>
+        <div class="wf-note muted">curated</div>
       </div>
       <div class="wf-row">
         <div class="wf-label" style="font-weight:700;">Total geocoded</div>
