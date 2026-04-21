@@ -661,71 +661,59 @@
 <section>
   <div class="container">
     <h2 id="building-coverage">Building coverage: from 0% to 81%</h2>
-    <p style="margin-bottom:0.5rem;">
-      Each phase of the pipeline adds coordinates to a new tranche of places.
-      Authority ID resolution handles the bulk; hierarchy inheritance closes the long tail.
-    </p>
-    <p class="muted" style="margin-bottom:1rem; padding:0.6rem 0.8rem; border-left:3px solid #94a3b8; background:#f8fafc; font-size:0.85rem;">
-      Note: the per-source counts below reflect the v0.23 build of this pipeline. In v0.24 the cascade
-      was re-run against a larger, enrichment-expanded vocabulary (36,907 places, up from 32,347), and the
-      result is summarised with a three-tier audit schema (23,666 <em>authority</em> / 6,060 <em>derived</em> /
-      0 <em>manual</em> = 29,726 geocoded = 81% coverage). A full v0.24 per-source redraw is planned for a
-      future release; the shape of the story — authority lookups handle most, hierarchy inheritance closes
-      the tail — is unchanged.
+    <p style="margin-bottom:1rem;">
+      Each geocoded coordinate in v0.24 is tagged with a three-tier provenance label:
+      <strong>authority</strong> (resolved directly against an external gazetteer),
+      <strong>derived</strong> (inherited from a parent or alias within the vocabulary tree),
+      or <strong>manual</strong> (hand-curated overrides). Authority lookups do most of the
+      work; hierarchy inheritance closes most of the tail.
     </p>
 
     <div class="waterfall">
       <div class="wf-row">
         <div class="wf-label">Total places</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:100%; background:#94a3b8;">32,347</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:100%; background:#94a3b8;">36,907</div></div>
         <div class="wf-note"></div>
       </div>
       <div class="wf-row">
-        <div class="wf-label">Wikidata P625</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:31.7%; background:#3b82f6;">10,264</div></div>
-        <div class="wf-note muted">SPARQL</div>
+        <div class="wf-label">Authority</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:64.1%; background:#3b82f6;">23,666 &nbsp;(64%)</div></div>
+        <div class="wf-note muted">external ID</div>
       </div>
       <div class="wf-row">
-        <div class="wf-label">Getty TGN</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:27.5%; background:#d97706;">8,882</div></div>
-        <div class="wf-note muted">SPARQL</div>
+        <div class="wf-label">Derived</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:16.4%; background:#6366f1;">6,060 &nbsp;(16%)</div></div>
+        <div class="wf-note muted">hierarchy + alias</div>
       </div>
       <div class="wf-row">
-        <div class="wf-label">WHG fuzzy + bridge</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:7.1%; background:#7c3aed;">2,283</div></div>
-        <div class="wf-note muted">API</div>
-      </div>
-      <div class="wf-row">
-        <div class="wf-label">GeoNames</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:3.7%; background:#059669;">1,201</div></div>
-        <div class="wf-note muted">REST API</div>
-      </div>
-      <div class="wf-row">
-        <div class="wf-label" style="font-style:italic;">Subtotal (direct)</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:70%; background:#0ea5e9;">22,630 &nbsp;(70%)</div></div>
-        <div class="wf-note"></div>
-      </div>
-      <div class="wf-row">
-        <div class="wf-label">Hierarchy inheritance</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:26%; background:#6366f1;">~8,400</div></div>
-        <div class="wf-note muted">broader_id</div>
+        <div class="wf-label">Manual</div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:1%; background:#7c3aed; min-width:40px;">0</div></div>
+        <div class="wf-note muted">human override</div>
       </div>
       <div class="wf-row">
         <div class="wf-label" style="font-weight:700;">Total geocoded</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:96%; background:#059669;">31,033 &nbsp;(96%)</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:80.5%; background:#059669;">29,726 &nbsp;(81%)</div></div>
         <div class="wf-note"></div>
       </div>
       <div class="wf-row">
         <div class="wf-label" style="color:#94a3b8;">Remaining ungeocoded</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:4%; background:#e5e5e0; color:#888; min-width:40px;">1,314</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:19.5%; background:#e5e5e0; color:#888;">7,181 &nbsp;(19%)</div></div>
         <div class="wf-note"></div>
       </div>
     </div>
 
-    <p class="muted" style="margin-top:0.5rem;">
-      The 1,314 ungeocoded places are primarily orphan vocabulary entries (not linked to any artwork),
-      extremely local landmarks, and a small number of places with authority IDs but no coordinates
-      in any source.
+    <p class="muted" style="margin-top:1.2rem; padding:0.6rem 0.8rem; border-left:3px solid #94a3b8; background:#f8fafc; font-size:0.85rem;">
+      <strong>Authority tier, by gazetteer.</strong> Among the 23,666 authority-tier places, external-ID
+      cross-references point to Getty TGN (14,286 places), Wikidata (8,375), and GeoNames (1,503).
+      Counts overlap: many places carry IDs from more than one authority, and the cascade accepts
+      whichever returns coordinates first. WHG contributions are resolved inline during the fuzzy-name
+      phase and are not persisted as cross-references, so they do not appear in this breakdown.
+    </p>
+
+    <p class="muted" style="margin-top:1rem;">
+      The remaining 7,181 ungeocoded places are mostly orphan vocabulary entries not linked to any
+      artwork, local landmarks outside every gazetteer's coverage, and
+      entries whose authority IDs return no coordinates in any queried source.
     </p>
   </div>
 </section>
