@@ -246,7 +246,10 @@
       punctuation convention</a>. The provenance parser in
       <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" style="color:#93c5fd;">rijksmuseum-mcp+</a>
       parses these narratives into over 100,000 structured events, making them searchable
-      by party, transfer type, date, location, and price.
+      by party, transfer type, date, location, and price. Every extracted event and party carries a three-tier
+      method tag (<code style="color:#fde68a; font-size:0.85em;">peg</code> /
+      <code style="color:#fde68a; font-size:0.85em;">rule</code> /
+      <code style="color:#fde68a; font-size:0.85em;">llm</code>) so its source can be audited.
     </p>
     <div class="stats-row">
       <div class="stat"><div class="num">48,539</div><div class="desc">artworks with provenance</div></div>
@@ -415,8 +418,8 @@
         <div class="card-icon">&curren;</div>
         <h3>Prices &amp; currencies</h3>
         <p>Amounts in original historical currency. 14 currencies recognised — dominant ones are guilders,
-          euros, pounds, francs, yen, and dollars; smaller tails for deutschmarks, Swiss francs, guineas,
-          reichsmarks, livres, marks, Belgian francs, and napoléons. A <code>batch_price</code> flag marks
+          euros, pounds, francs, yen, and deutschmarks; smaller tails for dollars, Swiss francs, guineas,
+          reichsmarks, livres, marks, napoléons, and Belgian francs. A <code>batch_price</code> flag marks
           <em>en bloc</em> totals for multiple works.</p>
         <div class="example">
           "fl. 175" &rarr; 175 guilders<br>
@@ -448,7 +451,7 @@
           <div><code>gap</code> &mdash; <code>&hellip;</code> break in ownership chain</div>
           <div><code>unsold</code> &mdash; auction lot was bought-in (no transfer occurred)</div>
           <div><code>batch_price</code> &mdash; price covers multiple works</div>
-          <div><code>parseMethod</code> &mdash; peg, regex_fallback, cross_ref, or credit_line</div>
+          <div><code>parseMethod</code> &mdash; peg, cross_ref, llm_structural, or credit_line</div>
           <div><code>categoryMethod</code> / <code>positionMethod</code> &mdash; provenance of every enrichment decision</div>
         </div>
       </div>
@@ -462,7 +465,7 @@
 <section>
   <div class="container">
     <h2>Parsed output for the Milkmaid (excerpt)</h2>
-    <p style="margin-bottom:0.5rem;">The first five events as structured rows. Each row is one semicolon-delimited segment from the raw text.</p>
+    <p style="margin-bottom:0.5rem;">The first five events as structured rows. Each row is one semicolon-delimited segment from the raw text. Where a segment names two co-owners in parentheses (e.g. &ldquo;X (dates) and Y (dates)&rdquo;), the grammar currently captures the first party only &mdash; a known limitation.</p>
     <div style="overflow-x:auto;">
     <table class="event-table">
       <thead>
@@ -481,8 +484,8 @@
         <tr>
           <td class="mono">1</td>
           <td><span class="type-badge type-collection">collection</span></td>
-          <td>Pieter Claesz van Ruijven <span class="muted">(1624-1674)</span><br>Maria Simonsdr de Knuijt <span class="muted">(1623-1681)</span></td>
-          <td class="muted">receiver<br>receiver</td>
+          <td>Pieter Claesz van Ruijven <span class="muted">(1624-1674)</span></td>
+          <td class="muted">receiver</td>
           <td>Delft</td>
           <td class="muted">&mdash;</td>
           <td class="muted">&mdash;</td>
@@ -613,7 +616,7 @@
         <div>
           <div class="label" style="color:#92400e; margin-bottom:0.3rem;">1. Transfer type classification</div>
           <p style="font-size:0.82rem; color:#78350f;">
-            170 events used institution-specific jargon, archaic terminology, or non-standard phrasing
+            166 events used institution-specific jargon, archaic terminology, or non-standard phrasing
             that no keyword rule could reliably match. The LLM classified each with a transfer type
             and written reasoning.
           </p>
@@ -627,7 +630,7 @@
         <div>
           <div class="label" style="color:#92400e; margin-bottom:0.3rem;">2. Party position disambiguation</div>
           <p style="font-size:0.82rem; color:#78350f;">
-            824 parties had no deterministic role mapping. The LLM inferred sender/receiver/agent
+            1,276 parties had no deterministic role mapping. The LLM inferred sender/receiver/agent
             from the narrative context and the transfer type of the event.
           </p>
           <div class="example" style="background:#fef9ee; font-size:0.78rem; border:1px solid #fde68a; margin-top:0.5rem;">
@@ -640,8 +643,8 @@
         <div>
           <div class="label" style="color:#92400e; margin-bottom:0.3rem;">3. Merged party decomposition</div>
           <p style="font-size:0.82rem; color:#78350f;">
-            367 party texts contained multiple people merged into a single string by the parser.
-            The LLM decomposed these into individual parties with correct positions.
+            439 party records were structurally split from merged text (e.g. &ldquo;X, his son Y&rdquo;)
+            and reassigned positions by the LLM, which inferred each person's role from the narrative.
           </p>
           <div class="example" style="background:#fef9ee; font-size:0.78rem; border:1px solid #fde68a; margin-top:0.5rem;">
             "Jan de Vos, his son Pieter de Vos"<br>
@@ -653,21 +656,21 @@
     </div>
 
     <!-- Waterfall -->
-    <h3 style="margin-top:1.5rem;">From 3,192 unknowns to 7</h3>
+    <h3 style="margin-top:1.5rem;">From 3,204 unknowns to 7</h3>
     <p style="margin-bottom:0.5rem; font-size:0.88rem; color:#555;">
       In the end, a series of grammar improvements, structural signal detection, deterministic rules,
-      and targeted LLM passes reduced the (non-cross-reference) unknowns by 99.9%.
+      and targeted LLM passes reduced the (non-cross-reference) unknowns by 99.8%.
     </p>
 
     <div class="waterfall">
       <div class="wf-row">
         <div class="wf-label">Starting unknowns</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:100%; background:#94a3b8;">3,192</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:100%; background:#94a3b8;">3,204</div></div>
         <div class="wf-note"></div>
       </div>
       <div class="wf-row">
         <div class="wf-label">Grammar improvements</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:60%; background:#3b82f6;">&minus;1,890</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:59%; background:#3b82f6;">&minus;1,890</div></div>
         <div class="wf-note muted">PEG rules</div>
       </div>
       <div class="wf-row">
@@ -682,12 +685,12 @@
       </div>
       <div class="wf-row">
         <div class="wf-label">Credit-line events</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:2.2%; background:#059669;">&minus;70</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:2.5%; background:#059669;">&minus;79</div></div>
         <div class="wf-note muted">rule</div>
       </div>
       <div class="wf-row">
         <div class="wf-label" style="color:#d97706; font-weight:600;">Transfer type classification</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:5.3%; background:#f59e0b;">&minus;170</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:5.2%; background:#f59e0b;">&minus;166</div></div>
         <div class="wf-note muted">LLM</div>
       </div>
       <div class="wf-row">
