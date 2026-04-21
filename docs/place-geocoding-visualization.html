@@ -243,7 +243,7 @@
       <div class="stat"><div class="num">36,907</div><div class="desc">distinct places</div></div>
       <div class="stat"><div class="num">29,726</div><div class="desc">geocoded (81%)</div></div>
       <div class="stat"><div class="num">5</div><div class="desc">authority sources</div></div>
-      <div class="stat"><div class="num">1.9M</div><div class="desc">artwork&ndash;place links</div></div>
+      <div class="stat"><div class="num">1.4M</div><div class="desc">artwork&ndash;place links</div></div>
     </div>
   </div>
 </div>
@@ -263,7 +263,7 @@
 
     <h3 style="margin-top:1.2rem;">How places connect to artworks</h3>
     <div class="field-grid">
-      <div class="field-item"><span class="f-name">Production place</span><span class="f-count">486,521 links</span></div>
+      <div class="field-item"><span class="f-name">Production place</span><span class="f-count">707,428 links</span></div>
       <div class="field-item"><span class="f-name">Depicted place</span><span class="f-count">310,098 links</span></div>
       <div class="field-item"><span class="f-name">Creator birth place</span><span class="f-count">195,957 links</span></div>
       <div class="field-item"><span class="f-name">Creator death place</span><span class="f-count">180,653 links</span></div>
@@ -271,7 +271,8 @@
 
     <p class="muted" style="margin-top:0.8rem;">
       A single place like "Amsterdam" may appear in all four roles across thousands of artworks.
-      Production places come from OAI-PMH <code>dcterms:spatial</code>; depicted places from
+      Production places are harvested from Linked Art production parts and OAI-PMH
+      <code>dcterms:spatial</code> (unified in the DB as one field); depicted places from
       <code>dc:subject</code>; birth/death places from Linked Art person records.
     </p>
   </div>
@@ -325,13 +326,13 @@
     </div>
 
     <div style="margin-top:1rem;">
-      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Coordinate sources — v0.23 build across 31,033 geocoded places (see v0.24 note below)</div>
+      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Share of resolution methods — v0.23 build (32,090 method assignments across 31,033 geocoded places; places reachable by &gt;1 method counted in each)</div>
       <div class="method-bar">
-        <div class="bar-wikidata" style="width:33%;" title="Wikidata: 10,264">Wikidata 33%</div>
-        <div class="bar-inherit" style="width:31%;" title="Hierarchy: ~9,460">Hierarchy 31%</div>
-        <div class="bar-tgn" style="width:29%;" title="Getty TGN: 8,882">Getty TGN 29%</div>
-        <div class="bar-geonames" style="width:4%;" title="GeoNames: 1,201">GN</div>
-        <div class="bar-whg" style="width:3%;" title="WHG: ~2,283">WHG</div>
+        <div class="bar-wikidata" style="width:32%;" title="Wikidata: 10,264">Wikidata 32%</div>
+        <div class="bar-inherit" style="width:29%;" title="Hierarchy: ~9,460">Hierarchy 29%</div>
+        <div class="bar-tgn" style="width:28%;" title="Getty TGN: 8,882">Getty TGN 28%</div>
+        <div class="bar-whg" style="width:7%;" title="WHG: ~2,283">WHG 7%</div>
+        <div class="bar-geonames" style="width:4%;" title="GeoNames: 1,201">GN 4%</div>
       </div>
     </div>
   </div>
