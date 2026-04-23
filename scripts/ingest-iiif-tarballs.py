@@ -16,6 +16,7 @@ Audit:
 from __future__ import annotations
 import hashlib
 import io
+import json
 import sqlite3
 import tarfile
 import time
@@ -28,6 +29,7 @@ USER_AGENT = "rijksmuseum-mcp-ingest-iiif/0.24"
 IIIF_SIZES = ["1568,", "max"]
 MAX_ATTEMPTS_PER_SIZE = 3
 BACKOFF_BASE = 0.5  # seconds; doubled per retry
+TAR_PREFIX = "tarballs/"
 
 
 def pick_artworks_for_shard(
@@ -124,6 +126,48 @@ def pack_tarball(download_dir: Path, iiif_ids: list[str]) -> tuple[bytes, str]:
             tf.add(p, arcname=f"{iid}.jpg")
     body = buf.getvalue()
     return body, hashlib.sha256(body).hexdigest()
+
+
+def make_bucket_client(creds: dict):
+    import boto3  # local import so users without boto3 can still run --audit offline
+    from botocore.config import Config
+    return boto3.client(
+        "s3",
+        endpoint_url=creds["endpoint"],
+        aws_access_key_id=creds["accessKeyId"],
+        aws_secret_access_key=creds["secretAccessKey"],
+        region_name=creds["region"],
+        config=Config(s3={"addressing_style": "virtual"}, retries={"max_attempts": 5}),
+    )
+
+
+def tar_key(shard_id: int) -> str:
+    return f"{TAR_PREFIX}shard-{shard_id:03d}.tar"
+
+
+def manifest_key(shard_id: int) -> str:
+    return f"{TAR_PREFIX}shard-{shard_id:03d}.manifest.json"
+
+
+def bucket_head(s3, bucket: str, key: str) -> dict | None:
+    try:
+        return s3.head_object(Bucket=bucket, Key=key)
+    except Exception as e:  # noqa: BLE001 — boto surface varies
+        if "404" in str(e) or "NoSuchKey" in str(e) or "NotFound" in str(e):
+            return None
+        raise
+
+
+def bucket_get_manifest(s3, bucket: str, shard_id: int) -> dict | None:
+    try:
+        body = s3.get_object(Bucket=bucket, Key=manifest_key(shard_id))["Body"].read()
+        return json.loads(body)
+    except Exception:
+        return None
+
+
+def bucket_put_bytes(s3, bucket: str, key: str, body: bytes, content_type: str) -> None:
+    s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type)
 
 
 def build_manifest(state, *, tar_bytes_len: int, tar_sha256: str) -> dict:
