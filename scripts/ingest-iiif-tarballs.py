@@ -14,9 +14,11 @@ Audit:
         --creds /tmp/src-creds.json --audit --shard-range 0-199
 """
 from __future__ import annotations
+import concurrent.futures as cf
 import hashlib
 import io
 import json
+import signal
 import sqlite3
 import tarfile
 import time
@@ -168,6 +170,94 @@ def bucket_get_manifest(s3, bucket: str, shard_id: int) -> dict | None:
 
 def bucket_put_bytes(s3, bucket: str, key: str, body: bytes, content_type: str) -> None:
     s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type)
+
+
+def _make_session(pool_size: int):
+    import requests
+    import requests.adapters
+    s = requests.Session()
+    s.headers.update({"User-Agent": USER_AGENT})
+    adapter = requests.adapters.HTTPAdapter(
+        pool_connections=pool_size,
+        pool_maxsize=pool_size,
+        max_retries=0,  # retries are handled inside fetch_one
+    )
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
+
+def download_phase(
+    state,
+    *,
+    download_dir: Path,
+    state_path: Path,
+    concurrency: int,
+    save_every_s: float = 30.0,
+    max_attempts_per_size: int = MAX_ATTEMPTS_PER_SIZE,
+) -> None:
+    """Download everything in `state.pending_or_retryable()` in parallel.
+
+    Writes each JPEG to `<download_dir>/<iiif_id>.jpg`, updates state per result,
+    saves state atomically every `save_every_s` seconds, and on completion.
+    Survives Ctrl-C by catching SIGINT and saving before re-raising.
+    """
+    pending = sorted(state.pending_or_retryable())
+    if not pending:
+        return
+
+    download_dir.mkdir(parents=True, exist_ok=True)
+    session = _make_session(concurrency)
+    last_save = time.monotonic()
+
+    def save_now() -> None:
+        nonlocal last_save
+        state.save_atomically(state_path)
+        last_save = time.monotonic()
+
+    original_sigint = signal.getsignal(signal.SIGINT)
+
+    def sigint_handler(signum, frame):
+        save_now()
+        signal.signal(signal.SIGINT, original_sigint)
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGINT, sigint_handler)
+    try:
+        with cf.ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futs = {pool.submit(fetch_one, session, iid): iid for iid in pending}
+            completed = 0
+            for fut in cf.as_completed(futs):
+                iid = futs[fut]
+                result = fut.result()
+                if result.ok:
+                    (download_dir / f"{iid}.jpg").write_bytes(result.body)
+                    state.record_success(
+                        iid,
+                        nbytes=len(result.body),
+                        sha256=hashlib.sha256(result.body).hexdigest(),
+                        size_used=result.size_used,
+                    )
+                elif result.last_status == 404:
+                    state.mark_dead(iid, reason="HTTP 404 at both sizes", last_status=404)
+                else:
+                    state.record_failure(
+                        iid,
+                        error=result.last_error or f"HTTP {result.last_status}",
+                        status=result.last_status,
+                        max_attempts=max_attempts_per_size,
+                    )
+                completed += 1
+                if time.monotonic() - last_save >= save_every_s:
+                    save_now()
+                if completed % 100 == 0:
+                    pct = completed / len(pending) * 100
+                    print(f"  [{completed:>4}/{len(pending)}] {pct:5.1f}% — "
+                          f"done={len(state.downloaded)} retry={len(state.failed_retryable)} "
+                          f"dead={len(state.failed_dead)}", flush=True)
+    finally:
+        save_now()
+        signal.signal(signal.SIGINT, original_sigint)
 
 
 def build_manifest(state, *, tar_bytes_len: int, tar_sha256: str) -> dict:
