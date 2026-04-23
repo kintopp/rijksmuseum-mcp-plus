@@ -14,9 +14,13 @@ Audit:
         --creds /tmp/src-creds.json --audit --shard-range 0-199
 """
 from __future__ import annotations
+import hashlib
+import io
 import sqlite3
+import tarfile
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 IIIF_BASE = "https://iiif.micr.io"
@@ -105,3 +109,34 @@ def fetch_one(
                 if attempt + 1 < max_attempts_per_size:
                     time.sleep(backoff_base * (2 ** attempt))
     return FetchResult(ok=False, last_status=last_status, last_error=last_error)
+
+
+def pack_tarball(download_dir: Path, iiif_ids: list[str]) -> tuple[bytes, str]:
+    """Pack `{iiif_id}.jpg` files from `download_dir` into an uncompressed tar.
+
+    JPEGs are already compressed; gzip would not help. Returns (tar_bytes, sha256).
+    Files inside the tar have flat names `{iiif_id}.jpg` with no directory prefix.
+    """
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        for iid in sorted(iiif_ids):
+            p = download_dir / f"{iid}.jpg"
+            tf.add(p, arcname=f"{iid}.jpg")
+    body = buf.getvalue()
+    return body, hashlib.sha256(body).hexdigest()
+
+
+def build_manifest(state, *, tar_bytes_len: int, tar_sha256: str) -> dict:
+    return {
+        "shard_id": state.shard_id,
+        "total_shards": state.total_shards,
+        "iiif_size": state.iiif_size,
+        "created_at": datetime.now(tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "expected_count": len(state.expected),
+        "downloaded_count": len(state.downloaded),
+        "dead_count": len(state.failed_dead),
+        "tar_bytes": tar_bytes_len,
+        "tar_sha256": tar_sha256,
+        "members": {iid: dict(v) for iid, v in state.downloaded.items()},
+        "dead": {iid: dict(v) for iid, v in state.failed_dead.items()},
+    }

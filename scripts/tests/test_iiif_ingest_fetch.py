@@ -144,6 +144,53 @@ def test_fetch_one_404_is_permanent_across_ladder():
     assert session.get.call_count == 2  # one try per size, no retries
 
 
+import hashlib
+import io
+import tarfile
+
+
+def test_pack_tarball_from_disk_files():
+    with tempfile.TemporaryDirectory() as td:
+        dl_dir = Path(td)
+        payloads = {"A": b"a" * 100, "B": b"b" * 200, "C": b"c" * 50}
+        for iid, body in payloads.items():
+            (dl_dir / f"{iid}.jpg").write_bytes(body)
+
+        tar_bytes, sha = ingest.pack_tarball(dl_dir, list(payloads.keys()))
+
+        assert hashlib.sha256(tar_bytes).hexdigest() == sha
+        with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tf:
+            members = tf.getmembers()
+            assert {m.name for m in members} == {"A.jpg", "B.jpg", "C.jpg"}
+            for m in members:
+                iid = m.name.removesuffix(".jpg")
+                extracted = tf.extractfile(m).read()
+                assert extracted == payloads[iid]
+
+
+def test_build_manifest_reflects_state_and_tar():
+    from _iiif_ingest_state import ShardState
+    s = ShardState(shard_id=7, total_shards=200, iiif_size="1568,")
+    s.expected["A"] = {"art_id": 1, "object_number": "SK-A-1"}
+    s.expected["B"] = {"art_id": 2, "object_number": "SK-A-2"}
+    s.downloaded["A"] = {"bytes": 100, "sha256": "aaa", "size_used": "1568,", "saved_at": "t"}
+    s.failed_dead["B"] = {"reason": "HTTP 404 at both sizes", "last_status": 404}
+
+    manifest = ingest.build_manifest(s, tar_bytes_len=12345, tar_sha256="abc")
+
+    assert manifest["shard_id"] == 7
+    assert manifest["total_shards"] == 200
+    assert manifest["iiif_size"] == "1568,"
+    assert manifest["expected_count"] == 2
+    assert manifest["downloaded_count"] == 1
+    assert manifest["dead_count"] == 1
+    assert manifest["tar_bytes"] == 12345
+    assert manifest["tar_sha256"] == "abc"
+    assert set(manifest["members"].keys()) == {"A"}
+    assert manifest["members"]["A"]["bytes"] == 100
+    assert set(manifest["dead"].keys()) == {"B"}
+
+
 if __name__ == "__main__":
     test_pick_artworks_for_shard_mod_arithmetic()
     test_pick_artworks_empty_shard_returns_empty_dict()
@@ -153,4 +200,6 @@ if __name__ == "__main__":
     test_fetch_one_retries_on_5xx_then_succeeds()
     test_fetch_one_gives_up_after_exhausting_ladder()
     test_fetch_one_404_is_permanent_across_ladder()
+    test_pack_tarball_from_disk_files()
+    test_build_manifest_reflects_state_and_tar()
     print("ok")
