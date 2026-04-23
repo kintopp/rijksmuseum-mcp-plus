@@ -7,7 +7,7 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from _iiif_ingest_state import ShardState  # noqa: E402
+from _iiif_ingest_state import ShardState, ShardStatus, classify_action  # noqa: E402
 
 
 def test_shardstate_construct_defaults():
@@ -141,6 +141,60 @@ def test_pending_excludes_done_and_dead():
     assert pending == {"C", "D"}
 
 
+def _complete_state_fixture():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    for iid in ["A", "B", "C"]:
+        s.expected[iid] = {"art_id": 1, "object_number": iid}
+        s.downloaded[iid] = {"bytes": 1, "sha256": "x", "size_used": "1568,", "saved_at": "t"}
+    return s
+
+
+def test_classify_not_started():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["A"] = {"art_id": 1, "object_number": "A"}
+    assert classify_action(s, bucket_tar_present=False, bucket_manifest=None) == ShardStatus.NOT_STARTED
+
+
+def test_classify_complete():
+    s = _complete_state_fixture()
+    s.last_uploaded_count = 3
+    manifest = {"members": {"A": {}, "B": {}, "C": {}}}
+    assert classify_action(s, bucket_tar_present=True, bucket_manifest=manifest) == ShardStatus.COMPLETE
+
+
+def test_classify_done_with_deaths():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["A"] = {"art_id": 1, "object_number": "A"}
+    s.expected["B"] = {"art_id": 2, "object_number": "B"}
+    s.downloaded["A"] = {"bytes": 1, "sha256": "x", "size_used": "1568,", "saved_at": "t"}
+    s.failed_dead["B"] = {"reason": "dead", "last_status": 404}
+    s.last_uploaded_count = 1
+    manifest = {"members": {"A": {}}, "dead": {"B": {}}}
+    assert classify_action(s, bucket_tar_present=True, bucket_manifest=manifest) == ShardStatus.DONE_WITH_DEATHS
+
+
+def test_classify_repack_needed():
+    s = _complete_state_fixture()
+    s.last_uploaded_count = 1  # only 1 of 3 uploaded last time
+    manifest = {"members": {"A": {}}}
+    assert classify_action(s, bucket_tar_present=True, bucket_manifest=manifest) == ShardStatus.REPACK_NEEDED
+
+
+def test_classify_retry_pending():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["A"] = {"art_id": 1, "object_number": "A"}
+    s.failed_retryable["A"] = {"attempts": 1, "last_error": "timeout", "last_status": -1}
+    assert classify_action(s, bucket_tar_present=False, bucket_manifest=None) == ShardStatus.RETRY_PENDING
+
+
+def test_classify_partial():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["A"] = {"art_id": 1, "object_number": "A"}
+    s.expected["B"] = {"art_id": 2, "object_number": "B"}
+    s.downloaded["A"] = {"bytes": 1, "sha256": "x", "size_used": "1568,", "saved_at": "t"}
+    assert classify_action(s, bucket_tar_present=False, bucket_manifest=None) == ShardStatus.PARTIAL
+
+
 if __name__ == "__main__":
     test_shardstate_construct_defaults()
     test_save_load_roundtrip()
@@ -152,4 +206,10 @@ if __name__ == "__main__":
     test_record_failure_increments_attempts()
     test_mark_dead_directly()
     test_pending_excludes_done_and_dead()
+    test_classify_not_started()
+    test_classify_complete()
+    test_classify_done_with_deaths()
+    test_classify_repack_needed()
+    test_classify_retry_pending()
+    test_classify_partial()
     print("ok")

@@ -5,6 +5,7 @@ import os
 import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 
@@ -90,3 +91,47 @@ class ShardState:
 
     def pending_or_retryable(self) -> set[str]:
         return set(self.expected) - set(self.downloaded) - set(self.failed_dead)
+
+
+class ShardStatus(str, Enum):
+    NOT_STARTED = "not_started"
+    PARTIAL = "partial"
+    RETRY_PENDING = "retry_pending"
+    REPACK_NEEDED = "repack_needed"
+    COMPLETE = "complete"
+    DONE_WITH_DEATHS = "done_with_deaths"
+
+
+def classify_action(
+    state: ShardState,
+    *,
+    bucket_tar_present: bool,
+    bucket_manifest: dict | None,
+) -> ShardStatus:
+    expected = set(state.expected)
+    downloaded = set(state.downloaded)
+    dead = set(state.failed_dead)
+    retryable = set(state.failed_retryable)
+
+    if not expected and not bucket_tar_present:
+        return ShardStatus.NOT_STARTED
+    if not downloaded and not dead and not retryable and not bucket_tar_present:
+        return ShardStatus.NOT_STARTED
+
+    if retryable:
+        return ShardStatus.RETRY_PENDING
+
+    # Terminal coverage: every expected ID is either downloaded or dead.
+    terminal = downloaded | dead
+    if expected and expected == terminal and bucket_tar_present and bucket_manifest is not None:
+        manifest_members = set(bucket_manifest.get("members", {}).keys())
+        if manifest_members == downloaded:
+            return ShardStatus.DONE_WITH_DEATHS if dead else ShardStatus.COMPLETE
+        return ShardStatus.REPACK_NEEDED
+
+    if bucket_tar_present and bucket_manifest is not None:
+        manifest_members = set(bucket_manifest.get("members", {}).keys())
+        if downloaded - manifest_members:
+            return ShardStatus.REPACK_NEEDED
+
+    return ShardStatus.PARTIAL
