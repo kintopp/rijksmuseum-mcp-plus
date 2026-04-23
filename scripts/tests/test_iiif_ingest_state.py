@@ -22,6 +22,47 @@ def test_shardstate_construct_defaults():
     assert s.last_uploaded_count == 0
 
 
+import json
+import tempfile
+
+def test_save_load_roundtrip():
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "shard-017.state.json"
+        original = ShardState(shard_id=17, total_shards=200, iiif_size="1568,")
+        original.expected["ABCDE"] = {"art_id": 42, "object_number": "SK-A-1"}
+        original.downloaded["ABCDE"] = {
+            "bytes": 100, "sha256": "x", "size_used": "1568,", "saved_at": "2026-01-01T00:00:00Z",
+        }
+        original.last_uploaded_count = 1
+        original.save_atomically(path)
+
+        assert path.exists()
+        payload = json.loads(path.read_text())
+        assert payload["shard_id"] == 17
+        assert payload["expected"]["ABCDE"]["art_id"] == 42
+
+        reloaded = ShardState.load(path)
+        assert reloaded.shard_id == 17
+        assert reloaded.expected == original.expected
+        assert reloaded.downloaded == original.downloaded
+        assert reloaded.last_uploaded_count == 1
+
+
+def test_load_nonexistent_returns_none():
+    with tempfile.TemporaryDirectory() as td:
+        assert ShardState.load(Path(td) / "does-not-exist.json") is None
+
+
+def test_load_corrupt_returns_none():
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "corrupt.json"
+        path.write_text("{not valid json")
+        assert ShardState.load(path) is None
+
+
 if __name__ == "__main__":
     test_shardstate_construct_defaults()
+    test_save_load_roundtrip()
+    test_load_nonexistent_returns_none()
+    test_load_corrupt_returns_none()
     print("ok")
