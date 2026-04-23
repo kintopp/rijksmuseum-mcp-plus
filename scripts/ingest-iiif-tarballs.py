@@ -487,3 +487,78 @@ def print_report_table(reports: list[ShardReport]) -> None:
     for r in reports:
         print(f"{r.shard_id:>5}  {r.status:<18}  {r.expected:>5}  {r.downloaded:>5}  "
               f"{r.retryable:>4}  {r.dead:>4}  {'yes' if r.tar_present else 'no':<5}  {r.action_taken}")
+
+
+import argparse
+
+
+def _find_project_root() -> Path:
+    here = Path(__file__).resolve().parent
+    for candidate in [here, *here.parents]:
+        if (candidate / "package.json").exists():
+            return candidate
+    raise RuntimeError("could not locate project root (package.json)")
+
+
+def _parse_shard_spec(shard_id: int | None, shard_range: str | None) -> list[int]:
+    if shard_id is not None and shard_range is not None:
+        raise SystemExit("specify --shard-id or --shard-range, not both")
+    if shard_id is not None:
+        return [shard_id]
+    if shard_range is not None:
+        a, _, b = shard_range.partition("-")
+        if not b:
+            raise SystemExit("--shard-range must be A-B (inclusive)")
+        return list(range(int(a), int(b) + 1))
+    raise SystemExit("specify --shard-id or --shard-range")
+
+
+def main() -> None:
+    project_root = _find_project_root()
+    default_db = project_root / "data" / "vocabulary.db"
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--creds", type=Path, required=True,
+                    help="JSON file from `railway bucket credentials --json`")
+    ap.add_argument("--total-shards", type=int, default=200)
+    ap.add_argument("--shard-id", type=int, default=None)
+    ap.add_argument("--shard-range", default=None, help="e.g. 0-99")
+    ap.add_argument("--audit", action="store_true",
+                    help="Report current status without downloading or uploading")
+    ap.add_argument("--concurrency", type=int, default=8,
+                    help="IIIF parallel download streams (default 8; sweet spot per bench)")
+    ap.add_argument("--size", default="1568,", help="IIIF size parameter (default 1568,)")
+    ap.add_argument("--db-path", type=Path, default=default_db)
+    ap.add_argument("--cache-root", type=Path, default=_default_cache_root(),
+                    help=f"default: {_default_cache_root()} (external SSD)")
+    ap.add_argument("--purge-after-upload", action="store_true",
+                    help="Delete per-shard downloads after successful upload "
+                         "(saves disk but forces re-download on future repack).")
+    args = ap.parse_args()
+
+    shard_ids = _parse_shard_spec(args.shard_id, args.shard_range)
+    creds = json.loads(args.creds.read_text())
+    cache_root = _require_cache_root(args.cache_root)
+
+    if args.audit:
+        reports = audit_shards(
+            shard_ids=shard_ids, total_shards=args.total_shards,
+            db_path=args.db_path, creds=creds, cache_root=cache_root,
+        )
+    else:
+        reports = run_shards(
+            shard_ids=shard_ids, total_shards=args.total_shards,
+            db_path=args.db_path, creds=creds, cache_root=cache_root,
+            concurrency=args.concurrency, purge_after_upload=args.purge_after_upload,
+        )
+    print("\n=== summary ===")
+    print_report_table(reports)
+
+    # Non-zero exit if any shard is not terminally OK (helps nightly cron).
+    non_terminal = [r for r in reports if r.status not in ("complete", "done_with_deaths")]
+    if non_terminal:
+        _sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
