@@ -64,7 +64,8 @@ aligned with the **PLOD framework** (Art Institute of Chicago).
 | `inventory` | ownership | Documented in an estate inventory or attestation |
 | `loan` | custody | On loan (temporary custody, no ownership change) |
 | `deposit` | custody | On deposit or in storage |
-| `transfer` | ambiguous | Administrative or intra-organisational transfer |
+| `transfer` | ownership | Administrative or intra-organisational transfer (predominantly ownership; a handful of custody/ambiguous variants also exist) |
+| `non_provenance` | — | Text identified as non-provenance content (citations, notes, inventory references); exclude from provenance analysis |
 | `unknown` | ambiguous | Parser could not classify (includes cross-references) |
 
 Extensions beyond CMOA: `recuperation` (physical recovery vs legal return),
@@ -75,7 +76,7 @@ Extensions beyond CMOA: `recuperation` (physical recovery vs legal return),
 | Flag | On type | Meaning |
 |------|---------|---------|
 | `unsold: true` | `sale` | Auction lot was unsold, bought in, or withdrawn. No ownership transfer occurred. Filter these when analysing actual sales. |
-| `batchPrice: true` | any with price | The price is an en bloc / batch total for multiple artworks, not an individual price. **Always filter these when ranking or comparing prices** — they massively distort rankings (e.g. fl. 6,350,000 for 393 Mannheimer objects). |
+| `batchPrice: true` | any with price | The price is an en bloc / batch total for multiple artworks, not an individual price. **Always filter these when ranking or comparing prices** — they massively distort rankings (e.g. the single fl. 6,350,000 Mannheimer sale is attributed to several hundred individual objects). |
 
 **Inheritance granularity**: use `by_descent` for works inherited by named
 relatives, `widowhood` for widow/widower inheritance specifically, or
@@ -100,17 +101,24 @@ Each party in a provenance event has a **role** (what they did) and a
 | `borrower` | receiver | Loan events |
 | `patron` | receiver | Commission events |
 | `collector` | receiver | Collection events |
+| `consignor` | sender | Sale events (owner delivering work to auction/dealer) |
 | `dealer` / `intermediary` / `auctioneer` | agent | Facilitated without owning |
+
+The table above lists the canonical role values. LLM enrichment also introduces
+granular variants (`his widow`, `his son`, `his daughter`, `seller/consignor`,
+`dealer/intermediary`, etc.) — dozens of them, each with small counts. When
+filtering by role, a broad `party=` search or a `LIKE` match on the canonical
+stem catches more than an exact role match.
 
 Positions (`sender`/`receiver`/`agent`) are derived from roles via deterministic
 mapping, with LLM enrichment for ambiguous cases. The `positionMethod` field
 tracks how each party's position was determined: `role_mapping` (deterministic),
-`llm_enrichment` (LLM-classified), or `llm_disambiguation` (LLM-resolved merged
-party text).
+`llm_enrichment` (LLM-classified), `llm_structural` (LLM resolved from event
+structure), or `llm_disambiguation` (LLM-resolved merged party text).
 
-Coverage: ~86K parties extracted across ~101K events. Not all events have named
-parties — bare-name `collection` events and cross-references often lack
-structured party data.
+Coverage: ~90K parties across ~100K events. Not all events have named parties —
+bare-name `collection` events and cross-references often lack structured party
+data.
 
 ---
 
@@ -134,11 +142,11 @@ Dates use qualified single years with temporal bounds, similar to the **EDTF
 ## Historical Currencies
 
 Prices are stored in their original historical currency — no inflation
-adjustment or cross-currency conversion is performed. Supported currency values:
-`guilders`, `pounds`, `francs`, `livres`, `napoléons`, `guineas`,
+adjustment or cross-currency conversion is performed. Currency values observed
+in the data: `guilders`, `pounds`, `francs`, `livres`, `napoléons`, `guineas`,
 `belgian_francs`, `deutschmarks`, `reichsmarks`, `swiss_francs`, `euros`,
-`dollars`, `yen`, `marks`, `louis_d_or`. Pre-decimal notations (£.s.d,
-fl. X:Y:-) are converted to decimal equivalents of the base currency unit.
+`dollars`, `yen`, `marks`. Pre-decimal notations (£.s.d, fl. X:Y:-) are
+converted to decimal equivalents of the base currency unit.
 
 Note on batch prices: *en bloc* prices (a batch sold together, e.g. the
 entire Mannheimer collection for fl. 6,350,000) are attributed to every
@@ -152,9 +160,9 @@ individual item in the batch. These events are flagged with `batchPrice: true`
 Every record carries provenance-of-provenance metadata tracking how it was
 determined:
 
-- `parseMethod`: how the event was parsed (`peg`, `regex_fallback`, `cross_ref`, `credit_line`)
-- `categoryMethod`: how the transfer type/category was determined (`type_mapping` = parser, `llm_enrichment` = LLM, `rule:transfer_is_ownership` = validated rule)
-- `positionMethod` (on parties): how the party position was determined (`role_mapping` = parser, `type_mapping` = from transfer type, `llm_enrichment` = LLM, `llm_disambiguation` = LLM-decomposed merged text)
+- `parseMethod`: how the event was parsed (`peg`, `cross_ref`, `llm_structural`, `credit_line`; `regex_fallback` is legacy and unused)
+- `categoryMethod`: how the transfer type/category was determined (`type_mapping` = parser, `rule:transfer_is_ownership` = validated rule, `llm_enrichment` = LLM)
+- `positionMethod` (on parties): how the party position was determined (`role_mapping` = parser, `llm_enrichment` = LLM, `llm_structural` = LLM from event structure, `llm_disambiguation` = LLM-decomposed merged text)
 - `enrichmentReasoning`: the LLM's reasoning for any non-deterministic decision
 
 When results contain LLM-enriched records, `search_provenance` provides a URL
@@ -168,13 +176,13 @@ not just output fields. Use them to audit LLM-mediated interpretations:
 
 ```python
 search_provenance(categoryMethod="llm_enrichment", maxResults=10)
-# → artworks where transfer type was classified by LLM (170 events)
+# → artworks where transfer type was classified by LLM (low hundreds of events)
 
 search_provenance(positionMethod="llm_enrichment", maxResults=10)
 # → artworks where party position was assigned by LLM
 
 search_provenance(positionMethod="llm_disambiguation", maxResults=10)
-# → artworks where merged party text was decomposed by LLM (204 splits)
+# → artworks where merged party text was decomposed by LLM (low hundreds of splits)
 ```
 
 For collection-wide distribution of methods:
@@ -194,7 +202,8 @@ The `parseMethod` field records how each provenance record was processed:
 |-------|-------|-------------|
 | `peg` | ~80% | PEG grammar parser — highest confidence |
 | `cross_ref` | ~20% | Cross-reference links |
-| `credit_line` | ~0.1% | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
+| `llm_structural` | <1% | LLM-resolved structural cases the PEG grammar could not parse |
+| `credit_line` | <1% | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
 | `regex_fallback` | — | Legacy, currently unused |
 
 `credit_line` events are particularly useful: they recover acquisition context
