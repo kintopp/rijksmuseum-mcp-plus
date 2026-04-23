@@ -424,3 +424,66 @@ def process_shard(
         retryable=len(state.failed_retryable), dead=len(state.failed_dead),
         tar_present=tar_info is not None, action_taken=action_taken,
     )
+
+
+def run_shards(
+    *,
+    shard_ids: list[int],
+    total_shards: int,
+    db_path: Path,
+    creds: dict,
+    cache_root: Path,
+    concurrency: int,
+    purge_after_upload: bool = False,
+) -> list[ShardReport]:
+    reports: list[ShardReport] = []
+    for sid in shard_ids:
+        print(f"\n===== shard {sid}/{total_shards - 1} =====", flush=True)
+        rep = process_shard(
+            shard_id=sid, total_shards=total_shards,
+            db_path=db_path, creds=creds, cache_root=cache_root, concurrency=concurrency,
+            purge_after_upload=purge_after_upload,
+        )
+        reports.append(rep)
+    return reports
+
+
+def audit_shards(
+    *,
+    shard_ids: list[int],
+    total_shards: int,
+    db_path: Path,
+    creds: dict,
+    cache_root: Path,
+) -> list[ShardReport]:
+    s3 = make_bucket_client(creds)
+    bucket = creds["bucketName"]
+    reports: list[ShardReport] = []
+    for sid in shard_ids:
+        state_path = _state_path(cache_root, sid)
+        state = ShardState.load(state_path)
+        if state is None:
+            # Build a ShardState on-the-fly from the DB so "expected" is populated.
+            expected = pick_artworks_for_shard(db_path, shard_id=sid, total_shards=total_shards)
+            state = ShardState(shard_id=sid, total_shards=total_shards, iiif_size="1568,")
+            state.reconcile(expected)
+        tar_info = bucket_head(s3, bucket, tar_key(sid))
+        manifest = bucket_get_manifest(s3, bucket, sid) if tar_info else None
+        status = classify_action(
+            state, bucket_tar_present=tar_info is not None, bucket_manifest=manifest
+        )
+        reports.append(ShardReport(
+            shard_id=sid, status=status.value,
+            expected=len(state.expected), downloaded=len(state.downloaded),
+            retryable=len(state.failed_retryable), dead=len(state.failed_dead),
+            tar_present=tar_info is not None, action_taken="audit-only",
+        ))
+    return reports
+
+
+def print_report_table(reports: list[ShardReport]) -> None:
+    print(f"{'shard':>5}  {'status':<18}  {'exp':>5}  {'dl':>5}  {'rtr':>4}  {'dead':>4}  {'tar':<5}  action")
+    print("-" * 100)
+    for r in reports:
+        print(f"{r.shard_id:>5}  {r.status:<18}  {r.expected:>5}  {r.downloaded:>5}  "
+              f"{r.retryable:>4}  {r.dead:>4}  {'yes' if r.tar_present else 'no':<5}  {r.action_taken}")
