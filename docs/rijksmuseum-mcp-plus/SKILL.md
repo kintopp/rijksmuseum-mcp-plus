@@ -1,5 +1,5 @@
 ---
-name: rijksmuseum-mcp
+name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server. Use this skill whenever
   the user wants to search the Rijksmuseum collection, look up artwork details,
