@@ -47,3 +47,16 @@ class ShardState:
         except (json.JSONDecodeError, OSError):
             return None
         return cls(**payload)
+
+    def reconcile(self, expected_ids: dict[str, dict]) -> None:
+        """Update `expected` to match a fresh DB query.
+
+        Adds new IDs, preserves existing download/failure progress for retained IDs,
+        and drops progress entries for IDs no longer present (rare — only if the DB
+        is re-harvested with different row counts).
+        """
+        self.expected = dict(expected_ids)
+        kept = set(expected_ids.keys())
+        self.downloaded = {k: v for k, v in self.downloaded.items() if k in kept}
+        self.failed_retryable = {k: v for k, v in self.failed_retryable.items() if k in kept}
+        self.failed_dead = {k: v for k, v in self.failed_dead.items() if k in kept}

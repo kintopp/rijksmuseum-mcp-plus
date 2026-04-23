@@ -60,9 +60,39 @@ def test_load_corrupt_returns_none():
         assert ShardState.load(path) is None
 
 
+def test_reconcile_adds_new_and_preserves_existing():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["OLD1"] = {"art_id": 1, "object_number": "A"}
+    s.downloaded["OLD1"] = {"bytes": 100, "sha256": "x", "size_used": "1568,", "saved_at": "t"}
+
+    new_ids = {
+        "OLD1": {"art_id": 1, "object_number": "A"},
+        "NEW1": {"art_id": 11, "object_number": "B"},
+    }
+    s.reconcile(new_ids)
+
+    assert "OLD1" in s.expected and "NEW1" in s.expected
+    assert "OLD1" in s.downloaded  # preserved
+
+
+def test_reconcile_drops_removed_ids():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["GONE"] = {"art_id": 1, "object_number": "A"}
+    s.downloaded["GONE"] = {"bytes": 100, "sha256": "x", "size_used": "1568,", "saved_at": "t"}
+    s.failed_retryable["ALSO_GONE"] = {"attempts": 1, "last_error": "x", "last_status": 500}
+
+    s.reconcile({"KEEP": {"art_id": 2, "object_number": "B"}})
+
+    assert s.expected == {"KEEP": {"art_id": 2, "object_number": "B"}}
+    assert "GONE" not in s.downloaded
+    assert "ALSO_GONE" not in s.failed_retryable
+
+
 if __name__ == "__main__":
     test_shardstate_construct_defaults()
     test_save_load_roundtrip()
     test_load_nonexistent_returns_none()
     test_load_corrupt_returns_none()
+    test_reconcile_adds_new_and_preserves_existing()
+    test_reconcile_drops_removed_ids()
     print("ok")
