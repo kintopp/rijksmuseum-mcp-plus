@@ -72,7 +72,85 @@ def test_pick_artworks_empty_shard_returns_empty_dict():
         assert got == {}
 
 
+from unittest.mock import MagicMock
+
+
+def test_iiif_url_format():
+    assert ingest.iiif_url("KMFvF", "1568,") == "https://iiif.micr.io/KMFvF/full/1568,/0/default.jpg"
+    assert ingest.iiif_url("KMFvF", "max") == "https://iiif.micr.io/KMFvF/full/max/0/default.jpg"
+
+
+def _resp(status: int, body: bytes = b""):
+    r = MagicMock()
+    r.status_code = status
+    r.content = body if status == 200 else b""
+    return r
+
+
+def test_fetch_one_success_at_1568():
+    session = MagicMock()
+    session.get.return_value = _resp(200, b"image-bytes-here")
+
+    result = ingest.fetch_one(session, "KMFvF", sizes=["1568,", "max"], max_attempts_per_size=3, backoff_base=0)
+
+    assert result.ok is True
+    assert result.size_used == "1568,"
+    assert result.body == b"image-bytes-here"
+    assert result.last_status == 200
+    assert session.get.call_count == 1
+
+
+def test_fetch_one_fallback_to_max_on_400():
+    session = MagicMock()
+    session.get.side_effect = [_resp(400), _resp(200, b"smaller")]
+
+    result = ingest.fetch_one(session, "K", sizes=["1568,", "max"], max_attempts_per_size=3, backoff_base=0)
+
+    assert result.ok is True
+    assert result.size_used == "max"
+    assert result.body == b"smaller"
+    assert session.get.call_count == 2
+
+
+def test_fetch_one_retries_on_5xx_then_succeeds():
+    session = MagicMock()
+    session.get.side_effect = [_resp(503), _resp(503), _resp(200, b"ok")]
+
+    result = ingest.fetch_one(session, "K", sizes=["1568,"], max_attempts_per_size=3, backoff_base=0)
+
+    assert result.ok is True
+    assert session.get.call_count == 3
+
+
+def test_fetch_one_gives_up_after_exhausting_ladder():
+    session = MagicMock()
+    session.get.side_effect = [_resp(503), _resp(503), _resp(503), _resp(503), _resp(503), _resp(503)]
+
+    result = ingest.fetch_one(session, "K", sizes=["1568,", "max"], max_attempts_per_size=3, backoff_base=0)
+
+    assert result.ok is False
+    assert result.last_status == 503
+    assert session.get.call_count == 6
+
+
+def test_fetch_one_404_is_permanent_across_ladder():
+    session = MagicMock()
+    session.get.side_effect = [_resp(404), _resp(404)]
+
+    result = ingest.fetch_one(session, "K", sizes=["1568,", "max"], max_attempts_per_size=3, backoff_base=0)
+
+    assert result.ok is False
+    assert result.last_status == 404
+    assert session.get.call_count == 2  # one try per size, no retries
+
+
 if __name__ == "__main__":
     test_pick_artworks_for_shard_mod_arithmetic()
     test_pick_artworks_empty_shard_returns_empty_dict()
+    test_iiif_url_format()
+    test_fetch_one_success_at_1568()
+    test_fetch_one_fallback_to_max_on_400()
+    test_fetch_one_retries_on_5xx_then_succeeds()
+    test_fetch_one_gives_up_after_exhausting_ladder()
+    test_fetch_one_404_is_permanent_across_ladder()
     print("ok")

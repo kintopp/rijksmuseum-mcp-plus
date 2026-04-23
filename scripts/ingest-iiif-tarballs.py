@@ -15,7 +15,15 @@ Audit:
 """
 from __future__ import annotations
 import sqlite3
+import time
+from dataclasses import dataclass
 from pathlib import Path
+
+IIIF_BASE = "https://iiif.micr.io"
+USER_AGENT = "rijksmuseum-mcp-ingest-iiif/0.24"
+IIIF_SIZES = ["1568,", "max"]
+MAX_ATTEMPTS_PER_SIZE = 3
+BACKOFF_BASE = 0.5  # seconds; doubled per retry
 
 
 def pick_artworks_for_shard(
@@ -45,3 +53,55 @@ def pick_artworks_for_shard(
         }
     finally:
         con.close()
+
+
+def iiif_url(iiif_id: str, size: str) -> str:
+    return f"{IIIF_BASE}/{iiif_id}/full/{size}/0/default.jpg"
+
+
+@dataclass
+class FetchResult:
+    ok: bool
+    body: bytes = b""
+    size_used: str = ""
+    last_status: int = 0
+    last_error: str = ""
+
+
+def fetch_one(
+    session,
+    iiif_id: str,
+    *,
+    sizes: list[str] = IIIF_SIZES,
+    max_attempts_per_size: int = MAX_ATTEMPTS_PER_SIZE,
+    backoff_base: float = BACKOFF_BASE,
+    timeout_s: int = 60,
+) -> FetchResult:
+    """Try each size in order; retry on 429/5xx/timeout within a size; break on 400/404."""
+    last_status = 0
+    last_error = ""
+    for size in sizes:
+        for attempt in range(max_attempts_per_size):
+            try:
+                r = session.get(iiif_url(iiif_id, size), timeout=timeout_s)
+                last_status = r.status_code
+                if r.status_code == 200:
+                    return FetchResult(
+                        ok=True, body=r.content, size_used=size, last_status=200
+                    )
+                if r.status_code in (400, 404):
+                    last_error = f"HTTP {r.status_code}"
+                    break  # try next size
+                if r.status_code == 429 or 500 <= r.status_code < 600:
+                    last_error = f"HTTP {r.status_code}"
+                    if attempt + 1 < max_attempts_per_size:
+                        time.sleep(backoff_base * (2 ** attempt))
+                    continue
+                last_error = f"HTTP {r.status_code}"
+                break
+            except Exception as e:
+                last_status = -1
+                last_error = f"{type(e).__name__}: {e}"
+                if attempt + 1 < max_attempts_per_size:
+                    time.sleep(backoff_base * (2 ** attempt))
+    return FetchResult(ok=False, last_status=last_status, last_error=last_error)
