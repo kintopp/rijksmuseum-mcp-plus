@@ -274,3 +274,153 @@ def build_manifest(state, *, tar_bytes_len: int, tar_sha256: str) -> dict:
         "members": {iid: dict(v) for iid, v in state.downloaded.items()},
         "dead": {iid: dict(v) for iid, v in state.failed_dead.items()},
     }
+
+
+DEFAULT_CACHE_ROOT = Path("/Volumes/sand/rijksmuseum-bucket")
+
+
+def _default_cache_root() -> Path:
+    return DEFAULT_CACHE_ROOT
+
+
+def _require_cache_root(cache_root: Path) -> Path:
+    """Fail fast if the default SSD isn't mounted and the user didn't override."""
+    if cache_root == DEFAULT_CACHE_ROOT and not cache_root.exists():
+        raise SystemExit(
+            f"default cache-root {cache_root} does not exist (SSD not mounted?). "
+            f"Either mount the SSD or pass --cache-root PATH explicitly."
+        )
+    cache_root.mkdir(parents=True, exist_ok=True)
+    return cache_root
+
+
+def _state_path(cache_root: Path, shard_id: int) -> Path:
+    return cache_root / "state" / f"shard-{shard_id:03d}.state.json"
+
+
+def _download_dir(cache_root: Path, shard_id: int) -> Path:
+    return cache_root / "downloads" / f"shard-{shard_id:03d}"
+
+
+def _purge_download_dir(download_dir: Path) -> int:
+    """Delete everything under `download_dir` and return bytes freed."""
+    import shutil
+    if not download_dir.exists():
+        return 0
+    total = sum(p.stat().st_size for p in download_dir.iterdir() if p.is_file())
+    shutil.rmtree(download_dir)
+    return total
+
+
+# Import state types here so the script can still be loaded without the sidecar
+# being on sys.path (the test harness pre-inserts it; the CLI's main() runs with
+# the script's own dir on sys.path per the argparse flow).
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _iiif_ingest_state import ShardState, ShardStatus, classify_action  # noqa: E402
+
+
+@dataclass
+class ShardReport:
+    shard_id: int
+    status: str
+    expected: int
+    downloaded: int
+    retryable: int
+    dead: int
+    tar_present: bool
+    action_taken: str
+
+
+def process_shard(
+    *,
+    shard_id: int,
+    total_shards: int,
+    db_path: Path,
+    creds: dict,
+    cache_root: Path,
+    concurrency: int,
+    iiif_size: str = "1568,",
+    purge_after_upload: bool = False,
+) -> ShardReport:
+    state_path = _state_path(cache_root, shard_id)
+    dl_dir = _download_dir(cache_root, shard_id)
+
+    # Load or init state, reconcile against DB.
+    state = ShardState.load(state_path) or ShardState(
+        shard_id=shard_id, total_shards=total_shards, iiif_size=iiif_size
+    )
+    expected = pick_artworks_for_shard(db_path, shard_id=shard_id, total_shards=total_shards)
+    state.reconcile(expected)
+    state.save_atomically(state_path)
+
+    # Peek at bucket.
+    s3 = make_bucket_client(creds)
+    bucket = creds["bucketName"]
+    tar_info = bucket_head(s3, bucket, tar_key(shard_id))
+    manifest = bucket_get_manifest(s3, bucket, shard_id) if tar_info else None
+    initial_status = classify_action(
+        state, bucket_tar_present=tar_info is not None, bucket_manifest=manifest
+    )
+
+    print(f"shard {shard_id:03d}: expected={len(state.expected)} "
+          f"downloaded={len(state.downloaded)} retry={len(state.failed_retryable)} "
+          f"dead={len(state.failed_dead)} bucket_tar={'yes' if tar_info else 'no'} "
+          f"initial_status={initial_status.value}", flush=True)
+
+    if initial_status in (ShardStatus.COMPLETE, ShardStatus.DONE_WITH_DEATHS):
+        return ShardReport(
+            shard_id=shard_id, status=initial_status.value,
+            expected=len(state.expected), downloaded=len(state.downloaded),
+            retryable=len(state.failed_retryable), dead=len(state.failed_dead),
+            tar_present=True, action_taken="skipped (already complete)",
+        )
+
+    # Download phase.
+    if state.pending_or_retryable():
+        print(f"  downloading {len(state.pending_or_retryable())} pending/retryable…", flush=True)
+        download_phase(
+            state, download_dir=dl_dir, state_path=state_path, concurrency=concurrency
+        )
+
+    # Decide whether to pack+upload.
+    downloaded_count_now = len(state.downloaded)
+    needs_upload = (
+        tar_info is None
+        or downloaded_count_now != state.last_uploaded_count
+    )
+    action_taken = "no-op (no new downloads)"
+
+    if needs_upload and state.downloaded:
+        ordered = sorted(state.downloaded.keys())
+        print(f"  packing {len(ordered)} files…", flush=True)
+        tar_bytes, tar_sha = pack_tarball(dl_dir, ordered)
+        manifest_obj = build_manifest(state, tar_bytes_len=len(tar_bytes), tar_sha256=tar_sha)
+        print(f"  uploading tar ({len(tar_bytes)/1e6:.1f} MB) + manifest…", flush=True)
+        bucket_put_bytes(s3, bucket, tar_key(shard_id), tar_bytes, "application/x-tar")
+        bucket_put_bytes(
+            s3, bucket, manifest_key(shard_id),
+            json.dumps(manifest_obj, ensure_ascii=False, indent=2).encode("utf-8"),
+            "application/json",
+        )
+        state.last_uploaded_count = downloaded_count_now
+        state.save_atomically(state_path)
+        action_taken = f"packed+uploaded tar ({len(tar_bytes)/1e6:.1f} MB, {len(ordered)} files)"
+
+        if purge_after_upload:
+            freed = _purge_download_dir(dl_dir)
+            print(f"  purged local downloads ({freed/1e6:.0f} MB freed)", flush=True)
+            action_taken += " [purged local]"
+
+    # Final classification.
+    tar_info = bucket_head(s3, bucket, tar_key(shard_id))
+    manifest = bucket_get_manifest(s3, bucket, shard_id) if tar_info else None
+    final = classify_action(
+        state, bucket_tar_present=tar_info is not None, bucket_manifest=manifest
+    )
+    return ShardReport(
+        shard_id=shard_id, status=final.value,
+        expected=len(state.expected), downloaded=len(state.downloaded),
+        retryable=len(state.failed_retryable), dead=len(state.failed_dead),
+        tar_present=tar_info is not None, action_taken=action_taken,
+    )
