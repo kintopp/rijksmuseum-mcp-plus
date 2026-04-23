@@ -347,18 +347,32 @@ def process_shard(
     dl_dir = _download_dir(cache_root, shard_id)
 
     # Load or init state, reconcile against DB.
-    state = ShardState.load(state_path) or ShardState(
+    loaded = ShardState.load(state_path)
+    state = loaded or ShardState(
         shard_id=shard_id, total_shards=total_shards, iiif_size=iiif_size
     )
     expected = pick_artworks_for_shard(db_path, shard_id=shard_id, total_shards=total_shards)
     state.reconcile(expected)
-    state.save_atomically(state_path)
 
     # Peek at bucket.
     s3 = make_bucket_client(creds)
     bucket = creds["bucketName"]
     tar_info = bucket_head(s3, bucket, tar_key(shard_id))
     manifest = bucket_get_manifest(s3, bucket, shard_id) if tar_info else None
+
+    # If state was freshly initialised (or lost to disk failure) but the bucket has a
+    # manifest, hydrate state from the manifest so we don't re-download bytes the bucket
+    # already has. The manifest is the authoritative record of what the tar contains.
+    if loaded is None and manifest is not None:
+        for iid, meta in manifest.get("members", {}).items():
+            if iid in state.expected:
+                state.downloaded[iid] = dict(meta)
+        for iid, meta in manifest.get("dead", {}).items():
+            if iid in state.expected:
+                state.failed_dead[iid] = dict(meta)
+        state.last_uploaded_count = len(state.downloaded)
+
+    state.save_atomically(state_path)
     initial_status = classify_action(
         state, bucket_tar_present=tar_info is not None, bucket_manifest=manifest
     )
