@@ -60,3 +60,33 @@ class ShardState:
         self.downloaded = {k: v for k, v in self.downloaded.items() if k in kept}
         self.failed_retryable = {k: v for k, v in self.failed_retryable.items() if k in kept}
         self.failed_dead = {k: v for k, v in self.failed_dead.items() if k in kept}
+
+    def record_success(self, iiif_id: str, *, nbytes: int, sha256: str, size_used: str) -> None:
+        self.downloaded[iiif_id] = {
+            "bytes": nbytes,
+            "sha256": sha256,
+            "size_used": size_used,
+            "saved_at": _utc_now_iso(),
+        }
+        self.failed_retryable.pop(iiif_id, None)
+
+    def record_failure(self, iiif_id: str, *, error: str, status: int, max_attempts: int) -> None:
+        entry = self.failed_retryable.get(iiif_id, {"attempts": 0})
+        entry["attempts"] = entry.get("attempts", 0) + 1
+        entry["last_error"] = error
+        entry["last_status"] = status
+        if entry["attempts"] >= max_attempts:
+            self.failed_retryable.pop(iiif_id, None)
+            self.failed_dead[iiif_id] = {
+                "reason": f"retries exhausted ({entry['attempts']} attempts); last: {error}",
+                "last_status": status,
+            }
+        else:
+            self.failed_retryable[iiif_id] = entry
+
+    def mark_dead(self, iiif_id: str, *, reason: str, last_status: int) -> None:
+        self.failed_retryable.pop(iiif_id, None)
+        self.failed_dead[iiif_id] = {"reason": reason, "last_status": last_status}
+
+    def pending_or_retryable(self) -> set[str]:
+        return set(self.expected) - set(self.downloaded) - set(self.failed_dead)

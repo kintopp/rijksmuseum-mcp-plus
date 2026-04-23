@@ -88,6 +88,59 @@ def test_reconcile_drops_removed_ids():
     assert "ALSO_GONE" not in s.failed_retryable
 
 
+def test_record_success_moves_from_pending_and_retryable():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["A"] = {"art_id": 1, "object_number": "A"}
+    s.failed_retryable["A"] = {"attempts": 2, "last_error": "timeout", "last_status": -1}
+
+    s.record_success("A", nbytes=100, sha256="abc", size_used="1568,")
+
+    assert "A" in s.downloaded
+    assert s.downloaded["A"]["bytes"] == 100
+    assert s.downloaded["A"]["sha256"] == "abc"
+    assert s.downloaded["A"]["size_used"] == "1568,"
+    assert "A" not in s.failed_retryable
+
+
+def test_record_failure_increments_attempts():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["A"] = {"art_id": 1, "object_number": "A"}
+
+    s.record_failure("A", error="timeout", status=-1, max_attempts=3)
+    assert s.failed_retryable["A"]["attempts"] == 1
+
+    s.record_failure("A", error="500", status=500, max_attempts=3)
+    assert s.failed_retryable["A"]["attempts"] == 2
+
+    s.record_failure("A", error="timeout", status=-1, max_attempts=3)
+    assert "A" not in s.failed_retryable
+    assert "A" in s.failed_dead
+    assert "exhausted" in s.failed_dead["A"]["reason"].lower()
+
+
+def test_mark_dead_directly():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    s.expected["A"] = {"art_id": 1, "object_number": "A"}
+
+    s.mark_dead("A", reason="HTTP 404 at both sizes", last_status=404)
+
+    assert "A" not in s.failed_retryable
+    assert s.failed_dead["A"]["reason"] == "HTTP 404 at both sizes"
+    assert s.failed_dead["A"]["last_status"] == 404
+
+
+def test_pending_excludes_done_and_dead():
+    s = ShardState(shard_id=1, total_shards=10, iiif_size="1568,")
+    for iid in ["A", "B", "C", "D"]:
+        s.expected[iid] = {"art_id": hash(iid) % 1000, "object_number": iid}
+    s.downloaded["A"] = {"bytes": 1, "sha256": "x", "size_used": "1568,", "saved_at": "t"}
+    s.failed_dead["B"] = {"reason": "dead", "last_status": 404}
+    s.failed_retryable["C"] = {"attempts": 1, "last_error": "x", "last_status": 500}
+
+    pending = s.pending_or_retryable()
+    assert pending == {"C", "D"}
+
+
 if __name__ == "__main__":
     test_shardstate_construct_defaults()
     test_save_load_roundtrip()
@@ -95,4 +148,8 @@ if __name__ == "__main__":
     test_load_corrupt_returns_none()
     test_reconcile_adds_new_and_preserves_existing()
     test_reconcile_drops_removed_ids()
+    test_record_success_moves_from_pending_and_retryable()
+    test_record_failure_increments_attempts()
+    test_mark_dead_directly()
+    test_pending_excludes_done_and_dead()
     print("ok")
