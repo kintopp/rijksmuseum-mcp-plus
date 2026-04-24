@@ -8,7 +8,7 @@ description: >
   addressed through the Rijksmuseum's holdings of ~833,000 artworks.
 metadata:
   version: "0.24.0"
-  last_updated: "2026-04-19"
+  last_updated: "2026-04-24"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -19,7 +19,7 @@ The server is not a 'one and done' search engine — it is a resource for active
 ```
 DISCOVER → QUANTIFY → RETRIEVE → INSPECT
 ```
-Avoid jumping directly to RETRIEVE without a DISCOVER or QUANTIFY step unless the query is simple and straightforward (e.g. the object number is already known). For QUANTIFY, use `collection_stats` for distributions and cross-domain breakdowns, `compact: true` for simple counts.
+Avoid jumping directly to RETRIEVE without a DISCOVER or QUANTIFY step unless the query is simple and straightforward (e.g. the object number is already known). For QUANTIFY, use `collection_stats` for distributions and cross-domain breakdowns, `compact: true` (returns only object numbers and minimal fields) for simple counts or when you just need IDs to feed into a follow-up call.
 
 ---
 
@@ -37,7 +37,9 @@ Avoid jumping directly to RETRIEVE without a DISCOVER or QUANTIFY step unless th
 | "How many artworks have LLM-mediated interpretations?" | `collection_stats` with `dimension: "categoryMethod"` |
 | "Of artworks with provenance, how many are paintings?" | `collection_stats` with `dimension: "type"` + `hasProvenance: true` |
 | "What does the Rijksmuseum say about this work?" | `get_artwork_details` |
+| "Show this artwork to the user / open the zoomable viewer" | `get_artwork_image` |
 | "Examine this image closely / read this inscription" | `inspect_artwork_image` |
+| "Find works similar to this one" — visual, thematic, lineage, shared subject | `find_similar` |
 | "Show me a curated group of works on X" | `list_curated_sets` → `browse_set` |
 | "Has anything changed / been acquired recently?" | `get_recent_changes` |
 | "Who owned this work / trace its ownership chain" | `search_provenance` with `objectNumber` |
@@ -178,7 +180,7 @@ These narrow results but **require at least one other content filter**:
 For any counting, distributional, or comparative question, **start with `collection_stats`** — it answers in one call what would otherwise require multiple `compact: true` loops.
 
 ```
-# Example: Rembrandt's output across media ��� one call
+# Example: Rembrandt's output across media — one call
 collection_stats(dimension="type", creator="Rembrandt van Rijn")
 # → painting 314 (38.2%), print 289 (35.2%), drawing 218 (26.5%)
 
@@ -275,7 +277,9 @@ or German query returns unexpected results, reformulate in English.
 
 ### 5. Image Inspection and Overlay Placement
 
-**Basic inspection + zoom is now a single step.** `inspect_artwork_image` automatically navigates the open viewer to the inspected region (`navigateViewer` defaults to `true`). No separate `navigate_viewer` call is needed for basic zoom — the viewer stays in sync with your analysis.
+**Two image tools, different purposes.** `get_artwork_image` opens the IIIF deep-zoom viewer and returns metadata plus a viewer URL — use it when the user wants to *see* the image themselves. `inspect_artwork_image` returns image bytes as base64 so the model can analyse the image directly — use it whenever *you* need to read inscriptions, identify details, or reason about composition. They compose cleanly: open with `get_artwork_image`, then `inspect_artwork_image` for analysis (which also auto-navigates the open viewer to whatever region you inspected, so the user sees what you're looking at).
+
+**Basic inspection + zoom is a single step.** `inspect_artwork_image` automatically navigates the open viewer to the inspected region (`navigateViewer` defaults to `true`). No separate `navigate_viewer` call is needed for basic zoom — the viewer stays in sync with your analysis.
 
 ```
 # Single call: inspect a region AND zoom the viewer there
@@ -389,6 +393,28 @@ search_artwork(creatorGender="female", type="painting", creationDate="17*", date
 collection_stats(dimension="creatorGender", type="painting", creationDateFrom=1700, creationDateTo=1799)
 # → male 4,521 (96.3%), female 48 (1.0%), ...
 ```
+
+### 10. Similarity Research
+
+`find_similar` takes a known artwork and surfaces others that resemble it along one of six signals, or a pooled blend. The signal you pick encodes *what kind of similarity matters* for the user's question — the defaults will not read the user's mind:
+
+| Signal | Matches on | Pick when the user is asking about… |
+|---|---|---|
+| `visual` | Image embedding (composition, palette, format) | Look-alikes regardless of attribution — "other prints with this feel" |
+| `description` | Curatorial narrative text | Shared themes, technique, style vocabulary |
+| `iconclass` | Overlapping Iconclass notations | Works with the same iconographic programme |
+| `lineage` | Shared creator-attribution chain | Workshop, follower, pupil, copy neighbourhoods |
+| `depictedPerson` | Same person(s) portrayed | Sitters across multiple portraits; historical figures |
+| `depictedPlace` | Same place(s) shown | Views of the same city, building, or landscape |
+| `pooled` | Weighted blend of all signals | Exploratory "what else is like this" when you don't yet know which dimension matters |
+
+```
+find_similar(objectNumber="RP-P-1958-335", signal="visual")
+find_similar(objectNumber="SK-C-5", signal="lineage")   # workshop candidates for The Night Watch
+find_similar(objectNumber="SK-A-4691", signal="pooled") # broad neighbourhood exploration
+```
+
+Each result comes with a brief similarity rationale — surface it to the user so they can judge whether the match is meaningful for their research. The tool is feature-gated (`ENABLE_FIND_SIMILAR`): if unavailable, fall back to `semantic_search` or a structured `search_artwork` built from the source artwork's filters (shared creator + type + subject).
 
 ---
 
