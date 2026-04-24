@@ -238,8 +238,14 @@ def download_phase(
                         sha256=hashlib.sha256(result.body).hexdigest(),
                         size_used=result.size_used,
                     )
-                elif result.last_status == 404:
-                    state.mark_dead(iid, reason="HTTP 404 at both sizes", last_status=404)
+                elif result.last_status in (400, 404):
+                    # Both are terminal: 404 = no asset, 400 = broken asset (info.json exists
+                    # but width/height null, any pixel request refused). Retrying won't help.
+                    state.mark_dead(
+                        iid,
+                        reason=f"HTTP {result.last_status} at both sizes",
+                        last_status=result.last_status,
+                    )
                 else:
                     state.record_failure(
                         iid,
@@ -383,12 +389,16 @@ def process_shard(
           f"initial_status={initial_status.value}", flush=True)
 
     if initial_status in (ShardStatus.COMPLETE, ShardStatus.DONE_WITH_DEATHS):
-        return ShardReport(
-            shard_id=shard_id, status=initial_status.value,
-            expected=len(state.expected), downloaded=len(state.downloaded),
-            retryable=len(state.failed_retryable), dead=len(state.failed_dead),
-            tar_present=True, action_taken="skipped (already complete)",
-        )
+        # Only truly skip if the manifest also reflects state dead entries.
+        # Otherwise we fall through so the pack+upload step refreshes the manifest.
+        manifest_dead = set((manifest or {}).get("dead", {}).keys()) if manifest else set()
+        if manifest_dead == set(state.failed_dead.keys()):
+            return ShardReport(
+                shard_id=shard_id, status=initial_status.value,
+                expected=len(state.expected), downloaded=len(state.downloaded),
+                retryable=len(state.failed_retryable), dead=len(state.failed_dead),
+                tar_present=True, action_taken="skipped (already complete)",
+            )
 
     # Download phase.
     if state.pending_or_retryable():
@@ -399,9 +409,12 @@ def process_shard(
 
     # Decide whether to pack+upload.
     downloaded_count_now = len(state.downloaded)
+    manifest_dead = set((manifest or {}).get("dead", {}).keys()) if manifest else set()
+    state_dead = set(state.failed_dead.keys())
     needs_upload = (
         tar_info is None
         or downloaded_count_now != state.last_uploaded_count
+        or manifest_dead != state_dead  # manifest out of sync with terminal state
     )
     action_taken = "no-op (no new downloads)"
 
