@@ -963,6 +963,42 @@ section("8. Schema surface — no $ref");
     }
   }
 
+  // 8b. MCP tool annotations present on every tool (issue #259).
+  // Without these, destructiveHint defaults to true and read tools get mislabelled.
+  const ANN_READ_CLOSED = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+  const ANN_READ_OPEN   = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
+  const ANN_VIEWER      = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
+  const EXPECTED_ANNOTATIONS = {
+    search_artwork:        ANN_READ_CLOSED,
+    get_artwork_details:   ANN_READ_CLOSED,
+    collection_stats:      ANN_READ_CLOSED,
+    semantic_search:       ANN_READ_CLOSED,
+    find_similar:          ANN_READ_CLOSED,
+    search_provenance:     ANN_READ_CLOSED,
+    get_recent_changes:    ANN_READ_OPEN,
+    list_curated_sets:     ANN_READ_OPEN,
+    browse_set:            ANN_READ_OPEN,
+    inspect_artwork_image: ANN_READ_OPEN,
+    get_artwork_image:     ANN_VIEWER,
+    navigate_viewer:       ANN_VIEWER,
+    poll_viewer_commands:  ANN_VIEWER,
+  };
+  for (const tool of tools) {
+    assert(tool.annotations, `${tool.name}: has annotations object`);
+    const expected = EXPECTED_ANNOTATIONS[tool.name];
+    if (expected) {
+      for (const key of Object.keys(expected)) {
+        assert(
+          tool.annotations[key] === expected[key],
+          `${tool.name}.annotations.${key} === ${expected[key]} (got ${tool.annotations[key]})`
+        );
+      }
+    } else {
+      // New tool — flag so the mapping is updated explicitly.
+      assert(false, `${tool.name}: no annotations mapping in test (add it to EXPECTED_ANNOTATIONS)`);
+    }
+  }
+
   // Verify string params are inlined (not shared) — spot-check search_artwork
   const searchTool = tools.find((t) => t.name === "search_artwork");
   if (searchTool) {

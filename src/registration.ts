@@ -28,6 +28,12 @@ const __dirname = path.dirname(__filename);
 
 const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
+// MCP tool annotations (behavioural hints; see issue #259).
+// `destructiveHint` defaults to true in the spec, so omitting annotations mislabels read-only tools.
+const ANN_READ_CLOSED = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+const ANN_READ_OPEN = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
+const ANN_VIEWER = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } as const;
+
 /**
  * Per-tool result limits. Defaults reflect payload weight:
  * - 25: lightweight per-result data (title, creator, date, score)
@@ -1014,6 +1020,7 @@ function registerTools(
     "search_artwork",
     {
       title: "Search Artwork",
+      annotations: ANN_READ_CLOSED,
       description:
         "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
         "Every response includes totalResults (exact count of all matching artworks, not just the returned page). " +
@@ -1449,6 +1456,7 @@ function registerTools(
     "get_artwork_details",
     {
       title: "Get Artwork Details",
+      annotations: ANN_READ_CLOSED,
       description:
         "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch) " +
         "or by its Linked Art URI (e.g. from relatedObjects). Provide exactly one of objectNumber or uri. " +
@@ -1516,6 +1524,7 @@ function registerTools(
     "get_artwork_image",
     {
       title: "Get Artwork Image",
+      annotations: ANN_VIEWER,
       description:
         "View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate, flip). " +
         "Use ONLY when the user explicitly wants to see or view an artwork — " +
@@ -1602,6 +1611,7 @@ function registerTools(
     "inspect_artwork_image",
     {
       title: "Inspect Artwork Image",
+      annotations: ANN_READ_OPEN,
       description:
         "Fetch an artwork image or region as base64 for direct visual analysis. " +
         "Use ONLY when visual analysis is needed (e.g. identifying details, reading inscriptions, " +
@@ -1917,6 +1927,7 @@ function registerTools(
     "navigate_viewer",
     {
       title: "Navigate Viewer",
+      annotations: ANN_VIEWER,
       description:
         "Navigate the artwork viewer to a specific region and/or add visual overlays. " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
@@ -2097,6 +2108,7 @@ function registerTools(
     "poll_viewer_commands",
     {
       title: "Poll Viewer Commands",
+      annotations: ANN_VIEWER,
       description: "Internal: poll for pending viewer navigation commands",
       inputSchema: z.object({
         viewUUID: z.string(),
@@ -2125,6 +2137,7 @@ function registerTools(
     "list_curated_sets",
     {
       title: "List Curated Sets",
+      annotations: ANN_READ_OPEN,
       description:
         "List curated collection sets from the Rijksmuseum (exhibitions, scholarly groupings, thematic collections). " +
         "Returns set identifiers that can be used with browse_set to explore their contents. " +
@@ -2164,6 +2177,7 @@ function registerTools(
     "browse_set",
     {
       title: "Browse Set",
+      annotations: ANN_READ_OPEN,
       description:
         "Browse artworks in a curated collection set. Returns parsed EDM records with titles, creators, dates, " +
         "image URLs, and IIIF service URLs. Each record includes an objectNumber that can be used with " +
@@ -2219,6 +2233,7 @@ function registerTools(
     "get_recent_changes",
     {
       title: "Get Recent Changes",
+      annotations: ANN_READ_OPEN,
       description:
         "Track recent additions and modifications to the Rijksmuseum collection. " +
         "Returns records changed within a date range. Use identifiersOnly=true for a lightweight " +
@@ -2400,6 +2415,7 @@ function registerTools(
       "search_provenance",
       {
         title: "Search Provenance",
+        annotations: ANN_READ_CLOSED,
         description:
           "Search ownership and provenance history across ~48K artworks with parsed provenance records. " +
           "Returns full provenance chains grouped by artwork, with matching events flagged. " +
@@ -2691,6 +2707,7 @@ function registerTools(
       "collection_stats",
       {
         title: "Collection Statistics",
+        annotations: ANN_READ_CLOSED,
         description:
           "Compute aggregate statistics across the collection. Returns counts, percentages, and distributions " +
           "as formatted text tables — no structured output schema.\n\n" +
@@ -2855,6 +2872,7 @@ function registerTools(
       "find_similar",
       {
         title: "Find Similar Artworks",
+        annotations: ANN_READ_CLOSED,
         description:
           "Find artworks similar to a given artwork. Generates a visual comparison page with IIIF thumbnails " +
           "showing five independent similarity signals (Lineage, Iconclass, Description, Depicted Person, Depicted Place) plus a pooled column.\n\n" +
@@ -3084,6 +3102,7 @@ function registerTools(
       "semantic_search",
       {
         title: "Semantic Search",
+        annotations: ANN_READ_CLOSED,
         description:
           "Find artworks by meaning, concept, or theme using natural language. " +
           "Returns results ranked by semantic similarity with source text for grounding — " +
