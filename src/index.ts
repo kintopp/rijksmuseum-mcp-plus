@@ -12,7 +12,6 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { createGunzip } from "node:zlib";
 
-import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
@@ -20,9 +19,8 @@ import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
-import { registerAll, resolvePublicUrl, similarPages, enrichmentReviewPages } from "./registration.js";
+import { registerAll, similarPages, enrichmentReviewPages } from "./registration.js";
 import { getViewerHtml } from "./viewer.js";
-import { StubOAuthProvider } from "./auth/StubOAuthProvider.js";
 
 const SERVER_NAME = "rijksmuseum-mcp+";
 
@@ -272,21 +270,6 @@ async function runHttp(): Promise<void> {
   );
   app.use(compression({ threshold: 1024 })); // gzip responses ≥ 1 KB (skips small payloads + base64 images)
   app.use(express.json());
-
-  // ── Stub OAuth endpoints (Claude mobile/desktop compatibility) ──
-  //
-  // Claude clients perform RFC 8414/9728 OAuth discovery before connecting.
-  // Without valid endpoints they show confusing auth errors even though
-  // this server is fully public. The stub issues tokens but /mcp never
-  // checks them.
-
-  const publicUrl = resolvePublicUrl(port)!;
-  app.use(mcpAuthRouter({
-    provider: new StubOAuthProvider(),
-    issuerUrl: new URL(publicUrl),
-    serviceDocumentationUrl: new URL("https://github.com/kintopp/rijksmuseum-mcp-plus"),
-    resourceServerUrl: new URL(`${publicUrl}/mcp`),
-  }));
 
   // ── MCP endpoint (stateless — no sessions, no SSE streams) ─────
   //

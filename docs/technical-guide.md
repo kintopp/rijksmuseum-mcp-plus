@@ -101,8 +101,6 @@ src/
     VocabularyDb.ts           — SQLite vocabulary database (artwork details, image metadata, vocab search, full-text, dimension, date, geo proximity, provenance, find_similar)
     EmbeddingsDb.ts           — sqlite-vec vector search (pure KNN + filtered KNN)
     EmbeddingModel.ts         — HuggingFace Transformers embedding model (ONNX/WASM)
-  auth/
-    StubOAuthProvider.ts      — No-op OAuth provider for Claude client compatibility
   utils/
     db.ts                     — Shared path resolution (PROJECT_ROOT, import.meta.url)
     ResponseCache.ts          — LRU+TTL cache (IIIF info.json responses)
