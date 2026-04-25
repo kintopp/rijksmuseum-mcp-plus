@@ -140,7 +140,7 @@ console.log("\n5. get_artwork_image");
 r = await call("get_artwork_image", { objectNumber: "SK-C-5" });
 check("Known artwork returns iiifInfoUrl", !!r.sc?.iiifInfoUrl);
 check("Known artwork returns viewUUID", !!r.sc?.viewUUID);
-check("Known artwork returns viewerUrl or fullUrl", !!(r.sc?.viewerUrl || r.sc?.fullUrl));
+check("Known artwork returns fullUrl", !!r.sc?.fullUrl);
 // Per memory note: fullUrl must NOT appear in the text channel (avoids claude.ai auto-thumbnail).
 const text5 = r.raw?.content?.[0]?.text ?? "";
 check("Text channel does not include fullUrl", !/fullUrl/i.test(text5));

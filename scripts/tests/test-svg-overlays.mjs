@@ -40,11 +40,6 @@ if (!viewUUID) {
 }
 console.log(`viewUUID: ${viewUUID}`);
 
-// Extract viewer URL from structuredContent or text
-const structured = r1.structuredContent;
-const viewerUrl = structured?.viewerUrl || text1.match(/(https?:\/\/\S+viewer\S*)/)?.[1];
-console.log(`Viewer URL: ${viewerUrl ?? "(stdio mode — no HTTP viewer)"}\n`);
-
 // 2. Wait a moment, then add various overlay shapes
 console.log("Adding overlays in 2 seconds...");
 await new Promise(r => setTimeout(r, 2000));

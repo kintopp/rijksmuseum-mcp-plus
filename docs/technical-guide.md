@@ -44,7 +44,6 @@ HTTP mode activates automatically when `PORT` is set or `--http` is passed.
 | Endpoint | Description |
 |---|---|
 | `POST /mcp` | MCP protocol (stateless Streamable HTTP) |
-| `GET /viewer?iiif={id}&title={title}` | OpenSeadragon IIIF deep-zoom viewer |
 | `GET /similar/:uuid` | find_similar HTML comparison pages (30-min TTL) |
 | `GET /enrichment-review/:uuid` | LLM enrichment review pages (30-min TTL) |
 | `GET /health` | Health check |
@@ -88,7 +87,6 @@ src/
   index.ts                    — Dual-transport entry point (stdio + HTTP)
   registration.ts             — Tool/resource/prompt registration, hybrid search routing
   types.ts                    — IIIF and OAI-PMH types
-  viewer.ts                   — OpenSeadragon HTML generator (HTTP mode)
   similarHtml.ts              — HTML template for find_similar comparison pages
   enrichmentReviewHtml.ts     — HTML review pages for LLM enrichments
   provenance.ts               — Provenance event parsing + DB queries
@@ -139,7 +137,7 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 |---|---|---|
 | `PORT` | HTTP server port (presence triggers HTTP mode) | `3000` |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
-| `PUBLIC_URL` | Base URL for viewer links in HTTP mode (e.g. `https://example.up.railway.app`) | `http://localhost:$PORT` |
+| `PUBLIC_URL` | Base URL for `/similar/:uuid` and `/enrichment-review/:uuid` links in HTTP mode (e.g. `https://example.up.railway.app`) | `http://localhost:$PORT` |
 | `VOCAB_DB_PATH` | Path to vocabulary SQLite database | `data/vocabulary.db` |
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
 | `EMBEDDINGS_DB_PATH` | Path to embeddings SQLite database | `data/embeddings.db` |

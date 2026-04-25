@@ -26,7 +26,6 @@ export interface ArtworkImageInfo {
   fullUrl: string;
   width: number;
   height: number;
-  viewerUrl?: string;
 }
 
 // ─── OAI-PMH Types ─────────────────────────────────────────────

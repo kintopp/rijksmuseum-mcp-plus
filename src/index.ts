@@ -20,7 +20,6 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { registerAll, similarPages, enrichmentReviewPages } from "./registration.js";
-import { getViewerHtml } from "./viewer.js";
 
 const SERVER_NAME = "rijksmuseum-mcp+";
 
@@ -312,28 +311,6 @@ async function runHttp(): Promise<void> {
     res.status(405).json({ error: "Method not allowed — this server is stateless (POST only)" });
   });
 
-  // ── Bundled OpenSeadragon assets for legacy viewer ──────────────
-  const osdPath = path.resolve(__dirname, "../node_modules/openseadragon/build/openseadragon");
-  app.use("/vendor/openseadragon", express.static(osdPath, { maxAge: "7d", immutable: true }));
-
-  // ── Viewer endpoint ─────────────────────────────────────────────
-
-  app.get("/viewer", (req: express.Request, res: express.Response) => {
-    const iiifId = req.query.iiif as string;
-    const title = (req.query.title as string) || "Artwork";
-
-    if (!iiifId) {
-      res.status(400).json({ error: "Missing ?iiif= parameter" });
-      return;
-    }
-
-    try {
-      res.type("html").send(getViewerHtml(iiifId, title));
-    } catch {
-      res.status(400).json({ error: "Invalid IIIF ID format" });
-    }
-  });
-
   // ── Similar artworks comparison page ────────────────────────────
 
   app.get("/similar/:uuid", (req: express.Request, res: express.Response) => {
@@ -389,7 +366,6 @@ async function runHttp(): Promise<void> {
   httpServer = app.listen(port, () => {
     console.error(`Rijksmuseum MCP server listening on http://localhost:${port}`);
     console.error(`  MCP endpoint: POST /mcp`);
-    console.error(`  Viewer:       GET  /viewer?iiif={id}&title={title}`);
     console.error(`  Health:       GET  /health`);
     console.error(`  Ready:        GET  /ready`);
 
