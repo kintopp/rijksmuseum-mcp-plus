@@ -7,8 +7,8 @@ description: >
   browse curated sets, or answer any art-historical question that could be
   addressed through the Rijksmuseum's holdings of ~833,000 artworks.
 metadata:
-  version: "0.24.0"
-  last_updated: "2026-04-24"
+  version: "0.24.1"
+  last_updated: "2026-04-26"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -277,7 +277,7 @@ or German query returns unexpected results, reformulate in English.
 
 ### 5. Image Inspection and Overlay Placement
 
-**Two image tools, different purposes.** `get_artwork_image` opens the IIIF deep-zoom viewer and returns metadata plus a viewer URL — use it when the user wants to *see* the image themselves. `inspect_artwork_image` returns image bytes as base64 so the model can analyse the image directly — use it whenever *you* need to read inscriptions, identify details, or reason about composition. They compose cleanly: open with `get_artwork_image`, then `inspect_artwork_image` for analysis (which also auto-navigates the open viewer to whatever region you inspected, so the user sees what you're looking at).
+**Two image tools, different purposes.** `get_artwork_image` opens the inline IIIF deep-zoom viewer and returns metadata plus a `viewUUID` handle for follow-up navigation — use it when the user wants to *see* the image themselves. `inspect_artwork_image` returns image bytes as base64 so the model can analyse the image directly — use it whenever *you* need to read inscriptions, identify details, or reason about composition. They compose cleanly: open with `get_artwork_image`, then `inspect_artwork_image` for analysis (which also auto-navigates the open viewer to whatever region you inspected, so the user sees what you're looking at).
 
 **Basic inspection + zoom is a single step.** `inspect_artwork_image` automatically navigates the open viewer to the inspected region (`navigateViewer` defaults to `true`). No separate `navigate_viewer` call is needed for basic zoom — the viewer stays in sync with your analysis.
 
@@ -422,7 +422,7 @@ Each result comes with a brief similarity rationale — surface it to the user s
 
 | Issue | Workaround |
 |---|---|
-| `navigate_viewer` WebSocket disconnection | Use `inspect_artwork_image` as the reliable fallback for region analysis |
+| `navigate_viewer` reports `viewerConnected: false` | Means the inline viewer iframe hasn't polled within 5s (no WebSocket — the viewer polls `poll_viewer_commands` every 500ms). Commands are still queued server-side and delivered on the next poll. If `viewerConnected: false` persists across multiple fresh `get_artwork_image` calls, the iframe likely failed to mount on the host — surface this to the user rather than silently falling back to `inspect_artwork_image`. |
 | No `subject` results in English | Try the Dutch term — vocabulary is bilingual ("fotograaf" not "photographer") |
 | `semantic_search` skews toward prints/drawings | Filter with `type: "painting"` — prints and drawings outnumber paintings ~77:1 |
 | `semantic_search` with very broad filter | Single broad filters (`type: "print"`, `material: "paper"`) exceed the candidate limit — results are good but not exhaustive. Combine filters for better coverage. |
