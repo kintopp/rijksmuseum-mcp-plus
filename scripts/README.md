@@ -161,3 +161,25 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `survey-persons-comprehensive.mjs` | — | Comprehensive 120-name survey across 12 categories. |
 | `profile-cross-filters.mjs` | — | Cross-filter performance profiling |
 | `profile-db-space.mjs` | — | DB space analysis |
+| `test-classify-path.py` | 39 | Python unit tests for `discover-linked-art-schema.py`'s `classify_path()` — covers the context-aware `EVIDENCE_DATA_PARENTS` rule (#275), the multilingual `notation`/`@language`/`@value` scaffolding rule, and regression coverage of the v0.24 extractor paths added 2026-04-26. |
+
+### v0.25 Stage A audit probes
+
+Live-LA-API probe scripts used during the 2026-04-26 v0.25 schema-decisions session. Reusable for any per-path validation needed during Stage B implementation or future audit cycles.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `probe-motivated-by.py` | Python | Fetches Linked Art records and dumps `produced_by.part[].assigned_by[].motivated_by[]` payloads (S5 evidence-type characterisation). Pass object numbers as args. |
+| `aggregate-probe.py` | Python | Aggregator for `probe-motivated-by.py` output: counts per object type, per AAT classification code, per bare-string variant. |
+| `probe-modified-by.py` | Python | Fetches `modified_by[]` payloads (S4 conservation-events characterisation). Persists to `modified-by-samples.json` for re-use by `test-peg-modified-by.mjs`. |
+| `test-peg-modified-by.mjs` | Node | PEG grammar feasibility test for `modified_by[]` payloads: categorises samples as A (clean fold) / B (partial) / C (fail). Verdict from the 2026-04-26 spike: 12.5% clean << 80% threshold → new table, not grammar fold. |
+| `test-peg-modified-by.js` | Node | Earlier .js variant of the PEG feasibility test, kept for reference. |
+| `inspect-suspicious-paths.py` | Python | Characterises the audit's suspicious IGNORED paths (notation as multilingual labels, `used_specific_object` as catalogues raisonnés AAT 300026061, `equivalent[]` as authority IDs). Handy for any future audit-output triage. |
+
+Companion data + report artefacts in this directory (not scripts):
+
+| File | Description |
+|------|-------------|
+| `modified-by-samples.json` | Captured `modified_by[]` payloads from the S4 spike (8 events, 5 artworks). |
+| `peg-modified-by-results.json` | Per-sample A/B/C categorisation from `test-peg-modified-by.mjs`. |
+| `S4-feasibility-report.md` | Full S4 spike report — sample inventory, vocabulary observed, recommendation, proposed table schema. |
