@@ -29,6 +29,7 @@ WIKIDATA_P131 = "wikidata_p131"
 WIKIDATA_P276 = "wikidata_p276"
 TGN_DIRECT = "tgn_direct"
 TGN_VIA_WIKIDATA = "tgn_via_wikidata_p1667"
+TGN_VIA_REPLACEMENT = "tgn_via_replacement"  # one-shot: follow dc:isReplacedBy on obsolete TGN IDs
 
 # Derived tier — heuristic / inference
 SELF_REF = "self_ref"
@@ -43,6 +44,7 @@ PARENT_FALLBACK = "parent_fallback"
 RECONCILED_REVIEW_ACCEPTED = "reconciled_review_accepted"
 WHG_REVIEW_ACCEPTED = "whg_review_accepted"
 WHG_BRIDGE_REVIEW_ACCEPTED = "whg_bridge_review_accepted"
+WOF_REVIEW_ACCEPTED = "wof_review_accepted"
 
 
 # ── Single source of truth: detail → coarse mapping ────────────────────
@@ -54,6 +56,7 @@ DETAIL_TO_TIER = {
     WIKIDATA_P276: AUTHORITY,
     TGN_DIRECT: AUTHORITY,
     TGN_VIA_WIKIDATA: AUTHORITY,
+    TGN_VIA_REPLACEMENT: AUTHORITY,
     SELF_REF: DERIVED,
     WIKIDATA_RECONCILIATION: DERIVED,
     WHG_RECONCILIATION: DERIVED,
@@ -64,6 +67,7 @@ DETAIL_TO_TIER = {
     RECONCILED_REVIEW_ACCEPTED: HUMAN,
     WHG_REVIEW_ACCEPTED: HUMAN,
     WHG_BRIDGE_REVIEW_ACCEPTED: HUMAN,
+    WOF_REVIEW_ACCEPTED: HUMAN,
 }
 
 
