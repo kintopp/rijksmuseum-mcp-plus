@@ -827,7 +827,7 @@ export class VocabularyDb {
     try {
       this.db = new Database(dbPath, { readonly: true });
       this.dbPath_ = dbPath;
-      this.db.pragma("mmap_size = 1610612736"); // 1.5 GB — vocab DB is ~1.1 GB, room for enrichment growth
+      this.db.pragma("mmap_size = 1073741824"); // 1 GB — empirical working set is ~700 MB across all observed query paths (issue #272)
       // Word-boundary matching for subject search (e.g. "cat" must not match "Catharijnekerk").
       // Memoize the compiled RegExp — pattern is identical for every row within a single query,
       // so this avoids O(rows) allocations on broad subject scans. Safe because SQLite executes
