@@ -709,7 +709,6 @@ const ImageInfoOutput = {
   license: z.string().nullable().optional(),
   physicalDimensions: z.string().nullable().optional(),
   collectionUrl: z.string().optional(),
-  fullUrl: z.string().optional().describe("Direct IIIF image URL (full resolution). For programmatic use — not rendered inline."),
   iiifInfoUrl: z.string().optional(),
   viewUUID: z.string().optional().describe("Viewer session ID for use with navigate_viewer."),
   error: z.string().optional(),

@@ -140,9 +140,11 @@ console.log("\n5. get_artwork_image");
 r = await call("get_artwork_image", { objectNumber: "SK-C-5" });
 check("Known artwork returns iiifInfoUrl", !!r.sc?.iiifInfoUrl);
 check("Known artwork returns viewUUID", !!r.sc?.viewUUID);
-check("Known artwork returns fullUrl", !!r.sc?.fullUrl);
-// Per memory note: fullUrl must NOT appear in the text channel (avoids claude.ai auto-thumbnail).
+// fullUrl was removed: it was never used by the inline OSD viewer and caused some hosts
+// (e.g. Codex) to render an unrequested inline thumbnail. The structured response now
+// exposes only iiifInfoUrl — IIIF clients can derive any size/region from info.json.
 const text5 = r.raw?.content?.[0]?.text ?? "";
+check("Structured response omits fullUrl", r.sc?.fullUrl === undefined);
 check("Text channel does not include fullUrl", !/fullUrl/i.test(text5));
 const capturedViewUUID = r.sc?.viewUUID;
 console.log(`    → SK-C-5 iiifInfoUrl: ${r.sc?.iiifInfoUrl?.slice(0,60)}, viewUUID: ${capturedViewUUID?.slice(0,8)}…`);

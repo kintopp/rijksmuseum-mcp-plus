@@ -83,7 +83,7 @@ export class RijksmuseumApiClient {
 
   /**
    * Fast-path image info: fetch info.json for a known IIIF ID (1 request).
-   * Returns pixel dimensions, IIIF URLs for thumbnail and full resolution.
+   * Returns pixel dimensions, IIIF info URL, and a thumbnail URL.
    */
   async getImageInfoFast(iiifId: string, thumbnailWidth: number = 800): Promise<ArtworkImageInfo | null> {
     try {
@@ -113,7 +113,6 @@ export class RijksmuseumApiClient {
       iiifId,
       iiifInfoUrl,
       thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`,
-      fullUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/max/0/default.jpg`,
       width: info.width,
       height: info.height,
     };

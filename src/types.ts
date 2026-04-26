@@ -23,7 +23,6 @@ export interface ArtworkImageInfo {
   iiifId: string;
   iiifInfoUrl: string;
   thumbnailUrl: string;
-  fullUrl: string;
   width: number;
   height: number;
 }
