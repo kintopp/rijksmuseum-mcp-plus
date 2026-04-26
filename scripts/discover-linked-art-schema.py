@@ -53,7 +53,7 @@ MAX_DEPTH = 12
 # or Phase 1/2 touches. Used for the "extracted vs ignored" diff.
 
 HARVEST_EXTRACTED_PATHS = {
-    # Phase 4: resolve_artwork()
+    # ─── Phase 4: resolve_artwork() — text + structured ─────────────────
     "referred_to_by[].classified_as[].id",       # text field classification
     "referred_to_by[].content",                   # inscriptions, provenance, credit, description
     "referred_to_by[].language[].id",             # language preference
@@ -75,23 +75,67 @@ HARVEST_EXTRACTED_PATHS = {
     "produced_by.timespan.begin_of_the_begin",   # date earliest
     "produced_by.timespan.end_of_the_end",       # date latest
     "identified_by[].type",                       # Name guard
-    "identified_by[].content",                    # title variants
+    "identified_by[].content",                    # title variants (also feeds title_variants table)
     "subject_of[].language[].id",                 # narrative language
     "subject_of[].part[].classified_as[].id",     # narrative classification
     "subject_of[].part[].content",                # narrative text
 
-    # Phase 2: resolve_uri() for vocabulary entities
+    # ─── Phase 4: v0.24 extractors added 2026-04-26 (kintopp/...#275) ──
+    # extract_dimension_note() → dimension_note column on artworks
+    "dimension[].referred_to_by[].content",       # dimension annotations (e.g. "trimmed within plate mark")
+
+    # extract_modifications() → modifications table
+    "modified_by[]",                              # restoration/treatment events container
+    "modified_by[].carried_out_by[]",             # restorer URIs (str or dict.id)
+    "modified_by[].carried_out_by[].id",
+    "modified_by[].timespan.begin_of_the_begin",  # treatment date range start
+    "modified_by[].timespan.end_of_the_end",      # treatment date range end
+    "modified_by[].timespan.identified_by[].content",  # date display
+    "modified_by[].referred_to_by[].content",     # treatment description
+
+    # extract_attributed_by() → related_objects + examinations tables
+    "attributed_by[]",                            # peer-relationship + examination container
+    "attributed_by[].assigned[].id",              # related artwork URIs
+    "attributed_by[].identified_by[].content",    # relationship label text (recto/verso, etc.)
+    "attributed_by[].carried_out_by[]",           # examiner — presence splits relations vs. examinations
+    "attributed_by[].carried_out_by[].id",
+    "attributed_by[].carried_out_by[].identified_by[].content",  # examiner name
+    "attributed_by[].classified_as[].id",         # examination report type AAT
+    "attributed_by[].classified_as[].identified_by[].content",   # report type label
+    "attributed_by[].timespan.begin_of_the_begin",  # examination date range
+    "attributed_by[].timespan.end_of_the_end",
+
+    # extract_title_variants() → title_variants table (also overlaps with identified_by[].content above)
+    "identified_by[].language[].id",              # title language
+    "identified_by[].classified_as[].id",         # title qualifier (brief/full/display/former)
+
+    # extract_part_of() → artwork_parent table
+    "part_of[]",
+    "part_of[].id",                               # parent HumanMadeObject URI
+    "part_of[].type",                             # HumanMadeObject guard
+
+    # extract_production_parts() top-level branch (#43 fix at harvest-vocabulary-db.py:2357-2360)
+    # Top-level produced_by.assigned_by[] (NOT inside part[]) processed via
+    # _process_assigned_by(..., -1). Same extraction logic as part-level, different entry.
+    "produced_by.assigned_by[]",
+    "produced_by.assigned_by[].type",
+    "produced_by.assigned_by[].assigned_property",
+    "produced_by.assigned_by[].assigned[]",
+    "produced_by.assigned_by[].assigned[].id",
+    "produced_by.assigned_by[].assigned[].type",
+    "produced_by.assigned_by[].classified_as[].id",
+
+    # ─── Phase 2: resolve_uri() for vocabulary entities ─────────────────
     "type",                                       # entity type
-    "identified_by[].language[].id",              # (already listed)
     "equivalent[].id",                            # external IDs (Wikidata)
     "defined_by",                                 # Place WKT geometry
 
-    # Phase 1: OAI-PMH (not JSON-LD, but for completeness)
+    # ─── Phase 1: OAI-PMH (not JSON-LD, but for completeness) ───────────
     # "dc:identifier", "dc:title", "dc:subject", "dcterms:medium",
     # "dc:type", "dc:creator", "dcterms:spatial", "edmfp:technique",
     # "edm:rights", "edm:isShownBy", "edm:object"
 
-    # Structural paths the harvest traverses but doesn't store directly
+    # ─── Structural paths the harvest traverses but doesn't store ──────
     "produced_by",
     "produced_by.part[]",
     "produced_by.timespan",
@@ -669,6 +713,14 @@ def classify_path(path: str) -> str:
     - scaffolding: JSON-LD structural fields (id, type, _label) at any level,
       or deeply nested paths inside entities already harvested via Phase 1/2
     - ignored: data paths present in Linked Art but not touched by the harvest
+
+    Context-aware override (added 2026-04-26, kintopp/rijksmuseum-mcp-plus-offline#275):
+    Paths whose ancestor includes one of EVIDENCE_DATA_PARENTS treat their
+    descendant ENTITY_INTERNAL_KEYS as data, not scaffolding. The 2026-03-10
+    run misclassified `motivated_by[].classified_as[]` (evidence-type AAT
+    vocabulary — see v0.25-schema-decisions.md §S5) under the generic
+    deep-entity-internal-key rule. Live probe 2026-04-26 disproved that
+    classification.
     """
     if path in HARVEST_EXTRACTED_PATHS:
         return "extracted"
@@ -691,34 +743,61 @@ def classify_path(path: str) -> str:
         if path.startswith(prefix):
             return "scaffolding"
 
-    # Linked Art recursive self-description: entities that contain their own
-    # identified_by, classified_as, etc. These are structural verbose patterns,
-    # not new data fields. Detect via deeply nested entity-internal paths.
-    # E.g., identified_by[].identified_by[] = identifiers having identifiers
-    #        classified_as[].classified_as[] = classifications of classifications
-    #        referred_to_by[].language[].identified_by[] = language entity internals
-    for key in ENTITY_INTERNAL_KEYS:
-        # Count how many times this key appears in the path (at any depth)
-        occurrences = path.count(f".{key}") + (1 if path.startswith(f"{key}") else 0)
-        if occurrences >= 2:
-            return "scaffolding"
-
-    # Deeply nested sub-entity descriptions (depth ≥ 3 dot-segments and ending in
-    # a known entity-internal key) are almost always Linked Art verbosity.
-    # Depth 3+ catches e.g. referred_to_by[].identified_by[].content
     segments = path.replace("[]", "").split(".")
-    if len(segments) >= 3 and segments[-1] in ENTITY_INTERNAL_KEYS:
-        return "scaffolding"
+
+    # Context-aware: inside evidence-data parents (motivated_by, modified_by,
+    # attributed_by, assigned_by), descendant ENTITY_INTERNAL_KEYS carry data
+    # semantics (e.g. AAT evidence-type codes). Skip the deep-segment and
+    # 2-occurrence scaffolding rules so these paths reach IGNORED for triage.
+    in_evidence_context = any(seg in EVIDENCE_DATA_PARENTS for seg in segments[:-1])
+
+    if not in_evidence_context:
+        # Linked Art recursive self-description: entities that contain their own
+        # identified_by, classified_as, etc. These are structural verbose patterns,
+        # not new data fields. Detect via deeply nested entity-internal paths.
+        # E.g., identified_by[].identified_by[] = identifiers having identifiers
+        #        classified_as[].classified_as[] = classifications of classifications
+        #        referred_to_by[].language[].identified_by[] = language entity internals
+        for key in ENTITY_INTERNAL_KEYS:
+            # Count how many times this key appears in the path (at any depth)
+            occurrences = path.count(f".{key}") + (1 if path.startswith(f"{key}") else 0)
+            if occurrences >= 2:
+                return "scaffolding"
+
+        # Deeply nested sub-entity descriptions (depth ≥ 3 dot-segments and ending in
+        # a known entity-internal key) are almost always Linked Art verbosity.
+        # Depth 3+ catches e.g. referred_to_by[].identified_by[].content
+        if len(segments) >= 3 and segments[-1] in ENTITY_INTERNAL_KEYS:
+            return "scaffolding"
 
     # Entity-internal paths at any depth that start with an entity-internal key
     # directly under a known entity (e.g., identified_by[].classified_as is
-    # "what type of identifier is this?" — structural, not data we'd harvest)
+    # "what type of identifier is this?" — structural, not data we'd harvest).
+    # This rule still applies inside evidence context to catch true type-discriminator
+    # envelopes, but only when the parent is itself a structural container.
     if len(segments) >= 2 and segments[-1] in ENTITY_INTERNAL_KEYS:
         parent = segments[-2]
         if parent in ENTITY_INTERNAL_KEYS or parent in ENTITY_CONTAINERS:
-            return "scaffolding"
+            # Don't fire inside evidence context if the path's grandparent is
+            # an evidence parent — that's the motivated_by[].classified_as case.
+            if not in_evidence_context:
+                return "scaffolding"
 
     return "ignored"
+
+
+# Containers where descendant ENTITY_INTERNAL_KEYS (notably classified_as[])
+# carry actual data semantics rather than scaffolding. Without this list, the
+# generic deep-entity-internal-key rule misclassifies real evidence-type
+# vocabularies (e.g. AAT codes inside motivated_by[].classified_as[]) as
+# structural plumbing and filters them out of the IGNORED triage list.
+# See kintopp/rijksmuseum-mcp-plus-offline#275 and v0.25-schema-decisions.md §S5.
+EVIDENCE_DATA_PARENTS = {
+    "motivated_by",   # attribution-evidence type (S5)
+    "modified_by",    # conservation event type (S4)
+    "attributed_by",  # peer-relationship type (S2)
+    "assigned_by",    # AttributeAssignment context — partial v0.24 extract; rest still IGNORED-worthy
+}
 
 
 # Keys that are internal to Linked Art entity descriptions
@@ -742,6 +821,18 @@ JSONLD_SCAFFOLDING = {
     "id", "type", "_label", "@context",
     # Linked Art internal reference patterns
     "conforms_to",  # API conformance
+    # Rijksmuseum-specific: `notation` on inline entities is a multilingual
+    # label container (e.g. notation: [{"@language": "nl", "@value":
+    # "schilderij"}, {"@language": "en", "@value": "painting"}]) — not a
+    # Linked Art Identifier notation code. Phase 2 already harvests the same
+    # text into vocabulary.label_en / vocabulary.label_nl, so we'd never
+    # extract this. Verified 2026-04-26 against SK-C-5 / SK-A-2330 /
+    # RP-T-1979-229-A. See offline/drafts/v0.25-schema-decisions.md §"2026-04-26
+    # reframing" and the suspicious-paths characterisation.
+    "notation",
+    # JSON-LD multilingual value container leaves (used inside `notation` arrays
+    # and any other multilingual property the Rijksmuseum API surfaces).
+    "@language", "@value",
 }
 
 # Prefixes for entities whose IDs are already harvested via Phase 1 OAI-PMH

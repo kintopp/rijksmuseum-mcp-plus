@@ -1,0 +1,333 @@
+[
+  {
+    "object_number": "SK-C-301",
+    "title": "",
+    "modified_by_entry": {
+      "raw_type": "Modification",
+      "carried_out_by": [],
+      "timespan": {
+        "begin_of_the_begin": "1999-01-01T00:00:00Z",
+        "end_of_the_end": "1999-12-31T23:59:59Z",
+        "identified_by": [
+          {
+            "type": "Name",
+            "content": "1999",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388277",
+                "type": "Language"
+              }
+            ]
+          },
+          {
+            "type": "Name",
+            "content": "1999",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388256",
+                "type": "Language"
+              }
+            ]
+          }
+        ]
+      },
+      "referred_to_by": [
+        {
+          "type": "LinguisticObject",
+          "content": "cleaned, restored and revarnished"
+        }
+      ]
+    },
+    "candidate_phrase": "1999, cleaned, restored and revarnished"
+  },
+  {
+    "object_number": "SK-C-1701",
+    "title": "",
+    "modified_by_entry": {
+      "raw_type": "Modification",
+      "carried_out_by": [
+        {
+          "id": "https://id.rijksmuseum.nl/21064894"
+        }
+      ],
+      "timespan": {
+        "begin_of_the_begin": "2006-01-01T00:00:00Z",
+        "end_of_the_end": null,
+        "identified_by": [
+          {
+            "type": "Name",
+            "content": "2006",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388277",
+                "type": "Language"
+              }
+            ]
+          },
+          {
+            "type": "Name",
+            "content": "2006",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388256",
+                "type": "Language"
+              }
+            ]
+          }
+        ]
+      },
+      "referred_to_by": [
+        {
+          "type": "LinguisticObject",
+          "content": "varnish and overpaint removed; filled, retouched and revarnished"
+        }
+      ]
+    },
+    "candidate_phrase": "https://id.rijksmuseum.nl/21064894, 2006, varnish and overpaint removed; filled, retouched and revarnished"
+  },
+  {
+    "object_number": "SK-A-285",
+    "title": "",
+    "modified_by_entry": {
+      "raw_type": "Modification",
+      "carried_out_by": [
+        {
+          "id": "https://id.rijksmuseum.nl/2101044"
+        }
+      ],
+      "timespan": {
+        "begin_of_the_begin": "1875-01-01T00:00:00Z",
+        "end_of_the_end": "1875-12-31T23:59:59Z",
+        "identified_by": [
+          {
+            "type": "Name",
+            "content": "1875",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388277",
+                "type": "Language"
+              }
+            ]
+          },
+          {
+            "type": "Name",
+            "content": "1875",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388256",
+                "type": "Language"
+              }
+            ]
+          }
+        ]
+      },
+      "referred_to_by": [
+        {
+          "type": "LinguisticObject",
+          "content": "varnish regenerated"
+        }
+      ]
+    },
+    "candidate_phrase": "https://id.rijksmuseum.nl/2101044, 1875, varnish regenerated"
+  },
+  {
+    "object_number": "SK-A-285",
+    "title": "",
+    "modified_by_entry": {
+      "raw_type": "Modification",
+      "carried_out_by": [
+        {
+          "id": "https://id.rijksmuseum.nl/2101044"
+        }
+      ],
+      "timespan": {
+        "begin_of_the_begin": "1874-01-01T00:00:00Z",
+        "end_of_the_end": "1874-12-31T23:59:59Z",
+        "identified_by": [
+          {
+            "type": "Name",
+            "content": "1874",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388277",
+                "type": "Language"
+              }
+            ]
+          },
+          {
+            "type": "Name",
+            "content": "1874",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388256",
+                "type": "Language"
+              }
+            ]
+          }
+        ]
+      },
+      "referred_to_by": [
+        {
+          "type": "LinguisticObject",
+          "content": "application of copaiba balsam; varnish regenerated"
+        }
+      ]
+    },
+    "candidate_phrase": "https://id.rijksmuseum.nl/2101044, 1874, application of copaiba balsam; varnish regenerated"
+  },
+  {
+    "object_number": "SK-A-569",
+    "title": "",
+    "modified_by_entry": {
+      "raw_type": "Modification",
+      "carried_out_by": [
+        {
+          "id": "https://id.rijksmuseum.nl/2102458"
+        }
+      ],
+      "timespan": {
+        "begin_of_the_begin": "1902-01-01T00:00:00Z",
+        "end_of_the_end": "1902-12-31T23:59:59Z",
+        "identified_by": [
+          {
+            "type": "Name",
+            "content": "1902",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388256",
+                "type": "Language"
+              }
+            ]
+          },
+          {
+            "type": "Name",
+            "content": "1902",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388277",
+                "type": "Language"
+              }
+            ]
+          }
+        ]
+      },
+      "referred_to_by": [
+        {
+          "type": "LinguisticObject",
+          "content": "canvas lined"
+        }
+      ]
+    },
+    "candidate_phrase": "https://id.rijksmuseum.nl/2102458, 1902, canvas lined"
+  },
+  {
+    "object_number": "SK-A-569",
+    "title": "",
+    "modified_by_entry": {
+      "raw_type": "Modification",
+      "carried_out_by": [
+        {
+          "id": "https://id.rijksmuseum.nl/210152154"
+        }
+      ],
+      "timespan": {
+        "begin_of_the_begin": "1914-01-01T00:00:00Z",
+        "end_of_the_end": "1914-12-31T23:59:59Z",
+        "identified_by": [
+          {
+            "type": "Name",
+            "content": "1914",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388256",
+                "type": "Language"
+              }
+            ]
+          },
+          {
+            "type": "Name",
+            "content": "1914",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388277",
+                "type": "Language"
+              }
+            ]
+          }
+        ]
+      },
+      "referred_to_by": [
+        {
+          "type": "LinguisticObject",
+          "content": "revarnished"
+        }
+      ]
+    },
+    "candidate_phrase": "https://id.rijksmuseum.nl/210152154, 1914, revarnished"
+  },
+  {
+    "object_number": "SK-A-853",
+    "title": "",
+    "modified_by_entry": {
+      "raw_type": "Modification",
+      "carried_out_by": [
+        {
+          "id": "https://id.rijksmuseum.nl/210152154"
+        }
+      ],
+      "timespan": null,
+      "referred_to_by": [
+        {
+          "type": "LinguisticObject",
+          "content": "partly overpainted (date unknown)"
+        }
+      ]
+    },
+    "candidate_phrase": "https://id.rijksmuseum.nl/210152154, partly overpainted (date unknown)"
+  },
+  {
+    "object_number": "SK-A-3125",
+    "title": "",
+    "modified_by_entry": {
+      "raw_type": "Modification",
+      "carried_out_by": [
+        {
+          "id": "https://id.rijksmuseum.nl/21051514"
+        }
+      ],
+      "timespan": {
+        "begin_of_the_begin": "1971-01-01T00:00:00Z",
+        "end_of_the_end": "1971-12-31T23:59:59Z",
+        "identified_by": [
+          {
+            "type": "Name",
+            "content": "1971",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388256",
+                "type": "Language"
+              }
+            ]
+          },
+          {
+            "type": "Name",
+            "content": "1971",
+            "language": [
+              {
+                "id": "http://vocab.getty.edu/aat/300388277",
+                "type": "Language"
+              }
+            ]
+          }
+        ]
+      },
+      "referred_to_by": [
+        {
+          "type": "LinguisticObject",
+          "content": "several superficial stains on the picture and wax on the reverse removed"
+        }
+      ]
+    },
+    "candidate_phrase": "https://id.rijksmuseum.nl/21051514, 1971, several superficial stains on the picture and wax on the reverse removed"
+  }
+]

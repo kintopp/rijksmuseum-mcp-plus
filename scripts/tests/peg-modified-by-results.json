@@ -1,0 +1,352 @@
+{
+  "timestamp": "2026-04-26T14:01:16.764Z",
+  "sample_count": 8,
+  "categories": {
+    "A": 1,
+    "B": 7,
+    "C": 0
+  },
+  "clean_fold_percentage": 12.5,
+  "decision": "new_table",
+  "detailed_results": [
+    {
+      "object_number": "SK-C-301",
+      "phrase": "1999, cleaned, restored and revarnished",
+      "category": "A",
+      "reasoning": "All key fields present: keyword + date + treatment verb",
+      "entry": {
+        "raw_type": "Modification",
+        "carried_out_by": [],
+        "timespan": {
+          "begin_of_the_begin": "1999-01-01T00:00:00Z",
+          "end_of_the_end": "1999-12-31T23:59:59Z",
+          "identified_by": [
+            {
+              "type": "Name",
+              "content": "1999",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388277",
+                  "type": "Language"
+                }
+              ]
+            },
+            {
+              "type": "Name",
+              "content": "1999",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388256",
+                  "type": "Language"
+                }
+              ]
+            }
+          ]
+        },
+        "referred_to_by": [
+          {
+            "type": "LinguisticObject",
+            "content": "cleaned, restored and revarnished"
+          }
+        ]
+      }
+    },
+    {
+      "object_number": "SK-C-1701",
+      "phrase": "https://id.rijksmuseum.nl/21064894, 2006, varnish and overpaint removed; filled, retouched and revarnished",
+      "category": "B",
+      "reasoning": "Partial match: date or treatment present, but not structured as event",
+      "entry": {
+        "raw_type": "Modification",
+        "carried_out_by": [
+          {
+            "id": "https://id.rijksmuseum.nl/21064894"
+          }
+        ],
+        "timespan": {
+          "begin_of_the_begin": "2006-01-01T00:00:00Z",
+          "end_of_the_end": null,
+          "identified_by": [
+            {
+              "type": "Name",
+              "content": "2006",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388277",
+                  "type": "Language"
+                }
+              ]
+            },
+            {
+              "type": "Name",
+              "content": "2006",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388256",
+                  "type": "Language"
+                }
+              ]
+            }
+          ]
+        },
+        "referred_to_by": [
+          {
+            "type": "LinguisticObject",
+            "content": "varnish and overpaint removed; filled, retouched and revarnished"
+          }
+        ]
+      }
+    },
+    {
+      "object_number": "SK-A-285",
+      "phrase": "https://id.rijksmuseum.nl/2101044, 1875, varnish regenerated",
+      "category": "B",
+      "reasoning": "Partial match: date or treatment present, but not structured as event",
+      "entry": {
+        "raw_type": "Modification",
+        "carried_out_by": [
+          {
+            "id": "https://id.rijksmuseum.nl/2101044"
+          }
+        ],
+        "timespan": {
+          "begin_of_the_begin": "1875-01-01T00:00:00Z",
+          "end_of_the_end": "1875-12-31T23:59:59Z",
+          "identified_by": [
+            {
+              "type": "Name",
+              "content": "1875",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388277",
+                  "type": "Language"
+                }
+              ]
+            },
+            {
+              "type": "Name",
+              "content": "1875",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388256",
+                  "type": "Language"
+                }
+              ]
+            }
+          ]
+        },
+        "referred_to_by": [
+          {
+            "type": "LinguisticObject",
+            "content": "varnish regenerated"
+          }
+        ]
+      }
+    },
+    {
+      "object_number": "SK-A-285",
+      "phrase": "https://id.rijksmuseum.nl/2101044, 1874, application of copaiba balsam; varnish regenerated",
+      "category": "B",
+      "reasoning": "Partial match: date or treatment present, but not structured as event",
+      "entry": {
+        "raw_type": "Modification",
+        "carried_out_by": [
+          {
+            "id": "https://id.rijksmuseum.nl/2101044"
+          }
+        ],
+        "timespan": {
+          "begin_of_the_begin": "1874-01-01T00:00:00Z",
+          "end_of_the_end": "1874-12-31T23:59:59Z",
+          "identified_by": [
+            {
+              "type": "Name",
+              "content": "1874",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388277",
+                  "type": "Language"
+                }
+              ]
+            },
+            {
+              "type": "Name",
+              "content": "1874",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388256",
+                  "type": "Language"
+                }
+              ]
+            }
+          ]
+        },
+        "referred_to_by": [
+          {
+            "type": "LinguisticObject",
+            "content": "application of copaiba balsam; varnish regenerated"
+          }
+        ]
+      }
+    },
+    {
+      "object_number": "SK-A-569",
+      "phrase": "https://id.rijksmuseum.nl/2102458, 1902, canvas lined",
+      "category": "B",
+      "reasoning": "Partial match: date or treatment present, but not structured as event",
+      "entry": {
+        "raw_type": "Modification",
+        "carried_out_by": [
+          {
+            "id": "https://id.rijksmuseum.nl/2102458"
+          }
+        ],
+        "timespan": {
+          "begin_of_the_begin": "1902-01-01T00:00:00Z",
+          "end_of_the_end": "1902-12-31T23:59:59Z",
+          "identified_by": [
+            {
+              "type": "Name",
+              "content": "1902",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388256",
+                  "type": "Language"
+                }
+              ]
+            },
+            {
+              "type": "Name",
+              "content": "1902",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388277",
+                  "type": "Language"
+                }
+              ]
+            }
+          ]
+        },
+        "referred_to_by": [
+          {
+            "type": "LinguisticObject",
+            "content": "canvas lined"
+          }
+        ]
+      }
+    },
+    {
+      "object_number": "SK-A-569",
+      "phrase": "https://id.rijksmuseum.nl/210152154, 1914, revarnished",
+      "category": "B",
+      "reasoning": "Partial match: date or treatment present, but not structured as event",
+      "entry": {
+        "raw_type": "Modification",
+        "carried_out_by": [
+          {
+            "id": "https://id.rijksmuseum.nl/210152154"
+          }
+        ],
+        "timespan": {
+          "begin_of_the_begin": "1914-01-01T00:00:00Z",
+          "end_of_the_end": "1914-12-31T23:59:59Z",
+          "identified_by": [
+            {
+              "type": "Name",
+              "content": "1914",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388256",
+                  "type": "Language"
+                }
+              ]
+            },
+            {
+              "type": "Name",
+              "content": "1914",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388277",
+                  "type": "Language"
+                }
+              ]
+            }
+          ]
+        },
+        "referred_to_by": [
+          {
+            "type": "LinguisticObject",
+            "content": "revarnished"
+          }
+        ]
+      }
+    },
+    {
+      "object_number": "SK-A-853",
+      "phrase": "https://id.rijksmuseum.nl/210152154, partly overpainted (date unknown)",
+      "category": "B",
+      "reasoning": "Partial match: date or treatment present, but not structured as event",
+      "entry": {
+        "raw_type": "Modification",
+        "carried_out_by": [
+          {
+            "id": "https://id.rijksmuseum.nl/210152154"
+          }
+        ],
+        "timespan": null,
+        "referred_to_by": [
+          {
+            "type": "LinguisticObject",
+            "content": "partly overpainted (date unknown)"
+          }
+        ]
+      }
+    },
+    {
+      "object_number": "SK-A-3125",
+      "phrase": "https://id.rijksmuseum.nl/21051514, 1971, several superficial stains on the picture and wax on the reverse removed",
+      "category": "B",
+      "reasoning": "Partial match: date or treatment present, but not structured as event",
+      "entry": {
+        "raw_type": "Modification",
+        "carried_out_by": [
+          {
+            "id": "https://id.rijksmuseum.nl/21051514"
+          }
+        ],
+        "timespan": {
+          "begin_of_the_begin": "1971-01-01T00:00:00Z",
+          "end_of_the_end": "1971-12-31T23:59:59Z",
+          "identified_by": [
+            {
+              "type": "Name",
+              "content": "1971",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388256",
+                  "type": "Language"
+                }
+              ]
+            },
+            {
+              "type": "Name",
+              "content": "1971",
+              "language": [
+                {
+                  "id": "http://vocab.getty.edu/aat/300388277",
+                  "type": "Language"
+                }
+              ]
+            }
+          ]
+        },
+        "referred_to_by": [
+          {
+            "type": "LinguisticObject",
+            "content": "several superficial stains on the picture and wax on the reverse removed"
+          }
+        ]
+      }
+    }
+  ]
+}

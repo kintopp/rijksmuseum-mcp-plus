@@ -64,7 +64,7 @@ const resolve = createIdResolver(db, idRemap);
 
 // Prepared statements
 const getParties = db.prepare(`
-  SELECT party_idx, party_name, party_dates, party_role, party_position, position_method, uncertain
+  SELECT party_idx, party_name, party_dates, party_role, party_position, position_method, uncertain, enrichment_reasoning
   FROM provenance_parties WHERE artwork_id = ? AND sequence = ? ORDER BY party_idx
 `);
 
@@ -77,8 +77,8 @@ const deleteAllPartiesForEvent = db.prepare(`
 `);
 
 const insertParty = db.prepare(`
-  INSERT INTO provenance_parties (artwork_id, sequence, party_idx, party_name, party_dates, party_role, party_position, position_method, uncertain)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO provenance_parties (artwork_id, sequence, party_idx, party_name, party_dates, party_role, party_position, position_method, uncertain, enrichment_reasoning)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const updatePartiesJson = db.prepare(`
@@ -162,6 +162,7 @@ const writeBatch = db.transaction(() => {
           party_role: repl.role_hint || positionToRole(repl.position),
           party_position: repl.position,
           position_method: "llm_disambiguation",
+          enrichment_reasoning: item.reasoning ?? origEntry.enrichment_reasoning ?? null,
         };
         renamesDone++;
 
@@ -173,6 +174,7 @@ const writeBatch = db.transaction(() => {
           party_position: repl.position,
           position_method: "llm_disambiguation",
           uncertain: origEntry.uncertain,
+          enrichment_reasoning: item.reasoning ?? null,
           _origIdx: -1, // new parties have no original index
         }));
         partyList.splice(entryPos, 1, ...newParties);
@@ -184,7 +186,7 @@ const writeBatch = db.transaction(() => {
     deleteAllPartiesForEvent.run(artworkId, seq);
     for (let i = 0; i < partyList.length; i++) {
       const p = partyList[i];
-      insertParty.run(artworkId, seq, i, p.party_name, p.party_dates, p.party_role, p.party_position, p.position_method, p.uncertain);
+      insertParty.run(artworkId, seq, i, p.party_name, p.party_dates, p.party_role, p.party_position, p.position_method, p.uncertain, p.enrichment_reasoning ?? null);
     }
     // Update JSON column
     const jsonParties = partyList.map(p => ({
