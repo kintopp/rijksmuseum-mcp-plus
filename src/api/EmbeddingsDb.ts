@@ -36,6 +36,7 @@ export interface DescriptionSearchResult {
  */
 export class EmbeddingsDb {
   private db: DatabaseType | null = null;
+  private dbPath_: string | null = null;
   private dimensions = 0;
   private artworkCount = 0;
 
@@ -61,6 +62,7 @@ export class EmbeddingsDb {
 
     try {
       this.db = new Database(dbPath, { readonly: true });
+      this.dbPath_ = dbPath;
       this.db.pragma("mmap_size = 1073741824"); // 1 GB — embeddings DB is ~700 MB mapped
 
       // Load sqlite-vec extension
@@ -122,6 +124,8 @@ export class EmbeddingsDb {
 
   get available(): boolean { return this.db !== null && this.stmtQuantize !== null; }
   get vectorDimensions(): number { return this.dimensions; }
+  get dbPath(): string | null { return this.dbPath_; }
+  get rawDb(): DatabaseType | null { return this.db; }
 
   /** Page in vec0 data so the first real KNN query is fast.
    *  Runs a single k=1 scan over the full vector index. */

@@ -725,6 +725,7 @@ export class VocabularyDb {
   }
 
   private db: DatabaseType | null = null;
+  private dbPath_: string | null = null;
   private hasFts5 = false;
   private hasTextFts = false;
   private hasDimensions = false;
@@ -825,6 +826,7 @@ export class VocabularyDb {
 
     try {
       this.db = new Database(dbPath, { readonly: true });
+      this.dbPath_ = dbPath;
       this.db.pragma("mmap_size = 1610612736"); // 1.5 GB — vocab DB is ~1.1 GB, room for enrichment growth
       // Word-boundary matching for subject search (e.g. "cat" must not match "Catharijnekerk").
       // Memoize the compiled RegExp — pattern is identical for every row within a single query,
@@ -1001,6 +1003,16 @@ export class VocabularyDb {
 
   get available(): boolean {
     return this.db !== null;
+  }
+
+  /** Resolved on-disk path of the vocabulary DB (or null if unavailable). */
+  get dbPath(): string | null {
+    return this.dbPath_;
+  }
+
+  /** Underlying better-sqlite3 handle for pragma queries (memory observability). */
+  get rawDb(): DatabaseType | null {
+    return this.db;
   }
 
   get hasProvenanceTables(): boolean {

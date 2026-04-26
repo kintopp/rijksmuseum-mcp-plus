@@ -19,6 +19,12 @@ import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
+import {
+  captureMemorySnapshot,
+  formatMemorySnapshotDetailed,
+  formatMemorySnapshotOneLine,
+  type DbHandle,
+} from "./utils/MemoryStats.js";
 import { registerAll, similarPages, enrichmentReviewPages } from "./registration.js";
 
 const SERVER_NAME = "rijksmuseum-mcp+";
@@ -160,6 +166,13 @@ async function initDatabases(): Promise<void> {
     const targetDim = embeddingsDb.available ? embeddingsDb.vectorDimensions : 0;
     await embeddingModel.init(modelId, targetDim);
   }
+}
+
+function buildMemoryDbHandles(): DbHandle[] {
+  return [
+    { name: "vocab", filePath: vocabDb?.dbPath ?? null, db: vocabDb?.rawDb ?? null },
+    { name: "embeddings", filePath: embeddingsDb?.dbPath ?? null, db: embeddingsDb?.rawDb ?? null },
+  ];
 }
 
 // ─── Shared client instances (one per process) ──────────────────────
@@ -361,6 +374,16 @@ async function runHttp(): Promise<void> {
     res.json({ ready, status: ready ? "warm" : "warming" });
   });
 
+  // ── Memory observability (issue #272) ───────────────────────────
+  //
+  // /debug/memory returns the same snapshot used for startup + periodic logs.
+  // Unauthenticated to match /health, /similar, /enrichment-review — the data
+  // is operational signal, not sensitive.
+
+  app.get("/debug/memory", (_req: express.Request, res: express.Response) => {
+    res.json(captureMemorySnapshot(buildMemoryDbHandles()));
+  });
+
   // ── Start ───────────────────────────────────────────────────────
 
   httpServer = app.listen(port, () => {
@@ -386,11 +409,19 @@ async function runHttp(): Promise<void> {
         }
         ready = true;
         console.error(`  Post-listen warmup complete in ${Date.now() - t0}ms — /ready now true`);
+        console.error(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));
       } catch (err) {
         console.error(`  Post-listen warmup failed: ${err instanceof Error ? err.message : err}`);
         ready = true; // don't leave /ready stuck — failure is logged
       }
     })();
+
+    // Periodic 5-min RSS snapshot for issue #272 — single log line so it
+    // costs nothing to leave on. unref() so it doesn't block shutdown.
+    const memInterval = setInterval(() => {
+      console.error(formatMemorySnapshotOneLine(captureMemorySnapshot(buildMemoryDbHandles())));
+    }, 5 * 60 * 1000);
+    memInterval.unref();
   });
 }
 
