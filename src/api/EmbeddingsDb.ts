@@ -63,7 +63,7 @@ export class EmbeddingsDb {
     try {
       this.db = new Database(dbPath, { readonly: true });
       this.dbPath_ = dbPath;
-      this.db.pragma("mmap_size = 1073741824"); // 1 GB — embeddings DB is ~700 MB mapped
+      this.db.pragma("mmap_size = 1073741824"); // 1 GB — DB is ~2 GB on disk; observed working set ~740 MB (vec0 warmed + desc on demand, issue #272)
 
       // Load sqlite-vec extension
       const sqliteVec = require("sqlite-vec");
