@@ -380,6 +380,74 @@ function formatDetailSummary(d: DetailWithChain): string {
   }
   if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
 
+  // Track A: title variants beyond the primary
+  if (d.titles && d.titles.length > 0) {
+    const byQual = new Map<string, string[]>();
+    for (const t of d.titles) {
+      const key = `${t.qualifier}/${t.language}`;
+      if (!byQual.has(key)) byQual.set(key, []);
+      byQual.get(key)!.push(t.title);
+    }
+    const compact = [...byQual.entries()]
+      .map(([k, ts]) => `${k}: ${ts[0]}${ts.length > 1 ? ` (+${ts.length - 1})` : ""}`)
+      .join(" | ");
+    lines.push(`[Titles] (${d.titles.length} variants) ${compact}`);
+  }
+
+  // Track B: parent / child hierarchy
+  if (d.parents && d.parents.length > 0) {
+    const ps = d.parents.map(p => `${p.objectNumber} — "${p.title}"`).join("; ");
+    lines.push(`[Parent] ${ps}`);
+  }
+  if (d.childCount && d.childCount > 0 && d.children) {
+    const preview = d.children.slice(0, 5).map(c => c.objectNumber).join(", ");
+    const more = d.childCount > d.children.length ? ` ...and ${d.childCount - d.children.length} more` : "";
+    const overflow = d.children.length > 5 ? ` (+${d.children.length - 5} in preview)` : "";
+    lines.push(`[Children] (${d.childCount}) ${preview}${overflow}${more}`);
+  }
+
+  // Track C: peer artwork relations grouped by relationship type
+  if (d.relatedObjectsTotalCount && d.relatedObjectsTotalCount > 0 && d.relatedObjects) {
+    const byType = new Map<string, string[]>();
+    for (const r of d.relatedObjects) {
+      const handle = r.objectNumber ?? r.objectUri;
+      if (!byType.has(r.relationship)) byType.set(r.relationship, []);
+      byType.get(r.relationship)!.push(handle);
+    }
+    const groups = [...byType.entries()]
+      .map(([rel, ids]) => `${rel}: ${ids.slice(0, 4).join(", ")}${ids.length > 4 ? ` (+${ids.length - 4})` : ""}`)
+      .join(" | ");
+    const cap = d.relatedObjectsTotalCount > d.relatedObjects.length
+      ? ` (showing ${d.relatedObjects.length} of ${d.relatedObjectsTotalCount})` : "";
+    lines.push(`[Related objects]${cap} ${groups}`);
+  }
+
+  // Track D: examination reports
+  if (d.examinationsTotalCount && d.examinationsTotalCount > 0 && d.examinations) {
+    const examiners = new Map<string | null, number>();
+    for (const e of d.examinations) examiners.set(e.examiner, (examiners.get(e.examiner) ?? 0) + 1);
+    const names = [...examiners.entries()]
+      .filter(([n]) => n)
+      .map(([n, c]) => c > 1 ? `${n} (${c}×)` : n!)
+      .join(", ");
+    const dates = d.examinations.map(e => e.dateBegin?.slice(0, 4)).filter(Boolean).sort();
+    const span = dates.length >= 2 && dates[0] !== dates.at(-1) ? `${dates[0]}–${dates.at(-1)}` : dates[0] ?? "?";
+    const cap = d.examinationsTotalCount > d.examinations.length
+      ? ` (showing ${d.examinations.length} of ${d.examinationsTotalCount})` : "";
+    lines.push(`[Examinations] (${d.examinationsTotalCount} reports, ${span})${cap}${names ? ` by ${names}` : ""}`);
+  }
+
+  // Track E: conservation / restoration history
+  if (d.conservationHistoryTotalCount && d.conservationHistoryTotalCount > 0 && d.conservationHistory) {
+    const events = d.conservationHistory.map(c => {
+      const when = c.date ?? c.dateBegin?.slice(0, 4) ?? "?";
+      return `${when} ${c.description ?? "(no description)"}`;
+    }).join(" | ");
+    const cap = d.conservationHistoryTotalCount > d.conservationHistory.length
+      ? ` (showing ${d.conservationHistory.length} of ${d.conservationHistoryTotalCount})` : "";
+    lines.push(`[Conservation]${cap} ${events}`);
+  }
+
   lines.push(`URL: ${d.url}`);
 
   return lines.join("\n");
@@ -1535,7 +1603,8 @@ function registerTools(
         "dimensions (text + structured), materials, object type, production details (with creator life dates, " +
         "gender, bio, and Wikidata ID where available), provenance, " +
         "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
-        "The relatedObjects field contains Linked Art URIs — pass them as uri to get full details of related works. " +
+        "The relatedObjects field carries each peer's objectNumber (canonical handle) plus a Linked Art objectUri. " +
+        "Pass either form back to this tool — objectNumber is preferred. " +
         "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",
       inputSchema: z.object({
         objectNumber: optStr()
@@ -1564,11 +1633,15 @@ function registerTools(
       if (args.objectNumber) {
         objNum = args.objectNumber;
       } else {
-        // URI format: https://id.rijksmuseum.nl/{art_id}
         const segment = args.uri!.split("/").pop()!;
-        // If the segment is purely numeric, it's an art_id — resolve to object_number
+        // Two URI flavours land here. (a) URIs minted by this server in the `id`
+        // field of get_artwork_details — segment = local art_id. (b) URIs harvested
+        // from upstream Linked Art payloads (related_la_uri / parent_la_uri) —
+        // segment = upstream entity ID, a different ID space. Try (a) first; fall
+        // back to (b) by probing the harvest tables for the URI.
         if (/^\d+$/.test(segment)) {
-          const resolved = vocabDb.getObjectNumberByArtId(Number(segment));
+          const resolved = vocabDb.getObjectNumberByArtId(Number(segment))
+            ?? vocabDb.getObjectNumberByLinkedArtUri(args.uri!);
           if (!resolved) throw new Error(`No artwork found for URI: ${args.uri}`);
           objNum = resolved;
         } else {

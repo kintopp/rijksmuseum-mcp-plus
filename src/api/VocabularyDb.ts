@@ -1286,6 +1286,35 @@ export class VocabularyDb {
   }
 
   /**
+   * Resolve a Linked Art URI to its peer artwork's object_number when the URI
+   * appears as a `related_la_uri` (related_objects) or `parent_la_uri`
+   * (artwork_parent) value. The numeric tail of these URIs is an upstream
+   * Rijksmuseum entity ID — a different ID space from local `art_id`. Without
+   * this fallback, get_artwork_details(uri=...) fails for URIs surfaced via
+   * relatedObjects or parents on get_artwork_details responses.
+   */
+  getObjectNumberByLinkedArtUri(uri: string): string | null {
+    if (!this.db) return null;
+    if (this.hasRelatedObjects_) {
+      const row = this.db.prepare(`
+        SELECT a.object_number FROM related_objects ro
+        JOIN artworks a ON a.art_id = ro.related_art_id
+        WHERE ro.related_la_uri = ? LIMIT 1
+      `).get(uri) as { object_number: string } | undefined;
+      if (row) return row.object_number;
+    }
+    if (this.hasArtworkParent_) {
+      const row = this.db.prepare(`
+        SELECT a.object_number FROM artwork_parent ap
+        JOIN artworks a ON a.art_id = ap.parent_art_id
+        WHERE ap.parent_la_uri = ? LIMIT 1
+      `).get(uri) as { object_number: string } | undefined;
+      if (row) return row.object_number;
+    }
+    return null;
+  }
+
+  /**
    * Full artwork detail from the vocab DB — replaces the Linked Art resolver +
    * toDetailEnriched() for get_artwork_details. Two queries: artwork row + mappings.
    */
