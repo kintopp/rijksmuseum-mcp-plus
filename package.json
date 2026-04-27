@@ -20,7 +20,8 @@
     "lint": "eslint src/",
     "test": "node scripts/tests/test-pure-functions.mjs",
     "test:viewer-build": "node scripts/tests/test-viewer-build.mjs",
-    "test:all": "node scripts/tests/test-pure-functions.mjs && node scripts/tests/test-provenance-parser.mjs && node scripts/tests/test-provenance-peg.mjs && node scripts/tests/test-overlay-scoring.mjs"
+    "test:all": "node scripts/tests/test-pure-functions.mjs && node scripts/tests/test-provenance-parser.mjs && node scripts/tests/test-provenance-peg.mjs && node scripts/tests/test-overlay-scoring.mjs",
+    "test:track2": "node scripts/tests/test-title-variants.mjs && node scripts/tests/test-parent-grouping.mjs && node scripts/tests/test-related-objects.mjs && node scripts/tests/test-examinations-history.mjs && node scripts/tests/test-track2-mcp.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
