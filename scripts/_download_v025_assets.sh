@@ -56,20 +56,30 @@ download_one() {
 log "v0.25 asset download starting"
 log "REPO_ROOT=${REPO_ROOT}"
 
-# --- WOF Parquet ---
-: > "${WOF_MANIFEST}.tmp"
-printf 'filename\tsha256\tsize_bytes\tdownload_iso8601\n' > "${WOF_MANIFEST}.tmp"
+# --- WOF Parquet (parallel download, then deterministic SHA + manifest pass) ---
+# Geocode Earth's CDN is Cloudflare-fronted and supports concurrent downloads.
+# 4-way parallelism saturates a typical residential link without thrashing the CDN.
+# `xargs -P 4` is portable across macOS bash 3.2 (no `wait -n`).
+log "downloading WOF parquet files (4-way parallel)…"
+printf '%s\n' "${WOF_COUNTRIES[@]}" | xargs -P 4 -I{} bash -c '
+  cc="$1"
+  filename="whosonfirst-data-admin-${cc}-latest.parquet"
+  url="'"${WOF_BASE}"'/${filename}"
+  dest="'"${WOF_DIR}"'/${filename}"
+  printf "[%s] ↓ WOF %s → %s\n" "$(date -u +%FT%TZ)" "${cc}" "${dest}" >> "'"${LOG_PATH}"'"
+  curl -fsSL --retry 3 --retry-delay 5 -C - -o "${dest}" "${url}"
+  printf "[%s] ✓ WOF %s\n" "$(date -u +%FT%TZ)" "${cc}" >> "'"${LOG_PATH}"'"
+' _ {}
 
+# Manifest is rewritten in WOF_COUNTRIES order to keep diffs stable across runs.
+printf 'filename\tsha256\tsize_bytes\tdownload_iso8601\n' > "${WOF_MANIFEST}.tmp"
 for cc in "${WOF_COUNTRIES[@]}"; do
   filename="whosonfirst-data-admin-${cc}-latest.parquet"
-  url="${WOF_BASE}/${filename}"
   dest="${WOF_DIR}/${filename}"
-  download_one "${url}" "${dest}" "WOF ${cc}"
   sha="$(sha256_of "${dest}")"
   size="$(size_of "${dest}")"
   printf '%s\t%s\t%s\t%s\n' "${filename}" "${sha}" "${size}" "$(date -u +%FT%TZ)" >> "${WOF_MANIFEST}.tmp"
 done
-
 mv "${WOF_MANIFEST}.tmp" "${WOF_MANIFEST}"
 log "✓ WOF manifest written: ${WOF_MANIFEST}"
 

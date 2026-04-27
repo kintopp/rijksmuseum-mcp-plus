@@ -6,6 +6,17 @@ import { escapeFts5, expandFtsQuery, resolveDbPath } from "../utils/db.js";
 /** Single value or array of values (array = AND/intersection). */
 type StringOrArray = string | string[];
 
+/** Allowed languages on a title variant. Unknown values collapse to "other". */
+export const TITLE_LANGUAGES = ["en", "nl", "other"] as const;
+export type TitleLanguage = (typeof TITLE_LANGUAGES)[number];
+
+/** Allowed qualifiers on a title variant. Unknown values collapse to "other". */
+export const TITLE_QUALIFIERS = ["brief", "full", "display", "former", "other"] as const;
+export type TitleQualifier = (typeof TITLE_QUALIFIERS)[number];
+
+const TITLE_LANGUAGES_SET = new Set<TitleLanguage>(TITLE_LANGUAGES);
+const TITLE_QUALIFIERS_SET = new Set<TitleQualifier>(TITLE_QUALIFIERS);
+
 export interface PersonInfo {
   birthYear: number | null;
   deathYear: number | null;
@@ -34,8 +45,8 @@ export interface ArtworkDetailFromDb {
   externalIds: Record<string, string>;
   titles: {
     title: string;
-    language: "en" | "nl" | "other";
-    qualifier: "brief" | "full" | "display" | "former" | "other";
+    language: TitleLanguage;
+    qualifier: TitleQualifier;
   }[];
   /** Parent records (e.g. the sketchbook this folio belongs to). Empty for top-level objects. */
   parents: { objectNumber: string; title: string }[];
@@ -1417,135 +1428,133 @@ export class VocabularyDb {
   }
 
   /**
-   * Fetch parents and a capped children preview for one artwork. Supports the
-   * sketchbook-folio hierarchy (#28). Returns empty values when the underlying
-   * `artwork_parent` table is absent.
+   * Generic count-then-preview fetch. Short-circuits when count=0 so empty
+   * artworks don't pay the preview round-trip. Returns empty when either
+   * statement is null (table absent on older harvests).
    */
+  private fetchCountAndPreview<TRow, TOut>(
+    countStmt: Statement | null,
+    previewStmt: Statement | null,
+    artId: number,
+    limit: number,
+    mapRow: (r: TRow) => TOut,
+  ): { items: TOut[]; total: number } {
+    if (!countStmt || !previewStmt) return { items: [], total: 0 };
+    const total = (countStmt.get(artId) as { n: number }).n;
+    if (total === 0) return { items: [], total: 0 };
+    const rows = previewStmt.all(artId, limit) as TRow[];
+    return { items: rows.map(mapRow), total };
+  }
+
+  /** Sketchbook/album hierarchy (#28). Parents have no cap (avg ≤1.1); children are capped. */
   private fetchArtworkLineage(
     artId: number,
   ): Pick<ArtworkDetailFromDb, "parents" | "childCount" | "children"> {
-    if (!this.stmtArtworkParents || !this.stmtArtworkChildCount || !this.stmtArtworkChildrenPreview) {
-      return { parents: [], childCount: 0, children: [] };
-    }
-    const parentRows = this.stmtArtworkParents.all(artId) as {
+    if (!this.stmtArtworkParents) return { parents: [], childCount: 0, children: [] };
+    const parents = (this.stmtArtworkParents.all(artId) as {
       object_number: string; title: string | null; title_all_text: string | null;
-    }[];
-    const parents = parentRows.map(p => ({
+    }[]).map(p => ({
       objectNumber: p.object_number,
       title: VocabularyDb.resolveTitle(p.title, p.title_all_text, "Untitled"),
     }));
 
-    const countRow = this.stmtArtworkChildCount.get(artId) as { n: number };
-    const childCount = countRow.n;
-    const children = childCount > 0
-      ? (this.stmtArtworkChildrenPreview.all(artId, VocabularyDb.CHILD_PREVIEW_LIMIT) as {
-          object_number: string; title: string | null; title_all_text: string | null;
-        }[]).map(c => ({
-          objectNumber: c.object_number,
-          title: VocabularyDb.resolveTitle(c.title, c.title_all_text, "Untitled"),
-        }))
-      : [];
+    const { items: children, total: childCount } = this.fetchCountAndPreview<
+      { object_number: string; title: string | null; title_all_text: string | null },
+      { objectNumber: string; title: string }
+    >(
+      this.stmtArtworkChildCount,
+      this.stmtArtworkChildrenPreview,
+      artId,
+      VocabularyDb.CHILD_PREVIEW_LIMIT,
+      c => ({
+        objectNumber: c.object_number,
+        title: VocabularyDb.resolveTitle(c.title, c.title_all_text, "Untitled"),
+      }),
+    );
 
     return { parents, childCount, children };
   }
 
-  /**
-   * Fetch peer-artwork relations (recto/verso, frame/painting, pendant, etc.).
-   * Returns up to {@link RELATED_PREVIEW_LIMIT} rows ordered by relationship type.
-   * `objectNumber` and `title` are populated when the peer resolves to an artwork
-   * row in our DB; left null for unresolved Linked Art URIs.
-   */
+  /** Peer artwork relations (recto/verso, frame/painting, pendant, …). */
   private fetchRelatedObjects(
     artId: number,
   ): Pick<ArtworkDetailFromDb, "relatedObjects" | "relatedObjectsTotalCount"> {
-    if (!this.stmtArtworkRelatedCount || !this.stmtArtworkRelatedPreview) {
-      return { relatedObjects: [], relatedObjectsTotalCount: 0 };
-    }
-    const countRow = this.stmtArtworkRelatedCount.get(artId) as { n: number };
-    const total = countRow.n;
-    if (total === 0) return { relatedObjects: [], relatedObjectsTotalCount: 0 };
-
-    const rows = this.stmtArtworkRelatedPreview.all(
-      artId, VocabularyDb.RELATED_PREVIEW_LIMIT,
-    ) as {
-      relationship_en: string; related_la_uri: string;
-      object_number: string | null; title: string | null; title_all_text: string | null;
-    }[];
-
-    return {
-      relatedObjects: rows.map(r => ({
+    const { items, total } = this.fetchCountAndPreview<
+      {
+        relationship_en: string; related_la_uri: string;
+        object_number: string | null; title: string | null; title_all_text: string | null;
+      },
+      ArtworkDetailFromDb["relatedObjects"][number]
+    >(
+      this.stmtArtworkRelatedCount,
+      this.stmtArtworkRelatedPreview,
+      artId,
+      VocabularyDb.RELATED_PREVIEW_LIMIT,
+      r => ({
         relationship: r.relationship_en,
         objectNumber: r.object_number,
         title: r.object_number
           ? VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled")
           : null,
         objectUri: r.related_la_uri,
-      })),
-      relatedObjectsTotalCount: total,
-    };
+      }),
+    );
+    return { relatedObjects: items, relatedObjectsTotalCount: total };
   }
 
-  /**
-   * Fetch conservation/scientific examination reports for one artwork.
-   * Ordered most-recent first, capped at {@link EVENT_PREVIEW_LIMIT}.
-   */
+  /** Conservation/scientific examination reports, most-recent first. */
   private fetchExaminations(
     artId: number,
   ): Pick<ArtworkDetailFromDb, "examinations" | "examinationsTotalCount"> {
-    if (!this.stmtArtworkExaminationsCount || !this.stmtArtworkExaminationsPreview) {
-      return { examinations: [], examinationsTotalCount: 0 };
-    }
-    const total = (this.stmtArtworkExaminationsCount.get(artId) as { n: number }).n;
-    if (total === 0) return { examinations: [], examinationsTotalCount: 0 };
-    const rows = this.stmtArtworkExaminationsPreview.all(
-      artId, VocabularyDb.EVENT_PREVIEW_LIMIT,
-    ) as {
-      examiner_name: string | null; report_type_id: string;
-      report_type_en: string | null;
-      date_display: string | null; date_begin: string | null; date_end: string | null;
-    }[];
-    return {
-      examinations: rows.map(r => ({
+    const { items, total } = this.fetchCountAndPreview<
+      {
+        examiner_name: string | null; report_type_id: string;
+        report_type_en: string | null;
+        date_display: string | null; date_begin: string | null; date_end: string | null;
+      },
+      ArtworkDetailFromDb["examinations"][number]
+    >(
+      this.stmtArtworkExaminationsCount,
+      this.stmtArtworkExaminationsPreview,
+      artId,
+      VocabularyDb.EVENT_PREVIEW_LIMIT,
+      r => ({
         examiner: r.examiner_name,
         reportTypeId: r.report_type_id,
         reportTypeLabel: r.report_type_en,
         date: r.date_display,
         dateBegin: r.date_begin,
         dateEnd: r.date_end,
-      })),
-      examinationsTotalCount: total,
-    };
+      }),
+    );
+    return { examinations: items, examinationsTotalCount: total };
   }
 
-  /**
-   * Fetch restoration / conservation treatment events for one artwork.
-   * Ordered most-recent first, capped at {@link EVENT_PREVIEW_LIMIT}.
-   */
+  /** Restoration / conservation treatment events, most-recent first. */
   private fetchConservationHistory(
     artId: number,
   ): Pick<ArtworkDetailFromDb, "conservationHistory" | "conservationHistoryTotalCount"> {
-    if (!this.stmtArtworkModificationsCount || !this.stmtArtworkModificationsPreview) {
-      return { conservationHistory: [], conservationHistoryTotalCount: 0 };
-    }
-    const total = (this.stmtArtworkModificationsCount.get(artId) as { n: number }).n;
-    if (total === 0) return { conservationHistory: [], conservationHistoryTotalCount: 0 };
-    const rows = this.stmtArtworkModificationsPreview.all(
-      artId, VocabularyDb.EVENT_PREVIEW_LIMIT,
-    ) as {
-      modifier_uri: string | null;
-      date_display: string | null; date_begin: string | null; date_end: string | null;
-      description: string | null;
-    }[];
-    return {
-      conservationHistory: rows.map(r => ({
+    const { items, total } = this.fetchCountAndPreview<
+      {
+        modifier_uri: string | null;
+        date_display: string | null; date_begin: string | null; date_end: string | null;
+        description: string | null;
+      },
+      ArtworkDetailFromDb["conservationHistory"][number]
+    >(
+      this.stmtArtworkModificationsCount,
+      this.stmtArtworkModificationsPreview,
+      artId,
+      VocabularyDb.EVENT_PREVIEW_LIMIT,
+      r => ({
         modifierUri: r.modifier_uri,
         description: r.description,
         date: r.date_display,
         dateBegin: r.date_begin,
         dateEnd: r.date_end,
-      })),
-      conservationHistoryTotalCount: total,
-    };
+      }),
+    );
+    return { conservationHistory: items, conservationHistoryTotalCount: total };
   }
 
   /**
@@ -1581,12 +1590,10 @@ export class VocabularyDb {
     }[];
     return rows.map((r) => ({
       title: r.title_text,
-      language: r.language === "en" || r.language === "nl" ? r.language : "other",
-      qualifier:
-        r.qualifier === "brief"   ? "brief"   :
-        r.qualifier === "full"    ? "full"    :
-        r.qualifier === "display" ? "display" :
-        r.qualifier === "former"  ? "former"  : "other",
+      language: TITLE_LANGUAGES_SET.has(r.language as TitleLanguage)
+        ? (r.language as TitleLanguage) : "other",
+      qualifier: TITLE_QUALIFIERS_SET.has(r.qualifier as TitleQualifier)
+        ? (r.qualifier as TitleQualifier) : "other",
     }));
   }
 
