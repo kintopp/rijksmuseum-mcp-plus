@@ -664,7 +664,7 @@ const ArtworkDetailOutput = {
   titles: z.array(z.object({
     title: z.string(),
     language: z.enum(["en", "nl", "other"]),
-    qualifier: z.enum(["brief", "full", "other"]),
+    qualifier: z.enum(["brief", "full", "display", "former", "other"]),
   })),
   curatorialNarrative: z.object({ en: z.string().nullable(), nl: z.string().nullable() }),
   license: z.string().nullable(),
@@ -1458,7 +1458,8 @@ function registerTools(
       description:
         "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch) " +
         "or by its Linked Art URI (e.g. from relatedObjects). Provide exactly one of objectNumber or uri. " +
-        "Returns 24 metadata categories including titles, creator, date, description, curatorial narrative, " +
+        "Returns 24 metadata categories including titles (primary plus the full set of variants " +
+        "with language and qualifier — Dutch/English brief/full/display/former), creator, date, description, curatorial narrative, " +
         "dimensions (text + structured), materials, object type, production details (with creator life dates, " +
         "gender, bio, and Wikidata ID where available), provenance, " +
         "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +

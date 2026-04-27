@@ -32,7 +32,11 @@ export interface ArtworkDetailFromDb {
   location: string | null;
   collectionSets: string[];
   externalIds: Record<string, string>;
-  titles: { title: string; language: "en" | "nl" | "other"; qualifier: "brief" | "full" | "other" }[];
+  titles: {
+    title: string;
+    language: "en" | "nl" | "other";
+    qualifier: "brief" | "full" | "display" | "former" | "other";
+  }[];
   curatorialNarrative: { en: string | null; nl: string | null };
   license: string | null;
   webPage: string | null;
@@ -751,6 +755,8 @@ export class VocabularyDb {
   private stmtImageMetadata: Statement | null = null;
   private stmtArtworkRow: Statement | null = null;
   private stmtArtworkMappings: Statement | null = null;
+  private stmtArtworkTitleVariants: Statement | null = null;
+  private hasTitleVariants_ = false;
   private stmtFilterArtIds = new Map<string, Statement>();
   // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
   private stmtLookupTypesCache = new Map<number, Statement>();
@@ -859,6 +865,7 @@ export class VocabularyDb {
       for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
       this.hasRightsLookup = this.tableExists("rights_lookup");
       this.hasPersonNames = this.tableExists("person_names_fts");
+      this.hasTitleVariants_ = this.tableExists("title_variants");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
@@ -969,6 +976,16 @@ export class VocabularyDb {
         JOIN field_lookup f ON m.field_id = f.id
         WHERE m.artwork_id = ?
       `);
+
+      // title_variants harvested in v0.24+; gracefully absent on older DBs.
+      if (this.hasTitleVariants_) {
+        this.stmtArtworkTitleVariants = this.db.prepare(`
+          SELECT title_text, language, qualifier
+          FROM title_variants
+          WHERE art_id = ?
+          ORDER BY seq
+        `);
+      }
 
       // Resolve batchLookupByArtId column list once (hasIiif is now fixed for the process lifetime)
       this.batchByArtIdCols = this.stmtLookupIiifId
@@ -1259,7 +1276,7 @@ export class VocabularyDb {
       collectionSets,
       externalIds: {},
       // Group A
-      titles: [], // language/qualifier tags not in DB
+      titles: this.fetchTitleVariants(row.art_id),
       curatorialNarrative: { en: row.narrative_text, nl: null },
       license: row.rights_uri,
       webPage: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
@@ -1274,6 +1291,27 @@ export class VocabularyDb {
       // Group C
       subjects: { iconclass, depictedPersons, depictedPlaces },
     };
+  }
+
+  /**
+   * Fetch title variants for one artwork, normalising language and qualifier
+   * codes onto the values declared in the public ArtworkDetailFromDb shape.
+   * Unknown languages (a handful of AAT URIs and NULLs) collapse to "other".
+   */
+  private fetchTitleVariants(artId: number): ArtworkDetailFromDb["titles"] {
+    if (!this.stmtArtworkTitleVariants) return [];
+    const rows = this.stmtArtworkTitleVariants.all(artId) as {
+      title_text: string; language: string | null; qualifier: string | null;
+    }[];
+    return rows.map((r) => ({
+      title: r.title_text,
+      language: r.language === "en" || r.language === "nl" ? r.language : "other",
+      qualifier:
+        r.qualifier === "brief"   ? "brief"   :
+        r.qualifier === "full"    ? "full"    :
+        r.qualifier === "display" ? "display" :
+        r.qualifier === "former"  ? "former"  : "other",
+    }));
   }
 
   /**
