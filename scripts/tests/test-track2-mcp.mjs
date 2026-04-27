@@ -321,7 +321,6 @@ const r12 = await client.callTool({
 const prov = unwrap(r12);
 const provText = textOf(r12);
 
-// Are there events at all? (sanity)
 const evCount = prov.results?.[0]?.events?.length ?? 0;
 assert(evCount > 0, `SK-C-5 has provenance events (got ${evCount})`);
 

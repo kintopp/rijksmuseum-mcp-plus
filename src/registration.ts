@@ -454,6 +454,20 @@ function formatDetailSummary(d: DetailWithChain): string {
   return lines.join("\n");
 }
 
+/**
+ * Render a classification-method code as a compact text-channel tag, or null
+ * if it equals the parser default (so the formatter can omit it). Lossless on
+ * `rule:*` qualifiers; abbreviates `llm_*` → `llm:*`; strips the
+ * `llm_structural:` prefix on correction codes.
+ */
+function compactMethodTag(method: string | null | undefined, defaultMethod?: string): string | null {
+  if (!method) return null;
+  if (defaultMethod && method === defaultMethod) return null;
+  if (method.startsWith("llm_structural:")) return method.slice("llm_structural:".length);
+  if (method.startsWith("llm_")) return "llm:" + method.slice("llm_".length);
+  return method;
+}
+
 /** Format a curated set as a compact one-liner (Tier 2). */
 function formatSetLine(s: { setSpec: string; name: string; lodUri?: string }, i: number): string {
   let line = `${i + 1}. ${s.setSpec} | ${s.name}`;
@@ -2752,18 +2766,19 @@ function registerTools(
               if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}${e.batchPrice ? " (batch)" : ""}`);
               if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
               const meta: string[] = [];
-              if (e.parseMethod && e.parseMethod !== "peg") meta.push(`parse=${e.parseMethod}`);
+              const parseT = compactMethodTag(e.parseMethod, "peg");
+              if (parseT) meta.push(`parse=${parseT}`);
               if (e.transferCategory) {
-                let cat = `cat=${e.transferCategory}`;
-                if (e.categoryMethod && e.categoryMethod !== "type_mapping") {
-                  cat += `/${e.categoryMethod.replace(/^llm_/, "llm:").replace(/^rule:.+/, "rule")}`;
-                }
-                meta.push(cat);
+                const catT = compactMethodTag(e.categoryMethod, "type_mapping");
+                meta.push(catT ? `cat=${e.transferCategory}/${catT}` : `cat=${e.transferCategory}`);
               }
-              if (e.correctionMethod) meta.push(`fix=${e.correctionMethod.replace(/^llm_structural:/, "")}`);
-              const partyPosTags = e.parties
-                .filter((p): p is typeof p & { positionMethod: string } => p.positionMethod != null && p.positionMethod !== "role_mapping")
-                .map(p => `${p.name}@${p.positionMethod.replace(/^llm_/, "llm:")}`);
+              const fixT = compactMethodTag(e.correctionMethod);
+              if (fixT) meta.push(`fix=${fixT}`);
+              const partyPosTags: string[] = [];
+              for (const p of e.parties) {
+                const posT = compactMethodTag(p.positionMethod, "role_mapping");
+                if (posT) partyPosTags.push(`${p.name}@${posT}`);
+              }
               if (partyPosTags.length) meta.push(`pos:${partyPosTags.join(",")}`);
               const suffix = meta.length ? `  [${meta.join(" | ")}]` : "";
               lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}${suffix}`);
