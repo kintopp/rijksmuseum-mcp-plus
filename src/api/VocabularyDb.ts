@@ -37,6 +37,12 @@ export interface ArtworkDetailFromDb {
     language: "en" | "nl" | "other";
     qualifier: "brief" | "full" | "display" | "former" | "other";
   }[];
+  /** Parent records (e.g. the sketchbook this folio belongs to). Empty for top-level objects. */
+  parents: { objectNumber: string; title: string }[];
+  /** Total count of child records (e.g. folios for a sketchbook parent). */
+  childCount: number;
+  /** Up to {@link CHILD_PREVIEW_LIMIT} child records, ordered by object_number. */
+  children: { objectNumber: string; title: string }[];
   curatorialNarrative: { en: string | null; nl: string | null };
   license: string | null;
   webPage: string | null;
@@ -240,6 +246,8 @@ export interface VocabSearchResult {
     url: string;
     nearestPlace?: string;
     distance_km?: number;
+    /** Set on parent records when search post-processing collapses children into them (groupBy=parent). */
+    groupedChildCount?: number;
   }[];
   source: "vocabulary";
   warnings?: string[];
@@ -756,7 +764,13 @@ export class VocabularyDb {
   private stmtArtworkRow: Statement | null = null;
   private stmtArtworkMappings: Statement | null = null;
   private stmtArtworkTitleVariants: Statement | null = null;
+  private stmtArtworkParents: Statement | null = null;
+  private stmtArtworkChildCount: Statement | null = null;
+  private stmtArtworkChildrenPreview: Statement | null = null;
   private hasTitleVariants_ = false;
+  private hasArtworkParent_ = false;
+  /** Maximum child records included inline on a parent's detail view. */
+  private static readonly CHILD_PREVIEW_LIMIT = 25;
   private stmtFilterArtIds = new Map<string, Statement>();
   // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
   private stmtLookupTypesCache = new Map<number, Statement>();
@@ -866,6 +880,7 @@ export class VocabularyDb {
       this.hasRightsLookup = this.tableExists("rights_lookup");
       this.hasPersonNames = this.tableExists("person_names_fts");
       this.hasTitleVariants_ = this.tableExists("title_variants");
+      this.hasArtworkParent_ = this.tableExists("artwork_parent");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
@@ -984,6 +999,27 @@ export class VocabularyDb {
           FROM title_variants
           WHERE art_id = ?
           ORDER BY seq
+        `);
+      }
+
+      // artwork_parent harvested in v0.24+; surfaces sketchbook/album hierarchy (#28).
+      if (this.hasArtworkParent_) {
+        this.stmtArtworkParents = this.db.prepare(`
+          SELECT a.object_number, a.title, a.title_all_text
+          FROM artwork_parent ap
+          JOIN artworks a ON a.art_id = ap.parent_art_id
+          WHERE ap.art_id = ?
+        `);
+        this.stmtArtworkChildCount = this.db.prepare(
+          `SELECT COUNT(*) AS n FROM artwork_parent WHERE parent_art_id = ?`
+        );
+        this.stmtArtworkChildrenPreview = this.db.prepare(`
+          SELECT a.object_number, a.title, a.title_all_text
+          FROM artwork_parent ap
+          JOIN artworks a ON a.art_id = ap.art_id
+          WHERE ap.parent_art_id = ?
+          ORDER BY a.object_number
+          LIMIT ?
         `);
       }
 
@@ -1277,6 +1313,7 @@ export class VocabularyDb {
       externalIds: {},
       // Group A
       titles: this.fetchTitleVariants(row.art_id),
+      ...this.fetchArtworkLineage(row.art_id),
       curatorialNarrative: { en: row.narrative_text, nl: null },
       license: row.rights_uri,
       webPage: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
@@ -1291,6 +1328,60 @@ export class VocabularyDb {
       // Group C
       subjects: { iconclass, depictedPersons, depictedPlaces },
     };
+  }
+
+  /**
+   * Fetch parents and a capped children preview for one artwork. Supports the
+   * sketchbook-folio hierarchy (#28). Returns empty values when the underlying
+   * `artwork_parent` table is absent.
+   */
+  private fetchArtworkLineage(
+    artId: number,
+  ): Pick<ArtworkDetailFromDb, "parents" | "childCount" | "children"> {
+    if (!this.stmtArtworkParents || !this.stmtArtworkChildCount || !this.stmtArtworkChildrenPreview) {
+      return { parents: [], childCount: 0, children: [] };
+    }
+    const parentRows = this.stmtArtworkParents.all(artId) as {
+      object_number: string; title: string | null; title_all_text: string | null;
+    }[];
+    const parents = parentRows.map(p => ({
+      objectNumber: p.object_number,
+      title: VocabularyDb.resolveTitle(p.title, p.title_all_text, "Untitled"),
+    }));
+
+    const countRow = this.stmtArtworkChildCount.get(artId) as { n: number };
+    const childCount = countRow.n;
+    const children = childCount > 0
+      ? (this.stmtArtworkChildrenPreview.all(artId, VocabularyDb.CHILD_PREVIEW_LIMIT) as {
+          object_number: string; title: string | null; title_all_text: string | null;
+        }[]).map(c => ({
+          objectNumber: c.object_number,
+          title: VocabularyDb.resolveTitle(c.title, c.title_all_text, "Untitled"),
+        }))
+      : [];
+
+    return { parents, childCount, children };
+  }
+
+  /**
+   * Given a set of object numbers from a search result, return only those whose
+   * parent is also in the same set — i.e. the children that should collapse
+   * into a parent already visible in the result. Used by `groupBy=parent`.
+   */
+  findParentGroupings(objectNumbers: string[]): Map<string, string> {
+    const out = new Map<string, string>();
+    if (!this.db || !this.hasArtworkParent_ || objectNumbers.length === 0) return out;
+    const placeholders = objectNumbers.map(() => "?").join(", ");
+    const rows = this.db.prepare(`
+      SELECT child.object_number AS child_obj, parent.object_number AS parent_obj
+      FROM artwork_parent ap
+      JOIN artworks child  ON child.art_id  = ap.art_id
+      JOIN artworks parent ON parent.art_id = ap.parent_art_id
+      WHERE child.object_number IN (${placeholders})
+        AND parent.object_number IN (${placeholders})
+    `).all(...objectNumbers, ...objectNumbers) as { child_obj: string; parent_obj: string }[];
+    for (const r of rows) out.set(r.child_obj, r.parent_obj);
+    return out;
   }
 
   /**

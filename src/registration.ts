@@ -628,6 +628,8 @@ const SearchResultOutput = {
     url: z.string(),
     nearestPlace: z.string().optional(),
     distance_km: z.number().optional(),
+    groupedChildCount: z.number().int().positive().optional()
+      .describe("Set on parent records when groupBy='parent' collapses children into them."),
   })).optional().describe("Artwork summaries. Absent when compact=true."),
   ids: z.array(z.string()).optional().describe("Object numbers (compact mode)."),
   source: z.literal("vocabulary").optional(),
@@ -675,6 +677,15 @@ const ArtworkDetailOutput = {
   relatedObjects: z.array(z.object({
     relationship: z.string(), objectUri: z.string(),
   })),
+  parents: z.array(z.object({
+    objectNumber: z.string(),
+    title: z.string(),
+  })).describe("Parent records (e.g. the sketchbook this folio belongs to). Empty for top-level objects."),
+  childCount: z.number().int().nonnegative().describe("Total number of child records (e.g. folios in a sketchbook). 0 for non-parent objects."),
+  children: z.array(z.object({
+    objectNumber: z.string(),
+    title: z.string(),
+  })).describe("Up to 25 child records, ordered by object_number. Use search_artwork to enumerate the full set."),
   persistentId: z.string().nullable(),
   // Enriched Group B
   objectTypes: z.array(ResolvedTermShape()),
@@ -1351,6 +1362,16 @@ function registerTools(
           .describe(
             "If true, returns only total count and IDs without resolving details (faster)."
           ),
+        groupBy: z
+          .enum(["parent"])
+          .optional()
+          .describe(
+            "Collapse component records under their parent (sketchbook folios, album pages, print-series leaves). " +
+            "When 'parent' is set, any child record that appears in the result alongside its parent is dropped, " +
+            "and the parent gains a `groupedChildCount`. Only collapses when both child and parent match the query " +
+            "— children whose parent isn't a hit remain in the result. Applied after the BM25 page is selected, " +
+            "so a parent that ranks below the maxResults cutoff won't pull its children in. Closes #28.",
+          ),
         pageToken: optStr()
           .optional()
           .describe("Deprecated. Pagination is not supported in the current search backend. Use maxResults to control result count."),
@@ -1429,9 +1450,39 @@ function registerTools(
           `Try aboutActor for broader person matching (searches both depicted persons and creators).`];
       }
 
+      // groupBy=parent: collapse children whose parent is also in the result set.
+      // Structural fix for #28; replaces the prefix-string heuristic when the user opts in.
+      let groupedAway = 0;
+      if (args.groupBy === "parent" && result.results.length > 0) {
+        const objectNumbers = result.results.map(r => r.objectNumber);
+        const childToParent = vocabDb.findParentGroupings(objectNumbers);
+        if (childToParent.size > 0) {
+          const childCountByParent = new Map<string, number>();
+          for (const parentObj of childToParent.values()) {
+            childCountByParent.set(parentObj, (childCountByParent.get(parentObj) ?? 0) + 1);
+          }
+          const filtered: typeof result.results = [];
+          for (const r of result.results) {
+            if (childToParent.has(r.objectNumber)) {
+              groupedAway++;
+              continue;
+            }
+            const absorbed = childCountByParent.get(r.objectNumber);
+            filtered.push(absorbed ? { ...r, groupedChildCount: absorbed } : r);
+          }
+          result.results = filtered;
+        }
+      }
+
       // Detect component-record clustering (sketchbook folios, album pages, etc.)
-      const clusterNote = detectComponentClustering(result.results.map(r => r.objectNumber));
-      if (clusterNote) result.warnings = [...(result.warnings || []), clusterNote];
+      // Skip when groupBy=parent already handled it structurally.
+      if (args.groupBy !== "parent") {
+        const clusterNote = detectComponentClustering(result.results.map(r => r.objectNumber));
+        if (clusterNote) result.warnings = [...(result.warnings || []), clusterNote];
+      } else if (groupedAway > 0) {
+        result.warnings = [...(result.warnings || []),
+          `groupBy=parent collapsed ${groupedAway} child record(s) into ${result.results.filter(r => "groupedChildCount" in r).length} parent(s).`];
+      }
 
       const header = `${result.results.length} results` +
         (result.totalResults != null ? ` of ${result.totalResults} total` : '') +
