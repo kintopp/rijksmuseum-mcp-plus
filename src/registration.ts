@@ -681,6 +681,23 @@ const ArtworkDetailOutput = {
     objectUri: z.string().describe("Original Linked Art URI from the harvest. Pass to get_artwork_details(uri=…) for full peer metadata."),
   })).describe("Peer artwork relations (recto/verso, frame/painting, pendant, production stadia, …). Capped at 25 entries — see relatedObjectsTotalCount."),
   relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total related-object count before capping. Equals relatedObjects.length when ≤ 25."),
+  examinations: z.array(z.object({
+    examiner: z.string().nullable().describe("Person who conducted the examination."),
+    reportTypeId: z.string().describe("Linked Art URI for the report type (22 distinct types in v0.24)."),
+    reportTypeLabel: z.string().nullable().describe("English label for the report type. Null in v0.24 — the harvest captures the URI but not the label."),
+    date: z.string().nullable().describe("Display date (e.g. '2010-05-06' or '1991 - 1992')."),
+    dateBegin: z.string().nullable().describe("ISO 8601 begin timestamp."),
+    dateEnd: z.string().nullable().describe("ISO 8601 end timestamp."),
+  })).describe("Conservation / scientific examination reports recorded against the artwork. Ordered most-recent first, capped at 25 — see examinationsTotalCount."),
+  examinationsTotalCount: z.number().int().nonnegative(),
+  conservationHistory: z.array(z.object({
+    modifierUri: z.string().nullable().describe("Linked Art URI for the conservator/modifier."),
+    description: z.string().nullable().describe("Free-text treatment description (e.g. 'complete restoration', 'treatment unknown')."),
+    date: z.string().nullable(),
+    dateBegin: z.string().nullable(),
+    dateEnd: z.string().nullable(),
+  })).describe("Restoration / treatment events. Ordered most-recent first, capped at 25 — see conservationHistoryTotalCount."),
+  conservationHistoryTotalCount: z.number().int().nonnegative(),
   parents: z.array(z.object({
     objectNumber: z.string(),
     title: z.string(),

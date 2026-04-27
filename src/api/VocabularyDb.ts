@@ -55,6 +55,26 @@ export interface ArtworkDetailFromDb {
   }[];
   /** Total related-object count before capping at {@link RELATED_PREVIEW_LIMIT}. */
   relatedObjectsTotalCount: number;
+  /** Conservation/scientific examination reports recorded in the museum's archive. */
+  examinations: {
+    examiner: string | null;
+    reportTypeId: string;
+    /** English label for the report type. Null in v0.24 — the harvest captures the URI but not the label. */
+    reportTypeLabel: string | null;
+    date: string | null;
+    dateBegin: string | null;
+    dateEnd: string | null;
+  }[];
+  examinationsTotalCount: number;
+  /** Restoration / treatment events recorded against the artwork. */
+  conservationHistory: {
+    modifierUri: string | null;
+    description: string | null;
+    date: string | null;
+    dateBegin: string | null;
+    dateEnd: string | null;
+  }[];
+  conservationHistoryTotalCount: number;
   persistentId: string | null;
   objectTypes: VocabTerm[];
   materials: VocabTerm[];
@@ -776,13 +796,21 @@ export class VocabularyDb {
   private stmtArtworkChildrenPreview: Statement | null = null;
   private stmtArtworkRelatedCount: Statement | null = null;
   private stmtArtworkRelatedPreview: Statement | null = null;
+  private stmtArtworkExaminationsCount: Statement | null = null;
+  private stmtArtworkExaminationsPreview: Statement | null = null;
+  private stmtArtworkModificationsCount: Statement | null = null;
+  private stmtArtworkModificationsPreview: Statement | null = null;
   private hasTitleVariants_ = false;
   private hasArtworkParent_ = false;
   private hasRelatedObjects_ = false;
+  private hasExaminations_ = false;
+  private hasModifications_ = false;
   /** Maximum child records included inline on a parent's detail view. */
   private static readonly CHILD_PREVIEW_LIMIT = 25;
   /** Maximum related-object peers included inline on a detail view. */
   private static readonly RELATED_PREVIEW_LIMIT = 25;
+  /** Maximum examination/conservation events included inline on a detail view. */
+  private static readonly EVENT_PREVIEW_LIMIT = 25;
   private stmtFilterArtIds = new Map<string, Statement>();
   // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
   private stmtLookupTypesCache = new Map<number, Statement>();
@@ -894,6 +922,8 @@ export class VocabularyDb {
       this.hasTitleVariants_ = this.tableExists("title_variants");
       this.hasArtworkParent_ = this.tableExists("artwork_parent");
       this.hasRelatedObjects_ = this.tableExists("related_objects");
+      this.hasExaminations_ = this.tableExists("examinations");
+      this.hasModifications_ = this.tableExists("modifications");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
@@ -1012,6 +1042,32 @@ export class VocabularyDb {
           FROM title_variants
           WHERE art_id = ?
           ORDER BY seq
+        `);
+      }
+
+      // examinations harvested in v0.24+; conservation/scientific report metadata.
+      if (this.hasExaminations_) {
+        this.stmtArtworkExaminationsCount = this.db.prepare(
+          `SELECT COUNT(*) AS n FROM examinations WHERE art_id = ?`
+        );
+        this.stmtArtworkExaminationsPreview = this.db.prepare(`
+          SELECT examiner_name, report_type_id, report_type_en, date_display, date_begin, date_end
+          FROM examinations WHERE art_id = ?
+          ORDER BY date_begin DESC NULLS LAST, seq
+          LIMIT ?
+        `);
+      }
+
+      // modifications harvested in v0.24+; restoration / treatment events.
+      if (this.hasModifications_) {
+        this.stmtArtworkModificationsCount = this.db.prepare(
+          `SELECT COUNT(*) AS n FROM modifications WHERE art_id = ?`
+        );
+        this.stmtArtworkModificationsPreview = this.db.prepare(`
+          SELECT modifier_uri, date_display, date_begin, date_end, description
+          FROM modifications WHERE art_id = ?
+          ORDER BY date_begin DESC NULLS LAST, seq
+          LIMIT ?
         `);
       }
 
@@ -1347,6 +1403,8 @@ export class VocabularyDb {
       webPage: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
       dimensions,
       ...this.fetchRelatedObjects(row.art_id),
+      ...this.fetchExaminations(row.art_id),
+      ...this.fetchConservationHistory(row.art_id),
       persistentId: row.art_id ? `http://hdl.handle.net/10934/RM0001.COLLECT.${row.art_id}` : null,
       // Group B
       objectTypes,
@@ -1424,6 +1482,69 @@ export class VocabularyDb {
         objectUri: r.related_la_uri,
       })),
       relatedObjectsTotalCount: total,
+    };
+  }
+
+  /**
+   * Fetch conservation/scientific examination reports for one artwork.
+   * Ordered most-recent first, capped at {@link EVENT_PREVIEW_LIMIT}.
+   */
+  private fetchExaminations(
+    artId: number,
+  ): Pick<ArtworkDetailFromDb, "examinations" | "examinationsTotalCount"> {
+    if (!this.stmtArtworkExaminationsCount || !this.stmtArtworkExaminationsPreview) {
+      return { examinations: [], examinationsTotalCount: 0 };
+    }
+    const total = (this.stmtArtworkExaminationsCount.get(artId) as { n: number }).n;
+    if (total === 0) return { examinations: [], examinationsTotalCount: 0 };
+    const rows = this.stmtArtworkExaminationsPreview.all(
+      artId, VocabularyDb.EVENT_PREVIEW_LIMIT,
+    ) as {
+      examiner_name: string | null; report_type_id: string;
+      report_type_en: string | null;
+      date_display: string | null; date_begin: string | null; date_end: string | null;
+    }[];
+    return {
+      examinations: rows.map(r => ({
+        examiner: r.examiner_name,
+        reportTypeId: r.report_type_id,
+        reportTypeLabel: r.report_type_en,
+        date: r.date_display,
+        dateBegin: r.date_begin,
+        dateEnd: r.date_end,
+      })),
+      examinationsTotalCount: total,
+    };
+  }
+
+  /**
+   * Fetch restoration / conservation treatment events for one artwork.
+   * Ordered most-recent first, capped at {@link EVENT_PREVIEW_LIMIT}.
+   */
+  private fetchConservationHistory(
+    artId: number,
+  ): Pick<ArtworkDetailFromDb, "conservationHistory" | "conservationHistoryTotalCount"> {
+    if (!this.stmtArtworkModificationsCount || !this.stmtArtworkModificationsPreview) {
+      return { conservationHistory: [], conservationHistoryTotalCount: 0 };
+    }
+    const total = (this.stmtArtworkModificationsCount.get(artId) as { n: number }).n;
+    if (total === 0) return { conservationHistory: [], conservationHistoryTotalCount: 0 };
+    const rows = this.stmtArtworkModificationsPreview.all(
+      artId, VocabularyDb.EVENT_PREVIEW_LIMIT,
+    ) as {
+      modifier_uri: string | null;
+      date_display: string | null; date_begin: string | null; date_end: string | null;
+      description: string | null;
+    }[];
+    return {
+      conservationHistory: rows.map(r => ({
+        modifierUri: r.modifier_uri,
+        description: r.description,
+        date: r.date_display,
+        dateBegin: r.date_begin,
+        dateEnd: r.date_end,
+      })),
+      conservationHistoryTotalCount: total,
     };
   }
 
