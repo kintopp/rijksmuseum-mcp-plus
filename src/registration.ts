@@ -138,13 +138,14 @@ function withOutputSchema<T>(schema: T): { outputSchema: T } | Record<never, nev
 }
 
 /** Format a search result as a compact one-liner for LLM content. */
-function formatSearchLine(r: { objectNumber: string; title: string; creator: string; date?: string; type?: string; url?: string; nearestPlace?: string; distance_km?: number }, i: number): string {
+function formatSearchLine(r: { objectNumber: string; title: string; creator: string; date?: string; type?: string; url?: string; nearestPlace?: string; distance_km?: number; groupedChildCount?: number }, i: number): string {
   let line = `${i + 1}. ${r.objectNumber}`;
   if (r.type) line += ` | ${r.type}`;
   if (r.date) line += ` | ${r.date}`;
   line += ` | "${r.title}"`;
   if (r.creator) line += ` — ${r.creator}`;
   if (r.nearestPlace) line += ` [${r.nearestPlace}, ${r.distance_km?.toFixed(1)}km]`;
+  if (r.groupedChildCount) line += ` (+${r.groupedChildCount} children collapsed)`;
   if (r.url) line += ` ${r.url}`;
   return line;
 }
@@ -454,8 +455,10 @@ function formatDetailSummary(d: DetailWithChain): string {
 }
 
 /** Format a curated set as a compact one-liner (Tier 2). */
-function formatSetLine(s: { setSpec: string; name: string }, i: number): string {
-  return `${i + 1}. ${s.setSpec} | ${s.name}`;
+function formatSetLine(s: { setSpec: string; name: string; lodUri?: string }, i: number): string {
+  let line = `${i + 1}. ${s.setSpec} | ${s.name}`;
+  if (s.lodUri) line += ` | ${s.lodUri}`;
+  return line;
 }
 
 /** Format an OAI-PMH record as a compact one-liner (Tier 2). */
@@ -1740,7 +1743,8 @@ function registerTools(
       };
 
       const dims = viewerData.width && viewerData.height ? ` | ${viewerData.width}×${viewerData.height}px` : "";
-      const text = `${artwork.objectNumber} — "${artwork.title}" by ${artwork.creator}${dims} | viewUUID: ${viewUUID}`;
+      const licenseTag = artwork.license ? ` [${artwork.license}]` : "";
+      const text = `${artwork.objectNumber} — "${artwork.title}" by ${artwork.creator}${dims}${licenseTag} | viewUUID: ${viewUUID}`;
       return structuredResponse(viewerData, text);
     })
   );
@@ -2747,7 +2751,22 @@ function registerTools(
               if (e.location) parts.push(e.location);
               if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}${e.batchPrice ? " (batch)" : ""}`);
               if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
-              lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}`);
+              const meta: string[] = [];
+              if (e.parseMethod && e.parseMethod !== "peg") meta.push(`parse=${e.parseMethod}`);
+              if (e.transferCategory) {
+                let cat = `cat=${e.transferCategory}`;
+                if (e.categoryMethod && e.categoryMethod !== "type_mapping") {
+                  cat += `/${e.categoryMethod.replace(/^llm_/, "llm:").replace(/^rule:.+/, "rule")}`;
+                }
+                meta.push(cat);
+              }
+              if (e.correctionMethod) meta.push(`fix=${e.correctionMethod.replace(/^llm_structural:/, "")}`);
+              const partyPosTags = e.parties
+                .filter((p): p is typeof p & { positionMethod: string } => p.positionMethod != null && p.positionMethod !== "role_mapping")
+                .map(p => `${p.name}@${p.positionMethod.replace(/^llm_/, "llm:")}`);
+              if (partyPosTags.length) meta.push(`pos:${partyPosTags.join(",")}`);
+              const suffix = meta.length ? `  [${meta.join(" | ")}]` : "";
+              lines.push(`  ${marker} ${e.sequence}. ${parts.length > 0 ? parts.join(" | ") : e.rawText}${suffix}`);
             }
           }
         }

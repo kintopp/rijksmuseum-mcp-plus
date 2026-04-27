@@ -28,6 +28,9 @@ function section(name) {
 function unwrap(r) {
   return r.structuredContent ?? JSON.parse(r.content[0].text);
 }
+function textOf(r) {
+  return r.content?.[0]?.text ?? "";
+}
 
 const transport = new StdioClientTransport({
   command: "node",
@@ -219,6 +222,127 @@ const stillFolios = grouped.results.filter(r =>
   r.objectNumber !== "BI-1962-1073" &&
   r.objectNumber.startsWith("BI-1962-1073")).length;
 assert(stillFolios === 0, "no folios remain when their parent is in the result");
+
+// ══════════════════════════════════════════════════════════════════
+section("8. Text-channel sentinels — get_artwork_details (Track A–E)");
+// ══════════════════════════════════════════════════════════════════
+// Issue #277: text formatter must emit sentinel markers when the matching
+// structuredContent fields are non-empty. Catches the entire bug class
+// where outputSchema gains a field but formatDetailSummary stays silent.
+
+const nwText = textOf(r2);
+assert(nwText.includes("[Titles]"),
+  "[Titles] section rendered when titles[].length > 0");
+assert(/\(\d+ variants\)/.test(nwText),
+  "[Titles] header includes variant count");
+
+const bookText = textOf(r3);
+assert(bookText.includes("[Children]"),
+  "[Children] section rendered when childCount > 0");
+assert(/\[Children\] \(51\)/.test(bookText),
+  "[Children] header carries the full childCount (not preview length)");
+
+const folioText = textOf(r4);
+assert(folioText.includes("[Parent]"),
+  "[Parent] section rendered when parents[].length > 0");
+assert(folioText.includes("BI-1898-1748A"),
+  "[Parent] line names the parent objectNumber");
+
+assert(nwText.includes("[Related objects]"),
+  "[Related objects] section rendered when relatedObjectsTotalCount > 0");
+
+const heavyText = textOf(r5);
+assert(heavyText.includes("[Examinations]"),
+  "[Examinations] section rendered when examinationsTotalCount > 0");
+assert(/\(15 reports/.test(heavyText),
+  "[Examinations] header includes the total report count");
+assert(heavyText.includes("[Conservation]"),
+  "[Conservation] section rendered when conservationHistoryTotalCount > 0");
+
+// ══════════════════════════════════════════════════════════════════
+section("9. Text-channel sentinels — search_artwork groupedChildCount (#277 High)");
+// ══════════════════════════════════════════════════════════════════
+
+const groupedText = textOf(r7);
+assert(/\(\+\d+ children collapsed\)/.test(groupedText),
+  "formatSearchLine renders '(+N children collapsed)' suffix on parent rows");
+const collapseMatches = groupedText.match(/\(\+(\d+) children collapsed\)/g) ?? [];
+assert(collapseMatches.length === parents.length,
+  `collapse suffix appears once per absorbing parent (text=${collapseMatches.length}, structured=${parents.length})`);
+
+// ══════════════════════════════════════════════════════════════════
+section("10. Text-channel sentinels — get_artwork_image license (#277 Low-Medium)");
+// ══════════════════════════════════════════════════════════════════
+
+const r10 = await client.callTool({
+  name: "get_artwork_image",
+  arguments: { objectNumber: "SK-C-5" },
+});
+const img = unwrap(r10);
+const imgText = textOf(r10);
+if (img.license) {
+  assert(imgText.includes(`[${img.license}]`),
+    "image text includes [license] tag when license is present in structuredContent");
+} else {
+  assert(true, "no license in structuredContent — text omits tag (vacuous pass)");
+}
+assert(imgText.includes("viewUUID:"),
+  "image text still carries viewUUID handle (no regression)");
+
+// ══════════════════════════════════════════════════════════════════
+section("11. Text-channel sentinels — list_curated_sets lodUri (#277 Low)");
+// ══════════════════════════════════════════════════════════════════
+
+const r11 = await client.callTool({
+  name: "list_curated_sets",
+  arguments: {},
+});
+const sets = unwrap(r11);
+const setsText = textOf(r11);
+const firstWithLod = sets.sets.find(s => s.lodUri);
+if (firstWithLod) {
+  assert(setsText.includes(firstWithLod.lodUri),
+    `formatSetLine renders lodUri (verified: ${firstWithLod.lodUri.slice(0, 50)}…)`);
+} else {
+  assert(true, "no curated set carries lodUri — text omits column (vacuous pass)");
+}
+
+// ══════════════════════════════════════════════════════════════════
+section("12. Text-channel sentinels — search_provenance event metadata (#277 Medium)");
+// ══════════════════════════════════════════════════════════════════
+// Pick an artwork known to have LLM-enriched events so we exercise the
+// non-trivial metadata suffix branches. SK-C-5 (Night Watch) provenance is
+// PEG-parsed with transferCategory set on most events.
+
+const r12 = await client.callTool({
+  name: "search_provenance",
+  arguments: { objectNumber: "SK-C-5" },
+});
+const prov = unwrap(r12);
+const provText = textOf(r12);
+
+// Are there events at all? (sanity)
+const evCount = prov.results?.[0]?.events?.length ?? 0;
+assert(evCount > 0, `SK-C-5 has provenance events (got ${evCount})`);
+
+// Look for at least one event that *should* render a [meta: …] suffix
+const evWithMeta = (prov.results?.[0]?.events ?? []).find(e =>
+  e.transferCategory ||
+  (e.parseMethod && e.parseMethod !== "peg") ||
+  e.correctionMethod ||
+  e.parties?.some(p => p.positionMethod && p.positionMethod !== "role_mapping")
+);
+
+if (evWithMeta) {
+  assert(/\[(parse=|cat=|fix=|pos:)/.test(provText),
+    "[meta: …] suffix rendered when event carries non-default classification metadata");
+  if (evWithMeta.transferCategory) {
+    assert(provText.includes(`cat=${evWithMeta.transferCategory}`),
+      `cat=${evWithMeta.transferCategory} appears in text channel`);
+  }
+} else {
+  assert(true, "no events with non-default metadata in SK-C-5 (vacuous pass — extend fixture if needed)");
+}
 
 // ══════════════════════════════════════════════════════════════════
 section("Summary");
