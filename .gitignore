@@ -36,6 +36,13 @@ data/*
 # Exception: hand-curated seed files that are inputs to the harvest, not
 # outputs of it (#229 Part A). Small, stable, versioned.
 !data/seed/
+# v0.25 geocoding-bundle assets — large pre-harvest downloads (~2 GB WOF + ~125 MB
+# Pleiades) that exceed GitHub's per-file limit. SHA-pinned via committed manifests
+# (`data/seed/wof/MANIFEST.tsv`) and re-downloaded by `scripts/_download_v025_assets.sh`.
+data/seed/wof/*.parquet
+data/seed/pleiades-places.json.gz
+data/seed/pleiades-places.json.gz.sha256
+!data/seed/wof/MANIFEST.tsv
 # Exception: audit manifest (documents which LLM batches were collected,
 # by date/model/cost) — small, stable, versioned, enables cross-session
 # reconstruction when the audit JSON files themselves are regenerated.

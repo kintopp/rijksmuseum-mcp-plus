@@ -30,6 +30,22 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 | `geocode_places.py` | Python | Multi-phase geocoding pipeline: GeoNames, Wikidata, Getty TGN, entity reconciliation, WHG fuzzy matching. Produces CSVs in `offline/geo/` (audit trail) and `data/backfills/` (active). |
 | `batch_geocode.py` | Python | Batch geocode using external IDs already in the DB (Wikidata SPARQL, GeoNames API, Getty TGN). Simpler than `geocode_places.py`. |
 | `map_depicted_places.py` | Python | Extracts depicted places, geocodes missing coords, generates an interactive Leaflet map. |
+| `harvest-placetypes.py` | Python | Populates `vocabulary.placetype` / `placetype_source` / `is_areal` via TGN + Wikidata SPARQL. Uses the classifier in `placetype_map.py`. Supports `--reclassify-only` to re-apply an updated classifier without re-querying upstream. |
+| `propagate_place_coordinates` (in `harvest-vocabulary-db.py`) | Python | Step 7: inheritance-based coord propagation. v0.25 adds Layer B fail-closed allow-list of inhabited-places parent placetypes — see `enrichment_methods.py` + `placetype_map.py`. |
+| `apply_areal_overrides.py` | Python | Applies manual `is_areal=1` overrides from `areal_overrides.tsv` to vocab rows whose centroid is meaningless for point-based queries (continents, oceans, historical polities, region-scale entities). v0.25 pre-harvest action: spot-pass for *Coromandel*, *Levant*, *Westindien* and similar misclassifications. |
+| `areal_overrides.tsv` | Data | 101-entry curated list of vocab IDs that need `is_areal=1` despite the auto-classifier's verdict. Maintained file. |
+| `placetype_map.py` | Python module | `AAT_IS_AREAL` (206 entries) + `WD_IS_AREAL` (632 entries) classifier dicts. Append-only contract — never modify existing values. v0.25 extension 2026-04-26 added 129 AAT + 565 WD entries (100% TGN coverage, 89.7% Wikidata). |
+| `enrichment_methods.py` | Python module | Detail-value vocabulary for `vocabulary.coord_method` + `coord_method_detail` (#218). Two-layer granularity: coarse `authority`/`derived`/`human`/NULL, fine 18 detail values. `DETAIL_TO_TIER` is the single source of truth — write sites call `tier_for(detail)` to derive the coarse tag. |
+
+### v0.25 pre-harvest TGN audit (2026-04-26)
+
+One-shot diagnostic probes + apply script that surfaced and fixed 13 obsolete-TGN-ID redirects via `dc:isReplacedBy` chains, and empirically dropped Phase 1c-direct from the v0.25 geocoding bundle. See `offline/drafts/v0.25-schema-decisions.md` § "#258 Phase 1c-direct dropped from v0.25 bundle" for the full lock context.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `_tgn_direct_lookup.py` | Python | Probe: queries Getty SPARQL for direct `wgs:lat`/`wgs:long` on TGN entities in the no-coords gap. Returned 0% on the v0.24 131-row population — the empirical evidence that justified dropping Phase 1c-direct. |
+| `_tgn_obsolete_chain.py` | Python | Classifier: characterises the same 131-row gap as live-no-coords vs obsolete-with-replacement. Follows `dc:isReplacedBy` chains and re-queries replacements for coords. Surfaced the 13-row redirect fix. |
+| `_tgn_apply_redirect_fix.py` | Python | Apply: writes the 13 redirected coords to `vocabulary` with `coord_method='authority'` + `coord_method_detail='tgn_via_replacement'`, inserts the replacement TGN URIs into `vocabulary_external_ids`, exports audit log to `data/backfills/2026-04-26-tgn-redirect-fix.tsv`. Applied 2026-04-26 to local DB; recurring TGN-deprecation check deferred to `harvest-v0.25-deferred-work.md` §6 for v0.26+ cycles. |
 
 ## Embeddings
 

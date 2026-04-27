@@ -2087,6 +2087,9 @@ export class VocabularyDb {
       const fieldId = this.fieldIdMap.get(facetDef.field);
       if (fieldId === undefined) continue;
       const typeFilter = facetDef.vocabType ? ` AND v.type = '${facetDef.vocabType}'` : "";
+      // Suppress areal regions (continents, oceans, empires) from place-typed facets — their
+      // recorded coordinates are meaningless centroids and they pollute "what places appear" rollups.
+      const arealFilter = facetDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
       // fieldId binding must come after ftsJoinBinding (if any) but before WHERE bindings,
       // matching the positional order of ? in the SQL: JOIN fts... JOIN fm.field_id=? WHERE ...
       const facetBindings = ftsJoinBinding != null
@@ -2097,7 +2100,7 @@ export class VocabularyDb {
         `FROM artworks a ${ftsJoinClause} ` +
         `JOIN mappings fm ON fm.artwork_id = a.art_id AND +fm.field_id = ? ` +
         `JOIN vocabulary v ON fm.vocab_rowid = v.vocab_int_id ` +
-        `WHERE ${where} AND v.label_en IS NOT NULL${typeFilter} ` +
+        `WHERE ${where} AND v.label_en IS NOT NULL${typeFilter}${arealFilter} ` +
         `GROUP BY label ORDER BY cnt DESC LIMIT ?`;
       const rows = this.db.prepare(sql).all(...facetBindings) as { label: string; cnt: number }[];
       if (rows.length > 0) {
@@ -2243,11 +2246,14 @@ export class VocabularyDb {
       const fieldId = this.fieldIdMap.get(vocabDef.field);
       if (fieldId === undefined) return null;
       const typeFilter = vocabDef.vocabType ? ` AND v.type = '${vocabDef.vocabType}'` : "";
+      // Suppress areal regions (continents, oceans, empires) from place-typed dimensions —
+      // their meaningless centroid coords would otherwise dominate top-N place rollups.
+      const arealFilter = vocabDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
       return {
         sql: `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT m.artwork_id) AS cnt
           FROM mappings m
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE +m.field_id = ? AND v.label_en IS NOT NULL${typeFilter}
+          WHERE +m.field_id = ? AND v.label_en IS NOT NULL${typeFilter}${arealFilter}
           AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)
           GROUP BY label ORDER BY cnt DESC LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
@@ -3293,7 +3299,7 @@ export class VocabularyDb {
 
     const rows = this.db!.prepare(
       `SELECT id FROM vocabulary
-       WHERE type = 'place' AND lat IS NOT NULL
+       WHERE type = 'place' AND lat IS NOT NULL AND is_areal IS NOT 1
          AND lat BETWEEN ? AND ?
          AND lon BETWEEN ? AND ?
          AND haversine_km(?, ?, lat, lon) <= ?`
@@ -3329,7 +3335,7 @@ export class VocabularyDb {
         const placeholders = vocabIds.map(() => "?").join(", ");
         row = this.db!.prepare(
           `SELECT label_en, label_nl, lat, lon FROM vocabulary
-           WHERE id IN (${placeholders}) AND lat IS NOT NULL
+           WHERE id IN (${placeholders}) AND lat IS NOT NULL AND is_areal IS NOT 1
            ORDER BY LENGTH(COALESCE(label_en, label_nl, ''))
            LIMIT 1`
         ).get(...vocabIds) as PlaceRow | undefined;
@@ -3337,7 +3343,7 @@ export class VocabularyDb {
     } else {
       row = this.db!.prepare(
         `SELECT label_en, label_nl, lat, lon FROM vocabulary
-         WHERE type = 'place' AND lat IS NOT NULL
+         WHERE type = 'place' AND lat IS NOT NULL AND is_areal IS NOT 1
            AND (label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)
          LIMIT 1`
       ).get(`%${placeName}%`, `%${placeName}%`) as PlaceRow | undefined;
@@ -3468,14 +3474,15 @@ export class VocabularyDb {
       if (vocabIds.length === 0) return [];
       const placeholders = vocabIds.map(() => "?").join(", ");
       return this.db!.prepare(
-        `SELECT id, label_en, label_nl, lat, lon FROM vocabulary WHERE id IN (${placeholders})`
+        `SELECT id, label_en, label_nl, lat, lon FROM vocabulary
+         WHERE id IN (${placeholders}) AND is_areal IS NOT 1`
       ).all(...vocabIds) as PlaceCandidateRow[];
     }
 
     // Non-FTS fallback (capped to avoid huge IN-lists from short generic terms)
     return this.db!.prepare(
       `SELECT id, label_en, label_nl, lat, lon FROM vocabulary
-       WHERE type = 'place'
+       WHERE type = 'place' AND is_areal IS NOT 1
          AND (label_en LIKE ? COLLATE NOCASE OR label_nl LIKE ? COLLATE NOCASE)
        LIMIT 200`
     ).all(`%${name}%`, `%${name}%`) as PlaceCandidateRow[];
@@ -3492,7 +3499,7 @@ export class VocabularyDb {
     // Step 1: exact label match (case-insensitive)
     const exact = this.db!.prepare(
       `SELECT lat, lon FROM vocabulary
-       WHERE type = 'place' AND lat IS NOT NULL
+       WHERE type = 'place' AND lat IS NOT NULL AND is_areal IS NOT 1
          AND (label_en = ? COLLATE NOCASE OR label_nl = ? COLLATE NOCASE)
        LIMIT 1`
     ).get(context, context) as CoordRow | undefined;
@@ -3506,7 +3513,7 @@ export class VocabularyDb {
         const placeholders = vocabIds.map(() => "?").join(", ");
         const row = this.db!.prepare(
           `SELECT lat, lon FROM vocabulary
-           WHERE id IN (${placeholders}) AND lat IS NOT NULL
+           WHERE id IN (${placeholders}) AND lat IS NOT NULL AND is_areal IS NOT 1
            ORDER BY LENGTH(COALESCE(label_en, label_nl, ''))
            LIMIT 1`
         ).get(...vocabIds) as CoordRow | undefined;

@@ -87,9 +87,13 @@ def fetch_person_names(person_id: str) -> list[dict] | None:
                 lang = "nl"
                 break
 
-        # Determine classification from classified_as AAT URIs
+        # Determine classification from classified_as AAT URIs.
+        # Linked Art occasionally returns bare-string classified_as entries instead of dicts (~7%
+        # rate per #231); skip those defensively rather than crashing on .get().
         classification = None
         for c in entry.get("classified_as", []):
+            if not isinstance(c, dict):
+                continue
             cid = c.get("id", "")
             for suffix, label in AAT_CLASSIFICATION.items():
                 if cid.endswith(suffix):

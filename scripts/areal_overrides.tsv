@@ -99,3 +99,10 @@
 23012689	Zwarte Zee	sea	sweep: sea labels (nl)
 130997	Zwarte Zee	sea	sweep: sea labels (nl)
 330138045	Zwarte Zee	sea	sweep: sea labels (nl)
+# Spot-pass 2026-04-27 (#256 audit): TGN tagged these as point-scale settlements/islands,
+# but the labels denote multi-feature regions whose centroid coords are meaningless.
+# Authority-shielded by current apply_areal_overrides.py — recorded here as intent.
+330134382	Coromandel	historical_polity	spot: colonial-era Coromandel coast region (TGN settlement → region)
+130652	Molukken	other	spot: Moluccas archipelago (multi-island, centroid useless)
+330136001	Molukken	other	spot: Moluccas archipelago duplicate
+2304958	Molukken	other	spot: Moluccas archipelago duplicate
