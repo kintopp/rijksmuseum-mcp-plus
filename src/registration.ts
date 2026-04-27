@@ -675,8 +675,12 @@ const ArtworkDetailOutput = {
     type: z.string(), value: z.union([z.number(), z.string()]), unit: z.string(), note: z.string().nullable(),
   })),
   relatedObjects: z.array(z.object({
-    relationship: z.string(), objectUri: z.string(),
-  })),
+    relationship: z.string().describe("English relationship label, e.g. 'recto | verso', 'pendant', 'object | former frame'."),
+    objectNumber: z.string().nullable().describe("Peer artwork's object number when it resolves to a row in our DB; null for unresolved Linked Art URIs."),
+    title: z.string().nullable().describe("Peer artwork's title when resolved; null otherwise."),
+    objectUri: z.string().describe("Original Linked Art URI from the harvest. Pass to get_artwork_details(uri=…) for full peer metadata."),
+  })).describe("Peer artwork relations (recto/verso, frame/painting, pendant, production stadia, …). Capped at 25 entries — see relatedObjectsTotalCount."),
+  relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total related-object count before capping. Equals relatedObjects.length when ≤ 25."),
   parents: z.array(z.object({
     objectNumber: z.string(),
     title: z.string(),

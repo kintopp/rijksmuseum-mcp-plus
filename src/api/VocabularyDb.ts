@@ -47,7 +47,14 @@ export interface ArtworkDetailFromDb {
   license: string | null;
   webPage: string | null;
   dimensions: { type: string; value: number; unit: string; note: string | null }[];
-  relatedObjects: { relationship: string; objectUri: string }[];
+  relatedObjects: {
+    relationship: string;
+    objectNumber: string | null;
+    title: string | null;
+    objectUri: string;
+  }[];
+  /** Total related-object count before capping at {@link RELATED_PREVIEW_LIMIT}. */
+  relatedObjectsTotalCount: number;
   persistentId: string | null;
   objectTypes: VocabTerm[];
   materials: VocabTerm[];
@@ -767,10 +774,15 @@ export class VocabularyDb {
   private stmtArtworkParents: Statement | null = null;
   private stmtArtworkChildCount: Statement | null = null;
   private stmtArtworkChildrenPreview: Statement | null = null;
+  private stmtArtworkRelatedCount: Statement | null = null;
+  private stmtArtworkRelatedPreview: Statement | null = null;
   private hasTitleVariants_ = false;
   private hasArtworkParent_ = false;
+  private hasRelatedObjects_ = false;
   /** Maximum child records included inline on a parent's detail view. */
   private static readonly CHILD_PREVIEW_LIMIT = 25;
+  /** Maximum related-object peers included inline on a detail view. */
+  private static readonly RELATED_PREVIEW_LIMIT = 25;
   private stmtFilterArtIds = new Map<string, Statement>();
   // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
   private stmtLookupTypesCache = new Map<number, Statement>();
@@ -881,6 +893,7 @@ export class VocabularyDb {
       this.hasPersonNames = this.tableExists("person_names_fts");
       this.hasTitleVariants_ = this.tableExists("title_variants");
       this.hasArtworkParent_ = this.tableExists("artwork_parent");
+      this.hasRelatedObjects_ = this.tableExists("related_objects");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
@@ -999,6 +1012,21 @@ export class VocabularyDb {
           FROM title_variants
           WHERE art_id = ?
           ORDER BY seq
+        `);
+      }
+
+      // related_objects harvested in v0.24+; peer artwork relations (recto/verso, frame/painting, pendant…).
+      if (this.hasRelatedObjects_) {
+        this.stmtArtworkRelatedCount = this.db.prepare(
+          `SELECT COUNT(*) AS n FROM related_objects WHERE art_id = ?`
+        );
+        this.stmtArtworkRelatedPreview = this.db.prepare(`
+          SELECT ro.relationship_en, ro.related_la_uri, a.object_number, a.title, a.title_all_text
+          FROM related_objects ro
+          LEFT JOIN artworks a ON a.art_id = ro.related_art_id
+          WHERE ro.art_id = ?
+          ORDER BY ro.relationship_en, a.object_number
+          LIMIT ?
         `);
       }
 
@@ -1318,7 +1346,7 @@ export class VocabularyDb {
       license: row.rights_uri,
       webPage: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
       dimensions,
-      relatedObjects: [], // not harvested
+      ...this.fetchRelatedObjects(row.art_id),
       persistentId: row.art_id ? `http://hdl.handle.net/10934/RM0001.COLLECT.${row.art_id}` : null,
       // Group B
       objectTypes,
@@ -1361,6 +1389,42 @@ export class VocabularyDb {
       : [];
 
     return { parents, childCount, children };
+  }
+
+  /**
+   * Fetch peer-artwork relations (recto/verso, frame/painting, pendant, etc.).
+   * Returns up to {@link RELATED_PREVIEW_LIMIT} rows ordered by relationship type.
+   * `objectNumber` and `title` are populated when the peer resolves to an artwork
+   * row in our DB; left null for unresolved Linked Art URIs.
+   */
+  private fetchRelatedObjects(
+    artId: number,
+  ): Pick<ArtworkDetailFromDb, "relatedObjects" | "relatedObjectsTotalCount"> {
+    if (!this.stmtArtworkRelatedCount || !this.stmtArtworkRelatedPreview) {
+      return { relatedObjects: [], relatedObjectsTotalCount: 0 };
+    }
+    const countRow = this.stmtArtworkRelatedCount.get(artId) as { n: number };
+    const total = countRow.n;
+    if (total === 0) return { relatedObjects: [], relatedObjectsTotalCount: 0 };
+
+    const rows = this.stmtArtworkRelatedPreview.all(
+      artId, VocabularyDb.RELATED_PREVIEW_LIMIT,
+    ) as {
+      relationship_en: string; related_la_uri: string;
+      object_number: string | null; title: string | null; title_all_text: string | null;
+    }[];
+
+    return {
+      relatedObjects: rows.map(r => ({
+        relationship: r.relationship_en,
+        objectNumber: r.object_number,
+        title: r.object_number
+          ? VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled")
+          : null,
+        objectUri: r.related_la_uri,
+      })),
+      relatedObjectsTotalCount: total,
+    };
   }
 
   /**
