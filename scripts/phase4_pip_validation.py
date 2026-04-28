@@ -34,6 +34,11 @@ import duckdb
 # Inferred from WOF parquet filenames: whosonfirst-data-admin-<iso2>-latest.parquet
 WOF_COVERAGE_ISO2 = {"nl", "de", "at", "fr", "be", "it", "gb", "us", "id", "jp", "cn"}
 
+BUCKET_AGREE = "agree"
+BUCKET_MILD = "mildly_disagree"
+BUCKET_WRONG = "definitely_wrong"
+BUCKET_NO_COVERAGE = "unknown_no_coverage"
+
 
 def run_pip_validation(
     conn: sqlite3.Connection,
@@ -89,93 +94,91 @@ def run_pip_validation(
         "locality": 5, "localadmin": 6, "county": 7, "region": 8, "country": 9,
     }
 
-    for pq_path in parquet_paths:
-        m = iso2_re.search(Path(pq_path).name)
-        wof_iso2 = m.group(1) if m else "?"
+    duck = duckdb.connect()
+    duck.execute("SET memory_limit='8GB'")
+    duck.execute("SET threads=1")
+    duck.execute("SET preserve_insertion_order=false")
+    duck.execute("INSTALL spatial; LOAD spatial")
+    try:
+        for pq_path in parquet_paths:
+            m = iso2_re.search(Path(pq_path).name)
+            wof_iso2 = m.group(1) if m else "?"
 
-        duck = duckdb.connect()
-        duck.execute("SET memory_limit='8GB'")
-        duck.execute("SET threads=1")
-        duck.execute("SET preserve_insertion_order=false")
-        duck.execute("INSTALL spatial; LOAD spatial")
+            bbox = duck.execute(
+                f"SELECT MIN(lat), MAX(lat), MIN(lon), MAX(lon) "
+                f"FROM read_parquet('{pq_path}') WHERE geometry IS NOT NULL"
+            ).fetchone()
+            if not bbox or bbox[0] is None:
+                continue
+            min_lat, max_lat, min_lon, max_lon = bbox
 
-        bbox = duck.execute(
-            f"SELECT MIN(lat), MAX(lat), MIN(lon), MAX(lon) "
-            f"FROM read_parquet('{pq_path}') WHERE geometry IS NOT NULL"
-        ).fetchone()
-        if not bbox or bbox[0] is None:
-            duck.close()
-            continue
-        min_lat, max_lat, min_lon, max_lon = bbox
+            bbox_places = [
+                r for r in places
+                if (r[3] is not None and r[4] is not None
+                    and min_lat <= float(r[3]) <= max_lat
+                    and min_lon <= float(r[4]) <= max_lon)
+            ]
+            if not bbox_places:
+                continue
 
-        bbox_places = [
-            r for r in places
-            if (r[3] is not None and r[4] is not None
-                and min_lat <= float(r[3]) <= max_lat
-                and min_lon <= float(r[4]) <= max_lon)
-        ]
-        if not bbox_places:
-            duck.close()
-            continue
-
-        duck.execute(
-            "CREATE TABLE places (vocab_id INT, lat DOUBLE, lon DOUBLE)"
-        )
-        duck.executemany(
-            "INSERT INTO places VALUES (?, ?, ?)",
-            [(int(r[0]), float(r[3]), float(r[4])) for r in bbox_places],
-        )
-
-        # Two-stage filter to avoid OOM on large-country parquets:
-        #   1) bbox prefilter using parquet's `geometry_bbox` STRUCT — cheap.
-        #   2) ST_Contains only on bbox-overlap candidates.
-        # Push placetype filter into the bbox stage so DuckDB only reads
-        # geometry columns for the small candidate set.
-        result = duck.execute(
-            f"""
-            WITH candidates AS (
-                SELECT p.vocab_id, p.lat, p.lon, w.id AS wof_id,
-                       w.name AS wof_name, w.placetype
-                  FROM places p
-                  JOIN read_parquet('{pq_path}') w
-                    ON w.placetype IN ('country','region','county','locality',
-                                       'localadmin','borough','dependency')
-                   AND w.geometry_bbox.xmin <= p.lon
-                   AND p.lon <= w.geometry_bbox.xmax
-                   AND w.geometry_bbox.ymin <= p.lat
-                   AND p.lat <= w.geometry_bbox.ymax
-            ),
-            verified AS (
-                SELECT c.vocab_id, c.wof_name, c.placetype,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY c.vocab_id
-                           ORDER BY CASE c.placetype
-                               WHEN 'borough' THEN 4
-                               WHEN 'locality' THEN 5
-                               WHEN 'localadmin' THEN 6
-                               WHEN 'county' THEN 7
-                               WHEN 'region' THEN 8
-                               WHEN 'country' THEN 9
-                               WHEN 'dependency' THEN 10
-                               ELSE 99
-                           END
-                       ) AS rn
-                  FROM candidates c
-                  JOIN read_parquet('{pq_path}') w2 ON w2.id = c.wof_id
-                 WHERE ST_Contains(w2.geometry, ST_Point(c.lon, c.lat))
+            duck.execute("DROP TABLE IF EXISTS places")
+            duck.execute(
+                "CREATE TABLE places (vocab_id INT, lat DOUBLE, lon DOUBLE)"
             )
-            SELECT vocab_id, wof_name, placetype
-              FROM verified
-             WHERE rn = 1
-            """
-        ).fetchall()
-        duck.close()
+            duck.executemany(
+                "INSERT INTO places VALUES (?, ?, ?)",
+                [(int(r[0]), float(r[3]), float(r[4])) for r in bbox_places],
+            )
 
-        for vid, wof_name, wof_pt in result:
-            new_rank = placetype_rank.get(wof_pt, 99)
-            existing = hits_by_vocab.get(int(vid))
-            if existing is None or new_rank < existing[3]:
-                hits_by_vocab[int(vid)] = (wof_iso2, wof_name, wof_pt, new_rank)
+            # Two-stage filter to avoid OOM on large-country parquets:
+            #   1) bbox prefilter using parquet's `geometry_bbox` STRUCT — cheap.
+            #   2) ST_Contains only on bbox-overlap candidates.
+            result = duck.execute(
+                f"""
+                WITH candidates AS (
+                    SELECT p.vocab_id, p.lat, p.lon, w.id AS wof_id,
+                           w.name AS wof_name, w.placetype
+                      FROM places p
+                      JOIN read_parquet('{pq_path}') w
+                        ON w.placetype IN ('country','region','county','locality',
+                                           'localadmin','borough','dependency')
+                       AND w.geometry_bbox.xmin <= p.lon
+                       AND p.lon <= w.geometry_bbox.xmax
+                       AND w.geometry_bbox.ymin <= p.lat
+                       AND p.lat <= w.geometry_bbox.ymax
+                ),
+                verified AS (
+                    SELECT c.vocab_id, c.wof_name, c.placetype,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY c.vocab_id
+                               ORDER BY CASE c.placetype
+                                   WHEN 'borough' THEN 4
+                                   WHEN 'locality' THEN 5
+                                   WHEN 'localadmin' THEN 6
+                                   WHEN 'county' THEN 7
+                                   WHEN 'region' THEN 8
+                                   WHEN 'country' THEN 9
+                                   WHEN 'dependency' THEN 10
+                                   ELSE 99
+                               END
+                           ) AS rn
+                      FROM candidates c
+                      JOIN read_parquet('{pq_path}') w2 ON w2.id = c.wof_id
+                     WHERE ST_Contains(w2.geometry, ST_Point(c.lon, c.lat))
+                )
+                SELECT vocab_id, wof_name, placetype
+                  FROM verified
+                 WHERE rn = 1
+                """
+            ).fetchall()
+
+            for vid, wof_name, wof_pt in result:
+                new_rank = placetype_rank.get(wof_pt, 99)
+                existing = hits_by_vocab.get(int(vid))
+                if existing is None or new_rank < existing[3]:
+                    hits_by_vocab[int(vid)] = (wof_iso2, wof_name, wof_pt, new_rank)
+    finally:
+        duck.close()
 
     buckets: Counter[str] = Counter()
     disagreements_path = output_dir / "disagreements.csv"
@@ -199,26 +202,24 @@ def run_pip_validation(
             hit = hits_by_vocab.get(int(vid))
             if hit:
                 wof_iso2, wof_name, wof_pt, _rank = hit
-                if expected is None:
-                    bucket = "agree"
-                elif expected.lower() == (wof_iso2 or "").lower():
-                    bucket = "agree"
+                if expected is None or expected.lower() == (wof_iso2 or "").lower():
+                    bucket = BUCKET_AGREE
                 else:
-                    bucket = "mildly_disagree"
+                    bucket = BUCKET_MILD
                 row = [vid, label_en, lat, lon, c_method or "", c_detail or "",
                        wof_iso2 or "", wof_name or "", wof_pt or "",
                        expected or "", bucket]
             else:
                 if expected and expected.lower() in WOF_COVERAGE_ISO2:
-                    bucket = "definitely_wrong"
+                    bucket = BUCKET_WRONG
                 else:
-                    bucket = "unknown_no_coverage"
+                    bucket = BUCKET_NO_COVERAGE
                 row = [vid, label_en, lat, lon, c_method or "", c_detail or "",
                        "", "", "", expected or "", bucket]
 
             buckets[bucket] += 1
             all_w.writerow(row)
-            if bucket in ("definitely_wrong", "mildly_disagree"):
+            if bucket in (BUCKET_WRONG, BUCKET_MILD):
                 dis_w.writerow(row)
 
     summary_path = output_dir / "summary.txt"
@@ -226,7 +227,7 @@ def run_pip_validation(
         f.write(f"PIP validation summary\n")
         f.write(f"DB rows scanned: {len(places)}\n")
         f.write(f"WOF parquet glob: {wof_parquet_glob}\n")
-        for bucket in ("agree", "mildly_disagree", "definitely_wrong", "unknown_no_coverage"):
+        for bucket in (BUCKET_AGREE, BUCKET_MILD, BUCKET_WRONG, BUCKET_NO_COVERAGE):
             f.write(f"  {bucket}: {buckets[bucket]}\n")
 
     return dict(buckets)

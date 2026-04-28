@@ -17,6 +17,9 @@ import sqlite3
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _test_helpers import run_test_functions
+
 V024_BASELINE_PCT = 80.5
 TOLERANCE_PCT = 0.5
 
@@ -75,19 +78,12 @@ def main() -> int:
 
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     try:
-        tests = [test_no_coord_without_method,
-                 test_coverage_within_tolerance,
-                 test_method_distribution_nonzero]
-        failed = 0
-        for t in tests:
-            try:
-                t(conn)
-                print(f"  PASS  {t.__name__}")
-            except AssertionError as e:
-                print(f"  FAIL  {t.__name__}: {e}")
-                failed += 1
-        print(f"\n{len(tests) - failed} passed, {failed} failed")
-        return 1 if failed else 0
+        return run_test_functions(
+            [test_no_coord_without_method,
+             test_coverage_within_tolerance,
+             test_method_distribution_nonzero],
+            conn,
+        )
     finally:
         conn.close()
 

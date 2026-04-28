@@ -30,8 +30,8 @@ WIKIDATA_P276 = "wikidata_p276"
 TGN_DIRECT = "tgn_direct"
 TGN_VIA_WIKIDATA = "tgn_via_wikidata_p1667"
 TGN_VIA_REPLACEMENT = "tgn_via_replacement"  # one-shot: follow dc:isReplacedBy on obsolete TGN IDs
-WOF_AUTHORITY = "wof_authority"  # Phase 1d: WOF admin polygon match (point-in-polygon name+placetype)
-RCE_VIA_WIKIDATA = "rce_via_wikidata"  # Phase 1e: RCE Rijksmonumenten via shared Wikidata QID
+WOF_AUTHORITY = "wof_authority"
+RCE_VIA_WIKIDATA = "rce_via_wikidata"
 
 # Derived tier — heuristic / inference
 SELF_REF = "self_ref"
@@ -41,9 +41,9 @@ WHG_BRIDGE = "whg_bridge"
 VALIDATION_HEMISPHERE_FIX = "validation_hemisphere_fix"
 VALIDATION_SWAP_FIX = "validation_swap_fix"
 PARENT_FALLBACK = "parent_fallback"
-COUNTRY_FALLBACK = "country_fallback"  # Layer B: parent placetype indicates a country
-CITY_FALLBACK = "city_fallback"  # Layer B: parent placetype indicates a city/town/locality
-PLEIADES_RECONCILIATION = "pleiades_reconciliation"  # Phase 3e: classical-antiquity name match
+COUNTRY_FALLBACK = "country_fallback"
+CITY_FALLBACK = "city_fallback"
+PLEIADES_RECONCILIATION = "pleiades_reconciliation"
 
 # Human tier — manual review
 RECONCILED_REVIEW_ACCEPTED = "reconciled_review_accepted"

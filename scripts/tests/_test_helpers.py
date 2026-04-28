@@ -55,6 +55,23 @@ def create_exhibition_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def run_test_functions(tests, *args, **kwargs) -> int:
+    """Run a list of test functions, printing PASS/FAIL per name, and return
+    a 0/1 exit code. Each test raises AssertionError to signal a failure;
+    any other exception propagates.
+    """
+    failed = 0
+    for t in tests:
+        try:
+            t(*args, **kwargs)
+            print(f"  PASS  {t.__name__}")
+        except AssertionError as e:
+            print(f"  FAIL  {t.__name__}: {e}")
+            failed += 1
+    print(f"\n{len(tests) - failed} passed, {failed} failed")
+    return 1 if failed else 0
+
+
 class CheckRecorder:
     """Minimal assertion tally for framework-less tests.
 

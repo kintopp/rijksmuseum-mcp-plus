@@ -15,7 +15,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import enrichment_methods as em
+from _test_helpers import run_test_functions
 
 
 def assert_eq(actual, expected, label: str) -> None:
@@ -82,19 +84,12 @@ def main() -> int:
 
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     try:
-        tests = [test_no_coarse_without_detail,
-                 test_every_detail_resolves,
-                 test_coarse_matches_detail_tier]
-        failed = 0
-        for t in tests:
-            try:
-                t(conn)
-                print(f"  PASS  {t.__name__}")
-            except AssertionError as e:
-                print(f"  FAIL  {t.__name__}: {e}")
-                failed += 1
-        print(f"\n{len(tests) - failed} passed, {failed} failed")
-        return 1 if failed else 0
+        return run_test_functions(
+            [test_no_coarse_without_detail,
+             test_every_detail_resolves,
+             test_coarse_matches_detail_tier],
+            conn,
+        )
     finally:
         conn.close()
 

@@ -9,8 +9,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import enrichment_methods as em
+from _test_helpers import run_test_functions
 
 
 def _names_of_string_constants(module) -> set[str]:
@@ -76,16 +78,7 @@ def test_allow_list_size_matches_locked_19() -> None:
 
 def main() -> int:
     tests = [v for k, v in globals().items() if k.startswith("test_") and callable(v)]
-    failed = 0
-    for t in tests:
-        try:
-            t()
-            print(f"  PASS  {t.__name__}")
-        except AssertionError as e:
-            print(f"  FAIL  {t.__name__}: {e}")
-            failed += 1
-    print(f"\n{len(tests) - failed} passed, {failed} failed")
-    return 1 if failed else 0
+    return run_test_functions(tests)
 
 
 if __name__ == "__main__":

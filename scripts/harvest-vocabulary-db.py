@@ -3009,12 +3009,23 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
         print(f"  Parsed {len(batch):,} geocoded places from CSV "
               f"(method cols: {'yes' if has_method_cols else 'no'})")
 
-    for vocab_id, lat, lon, ext_id, method_values in batch:
-        existing = conn.execute(
-            "SELECT type, external_id FROM vocabulary WHERE id = ?",
-            (vocab_id,),
-        ).fetchone()
+    # Bulk-load existing rows for the CSV's vocab IDs. Single SELECT vs.
+    # one-per-row avoids ~N round-trips on a 30k-row import.
+    batch_ids = list({row[0] for row in batch})
+    existing_map: dict[str, tuple] = {}
+    chunk = 900  # SQLite default SQLITE_MAX_VARIABLE_NUMBER is 999
+    for i in range(0, len(batch_ids), chunk):
+        slice_ = batch_ids[i:i + chunk]
+        placeholders = ",".join("?" * len(slice_))
+        rows = conn.execute(
+            f"SELECT id, type, external_id FROM vocabulary WHERE id IN ({placeholders})",
+            slice_,
+        ).fetchall()
+        for r in rows:
+            existing_map[r[0]] = (r[1], r[2])
 
+    for vocab_id, lat, lon, ext_id, method_values in batch:
+        existing = existing_map.get(vocab_id)
         if existing is None:
             skipped_missing += 1
             continue

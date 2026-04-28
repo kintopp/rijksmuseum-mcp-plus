@@ -2414,12 +2414,14 @@ def export_backfill_csv(conn: sqlite3.Connection, csv_path: str) -> int:
     """
     out = Path(csv_path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    db_cols = ["id", "label_en", "label_nl", "lat", "lon", "external_id",
+               "coord_method", "coord_method_detail",
+               "external_id_method", "external_id_method_detail",
+               "broader_method", "broader_method_detail"]
+    csv_header = ["vocab_id" if c == "id" else c for c in db_cols]
     rows = conn.execute(
-        """
-        SELECT id, label_en, label_nl, lat, lon, external_id,
-               coord_method, coord_method_detail,
-               external_id_method, external_id_method_detail,
-               broader_method, broader_method_detail
+        f"""
+        SELECT {", ".join(db_cols)}
           FROM vocabulary
          WHERE type = 'place'
            AND (coord_method IS NOT NULL
@@ -2430,21 +2432,9 @@ def export_backfill_csv(conn: sqlite3.Connection, csv_path: str) -> int:
     ).fetchall()
     with out.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow([
-            "vocab_id", "label_en", "label_nl", "lat", "lon", "external_id",
-            "coord_method", "coord_method_detail",
-            "external_id_method", "external_id_method_detail",
-            "broader_method", "broader_method_detail",
-        ])
+        w.writerow(csv_header)
         for r in rows:
-            w.writerow([r[k] if isinstance(r, sqlite3.Row) else r[i]
-                        for i, k in enumerate(["id", "label_en", "label_nl",
-                                               "lat", "lon", "external_id",
-                                               "coord_method", "coord_method_detail",
-                                               "external_id_method",
-                                               "external_id_method_detail",
-                                               "broader_method",
-                                               "broader_method_detail"])])
+            w.writerow([r[c] for c in db_cols])
     print(f"Exported {len(rows)} rows → {out}", file=sys.stderr)
     return len(rows)
 
