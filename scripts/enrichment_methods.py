@@ -32,6 +32,7 @@ TGN_VIA_WIKIDATA = "tgn_via_wikidata_p1667"
 TGN_VIA_REPLACEMENT = "tgn_via_replacement"  # one-shot: follow dc:isReplacedBy on obsolete TGN IDs
 WOF_AUTHORITY = "wof_authority"
 RCE_VIA_WIKIDATA = "rce_via_wikidata"
+RIJKSMUSEUM_LOD = "rijksmuseum_lod"
 
 # Derived tier — heuristic / inference
 SELF_REF = "self_ref"
@@ -64,6 +65,7 @@ DETAIL_TO_TIER = {
     TGN_VIA_REPLACEMENT: AUTHORITY,
     WOF_AUTHORITY: AUTHORITY,
     RCE_VIA_WIKIDATA: AUTHORITY,
+    RIJKSMUSEUM_LOD: AUTHORITY,
     SELF_REF: DERIVED,
     WIKIDATA_RECONCILIATION: DERIVED,
     WHG_RECONCILIATION: DERIVED,
