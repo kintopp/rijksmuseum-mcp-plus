@@ -30,6 +30,8 @@ WIKIDATA_P276 = "wikidata_p276"
 TGN_DIRECT = "tgn_direct"
 TGN_VIA_WIKIDATA = "tgn_via_wikidata_p1667"
 TGN_VIA_REPLACEMENT = "tgn_via_replacement"  # one-shot: follow dc:isReplacedBy on obsolete TGN IDs
+WOF_AUTHORITY = "wof_authority"  # Phase 1d: WOF admin polygon match (point-in-polygon name+placetype)
+RCE_VIA_WIKIDATA = "rce_via_wikidata"  # Phase 1e: RCE Rijksmonumenten via shared Wikidata QID
 
 # Derived tier — heuristic / inference
 SELF_REF = "self_ref"
@@ -39,6 +41,9 @@ WHG_BRIDGE = "whg_bridge"
 VALIDATION_HEMISPHERE_FIX = "validation_hemisphere_fix"
 VALIDATION_SWAP_FIX = "validation_swap_fix"
 PARENT_FALLBACK = "parent_fallback"
+COUNTRY_FALLBACK = "country_fallback"  # Layer B: parent placetype indicates a country
+CITY_FALLBACK = "city_fallback"  # Layer B: parent placetype indicates a city/town/locality
+PLEIADES_RECONCILIATION = "pleiades_reconciliation"  # Phase 3e: classical-antiquity name match
 
 # Human tier — manual review
 RECONCILED_REVIEW_ACCEPTED = "reconciled_review_accepted"
@@ -57,6 +62,8 @@ DETAIL_TO_TIER = {
     TGN_DIRECT: AUTHORITY,
     TGN_VIA_WIKIDATA: AUTHORITY,
     TGN_VIA_REPLACEMENT: AUTHORITY,
+    WOF_AUTHORITY: AUTHORITY,
+    RCE_VIA_WIKIDATA: AUTHORITY,
     SELF_REF: DERIVED,
     WIKIDATA_RECONCILIATION: DERIVED,
     WHG_RECONCILIATION: DERIVED,
@@ -64,6 +71,9 @@ DETAIL_TO_TIER = {
     VALIDATION_HEMISPHERE_FIX: DERIVED,
     VALIDATION_SWAP_FIX: DERIVED,
     PARENT_FALLBACK: DERIVED,
+    COUNTRY_FALLBACK: DERIVED,
+    CITY_FALLBACK: DERIVED,
+    PLEIADES_RECONCILIATION: DERIVED,
     RECONCILED_REVIEW_ACCEPTED: HUMAN,
     WHG_REVIEW_ACCEPTED: HUMAN,
     WHG_BRIDGE_REVIEW_ACCEPTED: HUMAN,
@@ -79,3 +89,43 @@ def tier_for(detail: str) -> str:
     fail fast at the write site rather than silently land a NULL tier.
     """
     return DETAIL_TO_TIER[detail]
+
+
+# ── Layer B (#262): fail-closed inheritance allow-list ─────────────────
+# Locked URI set from offline/drafts/v0.25-schema-decisions.md §502-§522.
+# When propagate_place_coordinates() considers inheriting from a parent
+# place, the parent's placetype URI must be in this set or inheritance is
+# refused. NULL placetypes are also refused (fail-closed on missing data).
+INHERITANCE_ALLOWED_PLACETYPES: frozenset[str] = frozenset({
+    "http://vocab.getty.edu/aat/300008347",  # inhabited places (umbrella)
+    "http://vocab.getty.edu/aat/300008389",  # cities
+    "http://vocab.getty.edu/aat/300008375",  # towns
+    "http://vocab.getty.edu/aat/300008372",  # villages
+    "http://vocab.getty.edu/aat/300008393",  # hamlets
+    "http://vocab.getty.edu/aat/300008777",  # quarters / urban districts
+    "http://vocab.getty.edu/aat/300008734",  # streets
+    "http://www.wikidata.org/entity/Q486972",  # human settlement (umbrella)
+    "http://www.wikidata.org/entity/Q515",      # city
+    "http://www.wikidata.org/entity/Q532",      # village
+    "http://www.wikidata.org/entity/Q3957",     # town
+    "http://www.wikidata.org/entity/Q5084",     # hamlet
+    "http://www.wikidata.org/entity/Q1549591",  # metropolis (e.g. Berlin)
+    "http://www.wikidata.org/entity/Q123705",   # neighborhood
+    "http://www.wikidata.org/entity/Q150093",   # neighborhood (variant)
+    "http://www.wikidata.org/entity/Q188509",   # suburb
+    "http://www.wikidata.org/entity/Q484170",   # commune of France
+    "http://www.wikidata.org/entity/Q747074",   # comune of Italy
+    "http://www.wikidata.org/entity/Q79007",    # street
+})
+
+
+def _inheritance_allowed(parent_placetype: str | None) -> bool:
+    """Layer B guard: True iff parent placetype is on the locked allow-list.
+
+    Fail-closed semantics: NULL/empty/unknown placetypes return False. New
+    harmful parent placetypes that appear in future harvests are refused
+    automatically until explicitly added to ``INHERITANCE_ALLOWED_PLACETYPES``.
+    """
+    if not parent_placetype:
+        return False
+    return parent_placetype in INHERITANCE_ALLOWED_PLACETYPES

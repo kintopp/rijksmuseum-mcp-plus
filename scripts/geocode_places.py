@@ -2379,6 +2379,77 @@ def phase_4_validation(conn: sqlite3.Connection,
 
 
 # ---------------------------------------------------------------------------
+# Phase 4-pip: WOF point-in-polygon audit (read-only)
+# ---------------------------------------------------------------------------
+
+def phase_4_pip_validation(conn: sqlite3.Connection,
+                            wof_parquet_glob: str,
+                            output_dir: str) -> dict[str, int]:
+    """Run the WOF PIP audit by delegating to scripts/phase4_pip_validation.py.
+
+    Read-only: writes CSVs + summary.txt under ``output_dir``, never mutates
+    the DB. Used as the Stage A baseline anchor and as the post-cold-rerun /
+    post-bundle gate.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from phase4_pip_validation import run_pip_validation
+    out = Path(output_dir)
+    print(f"Phase 4-pip: PIP audit against {wof_parquet_glob} → {out}",
+          file=sys.stderr)
+    result = run_pip_validation(conn, wof_parquet_glob, out, expected_country_lookup=None)
+    print(f"Phase 4-pip: {result}", file=sys.stderr)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Backfill CSV export
+# ---------------------------------------------------------------------------
+
+def export_backfill_csv(conn: sqlite3.Connection, csv_path: str) -> int:
+    """Write data/backfills/geocoded-places.csv with all method + detail columns.
+
+    One row per place that has at least one non-NULL method tag. The CSV is
+    the round-trip artefact: ``import_geocoding()`` reads it on the next
+    harvest cycle to repopulate ``vocabulary``.
+    """
+    out = Path(csv_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    rows = conn.execute(
+        """
+        SELECT id, label_en, label_nl, lat, lon, external_id,
+               coord_method, coord_method_detail,
+               external_id_method, external_id_method_detail,
+               broader_method, broader_method_detail
+          FROM vocabulary
+         WHERE type = 'place'
+           AND (coord_method IS NOT NULL
+                OR external_id_method IS NOT NULL
+                OR broader_method IS NOT NULL)
+         ORDER BY id
+        """
+    ).fetchall()
+    with out.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow([
+            "vocab_id", "label_en", "label_nl", "lat", "lon", "external_id",
+            "coord_method", "coord_method_detail",
+            "external_id_method", "external_id_method_detail",
+            "broader_method", "broader_method_detail",
+        ])
+        for r in rows:
+            w.writerow([r[k] if isinstance(r, sqlite3.Row) else r[i]
+                        for i, k in enumerate(["id", "label_en", "label_nl",
+                                               "lat", "lon", "external_id",
+                                               "coord_method", "coord_method_detail",
+                                               "external_id_method",
+                                               "external_id_method_detail",
+                                               "broader_method",
+                                               "broader_method_detail"])])
+    print(f"Exported {len(rows)} rows → {out}", file=sys.stderr)
+    return len(rows)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -2405,7 +2476,12 @@ Examples:
     parser.add_argument("--dry-run", action="store_true",
                         help="Show counts but don't modify DB")
     parser.add_argument("--phase", type=str,
-                        help="Run only specific phase (1a, 1b, 1c, 2, 3, 3b, 3c, 4)")
+                        choices=["1a", "1b", "1c", "1d", "1e",
+                                 "2", "3", "3b", "3c", "3e",
+                                 "4", "4-pip", "layer-b"],
+                        help="Run only specific phase. v0.25 phases: 1d (WOF), "
+                             "1e (RCE), 3e (Pleiades), 4-pip (PIP validation), "
+                             "layer-b (Step 7 fail-closed inheritance).")
     parser.add_argument("--skip-geonames", action="store_true",
                         help="Skip Phase 1a (GeoNames API)")
     parser.add_argument("--geonames-user",
@@ -2425,6 +2501,14 @@ Examples:
                              "skips all other phases.")
     parser.add_argument("--output-dir", default="offline/geo",
                         help="Output directory for CSVs and reports")
+    parser.add_argument("--wof-parquet",
+                        default="data/seed/wof/whosonfirst-data-admin-*.parquet",
+                        help="Glob for WOF admin parquets (used by --phase 1d / 4-pip)")
+    parser.add_argument("--export-backfill-csv", action="store_true",
+                        help="Export geocoded-places backfill CSV (with all method "
+                             "+ method_detail columns) and exit. Standalone mode.")
+    parser.add_argument("--backfill-csv", default="data/backfills/geocoded-places.csv",
+                        help="Output path for --export-backfill-csv")
     args = parser.parse_args()
 
     # Resolve DB path
@@ -2456,6 +2540,12 @@ Examples:
         total, with_coords = get_coverage(conn)
         print(f"\nFinal coverage: {with_coords:,} / {total:,} "
               f"({with_coords/total*100:.1f}%)", file=sys.stderr)
+        conn.close()
+        return
+
+    # Handle --export-backfill-csv mode (standalone — exits after writing CSV)
+    if args.export_backfill_csv:
+        export_backfill_csv(conn, args.backfill_csv)
         conn.close()
         return
 
@@ -2528,10 +2618,15 @@ Examples:
         total_updated += phase_3c_whg_bridge(
             conn, args.dry_run, args.csv_only, args.output_dir)
 
-    # Phase 4: Validation
+    # Phase 4: Validation (range/swap heuristics + markdown report)
     if run_phase in (None, "4"):
         print(f"\n--- Phase 4: Validation ---", file=sys.stderr)
         phase_4_validation(conn, args.output_dir)
+
+    # Phase 4-pip: WOF point-in-polygon audit (read-only, never in default loop)
+    if run_phase == "4-pip":
+        print(f"\n--- Phase 4-pip: WOF PIP audit ---", file=sys.stderr)
+        phase_4_pip_validation(conn, args.wof_parquet, args.output_dir)
 
     # Final summary
     total, with_coords = get_coverage(conn)

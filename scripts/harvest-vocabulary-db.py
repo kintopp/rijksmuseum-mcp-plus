@@ -2951,8 +2951,14 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
 def import_geocoding(conn: sqlite3.Connection, csv_path: str):
     """Import geocoded place data from CSV into the vocabulary table.
 
-    Updates lat, lon, and (optionally) external_id for existing place records.
-    Only updates external_id if the CSV has a non-empty value that differs from the DB.
+    Updates lat, lon, external_id, and (when present) the v0.25 provenance
+    columns ``coord_method`` / ``coord_method_detail`` /
+    ``external_id_method`` / ``external_id_method_detail`` /
+    ``broader_method`` / ``broader_method_detail``.
+
+    The CSV may use either ``id`` or ``vocab_id`` as the row-key column.
+    Provenance columns are optional — older CSVs without them are imported
+    with NULLs in those columns (back-compat).
     """
     csv_file = Path(csv_path)
     if not csv_file.exists():
@@ -2962,18 +2968,28 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
     print(f"  Reading: {csv_path}")
     updated_coords = 0
     updated_ext_id = 0
+    updated_method = 0
     skipped_missing = 0
     skipped_not_place = 0
 
+    METHOD_COLS = (
+        "coord_method", "coord_method_detail",
+        "external_id_method", "external_id_method_detail",
+        "broader_method", "broader_method_detail",
+    )
+
     with open(csv_file, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
+        has_method_cols = bool(reader.fieldnames) and any(
+            c in reader.fieldnames for c in METHOD_COLS
+        )
         batch = []
 
         for row in reader:
-            vocab_id = row.get("id", "").strip()
-            lat_str = row.get("lat", "").strip()
-            lon_str = row.get("lon", "").strip()
-            ext_id = row.get("external_id", "").strip()
+            vocab_id = (row.get("id") or row.get("vocab_id") or "").strip()
+            lat_str = (row.get("lat") or "").strip()
+            lon_str = (row.get("lon") or "").strip()
+            ext_id = (row.get("external_id") or "").strip()
 
             if not vocab_id or not lat_str or not lon_str:
                 continue
@@ -2984,11 +3000,16 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
             except ValueError:
                 continue
 
-            batch.append((vocab_id, lat, lon, ext_id))
+            method_values = tuple(
+                ((row.get(c) or "").strip() or None) for c in METHOD_COLS
+            ) if has_method_cols else (None, None, None, None, None, None)
 
-        print(f"  Parsed {len(batch):,} geocoded places from CSV")
+            batch.append((vocab_id, lat, lon, ext_id, method_values))
 
-    for vocab_id, lat, lon, ext_id in batch:
+        print(f"  Parsed {len(batch):,} geocoded places from CSV "
+              f"(method cols: {'yes' if has_method_cols else 'no'})")
+
+    for vocab_id, lat, lon, ext_id, method_values in batch:
         existing = conn.execute(
             "SELECT type, external_id FROM vocabulary WHERE id = ?",
             (vocab_id,),
@@ -3002,25 +3023,39 @@ def import_geocoding(conn: sqlite3.Connection, csv_path: str):
             skipped_not_place += 1
             continue
 
-        # Update coords, geocode_method, and external_id if the CSV provides a different one
         should_update_ext = ext_id and ext_id != existing[1]
         if should_update_ext:
             conn.execute(
-                "UPDATE vocabulary SET lat = ?, lon = ?, geocode_method = 'csv', external_id = ? WHERE id = ?",
-                (lat, lon, ext_id, vocab_id),
+                "UPDATE vocabulary "
+                "   SET lat = ?, lon = ?, "
+                "       geocode_method = 'csv', external_id = ?, "
+                "       coord_method = ?, coord_method_detail = ?, "
+                "       external_id_method = ?, external_id_method_detail = ?, "
+                "       broader_method = ?, broader_method_detail = ? "
+                " WHERE id = ?",
+                (lat, lon, ext_id, *method_values, vocab_id),
             )
             updated_ext_id += 1
         else:
             conn.execute(
-                "UPDATE vocabulary SET lat = ?, lon = ?, geocode_method = 'csv' WHERE id = ?",
-                (lat, lon, vocab_id),
+                "UPDATE vocabulary "
+                "   SET lat = ?, lon = ?, "
+                "       geocode_method = 'csv', "
+                "       coord_method = ?, coord_method_detail = ?, "
+                "       external_id_method = ?, external_id_method_detail = ?, "
+                "       broader_method = ?, broader_method_detail = ? "
+                " WHERE id = ?",
+                (lat, lon, *method_values, vocab_id),
             )
         updated_coords += 1
+        if has_method_cols and any(method_values):
+            updated_method += 1
 
     conn.commit()
     print(f"  Geocoding import complete:")
     print(f"    Coordinates updated: {updated_coords:,}")
     print(f"    External IDs updated: {updated_ext_id:,}")
+    print(f"    Provenance tags written: {updated_method:,}")
     if skipped_missing:
         print(f"    Skipped (not in DB): {skipped_missing:,}")
     if skipped_not_place:
