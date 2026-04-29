@@ -1645,13 +1645,22 @@ def resolve_uri(entity_id: str) -> tuple[dict | None, str | None]:
                     "classification": classification,
                 })
 
+    # #276: collect all equivalent[] authority IDs into _external_ids; the
+    # single-value `external_id` column still gets the Wikidata-preferred
+    # pick for back-compat.
     external_id = None
+    ext_ids_seen: set[str] = set()
+    external_ids_list: list[tuple[str, str, str]] = []
     for eq in data.get("equivalent", []):
         eq_id = eq.get("id", "")
+        if not eq_id or eq_id in ext_ids_seen:
+            continue
+        ext_ids_seen.add(eq_id)
+        authority, local_id = classify_authority(eq_id)
+        external_ids_list.append((authority, local_id, eq_id))
         if "wikidata.org" in eq_id:
-            external_id = eq_id
-            break
-        elif not external_id:
+            external_id = eq_id  # Wikidata wins outright
+        elif external_id is None:
             external_id = eq_id
 
     notation = None
@@ -1678,6 +1687,7 @@ def resolve_uri(entity_id: str) -> tuple[dict | None, str | None]:
         "lat": lat,
         "lon": lon,
         "name_variants": name_variants,
+        "_external_ids": external_ids_list,
     }, None
 
 
@@ -1737,9 +1747,15 @@ def retry_transient_failures(conn: sqlite3.Connection, max_rounds: int = 3) -> i
                 uri = futures[future]
                 result, new_reason = future.result()
                 if result:
+                    ext_ids = result.pop("_external_ids", [])
+                    variants = result.pop("name_variants", []) or []
                     conn.execute(VOCAB_INSERT_SQL, result)
+                    if ext_ids:
+                        conn.executemany(
+                            VEI_INSERT_SQL,
+                            [(result["id"], a, lid, u) for a, lid, u in ext_ids],
+                        )
                     conn.execute("DELETE FROM phase2_failures WHERE uri = ?", (uri,))
-                    variants = result.get("name_variants") or []
                     if variants:
                         conn.executemany(PERSON_NAMES_INSERT, variants)
                     recovered += 1
@@ -1838,7 +1854,13 @@ def run_phase2(conn: sqlite3.Connection):
                 failures_by_reason[key] += 1
 
             if len(batch) >= 200:
+                vei_rows: list[tuple[str, str, str, str]] = []
+                for r in batch:
+                    for a, lid, u in r.pop("_external_ids", []):
+                        vei_rows.append((r["id"], a, lid, u))
                 conn.executemany(VOCAB_INSERT_SQL, batch)
+                if vei_rows:
+                    conn.executemany(VEI_INSERT_SQL, vei_rows)
                 if name_batch:
                     conn.executemany(PERSON_NAMES_INSERT, name_batch)
                     name_batch = []
@@ -1860,7 +1882,13 @@ def run_phase2(conn: sqlite3.Connection):
                 )
 
     if batch:
+        vei_rows = []
+        for r in batch:
+            for a, lid, u in r.pop("_external_ids", []):
+                vei_rows.append((r["id"], a, lid, u))
         conn.executemany(VOCAB_INSERT_SQL, batch)
+        if vei_rows:
+            conn.executemany(VEI_INSERT_SQL, vei_rows)
     if name_batch:
         conn.executemany(PERSON_NAMES_INSERT, name_batch)
     if failure_batch:
