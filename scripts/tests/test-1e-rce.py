@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from _test_helpers import run_test_functions
+from _test_helpers import create_minimal_vocab_schema, run_test_functions
 
 spec = importlib.util.spec_from_file_location(
     "geocode_places", REPO_ROOT / "scripts" / "geocode_places.py"
@@ -31,20 +31,7 @@ spec.loader.exec_module(gp)
 def _make_conn(wikidata_place_count: int) -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.executescript("""
-        CREATE TABLE vocabulary (
-            id TEXT PRIMARY KEY, type TEXT, label_en TEXT, lat REAL, lon REAL,
-            external_id TEXT, coord_method TEXT, coord_method_detail TEXT,
-            external_id_method TEXT, external_id_method_detail TEXT,
-            broader_method TEXT, broader_method_detail TEXT,
-            vocab_int_id INTEGER, broader_id TEXT, placetype TEXT,
-            is_areal INTEGER
-        );
-        CREATE TABLE vocabulary_external_ids (
-            vocab_id TEXT, authority TEXT, id TEXT, uri TEXT,
-            UNIQUE (vocab_id, authority, id) ON CONFLICT IGNORE
-        );
-    """)
+    create_minimal_vocab_schema(conn, include_mappings=False)
     # Synthesize wikidata-place rows to satisfy pre-flight
     for i in range(wikidata_place_count):
         vid = f"p_{i}"

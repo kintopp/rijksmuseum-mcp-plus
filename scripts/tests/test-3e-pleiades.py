@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from _test_helpers import run_test_functions
+from _test_helpers import create_minimal_vocab_schema, run_test_functions
 
 spec = importlib.util.spec_from_file_location(
     "geocode_places", REPO_ROOT / "scripts" / "geocode_places.py"
@@ -92,19 +92,8 @@ def test_phase_3e_classifies_buckets() -> None:
     """End-to-end mock: single hit accepts, multi-hit goes to review CSV."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
+    create_minimal_vocab_schema(conn)
     conn.executescript("""
-        CREATE TABLE vocabulary (
-            id TEXT PRIMARY KEY, type TEXT, label_en TEXT, label_nl TEXT,
-            external_id TEXT, lat REAL, lon REAL, placetype TEXT,
-            coord_method TEXT, coord_method_detail TEXT,
-            external_id_method TEXT, external_id_method_detail TEXT,
-            broader_method TEXT, broader_method_detail TEXT,
-            vocab_int_id INTEGER, broader_id TEXT, is_areal INTEGER
-        );
-        CREATE TABLE vocabulary_external_ids (
-            vocab_id TEXT, authority TEXT, id TEXT, uri TEXT
-        );
-        CREATE TABLE mappings (vocab_rowid INTEGER);
         INSERT INTO vocabulary (id, type, label_en, vocab_int_id) VALUES
             ('p_roma', 'place', 'Roma',     1),
             ('p_split','place', 'Alexandria', 2);

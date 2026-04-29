@@ -100,6 +100,36 @@ class CheckRecorder:
         return 0 if not self.failures else 1
 
 
+def create_minimal_vocab_schema(conn: sqlite3.Connection,
+                                 include_mappings: bool = True) -> None:
+    """Create the v0.25 minimal place-vocab tables for unit tests.
+
+    Mirrors the column set the v0.25 geocoding bundle reads/writes (lat,
+    lon, three pairs of method/method_detail columns, broader_id, is_areal,
+    placetype). Pass ``include_mappings=False`` for tests that don't
+    exercise the ``vocab_int_id IN (SELECT vocab_rowid FROM mappings)``
+    fast path in ``get_ungeocoded("no_external_used")``.
+    """
+    conn.executescript("""
+        CREATE TABLE vocabulary (
+            id TEXT PRIMARY KEY, type TEXT, label_en TEXT, label_nl TEXT,
+            external_id TEXT, lat REAL, lon REAL, placetype TEXT,
+            placetype_source TEXT,
+            coord_method TEXT, coord_method_detail TEXT,
+            external_id_method TEXT, external_id_method_detail TEXT,
+            broader_method TEXT, broader_method_detail TEXT,
+            broader_id TEXT, is_areal INTEGER DEFAULT 0,
+            vocab_int_id INTEGER
+        );
+        CREATE TABLE vocabulary_external_ids (
+            vocab_id TEXT, authority TEXT, id TEXT, uri TEXT,
+            UNIQUE (vocab_id, authority, id) ON CONFLICT IGNORE
+        );
+    """)
+    if include_mappings:
+        conn.execute("CREATE TABLE mappings (vocab_rowid INTEGER)")
+
+
 def create_phase4_schema(conn: sqlite3.Connection) -> None:
     """Create the minimal artworks/mappings/vocabulary schema used by
     run_phase4's bootstrap block. Used by the Phase 4 extractor regression test.

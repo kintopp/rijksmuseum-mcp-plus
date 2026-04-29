@@ -15,27 +15,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from _test_helpers import load_harvest_module, run_test_functions
+from _test_helpers import (create_minimal_vocab_schema, load_harvest_module,
+                             run_test_functions)
 
 h = load_harvest_module()
 
 
 def _seed_db() -> sqlite3.Connection:
-    """Build the minimal vocabulary schema the propagator needs."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.executescript("""
-        CREATE TABLE vocabulary (
-            id TEXT PRIMARY KEY, type TEXT, label_en TEXT, label_nl TEXT,
-            external_id TEXT, lat REAL, lon REAL, placetype TEXT,
-            placetype_source TEXT,
-            coord_method TEXT, coord_method_detail TEXT,
-            external_id_method TEXT, external_id_method_detail TEXT,
-            broader_method TEXT, broader_method_detail TEXT,
-            broader_id TEXT, is_areal INTEGER DEFAULT 0,
-            vocab_int_id INTEGER
-        );
-    """)
+    create_minimal_vocab_schema(conn, include_mappings=False)
     return conn
 
 

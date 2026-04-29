@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from _test_helpers import run_test_functions
+from _test_helpers import create_minimal_vocab_schema, run_test_functions
 
 spec = importlib.util.spec_from_file_location(
     "geocode_places", REPO_ROOT / "scripts" / "geocode_places.py"
@@ -70,7 +70,7 @@ def test_review_csv_writer_handles_short_match_list() -> None:
     ]
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "wof_review.csv"
-        gp._wof_write_review_csv(rows, path)
+        gp._write_review_csv(path, rows, gp._WOF_REVIEW_FIELDS)
         text = path.read_text()
     assert "v1,Amsterdam" in text
     assert "v2,Springfield" in text
@@ -88,19 +88,8 @@ def test_phase_1d_classifies_match_buckets() -> None:
     import sqlite3
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
+    create_minimal_vocab_schema(conn)
     conn.executescript("""
-        CREATE TABLE vocabulary (
-            id TEXT PRIMARY KEY, type TEXT, label_en TEXT, label_nl TEXT,
-            external_id TEXT, lat REAL, lon REAL, placetype TEXT,
-            coord_method TEXT, coord_method_detail TEXT,
-            external_id_method TEXT, external_id_method_detail TEXT,
-            broader_method TEXT, broader_method_detail TEXT,
-            vocab_int_id INTEGER, broader_id TEXT, is_areal INTEGER
-        );
-        CREATE TABLE vocabulary_external_ids (
-            vocab_id TEXT, authority TEXT, id TEXT, uri TEXT
-        );
-        CREATE TABLE mappings (vocab_rowid INTEGER);
         INSERT INTO vocabulary (id, type, label_en, lat, vocab_int_id) VALUES
             ('p_amst',  'place', 'Amsterdam', NULL, 1),
             ('p_split', 'place', 'Springfield', NULL, 2),

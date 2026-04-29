@@ -35,6 +35,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -978,7 +979,7 @@ def phase_1d_wof(conn: sqlite3.Connection,
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     if review_rows:
-        _wof_write_review_csv(review_rows, out / "wof_review.csv")
+        _write_review_csv(out / "wof_review.csv", review_rows, _WOF_REVIEW_FIELDS)
         print(f"  Wrote {out / 'wof_review.csv'} ({len(review_rows)} entries)",
               file=sys.stderr)
 
@@ -1016,24 +1017,41 @@ def phase_1d_wof(conn: sqlite3.Connection,
     return updated
 
 
-def _wof_write_review_csv(review_rows: list[tuple[str, str, list[dict]]],
-                          path: Path) -> None:
-    """Write ambiguous WOF matches to a review CSV (max 3 candidates per row)."""
+def _write_review_csv(path: Path,
+                      rows: list[tuple[str, str, list[dict]]],
+                      fields: list[tuple[str, str]],
+                      max_matches: int = 3) -> None:
+    """Write a multi-candidate review CSV.
+
+    ``rows`` is a list of ``(vocab_id, name, [match_dict, ...])`` tuples.
+    ``fields`` is a list of ``(column_label, dict_key)`` pairs that
+    determine which fields are extracted per match candidate; column names
+    are emitted as ``<label>_1``, ``<label>_2``, etc., padded with blanks
+    when fewer than ``max_matches`` candidates are present.
+    """
     header = ["vocab_id", "name", "decision"]
-    for i in range(1, 4):
-        header += [f"wof_id_{i}", f"label_{i}", f"placetype_{i}",
-                   f"iso2_{i}", f"lat_{i}", f"lon_{i}"]
+    for i in range(1, max_matches + 1):
+        header.extend(f"{label}_{i}" for label, _ in fields)
     with path.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(header)
-        for vid, name, matches in review_rows:
-            row = [vid, name, ""]
-            for m in matches[:3]:
-                row += [m["id"], m["name"], m["placetype"],
-                        m["wof_iso2"], m["lat"], m["lon"]]
+        for vid, name, matches in rows:
+            row: list = [vid, name, ""]
+            for m in matches[:max_matches]:
+                row.extend(m.get(key, "") for _, key in fields)
             while len(row) < len(header):
                 row.append("")
             w.writerow(row)
+
+
+_WOF_REVIEW_FIELDS = [
+    ("wof_id", "id"), ("label", "name"), ("placetype", "placetype"),
+    ("iso2", "wof_iso2"), ("lat", "lat"), ("lon", "lon"),
+]
+_PLEIADES_REVIEW_FIELDS = [
+    ("pleiades_id", "id"), ("title", "title"),
+    ("lat", "lat"), ("lon", "lon"),
+]
 
 
 def phase_2_self_refs(conn: sqlite3.Connection,
@@ -1544,32 +1562,51 @@ def phase_3_reconciliation(conn: sqlite3.Connection,
 WHG_PLACE_TYPE = "https://whgazetteer.org/static/whg_schema.jsonld#Place"
 
 
-def _whg_post(params: dict[str, str], retries: int = 3) -> dict:
-    """POST form-encoded params to the WHG reconciliation endpoint with retries.
+def _http_post_json(endpoint: str,
+                    params: dict[str, str],
+                    extra_headers: dict[str, str] | None = None,
+                    bearer_token: str | None = None,
+                    retries: int = 3,
+                    timeout: int = 120,
+                    retry_label: str = "POST") -> dict:
+    """Form-encode ``params``, POST them, parse + return the JSON response.
 
-    WHG switched to ORCID-gated auth in 2024-2025; /reconcile now requires
-    Authorization: Bearer <token>. Token generated from the WHG Profile page
-    after linking an ORCID account. Set via WHG_TOKEN env var.
+    Used by the WHG, Wikidata, and RCE SPARQL paths. Bearer token is added
+    to the Authorization header when supplied.
     """
     body = urllib.parse.urlencode(params).encode()
-    req = urllib.request.Request(WHG_RECONCILE_URL, data=body, method="POST")
-    req.add_header("User-Agent", USER_AGENT)
-    req.add_header("Content-Type", "application/x-www-form-urlencoded")
-    token = os.environ.get("WHG_TOKEN", "").strip().strip('"').strip("'")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
-
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    req = urllib.request.Request(endpoint, data=body, method="POST",
+                                  headers=headers)
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode())
         except Exception as e:
             if attempt == retries - 1:
                 raise
             wait = 2 ** (attempt + 1)
-            print(f"  WHG retry in {wait}s: {e}", file=sys.stderr)
+            print(f"  {retry_label} retry in {wait}s: {e}", file=sys.stderr)
             time.sleep(wait)
     return {}
+
+
+def _whg_post(params: dict[str, str], retries: int = 3) -> dict:
+    """POST form-encoded params to WHG /reconcile with the ORCID Bearer token.
+
+    Token comes from WHG_TOKEN (set after linking an ORCID account on the
+    WHG Profile page; required since 2024-2025).
+    """
+    token = os.environ.get("WHG_TOKEN", "").strip().strip('"').strip("'") or None
+    return _http_post_json(WHG_RECONCILE_URL, params, bearer_token=token,
+                            retries=retries, retry_label="WHG")
 
 
 def whg_reconcile_batch(queries: dict) -> dict:
@@ -2439,6 +2476,9 @@ def _rce_pre_flight(conn: sqlite3.Connection, threshold: int = 9000) -> int:
     return n
 
 
+_SPARQL_JSON_HEADERS = {"Accept": "application/sparql-results+json"}
+
+
 def _wikidata_qids_to_rijksmonument_ids(qids: list[str]
                                          ) -> dict[str, list[str]]:
     """Query Wikidata for (qid → P2168 Rijksmonument ID) mappings.
@@ -2448,23 +2488,14 @@ def _wikidata_qids_to_rijksmonument_ids(qids: list[str]
     if not qids:
         return {}
     values = " ".join(f"wd:{q}" for q in qids)
-    query = f"""
-    SELECT ?qid ?rmid WHERE {{
-      VALUES ?qid {{ {values} }}
-      ?qid wdt:P2168 ?rmid .
-    }}
-    """
-    headers = {
-        "Accept": "application/sparql-results+json",
-        "User-Agent": USER_AGENT,
-    }
-    body = urllib.parse.urlencode({"query": query}).encode()
-    req = urllib.request.Request(WIKIDATA_SPARQL, data=body, method="POST",
-                                  headers={**headers,
-                                           "Content-Type":
-                                           "application/x-www-form-urlencoded"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read().decode())
+    query = (
+        "SELECT ?qid ?rmid WHERE { "
+        f"  VALUES ?qid {{ {values} }} "
+        "  ?qid wdt:P2168 ?rmid . }"
+    )
+    data = _http_post_json(WIKIDATA_SPARQL, {"query": query},
+                            extra_headers=_SPARQL_JSON_HEADERS,
+                            timeout=60, retries=3, retry_label="Wikidata")
 
     result: dict[str, list[str]] = defaultdict(list)
     for binding in data.get("results", {}).get("bindings", []):
@@ -2484,28 +2515,20 @@ def _rce_lookup_monuments(rm_ids: list[str]) -> dict[str, dict]:
     if not rm_ids:
         return {}
     values = " ".join(f'"{rm}"' for rm in rm_ids)
-    query = f"""
-    PREFIX ceo:  <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
-    PREFIX geo:  <http://www.w3.org/2003/01/geo/wgs84_pos#>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    SELECT ?rmid ?monument ?label ?lat ?lon WHERE {{
-      VALUES ?rmid {{ {values} }}
-      ?monument ceo:rijksmonumentnummer ?rmid ;
-                geo:lat  ?lat ;
-                geo:long ?lon .
-      OPTIONAL {{ ?monument rdfs:label ?label }}
-    }}
-    """
-    headers = {
-        "Accept": "application/sparql-results+json",
-        "User-Agent": USER_AGENT,
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
-    body = urllib.parse.urlencode({"query": query}).encode()
-    req = urllib.request.Request(RCE_SPARQL_ENDPOINT, data=body,
-                                  method="POST", headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read().decode())
+    query = (
+        "PREFIX ceo:  <https://linkeddata.cultureelerfgoed.nl/def/ceo#> "
+        "PREFIX geo:  <http://www.w3.org/2003/01/geo/wgs84_pos#> "
+        "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> "
+        "SELECT ?rmid ?monument ?label ?lat ?lon WHERE { "
+        f"  VALUES ?rmid {{ {values} }} "
+        "  ?monument ceo:rijksmonumentnummer ?rmid ; "
+        "            geo:lat  ?lat ; "
+        "            geo:long ?lon . "
+        "  OPTIONAL { ?monument rdfs:label ?label } }"
+    )
+    data = _http_post_json(RCE_SPARQL_ENDPOINT, {"query": query},
+                            extra_headers=_SPARQL_JSON_HEADERS,
+                            timeout=60, retries=3, retry_label="RCE")
 
     out: dict[str, dict] = {}
     for b in data.get("results", {}).get("bindings", []):
@@ -2560,20 +2583,28 @@ def phase_1e_rce(conn: sqlite3.Connection,
         qid_to_vids[qid].append(vid)
     qids = sorted(qid_to_vids)
 
+    def _run_batches(items: list[str], fn, label: str) -> dict:
+        """Submit one fn(batch) call per ``batch_size``-sized slice of items
+        in parallel (4 workers); merge results into a single dict."""
+        merged: dict = {}
+        slices = [items[i:i + batch_size]
+                  for i in range(0, len(items), batch_size)]
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {pool.submit(fn, s): idx for idx, s in enumerate(slices)}
+            for fut in as_completed(futures):
+                idx = futures[fut]
+                try:
+                    merged.update(fut.result())
+                except Exception as e:
+                    print(f"  {label} batch {idx + 1} error: {e}",
+                          file=sys.stderr)
+        return merged
+
     # Step 1: ask Wikidata for P2168 mappings
     print(f"Phase 1e-1: Querying Wikidata for P2168 across {len(qids)} QIDs "
-          f"({batch_size}/batch)...", file=sys.stderr)
-    qid_to_rmids: dict[str, list[str]] = {}
-    for i in range(0, len(qids), batch_size):
-        batch = qids[i:i + batch_size]
-        try:
-            chunk = _wikidata_qids_to_rijksmonument_ids(batch)
-        except Exception as e:
-            print(f"  Wikidata batch {i // batch_size + 1} error: {e}",
-                  file=sys.stderr)
-            continue
-        qid_to_rmids.update(chunk)
-        time.sleep(0.5)
+          f"({batch_size}/batch, 4 parallel)...", file=sys.stderr)
+    qid_to_rmids = _run_batches(
+        qids, _wikidata_qids_to_rijksmonument_ids, "Wikidata")
     print(f"  {len(qid_to_rmids)} of {len(qids)} QIDs map to Rijksmonument IDs",
           file=sys.stderr)
 
@@ -2583,19 +2614,9 @@ def phase_1e_rce(conn: sqlite3.Connection,
         return 0
 
     all_rmids = sorted({rm for ids in qid_to_rmids.values() for rm in ids})
-    print(f"Phase 1e-2: Querying RCE for {len(all_rmids)} monument IDs...",
-          file=sys.stderr)
-    rce_by_rmid: dict[str, dict] = {}
-    for i in range(0, len(all_rmids), batch_size):
-        batch = all_rmids[i:i + batch_size]
-        try:
-            chunk = _rce_lookup_monuments(batch)
-        except Exception as e:
-            print(f"  RCE batch {i // batch_size + 1} error: {e}",
-                  file=sys.stderr)
-            continue
-        rce_by_rmid.update(chunk)
-        time.sleep(0.5)
+    print(f"Phase 1e-2: Querying RCE for {len(all_rmids)} monument IDs "
+          f"({batch_size}/batch, 4 parallel)...", file=sys.stderr)
+    rce_by_rmid = _run_batches(all_rmids, _rce_lookup_monuments, "RCE")
     print(f"  {len(rce_by_rmid)} monuments found with coords", file=sys.stderr)
 
     if dry_run or not rce_by_rmid:
@@ -2731,20 +2752,7 @@ def phase_3e_pleiades(conn: sqlite3.Connection,
     out.mkdir(parents=True, exist_ok=True)
     if review_rows:
         path = out / "pleiades_review.csv"
-        header = ["vocab_id", "name", "decision"]
-        for i in range(1, 4):
-            header += [f"pleiades_id_{i}", f"title_{i}",
-                       f"lat_{i}", f"lon_{i}"]
-        with path.open("w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(header)
-            for vid, name, matches in review_rows:
-                row = [vid, name, ""]
-                for m in matches[:3]:
-                    row += [m["id"], m["title"], m["lat"], m["lon"]]
-                while len(row) < len(header):
-                    row.append("")
-                w.writerow(row)
+        _write_review_csv(path, review_rows, _PLEIADES_REVIEW_FIELDS)
         print(f"  Wrote {path} ({len(review_rows)} entries)", file=sys.stderr)
 
     if dry_run:
