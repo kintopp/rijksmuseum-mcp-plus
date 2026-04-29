@@ -1,0 +1,51 @@
+{
+  "id": "https://id.rijksmuseum.nl/200000002",
+  "type": "HumanMadeObject",
+  "produced_by": {
+    "type": "Production",
+    "part": [
+      {
+        "type": "Production",
+        "part_index": 0,
+        "assigned_by": [
+          {
+            "type": "AttributeAssignment",
+            "motivated_by": [
+              {
+                "type": "Activity",
+                "classified_as": [
+                  {"id": "http://vocab.getty.edu/aat/300404670", "type": "Type"}
+                ],
+                "carried_by": [
+                  {"id": "https://id.rijksmuseum.nl/300999999", "type": "LinguisticObject"}
+                ],
+                "identified_by": [
+                  {
+                    "type": "Name",
+                    "content": "Connoisseurship judgement: Jan de Bisschop, 1670",
+                    "language": [{"id": "http://vocab.getty.edu/aat/300388277", "type": "Language"}]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Production",
+        "assigned_by": [
+          {
+            "type": "AttributeAssignment",
+            "motivated_by": [
+              {
+                "type": "Activity",
+                "classified_as": ["http://vocab.getty.edu/aat/300028705"],
+                "carried_by": ["https://id.rijksmuseum.nl/2001"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

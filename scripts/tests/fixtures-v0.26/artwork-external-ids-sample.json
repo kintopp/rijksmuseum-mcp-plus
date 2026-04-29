@@ -1,0 +1,17 @@
+{
+  "id": "https://id.rijksmuseum.nl/200000004",
+  "type": "HumanMadeObject",
+  "equivalent": [
+    {"id": "http://www.wikidata.org/entity/Q12345", "type": "HumanMadeObject"},
+    {"id": "https://hdl.handle.net/10934/RM0001.COLLECT.123456", "type": "HumanMadeObject"}
+  ],
+  "shown_by": [
+    {
+      "id": "https://id.rijksmuseum.nl/202000004",
+      "type": "VisualItem",
+      "equivalent": [
+        {"id": "https://id.rijksmuseum.nl/200999999", "type": "VisualItem"}
+      ]
+    }
+  ]
+}

@@ -303,6 +303,12 @@ _AUTHORITY_NEEDLES: tuple[tuple[str, str], ...] = (
     ("biografischportaal.nl",  "biografisch_portaal"),
     ("cerl.org",               "cerl"),
     ("pic.nypl.org",           "nypl"),
+    # v0.26 SHIP-7 + SHIP-10: handle.net citations (S5 evidence trail) +
+    # internal Rijks cross-references (id.rijksmuseum.nl/...). The
+    # rijks_internal needle is intentionally last — anything matching a
+    # genuinely external authority above takes precedence.
+    ("hdl.handle.net/",        "handle"),
+    ("id.rijksmuseum.nl/",     "rijks_internal"),
 )
 
 
@@ -454,7 +460,12 @@ CREATE TABLE IF NOT EXISTS artworks (
     weight_g         REAL,
     diameter_cm      REAL,
     dimension_note   TEXT,
-    provenance_text_hash TEXT
+    provenance_text_hash TEXT,
+    -- v0.26 SHIP-1: LDES record timestamps (ISO 8601, nullable)
+    record_created   TEXT,
+    record_modified  TEXT,
+    -- v0.26 SHIP-6: free-text dimensions/extent string from la-framed
+    extent_text      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS mappings (
@@ -576,6 +587,48 @@ CREATE TABLE IF NOT EXISTS phase_failures (
     PRIMARY KEY (phase, uri_or_objnum)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_phase_failures_type ON phase_failures(failure_type);
+
+-- v0.26 SHIP-2: attribution-evidence junction.
+-- Captures S5 evidence trail (`produced_by.part[].assigned_by[].motivated_by[].carried_by[]`)
+-- as opaque rows: type AAT URI, citation/publication URI, free-text label.
+CREATE TABLE IF NOT EXISTS attribution_evidence (
+    art_id              INTEGER NOT NULL,
+    part_index          INTEGER NOT NULL,
+    evidence_type_aat   TEXT,
+    carried_by_uri      TEXT,
+    label_text          TEXT,
+    PRIMARY KEY (art_id, part_index, evidence_type_aat, carried_by_uri)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_attribution_evidence_art ON attribution_evidence(art_id);
+
+-- v0.26 SHIP-7: artwork-level external IDs (Wikidata, etc. on the HMO itself,
+-- distinct from `vocabulary_external_ids` which keys on vocab terms).
+CREATE TABLE IF NOT EXISTS artwork_external_ids (
+    art_id     INTEGER NOT NULL,
+    authority  TEXT NOT NULL,
+    id         TEXT NOT NULL,
+    uri        TEXT NOT NULL,
+    PRIMARY KEY (art_id, authority, id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_artwork_external_ids_authority ON artwork_external_ids(authority, id);
+
+-- v0.26 SHIP-9: polymorphic entity alt-names (organisations now, 31xxx persons via SHIP-8).
+-- person_names stays as-is for the existing FTS surface; this table covers entity types
+-- that didn't previously have an alt-name surface.
+-- NOTE: rowid-backed (not WITHOUT ROWID) because the FTS5 contentful twin below
+-- needs the implicit rowid for content_rowid binding.
+CREATE TABLE IF NOT EXISTS entity_alt_names (
+    entity_id      TEXT NOT NULL,
+    entity_type    TEXT NOT NULL,
+    name           TEXT NOT NULL,
+    lang           TEXT,
+    classification TEXT,
+    UNIQUE(entity_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_entity_alt_names_type ON entity_alt_names(entity_type);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS entity_alt_names_fts
+USING fts5(name, content='entity_alt_names', content_rowid='rowid');
 """
 
 VOCAB_INSERT_SQL = (
@@ -658,6 +711,10 @@ def create_or_open_db() -> sqlite3.Connection:
         ("diameter_cm", "REAL"),
         ("dimension_note", "TEXT"),
         ("provenance_text_hash", "TEXT"),
+        # v0.26 SHIP-1 + SHIP-6
+        ("record_created", "TEXT"),
+        ("record_modified", "TEXT"),
+        ("extent_text", "TEXT"),
     ]
     for col_name, col_type in tier2_cols:
         if col_name not in existing_cols:
@@ -1399,6 +1456,39 @@ def extract_records(root: ET.Element) -> list[dict]:
         for spec in set_specs:
             mappings.append((spec, "collection_set"))
 
+        # v0.26 SHIP-3 + SHIP-4: walk SKOS Concept / edm:Place / rdf:Description
+        # entity definitions at the metadata root and capture their owl:sameAs URIs
+        # for vocabulary_external_ids. This is the EXCLUSIVE channel for subject
+        # external IDs (Iconclass on `dc:subject`) and the primary channel for
+        # spatial external IDs (TGN, GeoNames, Wikidata on `dcterms:spatial`).
+        ext_ids: list[tuple[str, str, str, str]] = []  # (vocab_id, authority, id, uri)
+        OWL_SAME_AS = "{http://www.w3.org/2002/07/owl#}sameAs"
+        for tag in (
+            "{http://www.w3.org/2004/02/skos/core#}Concept",
+            "{http://www.europeana.eu/schemas/edm/}Place",
+            "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description",
+        ):
+            for ent in metadata.iter(tag):
+                ent_uri = ent.get(RDF_ABOUT, "")
+                if not ent_uri:
+                    continue
+                vocab_id = ent_uri.rsplit("/", 1)[-1]
+                for sa in ent.findall(OWL_SAME_AS):
+                    sa_uri = sa.get(RDF_RESOURCE, "")
+                    if not sa_uri:
+                        continue
+                    authority, local_id = classify_authority(sa_uri)
+                    ext_ids.append((vocab_id, authority, local_id, sa_uri))
+
+        # v0.26 SHIP-6: dcterms:extent free-text dimensions/extent string.
+        # Multiple language variants joined with " | " (matches inscription/
+        # provenance/credit_line convention from Phase 4).
+        extent_parts: list[str] = []
+        for ext in cho.findall("{http://purl.org/dc/terms/}extent"):
+            if ext.text and ext.text.strip():
+                extent_parts.append(ext.text.strip())
+        extent_text = " | ".join(extent_parts) if extent_parts else None
+
         # Extract rights URI from ore:Aggregation
         rights_uri = ""
         agg = metadata.find(".//{http://www.openarchives.org/ore/terms/}Aggregation")
@@ -1449,6 +1539,9 @@ def extract_records(root: ET.Element) -> list[dict]:
             "has_image": has_image,
             "iiif_id": iiif_id,
             "mappings": mappings,
+            # v0.26
+            "ext_ids": ext_ids,
+            "extent_text": extent_text,
         })
 
     return records
@@ -1503,9 +1596,10 @@ def run_phase1(conn: sqlite3.Connection, resume: bool = False, max_pages: int | 
         records = extract_records(root)
 
         for rec in records:
+            # v0.26: write extent_text alongside the other CHO-derived fields
             conn.execute(
-                "INSERT OR IGNORE INTO artworks (object_number, title, creator_label, rights_uri, linked_art_uri, has_image, iiif_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (rec["object_number"], rec["title"], rec["creator_label"], rec["rights_uri"], rec["linked_art_uri"], rec["has_image"], rec["iiif_id"]),
+                "INSERT OR IGNORE INTO artworks (object_number, title, creator_label, rights_uri, linked_art_uri, has_image, iiif_id, extent_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (rec["object_number"], rec["title"], rec["creator_label"], rec["rights_uri"], rec["linked_art_uri"], rec["has_image"], rec["iiif_id"], rec.get("extent_text")),
             )
             for vocab_id, field in rec["mappings"]:
                 conn.execute(
@@ -1513,6 +1607,9 @@ def run_phase1(conn: sqlite3.Connection, resume: bool = False, max_pages: int | 
                     (rec["object_number"], vocab_id, field),
                 )
                 total_mappings += 1
+            # v0.26 SHIP-3 + SHIP-4: vocabulary external IDs from owl:sameAs
+            for vocab_id, authority, local_id, uri in rec.get("ext_ids", []):
+                conn.execute(VEI_INSERT_SQL, (vocab_id, authority, local_id, uri))
 
         total_artworks += len(records)
 
@@ -2247,6 +2344,169 @@ def extract_part_of(data: dict) -> list[str]:
     return results
 
 
+# ─── v0.26 extractors ────────────────────────────────────────────────
+
+def extract_record_timestamps(data: dict) -> tuple[str | None, str | None]:
+    """SHIP-1: aggregate record-edit timestamps across referred_to_by[].
+
+    Each text statement carries a `created_by.timespan` describing when
+    it was authored. We take the earliest begin_of_the_begin (record's
+    first known creation event) and the latest end_of_the_end (last
+    known modification event). Both are ISO 8601 strings or None.
+    """
+    begins: list[str] = []
+    ends: list[str] = []
+    for ref in data.get("referred_to_by", []):
+        if not isinstance(ref, dict):
+            continue
+        cb = ref.get("created_by")
+        if not isinstance(cb, dict):
+            continue
+        ts = cb.get("timespan")
+        if not isinstance(ts, dict):
+            continue
+        b = ts.get("begin_of_the_begin")
+        e = ts.get("end_of_the_end")
+        if isinstance(b, str) and b:
+            begins.append(b)
+        if isinstance(e, str) and e:
+            ends.append(e)
+    record_created = min(begins) if begins else None
+    record_modified = max(ends) if ends else None
+    return record_created, record_modified
+
+
+def _ref_id(ref) -> str | None:
+    """Return the URI from a Linked Art reference — accepts a bare URI string
+    or a dict with `id`. Production payloads use both shapes interchangeably
+    inside `classified_as` / `carried_by` arrays."""
+    if isinstance(ref, str):
+        return ref or None
+    if isinstance(ref, dict):
+        rid = ref.get("id", "")
+        return rid or None
+    return None
+
+
+def extract_attribution_evidence(data: dict) -> list[dict]:
+    """SHIP-2: walk produced_by.part[].assigned_by[].motivated_by[] to capture
+    the S5 attribution-evidence trail.
+
+    Returns list of dicts: {part_index, evidence_type_aat, carried_by_uri, label_text}.
+    Multiple rows per artwork are normal; the schema's PRIMARY KEY
+    (art_id, part_index, evidence_type_aat, carried_by_uri) deduplicates.
+    """
+    results: list[dict] = []
+    produced_by = data.get("produced_by")
+    if not isinstance(produced_by, dict):
+        return results
+    parts = produced_by.get("part", [])
+    if not isinstance(parts, list):
+        return results
+    for part_index, part in enumerate(parts):
+        if not isinstance(part, dict):
+            continue
+        for assigned in part.get("assigned_by", []):
+            if not isinstance(assigned, dict):
+                continue
+            for motivated in assigned.get("motivated_by", []):
+                if not isinstance(motivated, dict):
+                    continue
+                # Evidence type AAT (first id from classified_as[]).
+                # Items may be bare strings or dicts.
+                evidence_type = None
+                for cls in motivated.get("classified_as", []):
+                    cid = _ref_id(cls)
+                    if cid:
+                        evidence_type = cid
+                        break
+                # Each carried_by[] item is one publication/citation URI;
+                # may be bare strings or dicts.
+                carried_uris = [_ref_id(cb) for cb in motivated.get("carried_by", [])]
+                carried_uris = [u for u in carried_uris if u]
+                if not carried_uris:
+                    carried_uris = [None]  # at least one row even without a URI
+                # Free-text label (prefer EN, fallback any).
+                label_by_lang: dict[str, str] = {}
+                for ident in motivated.get("identified_by", []):
+                    if not isinstance(ident, dict):
+                        continue
+                    content = ident.get("content", "")
+                    if isinstance(content, list):
+                        content = " ".join(s for s in content if isinstance(s, str))
+                    if not content:
+                        continue
+                    lang_uri = ""
+                    for lang in ident.get("language", []):
+                        if isinstance(lang, dict):
+                            lang_uri = lang.get("id", "")
+                            break
+                    if lang_uri and lang_uri not in label_by_lang:
+                        label_by_lang[lang_uri] = content
+                    elif "" not in label_by_lang:
+                        label_by_lang[""] = content
+                label_text = _pick_preferred_lang(label_by_lang)
+                for carried_uri in carried_uris:
+                    results.append({
+                        "part_index": part_index,
+                        "evidence_type_aat": evidence_type,
+                        "carried_by_uri": carried_uri,
+                        "label_text": label_text,
+                    })
+    return results
+
+
+def extract_about(data: dict) -> list[str]:
+    """SHIP-5: thematic vocab links from la-framed `about[]`.
+
+    Returns list of vocab_id strings (the URI suffix). Caller writes
+    rows into mappings(field='theme'). Unresolved entries are silently
+    dropped at INSERT time per existing orphan-mapping policy.
+    """
+    results: list[str] = []
+    for entry in data.get("about", []):
+        uri = _ref_id(entry)
+        if not uri:
+            continue
+        results.append(uri.rsplit("/", 1)[-1])
+    return results
+
+
+def extract_artwork_external_ids(data: dict) -> list[tuple[str, str, str]]:
+    """SHIP-7: artwork-level sameAs/equivalent URIs (Wikidata, handle, etc.).
+
+    Reads `equivalent[].id` on the HMO root. For VisualItem-rooted
+    payloads (some shape variants), additionally reads
+    `shown_by[].equivalent[].id`.
+
+    Returns list of (authority, local_id, uri) tuples ready to insert
+    into artwork_external_ids. classify_authority() handles bucketing.
+    """
+    results: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def _emit(uri: str) -> None:
+        if not uri:
+            return
+        authority, local_id = classify_authority(uri)
+        key = (authority, local_id)
+        if key in seen:
+            return
+        seen.add(key)
+        results.append((authority, local_id, uri))
+
+    for eq in data.get("equivalent", []):
+        _emit(_ref_id(eq) or "")
+
+    for shown in data.get("shown_by", []):
+        if not isinstance(shown, dict):
+            continue
+        for eq in shown.get("equivalent", []):
+            _emit(_ref_id(eq) or "")
+
+    return results
+
+
 def _pick_preferred_lang(by_lang: dict[str, str]) -> str | None:
     """Return EN value, then NL, then first available."""
     return by_lang.get(LANG_EN) or by_lang.get(LANG_NL) or (
@@ -2605,6 +2865,12 @@ def resolve_artwork(uri: str) -> dict | None:
     # Parent HMO URIs (part_of)
     parent_uris = extract_part_of(data)
 
+    # v0.26 extractors
+    record_created, record_modified = extract_record_timestamps(data)
+    attribution_evidence = extract_attribution_evidence(data)
+    about_vocab_ids = extract_about(data)
+    artwork_external_ids = extract_artwork_external_ids(data)
+
     return {
         "inscription_text": inscription_text,
         "provenance_text": provenance_text,
@@ -2635,6 +2901,12 @@ def resolve_artwork(uri: str) -> dict | None:
         "examinations": examinations,
         "title_variants": title_variants,
         "parent_uris": parent_uris,
+        # v0.26
+        "record_created": record_created,
+        "record_modified": record_modified,
+        "attribution_evidence": attribution_evidence,
+        "about_vocab_ids": about_vocab_ids,
+        "artwork_external_ids": artwork_external_ids,
     }
 
 
@@ -2679,13 +2951,14 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
 
     # Ensure new field names exist in field_lookup (integer-schema DBs).
     # The MAPPING_INSERT_SQL JOINs against field_lookup — missing entries cause silent drops.
+    # 'theme' added in v0.26 (SHIP-5) for la-framed `about[]` thematic-vocab mappings.
     if int_mappings:
         fl_added = 0
-        for field_name in ("production_place", "source_type"):
+        for field_name in ("production_place", "source_type", "theme"):
             res = cur.execute("INSERT OR IGNORE INTO field_lookup (name) VALUES (?)", (field_name,))
             fl_added += res.rowcount
         if fl_added:
-            print(f"  Added production_place + source_type to field_lookup.")
+            print(f"  Added {fl_added} field_lookup row(s).")
 
     # Ensure art_id exists on artworks before Phase 4's main loop — the six
     # new-table inserts (modifications, related_objects, examinations,
@@ -2769,6 +3042,11 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     parent_count = 0
     place_count = 0
     source_type_count = 0
+    # v0.26 tallies
+    attribution_evidence_count = 0
+    about_count = 0
+    artwork_external_id_count = 0
+    with_record_timestamp = 0
     t0 = time.time()
 
     TIER2_UPDATE_SQL = """
@@ -2791,6 +3069,8 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
             provenance_text_hash = ?,
             title_all_text = ?,
             creator_label = COALESCE(?, creator_label),
+            record_created = ?,
+            record_modified = ?,
             tier2_done = 1
         WHERE object_number = ?
     """
@@ -2868,8 +3148,12 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     result["provenance_text_hash"],
                     result["title_all_text"],
                     result.get("creator_label"),
+                    result.get("record_created"),
+                    result.get("record_modified"),
                     obj_num,
                 ))
+                if result.get("record_created") or result.get("record_modified"):
+                    with_record_timestamp += 1
 
                 # Insert production role, attribution qualifier, creator, place, and source type mappings
                 for vocab_id, field in chain(result["roles"], result["qualifiers"], result["creators"], result["places"], result["source_types"]):
@@ -2935,6 +3219,33 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                         )
                     parent_count += len(result.get("parent_uris", []))
 
+                    # v0.26 SHIP-2: attribution evidence trail
+                    for ev in result.get("attribution_evidence", []):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO attribution_evidence "
+                            "(art_id, part_index, evidence_type_aat, carried_by_uri, label_text) "
+                            "VALUES (?, ?, ?, ?, ?)",
+                            (art_id, ev["part_index"], ev["evidence_type_aat"],
+                             ev["carried_by_uri"], ev["label_text"]),
+                        )
+                    attribution_evidence_count += len(result.get("attribution_evidence", []))
+
+                    # v0.26 SHIP-7: artwork-level external IDs (Wikidata, handle, etc.)
+                    for authority, local_id, uri in result.get("artwork_external_ids", []):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO artwork_external_ids "
+                            "(art_id, authority, id, uri) VALUES (?, ?, ?, ?)",
+                            (art_id, authority, local_id, uri),
+                        )
+                    artwork_external_id_count += len(result.get("artwork_external_ids", []))
+
+                # v0.26 SHIP-5: thematic vocab mappings (field='theme').
+                # Uses MAPPING_INSERT_SQL like other vocab fields; orphan
+                # vocab_ids (entity not yet harvested) are silently dropped.
+                for vocab_id in result.get("about_vocab_ids", []):
+                    conn.execute(MAPPING_INSERT_SQL, (obj_num, vocab_id, "theme"))
+                about_count += len(result.get("about_vocab_ids", []))
+
             conn.commit()
             batch_start = batch_end
 
@@ -2972,6 +3283,11 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Parent links: {parent_count:,}")
     print(f"    Prod. places: {place_count:,}")
     print(f"    Source types: {source_type_count:,}")
+    # v0.26
+    print(f"    Record TS:    {with_record_timestamp:,}")
+    print(f"    Attr. evidence:{attribution_evidence_count:,}")
+    print(f"    about[] themes:{about_count:,}")
+    print(f"    Artwork ext IDs:{artwork_external_id_count:,}")
 
 
 # ─── Geocoding Import ────────────────────────────────────────────────
@@ -3578,6 +3894,160 @@ def enrich_wikidata_from_person_dump(conn: sqlite3.Connection, dumps_dir: Path) 
     print(f"  [enrich wikidata] Updated {updates:,} wikidata_id values")
 
 
+# v0.26 SHIP-8 + SHIP-9 ─────────────────────────────────────────────
+
+def _iter_dump_alt_names(dump_dir: Path):
+    """Yield (entity_id, name, classification) tuples from a per-entity NT dump dir.
+
+    classification ∈ {'schema_name', 'schema_alt_name'}. Works for any
+    Schema.org-shaped dump (person, organisation, topical_term).
+    """
+    files = os.listdir(dump_dir)
+    for i, fname in enumerate(files):
+        if i % 20000 == 0 and i > 0:
+            print(f"    ... scanned {i:,}/{len(files):,}", flush=True)
+        fpath = dump_dir / fname
+        try:
+            text = fpath.read_text()
+        except Exception:
+            continue
+        entity_id = fname
+        for m in _ENRICH_RE_SCHEMA_NAME.finditer(text):
+            if m.group(1) == entity_id:
+                yield (entity_id, m.group(2), "schema_name")
+        for m in _ENRICH_RE_SCHEMA_ALT_NAME.finditer(text):
+            if m.group(1) == entity_id:
+                yield (entity_id, m.group(2), "schema_alt_name")
+
+
+def enrich_person_names_from_dump(conn: sqlite3.Connection, dumps_dir: Path) -> None:
+    """SHIP-8: dump-side person_names enrichment for the 31xxx Schema.org cohort.
+
+    Phase 2's LA-shape `identified_by[]` extractor only succeeds for 21xxx
+    (LA-shape) persons. The 181K 31xxx (Schema.org-shape) persons need the
+    schema:name + schema:alternateName triples from the person dump. This
+    runs in seconds vs. 8.3h for the equivalent API re-run.
+
+    Idempotent — UNIQUE(person_id, name, lang) on person_names dedupes
+    against any rows already inserted by the LA path or prior enrichment.
+    """
+    dump_dir = dumps_dir / ENRICH_PERSON_DIR
+    if not dump_dir.exists():
+        # Fall back to on-demand extraction
+        extracted = extract_dump("person")
+        if extracted is None:
+            print("  [enrich person_names] person dump not present — skipping.")
+            return
+        dump_dir = extracted
+
+    try:
+        conn.execute("SELECT 1 FROM person_names LIMIT 1").fetchone()
+    except sqlite3.OperationalError:
+        print("  [enrich person_names] person_names table not present — skipping.")
+        return
+
+    vocab_person_ids = {
+        r[0] for r in conn.execute(
+            "SELECT id FROM vocabulary WHERE type='person'"
+        ).fetchall()
+    }
+    print(f"  [enrich person_names] Vocab persons: {len(vocab_person_ids):,}")
+
+    inserted = 0
+    skipped_not_in_vocab = 0
+    for entity_id, name, classification in _iter_dump_alt_names(dump_dir):
+        if entity_id not in vocab_person_ids:
+            skipped_not_in_vocab += 1
+            continue
+        res = conn.execute(
+            "INSERT OR IGNORE INTO person_names (person_id, name, lang, classification) "
+            "VALUES (?, ?, NULL, ?)",
+            (entity_id, name, classification),
+        )
+        inserted += res.rowcount
+    conn.commit()
+    print(
+        f"  [enrich person_names] Inserted {inserted:,} new rows "
+        f"(skipped {skipped_not_in_vocab:,} not in vocabulary)"
+    )
+
+
+def enrich_entity_alt_names_from_dump(
+    conn: sqlite3.Connection,
+    dumps_dir: Path,
+    dump_name: str,
+    entity_type: str,
+) -> None:
+    """SHIP-9: populate entity_alt_names from a Schema.org-shaped dump.
+
+    Generic shape — ``dump_name`` is the bare tar name (e.g. 'organisation')
+    and ``entity_type`` is what gets stored in entity_alt_names.entity_type
+    so downstream queries can scope by type. v0.26 ships ``organisation``;
+    future dumps (topical_term, geographic) can be wired with the same call.
+    """
+    dump_dir = dumps_dir / f"{dump_name}_extracted"
+    if not dump_dir.exists():
+        extracted = extract_dump(dump_name)
+        if extracted is None:
+            print(f"  [enrich entity_alt_names:{entity_type}] {dump_name} dump not present — skipping.")
+            return
+        dump_dir = extracted
+
+    vocab_ids = {
+        r[0] for r in conn.execute(
+            "SELECT id FROM vocabulary WHERE type=?", (entity_type,)
+        ).fetchall()
+    }
+    print(
+        f"  [enrich entity_alt_names:{entity_type}] Vocab entities: {len(vocab_ids):,}"
+    )
+
+    inserted = 0
+    skipped_not_in_vocab = 0
+    for entity_id, name, classification in _iter_dump_alt_names(dump_dir):
+        if entity_id not in vocab_ids:
+            skipped_not_in_vocab += 1
+            continue
+        res = conn.execute(
+            "INSERT OR IGNORE INTO entity_alt_names "
+            "(entity_id, entity_type, name, lang, classification) "
+            "VALUES (?, ?, ?, NULL, ?)",
+            (entity_id, entity_type, name, classification),
+        )
+        inserted += res.rowcount
+    conn.commit()
+    print(
+        f"  [enrich entity_alt_names:{entity_type}] Inserted {inserted:,} rows "
+        f"(skipped {skipped_not_in_vocab:,} not in vocabulary)"
+    )
+
+
+def reclassify_external_id_authorities(conn: sqlite3.Connection) -> None:
+    """SHIP-10: backfill rijks_internal + handle authority buckets on existing rows.
+
+    The new needles in `_AUTHORITY_NEEDLES` cover fresh inserts; this one-shot
+    UPDATE reclassifies any rows previously bucketed as 'other' that now match
+    the extended pattern set. Reduces the size of the opaque 'other' bucket.
+    """
+    cur = conn.cursor()
+    moved_internal = cur.execute(
+        "UPDATE vocabulary_external_ids "
+        "SET authority = 'rijks_internal' "
+        "WHERE authority = 'other' AND uri LIKE 'https://id.rijksmuseum.nl/%'"
+    ).rowcount
+    moved_handle = cur.execute(
+        "UPDATE vocabulary_external_ids "
+        "SET authority = 'handle' "
+        "WHERE authority = 'other' AND uri LIKE 'https://hdl.handle.net/%'"
+    ).rowcount
+    conn.commit()
+    if moved_internal or moved_handle:
+        print(
+            f"  [reclassify authorities] rijks_internal: {moved_internal:,}, "
+            f"handle: {moved_handle:,}"
+        )
+
+
 def enrich_concepts_from_skos(conn: sqlite3.Connection, dumps_dir: Path) -> None:
     """Enrich classification concepts with broader_id from 2019 SKOS thesaurus.
 
@@ -3931,7 +4401,17 @@ def run_enrichment(conn: sqlite3.Connection, dumps_dir: Path) -> bool:
     enrich_places_from_dump(conn, dumps_dir)
     enrich_actors_from_edm(conn, dumps_dir)
     enrich_wikidata_from_person_dump(conn, dumps_dir)
+    # v0.26 SHIP-8: dump-side person_names enrichment (covers 31xxx cohort).
+    # Runs AFTER enrich_wikidata_from_person_dump so the latter still uses the
+    # pre-existing person_names corpus for name-based wikidata matching.
+    enrich_person_names_from_dump(conn, dumps_dir)
+    # v0.26 SHIP-9: organisation alt-names. Generic so future dumps reuse it.
+    enrich_entity_alt_names_from_dump(conn, dumps_dir, "organisation", "organisation")
     enrich_concepts_from_skos(conn, dumps_dir)
+    # v0.26 SHIP-10: reclassify rijks_internal + handle out of the 'other' bucket
+    # in vocabulary_external_ids. Runs after all enrich_* steps so newly-inserted
+    # rows from this run are also reclassified.
+    reclassify_external_id_authorities(conn)
     propagate_place_coordinates(conn)
     _create_enrichment_indexes(conn)
 
@@ -4425,6 +4905,22 @@ def run_phase3(
         conn.commit()
     else:
         print("  Skipping person_names_fts (no person name data yet)")
+
+    # v0.26 SHIP-9: rebuild entity_alt_names_fts (organisations etc.)
+    try:
+        ean_count = cur.execute("SELECT COUNT(*) FROM entity_alt_names").fetchone()[0]
+    except sqlite3.OperationalError:
+        ean_count = 0
+    if ean_count > 0:
+        print("  Rebuilding FTS5 index on entity_alt_names...")
+        conn.execute(
+            "INSERT INTO entity_alt_names_fts(entity_alt_names_fts) VALUES('rebuild')"
+        )
+        eanf_count = cur.execute("SELECT COUNT(*) FROM entity_alt_names_fts").fetchone()[0]
+        print(f"    entity_alt_names_fts: {eanf_count:,} rows")
+        conn.commit()
+    else:
+        print("  Skipping entity_alt_names_fts (no rows yet)")
 
     # Populate normalized label columns (space-stripped lowercase for LIKE fallback)
     print("  Populating normalized label columns...")

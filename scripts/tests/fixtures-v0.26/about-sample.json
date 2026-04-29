@@ -1,0 +1,8 @@
+{
+  "id": "https://id.rijksmuseum.nl/200000003",
+  "type": "HumanMadeObject",
+  "about": [
+    {"id": "https://id.rijksmuseum.nl/22014775", "type": "Type"},
+    {"id": "https://id.rijksmuseum.nl/22014777", "type": "Type"}
+  ]
+}

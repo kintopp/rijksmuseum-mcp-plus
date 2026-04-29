@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/">
+  <ListRecords>
+    <record>
+      <header>
+        <identifier>https://id.rijksmuseum.nl/SK-A-0001</identifier>
+        <datestamp>2026-04-29T10:00:00Z</datestamp>
+        <setSpec>26151</setSpec>
+      </header>
+      <metadata>
+        <rdf:RDF
+          xmlns:dc="http://purl.org/dc/elements/1.1/"
+          xmlns:dcterms="http://purl.org/dc/terms/"
+          xmlns:edm="http://www.europeana.eu/schemas/edm/"
+          xmlns:ore="http://www.openarchives.org/ore/terms/"
+          xmlns:owl="http://www.w3.org/2002/07/owl#"
+          xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+          xmlns:skos="http://www.w3.org/2004/02/skos/core#">
+          <ore:Aggregation rdf:about="https://id.rijksmuseum.nl/SK-A-0001#aggregation">
+            <edm:aggregatedCHO>
+              <edm:ProvidedCHO rdf:about="https://id.rijksmuseum.nl/SK-A-0001">
+                <dc:identifier>SK-A-0001</dc:identifier>
+                <dc:title xml:lang="en">Test artwork</dc:title>
+                <dc:subject rdf:resource="https://id.rijksmuseum.nl/2212675"/>
+                <dcterms:spatial rdf:resource="https://id.rijksmuseum.nl/2305922"/>
+                <dcterms:extent xml:lang="en">height 100 mm x width 200 mm</dcterms:extent>
+                <dcterms:extent xml:lang="nl">hoogte 100 mm x breedte 200 mm</dcterms:extent>
+              </edm:ProvidedCHO>
+            </edm:aggregatedCHO>
+            <edm:rights rdf:resource="http://rightsstatements.org/vocab/InC/1.0/"/>
+          </ore:Aggregation>
+          <skos:Concept rdf:about="https://id.rijksmuseum.nl/2212675">
+            <skos:prefLabel xml:lang="en">test subject</skos:prefLabel>
+            <owl:sameAs rdf:resource="https://iconclass.org/41D92"/>
+          </skos:Concept>
+          <edm:Place rdf:about="https://id.rijksmuseum.nl/2305922">
+            <skos:prefLabel xml:lang="en">test place</skos:prefLabel>
+            <owl:sameAs rdf:resource="http://www.wikidata.org/entity/Q762943"/>
+            <owl:sameAs rdf:resource="http://sws.geonames.org/2759794/"/>
+          </edm:Place>
+        </rdf:RDF>
+      </metadata>
+    </record>
+  </ListRecords>
+</OAI-PMH>
