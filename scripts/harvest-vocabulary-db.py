@@ -3706,33 +3706,54 @@ def _compute_areal_parents(conn: sqlite3.Connection, threshold_km: float = 75.0
             and max_pairwise_km(pts, early_exit_km=threshold_km) >= threshold_km]
 
 
+_LAYER_B_CITY_PT = frozenset({
+    "http://vocab.getty.edu/aat/300008389",  # cities
+    "http://vocab.getty.edu/aat/300008375",  # towns
+    "http://vocab.getty.edu/aat/300008372",  # villages
+    "http://vocab.getty.edu/aat/300008393",  # hamlets
+    "http://www.wikidata.org/entity/Q515",      # city
+    "http://www.wikidata.org/entity/Q532",      # village
+    "http://www.wikidata.org/entity/Q3957",     # town
+    "http://www.wikidata.org/entity/Q5084",     # hamlet
+    "http://www.wikidata.org/entity/Q1549591",  # metropolis
+    "http://www.wikidata.org/entity/Q484170",   # commune of France
+    "http://www.wikidata.org/entity/Q747074",   # comune of Italy
+    "http://www.wikidata.org/entity/Q486972",   # human settlement (umbrella)
+})
+# Reserved for future expansion of the allow-list to country-class URIs.
+# Layer B's locked allow-list (decisions doc §502) is settlement-only, so
+# this set is empty today — but the constant em.COUNTRY_FALLBACK is wired
+# into the SQL CASE so flipping a country URI on means just adding it here.
+_LAYER_B_COUNTRY_PT: frozenset[str] = frozenset()
+
+
 def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
     """Propagate lat/lon from geocoded parent places to ungeocoded children.
 
     Walks vocabulary.broader_id up to depth 10. Idempotent.
 
-    #218: inherited coords are tagged ``coord_method = 'derived'`` (detail
-    ``parent_fallback`` lives only in the backfill CSV). NULL means
-    Rijksmuseum-originated; our inheritance is a local derivation that
-    should survive LDES updates.
+    #218 + #262 Layer B (v0.25): inherited coords are tagged
+    ``coord_method = 'derived'`` with one of three details depending on
+    parent placetype (city / country / generic). Layer B's fail-closed
+    allow-list (decisions doc §502, mirrored in
+    ``em.INHERITANCE_ALLOWED_PLACETYPES``) refuses inheritance unless the
+    parent's placetype is on the locked URI set — eliminating the
+    (53.0, -2.0) UK-cluster false-positive class as a side-effect.
 
-    Areal-parent filter (added post-v0.24 based on empirical analysis —
-    see offline issue #254 for design, #255 for data-model anomalies):
-    a parent is treated as areal (and excluded from inheritance) when it
-    has ≥2 geocoded children whose *pairwise* great-circle distance
-    exceeds 75 km. Parents with <2 geocoded children are not blocked —
-    we lack evidence to judge them. Pairwise haversine replaced the SQL
-    bbox-diagonal approach (#255) because the latter returned spurious
-    ~40,000 km diagonals for antimeridian-straddling sets (Fiji, Oceania).
+    Areal-parent filter (post-v0.24, see offline issues #254/#255): a
+    parent is treated as areal (excluded from inheritance) when its
+    ``is_areal=1`` is set OR when its geocoded children's pairwise
+    great-circle distance exceeds 75 km. Pairwise haversine vs. SQL
+    bbox-diagonal is antimeridian-safe (Fiji/Oceania fix, #255).
 
-    Blocker sources are unioned into the ``_areal_parents`` temp table:
-    1. ``vocabulary.is_areal = 1`` — principled signal from the placetype
-       harvest (#254) covering TGN/Wikidata/manual-sourced areal entities
-       like constituent countries (England), provinces, continents.
-    2. Spread heuristic — any parent with ≥2 geocoded children whose
-       pairwise great-circle distance ≥ 75 km. Belt-and-braces for rows
-       with NULL placetype. Pairwise haversine vs. bbox-diagonal is
-       antimeridian-safe (Fiji/Oceania fix, #255).
+    Blocker sources unioned into ``_areal_parents``:
+    1. ``vocabulary.is_areal = 1`` — principled signal from #254.
+    2. Spread heuristic — pairwise haversine ≥ 75 km.
+
+    Allow-list source (Layer B) seeded into ``_allowed_parents``:
+    parents whose placetype URI is in
+    ``em.INHERITANCE_ALLOWED_PLACETYPES``. NULL/missing placetypes fail
+    closed (refused).
     """
     conn.execute("DROP TABLE IF EXISTS _areal_parents")
     conn.execute("CREATE TEMP TABLE _areal_parents (id TEXT PRIMARY KEY)")
@@ -3761,25 +3782,57 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
           f"(placetype: {n_placetype:,}, spread ≥ 75 km: +{n_spread:,} new) — "
           f"blocked from inheritance")
 
+    # Layer B: seed the fail-closed allow-list
+    conn.execute("DROP TABLE IF EXISTS _allowed_parents")
+    conn.execute("CREATE TEMP TABLE _allowed_parents (id TEXT PRIMARY KEY)")
+    placeholders = ",".join("?" * len(em.INHERITANCE_ALLOWED_PLACETYPES))
+    conn.execute(
+        f"INSERT OR IGNORE INTO _allowed_parents (id) "
+        f"SELECT id FROM vocabulary "
+        f" WHERE type='place' AND placetype IN ({placeholders})",
+        tuple(em.INHERITANCE_ALLOWED_PLACETYPES),
+    )
+    n_allowed = conn.execute("SELECT COUNT(*) FROM _allowed_parents").fetchone()[0]
+    print(f"  [enrich coords] Layer B: {n_allowed:,} parents on the "
+          f"fail-closed allow-list (settlement-class placetypes)")
+
+    city_pt_list = ",".join("?" * len(_LAYER_B_CITY_PT))
+    country_pt_list = ",".join("?" * len(_LAYER_B_COUNTRY_PT)) if _LAYER_B_COUNTRY_PT else "NULL"
+    case_expr = f"""
+        CASE WHEN p.placetype IN ({city_pt_list}) THEN ?
+             WHEN p.placetype IN ({country_pt_list}) THEN ?
+             ELSE ?
+        END
+    """
+    case_params = (
+        *_LAYER_B_CITY_PT, em.CITY_FALLBACK,
+        *_LAYER_B_COUNTRY_PT, em.COUNTRY_FALLBACK,
+        em.PARENT_FALLBACK,
+    )
+
     total = 0
     max_depth = 10
     for depth in range(1, max_depth + 1):
         cur = conn.execute(
-            """UPDATE vocabulary SET lat = (
-                   SELECT p.lat FROM vocabulary p WHERE p.id = vocabulary.broader_id
-               ), lon = (
-                   SELECT p.lon FROM vocabulary p WHERE p.id = vocabulary.broader_id
-               ), coord_method = ?,
-               coord_method_detail = ?
-               WHERE type = 'place'
-                 AND lat IS NULL
-                 AND broader_id IS NOT NULL
-                 AND broader_id NOT IN (SELECT id FROM _areal_parents)
-                 AND EXISTS (
-                     SELECT 1 FROM vocabulary p
-                     WHERE p.id = vocabulary.broader_id AND p.lat IS NOT NULL
-                 )""",
-            (em.tier_for(em.PARENT_FALLBACK), em.PARENT_FALLBACK),
+            f"""UPDATE vocabulary SET
+                  lat = (SELECT p.lat FROM vocabulary p WHERE p.id = vocabulary.broader_id),
+                  lon = (SELECT p.lon FROM vocabulary p WHERE p.id = vocabulary.broader_id),
+                  coord_method = ?,
+                  coord_method_detail = (
+                      SELECT {case_expr}
+                        FROM vocabulary p WHERE p.id = vocabulary.broader_id
+                  )
+                WHERE type = 'place'
+                  AND lat IS NULL
+                  AND broader_id IS NOT NULL
+                  AND broader_id NOT IN (SELECT id FROM _areal_parents)
+                  AND broader_id IN (SELECT id FROM _allowed_parents)
+                  AND EXISTS (
+                      SELECT 1 FROM vocabulary p
+                      WHERE p.id = vocabulary.broader_id AND p.lat IS NOT NULL
+                  )
+            """,
+            (em.tier_for(em.PARENT_FALLBACK), *case_params),
         )
         inherited = cur.rowcount
         if inherited == 0:
@@ -3788,6 +3841,7 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
         total += inherited
     conn.commit()
     conn.execute("DROP TABLE IF EXISTS _areal_parents")
+    conn.execute("DROP TABLE IF EXISTS _allowed_parents")
     print(f"  [enrich coords] Total inherited: {total:,}")
 
 

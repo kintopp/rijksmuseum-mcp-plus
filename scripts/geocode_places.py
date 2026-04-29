@@ -841,6 +841,201 @@ def phase_1c_getty_crossref(conn: sqlite3.Connection,
 # Phase 2: Self-reference resolution
 # ---------------------------------------------------------------------------
 
+def _normalize_place_name(name: str) -> str:
+    """Lowercase + strip whitespace. Used for WOF / Pleiades name matching."""
+    return (name or "").strip().lower()
+
+
+WOF_ACCEPT_PLACETYPES: tuple[str, ...] = (
+    "country", "region", "county", "locality", "localadmin", "borough", "dependency",
+)
+WOF_SETTLEMENT_PLACETYPES = frozenset({"locality", "localadmin", "borough"})
+
+# Vocab placetype URIs that indicate a settlement-class entity (subset of
+# em.INHERITANCE_ALLOWED_PLACETYPES that maps cleanly to WOF locality-tier).
+# When vocab.placetype is in this set, Phase 1d requires WOF placetype to be
+# a settlement-tier match. When vocab.placetype is unset or outside this set,
+# the placetype-consistency check is skipped (fail-open).
+_VOCAB_SETTLEMENT_PT_URIS = frozenset({
+    "http://vocab.getty.edu/aat/300008347",  # inhabited places (umbrella)
+    "http://vocab.getty.edu/aat/300008389",  # cities
+    "http://vocab.getty.edu/aat/300008375",  # towns
+    "http://vocab.getty.edu/aat/300008372",  # villages
+    "http://vocab.getty.edu/aat/300008393",  # hamlets
+    "http://www.wikidata.org/entity/Q486972",
+    "http://www.wikidata.org/entity/Q515",
+    "http://www.wikidata.org/entity/Q532",
+    "http://www.wikidata.org/entity/Q3957",
+    "http://www.wikidata.org/entity/Q5084",
+    "http://www.wikidata.org/entity/Q1549591",
+    "http://www.wikidata.org/entity/Q484170",
+    "http://www.wikidata.org/entity/Q747074",
+})
+
+
+def _wof_load_admin_index(parquet_glob: str
+                          ) -> tuple[dict[str, list[dict]], list[dict]]:
+    """Load coarse-placetype WOF rows into (name_index, all_rows).
+
+    ``name_index`` maps a normalized name to the list of WOF rows that
+    use it (covers ``name``, ``name_eng``, ``name_nld``). Geometry is not
+    loaded — we only need the centroid (``lat``/``lon``) and concordances.
+    """
+    import duckdb
+    duck = duckdb.connect()
+    duck.execute("SET memory_limit='4GB'; SET threads=2")
+    placetypes = ",".join(f"'{pt}'" for pt in WOF_ACCEPT_PLACETYPES)
+    rows = duck.execute(
+        f"""
+        SELECT id, name, name_eng, name_nld, placetype,
+               lat, lon, wd_id, gn_id,
+               regexp_extract(filename, 'admin-([a-z]{{2}})-', 1) AS wof_iso2
+          FROM read_parquet('{parquet_glob}', filename=true)
+         WHERE lat IS NOT NULL AND lon IS NOT NULL
+           AND placetype IN ({placetypes})
+        """
+    ).fetchall()
+    duck.close()
+
+    cols = ("id", "name", "name_eng", "name_nld", "placetype",
+            "lat", "lon", "wd_id", "gn_id", "wof_iso2")
+    all_rows = [dict(zip(cols, r)) for r in rows]
+    name_index: dict[str, list[dict]] = defaultdict(list)
+    for r in all_rows:
+        for variant in (r["name"], r["name_eng"], r["name_nld"]):
+            if variant:
+                name_index[_normalize_place_name(variant)].append(r)
+    return name_index, all_rows
+
+
+def _wof_placetype_consistent(vocab_placetype: str | None,
+                               wof_placetype: str) -> bool:
+    """Phase 1d placetype-consistency check (fail-open on unknown vocab placetypes)."""
+    if not vocab_placetype:
+        return True
+    if vocab_placetype in _VOCAB_SETTLEMENT_PT_URIS:
+        return wof_placetype in WOF_SETTLEMENT_PLACETYPES
+    return True
+
+
+def phase_1d_wof(conn: sqlite3.Connection,
+                 parquet_glob: str,
+                 dry_run: bool = False,
+                 output_dir: str = "offline/geo") -> int:
+    """Match remaining ungeocoded places against WOF admin polygons.
+
+    For each ungeocoded place name (case-insensitive exact match against
+    WOF ``name``/``name_eng``/``name_nld``), require placetype consistency
+    when the vocab row has a settlement-class placetype set. Accept on a
+    single match; route multi-matches to ``wof_review.csv`` for human
+    triage. Concordances harvested per accepted row: WOF Spelunker URI as
+    ``external_id`` plus Wikidata QID and GeoNames ID into
+    ``vocabulary_external_ids``.
+    """
+    places = get_ungeocoded(conn, "no_external_used")
+    if not places:
+        print("Phase 1d: No places to match against WOF", file=sys.stderr)
+        return 0
+    candidates, skipped = filter_reconcilable(places)
+    print(f"Phase 1d: {len(candidates)} places to match against WOF "
+          f"({skipped} skipped)", file=sys.stderr)
+    if not candidates:
+        return 0
+
+    placetype_by_vid: dict[str, str] = dict(conn.execute(
+        "SELECT id, placetype FROM vocabulary "
+        " WHERE type='place' AND placetype IS NOT NULL AND placetype != ''"
+    ).fetchall())
+
+    print("Phase 1d-1: Loading WOF admin parquet index...", file=sys.stderr)
+    name_index, all_rows = _wof_load_admin_index(parquet_glob)
+    print(f"  Loaded {len(all_rows):,} coarse-placetype WOF rows; "
+          f"{len(name_index):,} distinct normalized names", file=sys.stderr)
+
+    accepted: dict[str, dict] = {}
+    review_rows: list[tuple[str, str, list[dict]]] = []
+    no_match = 0
+
+    for vid, name in candidates:
+        nname = _normalize_place_name(name)
+        matches = name_index.get(nname, [])
+        v_pt = placetype_by_vid.get(vid)
+        if v_pt:
+            matches = [m for m in matches
+                       if _wof_placetype_consistent(v_pt, m["placetype"])]
+
+        if not matches:
+            no_match += 1
+            continue
+        if len(matches) == 1:
+            accepted[vid] = matches[0]
+        else:
+            review_rows.append((vid, name, matches))
+
+    print(f"  Accepted: {len(accepted)}, review: {len(review_rows)}, "
+          f"no match: {no_match}", file=sys.stderr)
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    if review_rows:
+        _wof_write_review_csv(review_rows, out / "wof_review.csv")
+        print(f"  Wrote {out / 'wof_review.csv'} ({len(review_rows)} entries)",
+              file=sys.stderr)
+
+    if dry_run:
+        return 0
+
+    updates: dict[str, tuple[float, float, str]] = {}
+    concordances: list[tuple[str, str, str, str]] = []
+    for vid, m in accepted.items():
+        wof_uri = f"https://spelunker.whosonfirst.org/id/{m['id']}"
+        updates[vid] = (m["lat"], m["lon"], wof_uri)
+        concordances.append((vid, "wof", str(m["id"]), wof_uri))
+        if m.get("wd_id"):
+            wd_uri = f"http://www.wikidata.org/entity/{m['wd_id']}"
+            concordances.append((vid, "wikidata", m["wd_id"], wd_uri))
+        if m.get("gn_id"):
+            gn_uri = f"http://sws.geonames.org/{m['gn_id']}/"
+            concordances.append((vid, "geonames", m["gn_id"], gn_uri))
+
+    updated = update_coords_and_ids(
+        conn, updates,
+        coord_method_detail=em.WOF_AUTHORITY,
+        external_id_method_detail=em.WOF_AUTHORITY,
+        dry_run=dry_run,
+    )
+    if concordances:
+        conn.executemany(
+            "INSERT OR IGNORE INTO vocabulary_external_ids "
+            "(vocab_id, authority, id, uri) VALUES (?, ?, ?, ?)",
+            concordances,
+        )
+        conn.commit()
+    print(f"Phase 1d: {updated} places updated, "
+          f"{len(concordances)} concordances added", file=sys.stderr)
+    return updated
+
+
+def _wof_write_review_csv(review_rows: list[tuple[str, str, list[dict]]],
+                          path: Path) -> None:
+    """Write ambiguous WOF matches to a review CSV (max 3 candidates per row)."""
+    header = ["vocab_id", "name", "decision"]
+    for i in range(1, 4):
+        header += [f"wof_id_{i}", f"label_{i}", f"placetype_{i}",
+                   f"iso2_{i}", f"lat_{i}", f"lon_{i}"]
+    with path.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for vid, name, matches in review_rows:
+            row = [vid, name, ""]
+            for m in matches[:3]:
+                row += [m["id"], m["name"], m["placetype"],
+                        m["wof_iso2"], m["lat"], m["lon"]]
+            while len(row) < len(header):
+                row.append("")
+            w.writerow(row)
+
+
 def phase_2_self_refs(conn: sqlite3.Connection,
                      dry_run: bool = False) -> int:
     """Copy coordinates from target vocab entries for self-referencing places."""
@@ -2151,6 +2346,7 @@ def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
     ext_id_prefixes = {
         "qid_1": "http://www.wikidata.org/entity/",
         "entity_1": "https://whgazetteer.org/place/",
+        "wof_id_1": "https://spelunker.whosonfirst.org/id/",
     }
 
     with open(path, newline="") as f:
@@ -2160,12 +2356,12 @@ def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
             if decision not in ("y", "yes", "1", "accept"):
                 continue
 
-            # Determine source: Wikidata (qid_1) or WHG (entity_1)
+            # Determine source: Wikidata (qid_1), WHG (entity_1), or WOF (wof_id_1)
             ext_id = ""
             for col, prefix in ext_id_prefixes.items():
                 value = row.get(col, "")
                 if value:
-                    ext_id = prefix + value
+                    ext_id = prefix + str(value)
                     break
             if not ext_id:
                 continue
@@ -2183,13 +2379,16 @@ def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
         return 0
 
     # Pick the HUMAN-tier detail based on which review CSV was supplied.
-    # Three shapes per #218 §"Phase → method assignment":
+    # Four shapes per #218 §"Phase → method assignment":
     #   reconciled_review.csv  → RECONCILED_REVIEW_ACCEPTED
     #   whg_review.csv         → WHG_REVIEW_ACCEPTED
     #   whg_bridge_review.csv  → WHG_BRIDGE_REVIEW_ACCEPTED
+    #   wof_review.csv         → WOF_REVIEW_ACCEPTED
     name = path.name.lower()
     if "bridge" in name:
         review_detail = em.WHG_BRIDGE_REVIEW_ACCEPTED
+    elif "wof" in name:
+        review_detail = em.WOF_REVIEW_ACCEPTED
     elif "whg" in name:
         review_detail = em.WHG_REVIEW_ACCEPTED
     else:
@@ -2203,6 +2402,373 @@ def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
     )
     print(f"Apply reviewed ({review_detail}): {updated} places updated",
           file=sys.stderr)
+    return updated
+
+
+# ---------------------------------------------------------------------------
+# Phase 1e: RCE Rijksmonumenten via Wikidata QID bridge (v0.25)
+# ---------------------------------------------------------------------------
+
+RCE_SPARQL_ENDPOINT = "https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/cho/sparql"
+
+# Wikidata's `Rijksmonument ID` property (P2168) is the explicit bridge: a
+# Rijksmonument's Wikidata item carries a P2168 statement with the integer
+# RCE monument ID. RCE's CHO graph has the matching monument record with
+# coords (geo:lat/geo:long). The two-leg query first asks Wikidata for the
+# (qid → rijksmonument_id) bridge, then RCE for (rijksmonument_id → coords).
+# Decisions doc §431 marks the property as "verify at impl time"; landing
+# the verified pair (P2168 + ceo:Monument) here. Probe-callable below.
+
+WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
+
+
+def _rce_pre_flight(conn: sqlite3.Connection, threshold: int = 9000) -> int:
+    """Stage E.0 pre-flight gate. Returns the wikidata-place count; raises
+    SystemExit if below threshold."""
+    n = conn.execute(
+        "SELECT COUNT(*) FROM vocabulary_external_ids vei "
+        "  JOIN vocabulary v ON v.id = vei.vocab_id "
+        " WHERE v.type='place' AND vei.authority='wikidata'"
+    ).fetchone()[0]
+    if n < threshold:
+        raise SystemExit(
+            f"Phase 1e refuses to run: only {n} Wikidata place external IDs "
+            f"found in vocabulary_external_ids (threshold {threshold}). "
+            f"Land #276 + Phase 4 backfill first."
+        )
+    return n
+
+
+def _wikidata_qids_to_rijksmonument_ids(qids: list[str]
+                                         ) -> dict[str, list[str]]:
+    """Query Wikidata for (qid → P2168 Rijksmonument ID) mappings.
+
+    Returns ``{qid: [rm_id, ...]}``. Empty for qids without a P2168 statement.
+    """
+    if not qids:
+        return {}
+    values = " ".join(f"wd:{q}" for q in qids)
+    query = f"""
+    SELECT ?qid ?rmid WHERE {{
+      VALUES ?qid {{ {values} }}
+      ?qid wdt:P2168 ?rmid .
+    }}
+    """
+    headers = {
+        "Accept": "application/sparql-results+json",
+        "User-Agent": USER_AGENT,
+    }
+    body = urllib.parse.urlencode({"query": query}).encode()
+    req = urllib.request.Request(WIKIDATA_SPARQL, data=body, method="POST",
+                                  headers={**headers,
+                                           "Content-Type":
+                                           "application/x-www-form-urlencoded"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = json.loads(resp.read().decode())
+
+    result: dict[str, list[str]] = defaultdict(list)
+    for binding in data.get("results", {}).get("bindings", []):
+        qid_uri = binding.get("qid", {}).get("value", "")
+        rmid = binding.get("rmid", {}).get("value", "")
+        qid = qid_uri.rsplit("/", 1)[-1]
+        if qid and rmid:
+            result[qid].append(rmid)
+    return dict(result)
+
+
+def _rce_lookup_monuments(rm_ids: list[str]) -> dict[str, dict]:
+    """Query RCE CHO endpoint for monument coords by Rijksmonument ID.
+
+    Returns ``{rm_id: {"uri": ..., "lat": ..., "lon": ..., "label": ...}}``.
+    """
+    if not rm_ids:
+        return {}
+    values = " ".join(f'"{rm}"' for rm in rm_ids)
+    query = f"""
+    PREFIX ceo:  <https://linkeddata.cultureelerfgoed.nl/def/ceo#>
+    PREFIX geo:  <http://www.w3.org/2003/01/geo/wgs84_pos#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?rmid ?monument ?label ?lat ?lon WHERE {{
+      VALUES ?rmid {{ {values} }}
+      ?monument ceo:rijksmonumentnummer ?rmid ;
+                geo:lat  ?lat ;
+                geo:long ?lon .
+      OPTIONAL {{ ?monument rdfs:label ?label }}
+    }}
+    """
+    headers = {
+        "Accept": "application/sparql-results+json",
+        "User-Agent": USER_AGENT,
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    body = urllib.parse.urlencode({"query": query}).encode()
+    req = urllib.request.Request(RCE_SPARQL_ENDPOINT, data=body,
+                                  method="POST", headers=headers)
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = json.loads(resp.read().decode())
+
+    out: dict[str, dict] = {}
+    for b in data.get("results", {}).get("bindings", []):
+        rmid = b.get("rmid", {}).get("value", "")
+        if not rmid or rmid in out:
+            continue
+        try:
+            lat = float(b.get("lat", {}).get("value", ""))
+            lon = float(b.get("lon", {}).get("value", ""))
+        except ValueError:
+            continue
+        out[rmid] = {
+            "rmid": rmid,
+            "uri": b.get("monument", {}).get("value", ""),
+            "lat": lat,
+            "lon": lon,
+            "label": b.get("label", {}).get("value", ""),
+        }
+    return out
+
+
+def phase_1e_rce(conn: sqlite3.Connection,
+                 dry_run: bool = False,
+                 batch_size: int = 100,
+                 output_dir: str = "offline/geo") -> int:
+    """QID-bridge RCE Rijksmonumenten lookup (decisions doc §431).
+
+    Walks ``vocabulary_external_ids`` for places with Wikidata QIDs, asks
+    Wikidata for any P2168 (Rijksmonument ID) statements, then asks RCE for
+    each monument's coords. On hit: tag em.RCE_VIA_WIKIDATA, write the RCE
+    monument URI as ``external_id``, and INSERT the RCE concordance into
+    ``vocabulary_external_ids``.
+    """
+    n_qids = _rce_pre_flight(conn, threshold=9000)
+    print(f"Phase 1e: pre-flight OK ({n_qids:,} wikidata-tagged places)",
+          file=sys.stderr)
+
+    rows = conn.execute(
+        "SELECT vei.vocab_id, vei.id AS qid "
+        "  FROM vocabulary_external_ids vei "
+        "  JOIN vocabulary v ON v.id = vei.vocab_id "
+        " WHERE v.type='place' AND vei.authority='wikidata' "
+        "   AND v.lat IS NULL"
+    ).fetchall()
+    print(f"Phase 1e: {len(rows):,} ungeocoded places have a Wikidata QID",
+          file=sys.stderr)
+    if not rows:
+        return 0
+
+    qid_to_vids: dict[str, list[str]] = defaultdict(list)
+    for vid, qid in rows:
+        qid_to_vids[qid].append(vid)
+    qids = sorted(qid_to_vids)
+
+    # Step 1: ask Wikidata for P2168 mappings
+    print(f"Phase 1e-1: Querying Wikidata for P2168 across {len(qids)} QIDs "
+          f"({batch_size}/batch)...", file=sys.stderr)
+    qid_to_rmids: dict[str, list[str]] = {}
+    for i in range(0, len(qids), batch_size):
+        batch = qids[i:i + batch_size]
+        try:
+            chunk = _wikidata_qids_to_rijksmonument_ids(batch)
+        except Exception as e:
+            print(f"  Wikidata batch {i // batch_size + 1} error: {e}",
+                  file=sys.stderr)
+            continue
+        qid_to_rmids.update(chunk)
+        time.sleep(0.5)
+    print(f"  {len(qid_to_rmids)} of {len(qids)} QIDs map to Rijksmonument IDs",
+          file=sys.stderr)
+
+    if not qid_to_rmids:
+        print("Phase 1e: no P2168 statements found; phase exits with 0 updates.",
+              file=sys.stderr)
+        return 0
+
+    all_rmids = sorted({rm for ids in qid_to_rmids.values() for rm in ids})
+    print(f"Phase 1e-2: Querying RCE for {len(all_rmids)} monument IDs...",
+          file=sys.stderr)
+    rce_by_rmid: dict[str, dict] = {}
+    for i in range(0, len(all_rmids), batch_size):
+        batch = all_rmids[i:i + batch_size]
+        try:
+            chunk = _rce_lookup_monuments(batch)
+        except Exception as e:
+            print(f"  RCE batch {i // batch_size + 1} error: {e}",
+                  file=sys.stderr)
+            continue
+        rce_by_rmid.update(chunk)
+        time.sleep(0.5)
+    print(f"  {len(rce_by_rmid)} monuments found with coords", file=sys.stderr)
+
+    if dry_run or not rce_by_rmid:
+        return 0
+
+    updates: dict[str, tuple[float, float, str]] = {}
+    concordances: list[tuple[str, str, str, str]] = []
+    for qid, rmids in qid_to_rmids.items():
+        for rm in rmids:
+            mon = rce_by_rmid.get(rm)
+            if not mon:
+                continue
+            for vid in qid_to_vids[qid]:
+                if vid not in updates:
+                    updates[vid] = (mon["lat"], mon["lon"], mon["uri"])
+                    concordances.append((vid, "rce", rm, mon["uri"]))
+
+    updated = update_coords_and_ids(
+        conn, updates,
+        coord_method_detail=em.RCE_VIA_WIKIDATA,
+        external_id_method_detail=em.RCE_VIA_WIKIDATA,
+        dry_run=dry_run,
+    )
+    if concordances:
+        conn.executemany(
+            "INSERT OR IGNORE INTO vocabulary_external_ids "
+            "(vocab_id, authority, id, uri) VALUES (?, ?, ?, ?)",
+            concordances,
+        )
+        conn.commit()
+    print(f"Phase 1e: {updated} places updated", file=sys.stderr)
+    return updated
+
+
+# ---------------------------------------------------------------------------
+# Phase 3e: Pleiades classical-antiquity reconciliation (v0.25)
+# ---------------------------------------------------------------------------
+
+def _pleiades_load_index(dump_path: Path
+                         ) -> tuple[dict[str, list[dict]], int]:
+    """Load Pleiades JSON-LD dump and build a normalized-name → places index.
+
+    Pleiades dump shape: ``{"@context": ..., "@graph": [<place>, ...]}``,
+    where each place has ``id``, ``uri``, ``title``, ``reprPoint`` (lon,lat),
+    and a ``names[]`` array of variant names with ``romanized`` and
+    ``attested`` fields. We index over title + romanized + attested for
+    fuzzy alias coverage.
+    """
+    import gzip
+    open_fn = gzip.open if str(dump_path).endswith(".gz") else open
+    with open_fn(dump_path, "rt", encoding="utf-8") as f:
+        data = json.load(f)
+    items = data.get("@graph", []) if isinstance(data, dict) else data
+    index: dict[str, list[dict]] = defaultdict(list)
+    n_with_coords = 0
+    for it in items:
+        repr_pt = it.get("reprPoint")
+        if not repr_pt or len(repr_pt) != 2:
+            continue
+        lon, lat = repr_pt[0], repr_pt[1]
+        if lat is None or lon is None:
+            continue
+        n_with_coords += 1
+        record = {
+            "id": it.get("id"),
+            "uri": it.get("uri"),
+            "title": it.get("title", ""),
+            "lat": lat,
+            "lon": lon,
+        }
+        names: set[str] = set()
+        title = it.get("title")
+        if title:
+            names.add(_normalize_place_name(title))
+            # Slash-separated alternates: "Consabura/Consabrum" → both
+            for part in title.split("/"):
+                if part.strip():
+                    names.add(_normalize_place_name(part))
+        for nm in it.get("names", []) or []:
+            for fld in ("romanized", "attested"):
+                v = nm.get(fld)
+                if v:
+                    names.add(_normalize_place_name(v))
+        for n in names:
+            if n:
+                index[n].append(record)
+    return index, n_with_coords
+
+
+def phase_3e_pleiades(conn: sqlite3.Connection,
+                      dump_path: Path,
+                      dry_run: bool = False,
+                      output_dir: str = "offline/geo") -> int:
+    """Match remaining ungeocoded places against the Pleiades classical
+    antiquity gazetteer via exact name match (title + romanized + attested
+    aliases). Single hit → DERIVED-tier auto-accept; multi-hit →
+    pleiades_review.csv.
+    """
+    places = get_ungeocoded(conn, "no_external_used")
+    if not places:
+        print("Phase 3e: No places to match against Pleiades", file=sys.stderr)
+        return 0
+    candidates, skipped = filter_reconcilable(places)
+    print(f"Phase 3e: {len(candidates)} places to match against Pleiades "
+          f"({skipped} skipped)", file=sys.stderr)
+    if not candidates:
+        return 0
+
+    print("Phase 3e-1: Loading Pleiades dump...", file=sys.stderr)
+    index, n_with_coords = _pleiades_load_index(dump_path)
+    print(f"  Loaded {n_with_coords:,} Pleiades places "
+          f"({len(index):,} distinct normalized names)", file=sys.stderr)
+
+    accepted: dict[str, dict] = {}
+    review_rows: list[tuple[str, str, list[dict]]] = []
+    no_match = 0
+
+    for vid, name in candidates:
+        nname = _normalize_place_name(name)
+        matches = index.get(nname, [])
+        if not matches:
+            no_match += 1
+            continue
+        if len(matches) == 1:
+            accepted[vid] = matches[0]
+        else:
+            review_rows.append((vid, name, matches))
+
+    print(f"  Accepted: {len(accepted)}, review: {len(review_rows)}, "
+          f"no match: {no_match}", file=sys.stderr)
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    if review_rows:
+        path = out / "pleiades_review.csv"
+        header = ["vocab_id", "name", "decision"]
+        for i in range(1, 4):
+            header += [f"pleiades_id_{i}", f"title_{i}",
+                       f"lat_{i}", f"lon_{i}"]
+        with path.open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(header)
+            for vid, name, matches in review_rows:
+                row = [vid, name, ""]
+                for m in matches[:3]:
+                    row += [m["id"], m["title"], m["lat"], m["lon"]]
+                while len(row) < len(header):
+                    row.append("")
+                w.writerow(row)
+        print(f"  Wrote {path} ({len(review_rows)} entries)", file=sys.stderr)
+
+    if dry_run:
+        return 0
+
+    updates: dict[str, tuple[float, float, str]] = {}
+    for vid, m in accepted.items():
+        updates[vid] = (m["lat"], m["lon"], m["uri"])
+
+    updated = update_coords_and_ids(
+        conn, updates,
+        coord_method_detail=em.PLEIADES_RECONCILIATION,
+        external_id_method_detail=em.PLEIADES_RECONCILIATION,
+        dry_run=dry_run,
+    )
+    if accepted:
+        conn.executemany(
+            "INSERT OR IGNORE INTO vocabulary_external_ids "
+            "(vocab_id, authority, id, uri) VALUES (?, ?, ?, ?)",
+            [(vid, "other", str(m["id"]), m["uri"])
+             for vid, m in accepted.items()],
+        )
+        conn.commit()
+    print(f"Phase 3e: {updated} places updated", file=sys.stderr)
     return updated
 
 
@@ -2494,6 +3060,10 @@ Examples:
     parser.add_argument("--wof-parquet",
                         default="data/seed/wof/whosonfirst-data-admin-*.parquet",
                         help="Glob for WOF admin parquets (used by --phase 1d / 4-pip)")
+    parser.add_argument("--pleiades-dump",
+                        default="data/seed/pleiades-places.json.gz",
+                        type=Path,
+                        help="Path to Pleiades JSON-LD dump (used by --phase 3e)")
     parser.add_argument("--export-backfill-csv", action="store_true",
                         help="Export geocoded-places backfill CSV (with all method "
                              "+ method_detail columns) and exit. Standalone mode.")
@@ -2583,6 +3153,19 @@ Examples:
         print(f"\n--- Phase 1c: Getty TGN → Wikidata ---", file=sys.stderr)
         total_updated += phase_1c_getty_crossref(conn, args.dry_run)
 
+    # Phase 1d: Who's On First admin polygon match (v0.25)
+    if run_phase == "1d":
+        print(f"\n--- Phase 1d: WOF admin polygon match ---", file=sys.stderr)
+        total_updated += phase_1d_wof(
+            conn, args.wof_parquet, args.dry_run, args.output_dir)
+
+    # Phase 1e: RCE Rijksmonumenten via Wikidata QID bridge (v0.25)
+    if run_phase == "1e":
+        print(f"\n--- Phase 1e: RCE Rijksmonumenten via Wikidata ---",
+              file=sys.stderr)
+        total_updated += phase_1e_rce(
+            conn, args.dry_run, output_dir=args.output_dir)
+
     # Phase 2: Self-reference resolution
     if run_phase in (None, "2"):
         print(f"\n--- Phase 2: Self-reference resolution ---", file=sys.stderr)
@@ -2608,6 +3191,13 @@ Examples:
         total_updated += phase_3c_whg_bridge(
             conn, args.dry_run, args.csv_only, args.output_dir)
 
+    # Phase 3e: Pleiades classical antiquity reconciliation (v0.25)
+    if run_phase == "3e":
+        print(f"\n--- Phase 3e: Pleiades classical antiquity ---",
+              file=sys.stderr)
+        total_updated += phase_3e_pleiades(
+            conn, args.pleiades_dump, args.dry_run, args.output_dir)
+
     # Phase 4: Validation (range/swap heuristics + markdown report)
     if run_phase in (None, "4"):
         print(f"\n--- Phase 4: Validation ---", file=sys.stderr)
@@ -2617,6 +3207,26 @@ Examples:
     if run_phase == "4-pip":
         print(f"\n--- Phase 4-pip: WOF PIP audit ---", file=sys.stderr)
         phase_4_pip_validation(conn, args.wof_parquet, args.output_dir)
+
+    # Layer B: fail-closed inheritance via propagate_place_coordinates (#262)
+    if run_phase == "layer-b":
+        print(f"\n--- Layer B: fail-closed inheritance ---", file=sys.stderr)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "harvest_vocab_db",
+            Path(__file__).resolve().parent / "harvest-vocabulary-db.py",
+        )
+        harvest_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(harvest_mod)
+        if args.dry_run:
+            print("--phase layer-b is currently write-only; skipping under --dry-run",
+                  file=sys.stderr)
+        else:
+            harvest_mod.propagate_place_coordinates(conn)
+            total, with_coords = get_coverage(conn)
+            print(f"\nFinal coverage: {with_coords:,} / {total:,} "
+                  f"({with_coords/total*100:.1f}%)", file=sys.stderr)
 
     # Final summary
     total, with_coords = get_coverage(conn)
