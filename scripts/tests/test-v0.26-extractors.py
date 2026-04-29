@@ -98,7 +98,7 @@ def test_artwork_external_ids(hv):
 
 
 def test_cho_sameas_and_extent(hv):
-    """SHIP-3, SHIP-4, SHIP-6 — exercise extract_records on the EDM fixture."""
+    """Exercise extract_records on the EDM fixture: owl:sameAs walk + dcterms:extent."""
     tree = ET.parse(FIXTURES / "cho-sameas-sample.xml")
     root = tree.getroot()
     records = hv.extract_records(root)
@@ -140,7 +140,7 @@ def test_cho_sameas_and_extent(hv):
 
 
 def test_classify_authority_v026(hv):
-    """SHIP-7 + SHIP-10: ensure new needles match."""
+    """Ensure handle.net + id.rijksmuseum.nl needles match."""
     a, lid = hv.classify_authority("https://hdl.handle.net/10934/RM0001.COLLECT.123")
     assert_eq("classify_authority.handle.bucket", a, "handle")
     a, lid = hv.classify_authority("https://id.rijksmuseum.nl/300999999")
