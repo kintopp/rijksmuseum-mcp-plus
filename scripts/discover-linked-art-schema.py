@@ -48,6 +48,14 @@ DEFAULT_THREADS = 8
 # Maximum depth for recursive tree walk (Linked Art nests deeply but finitely)
 MAX_DEPTH = 12
 
+# LDES (Linked Data Event Stream) — used by --mode ldes
+LDES_ROOT = "https://data.rijksmuseum.nl/ldes/collection.json"
+LDES_CACHE_DIR = PROJECT_DIR / "data" / "ldes-cache"
+LDES_REQUEST_INTERVAL_S = 1.0  # be a polite citizen — confirmed acceptable with operator
+# Profiles whose @graph carries the inline JSON-LD payload we can walk.
+# Skip `oai_dc` (bare-minimum), `la` and `edm` (n-triples, no inline payload).
+LDES_FRAMED_PROFILES = {"la-framed", "edm-framed"}
+
 # ─── Paths the harvest currently extracts ────────────────────────────
 # Each entry is a dotted path ([] = array traversal) that resolve_artwork()
 # or Phase 1/2 touches. Used for the "extracted vs ignored" diff.
@@ -1206,6 +1214,485 @@ def generate_report(stats: dict[str, PathStats], total_resolved: int,
     return "\n".join(lines)
 
 
+# ─── LDES Walker ─────────────────────────────────────────────────────
+# Refit per kintopp/rijksmuseum-mcp-plus-offline#270/#271/#283 — use the LDES
+# feed as a thorough path enumerator instead of per-artwork Search-API+LA fetches.
+# Empirically (2026-04-29 probe): each day-fragment carries `member[]` of LDES
+# events. Each event's `object` describes one of five profiles (la, la-framed,
+# edm, edm-framed, oai_dc); the two *-framed JSON-LD profiles carry the inline
+# `@graph` payload we walk. n-triples profiles are referenced but not embedded.
+# Retention is `LatestVersionSubset/1`; only 2026+ data is available.
+
+import re
+
+_LDES_LAST_REQUEST = [0.0]
+
+
+def _ldes_throttle():
+    """Sleep so requests are spaced ≥ LDES_REQUEST_INTERVAL_S apart."""
+    elapsed = time.time() - _LDES_LAST_REQUEST[0]
+    if elapsed < LDES_REQUEST_INTERVAL_S:
+        time.sleep(LDES_REQUEST_INTERVAL_S - elapsed)
+    _LDES_LAST_REQUEST[0] = time.time()
+
+
+def _ldes_url_to_cache_path(url: str) -> Path:
+    """Map an LDES URL to a local cache path under LDES_CACHE_DIR.
+
+    https://data.rijksmuseum.nl/ldes/collection.json    → LDES_CACHE_DIR/collection.json
+    https://data.rijksmuseum.nl/ldes/2026.json          → LDES_CACHE_DIR/2026.json
+    https://data.rijksmuseum.nl/ldes/2026/3.json        → LDES_CACHE_DIR/2026/3.json
+    https://data.rijksmuseum.nl/ldes/2026/3/23.json     → LDES_CACHE_DIR/2026/3/23.json
+    """
+    m = re.match(r"^https?://data\.rijksmuseum\.nl/ldes/(.+)$", url)
+    if not m:
+        raise ValueError(f"Not an LDES URL: {url}")
+    return LDES_CACHE_DIR / m.group(1)
+
+
+def fetch_ldes_node(url: str, *, force: bool = False) -> dict:
+    """Fetch one LDES node (root, year, month, or day fragment) with caching.
+
+    Conditional GET via stored ETag/Last-Modified — the Rijksmuseum infra is
+    reportedly robust, so we still always hit the network for top-level
+    navigation nodes (root/year/month) but rely on conditional GET to short-
+    circuit body re-downloads. Day fragments are immutable enough to skip
+    revalidation entirely once cached.
+    """
+    cache_path = _ldes_url_to_cache_path(url)
+    meta_path = cache_path.with_suffix(cache_path.suffix + ".meta")
+
+    is_day = bool(re.search(r"/\d{4}/\d{1,2}/\d{1,2}\.json$", url))
+    if cache_path.exists() and is_day and not force:
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+
+    headers = {
+        "Accept": "application/ld+json",
+        "User-Agent": USER_AGENT,
+    }
+    if cache_path.exists() and meta_path.exists() and not force:
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if meta.get("etag"):
+                headers["If-None-Match"] = meta["etag"]
+            if meta.get("last_modified"):
+                headers["If-Modified-Since"] = meta["last_modified"]
+        except Exception:
+            pass
+
+    _ldes_throttle()
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = resp.read()
+            etag = resp.headers.get("ETag")
+            last_modified = resp.headers.get("Last-Modified")
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_bytes(body)
+            if etag or last_modified:
+                meta_path.write_text(json.dumps({
+                    "etag": etag,
+                    "last_modified": last_modified,
+                    "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                }), encoding="utf-8")
+            return json.loads(body)
+    except urllib.error.HTTPError as e:
+        if e.code == 304 and cache_path.exists():
+            return json.loads(cache_path.read_text(encoding="utf-8"))
+        raise
+
+
+def _node_relations(node: dict) -> list[dict]:
+    """Return the `tree:relation` array for an LDES node (root, year, month).
+
+    Some node-types put it at the top level, others nest under `view`.
+    """
+    if isinstance(node.get("relation"), list):
+        return node["relation"]
+    view = node.get("view")
+    if isinstance(view, dict) and isinstance(view.get("relation"), list):
+        return view["relation"]
+    return []
+
+
+def _relation_node_url(rel: dict) -> str | None:
+    n = rel.get("node")
+    if isinstance(n, dict):
+        return n.get("@id") or n.get("id")
+    if isinstance(n, str):
+        return n
+    return None
+
+
+_PAGINATION_RE = re.compile(r"[?&]pageToken=")
+
+
+def _is_pagination_url(url: str) -> bool:
+    """Pagination relations within a single day fragment carry `?pageToken=`."""
+    return bool(_PAGINATION_RE.search(url))
+
+
+def collect_day_fragments(
+    *,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    progress: bool = True,
+) -> list[str]:
+    """Walk the LDES tree:relation hierarchy and return day-fragment START URLs.
+
+    `from_date` / `to_date` are ISO-8601 strings (inclusive lower, exclusive
+    upper). If omitted, all available fragments are collected.
+
+    The Rijksmuseum LDES exposes navigation as a tree:relation hierarchy with
+    two distinct kinds of relation:
+      - **Navigation** — partition by time. Root → year (`/2026.json`) →
+        month (`/2026/3.json`) → day (`/2026/3/23.json`). These are the
+        partitions of the calendar.
+      - **Pagination** — within a single day, a `?pageToken=…` query string
+        chains successive pages of `member[]`. These are NOT additional
+        time partitions; they're more events from the same day.
+
+    This collector only follows navigation relations and returns the day-start
+    URL (the plain `.json` form, no query string). Pagination is followed
+    separately by `iter_day_fragment_pages` so the caller can cap how many
+    pages per day get walked.
+    """
+
+    def in_window(value: str) -> bool:
+        if from_date and value < from_date:
+            return False
+        if to_date and value >= to_date:
+            return False
+        return True
+
+    seen: set[str] = set()
+    leaves: list[str] = []
+
+    def descend(url: str, level: int):
+        if url in seen:
+            return
+        seen.add(url)
+        node = fetch_ldes_node(url)
+        rels = _node_relations(node)
+
+        # Filter out pagination relations — they belong to the day-walker.
+        nav_rels = [r for r in rels
+                    if not _is_pagination_url(_relation_node_url(r) or "")]
+
+        if not nav_rels and "member" in node:
+            # Day-start fragment: has member[] and only pagination relations
+            # (no further navigation children).
+            leaves.append(url)
+            return
+
+        # Group by child URL (year/month/day relations come in pairs of
+        # GreaterThanOrEqualTo + LessThan, both pointing at the same node).
+        children: dict[str, list[str]] = {}
+        for rel in nav_rels:
+            child_url = _relation_node_url(rel)
+            if not child_url:
+                continue
+            val = rel.get("value", {})
+            v = val.get("@value") if isinstance(val, dict) else val
+            if isinstance(v, str):
+                children.setdefault(child_url, []).append(v)
+
+        for child_url, values in children.items():
+            if (from_date or to_date) and values:
+                # Keep child if any bound is in window OR the child straddles
+                # the window. Conservative — if no values, descend anyway.
+                if not any(in_window(v) for v in values):
+                    if not (
+                        (not to_date or min(values) < to_date)
+                        and (not from_date or max(values) >= from_date)
+                    ):
+                        continue
+            descend(child_url, level + 1)
+            if progress and level <= 1:
+                print(f"    descended into {child_url} ({len(leaves)} day starts so far)", flush=True)
+
+    descend(LDES_ROOT, 0)
+    leaves.sort()
+    return leaves
+
+
+def iter_day_fragment_pages(
+    start_url: str,
+    max_pages: int | None = None,
+):
+    """Yield successive pages of a day fragment, following pagination relations.
+
+    Yields each fragment dict (with its `member[]`). Caps at `max_pages` if set.
+    """
+    visited: set[str] = set()
+    queue: list[str] = [start_url]
+    pages_yielded = 0
+
+    while queue and (max_pages is None or pages_yielded < max_pages):
+        url = queue.pop(0)
+        if url in visited:
+            continue
+        visited.add(url)
+        try:
+            node = fetch_ldes_node(url)
+        except Exception as e:
+            print(f"      page fetch failed {url}: {e}", flush=True)
+            continue
+        yield node
+        pages_yielded += 1
+
+        # Enqueue pagination successors (skip navigation children — there
+        # shouldn't be any at the day level, but be defensive).
+        for rel in _node_relations(node):
+            child = _relation_node_url(rel) or ""
+            if _is_pagination_url(child) and child not in visited:
+                queue.append(child)
+
+
+def _profile_of_member(member: dict) -> str | None:
+    """Extract the profile string (e.g. 'la-framed') from a member's `object`."""
+    obj = member.get("object")
+    if not isinstance(obj, dict):
+        return None
+    # Preferred: `?_profile=<name>` query param on object.@id
+    obj_id = obj.get("@id") or obj.get("id") or ""
+    m = re.search(r"[?&]_profile=([^&]+)", obj_id)
+    if m:
+        return m.group(1)
+    # Fallback: object.profile (full URI for the profile spec, less useful)
+    return obj.get("profile")
+
+
+def iter_ldes_payloads(fragment: dict):
+    """Yield (profile, event_type, payload) for every walkable member in a fragment."""
+    members = fragment.get("member") or []
+    if isinstance(members, dict):
+        members = [members]
+    for m in members:
+        if not isinstance(m, dict):
+            continue
+        graph = m.get("@graph")
+        if not isinstance(graph, dict):
+            continue  # n-triples profiles have no inline payload
+        profile = _profile_of_member(m)
+        if profile not in LDES_FRAMED_PROFILES:
+            continue
+        event_type = m.get("@type") or m.get("type")
+        yield profile, event_type, graph
+
+
+def walk_ldes(
+    *,
+    from_date: str | None,
+    to_date: str | None,
+    profiles: set[str],
+    sample_per_day: int | None,
+    pages_per_day: int | None,
+) -> tuple[dict[str, dict[str, PathStats]], dict]:
+    """Walk LDES day-fragments in the date window and return per-profile path stats.
+
+    `pages_per_day` caps how many paginated pages we fetch per day-fragment
+    (default None = unlimited). `sample_per_day` caps how many members per
+    profile per day get walked into the path stats (default None = unlimited).
+
+    Returns ({profile: {path: PathStats}}, summary-dict).
+    """
+    print(f"  Collecting day fragments (window: {from_date or '∅'} → {to_date or '∅'})...", flush=True)
+    days = collect_day_fragments(from_date=from_date, to_date=to_date)
+    print(f"  Found {len(days)} day fragments.", flush=True)
+
+    per_profile_stats: dict[str, dict[str, PathStats]] = {p: {} for p in profiles}
+    per_profile_payload_count: dict[str, int] = {p: 0 for p in profiles}
+    event_type_counts: Counter = Counter()
+    days_walked = 0
+    pages_walked_total = 0
+    member_count = 0
+    skipped_unknown_profile: Counter = Counter()
+    delete_events_with_payload = 0
+
+    t_start = time.time()
+
+    for day_url in days:
+        per_day_seen = {p: 0 for p in profiles}
+        pages_this_day = 0
+
+        for page in iter_day_fragment_pages(day_url, max_pages=pages_per_day):
+            pages_this_day += 1
+            pages_walked_total += 1
+
+            for profile, event_type, payload in iter_ldes_payloads(page):
+                member_count += 1
+                event_type_counts[event_type or "Unknown"] += 1
+                if profile not in profiles:
+                    skipped_unknown_profile[profile] += 1
+                    continue
+                if sample_per_day is not None and per_day_seen[profile] >= sample_per_day:
+                    continue
+                per_day_seen[profile] += 1
+                per_profile_payload_count[profile] += 1
+                if event_type == "Delete":
+                    delete_events_with_payload += 1
+
+                per_artwork_paths: set[str] = set()
+                walk_artwork(payload, per_profile_stats[profile], per_artwork_paths)
+
+        days_walked += 1
+        if days_walked % 5 == 0 or days_walked == len(days):
+            elapsed = time.time() - t_start
+            rate = days_walked / elapsed if elapsed > 0 else 0
+            eta = (len(days) - days_walked) / rate if rate > 0 else 0
+            print(
+                f"    days {days_walked}/{len(days)} "
+                f"(pages={pages_walked_total}, members={member_count}, "
+                f"per-profile={dict(per_profile_payload_count)}) "
+                f"{rate:.2f} days/s ETA {eta:.0f}s",
+                flush=True,
+            )
+
+    summary = {
+        "days_walked": days_walked,
+        "days_total": len(days),
+        "pages_walked": pages_walked_total,
+        "pages_per_day_cap": pages_per_day,
+        "members_seen": member_count,
+        "payloads_per_profile": dict(per_profile_payload_count),
+        "event_type_counts": dict(event_type_counts),
+        "skipped_profiles": dict(skipped_unknown_profile),
+        "delete_events_with_payload": delete_events_with_payload,
+        "from_date": from_date,
+        "to_date": to_date,
+    }
+    return per_profile_stats, summary
+
+
+# ─── LDES mode entry point ────────────────────────────────────────────
+
+def run_ldes_mode(args) -> None:
+    """Walk LDES day-fragments and emit per-profile schema-discovery reports."""
+    profiles = set(args.ldes_profile) if args.ldes_profile else set(LDES_FRAMED_PROFILES)
+    unknown = profiles - LDES_FRAMED_PROFILES
+    if unknown:
+        print(f"Warning: profile(s) not in framed-profile set: {sorted(unknown)}")
+        print(f"         walking anyway, but expect zero payloads for them.")
+
+    print(f"=== LDES mode ===")
+    print(f"  Window: {args.ldes_from or '(start of feed)'} → "
+          f"{args.ldes_to or '(end of feed)'}")
+    print(f"  Profiles: {sorted(profiles)}")
+    print(f"  Cache dir: {LDES_CACHE_DIR}")
+    print(f"  Throttle: ≥{LDES_REQUEST_INTERVAL_S}s/request")
+
+    t0 = time.time()
+    per_profile_stats, summary = walk_ldes(
+        from_date=args.ldes_from,
+        to_date=args.ldes_to,
+        profiles=profiles,
+        sample_per_day=args.ldes_sample_per_day,
+        pages_per_day=args.ldes_pages_per_day,
+    )
+    elapsed = time.time() - t0
+
+    print()
+    print(f"  Walked {summary['days_walked']}/{summary['days_total']} day fragments "
+          f"({summary['pages_walked']} pages) in {elapsed:.0f}s")
+    print(f"  Members observed: {summary['members_seen']}")
+    print(f"  Event types: {summary['event_type_counts']}")
+    print(f"  Payloads per profile: {summary['payloads_per_profile']}")
+    if summary["skipped_profiles"]:
+        print(f"  Skipped profiles (non-framed): {summary['skipped_profiles']}")
+    if summary["delete_events_with_payload"]:
+        print(f"  Delete events that carried a payload: {summary['delete_events_with_payload']}")
+
+    if not any(summary["payloads_per_profile"].values()):
+        print("\nError: no walkable payloads collected. Check window or profile filters.")
+        sys.exit(1)
+
+    audit_dir = PROJECT_DIR / "data" / "audit"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.output:
+        # User specified a base path — derive per-profile siblings.
+        base = Path(args.output)
+    else:
+        base = audit_dir / "oai-coverage-v0.26-ldes"
+
+    base.parent.mkdir(parents=True, exist_ok=True)
+
+    profile_outputs: dict[str, dict[str, Path]] = {}
+    for profile, stats in per_profile_stats.items():
+        n_payloads = summary["payloads_per_profile"].get(profile, 0)
+        if n_payloads == 0 or not stats:
+            print(f"  [{profile}] no payloads — skipping report")
+            continue
+
+        suffix = f".{profile}"
+        md_path = base.with_name(base.name + f"{suffix}.md")
+        json_path = base.with_name(base.name + f"{suffix}.json")
+        profile_outputs[profile] = {"md": md_path, "json": json_path}
+
+        report = generate_report(stats, n_payloads, 0, elapsed)
+        # Prepend an LDES-specific header noting the profile + window
+        cap_str = f", capped at {summary['pages_per_day_cap']} pages/day" \
+            if summary.get("pages_per_day_cap") else ""
+        ldes_header = (
+            f"# Schema Discovery — LDES `{profile}` profile\n\n"
+            f"- Window: `{args.ldes_from or '(start of feed)'}` → "
+            f"`{args.ldes_to or '(end of feed)'}`\n"
+            f"- Day fragments walked: {summary['days_walked']}{cap_str}\n"
+            f"- Pagination pages walked: {summary['pages_walked']}\n"
+            f"- Members observed (all profiles): {summary['members_seen']}\n"
+            f"- Payloads walked for this profile: {n_payloads}\n"
+            f"- Event types (all profiles): "
+            f"{', '.join(f'{k}: {v}' for k, v in summary['event_type_counts'].items())}\n\n"
+        )
+        md_path.write_text(ldes_header + report, encoding="utf-8")
+        print(f"  [{profile}] report → {md_path}")
+
+        json_stats = {
+            path: ps.to_dict(n_payloads)
+            for path, ps in sorted(stats.items(), key=lambda x: -x[1].count)
+        }
+        json_path.write_text(
+            json.dumps(
+                {
+                    "profile": profile,
+                    "summary": summary,
+                    "total_resolved": n_payloads,
+                    "paths": json_stats,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print(f"  [{profile}] raw stats → {json_path}")
+
+    # Per-profile summaries to stdout (mirrors --mode linked-art Summary)
+    print(f"\n=== Summary (per profile) ===")
+    for profile in sorted(per_profile_stats):
+        stats = per_profile_stats[profile]
+        n_payloads = summary["payloads_per_profile"].get(profile, 0)
+        if n_payloads == 0:
+            continue
+        n_extracted = sum(1 for p in stats if classify_path(p) == "extracted")
+        n_structural = sum(1 for p in stats if classify_path(p) == "structural")
+        n_scaffolding = sum(1 for p in stats if classify_path(p) == "scaffolding")
+        n_ignored = sum(1 for p in stats if classify_path(p) == "ignored")
+        print(f"  [{profile}] {n_payloads} payloads, {len(stats)} unique paths")
+        print(f"    extracted: {n_extracted}, structural: {n_structural}, "
+              f"scaffolding: {n_scaffolding}, ignored: {n_ignored}")
+
+        threshold = max(1, int(n_payloads * 0.05))
+        sig_ignored = [
+            (p, s) for p, s in stats.items()
+            if classify_path(p) == "ignored" and s.count >= threshold
+        ]
+        if sig_ignored:
+            print(f"    ⚠ {len(sig_ignored)} ignored paths with ≥5% coverage:")
+            for path, ps in sorted(sig_ignored, key=lambda x: -x[1].count)[:8]:
+                cov = f"{ps.count/n_payloads:.0%}"
+                print(f"      {cov}  {path}")
+
+
 # ─── Main ────────────────────────────────────────────────────────────
 
 def main():
@@ -1213,16 +1700,23 @@ def main():
         description="Discover all Linked Art JSON-LD paths for Rijksmuseum artworks"
     )
     parser.add_argument(
+        "--mode", choices=["linked-art", "ldes"], default="linked-art",
+        help="Input source: 'linked-art' resolves artworks via Search API + per-artwork "
+             "fetch (legacy); 'ldes' walks the LDES feed and enumerates JSON-LD paths "
+             "across the la-framed and edm-framed profiles (preferred for v0.26 audit)."
+    )
+    parser.add_argument(
         "--samples", type=int, default=DEFAULT_SAMPLES,
-        help=f"Number of artworks to sample (default: {DEFAULT_SAMPLES})"
+        help=f"[linked-art mode] Number of artworks to sample (default: {DEFAULT_SAMPLES})"
     )
     parser.add_argument(
         "--threads", type=int, default=DEFAULT_THREADS,
-        help=f"Thread count for HTTP resolution (default: {DEFAULT_THREADS})"
+        help=f"[linked-art mode] Thread count for HTTP resolution (default: {DEFAULT_THREADS})"
     )
     parser.add_argument(
         "--output", type=str, default=None,
-        help="Output markdown file (default: data/schema-discovery-report.md)"
+        help="Output markdown file (default: data/schema-discovery-report.md, "
+             "or per-profile reports in LDES mode)"
     )
     parser.add_argument(
         "--raw-json", type=str, default=None,
@@ -1230,13 +1724,39 @@ def main():
     )
     parser.add_argument(
         "--object-numbers", type=str, nargs="*", default=None,
-        help="Resolve specific object numbers instead of sampling"
+        help="[linked-art mode] Resolve specific object numbers instead of sampling"
     )
     parser.add_argument(
         "--db", type=str, default=str(DB_PATH),
         help=f"Path to vocabulary.db (default: {DB_PATH})"
     )
+    parser.add_argument(
+        "--ldes-from", type=str, default=None,
+        help="[ldes mode] Lower-bound date (inclusive), e.g. 2026-01-01"
+    )
+    parser.add_argument(
+        "--ldes-to", type=str, default=None,
+        help="[ldes mode] Upper-bound date (exclusive), e.g. 2026-05-01"
+    )
+    parser.add_argument(
+        "--ldes-profile", type=str, action="append", default=None,
+        help=f"[ldes mode] Restrict walk to one profile; repeatable. "
+             f"Default: all framed profiles ({sorted(LDES_FRAMED_PROFILES)})"
+    )
+    parser.add_argument(
+        "--ldes-sample-per-day", type=int, default=None,
+        help="[ldes mode] Cap members walked per day per profile (default: no cap)"
+    )
+    parser.add_argument(
+        "--ldes-pages-per-day", type=int, default=None,
+        help="[ldes mode] Cap paginated pages per day fragment. Each day has "
+             "intra-day pagination (?pageToken=...) chaining ~10 events per page. "
+             "Default: no cap (full thorough walk). Set to 1 for fastest sampling."
+    )
     args = parser.parse_args()
+
+    if args.mode == "ldes":
+        return run_ldes_mode(args)
 
     db_path = Path(args.db)
     if not db_path.exists():
