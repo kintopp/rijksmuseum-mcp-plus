@@ -2571,7 +2571,7 @@ def phase_1e_rce(conn: sqlite3.Connection,
     """QID-bridge RCE Rijksmonumenten lookup (decisions doc §431).
 
     Walks ``vocabulary_external_ids`` for places with Wikidata QIDs, asks
-    Wikidata for any P2168 (Rijksmonument ID) statements, then asks RCE for
+    Wikidata for any P359 (Rijksmonument ID) statements, then asks RCE for
     each monument's coords. On hit: tag em.RCE_VIA_WIKIDATA, write the RCE
     monument URI as ``external_id``, and INSERT the RCE concordance into
     ``vocabulary_external_ids``.
@@ -2614,8 +2614,8 @@ def phase_1e_rce(conn: sqlite3.Connection,
                           file=sys.stderr)
         return merged
 
-    # Step 1: ask Wikidata for P2168 mappings
-    print(f"Phase 1e-1: Querying Wikidata for P2168 across {len(qids)} QIDs "
+    # Step 1: ask Wikidata for P359 mappings
+    print(f"Phase 1e-1: Querying Wikidata for P359 across {len(qids)} QIDs "
           f"({batch_size}/batch, 4 parallel)...", file=sys.stderr)
     qid_to_rmids = _run_batches(
         qids, _wikidata_qids_to_rijksmonument_ids, "Wikidata")
@@ -2623,7 +2623,7 @@ def phase_1e_rce(conn: sqlite3.Connection,
           file=sys.stderr)
 
     if not qid_to_rmids:
-        print("Phase 1e: no P2168 statements found; phase exits with 0 updates.",
+        print("Phase 1e: no P359 statements found; phase exits with 0 updates.",
               file=sys.stderr)
         return 0
 
