@@ -2448,13 +2448,19 @@ def apply_reviewed(conn: sqlite3.Connection, csv_path: str,
 
 RCE_SPARQL_ENDPOINT = "https://api.linkeddata.cultureelerfgoed.nl/datasets/rce/cho/sparql"
 
-# Wikidata's `Rijksmonument ID` property (P2168) is the explicit bridge: a
-# Rijksmonument's Wikidata item carries a P2168 statement with the integer
-# RCE monument ID. RCE's CHO graph has the matching monument record with
-# coords (geo:lat/geo:long). The two-leg query first asks Wikidata for the
-# (qid → rijksmonument_id) bridge, then RCE for (rijksmonument_id → coords).
-# Decisions doc §431 marks the property as "verify at impl time"; landing
-# the verified pair (P2168 + ceo:Monument) here. Probe-callable below.
+# Wikidata `wdt:P359` ("Rijksmonument ID") is the bridge: a monument's
+# Wikidata item carries a P359 statement with the official RCE
+# Rijksmonument number. RCE's CHO graph stores the same number on each
+# `ceo:Rijksmonument` as `ceo:cultuurhistorischObjectnummer` (the URL slug
+# matches), and the geometry is on a separate node reached via
+# `ceo:heeftGeometrie`, exposed as a WKT literal `Point (lon lat)` (or
+# `MultiPolygon (...)` for the parcel outline — we filter to Points).
+#
+# Both property names verified 2026-04-29 via live SPARQL probes against
+# query.wikidata.org and api.linkeddata.cultureelerfgoed.nl. The original
+# v0.25 plan named them `wdt:P2168` and `ceo:rijksmonumentnummer` — both
+# were wrong (P2168 is "Swedish Film Database person ID";
+# rijksmonumentnummer doesn't exist on RCE). See decisions doc §431.
 
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 
@@ -2479,11 +2485,15 @@ def _rce_pre_flight(conn: sqlite3.Connection, threshold: int = 9000) -> int:
 _SPARQL_JSON_HEADERS = {"Accept": "application/sparql-results+json"}
 
 
+_WKT_POINT_RE = re.compile(r"^\s*Point\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)\s*$",
+                            re.IGNORECASE)
+
+
 def _wikidata_qids_to_rijksmonument_ids(qids: list[str]
                                          ) -> dict[str, list[str]]:
-    """Query Wikidata for (qid → P2168 Rijksmonument ID) mappings.
+    """Query Wikidata for (qid → P359 Rijksmonument ID) mappings.
 
-    Returns ``{qid: [rm_id, ...]}``. Empty for qids without a P2168 statement.
+    Returns ``{qid: [rm_id, ...]}``. Empty for qids without a P359 statement.
     """
     if not qids:
         return {}
@@ -2491,7 +2501,7 @@ def _wikidata_qids_to_rijksmonument_ids(qids: list[str]
     query = (
         "SELECT ?qid ?rmid WHERE { "
         f"  VALUES ?qid {{ {values} }} "
-        "  ?qid wdt:P2168 ?rmid . }"
+        "  ?qid wdt:P359 ?rmid . }"
     )
     data = _http_post_json(WIKIDATA_SPARQL, {"query": query},
                             extra_headers=_SPARQL_JSON_HEADERS,
@@ -2508,23 +2518,25 @@ def _wikidata_qids_to_rijksmonument_ids(qids: list[str]
 
 
 def _rce_lookup_monuments(rm_ids: list[str]) -> dict[str, dict]:
-    """Query RCE CHO endpoint for monument coords by Rijksmonument ID.
+    """Query RCE CHO endpoint for monument centroids by Rijksmonument ID.
 
-    Returns ``{rm_id: {"uri": ..., "lat": ..., "lon": ..., "label": ...}}``.
+    Returns ``{rm_id: {"uri": ..., "lat": ..., "lon": ...}}``. Each monument
+    has both a Point centroid and a MultiPolygon parcel outline reachable
+    via ``ceo:heeftGeometrie``; we filter to Points.
     """
     if not rm_ids:
         return {}
     values = " ".join(f'"{rm}"' for rm in rm_ids)
     query = (
-        "PREFIX ceo:  <https://linkeddata.cultureelerfgoed.nl/def/ceo#> "
-        "PREFIX geo:  <http://www.w3.org/2003/01/geo/wgs84_pos#> "
-        "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> "
-        "SELECT ?rmid ?monument ?label ?lat ?lon WHERE { "
+        "PREFIX ceo: <https://linkeddata.cultureelerfgoed.nl/def/ceo#> "
+        "PREFIX gs:  <http://www.opengis.net/ont/geosparql#> "
+        "SELECT ?rmid ?monument ?wkt WHERE { "
         f"  VALUES ?rmid {{ {values} }} "
-        "  ?monument ceo:rijksmonumentnummer ?rmid ; "
-        "            geo:lat  ?lat ; "
-        "            geo:long ?lon . "
-        "  OPTIONAL { ?monument rdfs:label ?label } }"
+        "  ?monument a ceo:Rijksmonument ; "
+        "            ceo:cultuurhistorischObjectnummer ?rmid ; "
+        "            ceo:heeftGeometrie ?g . "
+        "  ?g gs:asWKT ?wkt . "
+        "  FILTER(STRSTARTS(STR(?wkt), \"Point\")) }"
     )
     data = _http_post_json(RCE_SPARQL_ENDPOINT, {"query": query},
                             extra_headers=_SPARQL_JSON_HEADERS,
@@ -2535,9 +2547,12 @@ def _rce_lookup_monuments(rm_ids: list[str]) -> dict[str, dict]:
         rmid = b.get("rmid", {}).get("value", "")
         if not rmid or rmid in out:
             continue
+        m = _WKT_POINT_RE.match(b.get("wkt", {}).get("value", ""))
+        if not m:
+            continue
         try:
-            lat = float(b.get("lat", {}).get("value", ""))
-            lon = float(b.get("lon", {}).get("value", ""))
+            lon = float(m.group(1))
+            lat = float(m.group(2))
         except ValueError:
             continue
         out[rmid] = {
@@ -2545,7 +2560,6 @@ def _rce_lookup_monuments(rm_ids: list[str]) -> dict[str, dict]:
             "uri": b.get("monument", {}).get("value", ""),
             "lat": lat,
             "lon": lon,
-            "label": b.get("label", {}).get("value", ""),
         }
     return out
 

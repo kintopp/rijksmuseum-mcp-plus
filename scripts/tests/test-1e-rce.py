@@ -88,13 +88,14 @@ def test_wikidata_response_parser_extracts_qid_and_rmid() -> None:
 
 
 def test_rce_response_parser_extracts_coords() -> None:
+    """RCE returns coords as a WKT `Point (lon lat)` literal under ?wkt."""
     payload = {
         "results": {
             "bindings": [
                 {"rmid": {"value": "12345"},
-                 "monument": {"value": "https://rce.nl/m/12345"},
-                 "lat": {"value": "52.37"}, "lon": {"value": "4.89"},
-                 "label": {"value": "Test Monument"}},
+                 "monument": {"value":
+                              "https://linkeddata.cultureelerfgoed.nl/cho-kennis/id/rijksmonument/12345"},
+                 "wkt": {"value": "Point (4.89 52.37)"}},
             ]
         }
     }
@@ -106,6 +107,24 @@ def test_rce_response_parser_extracts_coords() -> None:
     assert result["12345"]["lon"] == 4.89
 
 
+def test_rce_skips_multipolygon_response() -> None:
+    """MultiPolygon WKTs are parcel outlines; phase 1e skips them in favour
+    of the Point centroid that's also returned for each monument."""
+    payload = {
+        "results": {
+            "bindings": [
+                {"rmid": {"value": "12345"},
+                 "monument": {"value": "https://rce.nl/m/12345"},
+                 "wkt": {"value": "MultiPolygon (((4.89 52.37, 4.90 52.38)))"}},
+            ]
+        }
+    }
+    with patch.object(gp.urllib.request, "urlopen",
+                      return_value=_mock_sparql(payload)):
+        result = gp._rce_lookup_monuments(["12345"])
+    assert result == {}, "MultiPolygon WKT must be filtered out"
+
+
 def test_phase_1e_end_to_end_accepts_match() -> None:
     """Full path: pre-flight passes, Wikidata returns P2168, RCE returns
     coords, and the place row is updated with em.RCE_VIA_WIKIDATA."""
@@ -113,7 +132,7 @@ def test_phase_1e_end_to_end_accepts_match() -> None:
 
     def _mock_urlopen(req, timeout=None):
         body = req.data.decode() if req.data else ""
-        if "wikidata" in req.full_url.lower() and "P2168" in body:
+        if "wikidata" in req.full_url.lower() and "P359" in body:
             return _mock_sparql({
                 "results": {"bindings": [
                     {"qid": {"value": "http://www.wikidata.org/entity/Q5"},
@@ -125,8 +144,7 @@ def test_phase_1e_end_to_end_accepts_match() -> None:
                 "results": {"bindings": [
                     {"rmid": {"value": "999"},
                      "monument": {"value": "https://rce.nl/m/999"},
-                     "lat": {"value": "52.0"}, "lon": {"value": "5.0"},
-                     "label": {"value": "Site"}},
+                     "wkt": {"value": "Point (5.0 52.0)"}},
                 ]}
             })
         return _mock_sparql({"results": {"bindings": []}})
