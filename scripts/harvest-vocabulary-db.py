@@ -5584,12 +5584,13 @@ def main():
             print(f"  Review and add missing codes to EXTERNAL_VOCAB before re-running Phase 3.")
             if args.stop_on_orphans:
                 # #228: bail before Phase 3's integer-encoding drops these mappings.
-                # Resume after review with `--phase 3 --start-phase 3` (start-phase
-                # path is idempotent for already-resolved phases).
                 print()
                 print(f"  --stop-on-orphans set: halting before Phase 3.")
-                print(f"  After reviewing {csv_path} and updating EXTERNAL_VOCAB,")
-                print(f"  resume with: --phase 2 (re-runs Phase 2 → 4 → 2b → orphan audit → Phase 3).")
+                print(f"  Review {csv_path}, then resume with one of:")
+                print(f"    a) Drop the orphans (accept silent loss): --phase 5")
+                print(f"       (skips already-completed phases; runs orphan audit + Phase 3 only).")
+                print(f"    b) Preserve some orphans: add their codes to EXTERNAL_VOCAB,")
+                print(f"       then --phase 2 (re-runs Phase 2 → 4 → 2b → orphan audit → Phase 3).")
                 conn.close()
                 sys.exit(2)
         else:
