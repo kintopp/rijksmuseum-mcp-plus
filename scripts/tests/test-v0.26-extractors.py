@@ -140,7 +140,7 @@ def test_cho_sameas_and_extent(hv):
 
 
 def test_visualitem_uri(hv):
-    """Phase 4.5 entry point: HMO -> shows[0].id."""
+    """VisualItem URI extracted from first shows[] entry."""
     assert_eq(
         "visualitem_uri.dict_shape",
         hv.extract_visualitem_uri({

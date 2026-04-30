@@ -467,9 +467,7 @@ CREATE TABLE IF NOT EXISTS artworks (
     record_modified  TEXT,
     -- Free-text dimensions/extent string from dcterms:extent (CHO).
     extent_text      TEXT,
-    -- HMO -> VisualItem cross-link, populated from shows[0].id in Phase 4.
-    -- Phase 4.5 reads this to fetch per-HMO `about[]` thematic vocab (#283).
-    -- Dropped during Phase 3 integer-encoding finalization, like linked_art_uri.
+    -- HMO -> VisualItem cross-link from shows[0].id.
     visualitem_uri   TEXT
 );
 
@@ -647,6 +645,25 @@ VEI_INSERT_SQL = (
     "INSERT OR IGNORE INTO vocabulary_external_ids "
     "(vocab_id, authority, id, uri) VALUES (?, ?, ?, ?)"
 )
+
+
+# Mappings INSERT shape diverges between text-schema (pre-Phase 3) and
+# integer-schema (post-Phase 3 finalization). Phase 4 and Phase 4.5 both
+# insert into mappings during the harvest, so they share this helper.
+_MAPPING_INSERT_SQL_INT = """
+    INSERT OR IGNORE INTO mappings (artwork_id, vocab_rowid, field_id)
+    SELECT a.art_id, v.vocab_int_id, f.id
+    FROM artworks a, vocabulary v, field_lookup f
+    WHERE a.object_number = ? AND v.id = ? AND f.name = ?
+"""
+
+_MAPPING_INSERT_SQL_TEXT = (
+    "INSERT OR IGNORE INTO mappings (object_number, vocab_id, field) VALUES (?, ?, ?)"
+)
+
+
+def _mapping_insert_sql(int_schema: bool) -> str:
+    return _MAPPING_INSERT_SQL_INT if int_schema else _MAPPING_INSERT_SQL_TEXT
 
 
 def get_columns(conn: sqlite3.Connection, table: str) -> set[str]:
@@ -3026,17 +3043,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     if has_art_id:
         art_id_map = dict(conn.execute("SELECT object_number, art_id FROM artworks").fetchall())
 
-    if int_mappings:
-        MAPPING_INSERT_SQL = """
-            INSERT OR IGNORE INTO mappings (artwork_id, vocab_rowid, field_id)
-            SELECT a.art_id, v.vocab_int_id, f.id
-            FROM artworks a, vocabulary v, field_lookup f
-            WHERE a.object_number = ? AND v.id = ? AND f.name = ?
-        """
-    else:
-        MAPPING_INSERT_SQL = (
-            "INSERT OR IGNORE INTO mappings (object_number, vocab_id, field) VALUES (?, ?, ?)"
-        )
+    MAPPING_INSERT_SQL = _mapping_insert_sql(int_mappings)
 
     processed = 0
     succeeded = 0
@@ -3346,19 +3353,18 @@ def _fetch_visualitem_about(uri: str) -> tuple[str, list[str] | None]:
 
 def run_phase4_5(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     """Phase 4.5: dereference each HMO's VisualItem to capture `about[]`
-    thematic-vocab links. Closes the SHIP-5 / #283 data-path gap that
-    surfaced in v0.26 — `about[]` lives on the VisualItem, not the HMO.
+    thematic-vocab links. The data-path correction here is non-obvious
+    (about[] lives on VisualItem, not HMO).
 
     Reads the visualitem_uri column populated during Phase 4. Idempotent:
     re-running on a populated DB is a no-op via INSERT OR IGNORE on the
-    mappings table. Skips if the column is absent (Phase 3 cleanup ran).
+    mappings table.
     """
     cur = conn.cursor()
 
     artworks_cols = get_columns(conn, "artworks")
     if "visualitem_uri" not in artworks_cols:
-        print("  visualitem_uri column not present (Phase 3 already finalized).")
-        print("  To re-run Phase 4.5, start from --phase 4 with a fresh harvest.")
+        print("  visualitem_uri column dropped — Phase 3 finalization already ran.")
         return
 
     rows = cur.execute(
@@ -3370,68 +3376,63 @@ def run_phase4_5(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
         print("  No visualitem_uri values to fetch — Phase 4 may not have run.")
         return
 
+    int_mappings = "field_id" in get_columns(conn, "mappings")
+    insert_sql = _mapping_insert_sql(int_mappings)
+
     print(f"  Resolving {total:,} VisualItems for thematic vocab ({threads} threads)...")
     t0 = time.time()
     processed = 0
-    succeeded = 0
     failed = 0
-    not_found = 0
+    no_themes = 0
     with_themes = 0
     total_theme_rows = 0
 
-    by_uri = {vi: obj for obj, vi in rows}
-
-    commit_batch_size = 1000
+    batch_size = 500
     pending: list[tuple[str, str, str]] = []
 
     with ThreadPoolExecutor(max_workers=threads) as pool:
-        futures = {pool.submit(_fetch_visualitem_about, vi): vi for _, vi in rows}
-        for future in as_completed(futures):
-            processed += 1
-            try:
-                vi_uri, about_ids = future.result()
-            except Exception:
-                failed += 1
-                continue
-            if about_ids is None:
-                failed += 1
-                continue
-            if not about_ids:
-                not_found += 1
-                continue
-            obj_num = by_uri.get(vi_uri)
-            if not obj_num:
-                continue
-            succeeded += 1
-            with_themes += 1
-            for vocab_id in about_ids:
-                pending.append((obj_num, vocab_id, "theme"))
-            total_theme_rows += len(about_ids)
+        for batch_start in range(0, total, batch_size):
+            batch = rows[batch_start:batch_start + batch_size]
+            futures = {pool.submit(_fetch_visualitem_about, vi): obj for obj, vi in batch}
+            for future in as_completed(futures):
+                obj_num = futures[future]
+                processed += 1
+                try:
+                    _, about_ids = future.result()
+                except Exception:
+                    failed += 1
+                    continue
+                if about_ids is None:
+                    failed += 1
+                    continue
+                if not about_ids:
+                    no_themes += 1
+                    continue
+                with_themes += 1
+                for vocab_id in about_ids:
+                    pending.append((obj_num, vocab_id, "theme"))
+                total_theme_rows += len(about_ids)
 
-            if len(pending) >= commit_batch_size:
-                conn.executemany(MAPPING_INSERT_SQL, pending)
-                conn.commit()
-                pending.clear()
+            conn.executemany(insert_sql, pending)
+            conn.commit()
+            pending.clear()
 
-            if processed % 10000 == 0:
+            if (batch_start // batch_size) % 20 == 0 and processed > 0:
                 elapsed = time.time() - t0
                 rate = processed / elapsed if elapsed > 0 else 0
                 remaining = (total - processed) / rate if rate > 0 else 0
                 print(
-                    f"    {processed:,}/{total:,} ({succeeded:,} ok, {failed:,} failed, "
-                    f"{not_found:,} no-themes, {rate:.0f}/s, ~{remaining / 60:.0f}min left)",
+                    f"    {processed:,}/{total:,} ({with_themes:,} with themes, "
+                    f"{failed:,} failed, {no_themes:,} no-themes, "
+                    f"{rate:.0f}/s, ~{remaining / 60:.0f}min left)",
                     flush=True,
                 )
-
-    if pending:
-        conn.executemany(MAPPING_INSERT_SQL, pending)
-        conn.commit()
 
     elapsed = time.time() - t0
     print(f"\n  Phase 4.5 complete in {elapsed / 60:.1f}min:")
     print(f"    Processed:    {processed:,}")
     print(f"    With themes:  {with_themes:,}")
-    print(f"    No-themes:    {not_found:,}")
+    print(f"    No-themes:    {no_themes:,}")
     print(f"    Failed:       {failed:,}")
     print(f"    Theme rows:   {total_theme_rows:,}")
 
