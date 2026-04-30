@@ -35,7 +35,9 @@ The downloaded skill file can be installed in Claude by following [these instruc
 
 ## Sample Queries
 
-After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language. For examples of the kinds of queries the systems can answer, please see the prompts below. For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md). Note: The links following the prompts are to sample responses in Claude Desktop. They only reproduce the texts of these sessions – not the inline image viewer or custom visualisations: 
+After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language. For examples of the kinds of queries the systems can answer, please see the prompts below. For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md). 
+
+Note: The links following the prompts are to sample responses in Claude Desktop. They only reproduce the texts of these sessions – not the inline image viewer or custom visualisations: 
 
 - _What German artworks at the Rijksmuseum evoke vanitas and mortality?_ [link](https://claude.ai/share/735c54c1-c4f4-4293-9c30-66d5ba8bd23b)
 - _Which artworks have a provenance linked to Emperor Bonaparte?_ [link](https://claude.ai/share/0f38737d-176b-4c46-bb3d-044404e0b334)
