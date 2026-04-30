@@ -466,7 +466,11 @@ CREATE TABLE IF NOT EXISTS artworks (
     record_created   TEXT,
     record_modified  TEXT,
     -- Free-text dimensions/extent string from dcterms:extent (CHO).
-    extent_text      TEXT
+    extent_text      TEXT,
+    -- HMO -> VisualItem cross-link, populated from shows[0].id in Phase 4.
+    -- Phase 4.5 reads this to fetch per-HMO `about[]` thematic vocab (#283).
+    -- Dropped during Phase 3 integer-encoding finalization, like linked_art_uri.
+    visualitem_uri   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS mappings (
@@ -716,6 +720,7 @@ def create_or_open_db() -> sqlite3.Connection:
         ("record_created", "TEXT"),
         ("record_modified", "TEXT"),
         ("extent_text", "TEXT"),
+        ("visualitem_uri", "TEXT"),
     ]
     for col_name, col_type in tier2_cols:
         if col_name not in existing_cols:
@@ -2459,6 +2464,10 @@ def extract_about(data: dict) -> list[str]:
     Returns list of vocab_id strings (the URI suffix). Caller writes
     rows into mappings(field='theme'). Unresolved entries are silently
     dropped at INSERT time per existing orphan-mapping policy.
+
+    Note: HumanMadeObject payloads do NOT carry `about[]` directly in
+    production data — `about[]` lives on the VisualItem reached via
+    `shows[0].id`. See `extract_visualitem_uri` and Phase 4.5.
     """
     results: list[str] = []
     for entry in data.get("about", []):
@@ -2467,6 +2476,20 @@ def extract_about(data: dict) -> list[str]:
             continue
         results.append(uri.rsplit("/", 1)[-1])
     return results
+
+
+def extract_visualitem_uri(data: dict) -> str | None:
+    """Return the VisualItem URI from an HMO's `shows[]` array.
+
+    Production HMOs carry exactly one `shows[]` entry pointing at the
+    VisualItem (the work's image-bearing aspect). Returns None when no
+    shows[] entry exists or the first entry has no id.
+    """
+    for entry in data.get("shows", []):
+        uri = _ref_id(entry)
+        if uri:
+            return uri
+    return None
 
 
 def extract_artwork_external_ids(data: dict) -> list[tuple[str, str, str]]:
@@ -2866,6 +2889,7 @@ def resolve_artwork(uri: str) -> dict | None:
     attribution_evidence = extract_attribution_evidence(data)
     about_vocab_ids = extract_about(data)
     artwork_external_ids = extract_artwork_external_ids(data)
+    visualitem_uri = extract_visualitem_uri(data)
 
     return {
         "inscription_text": inscription_text,
@@ -2902,6 +2926,7 @@ def resolve_artwork(uri: str) -> dict | None:
         "attribution_evidence": attribution_evidence,
         "about_vocab_ids": about_vocab_ids,
         "artwork_external_ids": artwork_external_ids,
+        "visualitem_uri": visualitem_uri,
     }
 
 
@@ -3065,6 +3090,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
             creator_label = COALESCE(?, creator_label),
             record_created = ?,
             record_modified = ?,
+            visualitem_uri = ?,
             tier2_done = 1
         WHERE object_number = ?
     """
@@ -3144,6 +3170,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                     result.get("creator_label"),
                     result.get("record_created"),
                     result.get("record_modified"),
+                    result.get("visualitem_uri"),
                     obj_num,
                 ))
                 if result.get("record_created") or result.get("record_modified"):
@@ -3288,6 +3315,125 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Attr. evidence:{attribution_evidence_count:,}")
     print(f"    about[] themes:{about_count:,}")
     print(f"    Artwork ext IDs:{artwork_external_id_count:,}")
+
+
+# ─── Phase 4.5: VisualItem.about[] dereference (#283) ────────────────
+
+def _fetch_visualitem_about(uri: str) -> tuple[str, list[str] | None]:
+    """Fetch a VisualItem URI and return (uri, about_vocab_ids).
+
+    On HTTP/JSON failure returns (uri, None) so the caller can count it
+    against the failure tally without aborting the rest of the pass.
+    """
+    try:
+        resp = get_http_session().get(uri, headers={
+            "Accept": "application/ld+json",
+            "Profile": "https://linked.art/ns/v1/linked-art.json",
+            "User-Agent": USER_AGENT,
+        }, timeout=30)
+    except requests.RequestException:
+        return uri, None
+    if resp.status_code == 404:
+        return uri, []  # no VI: real not-found, treat as zero-themes
+    if not resp.ok:
+        return uri, None
+    try:
+        data = resp.json()
+    except ValueError:
+        return uri, None
+    return uri, extract_about(data)
+
+
+def run_phase4_5(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
+    """Phase 4.5: dereference each HMO's VisualItem to capture `about[]`
+    thematic-vocab links. Closes the SHIP-5 / #283 data-path gap that
+    surfaced in v0.26 — `about[]` lives on the VisualItem, not the HMO.
+
+    Reads the visualitem_uri column populated during Phase 4. Idempotent:
+    re-running on a populated DB is a no-op via INSERT OR IGNORE on the
+    mappings table. Skips if the column is absent (Phase 3 cleanup ran).
+    """
+    cur = conn.cursor()
+
+    artworks_cols = get_columns(conn, "artworks")
+    if "visualitem_uri" not in artworks_cols:
+        print("  visualitem_uri column not present (Phase 3 already finalized).")
+        print("  To re-run Phase 4.5, start from --phase 4 with a fresh harvest.")
+        return
+
+    rows = cur.execute(
+        "SELECT object_number, visualitem_uri FROM artworks "
+        "WHERE visualitem_uri IS NOT NULL AND visualitem_uri != ''"
+    ).fetchall()
+    total = len(rows)
+    if total == 0:
+        print("  No visualitem_uri values to fetch — Phase 4 may not have run.")
+        return
+
+    print(f"  Resolving {total:,} VisualItems for thematic vocab ({threads} threads)...")
+    t0 = time.time()
+    processed = 0
+    succeeded = 0
+    failed = 0
+    not_found = 0
+    with_themes = 0
+    total_theme_rows = 0
+
+    by_uri = {vi: obj for obj, vi in rows}
+
+    commit_batch_size = 1000
+    pending: list[tuple[str, str, str]] = []
+
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        futures = {pool.submit(_fetch_visualitem_about, vi): vi for _, vi in rows}
+        for future in as_completed(futures):
+            processed += 1
+            try:
+                vi_uri, about_ids = future.result()
+            except Exception:
+                failed += 1
+                continue
+            if about_ids is None:
+                failed += 1
+                continue
+            if not about_ids:
+                not_found += 1
+                continue
+            obj_num = by_uri.get(vi_uri)
+            if not obj_num:
+                continue
+            succeeded += 1
+            with_themes += 1
+            for vocab_id in about_ids:
+                pending.append((obj_num, vocab_id, "theme"))
+            total_theme_rows += len(about_ids)
+
+            if len(pending) >= commit_batch_size:
+                conn.executemany(MAPPING_INSERT_SQL, pending)
+                conn.commit()
+                pending.clear()
+
+            if processed % 10000 == 0:
+                elapsed = time.time() - t0
+                rate = processed / elapsed if elapsed > 0 else 0
+                remaining = (total - processed) / rate if rate > 0 else 0
+                print(
+                    f"    {processed:,}/{total:,} ({succeeded:,} ok, {failed:,} failed, "
+                    f"{not_found:,} no-themes, {rate:.0f}/s, ~{remaining / 60:.0f}min left)",
+                    flush=True,
+                )
+
+    if pending:
+        conn.executemany(MAPPING_INSERT_SQL, pending)
+        conn.commit()
+
+    elapsed = time.time() - t0
+    print(f"\n  Phase 4.5 complete in {elapsed / 60:.1f}min:")
+    print(f"    Processed:    {processed:,}")
+    print(f"    With themes:  {with_themes:,}")
+    print(f"    No-themes:    {not_found:,}")
+    print(f"    Failed:       {failed:,}")
+    print(f"    Theme rows:   {total_theme_rows:,}")
 
 
 # ─── Geocoding Import ────────────────────────────────────────────────
@@ -4837,7 +4983,7 @@ def run_phase3(
     conn.execute("DROP INDEX IF EXISTS idx_mappings_vocab")
 
     # Drop harvest-only columns (SQLite >= 3.35.0)
-    for col in ["linked_art_uri", "tier2_done"]:
+    for col in ["linked_art_uri", "tier2_done", "visualitem_uri"]:
         try:
             conn.execute(f"ALTER TABLE artworks DROP COLUMN {col}")
             print(f"    Dropped {col} column")
@@ -5376,6 +5522,12 @@ def main():
         phase4_audit = run_phase_audit(conn, "phase4")
         all_audit_results["phase4"] = phase4_audit
         format_stdout_table(phase4_audit, "phase4")
+        print()
+
+        print("=== Phase 4.5: VisualItem.about[] thematic vocab (#283) ===")
+        t0 = time.time()
+        run_phase4_5(conn, threads=args.threads)
+        print(f"  Phase 4.5 took {time.time() - t0:.1f}s")
         print()
 
         print("=== Phase 2b: Resolving new vocabulary URIs from Phase 4 ===")

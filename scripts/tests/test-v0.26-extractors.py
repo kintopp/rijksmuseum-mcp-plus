@@ -139,6 +139,28 @@ def test_cho_sameas_and_extent(hv):
     assert_eq("cho.iconclass.local_id", icon[1], "41D92")
 
 
+def test_visualitem_uri(hv):
+    """Phase 4.5 entry point: HMO -> shows[0].id."""
+    assert_eq(
+        "visualitem_uri.dict_shape",
+        hv.extract_visualitem_uri({
+            "shows": [{"id": "https://id.rijksmuseum.nl/202756632", "type": "VisualItem"}]
+        }),
+        "https://id.rijksmuseum.nl/202756632",
+    )
+    assert_eq(
+        "visualitem_uri.string_shape",
+        hv.extract_visualitem_uri({"shows": ["https://id.rijksmuseum.nl/202909719"]}),
+        "https://id.rijksmuseum.nl/202909719",
+    )
+    assert_eq("visualitem_uri.empty", hv.extract_visualitem_uri({}), None)
+    assert_eq(
+        "visualitem_uri.empty_shows",
+        hv.extract_visualitem_uri({"shows": []}),
+        None,
+    )
+
+
 def test_classify_authority_v026(hv):
     """Ensure handle.net + id.rijksmuseum.nl needles match."""
     a, lid = hv.classify_authority("https://hdl.handle.net/10934/RM0001.COLLECT.123")
@@ -164,6 +186,8 @@ def main():
     test_artwork_external_ids(hv)
     print("test_cho_sameas_and_extent")
     test_cho_sameas_and_extent(hv)
+    print("test_visualitem_uri")
+    test_visualitem_uri(hv)
     print("test_classify_authority_v026")
     test_classify_authority_v026(hv)
     print()
