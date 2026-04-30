@@ -763,7 +763,9 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
 # ---------------------------------------------------------------------------
 
 def phase_1c_getty_crossref(conn: sqlite3.Connection,
-                            dry_run: bool = False) -> int:
+                            dry_run: bool = False,
+                            csv_only: bool = False,
+                            output_dir: str = "data/audit") -> int:
     """Cross-reference Getty TGN IDs to Wikidata via P1667.
 
     This is the *indirect* TGN path — Wikidata entities that reference a TGN
@@ -775,6 +777,10 @@ def phase_1c_getty_crossref(conn: sqlite3.Connection,
 
     Sources TGN IDs from both ``vocabulary_external_ids`` (primary — where
     most TGN links live post-#238) and legacy ``vocabulary.external_id``.
+
+    With ``csv_only=True`` the resolved (vocab_id, lat, lon) tuples are
+    written to ``<output_dir>/phase_1c_getty_crossref.csv`` and the DB is
+    not modified — useful for smoke tests and audit captures.
     """
     places = get_ungeocoded_by_authority(conn, "tgn")
     if not places:
@@ -829,6 +835,20 @@ def phase_1c_getty_crossref(conn: sqlite3.Connection,
             print(f"  Batch {i // batch_size + 1} error: {e}", file=sys.stderr)
 
         time.sleep(2)
+
+    if csv_only:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        csv_path = out / "phase_1c_getty_crossref.csv"
+        with open(csv_path, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["vocab_id", "lat", "lon", "method", "method_detail"])
+            for vocab_id, (lat, lon) in results.items():
+                w.writerow([vocab_id, lat, lon,
+                            em.tier_for(em.TGN_VIA_WIKIDATA), em.TGN_VIA_WIKIDATA])
+        print(f"Phase 1c: {len(results)} places written to {csv_path} "
+              f"(csv-only — DB not modified)", file=sys.stderr)
+        return 0
 
     # Phase 1c is the via-Wikidata-P1667 path by construction; the direct
     # TGN path (tgn_direct) lives in batch_geocode.geocode_getty(). No
@@ -3173,7 +3193,8 @@ Examples:
     # Phase 1c: Getty → Wikidata cross-reference
     if run_phase in (None, "1c"):
         print(f"\n--- Phase 1c: Getty TGN → Wikidata ---", file=sys.stderr)
-        total_updated += phase_1c_getty_crossref(conn, args.dry_run)
+        total_updated += phase_1c_getty_crossref(
+            conn, args.dry_run, args.csv_only, args.output_dir)
 
     # Phase 1d: Who's On First admin polygon match (v0.25)
     if run_phase == "1d":
