@@ -511,12 +511,18 @@ def get_coverage(conn: sqlite3.Connection) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 def phase_1a_geonames(conn: sqlite3.Connection, username: str,
-                      dry_run: bool = False) -> int:
+                      dry_run: bool = False,
+                      csv_only: bool = False,
+                      output_dir: str = "data/audit") -> int:
     """Geocode places with GeoNames IDs via the GeoNames API.
 
     Sources authority IDs from both ``vocabulary_external_ids`` (primary,
     post-#238) and ``vocabulary.external_id`` (legacy). See
     ``get_ungeocoded_by_authority``.
+
+    With ``csv_only=True`` the resolved (vocab_id, lat, lon) tuples are
+    written to ``<output_dir>/phase_1a_geonames.csv`` and the DB is not
+    modified.
     """
     places = get_ungeocoded_by_authority(conn, "geonames")
     if not places:
@@ -633,6 +639,20 @@ def phase_1a_geonames(conn: sqlite3.Connection, username: str,
             print(f"  ... {i + 1}/{len(gn_ids_list)} done ({len(results)} found)",
                   file=sys.stderr)
 
+    if csv_only:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        csv_path = out / "phase_1a_geonames.csv"
+        with open(csv_path, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["vocab_id", "lat", "lon", "method", "method_detail"])
+            for vocab_id, (lat, lon) in results.items():
+                w.writerow([vocab_id, lat, lon,
+                            em.tier_for(em.GEONAMES_API), em.GEONAMES_API])
+        print(f"Phase 1a: {len(results)} places written to {csv_path} "
+              f"(csv-only — DB not modified)", file=sys.stderr)
+        return 0
+
     updated = update_coords(conn, results, em.GEONAMES_API, dry_run)
     summary = [f"{updated} places updated", f"{errors} errors"]
     if errors_429:
@@ -648,7 +668,9 @@ def phase_1a_geonames(conn: sqlite3.Connection, username: str,
 # ---------------------------------------------------------------------------
 
 def phase_1b_wikidata_alt(conn: sqlite3.Connection,
-                          dry_run: bool = False) -> int:
+                          dry_run: bool = False,
+                          csv_only: bool = False,
+                          output_dir: str = "data/audit") -> int:
     """Geocode Wikidata entries missing P625 via alternative properties.
 
     Fires for QIDs where the direct P625 lookup failed (handled earlier by
@@ -660,6 +682,10 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
 
     Sources QIDs from both ``vocabulary_external_ids`` and the legacy
     ``vocabulary.external_id`` column.
+
+    With ``csv_only=True`` resolved (vocab_id, lat, lon, method_detail)
+    rows are written to ``<output_dir>/phase_1b_wikidata_alt.csv`` and
+    the DB is not modified.
     """
     places = get_ungeocoded_by_authority(conn, "wikidata")
     if not places:
@@ -746,6 +772,22 @@ def phase_1b_wikidata_alt(conn: sqlite3.Connection,
     for qid, (lat, lon, detail) in per_qid.items():
         for vocab_id in qid_to_vocab[qid]:
             by_detail[detail][vocab_id] = (lat, lon)
+
+    if csv_only:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        csv_path = out / "phase_1b_wikidata_alt.csv"
+        n = 0
+        with open(csv_path, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["vocab_id", "lat", "lon", "method", "method_detail"])
+            for detail, results in by_detail.items():
+                for vocab_id, (lat, lon) in results.items():
+                    w.writerow([vocab_id, lat, lon, em.tier_for(detail), detail])
+                    n += 1
+        print(f"Phase 1b: {n} places written to {csv_path} "
+              f"(csv-only — DB not modified)", file=sys.stderr)
+        return 0
 
     total = 0
     for detail, results in by_detail.items():
@@ -942,7 +984,8 @@ def _wof_placetype_consistent(vocab_placetype: str | None,
 def phase_1d_wof(conn: sqlite3.Connection,
                  parquet_glob: str,
                  dry_run: bool = False,
-                 output_dir: str = "offline/geo") -> int:
+                 output_dir: str = "offline/geo",
+                 csv_only: bool = False) -> int:
     """Match remaining ungeocoded places against WOF admin polygons.
 
     For each ungeocoded place name (case-insensitive exact match against
@@ -952,6 +995,10 @@ def phase_1d_wof(conn: sqlite3.Connection,
     triage. Concordances harvested per accepted row: WOF Spelunker URI as
     ``external_id`` plus Wikidata QID and GeoNames ID into
     ``vocabulary_external_ids``.
+
+    With ``csv_only=True`` accepted matches are written to
+    ``<output_dir>/phase_1d_wof_accepted.csv`` (alongside the existing
+    ``wof_review.csv``) and the DB is not modified.
     """
     places = get_ungeocoded(conn, "no_external_used")
     if not places:
@@ -1018,6 +1065,27 @@ def phase_1d_wof(conn: sqlite3.Connection,
         if m.get("gn_id"):
             gn_uri = f"http://sws.geonames.org/{m['gn_id']}/"
             concordances.append((vid, "geonames", m["gn_id"], gn_uri))
+
+    if csv_only:
+        accepted_csv = out / "phase_1d_wof_accepted.csv"
+        with open(accepted_csv, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["vocab_id", "lat", "lon", "external_id",
+                        "method", "method_detail", "concordance_authority", "concordance_id"])
+            for vid, (lat, lon, ext) in updates.items():
+                # Emit one row per concordance (or one bare row if none).
+                vid_concs = [c for c in concordances if c[0] == vid]
+                if not vid_concs:
+                    w.writerow([vid, lat, lon, ext,
+                                em.tier_for(em.WOF_AUTHORITY), em.WOF_AUTHORITY, "", ""])
+                else:
+                    for _, auth, cid, _curi in vid_concs:
+                        w.writerow([vid, lat, lon, ext,
+                                    em.tier_for(em.WOF_AUTHORITY), em.WOF_AUTHORITY,
+                                    auth, cid])
+        print(f"Phase 1d: {len(updates)} accepted matches written to {accepted_csv} "
+              f"(csv-only — DB not modified)", file=sys.stderr)
+        return 0
 
     updated = update_coords_and_ids(
         conn, updates,
@@ -2587,7 +2655,8 @@ def _rce_lookup_monuments(rm_ids: list[str]) -> dict[str, dict]:
 def phase_1e_rce(conn: sqlite3.Connection,
                  dry_run: bool = False,
                  batch_size: int = 100,
-                 output_dir: str = "offline/geo") -> int:
+                 output_dir: str = "offline/geo",
+                 csv_only: bool = False) -> int:
     """QID-bridge RCE Rijksmonumenten lookup (decisions doc §431).
 
     Walks ``vocabulary_external_ids`` for places with Wikidata QIDs, asks
@@ -2595,6 +2664,10 @@ def phase_1e_rce(conn: sqlite3.Connection,
     each monument's coords. On hit: tag em.RCE_VIA_WIKIDATA, write the RCE
     monument URI as ``external_id``, and INSERT the RCE concordance into
     ``vocabulary_external_ids``.
+
+    With ``csv_only=True`` resolved (vocab_id, lat, lon, RCE concordance)
+    rows are written to ``<output_dir>/phase_1e_rce.csv`` and the DB is
+    not modified.
     """
     n_qids = _rce_pre_flight(conn, threshold=9000)
     print(f"Phase 1e: pre-flight OK ({n_qids:,} wikidata-tagged places)",
@@ -2667,6 +2740,24 @@ def phase_1e_rce(conn: sqlite3.Connection,
                 if vid not in updates:
                     updates[vid] = (mon["lat"], mon["lon"], mon["uri"])
                     concordances.append((vid, "rce", rm, mon["uri"]))
+
+    if csv_only:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        csv_path = out / "phase_1e_rce.csv"
+        with open(csv_path, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["vocab_id", "lat", "lon", "external_id",
+                        "method", "method_detail", "rce_id"])
+            conc_by_vid = {c[0]: c for c in concordances}
+            for vid, (lat, lon, uri) in updates.items():
+                rm_id = conc_by_vid.get(vid, (None, None, "", None))[2]
+                w.writerow([vid, lat, lon, uri,
+                            em.tier_for(em.RCE_VIA_WIKIDATA), em.RCE_VIA_WIKIDATA,
+                            rm_id])
+        print(f"Phase 1e: {len(updates)} places written to {csv_path} "
+              f"(csv-only — DB not modified)", file=sys.stderr)
+        return 0
 
     updated = update_coords_and_ids(
         conn, updates,
@@ -3183,12 +3274,15 @@ Examples:
     # Phase 1a: GeoNames
     if run_phase in (None, "1a") and not args.skip_geonames:
         print(f"\n--- Phase 1a: GeoNames API ---", file=sys.stderr)
-        total_updated += phase_1a_geonames(conn, args.geonames_user, args.dry_run)
+        total_updated += phase_1a_geonames(
+            conn, args.geonames_user, args.dry_run,
+            args.csv_only, args.output_dir)
 
     # Phase 1b: Wikidata alternative properties
     if run_phase in (None, "1b"):
         print(f"\n--- Phase 1b: Wikidata alt-props ---", file=sys.stderr)
-        total_updated += phase_1b_wikidata_alt(conn, args.dry_run)
+        total_updated += phase_1b_wikidata_alt(
+            conn, args.dry_run, args.csv_only, args.output_dir)
 
     # Phase 1c: Getty → Wikidata cross-reference
     if run_phase in (None, "1c"):
@@ -3200,14 +3294,16 @@ Examples:
     if run_phase == "1d":
         print(f"\n--- Phase 1d: WOF admin polygon match ---", file=sys.stderr)
         total_updated += phase_1d_wof(
-            conn, args.wof_parquet, args.dry_run, args.output_dir)
+            conn, args.wof_parquet, args.dry_run, args.output_dir,
+            csv_only=args.csv_only)
 
     # Phase 1e: RCE Rijksmonumenten via Wikidata QID bridge (v0.25)
     if run_phase == "1e":
         print(f"\n--- Phase 1e: RCE Rijksmonumenten via Wikidata ---",
               file=sys.stderr)
         total_updated += phase_1e_rce(
-            conn, args.dry_run, output_dir=args.output_dir)
+            conn, args.dry_run, output_dir=args.output_dir,
+            csv_only=args.csv_only)
 
     # Phase 2: Self-reference resolution
     if run_phase in (None, "2"):
