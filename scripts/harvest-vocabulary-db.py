@@ -5445,6 +5445,12 @@ def parse_args() -> argparse.Namespace:
         help="Exit with non-zero status at end of run if any audit target fails (default: warn only). See #222.",
     )
     parser.add_argument(
+        "--stop-on-orphans", action="store_true",
+        help="Halt before Phase 3 if the orphan vocab audit finds any live (non-KNOWN_DEAD) "
+             "orphans. Forces a manual review of data/audit/orphan-vocab-ids-v0.24.csv before "
+             "Phase 3's integer-encoding silently drops them. See #228.",
+    )
+    parser.add_argument(
         "--skip-enrichment", action="store_true",
         help="Skip the Phase 3 vocab enrichment step (person bios, wikidata, place/concept hierarchy). "
              "DB will still open — column stubs are added unconditionally — but enriched fields will be empty. "
@@ -5463,11 +5469,18 @@ def main():
     global DB_PATH
     args = parse_args()
 
+    # #252: line-buffer stdout so `python harvest-vocabulary-db.py … | tee log`
+    # surfaces progress in real time during multi-hour phases instead of
+    # appearing dead between flushes. Equivalent to running with `python -u` or
+    # PYTHONUNBUFFERED=1, but doesn't depend on the caller remembering it.
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     if args.db:
         DB_PATH = Path(args.db)
 
     print(f"Database: {DB_PATH}")
-    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}, limit_pages={args.limit_pages}, skip_enrichment={args.skip_enrichment}, dumps_dir={args.dumps_dir or DUMPS_DIR}")
+    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}, limit_pages={args.limit_pages}, skip_enrichment={args.skip_enrichment}, stop_on_orphans={args.stop_on_orphans}, dumps_dir={args.dumps_dir or DUMPS_DIR}")
     print()
 
     conn = create_or_open_db()
@@ -5569,6 +5582,16 @@ def main():
                     f.write(f"{vid},{field},{cnt}\n")
             print(f"  WARNING: {len(live_orphans)} orphan vocab IDs exported to {csv_path}")
             print(f"  Review and add missing codes to EXTERNAL_VOCAB before re-running Phase 3.")
+            if args.stop_on_orphans:
+                # #228: bail before Phase 3's integer-encoding drops these mappings.
+                # Resume after review with `--phase 3 --start-phase 3` (start-phase
+                # path is idempotent for already-resolved phases).
+                print()
+                print(f"  --stop-on-orphans set: halting before Phase 3.")
+                print(f"  After reviewing {csv_path} and updating EXTERNAL_VOCAB,")
+                print(f"  resume with: --phase 2 (re-runs Phase 2 → 4 → 2b → orphan audit → Phase 3).")
+                conn.close()
+                sys.exit(2)
         else:
             print(f"  No orphan vocab IDs found — all mappings have matching vocabulary entries.")
     else:
