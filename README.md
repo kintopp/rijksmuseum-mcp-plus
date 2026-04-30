@@ -25,7 +25,7 @@ Go to _Settings_ → _Connectors_ → _Add custom connector_ → Name it as you 
 
 Recommended: Afterwards, follow the same procedure to install rijksmuseum-mcp+'s companion [IconClass](https://iconclass.org) resource, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). This allows you to automatically search and explore c. 1.3 million Iconclass notations, concepts, and descriptive texts alongside the Rijksmuseum's metadata. 
 
-Technically speaking, both rijksmuseum-mcp+ and rijksmuseum-iconclass-mcp are based on the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) standard. As such, they also work with generative large language models (LLMs) in other chatbots and applications which support this standard, including several which can be used **without a paid subscription**. However, currently none beside [Claude Desktop](https://claude.com/download) and [claude.ai](https://claude.ai) support viewing, analysing, and interacting with images and visualisations in the chat timeline. For more details, please see the [Choosing an AI system](#choosing-an-ai-system) section below.
+It is possible (with some tradeoffs) to use rijksmuseum-mcp+ **without a paid subscription**. For more details, please see the [Choosing an AI system](#choosing-an-ai-system) section below.
 
 ## Research skill
 
