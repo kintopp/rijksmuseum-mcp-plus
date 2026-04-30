@@ -302,7 +302,7 @@ everything else is sanity-band.
 | 3 | Unsold events | 660–680 | 665 | Stable across re-harvests |
 | 4 | Batch-price events with parsed price | 3,700–4,100 | 3,900 | The "real" batch_price metric — text-pattern matches that also have a parsed price |
 | 5 | Total `batch_price = 1` | 15K–18K | 17,076 | Includes parser-set rows where text matched but no price was extracted |
-| 6 | Parties missing `enrichment_reasoning` (where `position_method LIKE 'llm%'`) | 0–300 | 235 | Audit JSONs that didn't carry reasoning strings; non-fatal |
+| 6 | Parties + events missing `enrichment_reasoning` (where method `LIKE 'llm%'`) | 0–10 | 5 + 3 = 8 | After #285 fix — only writeback-clash residue from disambiguation / event-splitting overwrites remains |
 | 7 | Orphaned parties (party with no matching event) | **0** | 0 | Hard invariant |
 | 8 | Duplicate `(artwork_id, sequence)` | **0** | 0 | Hard invariant |
 | 9 | Corrected events without reasoning | **0** | 0 | Hard invariant |
@@ -358,3 +358,11 @@ SELECT 'periods', COUNT(*) FROM provenance_periods;
   results-format JSONs (the 2026-03-25 files are dry-run packages without
   responses), reframed verification targets as ranges with a v0.26-observed
   column.
+- **2026-04-30 (later)**: closed #285 by patching
+  `writeback-position-enrichment.mjs` and `writeback-type-classifications.mjs`
+  to extract `reasoning` from audit JSONs and write it to
+  `enrichment_reasoning` (with idempotent backfill for rows populated by
+  prior runs). The original diagnosis blamed the tool schema; the actual
+  bug was the writebacks dropping a field that was already in every audit
+  JSON. Verification target #6 tightened from 0–300 to 0–10
+  (writeback-clash residue only — v0.26 observed: 5 parties + 3 events = 8).

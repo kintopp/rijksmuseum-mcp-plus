@@ -54,6 +54,7 @@ for (const r of data.results) {
         party_idx: pu.party_idx,
         position: pos,
         confidence: pu.confidence,
+        reasoning: pu.reasoning ?? null,
       });
     }
 
@@ -68,6 +69,7 @@ for (const r of data.results) {
         sequence: seq,
         category: cu.category,
         confidence: cu.confidence,
+        reasoning: cu.reasoning ?? null,
       });
     }
   }
@@ -96,38 +98,77 @@ const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 const resolve = createIdResolver(db, idRemap);
 
+// New rows (party_position was NULL → fill position + method + reasoning).
 const updatePosition = db.prepare(`
   UPDATE provenance_parties
-  SET party_position = ?, position_method = 'llm_enrichment'
+  SET party_position = ?, position_method = 'llm_enrichment', enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ? AND party_idx = ?
     AND party_position IS NULL
 `);
 
+// Reasoning backfill (#285): for parties already positioned by this writeback in
+// a prior run, fill enrichment_reasoning if still NULL and the position matches
+// what the audit JSON now claims (safety guard against stale audit / model drift).
+const backfillPositionReasoning = db.prepare(`
+  UPDATE provenance_parties
+  SET enrichment_reasoning = ?
+  WHERE artwork_id = ? AND sequence = ? AND party_idx = ?
+    AND party_position = ?
+    AND position_method = 'llm_enrichment'
+    AND enrichment_reasoning IS NULL
+`);
+
 const updateCategory = db.prepare(`
   UPDATE provenance_events
-  SET transfer_category = ?, category_method = 'llm_enrichment'
+  SET transfer_category = ?, category_method = 'llm_enrichment', enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ?
     AND transfer_category = 'ambiguous'
 `);
 
+const backfillCategoryReasoning = db.prepare(`
+  UPDATE provenance_events
+  SET enrichment_reasoning = ?
+  WHERE artwork_id = ? AND sequence = ?
+    AND transfer_category = ?
+    AND category_method = 'llm_enrichment'
+    AND enrichment_reasoning IS NULL
+`);
+
 let posUpdated = 0, posSkipped = 0, skippedRemap = 0;
+let posReasoningBackfilled = 0;
 let catUpdated = 0, catSkipped = 0;
+let catReasoningBackfilled = 0;
 
 const writeBatch = db.transaction(() => {
   for (const u of positionUpdates) {
     const artworkId = resolve(u.artwork_id, u.object_number);
     if (artworkId == null) { skippedRemap++; continue; }
-    const result = updatePosition.run(u.position, artworkId, u.sequence, u.party_idx);
-    if (result.changes > 0) posUpdated++;
-    else posSkipped++;
+    const result = updatePosition.run(u.position, u.reasoning, artworkId, u.sequence, u.party_idx);
+    if (result.changes > 0) {
+      posUpdated++;
+    } else {
+      posSkipped++;
+      // Try to backfill reasoning for already-positioned rows where it's still NULL.
+      if (u.reasoning) {
+        const bf = backfillPositionReasoning.run(u.reasoning, artworkId, u.sequence, u.party_idx, u.position);
+        if (bf.changes > 0) posReasoningBackfilled++;
+      }
+    }
   }
 
   for (const u of categoryUpdates) {
     const artworkId = resolve(u.artwork_id, u.object_number);
     if (artworkId == null) { skippedRemap++; continue; }
-    const result = updateCategory.run(u.category, artworkId, u.sequence);
-    if (result.changes > 0) catUpdated++;
-    else catSkipped++;
+    const result = updateCategory.run(u.category, u.reasoning, artworkId, u.sequence);
+    if (result.changes > 0) {
+      catUpdated++;
+    } else {
+      catSkipped++;
+      if (u.reasoning) {
+        const bf = backfillCategoryReasoning.run(u.reasoning, artworkId, u.sequence, u.category);
+        if (bf.changes > 0) catReasoningBackfilled++;
+      }
+    }
   }
 });
 
@@ -143,5 +184,7 @@ db.close();
 
 console.log(`Results:`);
 console.log(`  Positions: ${posUpdated} updated, ${posSkipped} skipped (already set or missing)`);
+if (posReasoningBackfilled > 0) console.log(`             ${posReasoningBackfilled} reasoning backfilled on already-positioned parties (#285)`);
 console.log(`  Categories: ${catUpdated} updated, ${catSkipped} skipped`);
+if (catReasoningBackfilled > 0) console.log(`              ${catReasoningBackfilled} reasoning backfilled on already-categorised events (#285)`);
 if (skippedRemap > 0) console.log(`  Skipped (id-remap): ${skippedRemap}`);

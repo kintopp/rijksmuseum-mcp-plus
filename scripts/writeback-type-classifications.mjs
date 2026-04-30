@@ -99,14 +99,28 @@ const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 const resolve = createIdResolver(db, idRemap);
 
+// New rows (event was previously 'unknown' → set type, category, method, reasoning).
 const updateStmt = db.prepare(`
   UPDATE provenance_events
-  SET transfer_type = ?, transfer_category = ?, category_method = 'llm_enrichment'
+  SET transfer_type = ?, transfer_category = ?, category_method = 'llm_enrichment',
+      enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ? AND transfer_type = 'unknown'
+`);
+
+// Reasoning backfill (#285): for events already classified by this writeback in
+// a prior run, fill enrichment_reasoning if still NULL and the type matches the
+// audit JSON's claim (safety guard against subsequent reclassifications).
+const backfillReasoning = db.prepare(`
+  UPDATE provenance_events
+  SET enrichment_reasoning = ?
+  WHERE artwork_id = ? AND sequence = ?
+    AND transfer_type = ? AND category_method = 'llm_enrichment'
+    AND enrichment_reasoning IS NULL
 `);
 
 let updated = 0;
 let notFound = 0;
+let reasoningBackfilled = 0;
 
 let skippedRemap = 0;
 
@@ -115,15 +129,25 @@ const writeBatch = db.transaction((rows) => {
     const artworkId = resolve(row.artwork_id, row.object_number);
     if (artworkId == null) { skippedRemap++; continue; }
     const category = TRANSFER_TYPE_TO_CATEGORY[row.transfer_type] ?? null;
+    const reasoning = row.reasoning ?? null;
     const result = updateStmt.run(
       row.transfer_type,
       category,
+      reasoning,
       artworkId,
       row.event_sequence
     );
     if (result.changes > 0) {
       updated++;
     } else {
+      // Try to backfill reasoning for already-classified events (#285).
+      if (reasoning) {
+        const bf = backfillReasoning.run(reasoning, artworkId, row.event_sequence, row.transfer_type);
+        if (bf.changes > 0) {
+          reasoningBackfilled++;
+          continue;
+        }
+      }
       notFound++;
       console.warn(`  WARN: No unknown event at artwork_id=${artworkId} seq=${row.event_sequence}`);
     }
@@ -147,6 +171,7 @@ db.close();
 
 console.log(`Results:`);
 console.log(`  Updated:   ${updated}`);
+if (reasoningBackfilled > 0) console.log(`  Reasoning backfilled on already-classified events: ${reasoningBackfilled} (#285)`);
 console.log(`  Not found: ${notFound} (already reclassified or missing)`);
 if (skippedRemap > 0) console.log(`  Skipped (id-remap): ${skippedRemap}`);
 console.log(`  Version info updated.`);
