@@ -35,10 +35,9 @@ The downloaded skill file can be installed in Claude by following [these instruc
 
 ## Sample Queries
 
-After you've connected rijksmuseum-mcp+ to your AI system, you can explore the collection in natural language. The links below are to sample responses to these queries in Claude Desktop. Note: the shared links only reproduce the texts of these sessions (no image viewer or visualisations). 
+After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language. For examples of the kinds of queries the systems can answer, please see the prompts below. For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md). Note: The links following the prompts are to sample responses in Claude Desktop. They only reproduce the texts of these sessions – not the inline image viewer or custom visualisations: 
 
-- _What German artworks evoke vanitas and mortality?_ [link](https://claude.ai/share/735c54c1-c4f4-4293-9c30-66d5ba8bd23b)
-- _List portrait photographs by American female photographers in the collection_ [link](https://claude.ai/share/704b1dd1-6591-4fc5-b6a8-80cf38ad1df3)
+- _What German artworks at the Rijksmuseum evoke vanitas and mortality?_ [link](https://claude.ai/share/735c54c1-c4f4-4293-9c30-66d5ba8bd23b)
 - _Which artworks have a provenance linked to Emperor Bonaparte?_ [link](https://claude.ai/share/0f38737d-176b-4c46-bb3d-044404e0b334)
 - _Show artworks which include an inscription saying, 'Amor vincit omnia'_ [link](https://claude.ai/share/7415012a-5062-4866-a3e8-9278e9532a21)
 - _Find artworks similar to SK-A-2350_ [link](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2350.html)
@@ -46,11 +45,8 @@ After you've connected rijksmuseum-mcp+ to your AI system, you can explore the c
 - _Show me sculptures in the collection by artists born in Leiden_ [link](https://claude.ai/share/077db4fb-d748-4b17-86fa-494a982b5bcb)
 - _What are the three largest paintings in the collection by width?_ [link](https://claude.ai/share/1a7f9a3c-012c-4065-9222-fbfca265585a)
 - _Which 15th-century paintings are listed as workshop productions?_ [link](https://claude.ai/share/8733dcfc-4d25-4efd-b2af-6b2c3cddd7bb)
-- _What types of works does the collection have from Indonesia?_ [link](https://claude.ai/share/4f1bfe09-7620-4f45-9013-c719420ddf21)
 - _Show me the Roermondse passie and highlight the Betrayal of Judas_ [link](https://claude.ai/share/ca56c81b-7422-477e-9839-f921c0423c03)
   (requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai))
-
-For examples of more complex sample queries and responses, please see the [research scenarios](docs/research-scenarios.md).
 
 ## Features
 
