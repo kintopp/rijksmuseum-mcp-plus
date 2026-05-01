@@ -2739,7 +2739,12 @@ def phase_1e_rce(conn: sqlite3.Connection,
             for vid in qid_to_vids[qid]:
                 if vid not in updates:
                     updates[vid] = (mon["lat"], mon["lon"], mon["uri"])
-                    concordances.append((vid, "rce", rm, mon["uri"]))
+                    # authority='rijksmonument' names the registry (the ID is a
+                    # Rijksmonumentnummer, the same identifier Wikidata's P359
+                    # carries). RCE is the steward; using the registry name
+                    # keeps room for other RCE-published authorities later
+                    # (Bibliotheek, ABR thesauri, etc.).
+                    concordances.append((vid, "rijksmonument", rm, mon["uri"]))
 
     if csv_only:
         out = Path(output_dir)
@@ -2748,7 +2753,7 @@ def phase_1e_rce(conn: sqlite3.Connection,
         with open(csv_path, "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(["vocab_id", "lat", "lon", "external_id",
-                        "method", "method_detail", "rce_id"])
+                        "method", "method_detail", "rijksmonument_id"])
             conc_by_vid = {c[0]: c for c in concordances}
             for vid, (lat, lon, uri) in updates.items():
                 rm_id = conc_by_vid.get(vid, (None, None, "", None))[2]
