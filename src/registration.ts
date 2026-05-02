@@ -1867,7 +1867,7 @@ function registerTools(
     if (!resolvedImageInfo) return { ok: false, error: "No image available for this artwork" };
 
     const physicalDimensions = formatDimensions(artwork.heightCm, artwork.widthCm);
-    const { thumbnailUrl: _t, iiifId: _i, ...imageData } = resolvedImageInfo;
+    const { thumbnailUrl, iiifId, ...imageData } = resolvedImageInfo;
     const data: Omit<InferOutput<typeof ImageInfoOutput>, "viewUUID"> = {
       ...imageData,
       objectNumber: artwork.objectNumber,
@@ -2511,7 +2511,7 @@ function registerTools(
         lastPolledAt: queue.lastPolledAt != null ? new Date(queue.lastPolledAt).toISOString() : undefined,
         recentlyPolledByViewer,
         deliveryState,
-        viewerConnected: recentlyPolledByViewer, // deprecated alias, removed in v0.28
+        viewerConnected: recentlyPolledByViewer,
       };
 
       const overlayCount = queue.activeOverlays.length;

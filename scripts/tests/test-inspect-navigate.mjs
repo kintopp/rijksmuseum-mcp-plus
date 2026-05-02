@@ -413,10 +413,9 @@ const r4i = await client.callTool({
 });
 assert(r4i.isError === true, "relativeTo 'full' → error (must be pct:)");
 
-// 4j/4k. deliveryState transitions on a fresh isolated viewer.
-// Use a fresh viewUUID dedicated to these checks so the existing queue-
-// accounting in section 5 (which expects exact command counts on viewUUID1
-// and viewUUID2) is not perturbed.
+// Uses a fresh viewUUID dedicated to these checks so the queue-accounting
+// in section 5 (which expects exact command counts on viewUUID1 and
+// viewUUID2) is not perturbed.
 console.log("\n--- 4j/4k: deliveryState transitions ---");
 {
   const fresh = await client.callTool({
