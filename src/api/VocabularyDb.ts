@@ -2981,58 +2981,73 @@ export class VocabularyDb {
     }
 
     // Step 3: fetch the page.
-    const artworkCountSql = creatorFieldId !== undefined
-      ? `(SELECT COUNT(*) FROM mappings mc WHERE mc.field_id = ${creatorFieldId} AND mc.vocab_rowid = v.vocab_int_id)`
-      : "0";
-
-    let sql: string;
-    let queryBindings: unknown[];
-    if (nameOrder) {
-      // Order by name FTS rank — sort in JS using nameOrder.
-      sql =
-        `SELECT v.id, v.label_en, v.label_nl, v.birth_year, v.death_year,
-                v.gender, v.wikidata_id, ${artworkCountSql} AS artwork_count
-         FROM vocabulary v
-         WHERE ${where}`;
-      queryBindings = bindings;
-    } else {
-      sql =
-        `SELECT v.id, v.label_en, v.label_nl, v.birth_year, v.death_year,
-                v.gender, v.wikidata_id, ${artworkCountSql} AS artwork_count
-         FROM vocabulary v
-         WHERE ${where}
-         ORDER BY artwork_count DESC, COALESCE(v.label_en, v.label_nl) COLLATE NOCASE
-         LIMIT ? OFFSET ?`;
-      queryBindings = [...bindings, limit, offset];
-    }
-
-    let rows = this.db.prepare(sql).all(...queryBindings) as {
+    type PageRow = {
       id: string;
+      vocab_int_id: number;
       label_en: string | null;
       label_nl: string | null;
       birth_year: number | null;
       death_year: number | null;
       gender: string | null;
       wikidata_id: string | null;
-      artwork_count: number;
-    }[];
+    };
+    const baseColumns =
+      `v.id, v.vocab_int_id, v.label_en, v.label_nl, v.birth_year, v.death_year, v.gender, v.wikidata_id`;
 
+    let pageRows: PageRow[];
     if (nameOrder) {
-      rows.sort((a, b) => (nameOrder!.get(a.id) ?? 0) - (nameOrder!.get(b.id) ?? 0));
-      rows = rows.slice(offset, offset + limit);
+      // FTS-rank order requires sorting in JS. Defer per-row artworkCount to a
+      // single page-only batch below — for broad name searches the candidate
+      // set can be 10K+ persons, and a correlated subquery per row is wasteful
+      // when only ~25 are returned.
+      const allRows = this.db.prepare(
+        `SELECT ${baseColumns} FROM vocabulary v WHERE ${where}`
+      ).all(...bindings) as PageRow[];
+      allRows.sort((a, b) => (nameOrder!.get(a.id) ?? 0) - (nameOrder!.get(b.id) ?? 0));
+      pageRows = allRows.slice(offset, offset + limit);
+    } else {
+      // No name FTS — order by artworkCount in SQL (no JS post-processing needed).
+      const artworkCountSql = creatorFieldId !== undefined
+        ? `(SELECT COUNT(*) FROM mappings mc WHERE mc.field_id = ${creatorFieldId} AND mc.vocab_rowid = v.vocab_int_id)`
+        : "0";
+      pageRows = this.db.prepare(
+        `SELECT ${baseColumns}, ${artworkCountSql} AS artwork_count
+         FROM vocabulary v
+         WHERE ${where}
+         ORDER BY artwork_count DESC, COALESCE(v.label_en, v.label_nl) COLLATE NOCASE
+         LIMIT ? OFFSET ?`
+      ).all(...bindings, limit, offset) as (PageRow & { artwork_count: number })[];
     }
 
-    const persons: PersonResult[] = rows.map(r => ({
-      vocabId: r.id,
-      label: r.label_en ?? r.label_nl ?? r.id,
-      labelEn: r.label_en,
-      labelNl: r.label_nl,
-      birthYear: r.birth_year,
-      deathYear: r.death_year,
-      gender: r.gender,
-      ...(hasArtworks && { artworkCount: r.artwork_count }),
-      wikidataId: r.wikidata_id,
-    }));
+    // Resolve artworkCount in one batch query for the page.
+    const artworkCountMap = new Map<number, number>();
+    if (hasArtworks && creatorFieldId !== undefined && nameOrder && pageRows.length > 0) {
+      const intIds = pageRows.map(r => r.vocab_int_id);
+      const ph = intIds.map(() => "?").join(", ");
+      const countRows = this.db.prepare(
+        `SELECT vocab_rowid, COUNT(*) AS cnt FROM mappings
+         WHERE field_id = ? AND vocab_rowid IN (${ph})
+         GROUP BY vocab_rowid`
+      ).all(creatorFieldId, ...intIds) as { vocab_rowid: number; cnt: number }[];
+      for (const r of countRows) artworkCountMap.set(r.vocab_rowid, r.cnt);
+    }
+
+    const persons: PersonResult[] = pageRows.map(r => {
+      const artworkCount = nameOrder
+        ? (artworkCountMap.get(r.vocab_int_id) ?? 0)
+        : (r as PageRow & { artwork_count: number }).artwork_count;
+      return {
+        vocabId: r.id,
+        label: r.label_en ?? r.label_nl ?? r.id,
+        labelEn: r.label_en,
+        labelNl: r.label_nl,
+        birthYear: r.birth_year,
+        deathYear: r.death_year,
+        gender: r.gender,
+        ...(hasArtworks && { artworkCount }),
+        wikidataId: r.wikidata_id,
+      };
+    });
 
     return {
       totalResults,
@@ -4151,25 +4166,42 @@ export class VocabularyDb {
    * Tier 1: Exact phrase match across all name variants.
    * Tier 2: Token AND fallback (stripping name prepositions) if Tier 1 returns 0.
    */
-  private findPersonIdsFts(value: string): string[] {
-    // Tier 1: phrase match
-    const ftsPhrase = escapeFts5(value);
-    if (!ftsPhrase) return [];
+  /**
+   * Two-tier FTS lookup against an alt-name FTS table: phrase MATCH first,
+   * then token AND fallback (with optional stop-word stripping).
+   * Used by findPersonIdsFts and findOrgIdsFts.
+   *
+   * Identifier interpolation in the SQL is safe — `cfg.contentTable`,
+   * `cfg.ftsTable`, `cfg.idColumn`, `cfg.alias` are all hardcoded constants
+   * passed by the call sites, never user input.
+   */
+  private findIdsViaFts2Tier(
+    value: string,
+    cfg: {
+      contentTable: string;
+      ftsTable: string;
+      idColumn: string;
+      alias: string;
+      extraWhere?: string;
+      stopWords?: ReadonlySet<string>;
+    },
+  ): string[] {
+    const phrase = escapeFts5(value);
+    if (!phrase) return [];
 
-    const rows = this.db!.prepare(
-      `SELECT DISTINCT pn.person_id AS id
-       FROM person_names pn
-       WHERE pn.rowid IN (
-         SELECT rowid FROM person_names_fts WHERE person_names_fts MATCH ?
-       )`
-    ).all(ftsPhrase) as { id: string }[];
+    const baseSql =
+      `SELECT DISTINCT ${cfg.alias}.${cfg.idColumn} AS id
+       FROM ${cfg.contentTable} ${cfg.alias}
+       WHERE ${cfg.alias}.rowid IN (
+         SELECT rowid FROM ${cfg.ftsTable} WHERE ${cfg.ftsTable} MATCH ?
+       )${cfg.extraWhere ?? ""}`;
 
-    if (rows.length > 0) return rows.map((r) => r.id);
+    const tier1 = this.db!.prepare(baseSql).all(phrase) as { id: string }[];
+    if (tier1.length > 0) return tier1.map((r) => r.id);
 
-    // Tier 2: token AND with stop-word removal
     const tokens = value
       .split(/\s+/)
-      .filter((t) => t.length > 0 && !VocabularyDb.PERSON_STOP_WORDS.has(t.toLowerCase()));
+      .filter((t) => t.length > 0 && !cfg.stopWords?.has(t.toLowerCase()));
     if (tokens.length === 0) return [];
 
     const ftsTokens = tokens
@@ -4177,61 +4209,34 @@ export class VocabularyDb {
       .filter((x): x is string => x !== null);
     if (ftsTokens.length === 0) return [];
 
-    const ftsQuery = ftsTokens.join(" AND ");
-    const fallbackRows = this.db!.prepare(
-      `SELECT DISTINCT pn.person_id AS id
-       FROM person_names pn
-       WHERE pn.rowid IN (
-         SELECT rowid FROM person_names_fts WHERE person_names_fts MATCH ?
-       )`
-    ).all(ftsQuery) as { id: string }[];
+    const tier2 = this.db!.prepare(baseSql).all(ftsTokens.join(" AND ")) as { id: string }[];
+    return tier2.map((r) => r.id);
+  }
 
-    return fallbackRows.map((r) => r.id);
+  private findPersonIdsFts(value: string): string[] {
+    return this.findIdsViaFts2Tier(value, {
+      contentTable: "person_names",
+      ftsTable: "person_names_fts",
+      idColumn: "person_id",
+      alias: "pn",
+      stopWords: VocabularyDb.PERSON_STOP_WORDS,
+    });
   }
 
   /**
    * Find organisation/group vocab IDs via the entity_alt_names_fts table.
-   * Mirrors findPersonIdsFts (phrase MATCH then token AND), but without stop-word
-   * stripping — organisation names aren't shaped like personal names.
-   * Today entity_alt_names is 100% organisation-typed; the 'group' clause is
-   * forward-proofing for when alt-names start being harvested for groups too.
+   * No stop-word stripping — organisation names aren't shaped like personal names.
+   * The 'group' clause is forward-proofing: today entity_alt_names is 100%
+   * organisation-typed, but the schema and creator field already accept groups.
    */
   private findOrgIdsFts(value: string): string[] {
-    // Tier 1: phrase match
-    const ftsPhrase = escapeFts5(value);
-    if (!ftsPhrase) return [];
-
-    const rows = this.db!.prepare(
-      `SELECT DISTINCT ean.entity_id AS id
-       FROM entity_alt_names ean
-       WHERE ean.entity_type IN ('organisation', 'group')
-         AND ean.rowid IN (
-           SELECT rowid FROM entity_alt_names_fts WHERE entity_alt_names_fts MATCH ?
-         )`
-    ).all(ftsPhrase) as { id: string }[];
-
-    if (rows.length > 0) return rows.map((r) => r.id);
-
-    // Tier 2: token AND
-    const tokens = value.split(/\s+/).filter((t) => t.length > 0);
-    if (tokens.length === 0) return [];
-
-    const ftsTokens = tokens
-      .map((t) => escapeFts5(t))
-      .filter((x): x is string => x !== null);
-    if (ftsTokens.length === 0) return [];
-
-    const ftsQuery = ftsTokens.join(" AND ");
-    const fallbackRows = this.db!.prepare(
-      `SELECT DISTINCT ean.entity_id AS id
-       FROM entity_alt_names ean
-       WHERE ean.entity_type IN ('organisation', 'group')
-         AND ean.rowid IN (
-           SELECT rowid FROM entity_alt_names_fts WHERE entity_alt_names_fts MATCH ?
-         )`
-    ).all(ftsQuery) as { id: string }[];
-
-    return fallbackRows.map((r) => r.id);
+    return this.findIdsViaFts2Tier(value, {
+      contentTable: "entity_alt_names",
+      ftsTable: "entity_alt_names_fts",
+      idColumn: "entity_id",
+      alias: "ean",
+      extraWhere: " AND ean.entity_type IN ('organisation', 'group')",
+    });
   }
 
   /** Build vocab WHERE clause and bindings for the non-FTS path. */
