@@ -92,7 +92,14 @@ app.ontoolresult = (result) => {
   app.sendLog({ level: 'info', data: 'Tool result received' });
 
   if (result.isError) {
-    showError('Error loading artwork', result.content?.[0]?.text || 'Unknown error');
+    // Fail loud only when no viewer is mounted yet — otherwise the error may
+    // belong to a navigate/inspect/remount echo and shouldn't tear down the
+    // existing viewer.
+    if (!currentData) {
+      showError('Error loading artwork', result.content?.[0]?.text || 'Unknown error');
+    } else {
+      app.sendLog({ level: 'warn', data: `Tool error while viewer mounted: ${result.content?.[0]?.text || 'unknown'}` });
+    }
     return;
   }
 
@@ -100,8 +107,16 @@ app.ontoolresult = (result) => {
   if (data) {
     applyMountedArtwork(data, { isSeed: true });
     void fetchRelatedObjectsForCurrent(data.objectNumber);
-  } else {
+    return;
+  }
+
+  // Result without iiifInfoUrl: not an artwork mount. Could be a navigate/
+  // inspect/remount echo. If a viewer is already mounted, keep it; only
+  // showError when there's nothing to fall back to.
+  if (!currentData) {
     showError('No image available', 'Could not find IIIF image data in the tool result.');
+  } else {
+    app.sendLog({ level: 'info', data: 'Non-artwork tool result ignored (viewer already mounted)' });
   }
 };
 
