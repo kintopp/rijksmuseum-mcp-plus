@@ -281,6 +281,27 @@ function resetOrReturn(): void {
 }
 
 async function mountArtwork(objectNumber: string): Promise<void> {
+  // Prefer remount_viewer (preserves viewUUID, keeps the agent's stored UUID
+  // valid for navigate_viewer). Fall back to get_artwork_image if the queue
+  // was TTL-evicted (30 min idle) or no UUID is yet established.
+  if (viewUUID) {
+    try {
+      const result = await app.callServerTool({
+        name: 'remount_viewer',
+        arguments: { viewUUID, objectNumber },
+      });
+      if (!result.isError) {
+        const data = parseArtworkImageResult(result);
+        if (data) {
+          applyMountedArtwork(data, { isSeed: false });
+          return;
+        }
+      }
+      // fall through to get_artwork_image fallback on error
+    } catch {
+      // fall through
+    }
+  }
   try {
     const result = await app.callServerTool({
       name: 'get_artwork_image',

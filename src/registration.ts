@@ -1910,6 +1910,77 @@ function registerTools(
     })
   );
 
+  // ── remount_viewer (app-only, hidden from agent tools/list) ─────
+  //
+  // In-viewer related-artwork navigation calls this to swap the artwork
+  // *without* minting a fresh viewUUID. Preserving the UUID keeps the
+  // agent's stored navigate_viewer target valid across in-viewer
+  // navigation (issue #310). Spec basis: SEP-1865 § "Resource Discovery
+  // → Visibility" (visibility:["app"]) + § "Standard MCP Messages →
+  // Tools" (tools/call from a View to an app-only tool).
+
+  registerAppTool(
+    server,
+    "remount_viewer",
+    {
+      title: "Remount Viewer",
+      annotations: ANN_VIEWER,
+      description:
+        "Internal: switch the viewer to a different artwork while preserving the viewUUID. " +
+        "Called by the artwork-viewer iframe during in-viewer related navigation. " +
+        "Overlays are cleared on remount because their coordinates belong to the previous artwork.",
+      inputSchema: z.object({
+        viewUUID: z.string().describe("Existing viewer UUID returned by a prior get_artwork_image call"),
+        objectNumber: z.string().describe("Object number of the artwork to remount into the viewer"),
+      }).strict() as z.ZodTypeAny,
+      ...withOutputSchema(ImageInfoOutput),
+      _meta: {
+        ui: {
+          resourceUri: ARTWORK_VIEWER_RESOURCE_URI,
+          visibility: ["app"],
+        },
+      },
+    },
+    withLogging("remount_viewer", async (args) => {
+      const queue = viewerQueues.get(args.viewUUID);
+      if (!queue) {
+        const errorData: InferOutput<typeof ImageInfoOutput> = {
+          objectNumber: args.objectNumber,
+          error: "No active viewer for this UUID",
+        };
+        return {
+          ...structuredResponse(errorData, "No active viewer — call get_artwork_image to start a new session"),
+          isError: true as const,
+        };
+      }
+
+      const payload = await resolveArtworkImagePayload(args.objectNumber);
+      if (!payload.ok) {
+        const errorData: InferOutput<typeof ImageInfoOutput> = {
+          objectNumber: args.objectNumber,
+          error: payload.error,
+        };
+        return {
+          ...structuredResponse(errorData, payload.error),
+          isError: true as const,
+        };
+      }
+
+      // Atomic queue update — UUID and identity preserved, content swapped.
+      // Do NOT touch lastPolledAt: the iframe is already polling this UUID
+      // and will pick up the new artwork's image on its next render cycle.
+      queue.objectNumber = payload.data.objectNumber;
+      queue.imageWidth = payload.width;
+      queue.imageHeight = payload.height;
+      queue.activeOverlays = [];
+      queue.lastAccess = Date.now();
+
+      const viewerData: InferOutput<typeof ImageInfoOutput> = { ...payload.data, viewUUID: args.viewUUID };
+      const text = `Remounted viewer ${args.viewUUID.slice(0, 8)} → ${payload.data.objectNumber}`;
+      return structuredResponse(viewerData, text);
+    })
+  );
+
   // ── inspect_artwork_image ──────────────────────────────────────────
 
   server.registerTool(

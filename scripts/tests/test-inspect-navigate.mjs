@@ -981,6 +981,7 @@ section("8. Schema surface — no $ref");
     browse_set:            ANN_READ_OPEN,
     inspect_artwork_image: ANN_READ_OPEN,
     get_artwork_image:     ANN_VIEWER,
+    remount_viewer:        ANN_VIEWER,
     navigate_viewer:       ANN_VIEWER,
     poll_viewer_commands:  ANN_VIEWER,
   };
