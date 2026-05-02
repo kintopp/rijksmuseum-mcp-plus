@@ -60,6 +60,18 @@ Never chain `&&` across two `railway ssh` calls if one uses a local glob — ver
 
 Two DBs on this server's Railway volume: vocabulary, embeddings. (Iconclass moved to a separate service in v0.23.1 — see Phase B-bis.)
 
+**Pre-publish backfills (vocabulary.db only).** Run idempotent backfills against the freshly harvested local DB *before* compression so the curated state is baked into the released `.db.gz`:
+
+```bash
+# Theme English labels (top-100 by DF) — see #300, scripts/README.md "Enrichment & Backfill"
+python3 scripts/backfills/2026-05-01-apply-theme-en-labels.py --apply
+
+# Coord-method authority audit-trail — see scripts/backfill_coord_method_authority.py
+python3 scripts/backfill_coord_method_authority.py --apply
+```
+
+Each script is idempotent — re-running on an already-backfilled DB updates 0 rows.
+
 ```bash
 # 3. Compress (locally) and record SHA-256
 gzip -k -f data/<db-file>.db

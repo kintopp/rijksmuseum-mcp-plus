@@ -22,6 +22,7 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 | `backfill-dates.py` | Python | Backfills missing `date_earliest`/`date_latest` via Search API + Linked Art resolution. Hits live APIs. |
 | `backfill-iiif-ids.py` | Python | Backfills `iiif_id` from OAI-PMH `edm:isShownBy` URLs. No extra HTTP beyond OAI-PMH pages. |
 | `reimport-snapshots.py` | Python | Reimports all supplementary data from snapshot CSVs in `data/` after a fresh harvest. COALESCE semantics (fills NULLs only). Supports `--only actors|broader|geo|dates` and `--dry-run`. |
+| `backfills/2026-05-01-apply-theme-en-labels.py` | Python | Applies hand-curated English labels to top-100 theme vocab terms (#300). Reads `backfills/theme-en-labels-top-100.tsv`, idempotent (only writes where `label_en IS NULL`). Re-apply after every fresh harvest. |
 
 ## Geocoding
 
