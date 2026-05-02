@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -60,7 +60,7 @@ const TOOL_LIMITS = {
 } as const;
 
 /** Params that narrow results but are too broad to stand alone as the only filter. */
-const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "creatorGender", "creatorBornAfter", "creatorBornBefore", "expandPlaceHierarchy"]);
+const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "expandPlaceHierarchy", "modifiedAfter", "modifiedBefore"]);
 
 /** Provenance filter categorization by layer support. */
 const PROVENANCE_EVENT_ONLY_FILTERS = ["transferType", "excludeTransferType", "currency", "hasPrice", "hasGap", "relatedTo", "categoryMethod", "positionMethod"];
@@ -70,8 +70,9 @@ const PROVENANCE_ALL_FILTERS = [...PROVENANCE_SHARED_FILTERS, ...PROVENANCE_EVEN
 
 /** Available facet dimensions for search_artwork. Single source of truth for preprocess + z.enum. */
 const FACET_DIMENSIONS = [
-  "type", "material", "technique", "century", "creatorGender", "rights", "imageAvailable",
+  "type", "material", "technique", "century", "rights", "imageAvailable",
   "creator", "depictedPerson", "depictedPlace", "productionPlace",
+  "theme", "sourceType",
 ] as const;
 
 /** Preprocess: strip JSON null / "null" string / "" → undefined BEFORE Zod validates.
@@ -1176,9 +1177,9 @@ function registerTools(
   // With vocab-DB-only routing (v0.19), every parameter routes through the vocab DB.
   const vocabParamKeys = [
     "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
-    "birthPlace", "deathPlace", "profession", "collectionSet", "license",
+    "collectionSet", "license",
     // Tier 2 (vocabulary DB v1.0+)
-    "description", "inscription", "provenance", "creditLine", "curatorialNarrative", "productionRole", "attributionQualifier",
+    "description", "inscription", "creditLine", "curatorialNarrative", "productionRole", "attributionQualifier",
     "minHeight", "maxHeight", "minWidth", "maxWidth",
     "nearPlace", "nearLat", "nearLon",
     "title",
@@ -1187,10 +1188,10 @@ function registerTools(
     "imageAvailable",
     "hasProvenance",
     "aboutActor",
-    // Creator demographic filters (require person enrichment)
-    "creatorGender", "creatorBornAfter", "creatorBornBefore",
     // Place hierarchy
     "expandPlaceHierarchy",
+    // v0.27 — curatorial theme + source-channel taxonomy + record-modified date range
+    "theme", "sourceType", "modifiedAfter", "modifiedBefore",
   ] as const;
   // nearPlaceRadius excluded from routing key check: its Zod default (25) would trigger
   // on every query. Forwarded separately.
@@ -1233,8 +1234,8 @@ function registerTools(
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
             "(e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations. " +
-            "For provenance analytics: use provenance parameter for collection-wide keyword counts (e.g. provenance='Führermuseum' returns totalResults=843). " +
-            "Combine with facets for cross-tabulation. Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt')."
+            "For provenance keyword search use search_provenance (the per-tool provenance text filter was removed in v0.27). " +
+            "Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt')."
           : ""),
       inputSchema: z.object({
         query: optStr()
@@ -1301,6 +1302,19 @@ function registerTools(
             "Combine with other filters for cross-domain queries (e.g. type='painting' + hasProvenance=true). " +
             "Cannot be used alone — combine with at least one other filter."
           ),
+        modifiedAfter: optMinStr()
+          .optional()
+          .describe(
+            "ISO 8601 date — return only artworks whose catalogue record was last modified at or after " +
+            "this date (e.g. '2024-01-01'). Powers \"what changed since YYYY-MM-DD?\" without OAI-PMH. " +
+            "Cannot be used alone — combine with at least one other filter."
+          ),
+        modifiedBefore: optMinStr()
+          .optional()
+          .describe(
+            "ISO 8601 date — return only artworks whose catalogue record was last modified at or before this date. " +
+            "Cannot be used alone — combine with at least one other filter."
+          ),
         // Vocabulary-backed params
         ...(vocabAvailable
           ? {
@@ -1342,26 +1356,27 @@ function registerTools(
                   "Search for artworks produced in a specific place (e.g. 'Delft'). " +
                   "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Paleis van Justitie Den Haag')."
                 ),
-              birthPlace: stringOrArray()
-                .optional()
-                .describe(
-                  "Search by artist's birth place (e.g. 'Amsterdam')."
-                ),
-              deathPlace: stringOrArray()
-                .optional()
-                .describe(
-                  "Search by artist's death place (e.g. 'Paris')."
-                ),
-              profession: stringOrArray()
-                .optional()
-                .describe(
-                  "Search by artist's profession (e.g. 'painter', 'draughtsman', 'sculptor')."
-                ),
               collectionSet: stringOrArray()
                 .optional()
                 .describe(
                   "Search for artworks in curated collection sets by name (e.g. 'Rembrandt', 'Japanese'). " +
                   "Use list_curated_sets to discover available sets."
+                ),
+              theme: stringOrArray()
+                .optional()
+                .describe(
+                  "Curatorial thematic tag (e.g. 'overzeese geschiedenis', 'economische geschiedenis', 'costume'). " +
+                  "Distinct from subject (Iconclass) and depicted persons/places — themes group works around " +
+                  "collection-level narratives. ~7% of artworks have at least one theme; coverage is skewed " +
+                  "to historical-collection works. Most theme labels are Dutch (~17% have curated English labels)."
+                ),
+              sourceType: stringOrArray()
+                .optional()
+                .describe(
+                  "Source-channel classification: 'designs' (90K), 'drawings' (49K), 'paintings' (46K), " +
+                  "'prints (visual works)' (19K), 'sculpture (visual works)' (5K), 'photographs' (3K). " +
+                  "Distinct from `type` — sourceType reflects the cataloguing source, while type uses " +
+                  "Linked Art object-classification vocabulary."
                 ),
               license: optMinStr()
                 .optional()
@@ -1374,12 +1389,6 @@ function registerTools(
                 .describe(
                   "Full-text search on inscription texts (~500K artworks — signatures, mottoes, dates on the object surface, not conceptual content). " +
                   "Exact word matching, no stemming. E.g. 'Rembrandt f.' for signed works, Latin phrases."
-                ),
-              provenance: optMinStr()
-                .optional()
-                .describe(
-                  "Full-text search on provenance/ownership history (e.g. 'Six' for the Six collection). " +
-                  "Exact word matching, no stemming."
                 ),
               creditLine: optMinStr()
                 .optional()
@@ -1409,36 +1418,11 @@ function registerTools(
                   "'circle of', 'follower of', 'secondary', 'undetermined'. " +
                   "Combine with creator to narrow attribution (e.g. attributionQualifier: 'workshop of' + creator: 'Rembrandt')."
                 ),
-              creatorGender: optMinStr()
-                .optional()
-                .describe(
-                  "Filter by creator gender: 'male' or 'female'. " +
-                  "Coverage: ~64K of ~76K person entries have gender data. " +
-                  "Cannot be used alone — combine with at least one other filter (e.g. type: 'painting', creationDate: '17*')."
-                ),
-              creatorBornAfter: z.preprocess(stripNull, z
-                .number()
-                .int()
-                .optional()
-                .describe(
-                  "Filter to creators born in or after this year (e.g. 1800). " +
-                  "Coverage: ~49K person entries have birth year data. " +
-                  "Cannot be used alone — combine with at least one other filter."
-                )),
-              creatorBornBefore: z.preprocess(stripNull, z
-                .number()
-                .int()
-                .optional()
-                .describe(
-                  "Filter to creators born in or before this year (e.g. 1700). " +
-                  "Combine with creatorBornAfter for a range (e.g. born 1600–1700). " +
-                  "Cannot be used alone — combine with at least one other filter."
-                )),
               expandPlaceHierarchy: z.preprocess(stripNull, z
                 .boolean()
                 .optional()
                 .describe(
-                  "When true, place searches (productionPlace, depictedPlace, birthPlace, deathPlace) " +
+                  "When true, place searches (productionPlace, depictedPlace) " +
                   "expand to include sub-places in the administrative hierarchy. " +
                   "E.g. productionPlace: 'Netherlands' with expandPlaceHierarchy: true includes Amsterdam, Delft, etc. " +
                   "Expansion follows up to 3 levels of parent→child relationships. " +
@@ -1520,7 +1504,7 @@ function registerTools(
           z.array(z.enum(FACET_DIMENSIONS)).optional(),
         ).describe(
             "Facet dimensions to compute when results are truncated. " +
-            "Pass an array of dimension names (e.g. [\"creatorGender\", \"rights\"]) to compute only those, " +
+            "Pass an array of dimension names (e.g. [\"theme\", \"rights\"]) to compute only those, " +
             "or true for all dimensions. " +
             `Available: ${FACET_DIMENSIONS.join(", ")}. ` +
             "Dimensions already filtered on are excluded automatically."
@@ -1565,9 +1549,10 @@ function registerTools(
         ) || argsRecord["query"] !== undefined;
       if (!hasAnyFilter) {
         return errorResponse(
-          "At least one search filter is required (creatorGender, creatorBornAfter/Before, imageAvailable, " +
+          "At least one search filter is required (imageAvailable, hasProvenance, modifiedAfter/Before, " +
           "and expandPlaceHierarchy are modifiers that cannot be used alone). " +
           "Add a filter like subject, creator, type, material, technique, depictedPerson, or creationDate. " +
+          "For demographic queries (gender, birth/death place, profession), use search_persons → search_artwork({creator: <vocabId>}). " +
           "For concept-based search, try semantic_search instead."
         );
       }
@@ -1669,6 +1654,108 @@ function registerTools(
       return structuredResponse(structured, textParts.join("\n"));
     })
   );
+
+  // ── search_persons ──────────────────────────────────────────────
+
+  if (vocabAvailable) {
+    const PersonSearchOutput = {
+      totalResults: z.number().int().nonnegative(),
+      persons: z.array(z.object({
+        vocabId: z.string(),
+        label: z.string(),
+        labelEn: z.string().nullable(),
+        labelNl: z.string().nullable(),
+        birthYear: z.number().int().nullable(),
+        deathYear: z.number().int().nullable(),
+        gender: z.string().nullable(),
+        wikidataId: z.string().nullable(),
+        artworkCount: z.number().int().optional(),
+      })),
+      warnings: z.array(z.string()).optional(),
+    };
+
+    server.registerTool(
+      "search_persons",
+      {
+        title: "Search Persons",
+        annotations: ANN_READ_CLOSED,
+        description:
+          "Find persons (artists, depicted figures, donors) by demographic and structural criteria. " +
+          "Returns vocab IDs that can be passed to search_artwork({creator: <vocabId>}) for works by them, " +
+          "or to search_artwork({aboutActor: <name>}) for works depicting them. " +
+          "Two-step pattern: search_persons → search_artwork. Use this for any query like " +
+          "\"female impressionist painters born after 1850\" or \"Dutch painters who died in Italy\". " +
+          "By default restricts to persons with ≥1 artwork in the collection (~60K of ~290K). " +
+          "Note on data coverage (v0.27): demographic filters (gender, bornAfter, bornBefore) require " +
+          "person-enrichment to be present on the vocabulary DB; on a freshly harvested DB without " +
+          "person enrichment they return zero rows. Name search and structural filters " +
+          "(birthPlace / deathPlace / profession) work on any harvest.",
+        inputSchema: z.object({
+          name: optMinStr().optional()
+            .describe("Phrase or token match against ~700K name variants (~290K persons). Tries exact phrase first, then token AND with stop-word stripping."),
+          gender: optMinStr().optional()
+            .describe("Categorical: 'female', 'male', or other normalised values. Returns 0 rows if person enrichment is absent."),
+          bornAfter: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Birth year ≥ this value. Returns 0 rows if person enrichment is absent."),
+          bornBefore: z.preprocess(stripNull, z.number().int().optional())
+            .describe("Birth year ≤ this value. Returns 0 rows if person enrichment is absent."),
+          birthPlace: stringOrArray().optional()
+            .describe("Place name (vocab + FTS match). Multi-value AND. Resolved by pivot through creator-mapped artworks."),
+          deathPlace: stringOrArray().optional()
+            .describe("Place name. Multi-value AND. Resolved by pivot through creator-mapped artworks."),
+          profession: stringOrArray().optional()
+            .describe("Profession (e.g. 'painter', 'engraver'). Multi-value AND. Resolved by pivot through creator-mapped artworks."),
+          hasArtworks: z.preprocess(stripNull, z.boolean().optional().default(true))
+            .describe("Restrict to persons appearing as creator on ≥1 artwork. Default true."),
+          maxResults: z.number().int().min(1).max(100).default(25)
+            .describe("Maximum persons to return (1-100, default 25)."),
+          offset: z.preprocess(stripNull, z.number().int().min(0).default(0).optional())
+            .describe("Skip this many results (for pagination)."),
+        }).strict(),
+        ...withOutputSchema(PersonSearchOutput),
+      },
+      withLogging("search_persons", async (args) => {
+        if (!vocabDb) {
+          return errorResponse("search_persons requires the vocabulary database.");
+        }
+        const a = args as Record<string, unknown>;
+        const params: PersonSearchParams = {};
+        if (a.name) params.name = a.name as string;
+        if (a.gender) params.gender = a.gender as string;
+        if (a.bornAfter != null) params.bornAfter = a.bornAfter as number;
+        if (a.bornBefore != null) params.bornBefore = a.bornBefore as number;
+        if (a.birthPlace) params.birthPlace = a.birthPlace as string | string[];
+        if (a.deathPlace) params.deathPlace = a.deathPlace as string | string[];
+        if (a.profession) params.profession = a.profession as string | string[];
+        if (a.hasArtworks != null) params.hasArtworks = a.hasArtworks as boolean;
+        params.maxResults = a.maxResults as number ?? 25;
+        if (a.offset != null) params.offset = a.offset as number;
+
+        const result = vocabDb.searchPersons(params);
+
+        const lines: string[] = [];
+        lines.push(`${result.totalResults} person${result.totalResults === 1 ? "" : "s"} found`);
+        if (result.totalResults > result.persons.length) {
+          lines.push(`Showing ${result.persons.length} (offset ${params.offset ?? 0}).`);
+        }
+        for (let i = 0; i < result.persons.length; i++) {
+          const p = result.persons[i];
+          let line = `${i + 1}. ${p.label} (${p.vocabId})`;
+          const lifespan = (p.birthYear || p.deathYear) ? ` ${p.birthYear ?? "?"}–${p.deathYear ?? "?"}` : "";
+          line += lifespan;
+          if (p.gender) line += ` · ${p.gender}`;
+          if (p.artworkCount != null) line += ` · ${p.artworkCount} works`;
+          if (p.wikidataId) line += ` · Q${p.wikidataId.replace(/^Q/, "")}`;
+          lines.push(line);
+        }
+        if (result.warnings?.length) {
+          lines.push(...result.warnings.map(w => `⚠ ${w}`));
+        }
+
+        return structuredResponse(result, lines.join("\n"));
+      })
+    );
+  }
 
   // ── get_artwork_details ─────────────────────────────────────────
 
@@ -2998,8 +3085,8 @@ function registerTools(
           "- \"Sales by decade 1600–1900\" → dimension='provenanceDecade', transferType='sale', dateFrom=1600, dateTo=1900\n" +
           "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n\n" +
           "Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width, " +
-          "theme (thematic vocab — labels in NL until #300 backfill), exhibition (top exhibitions by member count), " +
-          "decadeModified (record_modified bucketed by decade, clamped to 1990–2030).\n" +
+          "theme (thematic vocab — labels in NL until #300 backfill), sourceType (cataloguing-channel taxonomy — 6 values), " +
+          "exhibition (top exhibitions by member count), decadeModified (record_modified bucketed by decade, clamped to 1990–2030).\n" +
           "Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, " +
           "currency, categoryMethod, positionMethod, parseMethod.\n\n" +
           "Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters " +
@@ -3024,11 +3111,8 @@ function registerTools(
           subject: optStr().describe("Filter to artworks with this subject (partial match on Iconclass labels)."),
           iconclass: optStr().describe("Filter by exact Iconclass notation code (e.g. '73D82')."),
           collectionSet: optStr().describe("Filter to artworks in this curated set (partial match on set name)."),
-          creatorGender: optStr().describe("Filter by creator gender: 'male' or 'female'."),
-          creatorBornAfter: z.preprocess(stripNull, z.number().int().optional())
-            .describe("Filter to creators born in or after this year."),
-          creatorBornBefore: z.preprocess(stripNull, z.number().int().optional())
-            .describe("Filter to creators born in or before this year."),
+          theme: optStr().describe("Filter to artworks tagged with this curatorial theme (partial match)."),
+          sourceType: optStr().describe("Filter by source-channel taxonomy: 'designs', 'drawings', 'paintings', 'prints (visual works)', 'sculpture (visual works)', 'photographs'."),
           imageAvailable: z.preprocess(stripNull, z.boolean().optional())
             .describe("If true, restrict to artworks with a digital image."),
           creationDateFrom: z.preprocess(stripNull, z.number().int().optional())
@@ -3067,9 +3151,8 @@ function registerTools(
         if (args.subject) params.subject = args.subject as string;
         if (args.iconclass) params.iconclass = args.iconclass as string;
         if (args.collectionSet) params.collectionSet = args.collectionSet as string;
-        if (args.creatorGender) params.creatorGender = args.creatorGender as string;
-        if (args.creatorBornAfter != null) params.creatorBornAfter = args.creatorBornAfter as number;
-        if (args.creatorBornBefore != null) params.creatorBornBefore = args.creatorBornBefore as number;
+        if (args.theme) params.theme = args.theme as string;
+        if (args.sourceType) params.sourceType = args.sourceType as string;
         if (args.imageAvailable != null) params.imageAvailable = args.imageAvailable as boolean;
         if (args.creationDateFrom != null) params.creationDateFrom = args.creationDateFrom as number;
         if (args.creationDateTo != null) params.creationDateTo = args.creationDateTo as number;
@@ -3097,10 +3180,8 @@ function registerTools(
         if (params.subject) filterParts.push(`subject=${params.subject}`);
         if (params.iconclass) filterParts.push(`iconclass=${params.iconclass}`);
         if (params.collectionSet) filterParts.push(`collectionSet=${params.collectionSet}`);
-        if (params.creatorGender) filterParts.push(`creatorGender=${params.creatorGender}`);
-        if (params.creatorBornAfter != null || params.creatorBornBefore != null) {
-          filterParts.push(`born ${params.creatorBornAfter ?? "..."}–${params.creatorBornBefore ?? "..."}`);
-        }
+        if (params.theme) filterParts.push(`theme=${params.theme}`);
+        if (params.sourceType) filterParts.push(`sourceType=${params.sourceType}`);
         if (params.imageAvailable) filterParts.push("imageAvailable");
         if (params.creationDateFrom != null || params.creationDateTo != null) {
           filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);
