@@ -5,13 +5,20 @@ One-shot for v0.26 dress-rehearsal DB. Companion to scripts/probe_group_altname_
 initial tier-0-only auto-insert).
 
 Steps:
- 1. Extend entity_alt_names with 7 provenance columns (idempotent).
+ 1. Extend entity_alt_names with 5 provenance columns (idempotent).
  2. Retroactively backfill provenance for the 30,871 existing rows based on their classification.
  3. Read accepted-candidates CSV (semicolon-delimited, format from probe TSV).
  4. UPDATE pre-existing rows (already_in_db=TRUE) to record human review.
  5. INSERT new rows with full provenance (already_in_db=FALSE).
  6. Refresh entity_alt_names_fts.
  7. Record batch metadata in version_info.
+
+#268: writes the shared three-tier vocabulary into ``entity_alt_names.tier``
+(deterministic / inferred / manual) instead of the legacy match_method /
+match_tier / match_score triple. The corrected derivation rule (locked per
+issue body): exact matches stay 'deterministic' even after reviewer review;
+only fuzzy matches are elevated to 'manual'. CSV inputs still carry tier 0–5
++ score so the reviewer can see fine detail; only the DB write is collapsed.
 
 Usage:
     ~/miniconda3/envs/embeddings/bin/python scripts/apply_reviewed_altname_candidates.py \
@@ -32,6 +39,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_DIR / "scripts"))
+from altname_methods import tier_for_row  # noqa: E402
+from enrichment_tiers import DETERMINISTIC, MANUAL  # noqa: E402, F401
+
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 
 # Provenance source tags
@@ -40,22 +51,10 @@ SOURCE_VERSION_ORG_DUMP = "organisation.tar.gz"
 SOURCE_EDM_ACTORS = "rijks_edm_actors_2019"
 SOURCE_VERSION_EDM_ACTORS = "201911-rma-edm-actors.zip"
 
-# Tier → match_method mapping for EDM-derived rows
-TIER_TO_METHOD = {
-    0: "exact_label",
-    1: "case_insensitive",
-    2: "diacritic_strip",
-    3: "punctuation_strip",
-    4: "token_set_jaccard",
-    5: "rapidfuzz_token_set_ratio",
-}
-
 PROVENANCE_COLUMNS = [
     ("source", "TEXT"),
     ("source_version", "TEXT"),
-    ("match_method", "TEXT"),
-    ("match_tier", "INTEGER"),
-    ("match_score", "REAL"),
+    ("tier", "TEXT"),
     ("reviewed_by", "TEXT"),
     ("reviewed_at", "TEXT"),
     ("added_at", "TEXT"),
@@ -90,45 +89,31 @@ def add_columns(conn: sqlite3.Connection, dry_run: bool) -> int:
     return added
 
 
-def parse_score(raw: str) -> float | None:
-    """Defensive parse — the CSV round-trip in some spreadsheets strips the 0. prefix
-    so '0.857' becomes '857'. Normalise back to the [0, 1] range."""
-    if raw is None or raw == "":
-        return None
-    try:
-        v = float(raw)
-    except ValueError:
-        return None
-    if v > 1.0:
-        # Either the leading 0. was stripped, or it's a percentage.
-        # The probe writes scores as f"{x:.3f}" so the leading 0. drop is the
-        # most likely culprit — divide by 10^digits to bring back into range.
-        # Examples: 857 -> 0.857, 962 -> 0.962, 1000 -> 1.000.
-        digits = len(raw.split(".")[0])
-        v = v / (10 ** digits)
-    return max(0.0, min(1.0, v))
-
-
 def backfill_existing_provenance(conn: sqlite3.Connection, dry_run: bool) -> dict:
-    """Set source/method/added_at on the 30,871 pre-existing rows based on classification.
+    """Set source/tier/added_at on the pre-existing rows based on classification.
 
     In dry-run mode the new columns don't exist yet (step 1 is skipped), so we just
     count rows by classification — those counts equal what would be updated in a real
     run, since the WHERE filter `source IS NULL` matches every row before any backfill.
+
+    Tier derivation per #268:
+      schema_name / schema_alt_name (authoritative dump, exact)         → deterministic
+      edm_altlabel rows pre-inserted by backfill_group_altnames_from_edm
+        (tier-0 baseline, exact match)                                  → deterministic
     """
     updates = {}
     has_provenance_col = "source" in existing_columns(conn, "entity_alt_names")
 
     plan = (
-        ("schema_name", "dump_schema_name", SOURCE_ORG_DUMP, SOURCE_VERSION_ORG_DUMP,
-         None, None, "2026-04-29T00:00:00Z"),
-        ("schema_alt_name", "dump_schema_alternateName", SOURCE_ORG_DUMP, SOURCE_VERSION_ORG_DUMP,
-         None, None, "2026-04-29T00:00:00Z"),
-        ("edm_altlabel", "exact_label", SOURCE_EDM_ACTORS, SOURCE_VERSION_EDM_ACTORS,
-         0, 1.0, "2026-05-02T07:18:20Z"),
+        ("schema_name", SOURCE_ORG_DUMP, SOURCE_VERSION_ORG_DUMP,
+         DETERMINISTIC, "2026-04-29T00:00:00Z"),
+        ("schema_alt_name", SOURCE_ORG_DUMP, SOURCE_VERSION_ORG_DUMP,
+         DETERMINISTIC, "2026-04-29T00:00:00Z"),
+        ("edm_altlabel", SOURCE_EDM_ACTORS, SOURCE_VERSION_EDM_ACTORS,
+         DETERMINISTIC, "2026-05-02T07:18:20Z"),
     )
 
-    for cls, method, source, source_ver, tier, score, added_at in plan:
+    for cls, source, source_ver, tier, added_at in plan:
         if dry_run or not has_provenance_col:
             n = conn.execute(
                 "SELECT COUNT(*) FROM entity_alt_names WHERE classification = ?", (cls,)
@@ -137,17 +122,15 @@ def backfill_existing_provenance(conn: sqlite3.Connection, dry_run: bool) -> dic
         else:
             cur = conn.execute(
                 "UPDATE entity_alt_names SET "
-                "  source = ?, source_version = ?, match_method = ?, "
-                "  match_tier = ?, match_score = ?, "
+                "  source = ?, source_version = ?, tier = ?, "
                 "  added_at = COALESCE(added_at, ?) "
                 "WHERE classification = ? AND source IS NULL",
-                (source, source_ver, method, tier, score, added_at, cls),
+                (source, source_ver, tier, added_at, cls),
             )
             n = cur.rowcount
             verb = "updated"
         updates[cls] = n
-        score_str = f", tier={tier}, score={score}" if tier is not None else ""
-        log(f"  classification='{cls}': {verb} {n:,} rows → method='{method}'{score_str}")
+        log(f"  classification='{cls}': {verb} {n:,} rows → tier='{tier}'")
 
     if not dry_run and has_provenance_col:
         conn.commit()
@@ -178,19 +161,20 @@ def process_csv(
         reader = csv.DictReader(f, delimiter=";")
         for row in reader:
             n_rows += 1
-            tier = int(row["tier"])
-            score = parse_score(row["score"])
+            csv_tier = int(row["tier"])
             vocab_id = row["vocab_id"]
             entity_type = row["vocab_type"]
             alt_label = row["edm_alt_label"]
             already = row["already_in_db"].strip().lower() in ("true", "1", "yes")
-            method = TIER_TO_METHOD.get(tier, "manual_override")
+            # Per #268: exact (csv_tier == 0) stays deterministic even after
+            # reviewer review; only fuzzy candidates are elevated to manual.
+            row_tier = tier_for_row(exact=(csv_tier == 0), reviewed_at=ts)
 
             if already:
                 if not has_provenance_col:
                     # Dry-run before columns exist — count optimistically
                     n_updated_existing += 1
-                    by_tier_updated[tier] = by_tier_updated.get(tier, 0) + 1
+                    by_tier_updated[csv_tier] = by_tier_updated.get(csv_tier, 0) + 1
                     continue
                 # Tier-0 row already inserted by the one-shot. Just stamp the human review.
                 # Don't re-stamp if reviewed_at already set (idempotency on re-run).
@@ -213,26 +197,25 @@ def process_csv(
                         (reviewed_by, ts, vocab_id, alt_label),
                     )
                 n_updated_existing += 1
-                by_tier_updated[tier] = by_tier_updated.get(tier, 0) + 1
+                by_tier_updated[csv_tier] = by_tier_updated.get(csv_tier, 0) + 1
             else:
                 # New row — INSERT with full provenance
                 if not dry_run and has_provenance_col:
                     conn.execute(
                         "INSERT OR IGNORE INTO entity_alt_names "
                         "  (entity_id, entity_type, name, lang, classification, "
-                        "   source, source_version, match_method, match_tier, match_score, "
+                        "   source, source_version, tier, "
                         "   reviewed_by, reviewed_at, added_at) "
                         "VALUES (?, ?, ?, NULL, 'edm_altlabel', "
-                        "        ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "        ?, ?, ?, ?, ?, ?)",
                         (
                             vocab_id, entity_type, alt_label,
-                            SOURCE_EDM_ACTORS, SOURCE_VERSION_EDM_ACTORS, method,
-                            tier, score,
+                            SOURCE_EDM_ACTORS, SOURCE_VERSION_EDM_ACTORS, row_tier,
                             reviewed_by, ts, ts,
                         ),
                     )
                 n_inserted_new += 1
-                by_tier_inserted[tier] = by_tier_inserted.get(tier, 0) + 1
+                by_tier_inserted[csv_tier] = by_tier_inserted.get(csv_tier, 0) + 1
 
     if not dry_run and has_provenance_col:
         conn.commit()
@@ -358,15 +341,15 @@ def main() -> int:
             "SELECT COUNT(*) FROM entity_alt_names WHERE reviewed_by IS NOT NULL"
         ).fetchone()[0]
         final_by_tier = dict(conn.execute(
-            "SELECT match_tier, COUNT(*) FROM entity_alt_names "
-            "WHERE match_tier IS NOT NULL GROUP BY match_tier"
+            "SELECT tier, COUNT(*) FROM entity_alt_names "
+            "WHERE tier IS NOT NULL GROUP BY tier"
         ).fetchall())
-        log(f"  by match_tier (non-NULL): {final_by_tier}")
+        log(f"  by tier: {final_by_tier}")
         log(f"  reviewed_by IS NOT NULL: {final_reviewed:,}")
 
         log("Smoke test (3 random reviewed group altnames):")
         for r in conn.execute(
-            "SELECT entity_id, name, match_tier, match_score, match_method, reviewed_by "
+            "SELECT entity_id, name, tier, reviewed_by "
             "FROM entity_alt_names "
             "WHERE entity_type='group' AND reviewed_by IS NOT NULL "
             "ORDER BY RANDOM() LIMIT 3"
