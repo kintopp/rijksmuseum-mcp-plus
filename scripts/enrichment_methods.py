@@ -1,22 +1,32 @@
 """Enrichment method vocabulary for the vocabulary DB's provenance columns.
 
-See issue #218 for the design rationale.
+See issues #218 and #268 for the design rationale.
 
 Two layers of granularity:
   - Coarse (imported into ``vocabulary.coord_method`` / ``external_id_method`` /
-    ``broader_method``): authority | derived | human | NULL
+    ``broader_method``): deterministic | inferred | manual | NULL
   - Fine (CSV-only, archival in ``data/backfills/geocoded-places.csv``):
     specific phase identifier naming the exact code path that produced the row
+
+The coarse tier vocabulary is shared across all three audit-trail systems (geo,
+provenance, alt-labels) — see ``enrichment_tiers.py``. Module-level aliases
+(AUTHORITY / DERIVED / HUMAN) preserve compatibility with in-flight call sites
+that haven't been swapped yet; new code should import from ``enrichment_tiers``
+directly.
 
 Invariant: every detail value maps to exactly one coarse tier via DETAIL_TO_TIER.
 Write-site code calls ``tier_for(detail)`` to derive the coarse tag — no
 duplication, no drift between the two layers possible.
 """
 
+from enrichment_tiers import DETERMINISTIC, INFERRED, MANUAL  # noqa: F401
+
 # ── Coarse tiers (imported into vocabulary.*_method columns) ───────────
-AUTHORITY = "authority"
-DERIVED = "derived"
-HUMAN = "human"
+# Legacy aliases — kept so existing call sites (em.AUTHORITY etc.) keep
+# producing the new canonical tier strings without an immediate sweep.
+AUTHORITY = DETERMINISTIC
+DERIVED = INFERRED
+HUMAN = MANUAL
 
 
 # ── Fine-grained detail values (CSV-only) ──────────────────────────────
