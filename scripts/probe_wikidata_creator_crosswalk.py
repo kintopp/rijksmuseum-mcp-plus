@@ -15,7 +15,7 @@ Three cohorts are reported:
   C. UNREACHABLE: 21xxx persons with no external authority IDs at all.
 
 The probe samples ``--sample-size`` rows from cohort B, batch-queries the
-Wikidata Query Service using P5402 (RKDartists), P245 (ULAN), P214 (VIAF), and
+Wikidata Query Service using P650 (RKDartists), P245 (ULAN), P214 (VIAF), and
 P1871 (CERL), and reports per-property hit-rate plus conflict rate.
 
 Usage:
