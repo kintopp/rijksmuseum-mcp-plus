@@ -945,6 +945,14 @@ export class VocabularyDb {
   private placeDf: Map<number, number> | null = null; // place vocab_rowid → document frequency
   private placeN = 0; // total artworks with depicted places (after filtering)
   private placeExcluded: Set<number> | null = null; // vocab_rowids excluded (TGN + broad places)
+  // Theme cache (#294)
+  private themeDf: Map<number, number> | null = null; // theme vocab_rowid → document frequency
+  private themeN = 0; // total artworks with at least one theme
+  // Related-object cache (#293) — curator-declared peer edges
+  private relatedObjectsByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
+  private static readonly RELATED_OBJECT_LABELS = [
+    "different example", "production stadia", "pendant",
+  ] as const;
 
   /** Look up a field_id by name, throwing if missing. */
   private requireFieldId(name: string): number {
@@ -2386,6 +2394,239 @@ export class VocabularyDb {
     );
   }
 
+  // ── find_similar: Theme overlap (#294) ───────────────────────────────
+
+  /** Lazily initialise the theme IDF cache. */
+  private ensureThemeCache(): void {
+    if (this.themeDf || !this.db) return;
+    if (!this.fieldIdMap.has("theme")) {
+      this.themeDf = new Map();
+      return;
+    }
+    const themeFieldId = this.requireFieldId("theme");
+
+    this.themeDf = new Map();
+    const rows = this.db.prepare(`
+      SELECT vocab_rowid, COUNT(DISTINCT artwork_id) as df
+      FROM mappings WHERE field_id = ?
+      GROUP BY vocab_rowid
+    `).all(themeFieldId) as { vocab_rowid: number; df: number }[];
+    for (const r of rows) this.themeDf.set(r.vocab_rowid, r.df);
+
+    const countRow = this.db.prepare(
+      `SELECT COUNT(DISTINCT artwork_id) as n FROM mappings WHERE field_id = ?`
+    ).get(themeFieldId) as { n: number };
+    this.themeN = countRow.n;
+    this.ensureMappingsStmt();
+    console.error(`[find_similar] Theme IDF cache: ${this.themeDf.size} themes, ${this.themeN.toLocaleString()} artworks`);
+  }
+
+  /**
+   * Find artworks similar to a given artwork by shared themes.
+   * IDF set-overlap: Σ log(N/DF(t)) over shared themes.
+   * Requires the seed to carry ≥2 themes; tertiary tie-break by artworks.importance.
+   * Themes do not carry Wikidata identifiers, so sharedTerms[] omits wikidataUri.
+   */
+  findSimilarByTheme(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
+    if (!this.db) return null;
+    this.ensureThemeCache();
+    if (!this.themeDf) return null;
+    if (!this.fieldIdMap.has("theme")) return null;
+
+    const themeFieldId = this.requireFieldId("theme");
+    const artRow = this.stmtLookupArtId!.get(objectNumber) as
+      { art_id: number; title: string; creator_label: string } | undefined;
+    if (!artRow) return null;
+
+    const queryThemes = this.db.prepare(`
+      SELECT m.vocab_rowid, COALESCE(v.label_en, v.label_nl, '') as label
+      FROM mappings m
+      JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
+      WHERE m.artwork_id = ? AND +m.field_id = ?
+    `).all(artRow.art_id, themeFieldId) as { vocab_rowid: number; label: string }[];
+
+    if (queryThemes.length < 2) {
+      return {
+        queryObjectNumber: objectNumber,
+        queryTitle: artRow.title || "",
+        queryTerms: queryThemes.map(t => ({
+          label: t.label,
+          artworks: this.themeDf!.get(t.vocab_rowid) ?? 0,
+        })),
+        results: [],
+        warnings: ["This artwork has fewer than 2 themes — Theme channel requires ≥2 to suppress noise."],
+      };
+    }
+
+    const queryArtId = artRow.art_id;
+    const candidates = new Map<number, { totalWeight: number; sharedTerms: { label: string; weight: number }[] }>();
+
+    for (const term of queryThemes) {
+      const df = this.themeDf.get(term.vocab_rowid) ?? 1;
+      const idf = Math.log(this.themeN / df);
+      const weight = Math.round(idf * 100) / 100;
+
+      const rows = this.stmtMappingsByFieldVocab!.all(themeFieldId, term.vocab_rowid) as { artwork_id: number }[];
+      for (const r of rows) {
+        if (r.artwork_id === queryArtId) continue;
+        const entry = candidates.get(r.artwork_id);
+        if (entry) {
+          entry.totalWeight += idf;
+          entry.sharedTerms.push({ label: term.label, weight });
+        } else {
+          candidates.set(r.artwork_id, { totalWeight: idf, sharedTerms: [{ label: term.label, weight }] });
+        }
+      }
+    }
+
+    // Take a generous prefix (4× maxResults) for tertiary-tie-break sort, then importance-rank.
+    const presort = [...candidates.entries()]
+      .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
+      .slice(0, Math.max(maxResults * 4, maxResults));
+
+    const presortIds = presort.map(([artId]) => artId);
+    const importanceMap = this.batchLookupImportanceByArtId(presortIds);
+
+    const sorted = presort
+      .sort((a, b) => {
+        if (b[1].totalWeight !== a[1].totalWeight) return b[1].totalWeight - a[1].totalWeight;
+        return (importanceMap.get(b[0]) ?? 0) - (importanceMap.get(a[0]) ?? 0);
+      })
+      .slice(0, maxResults);
+
+    const artIds = sorted.map(([artId]) => artId);
+    const metaMap = this.batchLookupByArtId(artIds);
+    const typeMap = this.batchLookupTypesByArtId(artIds);
+
+    const results = sorted.map(([artId, data]) => {
+      const meta = metaMap.get(artId);
+      const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
+      data.sharedTerms.sort((a, b) => b.weight - a.weight);
+      return {
+        artId,
+        objectNumber: meta?.objectNumber ?? `art_id:${artId}`,
+        title: meta?.title ?? "",
+        creator: meta?.creator ?? "",
+        ...(date && { date }),
+        ...(typeMap.has(artId) && { type: typeMap.get(artId) }),
+        ...(meta?.iiifId && { iiifId: meta.iiifId }),
+        score: Math.round(data.totalWeight * 100) / 100,
+        sharedTerms: data.sharedTerms,
+        url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
+      };
+    });
+
+    return {
+      queryObjectNumber: objectNumber,
+      queryTitle: artRow.title || "",
+      queryTerms: queryThemes.map(t => ({
+        label: t.label,
+        artworks: this.themeDf!.get(t.vocab_rowid) ?? 0,
+      })),
+      results,
+    };
+  }
+
+  // ── find_similar: Related Object curator-declared edges (#293) ───────
+
+  /**
+   * Lazily build the related-object cache from `related_objects` table.
+   * Scope: relationship_en in {different example, production stadia, pendant}.
+   * Edges with NULL related_art_id (peer not in our DB) are filtered out — the
+   * v0.26 dataset has zero such rows in scope, so we skip them rather than
+   * render an "external peer" placeholder.
+   */
+  private ensureRelatedObjectsCache(): void {
+    if (this.relatedObjectsByArtId || !this.db) return;
+    if (!this.hasRelatedObjects_) {
+      this.relatedObjectsByArtId = new Map();
+      return;
+    }
+
+    this.relatedObjectsByArtId = new Map();
+    const placeholders = VocabularyDb.RELATED_OBJECT_LABELS.map(() => "?").join(", ");
+    const rows = this.db.prepare(`
+      SELECT art_id, related_art_id, relationship_en
+      FROM related_objects
+      WHERE relationship_en IN (${placeholders}) AND related_art_id IS NOT NULL
+    `).all(...VocabularyDb.RELATED_OBJECT_LABELS) as {
+      art_id: number; related_art_id: number; relationship_en: string;
+    }[];
+
+    for (const r of rows) {
+      const list = this.relatedObjectsByArtId.get(r.art_id) ?? [];
+      list.push({ peerArtId: r.related_art_id, label: r.relationship_en });
+      this.relatedObjectsByArtId.set(r.art_id, list);
+    }
+    console.error(`[find_similar] Related Object cache: ${this.relatedObjectsByArtId.size} seeds, ${rows.length} edges`);
+  }
+
+  /**
+   * Find artworks declared related to the seed via curator-asserted edges
+   * ('different example' / 'production stadia' / 'pendant'). Score is fixed
+   * at 10 — these are explicit assertions, not probabilistic matches.
+   * Multi-label collisions on the same peer collapse into one result whose
+   * sharedTerms[] carries every label.
+   */
+  findSimilarByRelatedObject(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
+    if (!this.db) return null;
+    this.ensureRelatedObjectsCache();
+    if (!this.relatedObjectsByArtId) return null;
+
+    const artRow = this.stmtLookupArtId!.get(objectNumber) as
+      { art_id: number; title: string; creator_label: string } | undefined;
+    if (!artRow) return null;
+
+    const edges = this.relatedObjectsByArtId.get(artRow.art_id) ?? [];
+    if (edges.length === 0) {
+      return {
+        queryObjectNumber: objectNumber,
+        queryTitle: artRow.title || "",
+        queryTerms: [],
+        results: [],
+        warnings: ["No declared related-object edges (different example / production stadia / pendant) on this artwork."],
+      };
+    }
+
+    // Collapse multi-label peers
+    const byPeer = new Map<number, Set<string>>();
+    for (const e of edges) {
+      const labels = byPeer.get(e.peerArtId);
+      if (labels) labels.add(e.label);
+      else byPeer.set(e.peerArtId, new Set([e.label]));
+    }
+
+    const peerIds = [...byPeer.keys()].slice(0, maxResults);
+    const metaMap = this.batchLookupByArtId(peerIds);
+    const typeMap = this.batchLookupTypesByArtId(peerIds);
+
+    const results = peerIds.map(peerArtId => {
+      const labels = [...(byPeer.get(peerArtId) ?? new Set<string>())];
+      const meta = metaMap.get(peerArtId);
+      const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
+      return {
+        artId: peerArtId,
+        objectNumber: meta?.objectNumber ?? `art_id:${peerArtId}`,
+        title: meta?.title ?? "",
+        creator: meta?.creator ?? "",
+        ...(date && { date }),
+        ...(typeMap.has(peerArtId) && { type: typeMap.get(peerArtId) }),
+        ...(meta?.iiifId && { iiifId: meta.iiifId }),
+        score: 10,
+        sharedTerms: labels.map(label => ({ label, weight: 10 })),
+        url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
+      };
+    });
+
+    const distinctLabels = [...new Set(edges.map(e => e.label))];
+    return {
+      queryObjectNumber: objectNumber,
+      queryTitle: artRow.title || "",
+      queryTerms: distinctLabels.map(label => ({ label, artworks: 0 })),
+      results,
+    };
+  }
+
   // ── find_similar: batch metadata helpers ───────────────────────────
 
   /** Look up art_id, title, creator by object number. Returns null if not found. */
@@ -2457,6 +2698,23 @@ export class VocabularyDb {
     return map;
   }
 
+  /** Batch-lookup artwork importance scores by art_id. Returns empty map if the
+   *  importance column isn't present. Used by Theme channel for tertiary tie-break. */
+  batchLookupImportanceByArtId(artIds: number[]): Map<number, number> {
+    const map = new Map<number, number>();
+    if (!this.db || artIds.length === 0 || !this.hasImportance) return map;
+    const CHUNK = 500;
+    for (let i = 0; i < artIds.length; i += CHUNK) {
+      const chunk = artIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = this.db.prepare(
+        `SELECT art_id, importance FROM artworks WHERE art_id IN (${placeholders})`
+      ).all(...chunk) as { art_id: number; importance: number | null }[];
+      for (const r of rows) map.set(r.art_id, r.importance ?? 0);
+    }
+    return map;
+  }
+
   /** Batch-lookup description texts by art_id. Chunks at 500. */
   batchLookupDescriptionsByArtId(artIds: number[]): Map<number, string> {
     const map = new Map<number, string>();
@@ -2511,6 +2769,8 @@ export class VocabularyDb {
     this.ensureLineageCache();
     this.ensurePersonCache();
     this.ensurePlaceCache();
+    this.ensureThemeCache();
+    this.ensureRelatedObjectsCache();
   }
 
   // ── Curated sets cache (used by list_curated_sets) ─────────────────

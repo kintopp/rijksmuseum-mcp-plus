@@ -2,9 +2,9 @@
  * Server-side HTML generator for find_similar comparison pages.
  *
  * Produces a self-contained HTML page showing similarity results across
- * up to 6 signal modes in horizontal scroll rows (Visual, Lineage,
- * Iconclass, Description, Depicted Person, Depicted Place) plus a pooled
- * row for artworks appearing in ≥2 modes.
+ * up to 8 signal modes in horizontal scroll rows (Visual, Lineage,
+ * Iconclass, Description, Theme, Related Object, Depicted Person,
+ * Depicted Place) plus a pooled row for artworks appearing in ≥3 modes.
  */
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -50,6 +50,10 @@ export interface SimilarQueryInfo {
   depictedPersons?: { label: string; wikidataUri?: string }[];
   /** Depicted places on the query artwork (after filtering) */
   depictedPlaces?: { label: string; wikidataUri?: string }[];
+  /** Themes attached to the query artwork (#294) */
+  themes?: { label: string }[];
+  /** Distinct curator-declared relationship labels on the query artwork (#293) */
+  relatedObjectLabels?: string[];
 }
 
 export interface SimilarPageData {
@@ -59,6 +63,8 @@ export interface SimilarPageData {
     lineage: SimilarCandidate[];
     description: SimilarCandidate[];
     visual?: SimilarCandidate[];
+    theme?: SimilarCandidate[];
+    relatedObject?: SimilarCandidate[];
     depictedPerson?: SimilarCandidate[];
     depictedPlace?: SimilarCandidate[];
   };
@@ -130,6 +136,28 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
       "Rarer places contribute more. " +
       "Broader administrative regions (countries, provinces and cities) are excluded.",
   },
+  theme: {
+    label: "Theme",
+    badge: "Th",
+    color: "#5d4037",
+    methodology:
+      "Artworks sharing curatorial thematic tags &mdash; e.g. &ldquo;economic history&rdquo;, " +
+      "&ldquo;costume&rdquo;, &ldquo;colonial history&rdquo;. " +
+      "Distinct from Iconclass (which classifies depicted scenes) and Subject (which lists individual motifs). " +
+      "Requires the seed to carry &ge;2 themes and each match to share &ge;1; rarer themes contribute more. " +
+      "Tertiary tie-break by curatorial importance.",
+  },
+  relatedObject: {
+    label: "Related Object",
+    badge: "Rel",
+    color: "#7b1fa2",
+    methodology:
+      "Curator-declared peer relations: " +
+      "<em>different example</em> (other impressions, casts, or copies of the same edition), " +
+      "<em>production stadia</em> (working stages of the same project, e.g. sketch &rarr; print), " +
+      "<em>pendant</em> (companion piece designed to hang together). " +
+      "These are explicit cataloguer assertions, not probabilistic matches &mdash; score is fixed.",
+  },
   pooled: {
     label: "Pooled",
     badge: "P",
@@ -139,7 +167,11 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
 };
 
 /** Display order for signal rows */
-const MODE_ORDER = ["visual", "lineage", "iconclass", "description", "depictedPerson", "depictedPlace"] as const;
+const MODE_ORDER = [
+  "visual", "lineage", "iconclass", "description",
+  "theme", "relatedObject",
+  "depictedPerson", "depictedPlace",
+] as const;
 
 function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -173,7 +205,10 @@ function renderCardMetadata(c: SimilarCandidate, mode: string): string {
   if (mode === "description" && c.descSnippet) {
     return `<div class="card-detail"><div class="desc-snippet">${escHtml(c.descSnippet)}</div></div>`;
   }
-  if ((mode === "depictedPerson" || mode === "depictedPlace") && c.sharedTerms && c.sharedTerms.length > 0) {
+  if (
+    (mode === "depictedPerson" || mode === "depictedPlace" || mode === "theme" || mode === "relatedObject")
+    && c.sharedTerms && c.sharedTerms.length > 0
+  ) {
     const labels = c.sharedTerms.map(t => renderOptionalLink(t.label, t.wikidataUri)).join(", ");
     return `<div class="card-detail">${labels}</div>`;
   }
@@ -352,6 +387,22 @@ export function generateSimilarHtml(data: SimilarPageData): string {
     </div>`;
   }
 
+  if (query.themes && query.themes.length > 0) {
+    const themesHtml = query.themes.map(t => escHtml(t.label)).join(" &middot; ");
+    metaSections += `<div class="meta-section">
+      <div class="meta-section-label theme">Themes</div>
+      <div class="meta-content">${themesHtml}</div>
+    </div>`;
+  }
+
+  if (query.relatedObjectLabels && query.relatedObjectLabels.length > 0) {
+    const relHtml = query.relatedObjectLabels.map(l => `<em>${escHtml(l)}</em>`).join(" &middot; ");
+    metaSections += `<div class="meta-section">
+      <div class="meta-section-label related-object">Related Object</div>
+      <div class="meta-content">${relHtml}</div>
+    </div>`;
+  }
+
   const queryMetaHtml = metaSections
     ? `<div class="query-metadata">${metaSections}</div>`
     : "";
@@ -415,6 +466,8 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   .meta-section-label.description { color: #e65100; }
   .meta-section-label.depicted-person { color: #2e7d32; }
   .meta-section-label.depicted-place { color: #4e342e; }
+  .meta-section-label.theme { color: #5d4037; }
+  .meta-section-label.related-object { color: #7b1fa2; }
   .meta-section .meta-content { color: #555; }
   .meta-section .meta-content a { text-decoration: none; }
   .meta-section .meta-content a:hover code { text-decoration: underline; }
