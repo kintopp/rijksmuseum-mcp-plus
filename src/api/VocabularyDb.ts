@@ -14,6 +14,10 @@ export type TitleLanguage = (typeof TITLE_LANGUAGES)[number];
 export const TITLE_QUALIFIERS = ["brief", "full", "display", "former", "other"] as const;
 export type TitleQualifier = (typeof TITLE_QUALIFIERS)[number];
 
+/** Allowed structured-dimension types. */
+export const DIMENSION_TYPES = ["height", "width", "depth", "weight", "diameter"] as const;
+export type DimensionType = (typeof DIMENSION_TYPES)[number];
+
 const TITLE_LANGUAGES_SET = new Set<TitleLanguage>(TITLE_LANGUAGES);
 const TITLE_QUALIFIERS_SET = new Set<TitleQualifier>(TITLE_QUALIFIERS);
 
@@ -21,7 +25,6 @@ export interface PersonInfo {
   birthYear: number | null;
   deathYear: number | null;
   gender: string | null;
-  bio: string | null;
   wikidataId: string | null;
 }
 
@@ -40,9 +43,10 @@ export interface ArtworkDetailFromDb {
   provenance: string | null;
   creditLine: string | null;
   inscriptions: string[];
-  location: string | null;
+  /** Resolved museum room (current_location → museum_rooms join). Null when not on display or unmatched. */
+  location: { roomId: string; floor: string | null; roomName: string | null } | null;
   collectionSets: string[];
-  externalIds: Record<string, string>;
+  externalIds: { handle: string | null; other: string[] };
   titles: {
     title: string;
     language: TitleLanguage;
@@ -57,7 +61,7 @@ export interface ArtworkDetailFromDb {
   curatorialNarrative: { en: string | null; nl: string | null };
   license: string | null;
   webPage: string | null;
-  dimensions: { type: string; value: number; unit: string; note: string | null }[];
+  dimensions: { type: DimensionType; value: number; unit: string; note: string | null }[];
   relatedObjects: {
     relationship: string;
     objectNumber: string | null;
@@ -66,26 +70,6 @@ export interface ArtworkDetailFromDb {
   }[];
   /** Total related-object count before capping at {@link RELATED_PREVIEW_LIMIT}. */
   relatedObjectsTotalCount: number;
-  /** Conservation/scientific examination reports recorded in the museum's archive. */
-  examinations: {
-    examiner: string | null;
-    reportTypeId: string;
-    /** English label for the report type. Null in v0.24 — the harvest captures the URI but not the label. */
-    reportTypeLabel: string | null;
-    date: string | null;
-    dateBegin: string | null;
-    dateEnd: string | null;
-  }[];
-  examinationsTotalCount: number;
-  /** Restoration / treatment events recorded against the artwork. */
-  conservationHistory: {
-    modifierUri: string | null;
-    description: string | null;
-    date: string | null;
-    dateBegin: string | null;
-    dateEnd: string | null;
-  }[];
-  conservationHistoryTotalCount: number;
   persistentId: string | null;
   objectTypes: VocabTerm[];
   materials: VocabTerm[];
@@ -100,6 +84,33 @@ export interface ArtworkDetailFromDb {
     depictedPersons: VocabTerm[];
     depictedPlaces: VocabTerm[];
   };
+  /** Free-text Rijksmuseum-formatted display date (e.g. "1642", "c. 1665-1667"). */
+  dateDisplay: string | null;
+  /** Free-text extent / dimensions string (dcterms:extent). */
+  extentText: string | null;
+  /** ISO 8601 timestamp of catalogue record creation. */
+  recordCreated: string | null;
+  /** ISO 8601 timestamp of catalogue record's most recent modification. */
+  recordModified: string | null;
+  /** Curatorial thematic tags (theme field). */
+  themes: VocabTerm[];
+  themesTotalCount: number;
+  /** Exhibitions this artwork has appeared in. */
+  exhibitions: {
+    exhibitionId: number;
+    titleEn: string | null;
+    titleNl: string | null;
+    dateStart: string | null;
+    dateEnd: string | null;
+  }[];
+  exhibitionsTotalCount: number;
+  /** Evidence supporting attribution claims (signatures, inscriptions, monograms, …). Artwork-level — partIndex is preserved for upstream correlation, but not assumed to map to production[] index. */
+  attributionEvidence: {
+    partIndex: number;
+    evidenceTypeAat: string | null;
+    carriedByUri: string | null;
+    labelText: string | null;
+  }[];
 }
 
 // ─── find_similar types ──────────────────────────────────────────────
@@ -807,21 +818,19 @@ export class VocabularyDb {
   private stmtArtworkChildrenPreview: Statement | null = null;
   private stmtArtworkRelatedCount: Statement | null = null;
   private stmtArtworkRelatedPreview: Statement | null = null;
-  private stmtArtworkExaminationsCount: Statement | null = null;
-  private stmtArtworkExaminationsPreview: Statement | null = null;
-  private stmtArtworkModificationsCount: Statement | null = null;
-  private stmtArtworkModificationsPreview: Statement | null = null;
+  private stmtArtworkExternalIds: Statement | null = null;
+  private stmtArtworkAttributionEvidence: Statement | null = null;
+  private stmtArtworkExhibitions: Statement | null = null;
+  private museumRooms: Map<string, { roomId: string; floor: string | null; roomName: string | null }> | null = null;
   private hasTitleVariants_ = false;
   private hasArtworkParent_ = false;
   private hasRelatedObjects_ = false;
-  private hasExaminations_ = false;
-  private hasModifications_ = false;
   /** Maximum child records included inline on a parent's detail view. */
   private static readonly CHILD_PREVIEW_LIMIT = 25;
   /** Maximum related-object peers included inline on a detail view. */
   private static readonly RELATED_PREVIEW_LIMIT = 25;
-  /** Maximum examination/conservation events included inline on a detail view. */
-  private static readonly EVENT_PREVIEW_LIMIT = 25;
+  /** Maximum themes / exhibitions included inline on a detail view. */
+  private static readonly DETAIL_PREVIEW_LIMIT = 25;
   private stmtFilterArtIds = new Map<string, Statement>();
   // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
   private stmtLookupTypesCache = new Map<number, Statement>();
@@ -933,8 +942,6 @@ export class VocabularyDb {
       this.hasTitleVariants_ = this.tableExists("title_variants");
       this.hasArtworkParent_ = this.tableExists("artwork_parent");
       this.hasRelatedObjects_ = this.tableExists("related_objects");
-      this.hasExaminations_ = this.tableExists("examinations");
-      this.hasModifications_ = this.tableExists("modifications");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
@@ -974,10 +981,10 @@ export class VocabularyDb {
         "SELECT object_number FROM artworks WHERE art_id = ?"
       );
 
-      // Detect person enrichment columns (birth_year, death_year, gender, bio, wikidata_id)
+      // Detect person enrichment columns (birth_year, death_year, gender, wikidata_id)
       if (this.columnExists("vocabulary", "birth_year") && this.columnExists("vocabulary", "gender")) {
         this.stmtLookupPersonInfo = this.db.prepare(
-          "SELECT id, birth_year, death_year, gender, bio, wikidata_id FROM vocabulary WHERE id = ? AND type = 'person'"
+          "SELECT id, birth_year, death_year, gender, wikidata_id FROM vocabulary WHERE id = ? AND type = 'person'"
         );
       }
 
@@ -1003,6 +1010,14 @@ export class VocabularyDb {
                  a.date_earliest, a.date_latest, a.description_text, a.inscription_text,
                  a.provenance_text, a.credit_line, a.narrative_text,
                  a.height_cm, a.width_cm, a.iiif_id,
+                 ${this.detailColExpr("depth_cm")},
+                 ${this.detailColExpr("weight_g")},
+                 ${this.detailColExpr("diameter_cm")},
+                 ${this.detailColExpr("current_location")},
+                 ${this.detailColExpr("date_display")},
+                 ${this.detailColExpr("record_created")},
+                 ${this.detailColExpr("record_modified")},
+                 ${this.detailColExpr("extent_text")},
                  rl.uri AS rights_uri
           FROM artworks a
           LEFT JOIN rights_lookup rl ON a.rights_id = rl.id
@@ -1021,6 +1036,14 @@ export class VocabularyDb {
                  a.date_earliest, a.date_latest, a.description_text, a.inscription_text,
                  a.provenance_text, a.credit_line, a.narrative_text,
                  a.height_cm, a.width_cm, a.iiif_id,
+                 ${this.detailColExpr("depth_cm")},
+                 ${this.detailColExpr("weight_g")},
+                 ${this.detailColExpr("diameter_cm")},
+                 ${this.detailColExpr("current_location")},
+                 ${this.detailColExpr("date_display")},
+                 ${this.detailColExpr("record_created")},
+                 ${this.detailColExpr("record_modified")},
+                 ${this.detailColExpr("extent_text")},
                  a.rights_uri
           FROM artworks a
           WHERE a.object_number = ?
@@ -1034,8 +1057,8 @@ export class VocabularyDb {
         this.columnExists("vocabulary", "birth_year") &&
         this.columnExists("vocabulary", "gender");
       const personEnrichmentCols = hasPersonEnrichment
-        ? "v.birth_year, v.death_year, v.gender, v.bio, v.wikidata_id"
-        : "NULL AS birth_year, NULL AS death_year, NULL AS gender, NULL AS bio, NULL AS wikidata_id";
+        ? "v.birth_year, v.death_year, v.gender, v.wikidata_id"
+        : "NULL AS birth_year, NULL AS death_year, NULL AS gender, NULL AS wikidata_id";
       this.stmtArtworkMappings = this.db.prepare(`
         SELECT f.name AS field, v.label_en, v.label_nl, v.id AS vocab_id,
                v.notation, v.external_id, v.type AS vocab_type,
@@ -1056,32 +1079,6 @@ export class VocabularyDb {
         `);
       }
 
-      // examinations harvested in v0.24+; conservation/scientific report metadata.
-      if (this.hasExaminations_) {
-        this.stmtArtworkExaminationsCount = this.db.prepare(
-          `SELECT COUNT(*) AS n FROM examinations WHERE art_id = ?`
-        );
-        this.stmtArtworkExaminationsPreview = this.db.prepare(`
-          SELECT examiner_name, report_type_id, report_type_en, date_display, date_begin, date_end
-          FROM examinations WHERE art_id = ?
-          ORDER BY date_begin DESC NULLS LAST, seq
-          LIMIT ?
-        `);
-      }
-
-      // modifications harvested in v0.24+; restoration / treatment events.
-      if (this.hasModifications_) {
-        this.stmtArtworkModificationsCount = this.db.prepare(
-          `SELECT COUNT(*) AS n FROM modifications WHERE art_id = ?`
-        );
-        this.stmtArtworkModificationsPreview = this.db.prepare(`
-          SELECT modifier_uri, date_display, date_begin, date_end, description
-          FROM modifications WHERE art_id = ?
-          ORDER BY date_begin DESC NULLS LAST, seq
-          LIMIT ?
-        `);
-      }
-
       // related_objects harvested in v0.24+; peer artwork relations (recto/verso, frame/painting, pendant…).
       if (this.hasRelatedObjects_) {
         this.stmtArtworkRelatedCount = this.db.prepare(
@@ -1095,6 +1092,42 @@ export class VocabularyDb {
           ORDER BY ro.relationship_en, a.object_number
           LIMIT ?
         `);
+      }
+
+      if (this.tableExists("artwork_external_ids")) {
+        this.stmtArtworkExternalIds = this.db.prepare(
+          `SELECT authority, uri FROM artwork_external_ids WHERE art_id = ? ORDER BY authority, uri`
+        );
+      }
+
+      // part_index is preserved on each row but does NOT correlate with production[] index —
+      // see fetchAttributionEvidence and the 2026-05-01 plan revision for the data evidence.
+      if (this.tableExists("attribution_evidence")) {
+        this.stmtArtworkAttributionEvidence = this.db.prepare(
+          `SELECT part_index, evidence_type_aat, carried_by_uri, label_text
+           FROM attribution_evidence
+           WHERE art_id = ?
+           ORDER BY part_index, evidence_type_aat, carried_by_uri`
+        );
+      }
+
+      if (this.tableExists("artwork_exhibitions") && this.tableExists("exhibitions")) {
+        this.stmtArtworkExhibitions = this.db.prepare(`
+          SELECT e.exhibition_id, e.title_en, e.title_nl, e.date_start, e.date_end
+          FROM artwork_exhibitions ae
+          JOIN exhibitions e ON e.exhibition_id = ae.exhibition_id
+          WHERE ae.art_id = ?
+          ORDER BY e.date_start IS NULL, e.date_start DESC, e.exhibition_id
+        `);
+      }
+
+      // museum_rooms is 75 rows keyed by room_hash (no index on room_id) — preload once
+      // into a Map to avoid a per-call table scan from lookupMuseumRoom.
+      if (this.tableExists("museum_rooms")) {
+        const rows = this.db.prepare(
+          `SELECT room_id, floor, room_name FROM museum_rooms`
+        ).all() as { room_id: string; floor: string | null; room_name: string | null }[];
+        this.museumRooms = new Map(rows.map((r) => [r.room_id, { roomId: r.room_id, floor: r.floor, roomName: r.room_name }]));
       }
 
       // artwork_parent harvested in v0.24+; surfaces sketchbook/album hierarchy (#28).
@@ -1220,19 +1253,19 @@ export class VocabularyDb {
     return { title: VocabularyDb.resolveTitle(row.title, row.title_all_text), creator: row.creator_label || "", dateEarliest: row.date_earliest, dateLatest: row.date_latest };
   }
 
-  /** Look up enriched person info (birth/death/gender/bio/wikidata) by vocab IDs. */
+  /** Look up enriched person info (birth/death/gender/wikidata) by vocab IDs. */
   lookupPersonInfo(vocabIds: string[]): Map<string, PersonInfo> {
     const map = new Map<string, PersonInfo>();
     if (!this.stmtLookupPersonInfo || vocabIds.length === 0) return map;
     for (const id of vocabIds) {
       const row = this.stmtLookupPersonInfo.get(id) as {
         id: string; birth_year: number | null; death_year: number | null;
-        gender: string | null; bio: string | null; wikidata_id: string | null;
+        gender: string | null; wikidata_id: string | null;
       } | undefined;
-      if (row && (row.birth_year != null || row.death_year != null || row.gender || row.bio || row.wikidata_id)) {
+      if (row && (row.birth_year != null || row.death_year != null || row.gender || row.wikidata_id)) {
         map.set(id, {
           birthYear: row.birth_year, deathYear: row.death_year,
-          gender: row.gender, bio: row.bio, wikidataId: row.wikidata_id,
+          gender: row.gender, wikidataId: row.wikidata_id,
         });
       }
     }
@@ -1328,6 +1361,10 @@ export class VocabularyDb {
       description_text: string | null; inscription_text: string | null;
       provenance_text: string | null; credit_line: string | null; narrative_text: string | null;
       height_cm: number | null; width_cm: number | null; iiif_id: string | null;
+      depth_cm: number | null; weight_g: number | null; diameter_cm: number | null;
+      current_location: string | null; date_display: string | null;
+      record_created: string | null; record_modified: string | null;
+      extent_text: string | null;
       rights_uri: string | null;
     } | undefined;
     if (!row) return null;
@@ -1337,7 +1374,7 @@ export class VocabularyDb {
       field: string; label_en: string | null; label_nl: string | null; vocab_id: string;
       notation: string | null; external_id: string | null; vocab_type: string | null;
       birth_year: number | null; death_year: number | null; gender: string | null;
-      bio: string | null; wikidata_id: string | null;
+      wikidata_id: string | null;
     }[];
 
     // Group mappings by field
@@ -1390,8 +1427,8 @@ export class VocabularyDb {
     const safeBirthPlaces = birthPlaces.length === creators.length ? birthPlaces : [];
 
     const production = creators.map((c, i) => {
-      const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.bio || c.wikidata_id)
-        ? { birthYear: c.birth_year, deathYear: c.death_year, gender: c.gender, bio: c.bio, wikidataId: c.wikidata_id }
+      const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.wikidata_id)
+        ? { birthYear: c.birth_year, deathYear: c.death_year, gender: c.gender, wikidataId: c.wikidata_id }
         : undefined;
       return {
         name: label(c),
@@ -1409,9 +1446,17 @@ export class VocabularyDb {
     const dimensionStatement = formatDimensions(row.height_cm, row.width_cm);
 
     // Dimensions structured
-    const dimensions: { type: string; value: number; unit: string; note: string | null }[] = [];
+    const dimensions: { type: DimensionType; value: number; unit: string; note: string | null }[] = [];
     if (row.height_cm != null) dimensions.push({ type: "height", value: row.height_cm, unit: "cm", note: null });
     if (row.width_cm != null) dimensions.push({ type: "width", value: row.width_cm, unit: "cm", note: null });
+    if (row.depth_cm != null) dimensions.push({ type: "depth", value: row.depth_cm, unit: "cm", note: null });
+    if (row.weight_g != null) dimensions.push({ type: "weight", value: row.weight_g, unit: "g", note: null });
+    if (row.diameter_cm != null) dimensions.push({ type: "diameter", value: row.diameter_cm, unit: "cm", note: null });
+
+    // Themes piggy-back on the byField lookup we already loaded.
+    const themeRows = byField.get("theme") ?? [];
+    const themesTotalCount = themeRows.length;
+    const themes = themeRows.slice(0, VocabularyDb.DETAIL_PREVIEW_LIMIT).map(toTerm);
 
     // Technique statement from techniques
     const techniqueStatement = techniques.length > 0
@@ -1432,9 +1477,9 @@ export class VocabularyDb {
       provenance: row.provenance_text,
       creditLine: row.credit_line,
       inscriptions: row.inscription_text ? row.inscription_text.split(" | ") : [],
-      location: null, // not harvested
+      location: this.lookupMuseumRoom(row.current_location),
       collectionSets,
-      externalIds: {},
+      externalIds: this.fetchArtworkExternalIds(row.art_id),
       // Group A
       titles: this.fetchTitleVariants(row.art_id),
       ...this.fetchArtworkLineage(row.art_id),
@@ -1443,8 +1488,6 @@ export class VocabularyDb {
       webPage: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
       dimensions,
       ...this.fetchRelatedObjects(row.art_id),
-      ...this.fetchExaminations(row.art_id),
-      ...this.fetchConservationHistory(row.art_id),
       persistentId: row.art_id ? `http://hdl.handle.net/10934/RM0001.COLLECT.${row.art_id}` : null,
       // Group B
       objectTypes,
@@ -1453,6 +1496,15 @@ export class VocabularyDb {
       collectionSetLabels,
       // Group C
       subjects: { iconclass, depictedPersons, depictedPlaces },
+      // Group D — v0.27 (#291)
+      dateDisplay: row.date_display,
+      extentText: row.extent_text,
+      recordCreated: row.record_created,
+      recordModified: row.record_modified,
+      themes,
+      themesTotalCount,
+      ...this.fetchExhibitions(row.art_id),
+      attributionEvidence: this.fetchAttributionEvidence(row.art_id),
     };
   }
 
@@ -1531,61 +1583,6 @@ export class VocabularyDb {
     return { relatedObjects: items, relatedObjectsTotalCount: total };
   }
 
-  /** Conservation/scientific examination reports, most-recent first. */
-  private fetchExaminations(
-    artId: number,
-  ): Pick<ArtworkDetailFromDb, "examinations" | "examinationsTotalCount"> {
-    const { items, total } = this.fetchCountAndPreview<
-      {
-        examiner_name: string | null; report_type_id: string;
-        report_type_en: string | null;
-        date_display: string | null; date_begin: string | null; date_end: string | null;
-      },
-      ArtworkDetailFromDb["examinations"][number]
-    >(
-      this.stmtArtworkExaminationsCount,
-      this.stmtArtworkExaminationsPreview,
-      artId,
-      VocabularyDb.EVENT_PREVIEW_LIMIT,
-      r => ({
-        examiner: r.examiner_name,
-        reportTypeId: r.report_type_id,
-        reportTypeLabel: r.report_type_en,
-        date: r.date_display,
-        dateBegin: r.date_begin,
-        dateEnd: r.date_end,
-      }),
-    );
-    return { examinations: items, examinationsTotalCount: total };
-  }
-
-  /** Restoration / conservation treatment events, most-recent first. */
-  private fetchConservationHistory(
-    artId: number,
-  ): Pick<ArtworkDetailFromDb, "conservationHistory" | "conservationHistoryTotalCount"> {
-    const { items, total } = this.fetchCountAndPreview<
-      {
-        modifier_uri: string | null;
-        date_display: string | null; date_begin: string | null; date_end: string | null;
-        description: string | null;
-      },
-      ArtworkDetailFromDb["conservationHistory"][number]
-    >(
-      this.stmtArtworkModificationsCount,
-      this.stmtArtworkModificationsPreview,
-      artId,
-      VocabularyDb.EVENT_PREVIEW_LIMIT,
-      r => ({
-        modifierUri: r.modifier_uri,
-        description: r.description,
-        date: r.date_display,
-        dateBegin: r.date_begin,
-        dateEnd: r.date_end,
-      }),
-    );
-    return { conservationHistory: items, conservationHistoryTotalCount: total };
-  }
-
   /**
    * Given a set of object numbers from a search result, return only those whose
    * parent is also in the same set — i.e. the children that should collapse
@@ -1605,6 +1602,64 @@ export class VocabularyDb {
     `).all(...objectNumbers, ...objectNumbers) as { child_obj: string; parent_obj: string }[];
     for (const r of rows) out.set(r.child_obj, r.parent_obj);
     return out;
+  }
+
+  /** Splits handle from 'other' authority. */
+  private fetchArtworkExternalIds(artId: number): ArtworkDetailFromDb["externalIds"] {
+    if (!this.stmtArtworkExternalIds) return { handle: null, other: [] };
+    const rows = this.stmtArtworkExternalIds.all(artId) as { authority: string; uri: string }[];
+    let handle: string | null = null;
+    const other: string[] = [];
+    for (const r of rows) {
+      if (r.authority === "handle") handle = r.uri;
+      else other.push(r.uri);
+    }
+    return { handle, other };
+  }
+
+  /** Artwork-level — partIndex is preserved but does NOT map to production[] index (only 36% agreement empirically). */
+  private fetchAttributionEvidence(artId: number): ArtworkDetailFromDb["attributionEvidence"] {
+    if (!this.stmtArtworkAttributionEvidence) return [];
+    const rows = this.stmtArtworkAttributionEvidence.all(artId) as {
+      part_index: number; evidence_type_aat: string | null;
+      carried_by_uri: string | null; label_text: string | null;
+    }[];
+    return rows.map((r) => ({
+      partIndex: r.part_index,
+      evidenceTypeAat: r.evidence_type_aat,
+      carriedByUri: r.carried_by_uri,
+      labelText: r.label_text,
+    }));
+  }
+
+  /** Most-recent first. Max observed in v0.26 is 5 rows/artwork — no cap applied. */
+  private fetchExhibitions(artId: number): Pick<ArtworkDetailFromDb, "exhibitions" | "exhibitionsTotalCount"> {
+    if (!this.stmtArtworkExhibitions) return { exhibitions: [], exhibitionsTotalCount: 0 };
+    const rows = this.stmtArtworkExhibitions.all(artId) as {
+      exhibition_id: number; title_en: string | null; title_nl: string | null;
+      date_start: string | null; date_end: string | null;
+    }[];
+    const exhibitions = rows.map((r) => ({
+      exhibitionId: r.exhibition_id,
+      titleEn: r.title_en,
+      titleNl: r.title_nl,
+      dateStart: r.date_start,
+      dateEnd: r.date_end,
+    }));
+    return { exhibitions, exhibitionsTotalCount: exhibitions.length };
+  }
+
+  /**
+   * Resolve a `current_location` code (e.g. "HG-2.20-03") to its museum_rooms row.
+   * Strips the `HG-` prefix, takes the leading dotted-decimal segment up to the
+   * next hyphen, and looks up `room_id`. Returns null when unmatched (~3.2% of rows).
+   */
+  private lookupMuseumRoom(currentLocation: string | null): ArtworkDetailFromDb["location"] {
+    if (!currentLocation || !this.museumRooms) return null;
+    const stripped = currentLocation.startsWith("HG-") ? currentLocation.slice(3) : currentLocation;
+    const dashIdx = stripped.indexOf("-");
+    const roomId = dashIdx >= 0 ? stripped.slice(0, dashIdx) : stripped;
+    return this.museumRooms.get(roomId) ?? null;
   }
 
   /**
@@ -2390,6 +2445,11 @@ export class VocabularyDb {
     } catch {
       return false;
     }
+  }
+
+  /** Emit `a.<col>` if `artworks.<col>` exists, else `NULL AS <col>`. Lets stmtArtworkRow open against older harvest schemas. */
+  private detailColExpr(col: string): string {
+    return this.columnExists("artworks", col) ? `a.${col}` : `NULL AS ${col}`;
   }
 
   /** Compact search: returns only object numbers and total count, no enrichment.

@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -312,7 +312,10 @@ function formatDetailSummary(d: DetailWithChain): string {
   if (d.techniqueStatement || d.dimensionStatement) {
     lines.push([d.techniqueStatement, d.dimensionStatement].filter(Boolean).join(", "));
   }
-  if (d.location) lines.push(d.location);
+  if (d.location) {
+    const parts = [d.location.floor, d.location.roomName, `room ${d.location.roomId}`].filter(Boolean);
+    lines.push(parts.join(", "));
+  }
   lines.push("");
 
   const termLabels = (arr: { label: string }[], max = 5) => {
@@ -338,8 +341,6 @@ function formatDetailSummary(d: DetailWithChain): string {
       return s;
     });
     lines.push(`Production: ${parts.join("; ")}`);
-    const primaryBio = d.production[0]?.personInfo?.bio;
-    if (primaryBio) lines.push(`Bio: ${primaryBio}`);
   }
 
   if (d.description) lines.push(`\n[Description] ${d.description}`);
@@ -421,32 +422,6 @@ function formatDetailSummary(d: DetailWithChain): string {
     const cap = d.relatedObjectsTotalCount > d.relatedObjects.length
       ? ` (showing ${d.relatedObjects.length} of ${d.relatedObjectsTotalCount})` : "";
     lines.push(`[Related objects]${cap} ${groups}`);
-  }
-
-  // Track D: examination reports
-  if (d.examinationsTotalCount && d.examinationsTotalCount > 0 && d.examinations) {
-    const examiners = new Map<string | null, number>();
-    for (const e of d.examinations) examiners.set(e.examiner, (examiners.get(e.examiner) ?? 0) + 1);
-    const names = [...examiners.entries()]
-      .filter(([n]) => n)
-      .map(([n, c]) => c > 1 ? `${n} (${c}×)` : n!)
-      .join(", ");
-    const dates = d.examinations.map(e => e.dateBegin?.slice(0, 4)).filter(Boolean).sort();
-    const span = dates.length >= 2 && dates[0] !== dates.at(-1) ? `${dates[0]}–${dates.at(-1)}` : dates[0] ?? "?";
-    const cap = d.examinationsTotalCount > d.examinations.length
-      ? ` (showing ${d.examinations.length} of ${d.examinationsTotalCount})` : "";
-    lines.push(`[Examinations] (${d.examinationsTotalCount} reports, ${span})${cap}${names ? ` by ${names}` : ""}`);
-  }
-
-  // Track E: conservation / restoration history
-  if (d.conservationHistoryTotalCount && d.conservationHistoryTotalCount > 0 && d.conservationHistory) {
-    const events = d.conservationHistory.map(c => {
-      const when = c.date ?? c.dateBegin?.slice(0, 4) ?? "?";
-      return `${when} ${c.description ?? "(no description)"}`;
-    }).join(" | ");
-    const cap = d.conservationHistoryTotalCount > d.conservationHistory.length
-      ? ` (showing ${d.conservationHistory.length} of ${d.conservationHistoryTotalCount})` : "";
-    lines.push(`[Conservation]${cap} ${events}`);
   }
 
   lines.push(`URL: ${d.url}`);
@@ -744,9 +719,16 @@ const ArtworkDetailOutput = {
   provenance: z.string().nullable(),
   creditLine: z.string().nullable(),
   inscriptions: z.array(z.string()),
-  location: z.string().nullable(),
+  location: z.object({
+    roomId: z.string(),
+    floor: z.string().nullable(),
+    roomName: z.string().nullable(),
+  }).nullable().describe("Current museum room (resolved via current_location → museum_rooms join). Null if not on display."),
   collectionSets: z.array(z.string()),
-  externalIds: z.record(z.string()),
+  externalIds: z.object({
+    handle: z.string().nullable().describe("Persistent handle URI (hdl.handle.net)."),
+    other: z.array(z.string()).describe("Non-handle external IDs (rare — 14 rows DB-wide as of v0.26)."),
+  }),
   // Enriched Group A
   titles: z.array(z.object({
     title: z.string(),
@@ -757,7 +739,7 @@ const ArtworkDetailOutput = {
   license: z.string().nullable(),
   webPage: z.string().nullable(),
   dimensions: z.array(z.object({
-    type: z.string(), value: z.union([z.number(), z.string()]), unit: z.string(), note: z.string().nullable(),
+    type: z.enum(DIMENSION_TYPES), value: z.union([z.number(), z.string()]), unit: z.string(), note: z.string().nullable(),
   })),
   relatedObjects: z.array(z.object({
     relationship: z.string().describe("English relationship label, e.g. 'recto | verso', 'pendant', 'object | former frame'."),
@@ -766,23 +748,6 @@ const ArtworkDetailOutput = {
     objectUri: z.string().describe("Original Linked Art URI from the harvest. Pass to get_artwork_details(uri=…) for full peer metadata."),
   })).describe("Peer artwork relations (recto/verso, frame/painting, pendant, production stadia, …). Capped at 25 entries — see relatedObjectsTotalCount."),
   relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total related-object count before capping. Equals relatedObjects.length when ≤ 25."),
-  examinations: z.array(z.object({
-    examiner: z.string().nullable().describe("Person who conducted the examination."),
-    reportTypeId: z.string().describe("Linked Art URI for the report type (22 distinct types in v0.24)."),
-    reportTypeLabel: z.string().nullable().describe("English label for the report type. Null in v0.24 — the harvest captures the URI but not the label."),
-    date: z.string().nullable().describe("Display date (e.g. '2010-05-06' or '1991 - 1992')."),
-    dateBegin: z.string().nullable().describe("ISO 8601 begin timestamp."),
-    dateEnd: z.string().nullable().describe("ISO 8601 end timestamp."),
-  })).describe("Conservation / scientific examination reports recorded against the artwork. Ordered most-recent first, capped at 25 — see examinationsTotalCount."),
-  examinationsTotalCount: z.number().int().nonnegative(),
-  conservationHistory: z.array(z.object({
-    modifierUri: z.string().nullable().describe("Linked Art URI for the conservator/modifier."),
-    description: z.string().nullable().describe("Free-text treatment description (e.g. 'complete restoration', 'treatment unknown')."),
-    date: z.string().nullable(),
-    dateBegin: z.string().nullable(),
-    dateEnd: z.string().nullable(),
-  })).describe("Restoration / treatment events. Ordered most-recent first, capped at 25 — see conservationHistoryTotalCount."),
-  conservationHistoryTotalCount: z.number().int().nonnegative(),
   parents: z.array(z.object({
     objectNumber: z.string(),
     title: z.string(),
@@ -802,7 +767,6 @@ const ArtworkDetailOutput = {
       birthYear: z.number().int().nullable(),
       deathYear: z.number().int().nullable(),
       gender: z.string().nullable(),
-      bio: z.string().nullable(),
       wikidataId: z.string().nullable(),
     }).optional(),
   })),
@@ -813,6 +777,36 @@ const ArtworkDetailOutput = {
     depictedPersons: z.array(ResolvedTermShape()),
     depictedPlaces: z.array(ResolvedTermShape()),
   }),
+  // Enriched Group D — v0.27 (#291)
+  dateDisplay: z.string().nullable()
+    .describe("Free-text Rijksmuseum-formatted display date (e.g. '1642', 'c. 1665-1667'). Use this for prose; date for ISO-shaped output."),
+  extentText: z.string().nullable()
+    .describe("Free-text extent / dimensions string (dcterms:extent). Verbose human-readable form."),
+  recordCreated: z.string().nullable()
+    .describe("ISO 8601 timestamp of catalogue record creation."),
+  recordModified: z.string().nullable()
+    .describe("ISO 8601 timestamp of catalogue record's most recent modification."),
+  themes: z.array(ResolvedTermShape())
+    .describe("Curatorial thematic tags (overseas history, political history, costume, …)."),
+  themesTotalCount: z.number().int().nonnegative(),
+  exhibitions: z.array(z.object({
+    exhibitionId: z.number().int(),
+    titleEn: z.string().nullable(),
+    titleNl: z.string().nullable(),
+    dateStart: z.string().nullable(),
+    dateEnd: z.string().nullable(),
+  })).describe("Exhibitions this artwork has appeared in. Most-recent first."),
+  exhibitionsTotalCount: z.number().int().nonnegative(),
+  attributionEvidence: z.array(z.object({
+    partIndex: z.number().int().nonnegative()
+      .describe("Upstream LinkedArt part index (preserved for future correlation; do not assume it maps to production[] index)."),
+    evidenceTypeAat: z.string().nullable()
+      .describe("AAT URI for evidence type (signature, inscription, ...). Labels not yet harvested."),
+    carriedByUri: z.string().nullable()
+      .describe("Linked Art URI of the inscription/signature object."),
+    labelText: z.string().nullable()
+      .describe("Free-text label of the evidence (e.g. transcribed signature)."),
+  })).describe("Evidence supporting attribution claims (signatures, inscriptions, monograms, …). Artwork-level — partIndex preserves upstream ordering but does NOT map to production[] index."),
   error: z.string().optional(),
 };
 
@@ -1615,11 +1609,11 @@ function registerTools(
       description:
         "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch) " +
         "or by its Linked Art URI (e.g. from relatedObjects). Provide exactly one of objectNumber or uri. " +
-        "Returns 24 metadata categories including titles (primary plus the full set of variants " +
-        "with language and qualifier — Dutch/English brief/full/display/former), creator, date, description, curatorial narrative, " +
-        "dimensions (text + structured), materials, object type, production details (with creator life dates, " +
-        "gender, bio, and Wikidata ID where available), provenance, " +
-        "credit line, inscriptions, license, related objects, collection sets, plus reference and location metadata. " +
+        "Returns metadata including titles (primary plus the full set of variants " +
+        "with language and qualifier — Dutch/English brief/full/display/former), creator, date, dateDisplay (free-text form), description, curatorial narrative, " +
+        "dimensions (text + structured: height/width/depth/weight/diameter where present), extentText, materials, object type, production details (with creator life dates, " +
+        "gender, and Wikidata ID where available), provenance, " +
+        "credit line, inscriptions, license, related objects, themes, exhibitions, attributionEvidence, externalIds (handle + other), location (museum room when on display), recordCreated/recordModified timestamps, plus collection sets and reference metadata. " +
         "The relatedObjects field carries each peer's objectNumber (canonical handle) plus a Linked Art objectUri. " +
         "Pass either form back to this tool — objectNumber is preferred. " +
         "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",

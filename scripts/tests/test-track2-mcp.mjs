@@ -1,7 +1,6 @@
 /**
  * End-to-end MCP-protocol smoke test for the Track-2 wirings landed in this
- * session: title_variants, artwork_parent + groupBy=parent, related_objects,
- * examinations, conservationHistory.
+ * session: title_variants, artwork_parent + groupBy=parent, related_objects.
  *
  * Boots the local dist/index.js as a stdio MCP server and exercises each
  * surface through the JSON-RPC protocol — i.e. exactly the path a real
@@ -105,13 +104,6 @@ assert(typeof relRow?.relationship === "string" && relRow.relationship.length > 
 assert(typeof relRow?.objectUri === "string" && relRow.objectUri.startsWith("https://"),
   "first relatedObject carries objectUri");
 
-// Task D + E: examinations / conservationHistory (Night Watch has none)
-assert(Array.isArray(nw.examinations) && nw.examinations.length === 0,
-  "Night Watch has no examinations");
-assert(nw.examinationsTotalCount === 0, "examinationsTotalCount=0");
-assert(Array.isArray(nw.conservationHistory) && nw.conservationHistory.length === 0,
-  "Night Watch has no conservationHistory");
-
 // ══════════════════════════════════════════════════════════════════
 section("3. get_artwork_details(BI-1898-1748A) — sketchbook parent (#28)");
 // ══════════════════════════════════════════════════════════════════
@@ -147,34 +139,6 @@ assert(folio.parents[0].objectNumber === "BI-1898-1748A",
 assert(typeof folio.parents[0].title === "string" && folio.parents[0].title.length > 0,
   "parent record carries a resolved title");
 assert(folio.childCount === 0, "folio is a leaf (no children)");
-
-// ══════════════════════════════════════════════════════════════════
-section("5. get_artwork_details(SK-A-110) — examinations + conservation");
-// ══════════════════════════════════════════════════════════════════
-
-const r5 = await client.callTool({
-  name: "get_artwork_details",
-  arguments: { objectNumber: "SK-A-110" },
-});
-const heavy = unwrap(r5);
-
-assert(heavy.examinationsTotalCount === 15,
-  `SK-A-110 has 15 examinations (got ${heavy.examinationsTotalCount})`);
-assert(heavy.examinations.length === 15, "all 15 fit under 25-cap");
-const exam = heavy.examinations[0];
-assert(typeof exam.examiner === "string", "examiner field present");
-assert(typeof exam.reportTypeId === "string" && exam.reportTypeId.startsWith("https://"),
-  "reportTypeId is a Linked Art URI");
-assert(exam.reportTypeLabel === null,
-  "reportTypeLabel is null in v0.24 (harvest gap, documented)");
-assert(typeof exam.dateBegin === "string" && exam.dateBegin.length > 0,
-  "dateBegin populated");
-
-assert(heavy.conservationHistoryTotalCount === 5,
-  `SK-A-110 has 5 conservation events (got ${heavy.conservationHistoryTotalCount})`);
-const cons = heavy.conservationHistory[0];
-assert(typeof cons.description === "string" && cons.description.length > 0,
-  "conservation event has description");
 
 // ══════════════════════════════════════════════════════════════════
 section("6. search_artwork(creator='Schedel') — default behaviour");
@@ -250,14 +214,6 @@ assert(folioText.includes("BI-1898-1748A"),
 
 assert(nwText.includes("[Related objects]"),
   "[Related objects] section rendered when relatedObjectsTotalCount > 0");
-
-const heavyText = textOf(r5);
-assert(heavyText.includes("[Examinations]"),
-  "[Examinations] section rendered when examinationsTotalCount > 0");
-assert(/\(15 reports/.test(heavyText),
-  "[Examinations] header includes the total report count");
-assert(heavyText.includes("[Conservation]"),
-  "[Conservation] section rendered when conservationHistoryTotalCount > 0");
 
 // ══════════════════════════════════════════════════════════════════
 section("9. Text-channel sentinels — search_artwork groupedChildCount (#277 High)");

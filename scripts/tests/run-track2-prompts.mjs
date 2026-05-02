@@ -129,31 +129,6 @@ if (recto) {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-header("Test 5 — Task D · examinations[] (SK-A-110)");
-// ────────────────────────────────────────────────────────────────────────
-const t5 = await call(client, "get_artwork_details", { objectNumber: "SK-A-110" });
-console.log(`examinationsTotalCount: ${t5.examinationsTotalCount}`);
-console.log(`first 5 examinations:`);
-for (const e of t5.examinations.slice(0, 5)) {
-  console.log(`  · ${e.dateBegin?.slice(0,10) ?? "?"}  examiner=${e.examiner}  reportTypeLabel=${JSON.stringify(e.reportTypeLabel)}`);
-}
-const examiners = new Map();
-for (const e of t5.examinations) examiners.set(e.examiner, (examiners.get(e.examiner) ?? 0) + 1);
-console.log(`examiner frequency:`);
-for (const [name, n] of examiners) console.log(`  · ${name}: ${n}`);
-const allLabelsNull = t5.examinations.every(e => e.reportTypeLabel === null);
-console.log(`all reportTypeLabel === null (expected for v0.24): ${allLabelsNull}`);
-
-// ────────────────────────────────────────────────────────────────────────
-header("Test 6 — Task E · conservationHistory[] (SK-A-110)");
-// ────────────────────────────────────────────────────────────────────────
-console.log(`conservationHistoryTotalCount: ${t5.conservationHistoryTotalCount}`);
-for (const c of t5.conservationHistory) {
-  const dateLabel = c.date ?? `${c.dateBegin?.slice(0,4)}-${c.dateEnd?.slice(0,4)}`;
-  console.log(`  · ${dateLabel.padEnd(12)}  "${c.description}"`);
-}
-
-// ────────────────────────────────────────────────────────────────────────
 header("Test 7 — is_areal · nearPlace excludes Holy Roman Empire centroid");
 // ────────────────────────────────────────────────────────────────────────
 const t7holy = await call(client, "search_artwork", {
@@ -192,8 +167,6 @@ console.log(`titles[].length              : ${t9.titles.length}`);
 console.log(`parents.length               : ${t9.parents.length}`);
 console.log(`childCount                   : ${t9.childCount}`);
 console.log(`relatedObjectsTotalCount     : ${t9.relatedObjectsTotalCount}`);
-console.log(`examinationsTotalCount       : ${t9.examinationsTotalCount}`);
-console.log(`conservationHistoryTotalCount: ${t9.conservationHistoryTotalCount}`);
 
 await client.close();
 console.log("\n" + "━".repeat(72));
