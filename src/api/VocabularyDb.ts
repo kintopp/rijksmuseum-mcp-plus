@@ -950,11 +950,6 @@ export class VocabularyDb {
   // Theme cache (#294)
   private themeDf: Map<number, number> | null = null; // theme vocab_rowid → document frequency
   private themeN = 0; // total artworks with at least one theme
-  /** Over-fetch multiplier for the Theme channel's importance tie-break:
-   *  we sort by IDF-weight, take 4× the requested page, then re-sort with
-   *  the importance lookup. 4× is enough to cover ties at the page boundary
-   *  without paying for an importance lookup over the full candidate set. */
-  private static readonly THEME_TIE_BREAK_OVERFETCH = 4;
   // Related-object cache (#293) — curator-declared peer edges
   private relatedObjectsByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
   private static readonly RELATED_OBJECT_LABELS = [
@@ -2488,14 +2483,10 @@ export class VocabularyDb {
       }
     }
 
-    const presort = [...candidates.entries()]
-      .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
-      .slice(0, maxResults * VocabularyDb.THEME_TIE_BREAK_OVERFETCH);
+    const allCandidates = [...candidates.entries()];
+    const importanceMap = this.batchLookupImportanceByArtId(allCandidates.map(([artId]) => artId));
 
-    const presortIds = presort.map(([artId]) => artId);
-    const importanceMap = this.batchLookupImportanceByArtId(presortIds);
-
-    const sorted = presort
+    const sorted = allCandidates
       .sort((a, b) => {
         if (b[1].totalWeight !== a[1].totalWeight) return b[1].totalWeight - a[1].totalWeight;
         return (importanceMap.get(b[0]) ?? 0) - (importanceMap.get(a[0]) ?? 0);
