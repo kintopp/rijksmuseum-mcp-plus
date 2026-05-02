@@ -333,6 +333,7 @@ export interface ProvenanceSearchParams {
   acquisitionMethod?: string;
   minDuration?: number;
   maxDuration?: number;
+  periodLocation?: string;
 }
 
 /** Raw DB row shape from provenance_events JOIN artworks. */
@@ -509,6 +510,47 @@ export interface CollectionStatsResult {
   warnings?: string[];
 }
 
+export type CuratedSetCategory =
+  | "object_type"
+  | "iconographic"
+  | "album"
+  | "sub_collection"
+  | "umbrella";
+
+export interface CuratedSetMeta {
+  setSpec: string;
+  name: string;
+  lodUri: string;
+  memberCount: number;
+  dominantTypes: { label: string; count: number }[];
+  dominantCenturies: { century: string; count: number }[];
+  category: CuratedSetCategory | null;
+}
+
+export interface CuratedSetsQuery {
+  query?: string;
+  sortBy?: "name" | "size" | "size_desc";
+  minMembers?: number;
+  maxMembers?: number;
+  includeStats?: boolean;
+}
+
+export interface BrowseSetRecord {
+  objectNumber: string;
+  title: string;
+  creator: string;
+  date: string;
+  description?: string;
+  dimensions?: string;
+  datestamp?: string;
+  hasImage: boolean;
+  imageUrl?: string;
+  iiifServiceUrl?: string;
+  edmType?: string;
+  lodUri: string;
+  url: string;
+}
+
 /** Vocab dimension → DB field + optional type filter. Shared by computeFacets and artworkDimensionSql. */
 const VOCAB_DIMENSION_DEFS: ReadonlyArray<{ label: string; field: string; vocabType?: string }> = [
   { label: "type",           field: "type" },
@@ -544,6 +586,9 @@ export const STATS_DIMENSION_NAMES = [
   "century", "decade",                    // artwork date-based
   "height", "width",                      // artwork physical dimensions (cm, binned by binWidth)
   "provenanceDecade",                     // provenance date-based
+  "theme",                                // thematic vocab (NL labels until #300 backfill)
+  "exhibition",                           // top exhibitions by member count
+  "decadeModified",                       // record_modified bucketed by decade (1990s–2020s)
   ...PROV_DIMENSION_DEFS.map(d => d.label),
 ] as const;
 
@@ -821,6 +866,9 @@ export class VocabularyDb {
   private stmtArtworkExternalIds: Statement | null = null;
   private stmtArtworkAttributionEvidence: Statement | null = null;
   private stmtArtworkExhibitions: Statement | null = null;
+  private stmtBrowseSetLookup: Statement | null = null;
+  private stmtBrowseSetCount: Statement | null = null;
+  private stmtBrowseSetPage: Statement | null = null;
   private museumRooms: Map<string, { roomId: string; floor: string | null; roomName: string | null }> | null = null;
   private hasTitleVariants_ = false;
   private hasArtworkParent_ = false;
@@ -831,6 +879,9 @@ export class VocabularyDb {
   private static readonly RELATED_PREVIEW_LIMIT = 25;
   /** Maximum themes / exhibitions included inline on a detail view. */
   private static readonly DETAIL_PREVIEW_LIMIT = 25;
+  /** Keep in sync with `RijksmuseumApiClient.IIIF_BASE`. Duplicated here to avoid
+   *  a DB → API client dependency. */
+  private static readonly IIIF_BASE = "https://iiif.micr.io";
   private stmtFilterArtIds = new Map<string, Statement>();
   // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
   private stmtLookupTypesCache = new Map<number, Statement>();
@@ -2429,6 +2480,262 @@ export class VocabularyDb {
     this.ensurePlaceCache();
   }
 
+  // ── Curated sets cache (used by list_curated_sets) ─────────────────
+  //
+  // Built once at startup via three bulk GROUP-BY queries (memberCount,
+  // dominantTypes, dominantCenturies) — each scans the mappings table once
+  // and uses ROW_NUMBER() OVER (PARTITION BY set) to keep top-N per set.
+  // Cheaper than a per-set 3-query loop (193 sets × 3 = 579 statements).
+
+  private curatedSetsCache: Map<string, CuratedSetMeta> | null = null;
+
+  private classifySetCategory(
+    name: string,
+    memberCount: number,
+    types: { label: string; count: number }[],
+  ): CuratedSetCategory | null {
+    const n = name.toLowerCase();
+    if (memberCount >= 500_000) return "umbrella";
+    if (n.startsWith("album ")) return "album";
+    if (types[0]) {
+      const topLabel = types[0].label.toLowerCase();
+      if (topLabel === n || (memberCount > 0 && types[0].count >= memberCount * 0.95)) {
+        return "object_type";
+      }
+    }
+    const iconographic = [
+      "portret", "portrait",
+      "landschap", "landscape",
+      "stilleven", "still life",
+      "religieus", "religious",
+      "mythologisch", "mythological",
+      "historisch", "historical",
+    ];
+    if (iconographic.some(kw => n.includes(kw))) return "iconographic";
+    return "sub_collection";
+  }
+
+  ensureCuratedSetsCache(): void {
+    if (this.curatedSetsCache || !this.db) return;
+    const t0 = Date.now();
+    const collectionSetFieldId = this.requireFieldId("collection_set");
+    const typeFieldId = this.requireFieldId("type");
+
+    const sets = this.db.prepare(`
+      SELECT v.id AS set_spec, v.vocab_int_id AS set_int_id,
+             COALESCE(v.label_en, v.label_nl, v.id) AS name
+      FROM vocabulary v WHERE v.type = 'set'
+    `).all() as { set_spec: string; set_int_id: number; name: string }[];
+
+    const memberRows = this.db.prepare(`
+      SELECT vocab_rowid AS set_int_id, COUNT(DISTINCT artwork_id) AS n
+      FROM mappings WHERE field_id = ?
+      GROUP BY vocab_rowid
+    `).all(collectionSetFieldId) as { set_int_id: number; n: number }[];
+    const memberById = new Map<number, number>();
+    for (const r of memberRows) memberById.set(r.set_int_id, r.n);
+
+    // Top-3 dominant types per set. ROW_NUMBER over PARTITION BY set is what
+    // makes the "top-N per group" tractable in a single pass; without it we'd
+    // need 193 correlated subqueries.
+    const typeRows = this.db.prepare(`
+      WITH set_type_counts AS (
+        SELECT m1.vocab_rowid AS set_int_id,
+               m2.vocab_rowid AS type_int_id,
+               COUNT(*) AS cnt
+        FROM mappings m1
+        JOIN mappings m2 ON m2.artwork_id = m1.artwork_id AND m2.field_id = ?
+        WHERE m1.field_id = ?
+        GROUP BY m1.vocab_rowid, m2.vocab_rowid
+      ),
+      ranked AS (
+        SELECT set_int_id, type_int_id, cnt,
+               ROW_NUMBER() OVER (PARTITION BY set_int_id ORDER BY cnt DESC) AS rn
+        FROM set_type_counts
+      )
+      SELECT r.set_int_id, COALESCE(v.label_en, v.label_nl, '') AS label, r.cnt
+      FROM ranked r
+      JOIN vocabulary v ON v.vocab_int_id = r.type_int_id
+      WHERE r.rn <= 3
+      ORDER BY r.set_int_id, r.cnt DESC
+    `).all(typeFieldId, collectionSetFieldId) as { set_int_id: number; label: string; cnt: number }[];
+    const typesById = new Map<number, { label: string; count: number }[]>();
+    for (const r of typeRows) {
+      if (!r.label) continue;
+      const arr = typesById.get(r.set_int_id) ?? [];
+      arr.push({ label: r.label, count: r.cnt });
+      typesById.set(r.set_int_id, arr);
+    }
+
+    // Top-2 centuries per set. Negative dates (BC) bin via floor division to
+    // keep monotonic ordering across the BC/AD boundary.
+    const centuryRows = this.db.prepare(`
+      WITH set_century_counts AS (
+        SELECT m.vocab_rowid AS set_int_id,
+               (CASE WHEN a.date_earliest >= 0
+                     THEN (a.date_earliest / 100) * 100
+                     ELSE -((-a.date_earliest - 1) / 100 + 1) * 100 END) AS bin,
+               COUNT(*) AS cnt
+        FROM mappings m
+        JOIN artworks a ON a.art_id = m.artwork_id
+        WHERE m.field_id = ? AND a.date_earliest IS NOT NULL
+        GROUP BY m.vocab_rowid, bin
+      ),
+      ranked AS (
+        SELECT set_int_id, bin, cnt,
+               ROW_NUMBER() OVER (PARTITION BY set_int_id ORDER BY cnt DESC) AS rn
+        FROM set_century_counts
+      )
+      SELECT set_int_id, bin, cnt
+      FROM ranked WHERE rn <= 2
+      ORDER BY set_int_id, cnt DESC
+    `).all(collectionSetFieldId) as { set_int_id: number; bin: number; cnt: number }[];
+    const centuriesById = new Map<number, { century: string; count: number }[]>();
+    for (const r of centuryRows) {
+      const arr = centuriesById.get(r.set_int_id) ?? [];
+      arr.push({ century: `${r.bin}s`, count: r.cnt });
+      centuriesById.set(r.set_int_id, arr);
+    }
+
+    // Assemble cache
+    this.curatedSetsCache = new Map();
+    for (const s of sets) {
+      const memberCount = memberById.get(s.set_int_id) ?? 0;
+      const dominantTypes = typesById.get(s.set_int_id) ?? [];
+      const dominantCenturies = centuriesById.get(s.set_int_id) ?? [];
+      const category = this.classifySetCategory(s.name, memberCount, dominantTypes);
+      this.curatedSetsCache.set(s.set_spec, {
+        setSpec: s.set_spec,
+        name: s.name,
+        lodUri: `https://id.rijksmuseum.nl/${s.set_spec}`,
+        memberCount,
+        dominantTypes,
+        dominantCenturies,
+        category,
+      });
+    }
+    console.error(`  Curated sets cache: ${this.curatedSetsCache.size} sets in ${Date.now() - t0}ms`);
+  }
+
+  listCuratedSets(opts: CuratedSetsQuery = {}): {
+    totalSets: number;
+    filteredFrom?: number;
+    query?: string;
+    sets: Array<Omit<CuratedSetMeta, "memberCount" | "dominantTypes" | "dominantCenturies" | "category"> & Partial<Pick<CuratedSetMeta, "memberCount" | "dominantTypes" | "dominantCenturies" | "category">>>;
+  } {
+    this.ensureCuratedSetsCache();
+    const cache = this.curatedSetsCache!;
+    const includeStats = opts.includeStats ?? true;
+
+    let entries = Array.from(cache.values());
+    const allCount = entries.length;
+    const q = opts.query?.toLowerCase();
+    if (q) entries = entries.filter(s => s.name.toLowerCase().includes(q));
+    if (opts.minMembers != null) entries = entries.filter(s => s.memberCount >= opts.minMembers!);
+    if (opts.maxMembers != null) entries = entries.filter(s => s.memberCount <= opts.maxMembers!);
+
+    const sortBy = opts.sortBy ?? "name";
+    if (sortBy === "name") {
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === "size") {
+      entries.sort((a, b) => a.memberCount - b.memberCount);
+    } else {
+      entries.sort((a, b) => b.memberCount - a.memberCount);
+    }
+
+    const sets = entries.map(s => includeStats
+      ? { ...s }
+      : { setSpec: s.setSpec, name: s.name, lodUri: s.lodUri });
+
+    const filtered = q != null || opts.minMembers != null || opts.maxMembers != null;
+    return {
+      totalSets: sets.length,
+      ...(filtered ? { filteredFrom: allCount, query: opts.query } : {}),
+      sets,
+    };
+  }
+
+  /** Page through a curated set's members (used by browse_set).
+   *  Pure single-SELECT projection from the artworks table — no extra JOINs
+   *  for type/material/subjects (callers requiring those should follow up
+   *  with get_artwork_details on the objectNumber).
+   *  Reuses `memberCount` from the curated-sets cache, avoiding a per-page
+   *  COUNT(DISTINCT) scan over all collection_set mappings. */
+  browseSet(
+    setSpec: string, maxResults: number, offset: number,
+  ): { records: BrowseSetRecord[]; totalInSet: number } {
+    if (!this.db) return { records: [], totalInSet: 0 };
+    const collectionSetFieldId = this.requireFieldId("collection_set");
+
+    if (!this.stmtBrowseSetLookup) {
+      this.stmtBrowseSetLookup = this.db.prepare(
+        "SELECT vocab_int_id FROM vocabulary WHERE id = ? AND type = 'set'",
+      );
+    }
+    const setRow = this.stmtBrowseSetLookup.get(setSpec) as { vocab_int_id: number } | undefined;
+    if (!setRow) return { records: [], totalInSet: 0 };
+
+    let totalInSet: number;
+    this.ensureCuratedSetsCache();
+    const cached = this.curatedSetsCache?.get(setSpec);
+    if (cached) {
+      totalInSet = cached.memberCount;
+    } else {
+      if (!this.stmtBrowseSetCount) {
+        this.stmtBrowseSetCount = this.db.prepare(
+          "SELECT COUNT(DISTINCT artwork_id) AS n FROM mappings WHERE field_id = ? AND vocab_rowid = ?",
+        );
+      }
+      totalInSet = (this.stmtBrowseSetCount.get(collectionSetFieldId, setRow.vocab_int_id) as { n: number }).n;
+    }
+    if (totalInSet === 0) return { records: [], totalInSet: 0 };
+
+    if (!this.stmtBrowseSetPage) {
+      this.stmtBrowseSetPage = this.db.prepare(`
+        SELECT a.art_id, a.object_number, a.title, a.title_all_text, a.creator_label,
+               a.date_earliest, a.date_latest, a.date_display,
+               a.iiif_id, a.has_image, a.description_text, a.extent_text, a.record_modified
+        FROM mappings m
+        JOIN artworks a ON a.art_id = m.artwork_id
+        WHERE m.field_id = ? AND m.vocab_rowid = ?
+        ORDER BY a.object_number
+        LIMIT ? OFFSET ?
+      `);
+    }
+    const rows = this.stmtBrowseSetPage.all(
+      collectionSetFieldId, setRow.vocab_int_id, maxResults, offset,
+    ) as Array<{
+      art_id: number; object_number: string; title: string | null; title_all_text: string | null;
+      creator_label: string | null; date_earliest: number | null; date_latest: number | null;
+      date_display: string | null; iiif_id: string | null; has_image: number;
+      description_text: string | null; extent_text: string | null; record_modified: string | null;
+    }>;
+
+    const records: BrowseSetRecord[] = rows.map(r => {
+      const hasImage = r.has_image === 1;
+      const iiifId = r.iiif_id ?? undefined;
+      return {
+        objectNumber: r.object_number,
+        title: VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled"),
+        creator: r.creator_label ?? "",
+        date: r.date_display ?? formatDateRange(r.date_earliest, r.date_latest) ?? "",
+        ...(r.description_text && { description: r.description_text }),
+        ...(r.extent_text && { dimensions: r.extent_text }),
+        ...(r.record_modified && { datestamp: r.record_modified }),
+        hasImage,
+        ...(iiifId && {
+          imageUrl: `${VocabularyDb.IIIF_BASE}/${iiifId}/full/!1024,1024/0/default.jpg`,
+          iiifServiceUrl: `${VocabularyDb.IIIF_BASE}/${iiifId}/info.json`,
+        }),
+        ...(hasImage && { edmType: "IMAGE" }),
+        lodUri: `https://id.rijksmuseum.nl/${r.art_id}`,
+        url: `https://www.rijksmuseum.nl/en/collection/${r.object_number}`,
+      };
+    });
+
+    return { records, totalInSet };
+  }
+
   private tableExists(name: string): boolean {
     try {
       this.db!.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();
@@ -2701,6 +3008,50 @@ export class VocabularyDb {
           WHERE ${dimCol} > 0
           GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, topN, offset],
+      };
+    }
+
+    // Theme vocab — special-cased (not in VOCAB_DIMENSION_DEFS) because most theme rows lack
+    // label_en (~14% EN coverage). Falls back to NL via COALESCE in both SELECT and WHERE.
+    if (dim === "theme") {
+      const fieldId = this.fieldIdMap.get("theme");
+      if (fieldId === undefined) return null;
+      return {
+        sql: `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT m.artwork_id) AS cnt
+          FROM mappings m
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE +m.field_id = ? AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
+            AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)
+          GROUP BY label ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+        extraBindings: [fieldId, topN, offset],
+      };
+    }
+
+    // Exhibitions — JOINs through artwork_exhibitions, no vocab table involved.
+    if (dim === "exhibition") {
+      return {
+        sql: `SELECT COALESCE(e.title_en, e.title_nl) AS label, COUNT(*) AS cnt
+          FROM artwork_exhibitions ae
+          JOIN exhibitions e ON e.exhibition_id = ae.exhibition_id
+          WHERE ae.art_id IN (SELECT art_id FROM _stats_artworks)
+            AND (e.title_en IS NOT NULL OR e.title_nl IS NOT NULL)
+          GROUP BY ae.exhibition_id ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+        extraBindings: [topN, offset],
+      };
+    }
+
+    // record_modified bucketed by decade. Filter to 1990–2030 — the column has sentinel
+    // values spanning year 0001 → 2107 that would otherwise produce bogus tail buckets.
+    if (dim === "decadeModified") {
+      return {
+        sql: `SELECT (CAST(SUBSTR(a.record_modified, 1, 4) AS INTEGER) / 10) * 10 AS label,
+              COUNT(*) AS cnt
+          FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+          WHERE a.record_modified IS NOT NULL
+            AND a.record_modified >= '1990-01-01'
+            AND a.record_modified <  '2030-01-01'
+          GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
+        extraBindings: [topN, offset],
       };
     }
 
@@ -4326,6 +4677,9 @@ export class VocabularyDb {
     if (params.location) {
       if (!(row.location ?? "").toLowerCase().includes(params.location.toLowerCase())) return false;
     }
+    if (params.periodLocation) {
+      if (!(row.location ?? "").toLowerCase().includes(params.periodLocation.toLowerCase())) return false;
+    }
     if (params.dateFrom != null && (row.begin_year == null || row.begin_year < params.dateFrom)) return false;
     if (params.dateTo != null && (row.end_year == null || row.end_year > params.dateTo)) return false;
     if (params.minDuration != null || params.maxDuration != null) {
@@ -4410,6 +4764,10 @@ export class VocabularyDb {
     if (params.location) {
       conditions.push("pp.location LIKE '%' || ? || '%'");
       bindings.push(params.location);
+    }
+    if (params.periodLocation) {
+      conditions.push("pp.location LIKE '%' || ? || '%'");
+      bindings.push(params.periodLocation);
     }
     if (params.dateFrom != null) {
       conditions.push("pp.begin_year >= ?");
