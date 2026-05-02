@@ -1821,6 +1821,46 @@ function registerTools(
 
   // ── get_artwork_image (MCP App with inline IIIF viewer) ────────
 
+  // Shared by get_artwork_image and remount_viewer: look up artwork metadata
+  // from the vocab DB, resolve IIIF info (1 HTTP request), and shape the
+  // ImageInfoOutput payload sans viewUUID. Callers add the UUID and finalise
+  // the text-channel narration.
+  type ArtworkImagePayload =
+    | { ok: false; error: string }
+    | {
+        ok: true;
+        data: Omit<InferOutput<typeof ImageInfoOutput>, "viewUUID">;
+        width: number;
+        height: number;
+        narrationPrefix: string;
+      };
+  const resolveArtworkImagePayload = async (objectNumber: string): Promise<ArtworkImagePayload> => {
+    const artwork = vocabDb?.lookupImageMetadata(objectNumber);
+    if (!artwork) return { ok: false, error: "No artwork found for this object number" };
+
+    const resolvedImageInfo = artwork.iiifId
+      ? await api.getImageInfoFast(artwork.iiifId)
+      : null;
+    if (!resolvedImageInfo) return { ok: false, error: "No image available for this artwork" };
+
+    const physicalDimensions = formatDimensions(artwork.heightCm, artwork.widthCm);
+    const { thumbnailUrl: _t, iiifId: _i, ...imageData } = resolvedImageInfo;
+    const data: Omit<InferOutput<typeof ImageInfoOutput>, "viewUUID"> = {
+      ...imageData,
+      objectNumber: artwork.objectNumber,
+      title: artwork.title,
+      creator: artwork.creator,
+      date: artwork.date,
+      license: artwork.license,
+      physicalDimensions,
+      collectionUrl: `https://www.rijksmuseum.nl/en/collection/${artwork.objectNumber}`,
+    };
+    const dims = data.width && data.height ? ` | ${data.width}×${data.height}px` : "";
+    const licenseTag = artwork.license ? ` [${artwork.license}]` : "";
+    const narrationPrefix = `${artwork.objectNumber} — "${artwork.title}" by ${artwork.creator}${dims}${licenseTag}`;
+    return { ok: true, data, width: resolvedImageInfo.width, height: resolvedImageInfo.height, narrationPrefix };
+  };
+
   registerAppTool(
     server,
     "get_artwork_image",
@@ -1844,27 +1884,13 @@ function registerTools(
       },
     },
     withLogging("get_artwork_image", async (args) => {
-      // Look up metadata from vocab DB (sync) — replaces Linked Art resolver
-      const artwork = vocabDb?.lookupImageMetadata(args.objectNumber);
-      if (!artwork) {
+      const payload = await resolveArtworkImagePayload(args.objectNumber);
+      if (!payload.ok) {
         const errorData: InferOutput<typeof ImageInfoOutput> = {
           objectNumber: args.objectNumber,
-          error: "No artwork found for this object number",
+          error: payload.error,
         };
-        return structuredResponse(errorData, "No artwork found for this object number");
-      }
-
-      // Resolve IIIF image info (1 HTTP request) — only if artwork has an image
-      const resolvedImageInfo = artwork.iiifId
-        ? await api.getImageInfoFast(artwork.iiifId)
-        : null;
-
-      if (!resolvedImageInfo) {
-        const errorData: InferOutput<typeof ImageInfoOutput> = {
-          objectNumber: args.objectNumber,
-          error: "No image available for this artwork",
-        };
-        return structuredResponse(errorData, "No image available for this artwork");
+        return structuredResponse(errorData, payload.error);
       }
 
       const viewUUID = randomUUID();
@@ -1872,30 +1898,14 @@ function registerTools(
         commands: [],
         createdAt: Date.now(),
         lastAccess: Date.now(),
-        objectNumber: artwork.objectNumber,
-        imageWidth: resolvedImageInfo.width,
-        imageHeight: resolvedImageInfo.height,
+        objectNumber: payload.data.objectNumber,
+        imageWidth: payload.width,
+        imageHeight: payload.height,
         activeOverlays: [],
       });
 
-      const physicalDimensions = formatDimensions(artwork.heightCm, artwork.widthCm);
-
-      const { thumbnailUrl, iiifId, ...imageData } = resolvedImageInfo;
-      const viewerData: InferOutput<typeof ImageInfoOutput> = {
-        ...imageData,
-        objectNumber: artwork.objectNumber,
-        title: artwork.title,
-        creator: artwork.creator,
-        date: artwork.date,
-        license: artwork.license,
-        physicalDimensions,
-        collectionUrl: `https://www.rijksmuseum.nl/en/collection/${artwork.objectNumber}`,
-        viewUUID,
-      };
-
-      const dims = viewerData.width && viewerData.height ? ` | ${viewerData.width}×${viewerData.height}px` : "";
-      const licenseTag = artwork.license ? ` [${artwork.license}]` : "";
-      const text = `${artwork.objectNumber} — "${artwork.title}" by ${artwork.creator}${dims}${licenseTag} | viewUUID: ${viewUUID}`;
+      const viewerData: InferOutput<typeof ImageInfoOutput> = { ...payload.data, viewUUID };
+      const text = `${payload.narrationPrefix} | viewUUID: ${viewUUID}`;
       return structuredResponse(viewerData, text);
     })
   );
