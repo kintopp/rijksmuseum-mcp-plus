@@ -567,6 +567,12 @@ CREATE TABLE IF NOT EXISTS artwork_parent (
     parent_art_id INTEGER,
     PRIMARY KEY (art_id, parent_la_uri)
 ) WITHOUT ROWID;
+-- #267: reverse-edge index for parent → children lookups (per-detail
+-- stmtArtworkChildCount/stmtArtworkChildrenPreview, plus groupBy=parent
+-- in search_artwork). Forward art_id → parent is free via the PK prefix;
+-- without this, parent_art_id queries SCAN ~208K rows.
+CREATE INDEX IF NOT EXISTS idx_artwork_parent_reverse
+  ON artwork_parent(parent_art_id);
 
 CREATE TABLE IF NOT EXISTS phase2_failures (
     uri        TEXT PRIMARY KEY,
