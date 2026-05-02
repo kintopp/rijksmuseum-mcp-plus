@@ -970,6 +970,7 @@ section("8. Schema surface — no $ref");
   const ANN_VIEWER      = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
   const EXPECTED_ANNOTATIONS = {
     search_artwork:        ANN_READ_CLOSED,
+    search_persons:        ANN_READ_CLOSED,
     get_artwork_details:   ANN_READ_CLOSED,
     collection_stats:      ANN_READ_CLOSED,
     semantic_search:       ANN_READ_CLOSED,

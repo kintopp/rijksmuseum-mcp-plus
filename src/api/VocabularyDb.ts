@@ -67,6 +67,7 @@ export interface ArtworkDetailFromDb {
     objectNumber: string | null;
     title: string | null;
     objectUri: string;
+    iiifId: string | null;
   }[];
   /** Total related-object count before capping at {@link RELATED_PREVIEW_LIMIT}. */
   relatedObjectsTotalCount: number;
@@ -1183,7 +1184,7 @@ export class VocabularyDb {
           `SELECT COUNT(*) AS n FROM related_objects WHERE art_id = ?`
         );
         this.stmtArtworkRelatedPreview = this.db.prepare(`
-          SELECT ro.relationship_en, ro.related_la_uri, a.object_number, a.title, a.title_all_text
+          SELECT ro.relationship_en, ro.related_la_uri, a.object_number, a.title, a.title_all_text, a.iiif_id
           FROM related_objects ro
           LEFT JOIN artworks a ON a.art_id = ro.related_art_id
           WHERE ro.art_id = ?
@@ -1662,6 +1663,7 @@ export class VocabularyDb {
       {
         relationship_en: string; related_la_uri: string;
         object_number: string | null; title: string | null; title_all_text: string | null;
+        iiif_id: string | null;
       },
       ArtworkDetailFromDb["relatedObjects"][number]
     >(
@@ -1676,6 +1678,7 @@ export class VocabularyDb {
           ? VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled")
           : null,
         objectUri: r.related_la_uri,
+        iiifId: r.iiif_id,
       }),
     );
     return { relatedObjects: items, relatedObjectsTotalCount: total };
