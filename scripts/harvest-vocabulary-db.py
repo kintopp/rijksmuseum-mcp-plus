@@ -5144,6 +5144,13 @@ def run_phase3(
             ],
         ),
         (
+            "SELECT COUNT(*) FROM artworks WHERE record_modified IS NOT NULL",
+            "record_modified index",
+            [
+                "CREATE INDEX IF NOT EXISTS idx_artworks_record_modified ON artworks(record_modified) WHERE record_modified IS NOT NULL",
+            ],
+        ),
+        (
             "SELECT COUNT(*) FROM vocabulary WHERE lat IS NOT NULL",
             "geo index",
             [

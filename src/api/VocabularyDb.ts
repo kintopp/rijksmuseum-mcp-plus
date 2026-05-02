@@ -235,19 +235,17 @@ export interface VocabSearchParams {
   depictedPerson?: StringOrArray;
   depictedPlace?: StringOrArray;
   productionPlace?: StringOrArray;
-  birthPlace?: StringOrArray;
-  deathPlace?: StringOrArray;
-  profession?: StringOrArray;
   material?: StringOrArray;
   technique?: StringOrArray;
   type?: StringOrArray;
   creator?: StringOrArray;
   collectionSet?: StringOrArray;
+  theme?: StringOrArray;
+  sourceType?: StringOrArray;
   license?: string;
   // Tier 2 fields (require vocabulary DB v1.0+)
   description?: string;
   inscription?: string;
-  provenance?: string;
   creditLine?: string;
   curatorialNarrative?: string;
   productionRole?: StringOrArray;
@@ -269,14 +267,13 @@ export interface VocabSearchParams {
   imageAvailable?: boolean;
   // Broad person search (searches both depicted persons and creators)
   aboutActor?: string;
-  // Creator demographic filters (require person enrichment columns)
-  creatorGender?: string;
-  creatorBornAfter?: number;
-  creatorBornBefore?: number;
   // Place hierarchy expansion
   expandPlaceHierarchy?: boolean;
   // Cross-domain
   hasProvenance?: boolean;
+  // Record-modified date range (require record_modified column)
+  modifiedAfter?: string;
+  modifiedBefore?: string;
   maxResults?: number;
   offset?: number;
   facets?: string[];
@@ -301,6 +298,39 @@ export interface VocabSearchResult {
   source: "vocabulary";
   warnings?: string[];
   facets?: Record<string, Array<{ label: string; count: number }>>;
+}
+
+// ─── Person search types ────────────────────────────────────────────
+
+export interface PersonSearchParams {
+  name?: string;
+  gender?: string;
+  bornAfter?: number;
+  bornBefore?: number;
+  birthPlace?: StringOrArray;
+  deathPlace?: StringOrArray;
+  profession?: StringOrArray;
+  hasArtworks?: boolean;
+  maxResults?: number;
+  offset?: number;
+}
+
+export interface PersonResult {
+  vocabId: string;
+  label: string;
+  labelEn: string | null;
+  labelNl: string | null;
+  birthYear: number | null;
+  deathYear: number | null;
+  gender: string | null;
+  artworkCount?: number;
+  wikidataId: string | null;
+}
+
+export interface PersonSearchResult {
+  totalResults: number;
+  persons: PersonResult[];
+  warnings?: string[];
 }
 
 // ─── Provenance search types ────────────────────────────────────────
@@ -478,9 +508,8 @@ export interface CollectionStatsParams {
   subject?: string;
   iconclass?: string;
   collectionSet?: string;
-  creatorGender?: string;
-  creatorBornAfter?: number;
-  creatorBornBefore?: number;
+  theme?: string;
+  sourceType?: string;
   imageAvailable?: boolean;
   creationDateFrom?: number;
   creationDateTo?: number;
@@ -560,6 +589,7 @@ const VOCAB_DIMENSION_DEFS: ReadonlyArray<{ label: string; field: string; vocabT
   { label: "depictedPerson", field: "subject", vocabType: "person" },
   { label: "depictedPlace",  field: "subject", vocabType: "place" },
   { label: "productionPlace",field: "spatial" },
+  { label: "sourceType",     field: "source_type" },
 ];
 
 /** Provenance dimension → table/column. Shared by provenanceDimensionSql and computeProvenanceFacets. */
@@ -599,8 +629,9 @@ export const STATS_DIMENSION_NAMES = [
 
 const ALLOWED_FIELDS = new Set([
   "subject", "spatial", "material", "technique", "type", "creator",
-  "birth_place", "death_place", "profession", "collection_set",
+  "collection_set",
   "production_role", "attribution_qualifier",
+  "theme", "source_type",
 ]);
 const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
@@ -622,14 +653,13 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "depictedPerson", fields: ["subject"],               matchMode: "like", vocabType: "person",         ftsUpgrade: true },
   { param: "depictedPlace",  fields: ["subject", "spatial"],    matchMode: "like", vocabType: "place",          ftsUpgrade: true },
   { param: "productionPlace",fields: ["spatial"],               matchMode: "like", vocabType: "place",          ftsUpgrade: true },
-  { param: "birthPlace",     fields: ["birth_place"],           matchMode: "like", vocabType: "place",          ftsUpgrade: true },
-  { param: "deathPlace",     fields: ["death_place"],           matchMode: "like", vocabType: "place",          ftsUpgrade: true },
-  { param: "profession",     fields: ["profession"],            matchMode: "like", vocabType: "classification", ftsUpgrade: true },
   { param: "material",       fields: ["material"],              matchMode: "like",                               ftsUpgrade: true },
   { param: "technique",      fields: ["technique"],             matchMode: "like",                               ftsUpgrade: true },
   { param: "type",           fields: ["type"],                  matchMode: "like",                               ftsUpgrade: true },
   { param: "creator",        fields: ["creator"],               matchMode: "like",                               ftsUpgrade: true },
   { param: "collectionSet",  fields: ["collection_set"],        matchMode: "like", vocabType: "set",            ftsUpgrade: true },
+  { param: "theme",          fields: ["theme"],                 matchMode: "like",                               ftsUpgrade: true },
+  { param: "sourceType",     fields: ["source_type"],           matchMode: "like",                               ftsUpgrade: true },
   { param: "productionRole",fields: ["production_role"],        matchMode: "like",                               ftsUpgrade: true },
   { param: "attributionQualifier", fields: ["attribution_qualifier"], matchMode: "like",                       ftsUpgrade: true },
   { param: "aboutActor",   fields: ["subject", "creator"],    matchMode: "like", vocabType: "person",         ftsUpgrade: true },
@@ -656,6 +686,8 @@ const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
   { key: "subject",         fields: ["subject"] },
   { key: "iconclass",       fields: ["subject"],  exactNotation: true },
   { key: "collectionSet",   fields: ["collection_set"],     vocabType: "set" },
+  { key: "theme",           fields: ["theme"] },
+  { key: "sourceType",      fields: ["source_type"] },
 ];
 
 /**
@@ -674,9 +706,6 @@ export const FILTER_ART_IDS_KEYS: ReadonlySet<string> = new Set([
   "imageAvailable",
   "creationDate",
   "dateMatch",
-  "creatorGender",
-  "creatorBornAfter",
-  "creatorBornBefore",
 ]);
 
 /** Row shape returned by place-candidate queries (findPlaceCandidates, resolveMultiWordPlace). */
@@ -841,7 +870,9 @@ export class VocabularyDb {
 
   private hasRightsLookup = false;
   private hasPersonNames = false;
+  private hasEntityAltNames = false;
   private hasImageColumn = false;
+  private hasRecordModified_ = false;
   private hasImportance = false;
   private hasProvenanceTables_ = false;
   private hasProvenancePeriods_ = false;
@@ -990,10 +1021,12 @@ export class VocabularyDb {
       for (const r of fieldRows) this.fieldIdMap.set(r.name, r.id);
       this.hasRightsLookup = this.tableExists("rights_lookup");
       this.hasPersonNames = this.tableExists("person_names_fts");
+      this.hasEntityAltNames = this.tableExists("entity_alt_names_fts");
       this.hasTitleVariants_ = this.tableExists("title_variants");
       this.hasArtworkParent_ = this.tableExists("artwork_parent");
       this.hasRelatedObjects_ = this.tableExists("related_objects");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
+      this.hasRecordModified_ = this.columnExists("artworks", "record_modified");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
       this.hasProvenancePeriods_ = this.tableExists("provenance_periods");
@@ -2780,6 +2813,235 @@ export class VocabularyDb {
   }
 
   /**
+   * Search persons (artists, depicted figures, donors, …) by demographic and
+   * structural criteria. Returns vocab IDs that can be passed to
+   * search_artwork({creator: <vocabId>}) for works by them, or to
+   * search_artwork({aboutActor: <name>}) for works depicting them.
+   *
+   * Filter behaviour:
+   *  - `name`: phrase match on person_names_fts, with token-AND fallback (BM25 ranked).
+   *  - `birthPlace` / `deathPlace` / `profession`: pivot through the creator field —
+   *    matches persons who have ≥1 artwork whose denormalised birth_place /
+   *    death_place / profession mapping points at the named vocab term. Multi-value AND.
+   *  - `gender`, `bornAfter`, `bornBefore`: column predicates against vocabulary.
+   *    These return zero rows on a DB without person enrichment (NULL columns).
+   *  - `hasArtworks` (default true): restrict to persons appearing as creator
+   *    on ≥1 artwork.
+   *
+   * Ranking: BM25 order from person_names_fts when `name` is supplied, else
+   * artworkCount DESC then label COLLATE NOCASE.
+   *
+   * Note on the v0.26 schema: birth_place / death_place / profession mappings
+   * are denormalised onto the artwork (mappings.artwork_id is always an artwork
+   * art_id). We resolve "person born in X" as "person whose creator-mapped
+   * artwork has birth_place=X" — semantically equivalent in practice because
+   * an artist's birth_place is constant across their works.
+   */
+  searchPersons(params: PersonSearchParams): PersonSearchResult {
+    if (!this.db) return { totalResults: 0, persons: [] };
+
+    const warnings: string[] = [];
+    const limit = Math.min(params.maxResults ?? 25, 100);
+    const offset = params.offset ?? 0;
+    const hasArtworks = params.hasArtworks !== false; // default true
+
+    const creatorFieldId = this.fieldIdMap.get("creator");
+    const birthPlaceFieldId = this.fieldIdMap.get("birth_place");
+    const deathPlaceFieldId = this.fieldIdMap.get("death_place");
+    const professionFieldId = this.fieldIdMap.get("profession");
+
+    // Step 1: resolve candidate person ids via FTS + mappings (artwork-pivot).
+    let candidateIds: Set<string> | null = null;
+    let nameOrder: Map<string, number> | null = null;
+
+    if (params.name && this.hasPersonNames) {
+      const ids = this.findPersonIdsFts(params.name);
+      if (ids.length === 0) return { totalResults: 0, persons: [] };
+      candidateIds = new Set(ids);
+      nameOrder = new Map(ids.map((id, i) => [id, i]));
+    }
+
+    const intersect = (next: string[]): boolean => {
+      if (next.length === 0) {
+        candidateIds = new Set();
+        return false;
+      }
+      if (candidateIds === null) {
+        candidateIds = new Set(next);
+      } else {
+        const nextSet = new Set(next);
+        candidateIds = new Set([...candidateIds].filter(id => nextSet.has(id)));
+      }
+      return candidateIds.size > 0;
+    };
+
+    /** Pivot: persons whose creator-mapped artworks share a denormalised attribute. */
+    const personsByDenormAttr = (
+      attrFieldId: number,
+      attrVocabRowids: number[],
+    ): string[] => {
+      if (creatorFieldId === undefined || attrVocabRowids.length === 0) return [];
+      const ph = attrVocabRowids.map(() => "?").join(", ");
+      const rows = this.db!.prepare(
+        `SELECT DISTINCT cv.id AS person_id
+         FROM mappings cm
+         JOIN vocabulary cv ON cv.vocab_int_id = cm.vocab_rowid AND cv.type = 'person'
+         WHERE cm.field_id = ?
+           AND cm.artwork_id IN (
+             SELECT artwork_id FROM mappings
+             WHERE field_id = ? AND vocab_rowid IN (${ph})
+           )`
+      ).all(creatorFieldId, attrFieldId, ...attrVocabRowids) as { person_id: string }[];
+      return rows.map(r => r.person_id);
+    };
+
+    const applyVocabAttrFilter = (
+      rawValue: StringOrArray,
+      attrFieldId: number | undefined,
+      vocabType: string,
+    ): boolean => {
+      if (attrFieldId === undefined) return false;
+      const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+      for (const value of values) {
+        const vocabIds = this.findVocabIdsFts(String(value), " AND type = ?", [vocabType]);
+        if (vocabIds.length === 0) {
+          intersect([]);
+          return false;
+        }
+        const rowids = this.vocabIdsToRowids(vocabIds);
+        const persons = personsByDenormAttr(attrFieldId, rowids);
+        if (!intersect(persons)) return false;
+      }
+      return true;
+    };
+
+    if (params.birthPlace) {
+      if (!applyVocabAttrFilter(params.birthPlace, birthPlaceFieldId, "place")) {
+        return { totalResults: 0, persons: [], ...(warnings.length && { warnings }) };
+      }
+    }
+    if (params.deathPlace) {
+      if (!applyVocabAttrFilter(params.deathPlace, deathPlaceFieldId, "place")) {
+        return { totalResults: 0, persons: [], ...(warnings.length && { warnings }) };
+      }
+    }
+    if (params.profession) {
+      if (!applyVocabAttrFilter(params.profession, professionFieldId, "classification")) {
+        return { totalResults: 0, persons: [], ...(warnings.length && { warnings }) };
+      }
+    }
+
+    // Step 2: build SQL on the candidate set + column filters + hasArtworks.
+    const conditions: string[] = ["v.type = 'person'"];
+    const bindings: unknown[] = [];
+
+    if (candidateIds !== null) {
+      const idsArr = Array.from(candidateIds);
+      if (idsArr.length === 0) return { totalResults: 0, persons: [], ...(warnings.length && { warnings }) };
+      // Stay under SQLite default variable limit (999) by chunking via a temp table.
+      if (idsArr.length > 900) {
+        // For very large candidate sets, fall back to using a subquery with chunked
+        // INSERTs into a temp table — but this is rare for person search.
+        warnings.push(`Candidate set (${idsArr.length}) clipped to first 900 by ranking.`);
+        idsArr.length = 900;
+      }
+      const ph = idsArr.map(() => "?").join(", ");
+      conditions.push(`v.id IN (${ph})`);
+      bindings.push(...idsArr);
+    }
+
+    if (params.gender) {
+      conditions.push("v.gender = ?");
+      bindings.push(params.gender);
+    }
+    if (params.bornAfter != null) {
+      conditions.push("v.birth_year >= ?");
+      bindings.push(params.bornAfter);
+    }
+    if (params.bornBefore != null) {
+      conditions.push("v.birth_year <= ?");
+      bindings.push(params.bornBefore);
+    }
+
+    if (hasArtworks && creatorFieldId !== undefined) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)`
+      );
+      bindings.push(creatorFieldId);
+    }
+
+    const where = conditions.join(" AND ");
+
+    const totalResults = (this.db.prepare(
+      `SELECT COUNT(*) AS n FROM vocabulary v WHERE ${where}`
+    ).get(...bindings) as { n: number }).n;
+
+    if (totalResults === 0) {
+      return { totalResults: 0, persons: [], ...(warnings.length && { warnings }) };
+    }
+
+    // Step 3: fetch the page.
+    const artworkCountSql = creatorFieldId !== undefined
+      ? `(SELECT COUNT(*) FROM mappings mc WHERE mc.field_id = ${creatorFieldId} AND mc.vocab_rowid = v.vocab_int_id)`
+      : "0";
+
+    let sql: string;
+    let queryBindings: unknown[];
+    if (nameOrder) {
+      // Order by name FTS rank — sort in JS using nameOrder.
+      sql =
+        `SELECT v.id, v.label_en, v.label_nl, v.birth_year, v.death_year,
+                v.gender, v.wikidata_id, ${artworkCountSql} AS artwork_count
+         FROM vocabulary v
+         WHERE ${where}`;
+      queryBindings = bindings;
+    } else {
+      sql =
+        `SELECT v.id, v.label_en, v.label_nl, v.birth_year, v.death_year,
+                v.gender, v.wikidata_id, ${artworkCountSql} AS artwork_count
+         FROM vocabulary v
+         WHERE ${where}
+         ORDER BY artwork_count DESC, COALESCE(v.label_en, v.label_nl) COLLATE NOCASE
+         LIMIT ? OFFSET ?`;
+      queryBindings = [...bindings, limit, offset];
+    }
+
+    let rows = this.db.prepare(sql).all(...queryBindings) as {
+      id: string;
+      label_en: string | null;
+      label_nl: string | null;
+      birth_year: number | null;
+      death_year: number | null;
+      gender: string | null;
+      wikidata_id: string | null;
+      artwork_count: number;
+    }[];
+
+    if (nameOrder) {
+      rows.sort((a, b) => (nameOrder!.get(a.id) ?? 0) - (nameOrder!.get(b.id) ?? 0));
+      rows = rows.slice(offset, offset + limit);
+    }
+
+    const persons: PersonResult[] = rows.map(r => ({
+      vocabId: r.id,
+      label: r.label_en ?? r.label_nl ?? r.id,
+      labelEn: r.label_en,
+      labelNl: r.label_nl,
+      birthYear: r.birth_year,
+      deathYear: r.death_year,
+      gender: r.gender,
+      ...(hasArtworks && { artworkCount: r.artwork_count }),
+      wikidataId: r.wikidata_id,
+    }));
+
+    return {
+      totalResults,
+      persons,
+      ...(warnings.length && { warnings }),
+    };
+  }
+
+  /**
    * Compute top-5 faceted counts for requested dimensions.
    * Runs GROUP BY queries using the same WHERE clause as the main search.
    * Only computes dimensions present in `requestedFields`.
@@ -2825,6 +3087,28 @@ export class VocabularyDb {
       }
     }
 
+    // Theme facet — special-cased (not in VOCAB_DIMENSION_DEFS) because most theme rows
+    // lack label_en. Falls back to NL via COALESCE in both SELECT and WHERE.
+    if (requestedFields.has("theme")) {
+      const themeFieldId = this.fieldIdMap.get("theme");
+      if (themeFieldId !== undefined) {
+        const facetBindings = ftsJoinBinding != null
+          ? [ftsJoinBinding, themeFieldId, ...bindings, limit]
+          : [themeFieldId, ...bindings, limit];
+        const sql =
+          `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT fm.artwork_id) AS cnt ` +
+          `FROM artworks a ${ftsJoinClause} ` +
+          `JOIN mappings fm ON fm.artwork_id = a.art_id AND +fm.field_id = ? ` +
+          `JOIN vocabulary v ON fm.vocab_rowid = v.vocab_int_id ` +
+          `WHERE ${where} AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL) ` +
+          `GROUP BY label ORDER BY cnt DESC LIMIT ?`;
+        const rows = this.db.prepare(sql).all(...facetBindings) as { label: string; cnt: number }[];
+        if (rows.length > 0) {
+          result["theme"] = rows.map(r => ({ label: r.label, count: r.cnt }));
+        }
+      }
+    }
+
     // Century facet (computed from date_earliest)
     if (requestedFields.has("century") && this.hasDates) {
       const sql =
@@ -2839,27 +3123,6 @@ export class VocabularyDb {
           label: r.century > 0 ? `${ordinal(r.century)} century` : `${ordinal(-r.century)} century BCE`,
           count: r.cnt,
         }));
-      }
-    }
-
-    // Creator gender facet (computed from vocabulary.gender via creator mappings)
-    if (requestedFields.has("creatorGender") && this.stmtLookupPersonInfo) {
-      const creatorFieldId = this.fieldIdMap.get("creator");
-      if (creatorFieldId != null) {
-        const genderBindings = ftsJoinBinding != null
-          ? [ftsJoinBinding, creatorFieldId, ...bindings]
-          : [creatorFieldId, ...bindings];
-        const sql =
-          `SELECT v.gender AS gender, COUNT(DISTINCT fm.artwork_id) AS cnt ` +
-          `FROM artworks a ${ftsJoinClause} ` +
-          `JOIN mappings fm ON fm.artwork_id = a.art_id AND +fm.field_id = ? ` +
-          `JOIN vocabulary v ON fm.vocab_rowid = v.vocab_int_id ` +
-          `WHERE ${where} AND v.gender IS NOT NULL ` +
-          `GROUP BY gender ORDER BY cnt DESC`;
-        const rows = this.db.prepare(sql).all(...genderBindings) as { gender: string; cnt: number }[];
-        if (rows.length > 0) {
-          result["creatorGender"] = rows.map(r => ({ label: r.gender, count: r.cnt }));
-        }
       }
     }
 
@@ -3164,25 +3427,6 @@ export class VocabularyDb {
         bindings.push(...filter.bindings);
       }
     }
-    // Creator demographics — queries v.gender/v.birth_year columns, not labels
-    if (this.stmtLookupPersonInfo) {
-      const creatorFieldId = this.fieldIdMap.get("creator");
-      if (creatorFieldId != null) {
-        const demoConds: string[] = [];
-        const demoBindings: unknown[] = [creatorFieldId];
-        if (params.creatorGender != null) { demoConds.push("v.gender = ?"); demoBindings.push(params.creatorGender); }
-        if (params.creatorBornAfter != null) { demoConds.push("v.birth_year >= ?"); demoBindings.push(params.creatorBornAfter); }
-        if (params.creatorBornBefore != null) { demoConds.push("v.birth_year <= ?"); demoBindings.push(params.creatorBornBefore); }
-        if (demoConds.length > 0) {
-          conditions.push(
-            `a.art_id IN (SELECT m.artwork_id FROM mappings m ` +
-            `JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id ` +
-            `WHERE m.field_id = ? AND v.type = 'person' AND ${demoConds.join(" AND ")})`
-          );
-          bindings.push(...demoBindings);
-        }
-      }
-    }
     // Image availability
     if (params.imageAvailable === true && this.hasImageColumn) {
       conditions.push("a.has_image = 1");
@@ -3391,11 +3635,11 @@ export class VocabularyDb {
     conditions.push(...vocabResult.conditions);
     bindings.push(...vocabResult.bindings);
 
-    // Tier 2: Text FTS filters (inscription, provenance, creditLine, curatorialNarrative)
+    // Tier 2: Text FTS filters (inscription, creditLine, curatorialNarrative)
+    // (provenance text filter dropped in v0.27 — use search_provenance instead.)
     const TEXT_FILTERS: [keyof VocabSearchParams, string][] = [
       ["description", "description_text"],
       ["inscription", "inscription_text"],
-      ["provenance", "provenance_text"],
       ["creditLine", "credit_line"],
       ["curatorialNarrative", "narrative_text"],
       ["title", "title_all_text"],
@@ -3551,7 +3795,6 @@ export class VocabularyDb {
       if (effective.material) requested.delete("material");
       if (effective.technique) requested.delete("technique");
       if (effective.creationDate) requested.delete("century");
-      if (effective.creatorGender) requested.delete("creatorGender");
       if (effective.license) requested.delete("rights");
       if (effective.imageAvailable != null) requested.delete("imageAvailable");
       if (effective.creator) requested.delete("creator");
@@ -3651,6 +3894,15 @@ export class VocabularyDb {
             ? this.findPersonIdsFts(String(value))
             : this.findVocabIdsFts(String(value), typeClause, typeBindings);
 
+          // Extend `creator` reach into organisation/group alt-names. NOT applied
+          // to aboutActor (per design — aboutActor stays person-only).
+          if (this.hasEntityAltNames && filter.param === "creator") {
+            const orgIds = this.findOrgIdsFts(String(value));
+            if (orgIds.length > 0) {
+              vocabIds = Array.from(new Set([...vocabIds, ...orgIds]));
+            }
+          }
+
           // Multi-word place fallback: split "Oude Kerk Amsterdam" → "Oude Kerk" near "Amsterdam"
           if (vocabIds.length === 0 && filter.vocabType === "place") {
             const resolved = this.resolveMultiWordPlace(String(value));
@@ -3725,6 +3977,24 @@ export class VocabularyDb {
       }
     }
 
+    // Record-modified date range (requires record_modified column from v0.27+ DB)
+    if (effective.modifiedAfter) {
+      if (this.hasRecordModified_) {
+        conditions.push("a.record_modified >= ?");
+        bindings.push(effective.modifiedAfter);
+      } else {
+        warnings?.push("modifiedAfter requires vocabulary DB v0.27+. This filter was ignored.");
+      }
+    }
+    if (effective.modifiedBefore) {
+      if (this.hasRecordModified_) {
+        conditions.push("a.record_modified <= ?");
+        bindings.push(effective.modifiedBefore);
+      } else {
+        warnings?.push("modifiedBefore requires vocabulary DB v0.27+. This filter was ignored.");
+      }
+    }
+
     // Cross-domain: provenance existence filter
     if (effective.hasProvenance === true && this.hasProvenanceTables_) {
       conditions.push("EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
@@ -3755,38 +4025,6 @@ export class VocabularyDb {
         }
       } else {
         warnings?.push("Date filtering requires a vocabulary DB with date columns (re-run harvest Phase 4). This filter was ignored.");
-      }
-    }
-
-    // Creator demographic filters (gender, birth year range) — require person enrichment + integer mappings
-    const hasCreatorDemographic = effective.creatorGender != null || effective.creatorBornAfter != null || effective.creatorBornBefore != null;
-    if (hasCreatorDemographic) {
-      if (this.stmtLookupPersonInfo) {
-        const creatorFieldId = this.fieldIdMap.get("creator");
-        if (creatorFieldId != null) {
-          const vocabConds: string[] = ["v.type = 'person'"];
-          const vocabBindings: unknown[] = [];
-          if (effective.creatorGender != null) {
-            vocabConds.push("v.gender = ?");
-            vocabBindings.push(effective.creatorGender);
-          }
-          if (effective.creatorBornAfter != null) {
-            vocabConds.push("v.birth_year >= ?");
-            vocabBindings.push(effective.creatorBornAfter);
-          }
-          if (effective.creatorBornBefore != null) {
-            vocabConds.push("v.birth_year <= ?");
-            vocabBindings.push(effective.creatorBornBefore);
-          }
-          conditions.push(
-            `a.art_id IN (SELECT m.artwork_id FROM mappings m ` +
-            `JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id ` +
-            `WHERE m.field_id = ? AND ${vocabConds.join(" AND ")})`
-          );
-          bindings.push(creatorFieldId, ...vocabBindings);
-        }
-      } else {
-        warnings?.push("Creator demographic filters (creatorGender, creatorBornAfter, creatorBornBefore) require vocabulary DB with person enrichment. These filters were ignored.");
       }
     }
 
@@ -3946,6 +4184,51 @@ export class VocabularyDb {
        WHERE pn.rowid IN (
          SELECT rowid FROM person_names_fts WHERE person_names_fts MATCH ?
        )`
+    ).all(ftsQuery) as { id: string }[];
+
+    return fallbackRows.map((r) => r.id);
+  }
+
+  /**
+   * Find organisation/group vocab IDs via the entity_alt_names_fts table.
+   * Mirrors findPersonIdsFts (phrase MATCH then token AND), but without stop-word
+   * stripping — organisation names aren't shaped like personal names.
+   * Today entity_alt_names is 100% organisation-typed; the 'group' clause is
+   * forward-proofing for when alt-names start being harvested for groups too.
+   */
+  private findOrgIdsFts(value: string): string[] {
+    // Tier 1: phrase match
+    const ftsPhrase = escapeFts5(value);
+    if (!ftsPhrase) return [];
+
+    const rows = this.db!.prepare(
+      `SELECT DISTINCT ean.entity_id AS id
+       FROM entity_alt_names ean
+       WHERE ean.entity_type IN ('organisation', 'group')
+         AND ean.rowid IN (
+           SELECT rowid FROM entity_alt_names_fts WHERE entity_alt_names_fts MATCH ?
+         )`
+    ).all(ftsPhrase) as { id: string }[];
+
+    if (rows.length > 0) return rows.map((r) => r.id);
+
+    // Tier 2: token AND
+    const tokens = value.split(/\s+/).filter((t) => t.length > 0);
+    if (tokens.length === 0) return [];
+
+    const ftsTokens = tokens
+      .map((t) => escapeFts5(t))
+      .filter((x): x is string => x !== null);
+    if (ftsTokens.length === 0) return [];
+
+    const ftsQuery = ftsTokens.join(" AND ");
+    const fallbackRows = this.db!.prepare(
+      `SELECT DISTINCT ean.entity_id AS id
+       FROM entity_alt_names ean
+       WHERE ean.entity_type IN ('organisation', 'group')
+         AND ean.rowid IN (
+           SELECT rowid FROM entity_alt_names_fts WHERE entity_alt_names_fts MATCH ?
+         )`
     ).all(ftsQuery) as { id: string }[];
 
     return fallbackRows.map((r) => r.id);
