@@ -2777,8 +2777,7 @@ function registerTools(
           "Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). " +
           "The user cannot see tool output — if you do not include the path, they have no way to find the review page.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
-          "For collection-wide counting or keyword searches that don't map to structured fields, " +
-          "use search_artwork's provenance parameter (full-text search on raw provenance text) instead. " +
+          "Only the parsed provenance fields exposed below are searchable; raw-text full-text search across provenance was removed in v0.27. " +
           "For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — " +
           "also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) " +
           "and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). " +

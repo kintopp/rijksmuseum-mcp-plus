@@ -136,6 +136,11 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }):
     seedObjectNumber = data.objectNumber;
     viewerRelatedIndex = -1;
   }
+  // Transform state belongs to the *previous* OSD viewer; the fresh viewer
+  // created in renderViewer() starts at rotation 0 / unflipped, so the module
+  // vars must be reset to match or subsequent rotate/flip math drifts.
+  currentRotation = 0;
+  isFlipped = false;
   renderViewer(data);
   updateModelContext(data);
   if (data.viewUUID) {
@@ -614,7 +619,13 @@ function attachEventListeners(): void {
   document
     .getElementById('zoom-out')
     ?.addEventListener('click', () => viewer?.viewport.zoomBy(0.67));
-  document.getElementById('reset-view')?.addEventListener('click', resetView);
+  document.getElementById('reset-view')?.addEventListener('click', () => {
+    if (viewerRelatedIndex !== -1) {
+      void returnToSeed();
+    } else {
+      resetView();
+    }
+  });
   document.getElementById('prev-related')?.addEventListener('click', () => void navigateRelated('prev'));
   document.getElementById('next-related')?.addEventListener('click', () => void navigateRelated('next'));
   document.getElementById('select-mode')?.addEventListener('click', toggleSelectMode);
