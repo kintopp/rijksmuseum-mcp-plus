@@ -17,6 +17,9 @@ Phases (run in order):
   2a. Actors — birth/death/gender/bio from 2019 EDM actors dump (name matching)
   2b. Wikidata — wikidata_id from 2025 person dump (direct ID + name fallback)
   2c. Thesaurus — broader_id from 2019 SKOS thesaurus (AAT + label matching)
+  2f. v0.25 snapshot geo backfill — populate lat/lon/placetype/is_areal/coord_method
+      from data/vocabulary-v0.25-snapshot.db.gz where present (no-op otherwise).
+      Useful when Getty TGN is unreachable for a fresh Stage-5.5 run.
   3. Coordinate inheritance — propagate coords from geocoded parents to children
   4. Validation — spot checks and summary stats
 
@@ -89,7 +92,9 @@ RE_SCHEMA_SAME_AS = re.compile(
 RE_YEAR = re.compile(r"\b(\d{4})\b")
 RE_WIKIDATA_QID = re.compile(r"wikidata\.org/entity/(Q\d+)")
 
-PHASE_ORDER = ["1", "2d", "2a", "2b", "2c", "3", "4"]
+PHASE_ORDER = ["1", "2d", "2a", "2b", "2c", "2f", "3", "4"]
+
+V025_SNAPSHOT_GZ = PROJECT_DIR / "data" / "vocabulary-v0.25-snapshot.db.gz"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────
@@ -617,6 +622,44 @@ def phase_2c_thesaurus(conn, dry_run=False):
     log(f"  Updated: {updates} broader_id values")
 
 
+# ─── Phase 2f: v0.25 snapshot geo backfill ──────────────────────────
+
+
+def phase_2f_v025_geo_snapshot_backfill(conn, dry_run=False):
+    """Backfill Stage-5.5 place columns from a v0.25-format snapshot when present.
+
+    Idempotent — only writes where the target row is NULL on a column that v0.25
+    has populated. No-op if the snapshot file is missing (logged, not an error).
+    Stamps coord_method_detail = 'v0.25-snapshot-backfill:<original>' for audit.
+
+    Runs BEFORE phase 3 so the inheritance pass propagates from the broader
+    snapshot-restored coords, not just the harvest's authority-time coords.
+    """
+    log("Phase 2f: v0.25 snapshot geo backfill")
+
+    if not V025_SNAPSHOT_GZ.exists():
+        log(f"  v0.25 snapshot not found at {V025_SNAPSHOT_GZ}; skipping (no-op)")
+        return
+
+    # Lazy import — keeps the standalone CLI authoritative for the algorithm.
+    import gzip
+    import shutil
+    import sys as _sys
+    import tempfile
+    if str(SCRIPT_DIR) not in _sys.path:
+        _sys.path.insert(0, str(SCRIPT_DIR))
+    from backfill_place_geo_from_v025 import apply_v025_geo_backfill  # type: ignore
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        target = Path(tmpdir) / "v025.db"
+        log(f"  Decompressing snapshot to {target} ...")
+        with gzip.open(V025_SNAPSHOT_GZ, "rb") as src, target.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+        result = apply_v025_geo_backfill(conn, target, dry_run=dry_run, log_fn=log)
+        log(f"  Phase 2f result: {result['rows_touched']:,} rows touched, "
+            f"{result['not_in_snapshot']:,} target places had no v0.25 counterpart.")
+
+
 # ─── Phase 3: Coordinate inheritance ────────────────────────────────
 
 
@@ -805,6 +848,9 @@ def main():
 
         if "2c" in phases_to_run:
             phase_2c_thesaurus(conn, dry_run=args.dry_run)
+
+        if "2f" in phases_to_run:
+            phase_2f_v025_geo_snapshot_backfill(conn, dry_run=args.dry_run)
 
         if "3" in phases_to_run:
             phase_3_coord_inheritance(conn, dry_run=args.dry_run)
