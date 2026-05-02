@@ -2839,6 +2839,10 @@ function registerTools(
         citations: z.array(z.object({ text: z.string() })),
         isCrossRef: z.boolean(),
         crossRefTarget: z.string().nullable(),
+        // #268: the fine-axis literals below mirror scripts/provenance-enrichment-methods.mjs
+        // (and its Python twin scripts/provenance_enrichment_methods.py). Any rename or
+        // addition must be made there first; the writebacks are the source of truth for
+        // what lands in the DB.
         parseMethod: z.enum(["peg", "regex_fallback", "cross_ref", "credit_line", "llm_structural"]),
         categoryMethod: z.string().nullable().optional()
           .describe("How transfer_category was determined: type_mapping (parser), llm_enrichment, rule:transfer_is_ownership."),

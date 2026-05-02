@@ -389,6 +389,9 @@ interface ProvenanceEventDbRow {
   citations: string;
   is_cross_ref: number;
   cross_ref_target: string | null;
+  // #268: fine-axis literals are written by scripts/provenance-enrichment-methods.mjs
+  // (and its Python twin); runtime treats these as opaque strings — see
+  // registration.ts parseMethod enum for the canonical set.
   parse_method: string;
   category_method: string | null;
   correction_method: string | null;
