@@ -84,7 +84,7 @@ DUMPS_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps"
 
 # ── Enrichment dump artefacts (#242 part 3) ──
 # Phase 3 enrichment (folded in from scripts/enrich-vocab-from-dumps.py) reads
-# these four artefacts from DUMPS_DIR to populate person bio data, Wikidata
+# these four artefacts from DUMPS_DIR to populate person life data, Wikidata
 # links, place hierarchy, and concept hierarchy. When any artefact is missing,
 # the corresponding enrichment phase is skipped with a warning — the DB still
 # opens because the column stubs are added unconditionally in run_phase3().
@@ -3751,16 +3751,6 @@ def _enrich_parse_year(text):
     return int(m.group(1)) if m else None
 
 
-def _enrich_clean_bio(text):
-    if not text:
-        return None
-    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</?[iI]>", "", text)
-    text = html.unescape(text)
-    text = text.strip()
-    return text if text else None
-
-
 def enrich_places_from_dump(conn: sqlite3.Connection, dumps_dir: Path) -> None:
     """Enrich places with broader_id and external_id from the 2025 place dump.
 
@@ -3846,7 +3836,7 @@ def enrich_places_from_dump(conn: sqlite3.Connection, dumps_dir: Path) -> None:
 
 
 def enrich_actors_from_edm(conn: sqlite3.Connection, dumps_dir: Path) -> None:
-    """Enrich persons with birth_year/death_year/gender/bio from 2019 EDM actors dump.
+    """Enrich persons with birth_year/death_year/gender from 2019 EDM actors dump.
 
     Matches by prefLabel then altLabels against person_names. When multiple
     dump entries hit the same vocab id, keeps the richest (most non-NULL fields).
@@ -3884,7 +3874,6 @@ def enrich_actors_from_edm(conn: sqlite3.Connection, dumps_dir: Path) -> None:
                     birth = None
                     death = None
                     gender = None
-                    bio = None
                     for child in elem:
                         tag = child.tag
                         if tag == f"{{{_ENRICH_NS['skos']}}}prefLabel":
@@ -3898,21 +3887,19 @@ def enrich_actors_from_edm(conn: sqlite3.Connection, dumps_dir: Path) -> None:
                             death = _enrich_parse_year(child.text)
                         elif tag == f"{{{_ENRICH_NS['rdaGr2']}}}gender":
                             gender = child.text
-                        elif tag == f"{{{_ENRICH_NS['rdaGr2']}}}biographicalInformation":
-                            bio = _enrich_clean_bio(child.text)
                     if pref_label:
                         richness = sum(
-                            x is not None for x in (birth, death, gender, bio)
+                            x is not None for x in (birth, death, gender)
                         )
                         actors.append(
-                            (pref_label, alt_labels, birth, death, gender, bio, richness)
+                            (pref_label, alt_labels, birth, death, gender, richness)
                         )
                     elem.clear()
     print(f"  [enrich actors] Parsed {len(actors):,} EDM agents")
 
     vocab_id_to_data = {}
     matched = 0
-    for pref_label, alt_labels, birth, death, gender, bio, richness in actors:
+    for pref_label, alt_labels, birth, death, gender, richness in actors:
         candidate_ids = name_to_ids.get(pref_label, set())
         if not candidate_ids:
             for alt in alt_labels:
@@ -3924,15 +3911,15 @@ def enrich_actors_from_edm(conn: sqlite3.Connection, dumps_dir: Path) -> None:
         matched += 1
         for vid in candidate_ids:
             existing = vocab_id_to_data.get(vid)
-            if existing is None or richness > existing[4]:
-                vocab_id_to_data[vid] = (birth, death, gender, bio, richness)
+            if existing is None or richness > existing[3]:
+                vocab_id_to_data[vid] = (birth, death, gender, richness)
     print(
         f"  [enrich actors] Matched {matched:,} dump entries → "
         f"{len(vocab_id_to_data):,} unique vocab ids"
     )
 
-    updates = {"birth_year": 0, "death_year": 0, "gender": 0, "bio": 0}
-    for vid, (birth, death, gender, bio, _) in vocab_id_to_data.items():
+    updates = {"birth_year": 0, "death_year": 0, "gender": 0}
+    for vid, (birth, death, gender, _) in vocab_id_to_data.items():
         if birth is not None:
             updates["birth_year"] += conn.execute(
                 "UPDATE vocabulary SET birth_year = ? WHERE id = ? AND birth_year IS NULL",
@@ -3947,11 +3934,6 @@ def enrich_actors_from_edm(conn: sqlite3.Connection, dumps_dir: Path) -> None:
             updates["gender"] += conn.execute(
                 "UPDATE vocabulary SET gender = ? WHERE id = ? AND gender IS NULL",
                 (gender, vid),
-            ).rowcount
-        if bio is not None:
-            updates["bio"] += conn.execute(
-                "UPDATE vocabulary SET bio = ? WHERE id = ? AND bio IS NULL",
-                (bio, vid),
             ).rowcount
     conn.commit()
     print(f"  [enrich actors] Updates: {updates}")
@@ -4505,7 +4487,7 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
 
 def log_enrichment_stats(conn: sqlite3.Connection) -> None:
     """Print coverage stats for enriched columns (informational — not an audit)."""
-    for col in ("birth_year", "death_year", "gender", "bio", "wikidata_id"):
+    for col in ("birth_year", "death_year", "gender", "wikidata_id"):
         count = conn.execute(
             f"SELECT COUNT(*) FROM vocabulary WHERE {col} IS NOT NULL"
         ).fetchone()[0]
@@ -4580,7 +4562,7 @@ def run_enrichment(conn: sqlite3.Connection, dumps_dir: Path) -> bool:
         print(
             f"  [enrichment] Dumps dir not found: {dumps_dir}\n"
             f"  [enrichment] Skipping — DB will still open (column stubs present)\n"
-            f"  [enrichment] but creator bio, wikidata, and place hierarchy will be empty."
+            f"  [enrichment] but creator wikidata and place hierarchy will be empty."
         )
         return False
 
@@ -4710,14 +4692,13 @@ def run_phase3(
     conn.commit()
 
     # Person-enrichment columns must exist at server open() time — VocabularyDb.ts
-    # caches `stmtArtworkMappings` against v.birth_year/death_year/gender/bio/wikidata_id
+    # caches `stmtArtworkMappings` against v.birth_year/death_year/gender/wikidata_id
     # unconditionally. Populated later by enrich-vocab-from-dumps.py (Phases 2a/2b);
     # leaving them NULL is sufficient for the server to open the DB. See issue #242.
     person_enrichment_cols = [
         ("birth_year", "INTEGER"),
         ("death_year", "INTEGER"),
         ("gender", "TEXT"),
-        ("bio", "TEXT"),
         ("wikidata_id", "TEXT"),
     ]
     for col_name, col_type in person_enrichment_cols:
@@ -4808,7 +4789,7 @@ def run_phase3(
     print("\n--- Vocabulary Enrichment ---")
     if skip_enrichment:
         print("  Skipping enrichment (--skip-enrichment). DB will still open")
-        print("  (column stubs present), but creator bio, wikidata, and place")
+        print("  (column stubs present), but creator wikidata and place")
         print("  hierarchy will be empty.")
     else:
         run_enrichment(conn, dumps_dir or DUMPS_DIR)
@@ -5452,7 +5433,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--skip-enrichment", action="store_true",
-        help="Skip the Phase 3 vocab enrichment step (person bios, wikidata, place/concept hierarchy). "
+        help="Skip the Phase 3 vocab enrichment step (person life dates, wikidata, place/concept hierarchy). "
              "DB will still open — column stubs are added unconditionally — but enriched fields will be empty. "
              "Useful for fast iteration when you don't need the offline dumps. See #242.",
     )

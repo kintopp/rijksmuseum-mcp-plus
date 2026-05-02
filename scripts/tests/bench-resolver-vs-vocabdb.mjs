@@ -82,7 +82,7 @@ const stmtArtwork = db.prepare(`
 const stmtMappingsForArtwork = db.prepare(`
   SELECT fl.name AS field_name, v.label_en, v.label_nl, v.external_id,
          v.id AS vocab_id, v.type AS vocab_type, v.notation,
-         v.birth_year, v.death_year, v.gender, v.bio, v.wikidata_id,
+         v.birth_year, v.death_year, v.gender, v.wikidata_id,
          v.lat, v.lon
   FROM mappings m
   JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
