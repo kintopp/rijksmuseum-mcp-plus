@@ -2658,7 +2658,7 @@ function registerTools(
     totalArtworks: z.number().int()
       .describe("Number of artworks with matching provenance events/periods. Capped at 10,001 — see totalArtworksCapped."),
     totalArtworksCapped: z.boolean().optional()
-      .describe("True when the actual total exceeds 10,001. Use search_artwork with provenance parameter for exact collection-wide counts."),
+      .describe("True when the actual total exceeds 10,001. Narrow the search to bring the total under the cap if you need an exact figure."),
     results: z.array(z.object({
       objectNumber: z.string(),
       title: z.string(),

@@ -136,9 +136,8 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }):
     seedObjectNumber = data.objectNumber;
     viewerRelatedIndex = -1;
   }
-  // Transform state belongs to the *previous* OSD viewer; the fresh viewer
-  // created in renderViewer() starts at rotation 0 / unflipped, so the module
-  // vars must be reset to match or subsequent rotate/flip math drifts.
+  // Match the fresh OSD viewer renderViewer() will create — rotate/flip math
+  // is incremental and drifts if these vars outlive the previous viewer.
   currentRotation = 0;
   isFlipped = false;
   renderViewer(data);
@@ -259,6 +258,11 @@ async function returnToSeed(): Promise<void> {
   if (!seedObjectNumber || viewerRelatedIndex === -1) return;
   viewerRelatedIndex = -1;
   await mountArtwork(seedObjectNumber);
+}
+
+function resetOrReturn(): void {
+  if (viewerRelatedIndex !== -1) void returnToSeed();
+  else resetView();
 }
 
 async function mountArtwork(objectNumber: string): Promise<void> {
@@ -619,13 +623,7 @@ function attachEventListeners(): void {
   document
     .getElementById('zoom-out')
     ?.addEventListener('click', () => viewer?.viewport.zoomBy(0.67));
-  document.getElementById('reset-view')?.addEventListener('click', () => {
-    if (viewerRelatedIndex !== -1) {
-      void returnToSeed();
-    } else {
-      resetView();
-    }
-  });
+  document.getElementById('reset-view')?.addEventListener('click', resetOrReturn);
   document.getElementById('prev-related')?.addEventListener('click', () => void navigateRelated('prev'));
   document.getElementById('next-related')?.addEventListener('click', () => void navigateRelated('next'));
   document.getElementById('select-mode')?.addEventListener('click', toggleSelectMode);
@@ -683,7 +681,7 @@ function attachEventListeners(): void {
         toggleSelectMode();
         break;
       case '0':
-        resetView();
+        resetOrReturn();
         break;
       case 'j':
         void navigateRelated('prev');
