@@ -21,6 +21,7 @@
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -47,7 +48,7 @@ const updatePartyReasoning = dryRun ? null : db.prepare(`
 
 const updatePartyReasoningByMethod = dryRun ? null : db.prepare(`
   UPDATE provenance_parties SET enrichment_reasoning = ?
-  WHERE artwork_id = ? AND sequence = ? AND position_method = 'llm_disambiguation' AND enrichment_reasoning IS NULL
+  WHERE artwork_id = ? AND sequence = ? AND position_method = '${M.LLM_DISAMBIGUATION}' AND enrichment_reasoning IS NULL
 `);
 
 // ─── 1. Type classifications → provenance_events ────────────────────
@@ -153,11 +154,11 @@ const ruleReasoning = "Deterministic rule: all transfer-type events in the Rijks
 if (!dryRun) {
   const result = db.prepare(`
     UPDATE provenance_events SET enrichment_reasoning = ?
-    WHERE category_method = 'rule:transfer_is_ownership' AND enrichment_reasoning IS NULL
+    WHERE category_method = '${M.RULE_TRANSFER_IS_OWNERSHIP}' AND enrichment_reasoning IS NULL
   `).run(ruleReasoning);
   stats.rule = result.changes;
 } else {
-  stats.rule = db.prepare(`SELECT COUNT(*) as cnt FROM provenance_events WHERE category_method = 'rule:transfer_is_ownership' AND enrichment_reasoning IS NULL`).get().cnt;
+  stats.rule = db.prepare(`SELECT COUNT(*) as cnt FROM provenance_events WHERE category_method = '${M.RULE_TRANSFER_IS_OWNERSHIP}' AND enrichment_reasoning IS NULL`).get().cnt;
 }
 console.log(`   ${stats.rule} events`);
 

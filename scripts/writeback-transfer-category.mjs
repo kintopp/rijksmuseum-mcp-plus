@@ -12,6 +12,7 @@
  */
 
 import Database from "better-sqlite3";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -47,7 +48,7 @@ if (dryRun) {
 // Only reclassify transfer-type events (not unknown — those are unsold/#91)
 const result = db.prepare(`
   UPDATE provenance_events
-  SET transfer_category = 'ownership', category_method = 'rule:transfer_is_ownership'
+  SET transfer_category = 'ownership', category_method = '${M.RULE_TRANSFER_IS_OWNERSHIP}'
   WHERE transfer_type = 'transfer' AND transfer_category = 'ambiguous' AND is_cross_ref = 0
 `).run();
 

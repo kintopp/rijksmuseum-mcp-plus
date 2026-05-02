@@ -19,6 +19,7 @@ import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { TRANSFER_TYPE_TO_CATEGORY } from "../dist/provenance.js";
 import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ const resolve = createIdResolver(db, idRemap);
 // New rows (event was previously 'unknown' → set type, category, method, reasoning).
 const updateStmt = db.prepare(`
   UPDATE provenance_events
-  SET transfer_type = ?, transfer_category = ?, category_method = 'llm_enrichment',
+  SET transfer_type = ?, transfer_category = ?, category_method = '${M.LLM_ENRICHMENT}',
       enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ? AND transfer_type = 'unknown'
 `);
@@ -114,7 +115,7 @@ const backfillReasoning = db.prepare(`
   UPDATE provenance_events
   SET enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ?
-    AND transfer_type = ? AND category_method = 'llm_enrichment'
+    AND transfer_type = ? AND category_method = '${M.LLM_ENRICHMENT}'
     AND enrichment_reasoning IS NULL
 `);
 

@@ -15,6 +15,7 @@
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -161,7 +162,7 @@ const writeBatch = db.transaction(() => {
           party_name: repl.name,
           party_role: repl.role_hint || positionToRole(repl.position),
           party_position: repl.position,
-          position_method: "llm_disambiguation",
+          position_method: M.LLM_DISAMBIGUATION,
           enrichment_reasoning: item.reasoning ?? origEntry.enrichment_reasoning ?? null,
         };
         renamesDone++;
@@ -172,7 +173,7 @@ const writeBatch = db.transaction(() => {
           party_dates: null,
           party_role: repl.role_hint || positionToRole(repl.position),
           party_position: repl.position,
-          position_method: "llm_disambiguation",
+          position_method: M.LLM_DISAMBIGUATION,
           uncertain: origEntry.uncertain,
           enrichment_reasoning: item.reasoning ?? null,
           _origIdx: -1, // new parties have no original index

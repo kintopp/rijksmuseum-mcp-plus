@@ -20,6 +20,7 @@
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -115,7 +116,7 @@ const updateLocationStmt = db.prepare(`
 
 const insertPartyStmt = db.prepare(`
   INSERT INTO provenance_parties (artwork_id, sequence, party_idx, party_name, party_role, party_position, position_method, enrichment_reasoning)
-  VALUES (?, ?, ?, ?, ?, ?, 'llm_structural', ?)
+  VALUES (?, ?, ?, ?, ?, ?, '${M.LLM_STRUCTURAL}', ?)
 `);
 
 const getMaxPartyIdx = db.prepare(

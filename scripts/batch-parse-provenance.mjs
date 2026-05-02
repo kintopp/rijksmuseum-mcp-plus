@@ -18,6 +18,7 @@ import Database from "better-sqlite3";
 import { parseProvenanceRaw } from "../dist/provenance-peg.js";
 import { interpretPeriods } from "../dist/provenance-interpret.js";
 import { inferPosition, TRANSFER_TYPE_TO_CATEGORY } from "../dist/provenance.js";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ CREATE TABLE IF NOT EXISTS provenance_events (
   citations      TEXT,
   is_cross_ref     INTEGER NOT NULL DEFAULT 0,
   cross_ref_target TEXT,
-  parse_method   TEXT NOT NULL DEFAULT 'peg',
+  parse_method   TEXT NOT NULL DEFAULT '${M.PEG}',
   correction_method TEXT,
   enrichment_reasoning TEXT,
   PRIMARY KEY (artwork_id, sequence)
@@ -207,7 +208,7 @@ const insertBatch = dryRun ? () => {} : db.transaction((batch) => {
       }));
       insertEvent.run(
         artId, e.sequence, e.rawText, e.gap ? 1 : 0, e.transferType, e.unsold ? 1 : 0, e.batchPrice ? 1 : 0,
-        category, category ? "type_mapping" : null, e.uncertain ? 1 : 0,
+        category, category ? M.TYPE_MAPPING : null, e.uncertain ? 1 : 0,
         JSON.stringify(enrichedParties), e.dateExpression, e.dateYear, e.dateQualifier,
         e.location, e.price?.amount ?? null, e.price?.currency ?? null, e.saleDetails,
         JSON.stringify(e.citations),
@@ -221,7 +222,7 @@ const insertBatch = dryRun ? () => {} : db.transaction((batch) => {
           insertParty.run(
             artId, e.sequence, i,
             p.name, p.dates ?? null, p.role ?? null,
-            pos, pos ? "role_mapping" : null, p.uncertain ? 1 : 0
+            pos, pos ? M.ROLE_MAPPING : null, p.uncertain ? 1 : 0
           );
         }
       }
@@ -320,7 +321,7 @@ if (!dryRun) {
   const UNSOLD_RE = /\b(?:unsold|bought\s+in|withdrawn|invendu|ingetrokken)\b/i;
 
   const updateTypeAndMethod = db.prepare(
-    `UPDATE provenance_events SET transfer_type = ?, transfer_category = ?, category_method = 'type_mapping', parse_method = 'credit_line' WHERE artwork_id = ? AND sequence = ?`
+    `UPDATE provenance_events SET transfer_type = ?, transfer_category = ?, category_method = '${M.TYPE_MAPPING}', parse_method = '${M.CREDIT_LINE}' WHERE artwork_id = ? AND sequence = ?`
   );
 
   const enrichBatch = db.transaction((rows) => {

@@ -21,6 +21,7 @@
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 
@@ -221,7 +222,7 @@ const processArtwork = db.transaction((artworkId, splits) => {
             citations: evt.citations,  // inherit from original
             is_cross_ref: 0,
             cross_ref_target: null,
-            parse_method: "llm_structural",
+            parse_method: M.LLM_STRUCTURAL,
             correction_method: method,
             enrichment_reasoning: split.reasoning,
           },
@@ -231,7 +232,7 @@ const processArtwork = db.transaction((artworkId, splits) => {
             party_dates: null,
             party_role: p.role ?? null,
             party_position: p.position,
-            position_method: "llm_structural",
+            position_method: M.LLM_STRUCTURAL,
             uncertain: 0,
             enrichment_reasoning: split.reasoning,
           })),

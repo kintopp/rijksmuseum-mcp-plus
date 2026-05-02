@@ -12,6 +12,7 @@
  */
 
 import Database from "better-sqlite3";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -196,7 +197,7 @@ const insertParty = db.prepare(`
   INSERT INTO provenance_parties (
     artwork_id, sequence, party_idx, party_name, party_dates, party_role,
     party_position, position_method, uncertain, enrichment_reasoning
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, 'llm_enrichment', 0, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, '${M.LLM_ENRICHMENT}', 0, ?)
 `);
 
 const updatePartiesJson = db.prepare(`

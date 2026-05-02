@@ -34,6 +34,7 @@
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import Database from "better-sqlite3";
 import Anthropic from "@anthropic-ai/sdk";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 // ─── Modes ──────────────────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ function sampleSilentErrors() {
           MIN(date_year) AS earliest_year,
           COUNT(*) AS event_count
         FROM provenance_events
-        WHERE parse_method IN ('peg','regex_fallback')
+        WHERE parse_method IN ('${M.PEG}','${M.REGEX_FALLBACK}')
           AND transfer_type != 'unknown' AND is_cross_ref = 0
         GROUP BY artwork_id
       )
@@ -211,7 +212,7 @@ function sampleSilentErrors() {
       SELECT artwork_id FROM (
         SELECT e.artwork_id, COUNT(*) AS event_count
         FROM provenance_events e
-        WHERE e.parse_method IN ('peg','regex_fallback')
+        WHERE e.parse_method IN ('${M.PEG}','${M.REGEX_FALLBACK}')
           AND e.transfer_type != 'unknown' AND e.is_cross_ref = 0
           ${eraClause}
         GROUP BY e.artwork_id

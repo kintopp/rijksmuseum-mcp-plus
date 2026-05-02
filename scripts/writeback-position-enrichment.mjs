@@ -13,6 +13,7 @@
 import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { parseIdRemapFlag, createIdResolver } from "./lib/id-remap.mjs";
+import * as M from "./provenance-enrichment-methods.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -101,7 +102,7 @@ const resolve = createIdResolver(db, idRemap);
 // New rows (party_position was NULL → fill position + method + reasoning).
 const updatePosition = db.prepare(`
   UPDATE provenance_parties
-  SET party_position = ?, position_method = 'llm_enrichment', enrichment_reasoning = ?
+  SET party_position = ?, position_method = '${M.LLM_ENRICHMENT}', enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ? AND party_idx = ?
     AND party_position IS NULL
 `);
@@ -114,13 +115,13 @@ const backfillPositionReasoning = db.prepare(`
   SET enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ? AND party_idx = ?
     AND party_position = ?
-    AND position_method = 'llm_enrichment'
+    AND position_method = '${M.LLM_ENRICHMENT}'
     AND enrichment_reasoning IS NULL
 `);
 
 const updateCategory = db.prepare(`
   UPDATE provenance_events
-  SET transfer_category = ?, category_method = 'llm_enrichment', enrichment_reasoning = ?
+  SET transfer_category = ?, category_method = '${M.LLM_ENRICHMENT}', enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ?
     AND transfer_category = 'ambiguous'
 `);
@@ -130,7 +131,7 @@ const backfillCategoryReasoning = db.prepare(`
   SET enrichment_reasoning = ?
   WHERE artwork_id = ? AND sequence = ?
     AND transfer_category = ?
-    AND category_method = 'llm_enrichment'
+    AND category_method = '${M.LLM_ENRICHMENT}'
     AND enrichment_reasoning IS NULL
 `);
 
