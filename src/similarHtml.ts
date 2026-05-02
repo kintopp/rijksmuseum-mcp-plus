@@ -51,7 +51,7 @@ export interface SimilarQueryInfo {
   /** Depicted places on the query artwork (after filtering) */
   depictedPlaces?: { label: string; wikidataUri?: string }[];
   /** Themes attached to the query artwork (#294) */
-  themes?: { label: string }[];
+  themes?: string[];
   /** Distinct curator-declared relationship labels on the query artwork (#293) */
   relatedObjectLabels?: string[];
 }
@@ -170,6 +170,11 @@ const MODE_ORDER = [
   "theme", "depictedPerson", "depictedPlace",
 ] as const;
 
+/** Modes whose card detail is a comma-separated list of sharedTerms labels. */
+const SHARED_TERM_MODES = new Set<string>([
+  "depictedPerson", "depictedPlace", "theme", "relatedObject",
+]);
+
 function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -202,10 +207,7 @@ function renderCardMetadata(c: SimilarCandidate, mode: string): string {
   if (mode === "description" && c.descSnippet) {
     return `<div class="card-detail"><div class="desc-snippet">${escHtml(c.descSnippet)}</div></div>`;
   }
-  if (
-    (mode === "depictedPerson" || mode === "depictedPlace" || mode === "theme" || mode === "relatedObject")
-    && c.sharedTerms && c.sharedTerms.length > 0
-  ) {
+  if (SHARED_TERM_MODES.has(mode) && c.sharedTerms && c.sharedTerms.length > 0) {
     const labels = c.sharedTerms.map(t => renderOptionalLink(t.label, t.wikidataUri)).join(", ");
     return `<div class="card-detail">${labels}</div>`;
   }
@@ -385,7 +387,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   }
 
   if (query.themes && query.themes.length > 0) {
-    const themesHtml = query.themes.map(t => escHtml(t.label)).join(" &middot; ");
+    const themesHtml = query.themes.map(escHtml).join(" &middot; ");
     metaSections += `<div class="meta-section">
       <div class="meta-section-label theme">Themes</div>
       <div class="meta-content">${themesHtml}</div>

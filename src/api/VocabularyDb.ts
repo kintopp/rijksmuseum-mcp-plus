@@ -920,6 +920,7 @@ export class VocabularyDb {
   private stmtBatchByArtIdCache = new Map<number, Statement>();
   private stmtBatchTypesByArtIdCache = new Map<number, Statement>();
   private stmtBatchDescByArtIdCache = new Map<number, Statement>();
+  private stmtBatchImportanceByArtIdCache = new Map<number, Statement>();
   /** Column list for batchLookupByArtId — resolved once at construction so the
    *  chunk-size-keyed statement cache doesn't need hasIiif in its key. */
   private batchByArtIdCols = "";
@@ -948,6 +949,11 @@ export class VocabularyDb {
   // Theme cache (#294)
   private themeDf: Map<number, number> | null = null; // theme vocab_rowid → document frequency
   private themeN = 0; // total artworks with at least one theme
+  /** Over-fetch multiplier for the Theme channel's importance tie-break:
+   *  we sort by IDF-weight, take 4× the requested page, then re-sort with
+   *  the importance lookup. 4× is enough to cover ties at the page boundary
+   *  without paying for an importance lookup over the full candidate set. */
+  private static readonly THEME_TIE_BREAK_OVERFETCH = 4;
   // Related-object cache (#293) — curator-declared peer edges
   private relatedObjectsByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
   private static readonly RELATED_OBJECT_LABELS = [
@@ -2479,10 +2485,9 @@ export class VocabularyDb {
       }
     }
 
-    // Take a generous prefix (4× maxResults) for tertiary-tie-break sort, then importance-rank.
     const presort = [...candidates.entries()]
       .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
-      .slice(0, Math.max(maxResults * 4, maxResults));
+      .slice(0, maxResults * VocabularyDb.THEME_TIE_BREAK_OVERFETCH);
 
     const presortIds = presort.map(([artId]) => artId);
     const importanceMap = this.batchLookupImportanceByArtId(presortIds);
@@ -2706,10 +2711,15 @@ export class VocabularyDb {
     const CHUNK = 500;
     for (let i = 0; i < artIds.length; i += CHUNK) {
       const chunk = artIds.slice(i, i + CHUNK);
-      const placeholders = chunk.map(() => "?").join(", ");
-      const rows = this.db.prepare(
-        `SELECT art_id, importance FROM artworks WHERE art_id IN (${placeholders})`
-      ).all(...chunk) as { art_id: number; importance: number | null }[];
+      let stmt = this.stmtBatchImportanceByArtIdCache.get(chunk.length);
+      if (!stmt) {
+        const placeholders = chunk.map(() => "?").join(", ");
+        stmt = this.db.prepare(
+          `SELECT art_id, importance FROM artworks WHERE art_id IN (${placeholders})`
+        );
+        this.stmtBatchImportanceByArtIdCache.set(chunk.length, stmt);
+      }
+      const rows = stmt.all(...chunk) as { art_id: number; importance: number | null }[];
       for (const r of rows) map.set(r.art_id, r.importance ?? 0);
     }
     return map;

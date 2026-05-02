@@ -3406,7 +3406,7 @@ function registerTools(
             })),
             depictedPersons: dpResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
             depictedPlaces: dplResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
-            themes: thResult?.queryTerms.map(t => ({ label: t.label })),
+            themes: thResult?.queryTerms.map(t => t.label),
             relatedObjectLabels: roResult?.queryTerms.map(t => t.label),
           },
           modes: {
