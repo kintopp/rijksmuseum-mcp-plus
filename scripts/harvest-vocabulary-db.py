@@ -425,6 +425,11 @@ CREATE TABLE IF NOT EXISTS vocabulary (
 -- The legacy `vocabulary.external_id` column is kept as a single-pick hint (Wikidata preferred) for
 -- backwards-compatible reads (src/api/VocabularyDb.ts), but this table holds the full set and is the
 -- source of truth for reconciliation and authority-scoped lookups.
+--
+-- #268 audit-trail note: there is no separate `external_id_method` column on this table — the
+-- `authority` column ('wikidata' / 'tgn' / 'geonames' / 'viaf' / 'rkd' / 'ulan' / 'aat' /
+-- 'iconclass' / ...) IS the audit. Every row in this table came from a known external authority,
+-- so the trust tier is implicitly 'deterministic'.
 CREATE TABLE IF NOT EXISTS vocabulary_external_ids (
     vocab_id    TEXT NOT NULL,
     authority   TEXT NOT NULL,
@@ -4647,13 +4652,14 @@ def run_phase3(
         conn.execute("ALTER TABLE vocabulary ADD COLUMN geocode_method TEXT")
         conn.commit()
 
-    # #218: per-field enrichment provenance. NULL = as-is from Rijksmuseum
-    # (LDES may overwrite); 'authority' = our direct canonical lookup
+    # #218 / #268: per-field enrichment provenance. NULL = as-is from Rijksmuseum
+    # (LDES may overwrite); 'deterministic' = our direct canonical lookup
     # (Wikidata P625, GeoNames, Getty TGN) — preserve across LDES updates;
-    # 'derived' = our heuristic (reconciliation, parent-fallback, validation
-    # fix) — preserve; 'human' = manual review — never auto-overwrite.
-    # See scripts/enrichment_methods.py for the detail-value vocabulary that
-    # backs each coarse tier.
+    # 'inferred' = our heuristic (reconciliation, parent-fallback, validation
+    # fix) — preserve; 'manual' = curator review — never auto-overwrite.
+    # The coarse tier names are shared across geo, provenance, and alt-label
+    # audit trails — see scripts/enrichment_tiers.py. The fine detail values
+    # live in scripts/enrichment_methods.py.
     enrichment_method_cols = ("coord_method", "external_id_method", "broader_method")
     for col_name in enrichment_method_cols:
         if col_name not in vocab_cols:
@@ -4799,6 +4805,18 @@ def run_phase3(
         print("  hierarchy will be empty.")
     else:
         run_enrichment(conn, dumps_dir or DUMPS_DIR)
+
+    # #268: tag broader_method on every row that has a broader_id but no tier
+    # tag yet. All three broader_id write sites (baseline LA harvest, place dump
+    # enrichment, SKOS thesaurus enrichment) are authoritative — they pull from
+    # external curator-stamped sources — so 'deterministic' is correct. Runs
+    # unconditionally (covers the --skip-enrichment baseline-only path too).
+    tagged = conn.execute(
+        "UPDATE vocabulary SET broader_method = 'deterministic' "
+        "WHERE broader_id IS NOT NULL AND broader_method IS NULL"
+    ).rowcount
+    conn.commit()
+    print(f"  [enrich tier] Tagged {tagged:,} rows broader_method='deterministic'")
 
     # ── Post-normalization joins (require art_id from normalize_mappings) ──
 
