@@ -27,6 +27,7 @@ import {
   parseCropPixelsRegion,
   cropPixelsToIiifPixels,
   checkRegionBounds,
+  computeDeliveryState,
 } from "../../dist/registration.js";
 
 import {
@@ -494,6 +495,26 @@ assertEq(expandFtsQuery(""), null, "empty → null");
 
 // No expansion possible (no variants) → null
 assertEq(expandFtsQuery("a"), null, "single short token with no variants → null");
+
+// ── computeDeliveryState ─────────────────────────────────────────
+
+section("computeDeliveryState");
+
+const NOW = 1_700_000_000_000;
+assertEq(computeDeliveryState(undefined, NOW), "no_live_viewer_seen",
+  "undefined lastPolledAt → no_live_viewer_seen");
+assertEq(computeDeliveryState(NOW - 1000, NOW), "delivered_recently",
+  "polled 1s ago → delivered_recently");
+assertEq(computeDeliveryState(NOW - 4999, NOW), "delivered_recently",
+  "polled 4999ms ago → delivered_recently (just inside the window)");
+assertEq(computeDeliveryState(NOW - 5000, NOW), "queued_waiting_for_viewer",
+  "polled exactly 5000ms ago → queued_waiting_for_viewer (boundary excluded)");
+assertEq(computeDeliveryState(NOW - 60_000, NOW), "queued_waiting_for_viewer",
+  "polled 60s ago → queued_waiting_for_viewer");
+assertEq(computeDeliveryState(NOW - 5000, NOW, 10_000), "delivered_recently",
+  "custom recentMs widens the window");
+assertEq(computeDeliveryState(NOW, NOW), "delivered_recently",
+  "polled this instant → delivered_recently");
 
 // ── Summary ──────────────────────────────────────────────────────
 

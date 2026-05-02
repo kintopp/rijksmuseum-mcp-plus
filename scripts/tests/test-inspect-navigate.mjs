@@ -413,6 +413,70 @@ const r4i = await client.callTool({
 });
 assert(r4i.isError === true, "relativeTo 'full' → error (must be pct:)");
 
+// 4j/4k. deliveryState transitions on a fresh isolated viewer.
+// Use a fresh viewUUID dedicated to these checks so the existing queue-
+// accounting in section 5 (which expects exact command counts on viewUUID1
+// and viewUUID2) is not perturbed.
+console.log("\n--- 4j/4k: deliveryState transitions ---");
+{
+  const fresh = await client.callTool({
+    name: "get_artwork_image",
+    arguments: { objectNumber: "SK-A-2344" },
+  });
+  const freshSc = fresh.structuredContent ?? JSON.parse(fresh.content[0].text);
+  const stateUuid = freshSc.viewUUID;
+
+  // 4j: navigate before any poll → no_live_viewer_seen
+  const r4j = await client.callTool({
+    name: "navigate_viewer",
+    arguments: {
+      viewUUID: stateUuid,
+      commands: [{ action: "navigate", region: "full" }],
+    },
+  });
+  const nav4j = r4j.structuredContent ?? JSON.parse(r4j.content[0].text);
+  assert(nav4j.deliveryState === "no_live_viewer_seen",
+    `deliveryState = no_live_viewer_seen (got ${nav4j.deliveryState})`);
+  assert(nav4j.recentlyPolledByViewer === false,
+    `recentlyPolledByViewer false when never polled`);
+  assert(nav4j.lastPolledAt === undefined,
+    `lastPolledAt absent when never polled`);
+  assert(nav4j.viewerConnected === false,
+    `viewerConnected deprecated alias mirrors recentlyPolledByViewer`);
+  assert(typeof nav4j.pendingCommandCount === "number",
+    `pendingCommandCount populated (${nav4j.pendingCommandCount})`);
+  const text4j = r4j.content?.[0]?.text ?? "";
+  assert(text4j.includes("no viewer has connected yet"),
+    `text-channel narration matches state ("${text4j.slice(0, 80)}")`);
+  assert(!text4j.includes("not connected"),
+    `text no longer uses misleading "not connected" wording`);
+
+  // 4k: poll, then navigate → delivered_recently
+  await client.callTool({
+    name: "poll_viewer_commands",
+    arguments: { viewUUID: stateUuid },
+  });
+  const r4k = await client.callTool({
+    name: "navigate_viewer",
+    arguments: {
+      viewUUID: stateUuid,
+      commands: [{ action: "navigate", region: "full" }],
+    },
+  });
+  const nav4k = r4k.structuredContent ?? JSON.parse(r4k.content[0].text);
+  assert(nav4k.deliveryState === "delivered_recently",
+    `deliveryState = delivered_recently (got ${nav4k.deliveryState})`);
+  assert(nav4k.recentlyPolledByViewer === true,
+    `recentlyPolledByViewer true after fresh poll`);
+  assert(typeof nav4k.lastPolledAt === "string" && nav4k.lastPolledAt.includes("T"),
+    `lastPolledAt is ISO timestamp ("${nav4k.lastPolledAt}")`);
+  assert(nav4k.viewerConnected === true,
+    `viewerConnected deprecated alias still populated`);
+  const text4k = r4k.content?.[0]?.text ?? "";
+  assert(text4k.startsWith("Delivered"),
+    `text-channel narration leads with "Delivered" ("${text4k.slice(0, 60)}")`);
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  4bis. navigate_viewer — crop_pixels format + OOB rejection (#247)
 // ══════════════════════════════════════════════════════════════════

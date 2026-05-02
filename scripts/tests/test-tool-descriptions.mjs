@@ -170,6 +170,20 @@ assert(grc.includes("modifiedAfter") && grc.includes("search_artwork"),
   "get_recent_changes cross-links to search_artwork({modifiedAfter})");
 
 // ══════════════════════════════════════════════════════════════════
+//  navigate_viewer: deliveryState contract (#287/2)
+// ══════════════════════════════════════════════════════════════════
+
+section("navigate_viewer deliveryState contract");
+
+const nv = descOf("navigate_viewer");
+assert(nv.includes("deliveryState"),
+  "navigate_viewer description mentions deliveryState (response field contract)");
+assert(nv.includes("queued_waiting_for_viewer"),
+  "navigate_viewer description names the queued_waiting_for_viewer state");
+assert(nv.includes("do not narrate") && nv.toLowerCase().includes("failure"),
+  "navigate_viewer description tells the model not to narrate the queued state as a failure");
+
+// ══════════════════════════════════════════════════════════════════
 //  No references to dropped filters (scoped to the affected tools)
 // ══════════════════════════════════════════════════════════════════
 

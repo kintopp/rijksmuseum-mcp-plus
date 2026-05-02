@@ -1142,6 +1142,29 @@ export function checkRegionBounds(
   };
 }
 
+/**
+ * Classify how a navigate_viewer call's commands will reach the iframe,
+ * given the queue's last-poll timestamp. Pure for unit testing.
+ *
+ *   delivered_recently         — iframe polled within `recentMs` and will drain on its next tick
+ *   queued_waiting_for_viewer  — iframe has polled before but not recently (typical when scrolled offscreen)
+ *   no_live_viewer_seen        — no poll has been recorded for this UUID yet
+ */
+export type DeliveryState =
+  | "delivered_recently"
+  | "queued_waiting_for_viewer"
+  | "no_live_viewer_seen";
+
+export function computeDeliveryState(
+  lastPolledAtMs: number | undefined,
+  nowMs: number,
+  recentMs = 5000,
+): DeliveryState {
+  if (lastPolledAtMs == null) return "no_live_viewer_seen";
+  if (nowMs - lastPolledAtMs < recentMs) return "delivered_recently";
+  return "queued_waiting_for_viewer";
+}
+
 // Exported for testing
 /** Project crop-local coordinates to full-image space. Both must be pct: format. */
 export function projectToFullImage(local: string, relativeTo: string): string | null {
@@ -2289,12 +2312,21 @@ function registerTools(
       region: z.string(),
       pixelRect: z.string().optional(),
     })).optional(),
-    viewerConnected: z.boolean().optional(),
     currentOverlays: z.array(z.object({
       label: z.string().optional(),
       region: z.string(),
       color: z.string().optional(),
     })).optional(),
+    pendingCommandCount: z.number().int().optional()
+      .describe("Commands sitting in the queue that the iframe has not yet drained."),
+    lastPolledAt: z.string().optional()
+      .describe("ISO timestamp of the iframe's last poll. Absent if the iframe has never polled this session."),
+    recentlyPolledByViewer: z.boolean().optional()
+      .describe("True if the iframe polled within the last 5s. Replaces viewerConnected semantically."),
+    deliveryState: z.enum(["delivered_recently", "queued_waiting_for_viewer", "no_live_viewer_seen"]).optional()
+      .describe("Server's view of command delivery: delivered, queued for an existing-but-offscreen viewer, or no viewer ever connected."),
+    viewerConnected: z.boolean().optional()
+      .describe("DEPRECATED: use recentlyPolledByViewer or deliveryState. Will be removed in v0.28."),
     error: z.string().optional(),
   };
 
@@ -2328,7 +2360,13 @@ function registerTools(
         "Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, " +
         "use 'relativeTo' with the crop's region string. Specify 'region' as coordinates within " +
         "the crop's local space (pct: format) and the server projects to full-image space " +
-        "deterministically — eliminates manual coordinate conversion math.",
+        "deterministically — eliminates manual coordinate conversion math.\n\n" +
+        "Response field deliveryState reports whether the iframe drained the commands immediately " +
+        "(`delivered_recently`), the iframe exists but hasn't polled recently and the commands are " +
+        "queued (`queued_waiting_for_viewer` — typical when scrolled out of view), or no iframe has " +
+        "connected yet (`no_live_viewer_seen`). In the queued case, overlay state is preserved " +
+        "server-side and will apply automatically when the viewer resumes polling — do not narrate " +
+        "this as a delivery failure to the user.",
       inputSchema: z.object({
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
         commands: z.array(z.object({
@@ -2458,7 +2496,9 @@ function registerTools(
             }))
         : undefined;
 
-      const viewerConnected = queue.lastPolledAt != null && (Date.now() - queue.lastPolledAt) < 5000;
+      const now = Date.now();
+      const deliveryState = computeDeliveryState(queue.lastPolledAt, now);
+      const recentlyPolledByViewer = deliveryState === "delivered_recently";
 
       const navData: InferOutput<typeof NavigateViewerOutput> = {
         viewUUID: args.viewUUID,
@@ -2466,12 +2506,27 @@ function registerTools(
         imageWidth: queue.imageWidth,
         imageHeight: queue.imageHeight,
         overlays: overlayDetails?.length ? overlayDetails : undefined,
-        viewerConnected,
         currentOverlays: queue.activeOverlays.length ? queue.activeOverlays : undefined,
+        pendingCommandCount: queue.commands.length,
+        lastPolledAt: queue.lastPolledAt != null ? new Date(queue.lastPolledAt).toISOString() : undefined,
+        recentlyPolledByViewer,
+        deliveryState,
+        viewerConnected: recentlyPolledByViewer, // deprecated alias, removed in v0.28
       };
-      const connStatus = viewerConnected ? "connected" : "not connected";
+
       const overlayCount = queue.activeOverlays.length;
-      const text = `Queued ${args.commands.length} commands for viewer ${args.viewUUID.slice(0, 8)} (${connStatus})${overlayCount ? ` | ${overlayCount} active overlays` : ""}`;
+      const overlayClause = overlayCount ? ` | ${overlayCount} active overlays` : "";
+      const shortUuid = args.viewUUID.slice(0, 8);
+      const text = (() => {
+        switch (deliveryState) {
+          case "delivered_recently":
+            return `Delivered ${args.commands.length} commands to active viewer ${shortUuid}${overlayClause}`;
+          case "queued_waiting_for_viewer":
+            return `Queued ${args.commands.length} commands for viewer ${shortUuid} (offscreen or paused — overlay state preserved, will apply when viewer resumes polling)${overlayClause}`;
+          case "no_live_viewer_seen":
+            return `Queued ${args.commands.length} commands for viewer ${shortUuid} (no viewer has connected yet)${overlayClause}`;
+        }
+      })();
       return structuredResponse(navData, text);
     })
   );
