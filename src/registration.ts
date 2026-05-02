@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -64,7 +64,7 @@ const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "creatorGender
 
 /** Provenance filter categorization by layer support. */
 const PROVENANCE_EVENT_ONLY_FILTERS = ["transferType", "excludeTransferType", "currency", "hasPrice", "hasGap", "relatedTo", "categoryMethod", "positionMethod"];
-const PROVENANCE_PERIOD_ONLY_FILTERS = ["ownerName", "acquisitionMethod", "minDuration", "maxDuration"];
+const PROVENANCE_PERIOD_ONLY_FILTERS = ["ownerName", "acquisitionMethod", "minDuration", "maxDuration", "periodLocation"];
 const PROVENANCE_SHARED_FILTERS = ["party", "location", "dateFrom", "dateTo", "objectNumber", "creator"];
 const PROVENANCE_ALL_FILTERS = [...PROVENANCE_SHARED_FILTERS, ...PROVENANCE_EVENT_ONLY_FILTERS, ...PROVENANCE_PERIOD_ONLY_FILTERS];
 
@@ -444,9 +444,54 @@ function compactMethodTag(method: string | null | undefined, defaultMethod?: str
 }
 
 /** Format a curated set as a compact one-liner (Tier 2). */
-function formatSetLine(s: { setSpec: string; name: string; lodUri?: string }, i: number): string {
+function formatSetLine(
+  s: {
+    setSpec: string;
+    name: string;
+    lodUri?: string;
+    memberCount?: number;
+    dominantTypes?: { label: string; count: number }[];
+    category?: string | null;
+  },
+  i: number,
+): string {
   let line = `${i + 1}. ${s.setSpec} | ${s.name}`;
+  if (s.memberCount != null) line += ` | ${s.memberCount.toLocaleString()} members`;
+  if (s.category) line += ` | ${s.category}`;
+  if (s.dominantTypes && s.dominantTypes.length > 0) {
+    const top = s.dominantTypes.slice(0, 2).map(t => t.label).join(", ");
+    line += ` | ${top}`;
+  }
   if (s.lodUri) line += ` | ${s.lodUri}`;
+  return line;
+}
+
+/** Stateless base64 token: "<setSpec>\t<offset>". Tokens are not portable across
+ *  server versions — pre-v0.27 OAI-PMH tokens fail to decode here, by design. */
+function encodeBrowseSetToken(setSpec: string, offset: number): string {
+  return Buffer.from(`${setSpec}\t${offset}`, "utf8").toString("base64");
+}
+function decodeBrowseSetToken(token: string): { setSpec: string; offset: number } | null {
+  try {
+    const decoded = Buffer.from(token, "base64").toString("utf8");
+    const tab = decoded.indexOf("\t");
+    if (tab < 0) return null;
+    const setSpec = decoded.slice(0, tab);
+    const offset = parseInt(decoded.slice(tab + 1), 10);
+    if (!setSpec || isNaN(offset) || offset < 0) return null;
+    return { setSpec, offset };
+  } catch {
+    return null;
+  }
+}
+
+/** Format a DB-backed browse_set record as a compact one-liner (Tier 2). */
+function formatBrowseSetRecord(r: BrowseSetRecord, i: number): string {
+  let line = `${i + 1}. ${r.objectNumber}`;
+  if (r.title) line += ` | "${r.title}"`;
+  if (r.creator) line += ` — ${r.creator}`;
+  if (r.date) line += ` (${r.date})`;
+  if (r.hasImage) line += " [image]";
   return line;
 }
 
@@ -851,8 +896,24 @@ const PaginatedBase = {
 };
 
 const BrowseSetOutput = {
-  ...PaginatedBase,
+  records: z.array(z.object({
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    date: z.string(),
+    description: z.string().optional(),
+    dimensions: z.string().optional(),
+    datestamp: z.string().optional(),
+    hasImage: z.boolean(),
+    imageUrl: z.string().optional(),
+    iiifServiceUrl: z.string().optional(),
+    edmType: z.string().optional(),
+    lodUri: z.string(),
+    url: z.string(),
+  })),
   totalInSet: z.number().int().optional(),
+  resumptionToken: z.string().optional(),
+  error: z.string().optional(),
 };
 
 const RecentChangesOutput = {
@@ -888,6 +949,16 @@ const CuratedSetsOutput = {
     setSpec: z.string(),
     name: z.string(),
     lodUri: z.string(),
+    memberCount: z.number().int().optional(),
+    dominantTypes: z.array(z.object({
+      label: z.string(),
+      count: z.number().int(),
+    })).optional(),
+    dominantCenturies: z.array(z.object({
+      century: z.string(),
+      count: z.number().int(),
+    })).optional(),
+    category: z.enum(["object_type", "iconographic", "album", "sub_collection", "umbrella"]).nullable().optional(),
   })),
   error: z.string().optional(),
 };
@@ -2292,33 +2363,49 @@ function registerTools(
       annotations: ANN_READ_OPEN,
       description:
         "List curated collection sets from the Rijksmuseum (exhibitions, scholarly groupings, thematic collections). " +
-        "Returns set identifiers that can be used with browse_set to explore their contents. " +
-        "Optionally filter by name substring.",
+        "Each set carries memberCount, top dominant object types, top centuries by membership, and a category label " +
+        "(object_type / iconographic / album / sub_collection / umbrella) to help triage sets at very different sizes " +
+        "(e.g. 1 member through 834K). Use minMembers/maxMembers to exclude umbrella sets that span the entire collection. " +
+        "Returns set identifiers that can be used with browse_set to explore their contents.",
       inputSchema: z.object({
         query: optStr()
           .optional()
           .describe(
             "Filter sets by name (case-insensitive substring match). E.g. 'painting', 'Rembrandt', 'Japanese'"
           ),
+        sortBy: z.preprocess(stripNull, z.enum(["name", "size", "size_desc"]).optional())
+          .describe("Sort order: 'name' (alphabetical, default), 'size' (smallest first), 'size_desc' (largest first)."),
+        minMembers: z.preprocess(stripNull, z.number().int().min(0).optional())
+          .describe("Filter to sets with at least this many members."),
+        maxMembers: z.preprocess(stripNull, z.number().int().min(0).optional())
+          .describe("Filter to sets with at most this many members. Use ~100,000 to exclude umbrella sets like 'Alle gepubliceerde objecten' (834K) and 'Entire Public Domain Set' (732K)."),
+        includeStats: z.preprocess(stripNull, z.boolean().optional())
+          .describe("Include memberCount, dominantTypes, dominantCenturies, category. Default true. Set false for the lightweight legacy shape."),
       }).strict(),
       ...withOutputSchema(CuratedSetsOutput),
     },
     withLogging("list_curated_sets", async (args) => {
-      const allSets = await oai.listSets();
-      const q = args.query?.toLowerCase();
-      const sets = q
-        ? allSets.filter((s) => s.name.toLowerCase().includes(q))
-        : allSets;
+      const result = vocabDb!.listCuratedSets({
+        query: args.query,
+        sortBy: args.sortBy,
+        minMembers: args.minMembers,
+        maxMembers: args.maxMembers,
+        includeStats: args.includeStats,
+      });
 
-      const data: InferOutput<typeof CuratedSetsOutput> = {
-        totalSets: sets.length,
-        ...(q ? { filteredFrom: allSets.length, query: args.query } : {}),
-        sets,
-      };
-      const headerParts = [`${sets.length} sets`];
-      if (q) headerParts.push(`filtered from ${allSets.length}, query: "${args.query}"`);
-      const header = headerParts.join(" (") + (q ? ")" : "");
-      const lines = sets.map((s, i) => formatSetLine(s, i));
+      const data: InferOutput<typeof CuratedSetsOutput> = result;
+      const headerParts: string[] = [`${result.totalSets} sets`];
+      if (result.filteredFrom != null) {
+        const filters: string[] = [];
+        if (args.query) filters.push(`query: "${args.query}"`);
+        if (args.minMembers != null) filters.push(`minMembers=${args.minMembers}`);
+        if (args.maxMembers != null) filters.push(`maxMembers=${args.maxMembers}`);
+        headerParts.push(`filtered from ${result.filteredFrom}` + (filters.length > 0 ? `, ${filters.join(", ")}` : ""));
+      }
+      const header = headerParts.length > 1
+        ? `${headerParts[0]} (${headerParts.slice(1).join("; ")})`
+        : headerParts[0];
+      const lines = result.sets.map((s, i) => formatSetLine(s, i));
       return structuredResponse(data, [header, ...lines].join("\n"));
     })
   );
@@ -2331,10 +2418,11 @@ function registerTools(
       title: "Browse Set",
       annotations: ANN_READ_OPEN,
       description:
-        "Browse artworks in a curated collection set. Returns parsed EDM records with titles, creators, dates, " +
-        "image URLs, and IIIF service URLs. Each record includes an objectNumber that can be used with " +
-        "get_artwork_details or get_artwork_image for full metadata. " +
-        "Supports pagination via resumptionToken.",
+        "Browse artworks in a curated collection set. Returns DB-direct records with " +
+        "objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, " +
+        "image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full " +
+        "set memberships), follow up with get_artwork_details on the returned objectNumber. " +
+        "Supports pagination via resumptionToken (stateless base64; not portable across pre-v0.27 deploys).",
       inputSchema: z.object({
         setSpec: optStr()
           .optional()
@@ -2361,21 +2449,38 @@ function registerTools(
         return errorResponse("Either setSpec or resumptionToken is required.");
       }
 
-      const resolved = resolveOaiBuffer(args.resumptionToken, "browse_set");
-      if (resolved && "error" in resolved) return resolved.error;
-      if (resolved) {
-        return drainOaiBuffer(
-          resolved.buffered, args.maxResults, "totalInSet", "browse_set",
-          (token) => oai.listRecords({ resumptionToken: token }),
-          undefined, formatRecordLine,
-        );
+      let setSpec: string;
+      let offset: number;
+      if (args.resumptionToken) {
+        const decoded = decodeBrowseSetToken(args.resumptionToken);
+        if (!decoded) {
+          return errorResponse(
+            "Invalid resumptionToken. Tokens are not portable across server restarts or pre-v0.27 → v0.27 upgrades. " +
+            "Re-issue the original setSpec call to get a fresh token.",
+          );
+        }
+        setSpec = decoded.setSpec;
+        offset = decoded.offset;
+      } else {
+        setSpec = args.setSpec!;
+        offset = 0;
       }
 
-      const result = args.resumptionToken
-        ? await oai.listRecords({ resumptionToken: args.resumptionToken })
-        : await oai.listRecords({ set: args.setSpec! });
+      const result = vocabDb!.browseSet(setSpec, args.maxResults, offset);
+      const nextOffset = offset + result.records.length;
+      const hasMore = nextOffset < result.totalInSet;
+      const resumptionToken = hasMore ? encodeBrowseSetToken(setSpec, nextOffset) : undefined;
 
-      return paginatedResponse(result, args.maxResults, "totalInSet", "browse_set", undefined, formatRecordLine);
+      const data = {
+        records: result.records,
+        totalInSet: result.totalInSet,
+        ...(resumptionToken && { resumptionToken }),
+      };
+      const headerBits = [`${result.records.length} records`];
+      if (result.totalInSet > 0) headerBits.push(`offset ${offset}–${nextOffset - 1} of ${result.totalInSet}`);
+      const header = headerBits.join(" — ");
+      const lines = result.records.map((r, i) => formatBrowseSetRecord(r, offset + i));
+      return structuredResponse(data, [header, ...lines].join("\n"));
     })
   );
 
@@ -2619,6 +2724,12 @@ function registerTools(
             z.enum(PROVENANCE_TRANSFER_TYPES).optional(),
           ).describe("Acquisition method filter (exact match). Only used with layer='periods'."),
           location: optStr().describe("City or place name (partial match, e.g. 'Amsterdam', 'Paris', 'London')."),
+          periodLocation: optStr().describe(
+            "Place name on the ownership-period record (e.g. 'Amsterdam', 'Paris'). " +
+            "Filters against provenance_periods.location (45% populated). " +
+            "Preferred over location when scoping a periods-layer query — distinguishable from event-level location. " +
+            "AND-combined with location when both are supplied. Only used with layer='periods'.",
+          ),
           dateFrom: z.preprocess(stripNull, z.number().int().optional())
             .describe("Earliest year (inclusive) for provenance event/period dates."),
           dateTo: z.preprocess(stripNull, z.number().int().optional())
@@ -2676,6 +2787,7 @@ function registerTools(
         if (args.ownerName) params.ownerName = args.ownerName as string;
         if (args.acquisitionMethod) params.acquisitionMethod = args.acquisitionMethod as string;
         if (args.location) params.location = args.location as string;
+        if (args.periodLocation) params.periodLocation = args.periodLocation as string;
         if (args.dateFrom != null) params.dateFrom = args.dateFrom as number;
         if (args.dateTo != null) params.dateTo = args.dateTo as number;
         if (args.objectNumber) params.objectNumber = args.objectNumber as string;
@@ -2885,7 +2997,9 @@ function registerTools(
           "- \"Top 20 depicted persons\" → dimension='depictedPerson', topN=20\n" +
           "- \"Sales by decade 1600–1900\" → dimension='provenanceDecade', transferType='sale', dateFrom=1600, dateTo=1900\n" +
           "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n\n" +
-          "Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width.\n" +
+          "Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width, " +
+          "theme (thematic vocab — labels in NL until #300 backfill), exhibition (top exhibitions by member count), " +
+          "decadeModified (record_modified bucketed by decade, clamped to 1990–2030).\n" +
           "Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, " +
           "currency, categoryMethod, positionMethod, parseMethod.\n\n" +
           "Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters " +

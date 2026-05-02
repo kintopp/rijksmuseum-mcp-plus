@@ -257,7 +257,7 @@ async function runStdio(): Promise<void> {
   initSharedClients();
   initUsageStats();
   const server = createServer();
-  if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); }
+  if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); vocabDb.ensureCuratedSetsCache(); }
   if (embeddingsDb?.available) embeddingsDb.warmCorePages();
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -352,7 +352,7 @@ async function runHttp(): Promise<void> {
   // This runs before app.listen(), so Railway's healthcheck only passes
   // once the DBs are warm.
 
-  if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); }
+  if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); vocabDb.ensureCuratedSetsCache(); }
   if (embeddingsDb?.available) embeddingsDb.warmCorePages();
 
   // ── Health + readiness ──────────────────────────────────────────

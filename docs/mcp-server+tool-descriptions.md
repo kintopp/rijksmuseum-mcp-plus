@@ -52,11 +52,11 @@ Internal: poll for pending viewer navigation commands.
 
 ### 7. `list_curated_sets`
 
-List curated collection sets from the Rijksmuseum (exhibitions, scholarly groupings, thematic collections). Returns set identifiers that can be used with browse_set to explore their contents. Optionally filter by name substring.
+List curated collection sets from the Rijksmuseum (exhibitions, scholarly groupings, thematic collections). Each set carries memberCount, top dominant object types, top centuries by membership, and a category label (object_type / iconographic / album / sub_collection / umbrella) to help triage sets at very different sizes (1 member through 834K). Use minMembers/maxMembers to exclude umbrella sets that span the entire collection. Use sortBy='size_desc' for largest-first, 'size' for smallest-first, or 'name' (default) for alphabetical. Set includeStats=false for the lightweight legacy shape.
 
 ### 8. `browse_set`
 
-Browse artworks in a curated collection set. Returns parsed EDM records with titles, creators, dates, image URLs, and IIIF service URLs. Each record includes an objectNumber that can be used with get_artwork_details or get_artwork_image. Supports pagination via resumptionToken.
+Browse artworks in a curated collection set. DB-direct (no OAI-PMH round trip) — warm calls return in tens of milliseconds. Each record carries objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp (record_modified), image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. Pagination via stateless base64 resumptionToken (not portable across pre-v0.27 deploys).
 
 ### 9. `get_recent_changes`
 
@@ -68,7 +68,7 @@ Search ownership and provenance history across ~48K artworks with parsed provena
 
 ### 11. `collection_stats`
 
-Compute aggregate statistics across the collection. Returns counts, percentages, and distributions as formatted text tables — no structured output schema. Use this for questions like: "What types of artworks have provenance?" → dimension='type', hasProvenance=true; "Transfer type distribution for Rembrandt" → dimension='transferType', creator='Rembrandt'; "Top 20 depicted persons" → dimension='depictedPerson', topN=20; "Sales by decade 1600–1900" → dimension='provenanceDecade', transferType='sale', dateFrom=1600, dateTo=1900; "How many artworks have LLM-mediated interpretations?" → dimension='categoryMethod'. Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade. Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, currency, categoryMethod, positionMethod, parseMethod. Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters further restrict to artworks matching those provenance criteria.
+Compute aggregate statistics across the collection. Returns counts, percentages, and distributions as formatted text tables — no structured output schema. Use this for questions like: "What types of artworks have provenance?" → dimension='type', hasProvenance=true; "Transfer type distribution for Rembrandt" → dimension='transferType', creator='Rembrandt'; "Top 20 depicted persons" → dimension='depictedPerson', topN=20; "Sales by decade 1600–1900" → dimension='provenanceDecade', transferType='sale', dateFrom=1600, dateTo=1900; "How many artworks have LLM-mediated interpretations?" → dimension='categoryMethod'. Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width, theme (thematic vocab — labels in NL until #300 backfill), exhibition (top exhibitions by member count), decadeModified (record_modified bucketed by decade, clamped to 1990–2030). Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, currency, categoryMethod, positionMethod, parseMethod. Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters further restrict to artworks matching those provenance criteria.
 
 ### 12. `find_similar`
 
