@@ -57,31 +57,40 @@ SLEEP_BETWEEN_REQUESTS = 1.0  # WDQS etiquette
 
 
 def cohort_counts(conn: sqlite3.Connection) -> dict[str, int]:
-    row = conn.execute("""
-        WITH per_person AS (
-          SELECT
-            v.id,
-            MAX(CASE WHEN vei.authority='wikidata' THEN 1 ELSE 0 END) AS has_wikidata,
-            MAX(CASE WHEN vei.authority IN ('rkd','ulan','viaf','cerl','biografisch_portaal','nypl')
-                     THEN 1 ELSE 0 END) AS has_other_xwalk,
-            COUNT(vei.vocab_id) AS xwalk_count
-          FROM vocabulary v
-          LEFT JOIN vocabulary_external_ids vei ON vei.vocab_id = v.id
+    cur = conn.cursor()
+    total = cur.execute(
+        "SELECT COUNT(*) FROM vocabulary WHERE type='person' AND id LIKE '21%'"
+    ).fetchone()[0]
+    already = cur.execute("""
+        SELECT COUNT(DISTINCT vei.vocab_id)
+        FROM vocabulary_external_ids vei
+        JOIN vocabulary v ON v.id = vei.vocab_id
+        WHERE v.type='person' AND v.id LIKE '21%' AND vei.authority='wikidata'
+    """).fetchone()[0]
+    sparql_candidates = cur.execute("""
+        WITH no_wiki AS (
+          SELECT v.id FROM vocabulary v
           WHERE v.type='person' AND v.id LIKE '21%'
-          GROUP BY v.id
+            AND NOT EXISTS (
+              SELECT 1 FROM vocabulary_external_ids vei
+              WHERE vei.vocab_id=v.id AND vei.authority='wikidata'
+            )
         )
-        SELECT
-          COUNT(*)                                                          AS total,
-          SUM(has_wikidata)                                                  AS already,
-          SUM(CASE WHEN has_wikidata=0 AND has_other_xwalk=1 THEN 1 ELSE 0 END) AS sparql_candidates,
-          SUM(CASE WHEN xwalk_count=0 THEN 1 ELSE 0 END)                     AS unreachable
-        FROM per_person
-    """).fetchone()
+        SELECT COUNT(DISTINCT vei.vocab_id)
+        FROM vocabulary_external_ids vei
+        JOIN no_wiki nw ON nw.id = vei.vocab_id
+        WHERE vei.authority IN ('rkd','ulan','viaf','cerl','biografisch_portaal','nypl')
+    """).fetchone()[0]
+    unreachable = cur.execute("""
+        SELECT COUNT(*) FROM vocabulary v
+        WHERE v.type='person' AND v.id LIKE '21%'
+          AND NOT EXISTS (SELECT 1 FROM vocabulary_external_ids vei WHERE vei.vocab_id=v.id)
+    """).fetchone()[0]
     return {
-        "total_21xxx_persons": row[0],
-        "cohort_a_already_have_wikidata_uri": row[1],
-        "cohort_b_sparql_candidates": row[2],
-        "cohort_c_unreachable_no_crosswalks": row[3],
+        "total_21xxx_persons": total,
+        "cohort_a_already_have_wikidata_uri": already,
+        "cohort_b_sparql_candidates": sparql_candidates,
+        "cohort_c_unreachable_no_crosswalks": unreachable,
     }
 
 
