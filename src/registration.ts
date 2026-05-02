@@ -3359,6 +3359,17 @@ function registerTools(
         const dplResult = vocabDb!.findSimilarByDepictedPlace(args.objectNumber, maxResults);
         const dplCandidates = toDepictedCandidates(dplResult);
 
+        // Theme (#294) — gated to allow disabling without taking down find_similar
+        const themeEnabled = process.env.ENABLE_THEME_SIMILAR !== "false";
+        const thResult = themeEnabled
+          ? vocabDb!.findSimilarByTheme(args.objectNumber, maxResults)
+          : null;
+        const thCandidates = toDepictedCandidates(thResult);
+
+        // Related Object (#293) — curator-declared edges, fixed score=10
+        const roResult = vocabDb!.findSimilarByRelatedObject(args.objectNumber, maxResults);
+        const roCandidates = toDepictedCandidates(roResult);
+
         // Visual (Rijksmuseum website API — best-effort, never blocks other signals)
         // nodeIdPromise was started concurrently with the sync DB signals above
         let visualCandidates: SimilarCandidate[] = [];
@@ -3395,12 +3406,16 @@ function registerTools(
             })),
             depictedPersons: dpResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
             depictedPlaces: dplResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
+            themes: thResult?.queryTerms.map(t => t.label),
+            relatedObjectLabels: roResult?.queryTerms.map(t => t.label),
           },
           modes: {
             iconclass: icCandidates,
             lineage: liCandidates,
             description: descCandidates,
             ...(visualCandidates.length > 0 && { visual: visualCandidates }),
+            ...(thCandidates.length > 0 && { theme: thCandidates }),
+            ...(roCandidates.length > 0 && { relatedObject: roCandidates }),
             ...(dpCandidates.length > 0 && { depictedPerson: dpCandidates }),
             ...(dplCandidates.length > 0 && { depictedPlace: dplCandidates }),
           },
@@ -3430,16 +3445,18 @@ function registerTools(
         // Summary counts
         const counts = [
           ...(visualCandidates.length > 0 ? [`Visual: ${visualCandidates.length}`] : []),
+          `Related: ${roCandidates.length}`,
           `Lineage: ${liCandidates.length}`,
           `Iconclass: ${icCandidates.length}`,
           `Description: ${descCandidates.length}`,
+          `Theme: ${thCandidates.length}`,
           `Person: ${dpCandidates.length}`,
           `Place: ${dplCandidates.length}`,
         ];
         const poolThreshold = pageData.poolThreshold;
         // Count pooled entries
         const allObjNums = new Map<string, number>();
-        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates, dpCandidates, dplCandidates]) {
+        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates, thCandidates, roCandidates, dpCandidates, dplCandidates]) {
           for (const c of mode) {
             allObjNums.set(c.objectNumber, (allObjNums.get(c.objectNumber) ?? 0) + 1);
           }
