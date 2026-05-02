@@ -92,7 +92,34 @@ assert(
   'resourceDomains does not include unpkg.com'
 );
 
-// ── 6. Size budget ──────────────────────────────────────────────────
+// ── 6. Cluster E (#296) — prev/next-related toolbar + j/k/l keymap ─
+
+assert(
+  html.includes('id="prev-related"'),
+  'Toolbar exposes prev-related button (cluster E #296)',
+);
+assert(
+  html.includes('id="next-related"'),
+  'Toolbar exposes next-related button (cluster E #296)',
+);
+assert(
+  !/<button[^>]*id="rotate-left"/.test(html) && !/<button[^>]*id="rotate-right"/.test(html),
+  'Rotate buttons removed from toolbar (keyboard preserved)',
+);
+assert(
+  !/<button[^>]*id="fullscreen"/.test(html),
+  'Fullscreen button removed from toolbar (keyboard preserved)',
+);
+assert(
+  /shortcut-row[^>]*>[^<]*<kbd>j<\/kbd>\s*\/\s*<kbd>l<\/kbd>/.test(html),
+  'Shortcuts overlay documents j / l for related navigation',
+);
+assert(
+  /shortcut-row[^>]*>[^<]*<kbd>0<\/kbd>\s*\/\s*<kbd>k<\/kbd>/.test(html),
+  'Shortcuts overlay documents 0 / k for reset / return-to-seed',
+);
+
+// ── 7. Size budget ──────────────────────────────────────────────────
 
 const rawBytes = Buffer.byteLength(html, 'utf-8');
 const gzBytes = gzipSync(html).length;

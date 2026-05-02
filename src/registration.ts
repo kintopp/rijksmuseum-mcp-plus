@@ -792,6 +792,7 @@ const ArtworkDetailOutput = {
     objectNumber: z.string().nullable().describe("Peer artwork's object number when it resolves to a row in our DB; null for unresolved Linked Art URIs."),
     title: z.string().nullable().describe("Peer artwork's title when resolved; null otherwise."),
     objectUri: z.string().describe("Original Linked Art URI from the harvest. Pass to get_artwork_details(uri=…) for full peer metadata."),
+    iiifId: z.string().nullable().describe("Peer artwork's IIIF identifier when resolved and the peer carries an image; null otherwise. Powers in-viewer prev/next navigation."),
   })).describe("Peer artwork relations (recto/verso, frame/painting, pendant, production stadia, …). Capped at 25 entries — see relatedObjectsTotalCount."),
   relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total related-object count before capping. Equals relatedObjects.length when ≤ 25."),
   parents: z.array(z.object({
@@ -1203,39 +1204,27 @@ function registerTools(
       title: "Search Artwork",
       annotations: ANN_READ_CLOSED,
       description:
-        "Search the Rijksmuseum collection. Returns artwork summaries with titles, creators, and dates. " +
-        "Every response includes totalResults (exact count of all matching artworks, not just the returned page). " +
-        "For aggregate counts and distributions (e.g. 'how many paintings?', 'top depicted persons'), prefer collection_stats — " +
-        "it answers in one call what would otherwise require compact=true loops. " +
-        "Use compact=true with facets=true for efficient counting and breakdowns (e.g. gender ratios by decade). " +
-        "Results are ranked by relevance when text search (description, title, etc.) or geographic proximity is used; " +
-        "otherwise results are ordered by importance (image availability, curatorial attention, metadata richness). " +
-        "For concept-ranked results, use semantic_search. " +
-        "At least one search filter is required. " +
-        "Use specific filters for best results — there is no general full-text search across all metadata fields. " +
-        "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), " +
-        "ALWAYS start with subject — it searches ~832K artworks tagged with structured Iconclass vocabulary " +
-        "and has by far the highest recall for conceptual queries. " +
-        "Use description for cataloguer observations (e.g. compositional details, specific motifs noted by specialists); " +
-        "use curatorialNarrative for curatorial interpretation and art-historical context. " +
-        "These three fields search different text corpora and can return complementary results. " +
-        "For broader concept or theme discovery beyond structured vocabulary, use semantic_search — " +
-        "but note that paintings are underrepresented there, so combine it with " +
-        "search_artwork(type: 'painting', subject/creator: ...) for painting queries. " +
-        "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both subjects). " +
-        "If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; " +
-        "narrow with type/material filters or treat the shared prefix as the unit. " +
-        "Each result includes an objectNumber for follow-up calls: " +
-        "get_artwork_details (full metadata) " +
-        "or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; " +
-        "do not open the viewer for list/count/summary requests)." +
+        "Use when you have specific filter criteria (subject, material, technique, dates, place, person, theme, …) and want artworks matching ALL filters. " +
+        "Returns artwork summaries with titles, creators, and dates; every response includes totalResults (exact match count, not just the returned page). " +
+        "Not for free-text concept queries — use semantic_search for those. " +
+        "Not for artwork-to-artwork similarity — use find_similar with an objectNumber. " +
+        "For demographic person queries (gender, born/died, profession, birth/death place), use search_persons first to get a vocabId, then pass it as creator here. " +
+        "For provenance text and ownership history, use search_provenance. " +
+        "For aggregate counts and distributions, prefer collection_stats — one call vs compact=true loops.\n\n" +
+        "Ranking: relevance (BM25) when text search (description, title, etc.) or geographic proximity is used; otherwise importance (image availability, curatorial attention, metadata richness). " +
+        "For concept-ranked results, use semantic_search.\n\n" +
+        "At least one filter is required. There is no full-text search across all metadata. " +
+        "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), ALWAYS start with subject — it searches ~832K artworks tagged with structured Iconclass vocabulary and has by far the highest recall for conceptual queries. " +
+        "Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. " +
+        "For broader concept discovery beyond structured vocabulary, use semantic_search — but combine it with search_artwork(type: 'painting', …) for painting queries since paintings are underrepresented there.\n\n" +
+        "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). " +
+        "If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. " +
+        "Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; do not open the viewer for list/count/summary requests)." +
         (vocabAvailable
-          ? " All parameters can be freely combined with each other. " +
-            "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results " +
-            "(e.g. 'fotograaf' instead of 'photographer'). " +
-            "For proximity search, use nearPlace with a place name, or nearLat/nearLon with coordinates for arbitrary locations. " +
-            "For provenance keyword search use search_provenance (the per-tool provenance text filter was removed in v0.27). " +
-            "Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt')."
+          ? " All parameters combine freely. Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
+            "For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. " +
+            "Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt'). " +
+            "v0.27 added theme, sourceType, modifiedAfter, modifiedBefore filters; removed the per-tool provenance text filter and 6 demographic creator filters (use search_persons → creator: <vocabId> instead)."
           : ""),
       inputSchema: z.object({
         query: optStr()
@@ -1680,16 +1669,17 @@ function registerTools(
         title: "Search Persons",
         annotations: ANN_READ_CLOSED,
         description:
-          "Find persons (artists, depicted figures, donors) by demographic and structural criteria. " +
-          "Returns vocab IDs that can be passed to search_artwork({creator: <vocabId>}) for works by them, " +
-          "or to search_artwork({aboutActor: <name>}) for works depicting them. " +
-          "Two-step pattern: search_persons → search_artwork. Use this for any query like " +
-          "\"female impressionist painters born after 1850\" or \"Dutch painters who died in Italy\". " +
+          "Use when the user has a demographic or structural query about persons (artists, depicted figures, donors): " +
+          "gender, birth/death year, birth/death place, profession. " +
+          "Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, " +
+          "or search_artwork({aboutActor: <name>}) for works depicting them. " +
+          "Two-step pattern: search_persons → search_artwork. " +
+          "Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.\n\n" +
+          "Not for free-text concept queries — use semantic_search. " +
+          "Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.\n\n" +
           "By default restricts to persons with ≥1 artwork in the collection (~60K of ~290K). " +
-          "Note on data coverage (v0.27): demographic filters (gender, bornAfter, bornBefore) require " +
-          "person-enrichment to be present on the vocabulary DB; on a freshly harvested DB without " +
-          "person enrichment they return zero rows. Name search and structural filters " +
-          "(birthPlace / deathPlace / profession) work on any harvest.",
+          "Coverage note (v0.27): demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB; " +
+          "on a freshly harvested DB without person enrichment they return zero rows. Name search and structural filters (birthPlace / deathPlace / profession) work on any harvest.",
         inputSchema: z.object({
           name: optMinStr().optional()
             .describe("Phrase or token match against ~700K name variants (~290K persons). Tries exact phrase first, then token AND with stop-word stripping."),
@@ -1765,16 +1755,15 @@ function registerTools(
       title: "Get Artwork Details",
       annotations: ANN_READ_CLOSED,
       description:
-        "Get comprehensive details about a specific artwork by its object number (e.g. 'SK-C-5' for The Night Watch) " +
-        "or by its Linked Art URI (e.g. from relatedObjects). Provide exactly one of objectNumber or uri. " +
-        "Returns metadata including titles (primary plus the full set of variants " +
-        "with language and qualifier — Dutch/English brief/full/display/former), creator, date, dateDisplay (free-text form), description, curatorial narrative, " +
-        "dimensions (text + structured: height/width/depth/weight/diameter where present), extentText, materials, object type, production details (with creator life dates, " +
-        "gender, and Wikidata ID where available), provenance, " +
-        "credit line, inscriptions, license, related objects, themes, exhibitions, attributionEvidence, externalIds (handle + other), location (museum room when on display), recordCreated/recordModified timestamps, plus collection sets and reference metadata. " +
-        "The relatedObjects field carries each peer's objectNumber (canonical handle) plus a Linked Art objectUri. " +
-        "Pass either form back to this tool — objectNumber is preferred. " +
-        "Use this tool on vocabulary search results to check dates, dimensions, or other fields not available in the search response.",
+        "Use when you need full metadata for a SINGLE artwork (e.g. after a search_artwork / semantic_search / find_similar result, or when the user names a specific objectNumber). " +
+        "Provide exactly one of objectNumber (e.g. 'SK-C-5' for The Night Watch) or uri (a Linked Art URI from relatedObjects).\n\n" +
+        "Returns metadata including titles (primary plus the full set of variants with language and qualifier — Dutch/English brief/full/display/former), " +
+        "creator, date, dateDisplay (free-text form), description, curatorial narrative, dimensions (text + structured: height/width/depth/weight/diameter where present), " +
+        "extentText, materials, object type, production details (with creator life dates, gender, and Wikidata ID where available), provenance, credit line, inscriptions, license, " +
+        "related objects (each carrying objectNumber + iiifId for in-viewer navigation), themes, exhibitions, attributionEvidence, externalIds (handle + other), " +
+        "location (museum room when on display, as { roomId, floor, roomName }), recordCreated/recordModified timestamps, plus collection sets and reference metadata. " +
+        "The relatedObjects field carries each peer's objectNumber (canonical handle) plus a Linked Art objectUri; pass either form back here, objectNumber preferred.\n\n" +
+        "Not for filter-based discovery — use search_artwork. Not for similarity discovery — use find_similar. Not for aggregate counts — use collection_stats.",
       inputSchema: z.object({
         objectNumber: optStr()
           .optional()
@@ -1839,15 +1828,11 @@ function registerTools(
       title: "Get Artwork Image",
       annotations: ANN_VIEWER,
       description:
-        "View an artwork in high resolution with an interactive deep-zoom viewer (zoom, pan, rotate, flip). " +
-        "Use ONLY when the user explicitly wants to see or view an artwork — " +
-        "do not call this for list, summary, count, or text-only requests. " +
+        "Use ONLY when the user explicitly wants to see, show, or view an artwork — opens an interactive deep-zoom viewer (zoom, pan, rotate, flip, j/k/l navigation between related artworks). " +
+        "Do NOT call for list, summary, count, or text-only requests. " +
+        "Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. " +
         "Not all artworks have images available. " +
-        "Downloadable images are available from the artwork's collection page on rijksmuseum.nl. " +
-        "Do not construct IIIF image URLs manually. " +
-        "Note: this tool returns metadata and a viewer link, not the image bytes themselves. " +
-        "IIIF image URLs cannot be fetched via web_fetch or curl — do not attempt to download the image. " +
-        "To get the actual image bytes for visual analysis, use inspect_artwork_image instead.",
+        "Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl).",
       inputSchema: z.object({
         objectNumber: z
           .string()
@@ -1923,11 +1908,10 @@ function registerTools(
       title: "Inspect Artwork Image",
       annotations: ANN_READ_OPEN,
       description:
-        "Fetch an artwork image or region as base64 for direct visual analysis. " +
-        "Use ONLY when visual analysis is needed (e.g. identifying details, reading inscriptions, " +
-        "comparing compositions) — not for listing or summarising artworks. " +
-        "Returns image bytes in the tool response — the LLM can see and reason " +
-        "about the image immediately.\n\n" +
+        "Use when YOU (the LLM) need to look at an artwork image or region for visual analysis — identifying details, reading inscriptions, comparing compositions, planning overlays. " +
+        "Returns image bytes (base64) in the tool response — the LLM can see and reason about the image immediately. " +
+        "Not for the user to view — use get_artwork_image for the interactive viewer. " +
+        "Not for listing or summarising artworks — use search_artwork.\n\n" +
         "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
         "region to zoom into details, read inscriptions, or examine specific areas.\n\n" +
         "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), " +
@@ -2239,9 +2223,9 @@ function registerTools(
       title: "Navigate Viewer",
       annotations: ANN_VIEWER,
       description:
-        "Navigate the artwork viewer to a specific region and/or add visual overlays. " +
+        "Use after inspect_artwork_image when you want to draw the user's attention to a specific region of the open viewer (zoom there, add a labelled overlay, or clear overlays). " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
-        "Can be used after inspect_artwork_image to show the user what you found. " +
+        "Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image. " +
         "Commands execute in order: typically clear_overlays → navigate → add_overlay.\n\n" +
         "All region coordinates are in full-image space (percentages or pixels of the original image), " +
         "not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image " +
@@ -2449,11 +2433,13 @@ function registerTools(
       title: "List Curated Sets",
       annotations: ANN_READ_OPEN,
       description:
-        "List curated collection sets from the Rijksmuseum (exhibitions, scholarly groupings, thematic collections). " +
-        "Each set carries memberCount, top dominant object types, top centuries by membership, and a category label " +
-        "(object_type / iconographic / album / sub_collection / umbrella) to help triage sets at very different sizes " +
-        "(e.g. 1 member through 834K). Use minMembers/maxMembers to exclude umbrella sets that span the entire collection. " +
-        "Returns set identifiers that can be used with browse_set to explore their contents.",
+        "Use when you want to discover curated collection sets (193 total) ranging from substantive sub-collections " +
+        "(drawings, paintings, photographs) through iconographic groupings to umbrella sets (Alle gepubliceerde objecten = 834K members). " +
+        "Each result carries memberCount, top dominantTypes, top dominantCenturies by membership, and a category heuristic " +
+        "(object_type / iconographic / album / sub_collection / umbrella) so you can pick the right scope. " +
+        "Use minMembers: 100, maxMembers: 200000 to avoid umbrella sets when the user wants a substantive subset. " +
+        "Pair with browse_set(setSpec) to enumerate members. " +
+        "Not for keyword search across artworks — use search_artwork. Not for aggregate counts — use collection_stats.",
       inputSchema: z.object({
         query: optStr()
           .optional()
@@ -2505,11 +2491,12 @@ function registerTools(
       title: "Browse Set",
       annotations: ANN_READ_OPEN,
       description:
-        "Browse artworks in a curated collection set. Returns DB-direct records with " +
-        "objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, " +
-        "image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full " +
-        "set memberships), follow up with get_artwork_details on the returned objectNumber. " +
-        "Supports pagination via resumptionToken (stateless base64; not portable across pre-v0.27 deploys).",
+        "Use when you have a setSpec (from list_curated_sets) and want to enumerate its member artworks. " +
+        "DB-backed since v0.27 (~600× faster than the prior OAI-PMH path; warm calls in tens of ms). " +
+        "Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. " +
+        "For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. " +
+        "Supports pagination via resumptionToken (stateless base64; not portable across pre-v0.27 deploys). " +
+        "Not for set discovery — use list_curated_sets first.",
       inputSchema: z.object({
         setSpec: optStr()
           .optional()
@@ -2579,10 +2566,10 @@ function registerTools(
       title: "Get Recent Changes",
       annotations: ANN_READ_OPEN,
       description:
-        "Track recent additions and modifications to the Rijksmuseum collection. " +
-        "Returns records changed within a date range. Use identifiersOnly=true for a lightweight " +
-        "listing (headers only, no full metadata). Each record includes an objectNumber for use with " +
-        "get_artwork_details or get_artwork_image.",
+        "Use when you need OAI-PMH delta semantics specifically — tracking what changed since a known harvest checkpoint, with resumption-token pagination. " +
+        "Returns records changed within a date range. Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). " +
+        "Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. " +
+        "For static date-modified filtering across the collection, prefer search_artwork({modifiedAfter: <ISO date>}) — same data, no resumption tokens, combinable with other filters.",
       inputSchema: z.object({
         from: optStr()
           .optional()
@@ -2761,10 +2748,13 @@ function registerTools(
         title: "Search Provenance",
         annotations: ANN_READ_CLOSED,
         description:
-          "Search ownership and provenance history across ~48K artworks with parsed provenance records. " +
-          "Returns full provenance chains grouped by artwork, with matching events flagged. " +
-          "Each chain tells the complete ownership story: collectors, sales, inheritances, gifts, " +
-          "confiscations, and restitutions, with dates, locations, prices, and citations.\n\n" +
+          "Use when the user has a provenance question — ownership history, collectors, sales, inheritances, gifts, confiscations, restitutions, " +
+          "or a search across the parsed provenance corpus (~48K artworks with structured records). " +
+          "Returns full provenance chains grouped by artwork, with matching events flagged.\n\n" +
+          "Not for catalogue keyword search — use search_artwork. " +
+          "Not for aggregate provenance counts — use collection_stats with provenance dimensions/filters. " +
+          "v0.27 added periodLocation (period-level location filter, preferred over location at layer='periods' for clarity).\n\n" +
+          "Each chain tells the complete ownership story: collectors, sales, inheritances, gifts, confiscations, and restitutions, with dates, locations, prices, and citations.\n\n" +
           "Use objectNumber for a single artwork's chain (fast local lookup, no network). " +
           "Use party to trace a collector or dealer across artworks (e.g. 'Six', 'Rothschild'). " +
           "Use relatedTo for reverse cross-references — find all works sharing provenance with a given object " +
@@ -3076,9 +3066,10 @@ function registerTools(
         title: "Collection Statistics",
         annotations: ANN_READ_CLOSED,
         description:
-          "Compute aggregate statistics across the collection. Returns counts, percentages, and distributions " +
-          "as formatted text tables — no structured output schema.\n\n" +
-          "Use this for questions like:\n" +
+          "Use when the user wants aggregate counts, percentages, or distributions across the collection (one call instead of search_artwork(compact=true) loops). " +
+          "Returns formatted text tables — no structured output schema. " +
+          "Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.\n\n" +
+          "Examples:\n" +
           "- \"What types of artworks have provenance?\" → dimension='type', hasProvenance=true\n" +
           "- \"Transfer type distribution for Rembrandt\" → dimension='transferType', creator='Rembrandt'\n" +
           "- \"Top 20 depicted persons\" → dimension='depictedPerson', topN=20\n" +
@@ -3090,7 +3081,8 @@ function registerTools(
           "Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, " +
           "currency, categoryMethod, positionMethod, parseMethod.\n\n" +
           "Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters " +
-          "further restrict to artworks matching those provenance criteria.",
+          "further restrict to artworks matching those provenance criteria. " +
+          "For demographic-filtered counts (e.g. female artists by century), first run search_persons to get vocab IDs, then pass them as creator here.",
         inputSchema: z.object({
           dimension: z.enum(STATS_DIMENSIONS as unknown as [string, ...string[]])
             .describe("What to count/group by."),
@@ -3237,8 +3229,13 @@ function registerTools(
         title: "Find Similar Artworks",
         annotations: ANN_READ_CLOSED,
         description:
-          "Find artworks similar to a given artwork. Generates a visual comparison page with IIIF thumbnails " +
-          "showing five independent similarity signals (Lineage, Iconclass, Description, Depicted Person, Depicted Place) plus a pooled column.\n\n" +
+          "Use when the user has a SPECIFIC artwork (objectNumber) and wants others like it. " +
+          "Generates an HTML comparison page with IIIF thumbnails across 8 independent similarity channels: " +
+          "Visual (image-embedding nearest neighbours), Related Object (curator-declared edges: pendants, production stadia, different examples), " +
+          "Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), " +
+          "Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all eight.\n\n" +
+          "Not for free-text concept queries — use semantic_search. " +
+          "Not for filter-based search — use search_artwork.\n\n" +
           "IMPORTANT: The result is a file path or URL to an HTML page. " +
           "Your ONLY job is to show the user the path/URL so they can open it in a browser. " +
           "Do NOT attempt to open, read, fetch, summarise, or characterise the page contents. " +
@@ -3484,29 +3481,26 @@ function registerTools(
         title: "Semantic Search",
         annotations: ANN_READ_CLOSED,
         description:
-          "Find artworks by meaning, concept, or theme using natural language. " +
-          "Returns results ranked by semantic similarity with source text for grounding — " +
-          "use this to explain why results are relevant or to flag false positives.\n\n" +
-          "Best for: concepts or themes that cannot be expressed as structured metadata — " +
-          "atmospheric qualities ('vanitas symbolism', 'sense of loneliness'), compositional descriptions " +
-          "('artist gazing directly at the viewer'), art-historical concepts ('cultural exchange under VOC trade'), " +
-          "or cross-language queries. Results are most reliable when the Rijksmuseum's curatorial narrative texts " +
-          "discuss the relevant concept explicitly; purely emotional or stylistic concepts (e.g. chiaroscuro, " +
-          "desolation) may yield lower precision because catalogue descriptions often do not use that language.\n\n" +
-          "Not for: queries expressible as structured metadata (specific artists, dates, places, materials) — " +
-          "use search_artwork for those.\n\n" +
-          "Filter notes: Supports pre-filtering by subject, depictedPerson, depictedPlace, productionPlace, " +
-          "collectionSet, aboutActor, iconclass, and imageAvailable in addition to type, material, technique, creator, and creationDate. " +
-          "Use type: 'painting' to restrict to the paintings collection. " +
-          "Do NOT use technique: 'painting' for this purpose — it matches painted decoration on any object type " +
+          "Use when the user has a free-text concept ('solitude', 'industrial revolution', 'maritime trade', 'vanitas symbolism') and no specific filter criteria. " +
+          "Returns artworks ranked by Dutch-description embedding similarity to the query, with source text for grounding — " +
+          "use that text to explain why results are relevant or to flag false positives.\n\n" +
+          "Not for queries expressible as structured metadata (specific artists, dates, places, materials) — use search_artwork for those. " +
+          "Not for artwork-to-artwork similarity — use find_similar with an objectNumber.\n\n" +
+          "Best for concepts that resist structured metadata: atmospheric qualities ('sense of loneliness'), compositional descriptions " +
+          "('artist gazing directly at the viewer'), art-historical concepts ('cultural exchange under VOC trade'), or cross-language queries. " +
+          "Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly; " +
+          "purely emotional or stylistic concepts (e.g. chiaroscuro, desolation) may yield lower precision because catalogue descriptions " +
+          "often do not use that language.\n\n" +
+          "Filter notes: supports pre-filtering by subject, depictedPerson, depictedPlace, productionPlace, collectionSet, aboutActor, iconclass, and imageAvailable " +
+          "in addition to type, material, technique, creator, and creationDate. " +
+          "Use type: 'painting' to restrict to the paintings collection. Do NOT use technique: 'painting' — it matches painted decoration on any object type " +
           "(ceramics, textiles, frames) and will return unexpected results.\n\n" +
-          "Painting queries — two-step pattern: Paintings are underrepresented in semantic results " +
-          "because prints and drawings outnumber them ~77:1 in the collection. For queries where paintings are the expected " +
-          "result type, ALWAYS combine semantic_search with a follow-up search_artwork(type: 'painting', subject: ...) " +
-          "or search_artwork(type: 'painting', creator: ...) call — do not wait to observe skew, as the absence " +
-          "of key works is not visible in the returned results.\n\n" +
-          "Multilingual: queries in Dutch, German, French and other languages are supported but may benefit " +
-          "from a wider result window or English reformulation if canonical works are missing.",
+          "Painting queries — two-step pattern: paintings are underrepresented (prints and drawings outnumber them ~77:1). " +
+          "For queries where paintings are the expected result type, ALWAYS combine semantic_search with a follow-up " +
+          "search_artwork(type: 'painting', subject: …) or search_artwork(type: 'painting', creator: …) — do not wait to observe skew, " +
+          "as the absence of key works is not visible in the returned results.\n\n" +
+          "Multilingual: queries in Dutch, German, French and other languages are supported but may benefit from a wider result window " +
+          "or English reformulation if canonical works are missing.",
         inputSchema: z.object({
           query: z.string().describe("Natural language concept query (e.g. 'winter landscape with ice skating')"),
           type: stringOrArray().optional().describe("Filter by object type (e.g. 'painting', 'print')."),

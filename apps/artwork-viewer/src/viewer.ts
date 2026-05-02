@@ -49,6 +49,13 @@ let currentDisplayMode: 'inline' | 'fullscreen' | 'pip' = 'inline';
 let viewUUID: string | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
+// seedObjectNumber is set ONLY on host-initiated mounts; in-viewer j/l updates
+// the index but never the seed, so `k` always returns to the host's artwork.
+type RelatedPeer = { objectNumber: string; iiifId: string; relationship: string };
+let seedObjectNumber: string | null = null;
+let viewerRelatedObjects: RelatedPeer[] = [];
+let viewerRelatedIndex = -1; // -1 = on seed; 0..n-1 = on a sibling
+
 // Selection mode state
 let selectMode = false;
 let selectionTracker: OpenSeadragon.MouseTracker | null = null;
@@ -89,44 +96,53 @@ app.ontoolresult = (result) => {
     return;
   }
 
-  // Parse artwork data — prefer structuredContent, fall back to JSON in text blocks
-  let data: ArtworkImageData | null = null;
-
-  // Structured content path (post-v0.18 default)
-  const sc = result.structuredContent as Record<string, unknown> | undefined;
-  if (sc && typeof sc.iiifInfoUrl === 'string') {
-    data = sc as unknown as ArtworkImageData;
-  }
-
-  // Fallback: try each text content block for valid JSON
-  if (!data && result.content) {
-    for (const block of result.content) {
-      if (block?.type === 'text' && block.text.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(block.text);
-          if (parsed.iiifInfoUrl) {
-            data = parsed as ArtworkImageData;
-            break;
-          }
-        } catch {
-          // Not valid JSON, continue
-        }
-      }
-    }
-  }
-
+  const data = parseArtworkImageResult(result);
   if (data) {
-    currentData = data;
-    renderViewer(data);
-    updateModelContext(data);
-    if (data.viewUUID) {
-      viewUUID = data.viewUUID;
-      startPolling();
-    }
+    applyMountedArtwork(data, { isSeed: true });
+    void fetchRelatedObjectsForCurrent(data.objectNumber);
   } else {
     showError('No image available', 'Could not find IIIF image data in the tool result.');
   }
 };
+
+// Extracts ArtworkImageData from a get_artwork_image result. Prefers
+// structuredContent (post-v0.18 default); falls back to JSON in text blocks
+// for clients with STRUCTURED_CONTENT=false.
+function parseArtworkImageResult(
+  result: { structuredContent?: unknown; content?: { type?: string; text?: string }[] },
+): ArtworkImageData | null {
+  const sc = result.structuredContent as Record<string, unknown> | undefined;
+  if (sc && typeof sc.iiifInfoUrl === 'string') {
+    return sc as unknown as ArtworkImageData;
+  }
+  for (const block of result.content ?? []) {
+    if (block?.type === 'text' && block.text?.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(block.text);
+        if (parsed.iiifInfoUrl) return parsed as ArtworkImageData;
+      } catch { /* try next block */ }
+    }
+  }
+  return null;
+}
+
+// Mount an artwork into the viewer. `isSeed: true` for host-initiated mounts
+// (resets the j/k/l anchor); `false` for in-viewer navigation, which preserves
+// the seed so `k` always returns the user to the artwork the host originally
+// mounted.
+function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }): void {
+  currentData = data;
+  if (opts.isSeed) {
+    seedObjectNumber = data.objectNumber;
+    viewerRelatedIndex = -1;
+  }
+  renderViewer(data);
+  updateModelContext(data);
+  if (data.viewUUID) {
+    viewUUID = data.viewUUID;
+    startPolling();
+  }
+}
 
 function applyHostContext(
   params: Parameters<NonNullable<typeof app.onhostcontextchanged>>[0]
@@ -190,6 +206,68 @@ function resetView(): void {
   viewer.viewport.setFlip(false);
   viewer.viewport.goHome();
   clearAllOverlays();
+}
+
+function setNavButtonsEnabled(enabled: boolean): void {
+  const prev = document.getElementById('prev-related') as HTMLButtonElement | null;
+  const next = document.getElementById('next-related') as HTMLButtonElement | null;
+  if (prev) prev.disabled = !enabled;
+  if (next) next.disabled = !enabled;
+}
+
+async function fetchRelatedObjectsForCurrent(objectNumber: string): Promise<void> {
+  viewerRelatedObjects = [];
+  setNavButtonsEnabled(false);
+  try {
+    const result = await app.callServerTool({
+      name: 'get_artwork_details',
+      arguments: { objectNumber },
+    });
+    if (result.isError) return;
+    const sc = result.structuredContent as
+      | { relatedObjects?: { objectNumber: string | null; iiifId: string | null; relationship: string }[] }
+      | undefined;
+    const peers = (sc?.relatedObjects ?? []).filter(
+      (r): r is RelatedPeer => !!r.objectNumber && !!r.iiifId,
+    );
+    viewerRelatedObjects = peers;
+    setNavButtonsEnabled(peers.length > 0);
+  } catch {
+    /* keep buttons disabled, fail silent */
+  }
+}
+
+async function navigateRelated(direction: 'prev' | 'next'): Promise<void> {
+  if (viewerRelatedObjects.length === 0) return;
+  const len = viewerRelatedObjects.length;
+  if (viewerRelatedIndex === -1) {
+    viewerRelatedIndex = direction === 'next' ? 0 : len - 1;
+  } else {
+    viewerRelatedIndex = direction === 'next'
+      ? (viewerRelatedIndex + 1) % len
+      : (viewerRelatedIndex - 1 + len) % len;
+  }
+  await mountArtwork(viewerRelatedObjects[viewerRelatedIndex].objectNumber);
+}
+
+async function returnToSeed(): Promise<void> {
+  if (!seedObjectNumber || viewerRelatedIndex === -1) return;
+  viewerRelatedIndex = -1;
+  await mountArtwork(seedObjectNumber);
+}
+
+async function mountArtwork(objectNumber: string): Promise<void> {
+  try {
+    const result = await app.callServerTool({
+      name: 'get_artwork_image',
+      arguments: { objectNumber },
+    });
+    if (result.isError) return;
+    const data = parseArtworkImageResult(result);
+    if (data) applyMountedArtwork(data, { isSeed: false });
+  } catch {
+    /* fail silent — user keeps current view */
+  }
 }
 
 async function toggleFullscreen(): Promise<void> {
@@ -405,15 +483,13 @@ function renderViewer(data: ArtworkImageData): void {
       <div class="content">
         <div id="openseadragon-viewer"></div>
         <div class="image-controls">
-          <button id="show-shortcuts" title="Keyboard Shortcuts">?</button>
-          <button id="zoom-in" title="Zoom In">+</button>
-          <button id="zoom-out" title="Zoom Out">&minus;</button>
-          <button id="reset-view" title="Reset View">Reset</button>
-          <button id="rotate-left" title="Rotate Left">&#8634;</button>
-          <button id="rotate-right" title="Rotate Right">&#8635;</button>
-          <button id="fullscreen" title="Fullscreen">&#8862;</button>
-          <div class="control-separator"></div>
-          <button id="select-mode" title="Select Region">&#9744;</button>
+          <button id="show-shortcuts" title="Keyboard Shortcuts (?)">?</button>
+          <button id="zoom-in" title="Zoom In (+)">+</button>
+          <button id="zoom-out" title="Zoom Out (-)">&minus;</button>
+          <button id="reset-view" title="Reset / return to seed (0 / k)">Reset</button>
+          <button id="prev-related" title="Previous related (j)" disabled>&#9664;</button>
+          <button id="next-related" title="Next related (l)" disabled>&#9654;</button>
+          <button id="select-mode" title="Select Region (i)">&#9744;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
           <div class="shortcuts-content">
@@ -421,10 +497,10 @@ function renderViewer(data: ArtworkImageData): void {
             <div class="shortcuts-list">
               <div class="shortcut-row"><kbd>&#8679;&uarr;</kbd> / <kbd>&#8679;&darr;</kbd><span>Zoom in / out</span></div>
               <div class="shortcut-row"><kbd>+</kbd> / <kbd>&minus;</kbd><span>Zoom in / out</span></div>
-              <div class="shortcut-row"><kbd>0</kbd><span>Reset view</span></div>
+              <div class="shortcut-row"><kbd>0</kbd> / <kbd>k</kbd><span>Reset view / return to seed</span></div>
               <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
-              <div class="shortcut-row"><kbd>R</kbd><span>Rotate right</span></div>
-              <div class="shortcut-row"><kbd>&#8679;R</kbd><span>Rotate left</span></div>
+              <div class="shortcut-row"><kbd>j</kbd> / <kbd>l</kbd><span>Previous / next related artwork</span></div>
+              <div class="shortcut-row"><kbd>r</kbd> / <kbd>&#8679;r</kbd><span>Rotate right / left</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
               <div class="shortcut-row"><kbd>i</kbd><span>Draw highlight</span></div>
@@ -531,7 +607,7 @@ function attachEventListeners(): void {
     });
   });
 
-  // Zoom/rotate controls
+  // Rotate (r / Shift+r) and fullscreen (f) are keyboard-only — no toolbar icons.
   document
     .getElementById('zoom-in')
     ?.addEventListener('click', () => viewer?.viewport.zoomBy(1.5));
@@ -539,9 +615,8 @@ function attachEventListeners(): void {
     .getElementById('zoom-out')
     ?.addEventListener('click', () => viewer?.viewport.zoomBy(0.67));
   document.getElementById('reset-view')?.addEventListener('click', resetView);
-  document.getElementById('rotate-left')?.addEventListener('click', () => rotateBy(-90));
-  document.getElementById('rotate-right')?.addEventListener('click', () => rotateBy(90));
-  document.getElementById('fullscreen')?.addEventListener('click', toggleFullscreen);
+  document.getElementById('prev-related')?.addEventListener('click', () => void navigateRelated('prev'));
+  document.getElementById('next-related')?.addEventListener('click', () => void navigateRelated('next'));
   document.getElementById('select-mode')?.addEventListener('click', toggleSelectMode);
 
   // Shortcuts overlay
@@ -595,6 +670,18 @@ function attachEventListeners(): void {
         break;
       case 'i':
         toggleSelectMode();
+        break;
+      case '0':
+        resetView();
+        break;
+      case 'j':
+        void navigateRelated('prev');
+        break;
+      case 'k':
+        void returnToSeed();
+        break;
+      case 'l':
+        void navigateRelated('next');
         break;
       default:
         handled = false;
