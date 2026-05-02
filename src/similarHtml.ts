@@ -2,9 +2,9 @@
  * Server-side HTML generator for find_similar comparison pages.
  *
  * Produces a self-contained HTML page showing similarity results across
- * up to 8 signal modes in horizontal scroll rows (Visual, Lineage,
- * Iconclass, Description, Theme, Related Object, Depicted Person,
- * Depicted Place) plus a pooled row for artworks appearing in ≥3 modes.
+ * up to 8 signal modes in horizontal scroll rows (Visual, Related Object,
+ * Lineage, Iconclass, Description, Theme, Depicted Person, Depicted Place)
+ * plus a pooled row for artworks appearing in ≥3 modes.
  */
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -141,22 +141,20 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     badge: "Th",
     color: "#5d4037",
     methodology:
-      "Artworks sharing curatorial thematic tags &mdash; e.g. &ldquo;economic history&rdquo;, " +
-      "&ldquo;costume&rdquo;, &ldquo;colonial history&rdquo;. " +
-      "Distinct from Iconclass (which classifies depicted scenes) and Subject (which lists individual motifs). " +
-      "Requires the seed to carry &ge;2 themes and each match to share &ge;1; rarer themes contribute more. " +
-      "Tertiary tie-break by curatorial importance.",
+      "Artworks sharing curatorial thematic tags, e.g. &ldquo;economic history&rdquo;. " +
+      "Matching artworks need to have at least two themes and match at least one; " +
+      "rarer themes contribute more. " +
+      "Three-way tie-breaks are resolved by curatorial importance.",
   },
   relatedObject: {
     label: "Related Object",
     badge: "Rel",
     color: "#7b1fa2",
     methodology:
-      "Curator-declared peer relations: " +
-      "<em>different example</em> (other impressions, casts, or copies of the same edition), " +
-      "<em>production stadia</em> (working stages of the same project, e.g. sketch &rarr; print), " +
-      "<em>pendant</em> (companion piece designed to hang together). " +
-      "These are explicit cataloguer assertions, not probabilistic matches &mdash; score is fixed.",
+      "Artworks are related by different curator-defined assertions: " +
+      "<em>example</em> (e.g. impressions, casts, or copies), " +
+      "<em>production stadia</em> (e.g. a working sketch for a print), " +
+      "or <em>pendant</em> (companion pieces).",
   },
   pooled: {
     label: "Pooled",
@@ -168,9 +166,8 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
 
 /** Display order for signal rows */
 const MODE_ORDER = [
-  "visual", "lineage", "iconclass", "description",
-  "theme", "relatedObject",
-  "depictedPerson", "depictedPlace",
+  "visual", "relatedObject", "lineage", "iconclass", "description",
+  "theme", "depictedPerson", "depictedPlace",
 ] as const;
 
 function escHtml(s: string): string {

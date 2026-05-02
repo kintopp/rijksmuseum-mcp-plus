@@ -3445,11 +3445,11 @@ function registerTools(
         // Summary counts
         const counts = [
           ...(visualCandidates.length > 0 ? [`Visual: ${visualCandidates.length}`] : []),
+          `Related: ${roCandidates.length}`,
           `Lineage: ${liCandidates.length}`,
           `Iconclass: ${icCandidates.length}`,
           `Description: ${descCandidates.length}`,
           `Theme: ${thCandidates.length}`,
-          `Related: ${roCandidates.length}`,
           `Person: ${dpCandidates.length}`,
           `Place: ${dplCandidates.length}`,
         ];
