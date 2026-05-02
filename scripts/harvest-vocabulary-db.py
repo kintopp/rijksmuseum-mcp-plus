@@ -4383,8 +4383,8 @@ def propagate_place_coordinates(conn: sqlite3.Connection) -> None:
 
     Walks vocabulary.broader_id up to depth 10. Idempotent.
 
-    #218 + #262 Layer B (v0.25): inherited coords are tagged
-    ``coord_method = 'derived'`` with one of three details depending on
+    #218 + #262 Layer B (v0.25) + #268: inherited coords are tagged
+    ``coord_method = 'inferred'`` with one of three details depending on
     parent placetype (city / country / generic). Layer B's fail-closed
     allow-list (decisions doc §502, mirrored in
     ``em.INHERITANCE_ALLOWED_PLACETYPES``) refuses inheritance unless the
@@ -4667,7 +4667,8 @@ def run_phase3(
     conn.commit()
 
     # #218 fine-grained detail — paired with the coarse method columns above.
-    # coord_method stores the coarse tier ('authority' / 'derived' / 'human'),
+    # coord_method stores the coarse tier ('deterministic' / 'inferred' / 'manual'
+    # — see #268; legacy 'authority' / 'derived' / 'human' fully migrated),
     # *_detail stores the specific phase identifier ('wikidata_p625',
     # 'geonames_api', 'whg_reconciliation', 'parent_fallback', etc. from
     # scripts/enrichment_methods.py). Both layers live in the DB so the

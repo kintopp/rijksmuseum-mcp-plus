@@ -143,7 +143,7 @@ SELECT
   (SELECT COUNT(*) FROM vocabulary WHERE type='place' AND lat IS NOT NULL)                     AS geocoded,
   (SELECT COUNT(*) FROM vocabulary WHERE type='place' AND placetype IS NOT NULL)               AS placetyped,
   (SELECT COUNT(*) FROM vocabulary WHERE type='place' AND is_areal IS NOT NULL)                AS classified_areal,
-  (SELECT COUNT(*) FROM vocabulary WHERE type='place' AND lat IS NOT NULL AND coord_method = 'authority') AS tagged_authority,
+  (SELECT COUNT(*) FROM vocabulary WHERE type='place' AND lat IS NOT NULL AND coord_method = 'deterministic') AS tagged_authority,
   (SELECT COUNT(*) FROM vocabulary WHERE type='place' AND coord_method_detail = 'geonames_api')    AS m_geonames_api,
   (SELECT COUNT(*) FROM vocabulary WHERE type='place' AND coord_method_detail = 'wikidata_p625')   AS m_wikidata_p625,
   (SELECT COUNT(*) FROM vocabulary WHERE type='place' AND coord_method_detail = 'tgn_p1667')       AS m_tgn_p1667,

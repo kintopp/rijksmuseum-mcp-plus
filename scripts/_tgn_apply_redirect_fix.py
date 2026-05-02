@@ -1,7 +1,7 @@
 """One-shot: apply the 13 TGN-deprecation redirects to vocabulary.db.
 
 Reads the 'via_replacement' rows from _tgn_chain_results.tsv, writes
-lat/lon + coord_method='authority' + coord_method_detail='tgn_via_replacement'
+lat/lon + coord_method='deterministic' + coord_method_detail='tgn_via_replacement'
 to vocabulary, and inserts the new TGN URI into vocabulary_external_ids.
 The original (obsolete) TGN URI is left in place — it remains a valid
 identifier for the place, just deprecated upstream.
@@ -45,7 +45,7 @@ def main() -> None:
                 # Apply the coord write
                 conn.execute(
                     """UPDATE vocabulary
-                       SET lat = ?, lon = ?, coord_method = 'authority', coord_method_detail = 'tgn_via_replacement'
+                       SET lat = ?, lon = ?, coord_method = 'deterministic', coord_method_detail = 'tgn_via_replacement'
                        WHERE id = ?""",
                     (lat, lon, vocab_id),
                 )
