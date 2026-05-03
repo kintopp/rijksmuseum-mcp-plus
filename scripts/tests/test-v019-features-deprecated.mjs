@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * DEPRECATED — v0.19-era feature tests. Predates clusters A–F (v0.27).
+ * Still functionally passes because the exercised filters survived, but the
+ * coverage is partial vs. the current tool surface. Kept for historical
+ * reference; do not extend — write new tests against the current surface
+ * instead.
+ *
  * Targeted tests for all v0.19 features:
  *   1. Compact mode — IDs only, no enrichment, totalResults
  *   2. aboutActor — searches both depicted persons and creators

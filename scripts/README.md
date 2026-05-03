@@ -155,7 +155,7 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `run-all.mjs` | — | Test runner: executes all stdio test scripts in sequence (skips `test-http-viewer-queues.mjs`). |
 | `test-inspect-navigate.mjs` | 115 | Full inspect/navigate/poll viewer workflow |
 | `test-http-viewer-queues.mjs` | 16 | HTTP cross-request viewerQueue persistence (requires server on :3000) |
-| `smoke-v019.mjs` | 25 | v0.19 feature smoke tests |
+| `smoke-v019-deprecated.mjs` | 25 | **DEPRECATED.** v0.19 feature smoke tests; predates v0.27 clusters A–F. Kept for reference. |
 | `test-pure-functions.mjs` | 87 | Unit tests for exported pure functions |
 | `test-fts-edge-cases.mjs` | — | FTS5 query escaping with tricky inputs |
 | `test-new-filters.mjs` | 19 | v0.20 filters: creatorGender, creatorBornAfter/Before, expandPlaceHierarchy |
@@ -168,12 +168,12 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `test-provenance-search.mjs` | ~76 | Integration tests for `search_provenance` tool: party lookup, transfer type filters, date ranges, cross-references, parse audit. |
 | `test-query-plans.mjs` | 200+ | EXPLAIN QUERY PLAN validation — asserts the optimizer never uses `idx_mappings_field_vocab` as a covering-scan driver. |
 | `test-totalcount.mjs` | ~16 | Smoke test: totalResults always present + selective/compact facets. |
-| `test-v019-features.mjs` | — | Targeted tests for all v0.19 features |
+| `test-v019-features-deprecated.mjs` | — | **DEPRECATED.** Targeted tests for v0.19 features; predates v0.27 clusters A–F. Kept for reference. |
 | `test-svg-overlays.mjs` | — | Visual test for SVG overlay rendering on The Night Watch. Opens viewer, adds various overlay shapes. |
 | `test-viewer-build.mjs` | — | Validates bundled viewer HTML is self-contained (no CDN dependencies) and within size budget. |
 | `audit-schemas.mjs` | — | Schema audit: checks all outputSchemas for structural risk factors (anyOf/oneOf, $ref/$defs, nesting depth). |
 | `validate-vocab-db.mjs` | — | Comprehensive vocab DB structure & integrity validation (13 checks: integrity, tables, FTS5, FK integrity, importance, server compat, etc.) |
-| `generate-similarity-review.mjs` | — | Generates HTML review pages for find_similar results (outputs `similarity-review.html`). |
+| `generate-similarity-review.deprecated.mjs` | — | **DEPRECATED.** Multi-call per-mode review predates v0.27 — `find_similar` no longer accepts `mode` and produces a 9-channel HTML page in one call. Kept for reference; do not run. |
 | `survey-persons.mjs` | — | Quick survey of `depictedPerson` vs `aboutActor` coverage. |
 | `survey-persons-comprehensive.mjs` | — | Comprehensive 120-name survey across 12 categories. |
 | `profile-cross-filters.mjs` | — | Cross-filter performance profiling |

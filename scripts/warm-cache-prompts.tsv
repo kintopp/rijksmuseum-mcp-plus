@@ -19,17 +19,13 @@ search_artwork	{"depictedPerson": "Amalia van Solms", "type": "painting"}
 search_artwork	{"subject": "winter landscape", "creationDate": "17*"}
 search_artwork	{"productionPlace": "Haarlem", "technique": "mezzotint"}
 search_artwork	{"inscription": "fecit"}
-search_artwork	{"provenance": "Napoleon"}
 search_artwork	{"productionRole": "after painting by"}
 search_artwork	{"creditLine": "bequest"}
 search_artwork	{"nearPlace": "Oude Kerk Amsterdam", "nearPlaceRadius": 0.1}
 search_artwork	{"inscription": "luctor et emergo"}
 search_artwork	{"type": "painting", "minWidth": 300}
-search_artwork	{"type": "sculpture", "birthPlace": "Leiden"}
 get_artwork_details	{"objectNumber": "SK-A-1718"}
-search_artwork	{"creatorGender": "female", "type": "painting"}
 search_artwork	{"attributionQualifier": "circle of", "creator": "Hieronymus Bosch"}
-search_artwork	{"type": "photograph", "birthPlace": "Indonesia"}
 list_curated_sets	{}
 
 # ===================================================================
@@ -65,7 +61,6 @@ search_artwork	{"productionPlace": "Haarlem", "type": "print"}
 search_artwork	{"productionPlace": "Amsterdam", "type": "print"}
 search_artwork	{"productionPlace": "Leiden", "type": "print"}
 search_artwork	{"productionPlace": "Antwerp", "type": "print"}
-search_artwork	{"profession": "printmaker", "birthPlace": "Haarlem"}
 
 # 6. Iconographic Traditions Across Media
 search_artwork	{"subject": "vanitas", "type": "painting"}
@@ -78,14 +73,8 @@ search_artwork	{"inscription": "Saenredam"}
 # 8. Credit Lines and Acquisition Context
 search_artwork	{"creditLine": "purchase", "creator": "Rembrandt"}
 search_artwork	{"creditLine": "bequest", "creator": "Rembrandt"}
-search_artwork	{"provenance": "Rembrandt"}
 
-# 9. Women Artists Across Centuries and Media
-search_artwork	{"creatorGender": "female", "type": "painting", "compact": true}
-search_artwork	{"creatorGender": "female", "creationDate": "17*"}
-search_artwork	{"creatorGender": "female", "type": "painting"}
-search_artwork	{"creatorGender": "female", "creatorBornAfter": 1800, "creatorBornBefore": 1900, "type": "painting"}
-search_artwork	{"creatorGender": "female", "productionPlace": "Netherlands", "expandPlaceHierarchy": true}
+# 9. Women Artists Across Centuries and Media (demographic filters now via search_persons → search_artwork)
 
 # 10. Measuring Scholarly Attention
 search_artwork	{"creator": "Johannes Vermeer", "type": "painting"}
@@ -101,9 +90,7 @@ search_artwork	{"iconclass": "73D24"}
 get_artwork_details	{"objectNumber": "SK-C-5"}
 get_artwork_image	{"objectNumber": "SK-C-5"}
 
-# 14. Comparative Detail Analysis Across Works
-search_artwork	{"birthPlace": "Leiden", "profession": "painter", "type": "painting"}
-search_artwork	{"birthPlace": "Haarlem", "profession": "painter", "type": "painting"}
+# 14. Comparative Detail Analysis Across Works (demographic filters now via search_persons → search_artwork)
 
 # 15. Reproductive Prints and Their Painted Sources
 search_artwork	{"productionRole": "after painting by", "creator": "Rembrandt"}

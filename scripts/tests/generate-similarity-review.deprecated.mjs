@@ -1,7 +1,17 @@
 /**
- * Generate an HTML review page for find_similar results.
- * Run: node scripts/tests/generate-similarity-review.mjs
- * Output: scripts/tests/similarity-review.html
+ * DEPRECATED — does not work against the current find_similar surface.
+ *
+ * The current find_similar tool accepts only { objectNumber, maxResults } (strict
+ * Zod schema). The per-mode calls below (mode: "iconclass" / "lineage" /
+ * "depicted_person") are rejected. find_similar now produces a 9-channel HTML
+ * comparison page in a single call (visual, related-co-production, lineage,
+ * iconclass, description, theme, depicted person, depicted place,
+ * related object, plus pooled), making the multi-call intersection workflow
+ * here largely redundant with the production page at /similar/:uuid.
+ *
+ * Kept for reference only. Rewrite from scratch if you need per-channel
+ * intersection analytics — call vocab DB methods (findSimilarByIconclass,
+ * findSimilarByLineage, etc.) directly rather than going through MCP.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";

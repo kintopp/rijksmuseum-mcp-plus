@@ -61,7 +61,9 @@ const expectedTools = [
   "list_curated_sets",
   "navigate_viewer",
   "poll_viewer_commands",
+  "remount_viewer",
   "search_artwork",
+  "search_persons",
   "search_provenance",
   "semantic_search",
 ].sort();

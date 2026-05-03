@@ -200,7 +200,7 @@ const r5 = await client.callTool({
 ok(!r5.isError, "no error for SK-A-1718");
 const text5 = r5.content?.[0]?.text ?? "";
 // Check that no signal exceeds maxResults
-const countMatches = text5.matchAll(/(?:Visual|Lineage|Iconclass|Description|Person|Place): (\d+)/g);
+const countMatches = text5.matchAll(/(?:Visual|Co-Production|Related|Lineage|Iconclass|Description|Theme|Person|Place): (\d+)/g);
 for (const m of countMatches) {
   const count = parseInt(m[1]);
   ok(count <= 3, `${m[0]} respects maxResults (${count} ≤ 3)`);
@@ -220,28 +220,46 @@ if (pathMatch5) {
   ok(html5.includes("query-header"), "has query header");
   ok(html5.includes("query-metadata"), "has query metadata section");
 
-  // Row order: Visual → Lineage → Iconclass → Description → Depicted Person → Depicted Place → Pooled
+  // Row order (MODE_ORDER in src/similarHtml.ts):
+  // Visual → Related Co-Production → Lineage → Iconclass → Description → Theme → Depicted Person → Depicted Place → Related Object → Pooled
+  const visualPos = html5.indexOf('"Visual"');
+  const coProdPos = html5.indexOf('"Related Co-Production"');
   const linePos = html5.indexOf('"Lineage"');
   const iconPos = html5.indexOf('"Iconclass"');
   const descPos = html5.indexOf('"Description"');
+  const themePos = html5.indexOf('"Theme"');
   const personPos = html5.indexOf('"Depicted Person"');
   const placePos = html5.indexOf('"Depicted Place"');
+  const relObjPos = html5.indexOf('"Related Object"');
   const poolPos = html5.indexOf('"Pooled"');
 
+  if (visualPos > -1 && coProdPos > -1) {
+    ok(visualPos < coProdPos, "Visual before Related Co-Production");
+  }
+  if (coProdPos > -1 && linePos > -1) {
+    ok(coProdPos < linePos, "Related Co-Production before Lineage");
+  }
   if (linePos > -1 && iconPos > -1) {
     ok(linePos < iconPos, "Lineage before Iconclass");
   }
   if (iconPos > -1 && descPos > -1) {
     ok(iconPos < descPos, "Iconclass before Description");
   }
-  if (descPos > -1 && personPos > -1) {
-    ok(descPos < personPos, "Description before Depicted Person");
+  if (descPos > -1 && themePos > -1) {
+    ok(descPos < themePos, "Description before Theme");
+  }
+  if (themePos > -1 && personPos > -1) {
+    ok(themePos < personPos, "Theme before Depicted Person");
   }
   if (personPos > -1 && placePos > -1) {
     ok(personPos < placePos, "Depicted Person before Depicted Place");
   }
+  if (placePos > -1 && relObjPos > -1) {
+    ok(placePos < relObjPos, "Depicted Place before Related Object");
+  }
   if (poolPos > -1) {
-    ok(poolPos > (placePos > -1 ? placePos : personPos > -1 ? personPos : descPos), "Pooled is last");
+    const lastChannelPos = Math.max(relObjPos, placePos, personPos, themePos, descPos);
+    ok(poolPos > lastChannelPos, "Pooled is last");
   }
 }
 

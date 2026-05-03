@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/**
+ * DEPRECATED — v0.19-era smoke test. Predates clusters A–F (v0.27).
+ * Still passes because it only exercises filters that survived, but coverage
+ * is incomplete vs. the current 15-tool surface. Kept for historical reference.
+ */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 

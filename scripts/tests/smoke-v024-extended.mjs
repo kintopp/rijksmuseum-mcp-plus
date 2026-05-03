@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Extended smoke test — exercises the 8 MCP tools not covered by smoke-v019.mjs.
-// Issue #244. Mirrors smoke-v019.mjs pattern.
+// Extended smoke test — exercises the 8 MCP tools not covered by smoke-v019-deprecated.mjs.
+// Issue #244. Mirrors smoke-v019-deprecated.mjs pattern.
 //
 // Tools covered: search_provenance, find_similar, list_curated_sets, browse_set,
 //                get_recent_changes, collection_stats, get_artwork_image, inspect_artwork_image.
