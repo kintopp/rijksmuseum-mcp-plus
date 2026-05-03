@@ -422,7 +422,7 @@ function formatDetailSummary(d: DetailWithChain): string {
       .join(" | ");
     const cap = d.relatedObjectsTotalCount > d.relatedObjects.length
       ? ` (showing ${d.relatedObjects.length} of ${d.relatedObjectsTotalCount})` : "";
-    lines.push(`[Related objects]${cap} ${groups}`);
+    lines.push(`[Co-productions]${cap} ${groups}`);
   }
 
   lines.push(`URL: ${d.url}`);
@@ -788,13 +788,13 @@ const ArtworkDetailOutput = {
     type: z.enum(DIMENSION_TYPES), value: z.union([z.number(), z.string()]), unit: z.string(), note: z.string().nullable(),
   })),
   relatedObjects: z.array(z.object({
-    relationship: z.string().describe("English relationship label, e.g. 'recto | verso', 'pendant', 'object | former frame'."),
+    relationship: z.string().describe("English relationship label: 'different example', 'production stadia', or 'pendant'."),
     objectNumber: z.string().nullable().describe("Peer artwork's object number when it resolves to a row in our DB; null for unresolved Linked Art URIs."),
     title: z.string().nullable().describe("Peer artwork's title when resolved; null otherwise."),
     objectUri: z.string().describe("Original Linked Art URI from the harvest. Pass to get_artwork_details(uri=…) for full peer metadata."),
     iiifId: z.string().nullable().describe("Peer artwork's IIIF identifier when resolved and the peer carries an image; null otherwise. Powers in-viewer prev/next navigation."),
-  })).describe("Peer artwork relations (recto/verso, frame/painting, pendant, production stadia, …). Capped at 25 entries — see relatedObjectsTotalCount."),
-  relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total related-object count before capping. Equals relatedObjects.length when ≤ 25."),
+  })).describe("Co-production peer relations — restricted to creator-invariant curator-declared edges ('different example' / 'production stadia' / 'pendant'). Other curator-declared relationships (pair, set, recto|verso, original|reproduction, related object) are exposed via find_similar's Related Object channel rather than here. Capped at 25 entries — see relatedObjectsTotalCount."),
+  relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total co-production-relation count before capping. Equals relatedObjects.length when ≤ 25."),
   parents: z.array(z.object({
     objectNumber: z.string(),
     title: z.string(),
@@ -3369,10 +3369,11 @@ function registerTools(
         annotations: ANN_READ_CLOSED,
         description:
           "Use when the user has a SPECIFIC artwork (objectNumber) and wants others like it. " +
-          "Generates an HTML comparison page with IIIF thumbnails across 8 independent similarity channels: " +
-          "Visual (image-embedding nearest neighbours), Related Object (curator-declared edges: pendants, production stadia, different examples), " +
+          "Generates an HTML comparison page with IIIF thumbnails across 9 independent similarity channels: " +
+          "Visual (image-embedding nearest neighbours), Related Co-Production (creator-invariant curator-declared edges: pendants, production stadia, different examples), " +
+          "Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), " +
           "Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), " +
-          "Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all eight.\n\n" +
+          "Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.\n\n" +
           "Not for free-text concept queries — use semantic_search. " +
           "Not for filter-based search — use search_artwork.\n\n" +
           "IMPORTANT: The result is a file path or URL to an HTML page. " +
@@ -3502,7 +3503,13 @@ function registerTools(
           : null;
         const thCandidates = toDepictedCandidates(thResult);
 
-        // Related Object (#293) — curator-declared edges, fixed score=10
+        // Related Co-Production (#293) — creator-invariant curator-declared edges
+        // ('different example' / 'production stadia' / 'pendant'), fixed score=10
+        const cpResult = vocabDb!.findSimilarByCoProduction(args.objectNumber, maxResults);
+        const cpCandidates = toDepictedCandidates(cpResult);
+
+        // Related Object — other curator-declared edges (pair / set / recto|verso /
+        // reproduction / catch-all related object), tiered scores 2-6.
         const roResult = vocabDb!.findSimilarByRelatedObject(args.objectNumber, maxResults);
         const roCandidates = toDepictedCandidates(roResult);
 
@@ -3543,6 +3550,7 @@ function registerTools(
             depictedPersons: dpResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
             depictedPlaces: dplResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
             themes: thResult?.queryTerms.map(t => t.label),
+            coProductionLabels: cpResult?.queryTerms.map(t => t.label),
             relatedObjectLabels: roResult?.queryTerms.map(t => t.label),
           },
           modes: {
@@ -3551,11 +3559,12 @@ function registerTools(
             description: descCandidates,
             ...(visualCandidates.length > 0 && { visual: visualCandidates }),
             ...(thCandidates.length > 0 && { theme: thCandidates }),
+            ...(cpCandidates.length > 0 && { coProduction: cpCandidates }),
             ...(roCandidates.length > 0 && { relatedObject: roCandidates }),
             ...(dpCandidates.length > 0 && { depictedPerson: dpCandidates }),
             ...(dplCandidates.length > 0 && { depictedPlace: dplCandidates }),
           },
-          poolThreshold: 3,
+          poolThreshold: 4,
           generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
           ...(visualSearchUrl && { visualSearchUrl }),
           ...(visualTotalResults && { visualTotalResults }),
@@ -3581,6 +3590,7 @@ function registerTools(
         // Summary counts
         const counts = [
           ...(visualCandidates.length > 0 ? [`Visual: ${visualCandidates.length}`] : []),
+          `Co-Production: ${cpCandidates.length}`,
           `Related: ${roCandidates.length}`,
           `Lineage: ${liCandidates.length}`,
           `Iconclass: ${icCandidates.length}`,
@@ -3592,7 +3602,7 @@ function registerTools(
         const poolThreshold = pageData.poolThreshold;
         // Count pooled entries
         const allObjNums = new Map<string, number>();
-        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates, thCandidates, roCandidates, dpCandidates, dplCandidates]) {
+        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates, thCandidates, cpCandidates, roCandidates, dpCandidates, dplCandidates]) {
           for (const c of mode) {
             allObjNums.set(c.objectNumber, (allObjNums.get(c.objectNumber) ?? 0) + 1);
           }

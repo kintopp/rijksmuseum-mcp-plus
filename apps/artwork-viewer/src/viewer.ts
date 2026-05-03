@@ -239,14 +239,14 @@ function resetView(): void {
 function setNavButtonsEnabled(enabled: boolean): void {
   const prev = document.getElementById('prev-related') as HTMLButtonElement | null;
   const next = document.getElementById('next-related') as HTMLButtonElement | null;
-  const disabledHint = 'No related objects';
+  const disabledHint = 'No co-productions available';
   if (prev) {
     prev.disabled = !enabled;
-    prev.title = enabled ? 'Previous related (j)' : disabledHint;
+    prev.title = enabled ? 'Previous co-production (j)' : disabledHint;
   }
   if (next) {
     next.disabled = !enabled;
-    next.title = enabled ? 'Next related (l)' : disabledHint;
+    next.title = enabled ? 'Next co-production (l)' : disabledHint;
   }
 }
 
@@ -549,8 +549,8 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="zoom-in" title="Zoom In (+)">+</button>
           <button id="zoom-out" title="Zoom Out (-)">&minus;</button>
           <button id="reset-view" title="Reset / return to seed (0 / k)">Reset</button>
-          <button id="prev-related" title="Previous related (j)" disabled>&#9664;</button>
-          <button id="next-related" title="Next related (l)" disabled>&#9654;</button>
+          <button id="prev-related" title="Previous co-production (j)" disabled>&#9664;</button>
+          <button id="next-related" title="Next co-production (l)" disabled>&#9654;</button>
           <button id="select-mode" title="Select Region (i)">&#9744;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
@@ -561,7 +561,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>+</kbd> / <kbd>&minus;</kbd><span>Zoom in / out</span></div>
               <div class="shortcut-row"><kbd>0</kbd> / <kbd>k</kbd><span>Reset view</span></div>
               <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
-              <div class="shortcut-row"><kbd>j</kbd> / <kbd>l</kbd><span>Previous / next related artwork</span></div>
+              <div class="shortcut-row"><kbd>j</kbd> / <kbd>l</kbd><span>Previous / next co-production</span></div>
               <div class="shortcut-row"><kbd>r</kbd> / <kbd>&#8679;r</kbd><span>Rotate right / left</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>

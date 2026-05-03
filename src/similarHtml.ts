@@ -2,9 +2,9 @@
  * Server-side HTML generator for find_similar comparison pages.
  *
  * Produces a self-contained HTML page showing similarity results across
- * up to 8 signal modes in horizontal scroll rows (Visual, Related Object,
- * Lineage, Iconclass, Description, Theme, Depicted Person, Depicted Place)
- * plus a pooled row for artworks appearing in ≥3 modes.
+ * up to 9 signal modes in horizontal scroll rows (Visual, Related Co-Production,
+ * Related Object, Lineage, Iconclass, Description, Theme, Depicted Person,
+ * Depicted Place) plus a pooled row for artworks appearing in ≥4 modes.
  */
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -52,7 +52,9 @@ export interface SimilarQueryInfo {
   depictedPlaces?: { label: string; wikidataUri?: string }[];
   /** Themes attached to the query artwork (#294) */
   themes?: string[];
-  /** Distinct curator-declared relationship labels on the query artwork (#293) */
+  /** Distinct creator-invariant co-production relationship labels on the query artwork (#293) */
+  coProductionLabels?: string[];
+  /** Distinct other-curator-declared relationship labels on the query artwork (Related Object channel) */
   relatedObjectLabels?: string[];
 }
 
@@ -64,6 +66,7 @@ export interface SimilarPageData {
     description: SimilarCandidate[];
     visual?: SimilarCandidate[];
     theme?: SimilarCandidate[];
+    coProduction?: SimilarCandidate[];
     relatedObject?: SimilarCandidate[];
     depictedPerson?: SimilarCandidate[];
     depictedPlace?: SimilarCandidate[];
@@ -146,15 +149,25 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
       "rarer themes contribute more. " +
       "Three-way tie-breaks are resolved by curatorial importance.",
   },
+  coProduction: {
+    label: "Related Co-Production",
+    badge: "CoP",
+    color: "#7b1fa2",
+    methodology:
+      "Curator-defined assertions of a co-production by the same creator: " +
+      "<em>different example</em> (e.g. impressions, casts, or copies), " +
+      "<em>production stadia</em> (e.g. a working sketch for a print), " +
+      "or <em>pendant</em> (companion pieces).",
+  },
   relatedObject: {
     label: "Related Object",
     badge: "Rel",
-    color: "#7b1fa2",
+    color: "#ad1457",
     methodology:
-      "Artworks are related by different curator-defined assertions: " +
-      "<em>example</em> (e.g. impressions, casts, or copies), " +
-      "<em>production stadia</em> (e.g. a working sketch for a print), " +
-      "or <em>pendant</em> (companion pieces).",
+      "Curator-defined assertions linking other related works: " +
+      "<em>pair</em> / <em>set</em> / <em>recto | verso</em> / <em>product line</em> (multi-object groupings, score 6), " +
+      "<em>original | reproduction</em> (derivative works by other hands, score 4), " +
+      "and the catch-all <em>related object</em> (score 2).",
   },
   pooled: {
     label: "Pooled",
@@ -164,15 +177,17 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
   },
 };
 
-/** Display order for signal rows */
+/** Display order for signal rows. Co-Production sits next to Visual since both
+ *  describe direct relationships to the seed; the wider Related Object channel
+ *  follows the deterministic similarity signals. */
 const MODE_ORDER = [
-  "visual", "relatedObject", "lineage", "iconclass", "description",
-  "theme", "depictedPerson", "depictedPlace",
+  "visual", "coProduction", "lineage", "iconclass", "description",
+  "theme", "depictedPerson", "depictedPlace", "relatedObject",
 ] as const;
 
 /** Modes whose card detail is a comma-separated list of sharedTerms labels. */
 const SHARED_TERM_MODES = new Set<string>([
-  "depictedPerson", "depictedPlace", "theme", "relatedObject",
+  "depictedPerson", "depictedPlace", "theme", "coProduction", "relatedObject",
 ]);
 
 function escHtml(s: string): string {
@@ -391,6 +406,14 @@ export function generateSimilarHtml(data: SimilarPageData): string {
     metaSections += `<div class="meta-section">
       <div class="meta-section-label theme">Themes</div>
       <div class="meta-content">${themesHtml}</div>
+    </div>`;
+  }
+
+  if (query.coProductionLabels && query.coProductionLabels.length > 0) {
+    const cpHtml = query.coProductionLabels.map(l => `<em>${escHtml(l)}</em>`).join(" &middot; ");
+    metaSections += `<div class="meta-section">
+      <div class="meta-section-label related-object">Related Co-Production</div>
+      <div class="meta-content">${cpHtml}</div>
     </div>`;
   }
 

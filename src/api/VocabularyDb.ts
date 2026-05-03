@@ -953,11 +953,33 @@ export class VocabularyDb {
   // Theme cache (#294)
   private themeDf: Map<number, number> | null = null; // theme vocab_rowid → document frequency
   private themeN = 0; // total artworks with at least one theme
-  // Related-object cache (#293) — curator-declared peer edges
-  private relatedObjectsByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
-  private static readonly RELATED_OBJECT_LABELS = [
+  // Related Co-Production cache (#293) — curator-declared peer edges where
+  // the creator is invariant (~94-97% empirically) and the link describes
+  // another instantiation, stage, or deliberate companion of the same
+  // artistic conception. Score is fixed (each edge is a curatorial assertion,
+  // not a probabilistic match).
+  private coProductionByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
+  private static readonly CO_PRODUCTION_LABELS = [
     "different example", "production stadia", "pendant",
   ] as const;
+
+  // Related Object cache — derivative works by other hands (B1) and
+  // multi-object groupings (B3) from the related_objects vocabulary. Tiered
+  // weights below: tighter groupings score higher than the catch-all.
+  private relatedObjectByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
+  private static readonly RELATED_OBJECT_LABELS = [
+    "pair", "pair (weapons)", "set", "recto | verso", "product line",
+    "original | reproduction", "related object",
+  ] as const;
+  private static readonly RELATED_OBJECT_TIER_WEIGHT: Record<string, number> = {
+    "pair": 6,
+    "pair (weapons)": 6,
+    "set": 6,
+    "recto | verso": 6,
+    "product line": 6,
+    "original | reproduction": 4,
+    "related object": 2,
+  };
 
   /** Look up a field_id by name, throwing if missing. */
   private requireFieldId(name: string): number {
@@ -1178,14 +1200,23 @@ export class VocabularyDb {
 
       // related_objects harvested in v0.24+; peer artwork relations (recto/verso, frame/painting, pendant…).
       if (this.hasRelatedObjects_) {
+        const coProductionPlaceholdersForCount = VocabularyDb.CO_PRODUCTION_LABELS.map(() => "?").join(", ");
         this.stmtArtworkRelatedCount = this.db.prepare(
-          `SELECT COUNT(*) AS n FROM related_objects WHERE art_id = ?`
+          `SELECT COUNT(*) AS n FROM related_objects
+             WHERE art_id = ? AND relationship_en IN (${coProductionPlaceholdersForCount})`
         );
+        // Viewer-side relatedObjects[] is restricted to the same 3 creator-
+        // invariant types used by find_similar's Related Co-Production
+        // channel ('different example' / 'production stadia' / 'pendant').
+        // Other relationship types are surfaced through find_similar's
+        // Related Object channel rather than the viewer.
+        const coProductionPlaceholders = VocabularyDb.CO_PRODUCTION_LABELS.map(() => "?").join(", ");
         this.stmtArtworkRelatedPreview = this.db.prepare(`
           SELECT ro.relationship_en, ro.related_la_uri, a.object_number, a.title, a.title_all_text, a.iiif_id
           FROM related_objects ro
           LEFT JOIN artworks a ON a.art_id = ro.related_art_id
           WHERE ro.art_id = ?
+            AND ro.relationship_en IN (${coProductionPlaceholders})
           ORDER BY ro.relationship_en, a.object_number
           LIMIT ?
         `);
@@ -1657,28 +1688,32 @@ export class VocabularyDb {
   private fetchRelatedObjects(
     artId: number,
   ): Pick<ArtworkDetailFromDb, "relatedObjects" | "relatedObjectsTotalCount"> {
-    const { items, total } = this.fetchCountAndPreview<
-      {
-        relationship_en: string; related_la_uri: string;
-        object_number: string | null; title: string | null; title_all_text: string | null;
-        iiif_id: string | null;
-      },
-      ArtworkDetailFromDb["relatedObjects"][number]
-    >(
-      this.stmtArtworkRelatedCount,
-      this.stmtArtworkRelatedPreview,
-      artId,
-      VocabularyDb.RELATED_PREVIEW_LIMIT,
-      r => ({
-        relationship: r.relationship_en,
-        objectNumber: r.object_number,
-        title: r.object_number
-          ? VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled")
-          : null,
-        objectUri: r.related_la_uri,
-        iiifId: r.iiif_id,
-      }),
-    );
+    if (!this.stmtArtworkRelatedCount || !this.stmtArtworkRelatedPreview) {
+      return { relatedObjects: [], relatedObjectsTotalCount: 0 };
+    }
+    // Both prepared statements bind the 3 CO_PRODUCTION_LABELS as label
+    // filters in addition to artId / limit.
+    const labels = VocabularyDb.CO_PRODUCTION_LABELS;
+    const total = (this.stmtArtworkRelatedCount.get(artId, ...labels) as { n: number }).n;
+    if (total === 0) return { relatedObjects: [], relatedObjectsTotalCount: 0 };
+
+    const rows = this.stmtArtworkRelatedPreview.all(
+      artId, ...labels, VocabularyDb.RELATED_PREVIEW_LIMIT,
+    ) as {
+      relationship_en: string; related_la_uri: string;
+      object_number: string | null; title: string | null; title_all_text: string | null;
+      iiif_id: string | null;
+    }[];
+
+    const items: ArtworkDetailFromDb["relatedObjects"] = rows.map(r => ({
+      relationship: r.relationship_en,
+      objectNumber: r.object_number,
+      title: r.object_number
+        ? VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled")
+        : null,
+      objectUri: r.related_la_uri,
+      iiifId: r.iiif_id,
+    }));
     return { relatedObjects: items, relatedObjectsTotalCount: total };
   }
 
@@ -2529,23 +2564,55 @@ export class VocabularyDb {
     };
   }
 
-  // ── find_similar: Related Object curator-declared edges (#293) ───────
+  // ── find_similar: Related Co-Production curator-declared edges (#293) ───────
 
   /**
-   * Lazily build the related-object cache from `related_objects` table.
+   * Lazily build the Co-Production cache from `related_objects` table.
    * Scope: relationship_en in {different example, production stadia, pendant}.
    * Edges with NULL related_art_id (peer not in our DB) are filtered out — the
    * v0.26 dataset has zero such rows in scope, so we skip them rather than
    * render an "external peer" placeholder.
    */
-  private ensureRelatedObjectsCache(): void {
-    if (this.relatedObjectsByArtId || !this.db) return;
+  private ensureCoProductionCache(): void {
+    if (this.coProductionByArtId || !this.db) return;
     if (!this.hasRelatedObjects_) {
-      this.relatedObjectsByArtId = new Map();
+      this.coProductionByArtId = new Map();
       return;
     }
 
-    this.relatedObjectsByArtId = new Map();
+    this.coProductionByArtId = new Map();
+    const placeholders = VocabularyDb.CO_PRODUCTION_LABELS.map(() => "?").join(", ");
+    const rows = this.db.prepare(`
+      SELECT art_id, related_art_id, relationship_en
+      FROM related_objects
+      WHERE relationship_en IN (${placeholders}) AND related_art_id IS NOT NULL
+    `).all(...VocabularyDb.CO_PRODUCTION_LABELS) as {
+      art_id: number; related_art_id: number; relationship_en: string;
+    }[];
+
+    for (const r of rows) {
+      const list = this.coProductionByArtId.get(r.art_id) ?? [];
+      list.push({ peerArtId: r.related_art_id, label: r.relationship_en });
+      this.coProductionByArtId.set(r.art_id, list);
+    }
+    console.error(`[find_similar] Co-Production cache: ${this.coProductionByArtId.size} seeds, ${rows.length} edges`);
+  }
+
+  /**
+   * Lazily build the new Related Object cache. Scope: relationship_en in
+   * {pair, pair (weapons), set, recto | verso, product line,
+   *  original | reproduction, related object}. Tiered weights per type
+   * (RELATED_OBJECT_TIER_WEIGHT). 14× larger than the Co-Production cache
+   * (~141K edges vs ~12K).
+   */
+  private ensureRelatedObjectCache(): void {
+    if (this.relatedObjectByArtId || !this.db) return;
+    if (!this.hasRelatedObjects_) {
+      this.relatedObjectByArtId = new Map();
+      return;
+    }
+
+    this.relatedObjectByArtId = new Map();
     const placeholders = VocabularyDb.RELATED_OBJECT_LABELS.map(() => "?").join(", ");
     const rows = this.db.prepare(`
       SELECT art_id, related_art_id, relationship_en
@@ -2556,41 +2623,86 @@ export class VocabularyDb {
     }[];
 
     for (const r of rows) {
-      const list = this.relatedObjectsByArtId.get(r.art_id) ?? [];
+      const list = this.relatedObjectByArtId.get(r.art_id) ?? [];
       list.push({ peerArtId: r.related_art_id, label: r.relationship_en });
-      this.relatedObjectsByArtId.set(r.art_id, list);
+      this.relatedObjectByArtId.set(r.art_id, list);
     }
-    console.error(`[find_similar] Related Object cache: ${this.relatedObjectsByArtId.size} seeds, ${rows.length} edges`);
+    console.error(`[find_similar] Related Object cache: ${this.relatedObjectByArtId.size} seeds, ${rows.length} edges`);
   }
 
   /**
-   * Find artworks declared related to the seed via curator-asserted edges
-   * ('different example' / 'production stadia' / 'pendant'). Score is fixed
-   * at 10 — these are explicit assertions, not probabilistic matches.
+   * Find artworks declared as co-productions of the seed via curator-asserted
+   * edges ('different example' / 'production stadia' / 'pendant'). Score is
+   * fixed at 10 — these are explicit assertions, not probabilistic matches.
    * Multi-label collisions on the same peer collapse into one result whose
    * sharedTerms[] carries every label.
    */
-  findSimilarByRelatedObject(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
+  findSimilarByCoProduction(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
     if (!this.db) return null;
-    this.ensureRelatedObjectsCache();
-    if (!this.relatedObjectsByArtId) return null;
+    this.ensureCoProductionCache();
+    if (!this.coProductionByArtId) return null;
 
     const artRow = this.stmtLookupArtId!.get(objectNumber) as
       { art_id: number; title: string; creator_label: string } | undefined;
     if (!artRow) return null;
 
-    const edges = this.relatedObjectsByArtId.get(artRow.art_id) ?? [];
+    const edges = this.coProductionByArtId.get(artRow.art_id) ?? [];
     if (edges.length === 0) {
       return {
         queryObjectNumber: objectNumber,
         queryTitle: artRow.title || "",
         queryTerms: [],
         results: [],
-        warnings: ["No declared related-object edges (different example / production stadia / pendant) on this artwork."],
+        warnings: ["No declared co-production edges (different example / production stadia / pendant) on this artwork."],
       };
     }
 
-    // Collapse multi-label peers
+    return this.assembleRelatedResults(objectNumber, artRow.title, edges, maxResults, () => 10);
+  }
+
+  /**
+   * Find artworks declared as Related Objects of the seed — derivative works
+   * (original | reproduction, related object) and multi-object groupings
+   * (pair / pair (weapons) / set / recto | verso / product line). Score is
+   * tiered per relationship type (RELATED_OBJECT_TIER_WEIGHT). When a peer
+   * has multiple edges to the seed, the highest tier wins for the score and
+   * sharedTerms[] carries every label.
+   */
+  findSimilarByRelatedObject(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
+    if (!this.db) return null;
+    this.ensureRelatedObjectCache();
+    if (!this.relatedObjectByArtId) return null;
+
+    const artRow = this.stmtLookupArtId!.get(objectNumber) as
+      { art_id: number; title: string; creator_label: string } | undefined;
+    if (!artRow) return null;
+
+    const edges = this.relatedObjectByArtId.get(artRow.art_id) ?? [];
+    if (edges.length === 0) {
+      return {
+        queryObjectNumber: objectNumber,
+        queryTitle: artRow.title || "",
+        queryTerms: [],
+        results: [],
+        warnings: ["No declared Related Object edges (pair / set / recto | verso / reproduction / general related object / …) on this artwork."],
+      };
+    }
+
+    return this.assembleRelatedResults(
+      objectNumber, artRow.title, edges, maxResults,
+      labels => Math.max(...labels.map(l => VocabularyDb.RELATED_OBJECT_TIER_WEIGHT[l] ?? 1)),
+    );
+  }
+
+  /** Shared assembly path for both Co-Production and Related Object channels.
+   *  scoreFn receives the distinct labels for a peer and returns the score. */
+  private assembleRelatedResults(
+    objectNumber: string,
+    queryTitle: string,
+    edges: { peerArtId: number; label: string }[],
+    maxResults: number,
+    scoreFn: (labels: string[]) => number,
+  ): DepictedSimilarResult {
     const byPeer = new Map<number, Set<string>>();
     for (const e of edges) {
       const labels = byPeer.get(e.peerArtId);
@@ -2606,6 +2718,7 @@ export class VocabularyDb {
       const labels = [...(byPeer.get(peerArtId) ?? new Set<string>())];
       const meta = metaMap.get(peerArtId);
       const date = formatDateRange(meta?.dateEarliest, meta?.dateLatest);
+      const score = scoreFn(labels);
       return {
         artId: peerArtId,
         objectNumber: meta?.objectNumber ?? `art_id:${peerArtId}`,
@@ -2614,8 +2727,8 @@ export class VocabularyDb {
         ...(date && { date }),
         ...(typeMap.has(peerArtId) && { type: typeMap.get(peerArtId) }),
         ...(meta?.iiifId && { iiifId: meta.iiifId }),
-        score: 10,
-        sharedTerms: labels.map(label => ({ label, weight: 10 })),
+        score,
+        sharedTerms: labels.map(label => ({ label, weight: score })),
         url: `https://www.rijksmuseum.nl/en/collection/${meta?.objectNumber ?? ""}`,
       };
     });
@@ -2623,7 +2736,7 @@ export class VocabularyDb {
     const distinctLabels = [...new Set(edges.map(e => e.label))];
     return {
       queryObjectNumber: objectNumber,
-      queryTitle: artRow.title || "",
+      queryTitle: queryTitle || "",
       queryTerms: distinctLabels.map(label => ({ label, artworks: 0 })),
       results,
     };
@@ -2768,7 +2881,7 @@ export class VocabularyDb {
     }
   }
 
-  /** Eagerly build all four IDF caches used by find_similar.
+  /** Eagerly build all caches used by find_similar.
    *  Safe to call multiple times — each ensure* method no-ops if already built. */
   warmSimilarCaches(): void {
     if (!this.db) return;
@@ -2777,7 +2890,8 @@ export class VocabularyDb {
     this.ensurePersonCache();
     this.ensurePlaceCache();
     this.ensureThemeCache();
-    this.ensureRelatedObjectsCache();
+    this.ensureCoProductionCache();
+    this.ensureRelatedObjectCache();
   }
 
   // ── Curated sets cache (used by list_curated_sets) ─────────────────
