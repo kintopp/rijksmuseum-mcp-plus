@@ -159,10 +159,26 @@ def load_artworks(
     subject_fid = field_ids["subject"]
 
     print("  Loading artworks...")
-    rows = conn.execute("""
+    # #261 — for no-subjects, all source columns live on `artworks`, so we can
+    # exclude rows with no usable text at SQL load time. This mirrors
+    # generate-description-embeddings-modal.py:131 and prevents the v0.24
+    # phantom-rowid bug (vec_artworks insertions for art_ids that the Python
+    # filter dropped post-fetch). Other strategies join in subject labels, so
+    # the post-build `if t` filter still acts as the empty-composite drop.
+    if strategy == "no-subjects":
+        where_clause = """
+            WHERE COALESCE(title, '') != ''
+               OR COALESCE(inscription_text, '') != ''
+               OR COALESCE(description_text, '') != ''
+               OR COALESCE(narrative_text, '') != ''
+        """
+    else:
+        where_clause = ""
+    rows = conn.execute(f"""
         SELECT art_id, object_number, title, title_all_text, creator_label,
                narrative_text, inscription_text, description_text
         FROM artworks
+        {where_clause}
     """).fetchall()
     print(f"    {len(rows):,} artworks")
 
