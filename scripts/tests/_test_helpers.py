@@ -33,6 +33,18 @@ def load_harvest_module():
     return module
 
 
+def write_nt_fixture(tmpdir: Path, entity_id: str, lines: list[str]) -> Path:
+    """Write an .nt fixture with `entity_id` as the basename.
+
+    `parse_nt_file` derives the entity URI from the filename, so the basename
+    must match the subject URI used in the triples. Lines are joined with
+    `\\n` and a trailing newline appended.
+    """
+    p = tmpdir / entity_id
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return p
+
+
 def create_exhibition_schema(conn: sqlite3.Connection) -> None:
     """Create the minimal exhibitions + exhibition_members schema used by
     parse_exhibition_dump. Used by the exhibition dump regression test.

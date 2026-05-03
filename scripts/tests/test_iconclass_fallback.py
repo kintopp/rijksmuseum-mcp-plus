@@ -20,7 +20,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _test_helpers import CheckRecorder, load_harvest_module
+from _test_helpers import CheckRecorder, load_harvest_module, write_nt_fixture as write_fixture
 
 harvest_mod = load_harvest_module()
 parse_nt_file = harvest_mod.parse_nt_file
@@ -58,12 +58,6 @@ def build_synthetic_iconclass_db(path: Path) -> None:
     )
     conn.commit()
     conn.close()
-
-
-def write_fixture(tmpdir: Path, entity_id: str, lines: list[str]) -> Path:
-    p = tmpdir / entity_id
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return p
 
 
 with tempfile.TemporaryDirectory() as tmp:

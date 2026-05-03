@@ -23,22 +23,13 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _test_helpers import CheckRecorder, load_harvest_module
+from _test_helpers import CheckRecorder, load_harvest_module, write_nt_fixture as write_fixture
 
 harvest_mod = load_harvest_module()
 parse_nt_file = harvest_mod.parse_nt_file
 
 recorder = CheckRecorder()
 check = recorder.check
-
-
-def write_fixture(tmpdir: Path, entity_id: str, lines: list[str]) -> Path:
-    """Write an .nt fixture with the entity_id as the basename. The parser
-    derives `entity_uri` from the basename, so the test fixture filename
-    must match the subject URI used in the triples."""
-    p = tmpdir / entity_id
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return p
 
 
 with tempfile.TemporaryDirectory() as tmp:
