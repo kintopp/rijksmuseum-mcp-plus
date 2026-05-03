@@ -22,7 +22,7 @@ import {
 import OpenSeadragon from 'openseadragon';
 
 // Data structure matching the JSON returned by get_artwork_image tool
-interface ArtworkImageData {
+export interface ArtworkImageData {
   iiifId: string;
   iiifInfoUrl: string;
   thumbnailUrl: string;

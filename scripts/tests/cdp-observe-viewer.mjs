@@ -150,10 +150,12 @@ async function main() {
       watchBtn('select-mode');
       // (fullscreen icon removed by cluster-e — keyboard `f` only)
 
-      // Watch the title bar so re-mounts are visible.
+      // Watch the title bar so re-mounts are visible. The .copyable class
+      // lives on the inner <span class="title-text"> (so the title click
+      // target matches the visible text); query that directly.
       const titleObs = new MutationObserver(() => {
-        const h1 = doc.querySelector('h1.copyable');
-        if (h1) console.info(`[probe:title] ${h1.textContent}`);
+        const titleEl = doc.querySelector('h1 .title-text');
+        if (titleEl) console.info(`[probe:title] ${titleEl.textContent}`);
       });
       const app = doc.getElementById('app');
       if (app) titleObs.observe(app, { childList: true, subtree: true, characterData: true });
@@ -186,7 +188,7 @@ async function main() {
         // attribute crawl. Easier: read aria/title strings off the toolbar
         // and the active overlay state.
         const doc = win.document;
-        const title = doc.querySelector('h1.copyable')?.textContent || '';
+        const title = doc.querySelector('h1 .title-text')?.textContent || '';
         const reset = doc.getElementById('reset-view');
         const prev = doc.getElementById('prev-related');
         const next = doc.getElementById('next-related');

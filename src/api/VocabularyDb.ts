@@ -2567,67 +2567,52 @@ export class VocabularyDb {
   // ── find_similar: Related Co-Production curator-declared edges (#293) ───────
 
   /**
-   * Lazily build the Co-Production cache from `related_objects` table.
-   * Scope: relationship_en in {different example, production stadia, pendant}.
-   * Edges with NULL related_art_id (peer not in our DB) are filtered out — the
-   * v0.26 dataset has zero such rows in scope, so we skip them rather than
-   * render an "external peer" placeholder.
+   * Build a Map<art_id, [{peerArtId, label}]> by scanning related_objects for
+   * edges whose relationship_en sits in `labels`. Edges with NULL
+   * related_art_id (peer not in our DB) are skipped — the v0.26 dataset has
+   * zero such rows in either label scope, so an "external peer" placeholder
+   * isn't rendered.
+   *
+   * Shared by ensureCoProductionCache (3 creator-invariant types) and
+   * ensureRelatedObjectCache (7 derivative + grouping types).
    */
-  private ensureCoProductionCache(): void {
-    if (this.coProductionByArtId || !this.db) return;
-    if (!this.hasRelatedObjects_) {
-      this.coProductionByArtId = new Map();
-      return;
-    }
+  private buildRelationshipCache(
+    labels: ReadonlyArray<string>,
+    logName: string,
+  ): Map<number, { peerArtId: number; label: string }[]> {
+    const cache = new Map<number, { peerArtId: number; label: string }[]>();
+    if (!this.db || !this.hasRelatedObjects_) return cache;
 
-    this.coProductionByArtId = new Map();
-    const placeholders = VocabularyDb.CO_PRODUCTION_LABELS.map(() => "?").join(", ");
+    const placeholders = labels.map(() => "?").join(", ");
     const rows = this.db.prepare(`
       SELECT art_id, related_art_id, relationship_en
       FROM related_objects
       WHERE relationship_en IN (${placeholders}) AND related_art_id IS NOT NULL
-    `).all(...VocabularyDb.CO_PRODUCTION_LABELS) as {
+    `).all(...labels) as {
       art_id: number; related_art_id: number; relationship_en: string;
     }[];
 
     for (const r of rows) {
-      const list = this.coProductionByArtId.get(r.art_id) ?? [];
+      const list = cache.get(r.art_id) ?? [];
       list.push({ peerArtId: r.related_art_id, label: r.relationship_en });
-      this.coProductionByArtId.set(r.art_id, list);
+      cache.set(r.art_id, list);
     }
-    console.error(`[find_similar] Co-Production cache: ${this.coProductionByArtId.size} seeds, ${rows.length} edges`);
+    console.error(`[find_similar] ${logName} cache: ${cache.size} seeds, ${rows.length} edges`);
+    return cache;
   }
 
-  /**
-   * Lazily build the new Related Object cache. Scope: relationship_en in
-   * {pair, pair (weapons), set, recto | verso, product line,
-   *  original | reproduction, related object}. Tiered weights per type
-   * (RELATED_OBJECT_TIER_WEIGHT). 14× larger than the Co-Production cache
-   * (~141K edges vs ~12K).
-   */
+  private ensureCoProductionCache(): void {
+    if (this.coProductionByArtId || !this.db) return;
+    this.coProductionByArtId = this.buildRelationshipCache(
+      VocabularyDb.CO_PRODUCTION_LABELS, "Co-Production",
+    );
+  }
+
   private ensureRelatedObjectCache(): void {
     if (this.relatedObjectByArtId || !this.db) return;
-    if (!this.hasRelatedObjects_) {
-      this.relatedObjectByArtId = new Map();
-      return;
-    }
-
-    this.relatedObjectByArtId = new Map();
-    const placeholders = VocabularyDb.RELATED_OBJECT_LABELS.map(() => "?").join(", ");
-    const rows = this.db.prepare(`
-      SELECT art_id, related_art_id, relationship_en
-      FROM related_objects
-      WHERE relationship_en IN (${placeholders}) AND related_art_id IS NOT NULL
-    `).all(...VocabularyDb.RELATED_OBJECT_LABELS) as {
-      art_id: number; related_art_id: number; relationship_en: string;
-    }[];
-
-    for (const r of rows) {
-      const list = this.relatedObjectByArtId.get(r.art_id) ?? [];
-      list.push({ peerArtId: r.related_art_id, label: r.relationship_en });
-      this.relatedObjectByArtId.set(r.art_id, list);
-    }
-    console.error(`[find_similar] Related Object cache: ${this.relatedObjectByArtId.size} seeds, ${rows.length} edges`);
+    this.relatedObjectByArtId = this.buildRelationshipCache(
+      VocabularyDb.RELATED_OBJECT_LABELS, "Related Object",
+    );
   }
 
   /**

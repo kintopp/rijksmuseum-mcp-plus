@@ -9,6 +9,7 @@
  */
 
 import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/app-bridge';
+import type { ArtworkImageData } from './viewer';
 
 interface Fixture {
   objectNumber: string;
@@ -147,20 +148,7 @@ function log(kind: 'tool' | 'lifecycle' | 'note' | 'error', message: string): vo
   console.info(`[dev-host:${kind}] ${message}`);
 }
 
-function fixtureToArtworkResult(f: Fixture): {
-  iiifId: string;
-  iiifInfoUrl: string;
-  thumbnailUrl: string;
-  width: number;
-  height: number;
-  objectNumber: string;
-  title: string;
-  creator: string;
-  date: string;
-  license: string;
-  physicalDimensions: string;
-  collectionUrl: string;
-} {
+function fixtureToArtworkResult(f: Fixture): ArtworkImageData {
   // viewUUID intentionally omitted — its presence triggers viewer.ts startPolling()
   // which spams poll_viewer_commands every few seconds and drowns out the messages
   // we actually care about while testing.
