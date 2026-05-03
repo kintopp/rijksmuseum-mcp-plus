@@ -46,6 +46,7 @@ import tarfile
 from itertools import chain
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import requests
 import requests.adapters
@@ -204,14 +205,20 @@ RM_TITLE_FORMER = "https://id.rijksmuseum.nl/22015528"
 
 # ─── N-Triples parsing (same as pilot) ──────────────────────────────
 
+_LITERAL_BODY = r'(?:[^"\\]|\\.)*'  # any char except `"`/`\`, OR a `\`-escape pair
+
 NT_PATTERN = re.compile(
     # Object can be <uri> or "literal" optionally followed by a datatype
     # suffix ^^<datatype> (e.g. xsd:dateTime on P82a/P82b literals).
     # The datatype group is non-capturing — we don't use it.
-    r'^<([^>]+)>\s+<([^>]+)>\s+(?:<([^>]+)>|"([^"]*)"(?:\^\^<[^>]+>)?)\s*\.\s*$'
+    # The literal body uses `_LITERAL_BODY` so escaped quotes (`\"`) and
+    # backslashes (`\\`) inside literals don't terminate the match early
+    # (#245: ~143 organisation files had escaped-quote names like
+    # `Verein \"Arbeitsgruppe ...\"` and were being silently dropped).
+    r'^<([^>]+)>\s+<([^>]+)>\s+(?:<([^>]+)>|"(' + _LITERAL_BODY + r')"(?:\^\^<[^>]+>)?)\s*\.\s*$'
 )
 BNODE_PATTERN = re.compile(
-    r'^_:(\S+)\s+<([^>]+)>\s+(?:<([^>]+)>|"([^"]*)"(?:\^\^<[^>]+>)?)\s*\.\s*$'
+    r'^_:(\S+)\s+<([^>]+)>\s+(?:<([^>]+)>|"(' + _LITERAL_BODY + r')"(?:\^\^<[^>]+>)?)\s*\.\s*$'
 )
 # Matches triples with URI subject and blank-node object: <uri> <uri> _:bnode .
 # Needed for exhibition dump parsing where <Exhibition> P16_used_specific_object _:Set .
@@ -226,8 +233,38 @@ NT_LANG_PATTERN = re.compile(
     # subtags separated by hyphens (e.g. `@nl`, `@nl-NL`, `@zh-Hans-CN`).
     # The earlier `\w+` form silently dropped topical_term `@nl-NL` labels,
     # which contributed to the Schema.org dump parsing gap (#238).
-    r'^<([^>]+)>\s+<([^>]+)>\s+"([^"]*)"@([A-Za-z][A-Za-z0-9-]*)\s*\.\s*$'
+    r'^<([^>]+)>\s+<([^>]+)>\s+"(' + _LITERAL_BODY + r')"@([A-Za-z][A-Za-z0-9-]*)\s*\.\s*$'
 )
+
+
+# N-Triples literal escape sequences: \" → ", \\ → \, \n → newline, etc.
+# https://www.w3.org/TR/n-triples/#grammar-production-ECHAR
+_ECHAR_MAP = {
+    '"': '"', "\\": "\\", "n": "\n", "r": "\r", "t": "\t",
+    "b": "\b", "f": "\f", "/": "/",
+}
+
+
+def _unescape_nt_literal(s: str) -> str:
+    """Decode N-Triples escape sequences in a literal body. The regex captures
+    the raw bytes between quotes; this turns `\\"` back into `"`, `\\\\` into
+    `\\`, `\\n` into a newline, etc. Unknown escapes pass through as-is so we
+    don't lose data on novel sequences."""
+    if "\\" not in s:
+        return s
+    out: list[str] = []
+    i = 0
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if c == "\\" and i + 1 < n:
+            nxt = s[i + 1]
+            out.append(_ECHAR_MAP.get(nxt, nxt))
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
 
 P_LABEL = "http://www.cidoc-crm.org/cidoc-crm/P190_has_symbolic_content"
 P_LANGUAGE = "http://www.cidoc-crm.org/cidoc-crm/P72_has_language"
@@ -761,7 +798,91 @@ def create_or_open_db() -> sqlite3.Connection:
 
 # ─── Phase 0: Parse data dumps ────────────────────────────────────────
 
-def parse_nt_file(filepath: str, default_type: str) -> dict | None:
+
+# Type alias: a callable taking an Iconclass notation string and returning a
+# (label_en, label_nl) tuple if either is resolvable, else None. Built once
+# per harvest by `make_iconclass_resolver()`. Used as a *last-resort* label
+# fallback in `parse_nt_file` for classification entities whose dump file
+# carries only a P190 notation string and no label literal of any kind.
+IconclassResolver = "callable[[str], tuple[str | None, str | None] | None] | None"
+
+
+def make_iconclass_resolver(db_path: str | None = None):
+    """Return a label resolver backed by `iconclass.db` (the local sibling
+    project's bundled Iconclass dump).
+
+    Recovery for classification entities like `41D224(SIERMOUWEN)` whose
+    dump file carries the notation but no label literal (#245). Three-step
+    lookup, first match wins:
+
+      1. **exact** — the full notation as-is
+      2. **paren-stripped** — drop Rijksmuseum-specific keys like
+         `(SIERMOUWEN)`, `(TURTLE)` to recover the canonical Iconclass base
+         (`41D224(SIERMOUWEN)` → `41D224` → "sleeves"). The Rijksmuseum
+         extends Iconclass with Dutch keyword keys; iconclass.org's dump
+         only has the canonical notations.
+      3. **progressive prefix** — shave one trailing char at a time until
+         a match (`41D2619(+82)` → `41D2619` → `41D261` → `41D26` → ...).
+         Always semantically valid: every prefix of an Iconclass notation
+         is a broader category. Recovery degrades gracefully (less specific
+         label) but never lies.
+
+    Returns None if the resolver is unavailable (no DB path, file missing).
+    Caller threads the result through `parse_nt_file(..., iconclass_resolver=)`.
+
+    DB path resolution order: explicit arg > `ICONCLASS_DB_PATH` env var >
+    project-local `data/iconclass.db` > sibling-checkout
+    `../rijksmuseum-iconclass-mcp/data/iconclass.db` (the dev convention —
+    the iconclass MCP server bundles its own 3.4 GB Iconclass dump).
+    """
+    if not db_path:
+        db_path = os.environ.get("ICONCLASS_DB_PATH")
+    if not db_path:
+        project_root = Path(__file__).resolve().parent.parent
+        candidates = [
+            project_root / "data" / "iconclass.db",
+            project_root.parent / "rijksmuseum-iconclass-mcp" / "data" / "iconclass.db",
+        ]
+        for c in candidates:
+            if c.exists():
+                db_path = str(c)
+                break
+    if not db_path or not os.path.exists(db_path):
+        return None
+
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    paren_re = re.compile(r'\([^)]+\)')
+
+    def resolve(notation: str) -> "tuple[str | None, str | None] | None":
+        if not notation:
+            return None
+        # Build candidate list in resolution-order priority
+        candidates: list[str] = [notation]
+        base = paren_re.sub("", notation)
+        if base != notation and base:
+            candidates.append(base)
+        target = base if base else notation
+        while len(target) > 1:
+            target = target[:-1]
+            candidates.append(target)
+        # Try each; first hit wins. Pull both en/nl in one query.
+        for cand in candidates:
+            rows = conn.execute(
+                "SELECT lang, text FROM texts WHERE notation = ? AND lang IN ('en', 'nl')",
+                (cand,),
+            ).fetchall()
+            if not rows:
+                continue
+            en = next((t for l, t in rows if l == "en"), None)
+            nl = next((t for l, t in rows if l == "nl"), None)
+            if en or nl:
+                return (en, nl)
+        return None
+
+    return resolve
+
+
+def parse_nt_file(filepath: str, default_type: str, iconclass_resolver=None) -> dict | None:
     """Parse a single N-Triples entity file into a vocabulary record.
 
     Handles two coexisting shapes in the dumps:
@@ -793,6 +914,12 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
     rdf_type: str | None = None
     skos_label_en: str | None = None
     skos_label_nl: str | None = None
+    # Other-language label fallbacks (#245): used only when en/nl labels
+    # are completely absent. Captures non-en/non-nl rdfs:label / skos:prefLabel
+    # literals (first-wins) so we don't silently drop entities whose only
+    # labels are French, German, etc.
+    skos_label_other: str | None = None
+    skos_label_untagged: str | None = None
 
     # Schema.org shape collectors (#238)
     schema_types: set[str] = set()
@@ -817,7 +944,7 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
         if m and m.group(1) == entity_uri:
             pred = m.group(2)
             obj_uri = m.group(3)
-            obj_lit = m.group(4)
+            obj_lit = _unescape_nt_literal(m.group(4)) if m.group(4) is not None else None
             if pred == P_EQUIVALENT and obj_uri:
                 equivalents.append(obj_uri)
             elif pred == P_BROADER and obj_uri:
@@ -838,13 +965,19 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
                 schema_alt_names_bare.append(obj_lit)
             elif pred == P_SCHEMA_SAME_AS and obj_uri:
                 schema_same_as.append(obj_uri)
+            elif pred in (SKOS_PREFLABEL, RDFS_LABEL) and obj_lit is not None:
+                # #245 fallback: untagged rdfs:label / skos:prefLabel literal
+                # (no `@lang` suffix). NT_LANG_PATTERN doesn't match these,
+                # so without this branch they'd be silently dropped.
+                if skos_label_untagged is None:
+                    skos_label_untagged = obj_lit
 
         m = BNODE_PATTERN.match(line)
         if m:
             bnode_id = m.group(1)
             pred = m.group(2)
             obj_uri = m.group(3)
-            obj_lit = m.group(4)
+            obj_lit = _unescape_nt_literal(m.group(4)) if m.group(4) is not None else None
 
             if bnode_id not in bnodes:
                 bnodes[bnode_id] = {}
@@ -863,13 +996,18 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
         m = NT_LANG_PATTERN.match(line)
         if m and m.group(1) == entity_uri:
             pred = m.group(2)
-            text = m.group(3)
+            text = _unescape_nt_literal(m.group(3))
             lang_tag = m.group(4)
             if pred in (SKOS_PREFLABEL, RDFS_LABEL) and text:
                 if lang_tag == "en" and not skos_label_en:
                     skos_label_en = text
                 elif lang_tag == "nl" and not skos_label_nl:
                     skos_label_nl = text
+                elif skos_label_other is None:
+                    # #245 fallback: capture first non-en/non-nl tag as a
+                    # last resort. lang_tag is always present here because
+                    # NT_LANG_PATTERN requires the @lang suffix.
+                    skos_label_other = text
             elif pred == P_SCHEMA_NAME and text:
                 # BCP 47 primary subtag (e.g. `nl-NL` → `nl`, `zh-Hans-CN` → `zh`)
                 primary = lang_tag.split("-", 1)[0].lower()
@@ -882,6 +1020,7 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
 
     label_en = None
     label_nl = None
+    bnode_label_other: str | None = None  # #245 fallback for non-en/non-nl display-name labels
 
     for bdata in bnodes.values():
         label = bdata.get("label")
@@ -895,6 +1034,11 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
                 label_en = label
             elif lang == LANG_NL:
                 label_nl = label
+            elif bnode_label_other is None:
+                # Non-en/non-nl display-name label (or no language URI): keep
+                # as last-resort fallback. First-wins; ordering across bnodes
+                # is dict-iteration order which is dump-file dependent.
+                bnode_label_other = label
 
     # Fallback: use skos/rdfs labels if display-name labels weren't found
     if not label_en:
@@ -986,10 +1130,58 @@ def parse_nt_file(filepath: str, default_type: str) -> dict | None:
             lon = float(m_coord.group(1))
             lat = float(m_coord.group(2))
 
-    # For events, insert even without labels (the entity ID is the primary value)
+    # #245: Other-language fallback before final drop. Recovers entities
+    # whose only labels are in French/German/etc. or carry no @lang tag.
+    # Stored under label_en by convention (the column is treated as the
+    # primary display label downstream; precise BCP47 tagging is out of
+    # scope for the vocab table). Tried in priority order:
+    #   1. blank-node display-name with non-en/non-nl AAT language URI
+    #   2. skos:prefLabel / rdfs:label with non-en/non-nl @lang
+    #   3. skos:prefLabel / rdfs:label with no @lang at all
+    #   4. any schema:name in any language (covers files that have only
+    #      a single non-en/non-nl @lang-tagged schema:name and no other
+    #      label channels)
+    #   5. any schema:alternateName in any language
     if not label_en and not label_nl:
-        if vocab_type == "event":
+        fallback = (
+            bnode_label_other
+            or skos_label_other
+            or skos_label_untagged
+            or next(iter(schema_names_by_lang.values()), None)
+            or next(iter(schema_alt_names_by_lang.values()), None)
+        )
+        if fallback:
+            label_en = fallback
+        elif vocab_type == "event":
             label_en = entity_id  # Use entity ID as fallback label
+        elif iconclass_resolver is not None and vocab_type == "classification":
+            # #245 Tier 1: last-resort lookup against iconclass.db. Two ways
+            # to derive a candidate notation for a label-less classification:
+            #   1. P190 literal on the E42_Identifier bnode (most files)
+            #   2. URL path of any iconclass.org URI in `linked.art/equivalent`
+            #      (the ~11 files that carry only the URI, no P190 literal —
+            #      e.g. `<...> equivalent <https://iconclass.org/61BB11%28%2B0%29>`)
+            # Places (notation = "POINT(...)") are excluded.
+            candidate_notation: str | None = None
+            if notation and not notation.startswith("POINT"):
+                candidate_notation = notation
+            else:
+                for eq in equivalents:
+                    if "iconclass.org/" in eq:
+                        candidate_notation = urllib.parse.unquote(
+                            eq.split("iconclass.org/", 1)[1]
+                        )
+                        if not notation:
+                            notation = candidate_notation  # also persist for audit
+                        break
+            if candidate_notation:
+                resolved = iconclass_resolver(candidate_notation)
+                if resolved:
+                    label_en, label_nl = resolved
+                else:
+                    return None
+            else:
+                return None
         else:
             return None
 
@@ -1021,7 +1213,7 @@ def extract_dump(tar_name: str) -> Path | None:
     return extract_dir
 
 
-def parse_dump_dir(dump_dir: Path, default_type: str) -> list[dict]:
+def parse_dump_dir(dump_dir: Path, default_type: str, iconclass_resolver=None) -> list[dict]:
     """Parse all N-Triples files in a dump directory."""
     files = [f for f in os.listdir(dump_dir) if os.path.isfile(dump_dir / f) and not f.startswith(".")]
     total = len(files)
@@ -1029,7 +1221,7 @@ def parse_dump_dir(dump_dir: Path, default_type: str) -> list[dict]:
     for i, fname in enumerate(files):
         if i % 5000 == 0 and i > 0:
             print(f"    Parsing: {i}/{total}...", flush=True)
-        rec = parse_nt_file(str(dump_dir / fname), default_type)
+        rec = parse_nt_file(str(dump_dir / fname), default_type, iconclass_resolver=iconclass_resolver)
         if rec:
             records.append(rec)
     return records
@@ -1292,6 +1484,15 @@ def run_phase0(conn: sqlite3.Connection):
         print(f"  Download from: https://data.rijksmuseum.nl/object-metadata/download/")
         return
 
+    # #245 Tier 1: build the iconclass-fallback resolver once. None if the
+    # sibling iconclass.db isn't available — harvest still works, just with
+    # ~100 fewer recovered classifications.
+    iconclass_resolver = make_iconclass_resolver()
+    if iconclass_resolver is None:
+        print("  Note: iconclass.db not found — classification label fallback disabled (#245).")
+    else:
+        print("  Iconclass-fallback resolver active for label-less classifications (#245).")
+
     total_records = 0
     total_ext_ids = 0
 
@@ -1306,7 +1507,7 @@ def run_phase0(conn: sqlite3.Connection):
         if tar_name == "exhibition":
             exh_count, mem_count = parse_exhibition_dump(dump_dir, conn)
             # Also parse as regular vocab (for label lookup)
-            records = parse_dump_dir(dump_dir, default_type)
+            records = parse_dump_dir(dump_dir, default_type, iconclass_resolver=iconclass_resolver)
             if records:
                 ext_count = _flush_vocab_batch(conn, records)
                 conn.commit()
@@ -1315,7 +1516,7 @@ def run_phase0(conn: sqlite3.Connection):
             print(f"    {exh_count:,} exhibitions, {mem_count:,} artwork memberships, {len(records):,} vocab records")
             continue
 
-        records = parse_dump_dir(dump_dir, default_type)
+        records = parse_dump_dir(dump_dir, default_type, iconclass_resolver=iconclass_resolver)
         if not records:
             print(f"    No records parsed")
             continue
