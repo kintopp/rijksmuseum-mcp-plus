@@ -1844,10 +1844,27 @@ function registerTools(
 
   // ── get_artwork_image (MCP App with inline IIIF viewer) ────────
 
-  // Shared by get_artwork_image and remount_viewer: look up artwork metadata
-  // from the vocab DB, resolve IIIF info (1 HTTP request), and shape the
-  // ImageInfoOutput payload sans viewUUID. Callers add the UUID and finalise
-  // the text-channel narration.
+  // Single source of truth for the vocab-lookup + IIIF-resolve prelude shared by
+  // get_artwork_image, remount_viewer, and inspect_artwork_image. Callers that
+  // need viewer-payload shaping go through resolveArtworkImagePayload below;
+  // inspect_artwork_image consumes the raw artwork + imageInfo for IIIF region
+  // math.
+  type ArtworkMetadata = NonNullable<ReturnType<VocabularyDb["lookupImageMetadata"]>>;
+  type ImageInfo = NonNullable<Awaited<ReturnType<RijksmuseumApiClient["getImageInfoFast"]>>>;
+  type ArtworkAndImage =
+    | { ok: false; reason: "no_artwork" | "no_image"; error: string }
+    | { ok: true; artwork: ArtworkMetadata; imageInfo: ImageInfo };
+
+  const loadArtworkAndImageInfo = async (objectNumber: string): Promise<ArtworkAndImage> => {
+    const artwork = vocabDb?.lookupImageMetadata(objectNumber);
+    if (!artwork) return { ok: false, reason: "no_artwork", error: "No artwork found for this object number" };
+    const imageInfo = artwork.iiifId ? await api.getImageInfoFast(artwork.iiifId) : null;
+    if (!imageInfo) return { ok: false, reason: "no_image", error: "No image available for this artwork" };
+    return { ok: true, artwork, imageInfo };
+  };
+
+  // Shape the ImageInfoOutput payload sans viewUUID. Callers add the UUID and
+  // finalise the text-channel narration.
   type ArtworkImagePayload =
     | { ok: false; error: string }
     | {
@@ -1858,16 +1875,12 @@ function registerTools(
         narrationPrefix: string;
       };
   const resolveArtworkImagePayload = async (objectNumber: string): Promise<ArtworkImagePayload> => {
-    const artwork = vocabDb?.lookupImageMetadata(objectNumber);
-    if (!artwork) return { ok: false, error: "No artwork found for this object number" };
-
-    const resolvedImageInfo = artwork.iiifId
-      ? await api.getImageInfoFast(artwork.iiifId)
-      : null;
-    if (!resolvedImageInfo) return { ok: false, error: "No image available for this artwork" };
+    const loaded = await loadArtworkAndImageInfo(objectNumber);
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+    const { artwork, imageInfo } = loaded;
 
     const physicalDimensions = formatDimensions(artwork.heightCm, artwork.widthCm);
-    const { thumbnailUrl, iiifId, ...imageData } = resolvedImageInfo;
+    const { thumbnailUrl, iiifId, ...imageData } = imageInfo;
     const data: Omit<InferOutput<typeof ImageInfoOutput>, "viewUUID"> = {
       ...imageData,
       objectNumber: artwork.objectNumber,
@@ -1881,7 +1894,7 @@ function registerTools(
     const dims = data.width && data.height ? ` | ${data.width}×${data.height}px` : "";
     const licenseTag = artwork.license ? ` [${artwork.license}]` : "";
     const narrationPrefix = `${artwork.objectNumber} — "${artwork.title}" by ${artwork.creator}${dims}${licenseTag}`;
-    return { ok: true, data, width: resolvedImageInfo.width, height: resolvedImageInfo.height, narrationPrefix };
+    return { ok: true, data, width: imageInfo.width, height: imageInfo.height, narrationPrefix };
   };
 
   registerAppTool(
@@ -2095,16 +2108,10 @@ function registerTools(
       };
 
       try {
-        // Look up metadata from vocab DB (sync) — replaces Linked Art resolver
-        const artwork = vocabDb?.lookupImageMetadata(args.objectNumber);
-        if (!artwork) {
-          return cropError("No artwork found for this object number");
+        const loaded = await loadArtworkAndImageInfo(args.objectNumber);
+        if (!loaded.ok && loaded.reason === "no_artwork") {
+          return cropError(loaded.error);
         }
-
-        // Resolve IIIF image info (1 HTTP request)
-        const imageInfo = artwork.iiifId
-          ? await api.getImageInfoFast(artwork.iiifId)
-          : null;
 
         // Find active viewer — prefer explicit viewUUID, else pick the most
         // recently accessed queue for this artwork. Recency tie-break is safe
@@ -2135,9 +2142,10 @@ function registerTools(
           }
         }
 
-        if (!imageInfo) {
-          return cropError("No image available for this artwork");
+        if (!loaded.ok) {
+          return cropError(loaded.error);
         }
+        const { artwork, imageInfo } = loaded;
 
         // show_overlays on region="full" hits a degenerate case: at the 448 px
         // clamp, a feature-scale overlay shrinks to a few pixels and reveals
