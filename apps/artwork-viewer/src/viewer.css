@@ -120,10 +120,29 @@ html, body {
 .header h1 {
   font-size: 1rem;
   font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Outer span holds the click-to-copy + tooltip; sized to its truncated text
+   content so the hover/click area matches what the user sees. Crucially does
+   NOT have overflow:hidden — that would clip the :hover::after tooltip. */
+.header h1 > .copyable {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+}
+
+/* Inner span carries the truncation; its overflow:hidden is what makes
+   text-overflow:ellipsis kick in for long titles. */
+.header h1 .title-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
+  min-width: 0;
 }
 
 .metadata {
@@ -253,12 +272,58 @@ html, body {
   transition: background 0.2s;
 }
 
-.image-controls button:hover {
+.image-controls button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.image-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .image-controls button.active {
   background: rgba(59, 130, 246, 0.4);
+}
+
+/* Uniform background width for all icon buttons (everything except Reset,
+   which is a text label and naturally wider). The select-region button keeps
+   a larger glyph for prominence but its background matches the others. */
+.image-controls #show-shortcuts,
+.image-controls #zoom-in,
+.image-controls #zoom-out,
+.image-controls #prev-related,
+.image-controls #next-related,
+.image-controls #select-mode {
+  width: 2.4rem;
+  padding: 0.4rem 0;
+  font-size: 0.9rem;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.image-controls #zoom-in,
+.image-controls #zoom-out {
+  font-size: 1.05rem;
+}
+
+.image-controls #prev-related,
+.image-controls #next-related {
+  font-size: 0.75rem;
+}
+
+.image-controls #select-mode {
+  font-size: 1.1rem;
+}
+
+/* Suppress the browser's default focus ring after a mouse click — keyboard
+   users still get a clear indicator via :focus-visible below. */
+.image-controls button:focus {
+  outline: none;
+}
+
+.image-controls button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 1px;
 }
 
 .image-controls .control-separator {

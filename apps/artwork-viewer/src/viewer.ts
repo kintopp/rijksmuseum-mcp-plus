@@ -156,6 +156,12 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }):
   currentRotation = 0;
   isFlipped = false;
   renderViewer(data);
+  // renderViewer re-creates the toolbar from a static HTML template where
+  // prev/next-related start disabled; fetchRelatedObjectsForCurrent only
+  // re-enables them on the seed-mount path. Re-assert the state here so peer
+  // navigation and seed-returns keep the mouse buttons live as long as
+  // viewerRelatedObjects has entries.
+  setNavButtonsEnabled(viewerRelatedObjects.length > 0);
   updateModelContext(data);
   if (data.viewUUID) {
     viewUUID = data.viewUUID;
@@ -225,13 +231,23 @@ function resetView(): void {
   viewer.viewport.setFlip(false);
   viewer.viewport.goHome();
   clearAllOverlays();
+  // Reset is also the explicit way out of select mode — keeps the visual
+  // state of the icon in sync with what the user just did.
+  if (selectMode) toggleSelectMode();
 }
 
 function setNavButtonsEnabled(enabled: boolean): void {
   const prev = document.getElementById('prev-related') as HTMLButtonElement | null;
   const next = document.getElementById('next-related') as HTMLButtonElement | null;
-  if (prev) prev.disabled = !enabled;
-  if (next) next.disabled = !enabled;
+  const disabledHint = 'No related objects';
+  if (prev) {
+    prev.disabled = !enabled;
+    prev.title = enabled ? 'Previous related (j)' : disabledHint;
+  }
+  if (next) {
+    next.disabled = !enabled;
+    next.title = enabled ? 'Next related (l)' : disabledHint;
+  }
 }
 
 async function fetchRelatedObjectsForCurrent(objectNumber: string): Promise<void> {
@@ -447,7 +463,8 @@ function onSelectionRelease(event: OpenSeadragon.MouseTrackerEvent): void {
 
   const region = `pct:${r.pctX.toFixed(1)},${r.pctY.toFixed(1)},${r.pctW.toFixed(1)},${r.pctH.toFixed(1)}`;
   userHighlightEl = addRegionOverlay(region, 'Highlight', HIGHLIGHT_STROKE, HIGHLIGHT_FILL);
-  toggleSelectMode();
+  // Stay in select mode after drawing — user exits explicitly via i, click on
+  // the rectangle icon, or Reset. This lets them redraw without re-entering.
   sendSelectionToChat(region);
 }
 
@@ -513,7 +530,7 @@ function renderViewer(data: ArtworkImageData): void {
     <div class="main">
       <header class="header">
         <div class="header-title-row">
-          <h1 class="copyable" data-copy="${escapeHtml(data.title)}" data-tooltip="Click to copy">${escapeHtml(data.title)}</h1>
+          <h1><span class="copyable" data-copy="${escapeHtml(data.title)}" data-tooltip="Click to copy"><span class="title-text">${escapeHtml(data.title)}</span></span></h1>
           <div class="external-links">
             <a href="${collectionUrl}" data-external-url="${collectionUrl}">Rijksmuseum</a>
           </div>
@@ -542,7 +559,7 @@ function renderViewer(data: ArtworkImageData): void {
             <div class="shortcuts-list">
               <div class="shortcut-row"><kbd>&#8679;&uarr;</kbd> / <kbd>&#8679;&darr;</kbd><span>Zoom in / out</span></div>
               <div class="shortcut-row"><kbd>+</kbd> / <kbd>&minus;</kbd><span>Zoom in / out</span></div>
-              <div class="shortcut-row"><kbd>0</kbd> / <kbd>k</kbd><span>Reset view / return to seed</span></div>
+              <div class="shortcut-row"><kbd>0</kbd> / <kbd>k</kbd><span>Reset view</span></div>
               <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
               <div class="shortcut-row"><kbd>j</kbd> / <kbd>l</kbd><span>Previous / next related artwork</span></div>
               <div class="shortcut-row"><kbd>r</kbd> / <kbd>&#8679;r</kbd><span>Rotate right / left</span></div>
