@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:,">
+  <title>Viewer Dev Host (cluster-e UX testing)</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a1a; color: #eee; }
+    .layout { display: grid; grid-template-columns: 1fr 320px; height: 100vh; }
+    .iframe-wrap { background: #000; }
+    .iframe-wrap iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .panel { padding: 12px; background: #232323; border-left: 1px solid #333; display: flex; flex-direction: column; gap: 10px; overflow: hidden; min-width: 0; }
+    .panel h2 { font-size: 13px; margin: 0; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .controls { display: flex; flex-direction: column; gap: 4px; }
+    .controls button { padding: 6px 10px; background: #333; border: 1px solid #444; color: #eee; cursor: pointer; border-radius: 3px; font-size: 12px; text-align: left; }
+    .controls button:hover { background: #3a3a3a; }
+    .state { font-size: 11px; color: #888; display: flex; flex-direction: column; gap: 2px; }
+    .state code { color: #ddd; font-family: ui-monospace, monospace; }
+    .log { flex: 1; background: #111; border: 1px solid #333; padding: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; overflow-y: auto; min-height: 0; line-height: 1.4; }
+    .log .row { padding: 2px 0; border-bottom: 1px dotted #222; }
+    .log .row.tool { color: #8cf; }
+    .log .row.lifecycle { color: #fc8; }
+    .log .row.note { color: #aaa; font-style: italic; }
+    .log .row.error { color: #f88; }
+    .log .row time { color: #555; margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="iframe-wrap">
+      <iframe id="viewer-frame" src="./index.html" allow="fullscreen; clipboard-write; clipboard-read"></iframe>
+    </div>
+    <aside class="panel">
+      <h2>Dev Host</h2>
+      <div class="controls">
+        <button data-mount="seed">Mount SK-A-1115 (Battle of Waterloo, 4 peers)</button>
+        <button data-mount="peerless">Mount SK-A-135 (Merry Drinker, 0 peers)</button>
+        <button data-mount="reload">Reload iframe</button>
+      </div>
+      <h2>Display state</h2>
+      <div class="state">
+        <div>displayMode: <code id="state-display-mode">inline</code></div>
+        <div>peers loaded: <code id="state-peers">0</code></div>
+        <div>last tool call: <code id="state-last-tool">—</code></div>
+      </div>
+      <h2>Bridge log</h2>
+      <div class="log" id="log"></div>
+    </aside>
+  </div>
+  <script type="module" src="./src/dev-host.ts"></script>
+</body>
+</html>
