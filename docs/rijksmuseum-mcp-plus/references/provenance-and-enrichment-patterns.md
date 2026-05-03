@@ -4,6 +4,10 @@ Reference material for `search_provenance`. Consult this file when you need to
 interpret raw provenance text, understand the data model, or construct
 specialised query patterns beyond the examples in the main skill.
 
+> **v0.3.0 audit status (2026-05-03):** the CMOA/AAM data model is unchanged. Coverage counts re-derived from the v0.27-RC1 vocab DB (~360K artworks with `creditLine` vs ~49K with parsed provenance). `parseMethod` shares re-confirmed (peg 80.1% / cross_ref 19.6% / llm_structural 0.2% / credit_line 0.1%). Audit-trail vocabulary cross-reference added. Items still flagged for live spot-tests:
+> - **`hasGap` + `dateFrom`/`dateTo` interaction** — verify artwork-level vs event-level filtering described under "Wartime provenance".
+> - **`transferType=["by_descent","widowhood"]` + `layer="periods"`** — verify end-to-end parse against current `search_provenance` implementation.
+
 ## Contents
 
 1. [Provenance Text Format (AAM Standard)](#provenance-text-format-aam-standard)
@@ -118,7 +122,8 @@ structure), or `llm_disambiguation` (LLM-resolved merged party text).
 
 Coverage: ~90K parties across ~100K events. Not all events have named parties —
 bare-name `collection` events and cross-references often lack structured party
-data.
+data. (Spot-checked 2026-05-03 against the v0.27-RC1 DB: ~49K artworks have at
+least one parsed provenance event.)
 
 ---
 
@@ -166,8 +171,32 @@ determined:
 - `enrichmentReasoning`: the LLM's reasoning for any non-deterministic decision
 
 When results contain LLM-enriched records, `search_provenance` provides a URL
-to an enrichment review page showing the full methodology and reasoning for
+to an enrichment review page (at `${PUBLIC_URL}/enrichment-review/:uuid`,
+TTL-cached for 30 minutes) showing the full methodology and reasoning for
 each decision. **Always show this URL to the user.**
+
+### Two complementary audit layers
+
+The four fields above (`parseMethod`, `categoryMethod`, `positionMethod`,
+`enrichmentReasoning`) are **event-level** audit metadata — they record how
+each parsed provenance event was produced.
+
+In v0.27 the vocabulary DB also carries an **entity-level** 3-tier audit
+vocabulary that runs alongside this:
+
+| Tier | Meaning |
+|------|---------|
+| `deterministic` | Source-derived without inference (e.g. exact-match alt-name from authority files) |
+| `inferred` | Algorithmically inferred (e.g. fuzzy-match alt-name not yet reviewed) |
+| `manual` | Human-reviewed (e.g. fuzzy-match alt-name confirmed by reviewer) |
+
+This 3-tier vocabulary appears on `entity_alt_names.tier`, on geo-enrichment
+audit columns (`coord_method` / `placetype_source`), and on the entity-level
+audit twins of provenance enrichment. Don't confuse them — *event*-level
+methods (`peg` / `cross_ref` / `llm_enrichment` / `llm_structural`) describe
+the parsed event provenance, while the 3-tier vocabulary describes the
+provenance of supporting entity data (places, alt-names, external IDs) that
+the event references.
 
 ### Querying by enrichment method
 
@@ -198,16 +227,17 @@ collection_stats(dimension="parseMethod")
 
 The `parseMethod` field records how each provenance record was processed:
 
-| Value | Share | Description |
-|-------|-------|-------------|
-| `peg` | ~80% | PEG grammar parser — highest confidence |
-| `cross_ref` | ~20% | Cross-reference links |
-| `llm_structural` | <1% | LLM-resolved structural cases the PEG grammar could not parse |
-| `credit_line` | <1% | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
+| Value | Share (v0.27-RC1) | Description |
+|-------|-------------------|-------------|
+| `peg` | 80.1% | PEG grammar parser — highest confidence |
+| `cross_ref` | 19.6% | Cross-reference links |
+| `llm_structural` | 0.2% | LLM-resolved structural cases the PEG grammar could not parse |
+| `credit_line` | 0.1% | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
 | `regex_fallback` | — | Legacy, currently unused |
 
 `credit_line` events are particularly useful: they recover acquisition context
-(donor name, purchase fund) that the provenance text omits.
+(donor name, purchase fund) that the provenance text omits. Re-derive these
+shares any time after a new harvest with `collection_stats(dimension="parseMethod")`.
 
 ---
 
@@ -260,7 +290,8 @@ search_provenance(layer="periods", ownerName="Six",
 ### Acquisition channel analysis
 
 ```python
-# creditLine covers ~358K artworks — far more than parsed provenance (~48K)
+# creditLine covers ~360K artworks — far more than parsed provenance (~49K).
+# (Recounted 2026-05-03 against the v0.27-RC1 DB.)
 # Use it to profile how the museum acquired works from a donor or fund
 search_artwork(creditLine="Drucker-Fraser", compact=true)
 search_artwork(creditLine="Vereniging Rembrandt", type="painting", compact=true)
@@ -277,6 +308,8 @@ search_provenance(transferType="confiscation",
 # Note: hasGap is artwork-level (any gap anywhere in the chain);
 # dateFrom/dateTo filters on event date_year. The gap itself may fall
 # outside the target range — always inspect the returned chain to confirm.
+# ⚠ TODO (v0.3.0 audit): re-validate the artwork-level vs event-level
+# semantics against the current search_provenance implementation.
 search_provenance(hasGap=true, creator="Rembrandt",
                   dateFrom=1933, dateTo=1945, maxResults=20)
 
@@ -301,6 +334,10 @@ search_provenance(objectNumber="SK-A-2344", layer="events")
 ### Multi-generation family collections
 
 ```python
+# ⚠ TODO (v0.3.0 audit): verify that transferType arrays still parse end-to-end
+# against the current search_provenance with layer="periods". (Period rows don't
+# carry transfer_type directly — the filter applies to the period's acquisition
+# event.)
 search_provenance(transferType=["by_descent", "widowhood"],
                   layer="periods", minDuration=50,
                   sortBy="duration", sortOrder="desc", maxResults=20)
