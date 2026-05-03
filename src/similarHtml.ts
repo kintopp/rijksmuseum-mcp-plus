@@ -164,10 +164,10 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     badge: "Rel",
     color: "#ad1457",
     methodology:
-      "Curator-defined assertions linking other related works: " +
-      "<em>pair</em> / <em>set</em> / <em>recto | verso</em> / <em>product line</em> (multi-object groupings, score 6), " +
-      "<em>original | reproduction</em> (derivative works by other hands, score 4), " +
-      "and the catch-all <em>related object</em> (score 2).",
+      "Curator-defined assertions linking other related works, weighted by the specificity of the relationship: " +
+      "<em>pair</em> / <em>set</em> / <em>recto | verso</em> / <em>product line</em> (named, well-defined groupings) carry the most weight; " +
+      "<em>original | reproduction</em> (a defined derivative relationship) less; " +
+      "the catch-all <em>related object</em> the least.",
   },
   pooled: {
     label: "Pooled",
