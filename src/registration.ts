@@ -1426,8 +1426,11 @@ function registerTools(
               attributionQualifier: stringOrArray()
                 .optional()
                 .describe(
-                  "Filter by attribution qualifier: 'primary', 'attributed to', 'workshop of', " +
-                  "'circle of', 'follower of', 'secondary', 'undetermined'. " +
+                  "Filter by attribution qualifier. Full enumerated set (13 values, ordered by DB frequency): " +
+                  "'primary', 'undetermined', 'after', 'secondary', 'possibly', 'attributed to', " +
+                  "'circle of', 'workshop of', 'copyist of', 'manner of', 'follower of', 'falsification', 'free-form'. " +
+                  "Mixes connoisseurship terms (workshop of, circle of, follower of, manner of, copyist of), " +
+                  "editorial-confidence terms (attributed to, possibly, undetermined), and structural markers (primary, secondary, after, falsification, free-form). " +
                   "Combine with creator to narrow attribution (e.g. attributionQualifier: 'workshop of' + creator: 'Rembrandt')."
                 ),
               expandPlaceHierarchy: z.preprocess(stripNull, z
