@@ -1218,8 +1218,9 @@ function registerTools(
     "theme", "sourceType", "modifiedAfter", "modifiedBefore",
   ] as const;
   // nearPlaceRadius excluded from routing key check: its Zod default (25) would trigger
-  // on every query. Forwarded separately.
-  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", "dateMatch"] as const;
+  // on every query. Forwarded separately. sortBy/sortOrder are also forwarded but never
+  // count as substantive filters for the "at-least-one-filter-required" check.
+  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", "dateMatch", "sortBy", "sortOrder"] as const;
 
   server.registerTool(
     "search_artwork",
@@ -1541,6 +1542,25 @@ function registerTools(
             "and the parent gains a `groupedChildCount`. Only collapses when both child and parent match the query " +
             "— children whose parent isn't a hit remain in the result. Applied after the BM25 page is selected, " +
             "so a parent that ranks below the maxResults cutoff won't pull its children in. Closes #28.",
+          ),
+        sortBy: z
+          .enum(["height", "width", "dateEarliest", "dateLatest", "recordModified"])
+          .optional()
+          .describe(
+            "Order results by a column instead of relevance/importance. " +
+            "Overrides BM25 (text-match) and geo-proximity ordering when set. Cannot be used alone — needs at least one substantive filter.\n\n" +
+            "Values: " +
+            "'height' / 'width' (cm — 95% / 94% coverage; 0.0 sentinels are folded to NULL and ordered last), " +
+            "'dateEarliest' / 'dateLatest' (year — 99.9% coverage; bracket the dating range, useful for hedged datings like 'c. 1660–1665'), " +
+            "'recordModified' (ISO date — 62% coverage; ~7 implausibly future-dated rows lead a 'desc' sort, ~2K pre-1990 rows lead an 'asc' sort)."
+          ),
+        sortOrder: z
+          .enum(["asc", "desc"])
+          .optional()
+          .describe(
+            "Sort direction (default 'desc'). NULLs always sort last regardless of direction. " +
+            "Examples: largest paintings → sortBy='height', sortOrder='desc'; earliest works → sortBy='dateEarliest', sortOrder='asc'; " +
+            "most recently catalogued → sortBy='recordModified', sortOrder='desc'."
           ),
         pageToken: optStr()
           .optional()

@@ -275,6 +275,10 @@ export interface VocabSearchParams {
   // Record-modified date range (require record_modified column)
   modifiedAfter?: string;
   modifiedBefore?: string;
+  // Result ordering. Overrides BM25 / geo-proximity / importance defaults.
+  // recordModified requires record_modified column (v0.27+ DB).
+  sortBy?: "height" | "width" | "dateEarliest" | "dateLatest" | "recordModified";
+  sortOrder?: "asc" | "desc";
   maxResults?: number;
   offset?: number;
   facets?: string[];
@@ -4116,18 +4120,49 @@ export class VocabularyDb {
     const limit = Math.min(effective.maxResults ?? 25, INTERNAL_MAX_RESULTS_CAP);
     const userOffset = effective.offset ?? 0;
 
-    // When geo is active and BM25 isn't ordering, use a larger internal limit so
-    // distance ordering (applied post-query) sees the true top-N nearest artworks,
-    // not just the most-important ones. Cap at 2000 to bound memory usage.
+    // sortBy overrides BM25 / geo-proximity / importance defaults.
+    // NULLIF on dimension columns folds the 0.0 "unknown" sentinels to NULL so
+    // they fall to the end under NULLS LAST regardless of sort direction.
+    const SORT_COLUMN_MAP: Record<NonNullable<VocabSearchParams["sortBy"]>, string> = {
+      height: "NULLIF(a.height_cm, 0)",
+      width: "NULLIF(a.width_cm, 0)",
+      dateEarliest: "a.date_earliest",
+      dateLatest: "a.date_latest",
+      recordModified: "a.record_modified",
+    };
+    let sortByActive = false;
+    let sortByClause = "";
+    if (effective.sortBy) {
+      if (effective.sortBy === "recordModified" && !this.hasRecordModified_) {
+        warnings.push("sortBy: 'recordModified' requires vocabulary DB v0.27+. Sort was ignored.");
+      } else if ((effective.sortBy === "height" || effective.sortBy === "width") && !this.hasDimensions) {
+        warnings.push(`sortBy: '${effective.sortBy}' requires vocabulary DB v1.0+. Sort was ignored.`);
+      } else {
+        const expr = SORT_COLUMN_MAP[effective.sortBy];
+        const dir = effective.sortOrder === "asc" ? "ASC" : "DESC";
+        sortByClause = `${expr} ${dir} NULLS LAST`;
+        sortByActive = true;
+      }
+    }
+
+    // When geo is active and neither BM25 nor sortBy is ordering, use a larger
+    // internal limit so distance ordering (applied post-query) sees the true
+    // top-N nearest artworks, not just the most-important ones. Cap at 2000.
     // Always fetch limit + offset rows so post-query offset works correctly.
-    const geoExpansion = geoResult && !ftsRankOrder;
+    const geoExpansion = geoResult && !ftsRankOrder && !sortByActive;
     const fetchLimit = geoExpansion ? Math.max((limit + userOffset) * 10, 2000) : limit + userOffset;
 
-    const orderBy = ftsRankOrder
-      ? "ORDER BY fts.rank"
-      : this.hasImportance
-        ? "ORDER BY a.importance DESC"
-        : "";
+    // All ordering paths get a deterministic tiebreaker on a.art_id ASC so
+    // pagination is stable across pages even within heavy importance ties
+    // (550K+ artworks share importance=7 — see #321).
+    const tiebreaker = ", a.art_id ASC";
+    const orderBy = sortByActive
+      ? `ORDER BY ${sortByClause}${tiebreaker}`
+      : ftsRankOrder
+        ? `ORDER BY fts.rank${tiebreaker}`
+        : this.hasImportance
+          ? `ORDER BY a.importance DESC${tiebreaker}`
+          : `ORDER BY a.art_id ASC`;
     const sql = `SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
     const rows = this.db.prepare(sql).all(
       ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, fetchLimit] : [...bindings, fetchLimit]),
@@ -4183,8 +4218,8 @@ export class VocabularyDb {
       }
     }
 
-    // Sort by distance when geo is active and BM25 isn't already ordering
-    if (distanceMap && distanceMap.size > 0 && !ftsRankOrder) {
+    // Sort by distance when geo is active and neither BM25 nor sortBy is ordering
+    if (distanceMap && distanceMap.size > 0 && !ftsRankOrder && !sortByActive) {
       rows.sort((a, b) => {
         const da = distanceMap!.get(a.object_number)?.dist ?? Infinity;
         const db = distanceMap!.get(b.object_number)?.dist ?? Infinity;
