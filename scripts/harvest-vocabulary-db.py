@@ -39,6 +39,7 @@ import os
 import re
 import socket
 import sqlite3
+import subprocess
 import zipfile
 from collections import Counter, defaultdict
 import sys
@@ -82,6 +83,47 @@ HARVEST_VERSION = "v0.24"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 CHECKPOINT_PATH = SCRIPT_DIR / ".harvest-checkpoint"
 DUMPS_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps"
+
+
+# ─── Run state (#230) ────────────────────────────────────────────────
+# Per-phase wall durations (seconds) keyed `phase0`, `phase0_5`, `phase1`,
+# `phase2`, `phase4`, `phase4_5`, `phase2b`, `phase3`. Populated by main();
+# persisted to version_info as `<key>_duration_sec`. `--start-phase N` resumes
+# only stamp the phases that actually ran — keys for skipped phases are absent.
+PHASE_DURATIONS: dict[str, float] = {}
+HARVEST_STARTED_AT: str | None = None  # ISO-8601 UTC
+
+
+def repo_path(p) -> str:
+    """#230: Render a path as repo-relative when it lives under PROJECT_DIR,
+    falling back to the absolute string otherwise. Use for log lines so logs
+    captured on the build machine remain interpretable when read elsewhere."""
+    try:
+        return str(Path(p).resolve().relative_to(PROJECT_DIR.resolve()))
+    except (ValueError, OSError):
+        return str(p)
+
+
+def detect_git_commit() -> tuple[str, bool]:
+    """#230: Return (short_commit, dirty) for the harvest script's checkout.
+    Returns ("unknown", False) outside a git checkout (e.g. Railway runtime)."""
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_DIR,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        ).decode().strip()
+        dirty = subprocess.call(
+            ["git", "diff", "--quiet"],
+            cwd=PROJECT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        ) != 0
+        return commit[:8], dirty
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return "unknown", False
 
 # ── Enrichment dump artefacts (#242 part 3) ──
 # Phase 3 enrichment (folded in from scripts/enrich-vocab-from-dumps.py) reads
@@ -5680,7 +5722,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main():
-    global DB_PATH
+    global DB_PATH, HARVEST_STARTED_AT
     args = parse_args()
 
     # #252: line-buffer stdout so `python harvest-vocabulary-db.py … | tee log`
@@ -5693,8 +5735,18 @@ def main():
     if args.db:
         DB_PATH = Path(args.db)
 
-    print(f"Database: {DB_PATH}")
-    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}, limit_pages={args.limit_pages}, skip_enrichment={args.skip_enrichment}, stop_on_orphans={args.stop_on_orphans}, dumps_dir={args.dumps_dir or DUMPS_DIR}")
+    # #230: Stamp wall-clock start, repo-relative paths, and the harvest
+    # script's git commit so the log + DB are self-describing.
+    HARVEST_STARTED_AT = datetime.now(timezone.utc).isoformat()
+    git_commit, git_dirty = detect_git_commit()
+    git_label = f"{git_commit}{'-dirty' if git_dirty else ''}"
+
+    print(f"Working dir: {PROJECT_DIR}")
+    print(f"Harvest version: {HARVEST_VERSION}")
+    print(f"Harvest commit: {git_label}")
+    print(f"Started at: {HARVEST_STARTED_AT}")
+    print(f"Database: {repo_path(DB_PATH)}")
+    print(f"Options: resume={args.resume}, skip_dump={args.skip_dump}, start_phase={args.start_phase}, threads={args.threads}, geo_csv={args.geo_csv}, limit_pages={args.limit_pages}, skip_enrichment={args.skip_enrichment}, stop_on_orphans={args.stop_on_orphans}, dumps_dir={repo_path(args.dumps_dir or DUMPS_DIR)}")
     print()
 
     conn = create_or_open_db()
@@ -5711,7 +5763,8 @@ def main():
         print("=== Phase 0: Parsing data dumps ===")
         t0 = time.time()
         run_phase0(conn)
-        print(f"  Phase 0 took {time.time() - t0:.1f}s")
+        PHASE_DURATIONS["phase0"] = time.time() - t0
+        print(f"  Phase 0 took {PHASE_DURATIONS['phase0']:.1f}s")
         phase0_audit = run_phase_audit(conn, "phase0")
         all_audit_results["phase0"] = phase0_audit
         format_stdout_table(phase0_audit, "phase0")
@@ -5721,7 +5774,8 @@ def main():
         print("=== Phase 0.5: Seeding curated set names ===")
         t0 = time.time()
         run_phase0_5(conn)
-        print(f"  Phase 0.5 took {time.time() - t0:.1f}s")
+        PHASE_DURATIONS["phase0_5"] = time.time() - t0
+        print(f"  Phase 0.5 took {PHASE_DURATIONS['phase0_5']:.1f}s")
         print()
 
     if args.start_phase <= 1:
@@ -5729,14 +5783,16 @@ def main():
         print(f"=== Phase 1: {label} ===")
         t0 = time.time()
         run_phase1(conn, resume=args.resume, max_pages=args.limit_pages)
-        print(f"  Phase 1 took {time.time() - t0:.1f}s")
+        PHASE_DURATIONS["phase1"] = time.time() - t0
+        print(f"  Phase 1 took {PHASE_DURATIONS['phase1']:.1f}s")
         print()
 
     if args.start_phase <= 2:
         print("=== Phase 2: Resolving unmatched vocabulary URIs ===")
         t0 = time.time()
         run_phase2(conn)
-        print(f"  Phase 2 took {time.time() - t0:.1f}s")
+        PHASE_DURATIONS["phase2"] = time.time() - t0
+        print(f"  Phase 2 took {PHASE_DURATIONS['phase2']:.1f}s")
         phase2_audit = run_phase_audit(conn, "phase2")
         all_audit_results["phase2"] = phase2_audit
         format_stdout_table(phase2_audit, "phase2")
@@ -5746,7 +5802,8 @@ def main():
         print("=== Phase 4: Linked Art Resolution (Tier 2) ===")
         t0 = time.time()
         run_phase4(conn, threads=args.threads)
-        print(f"  Phase 4 took {time.time() - t0:.1f}s")
+        PHASE_DURATIONS["phase4"] = time.time() - t0
+        print(f"  Phase 4 took {PHASE_DURATIONS['phase4']:.1f}s")
         phase4_audit = run_phase_audit(conn, "phase4")
         all_audit_results["phase4"] = phase4_audit
         format_stdout_table(phase4_audit, "phase4")
@@ -5755,13 +5812,15 @@ def main():
         print("=== Phase 4.5: VisualItem.about[] thematic vocab (#283) ===")
         t0 = time.time()
         run_phase4_5(conn, threads=args.threads)
-        print(f"  Phase 4.5 took {time.time() - t0:.1f}s")
+        PHASE_DURATIONS["phase4_5"] = time.time() - t0
+        print(f"  Phase 4.5 took {PHASE_DURATIONS['phase4_5']:.1f}s")
         print()
 
         print("=== Phase 2b: Resolving new vocabulary URIs from Phase 4 ===")
         t0 = time.time()
         run_phase2(conn)
-        print(f"  Phase 2b took {time.time() - t0:.1f}s")
+        PHASE_DURATIONS["phase2b"] = time.time() - t0
+        print(f"  Phase 2b took {PHASE_DURATIONS['phase2b']:.1f}s")
         phase2b_audit = run_phase_audit(conn, "phase2")
         all_audit_results["phase2b"] = phase2b_audit
         format_stdout_table(phase2b_audit, "phase2b")
@@ -5794,13 +5853,13 @@ def main():
                 f.write("vocab_id,field,count\n")
                 for vid, field, cnt in live_orphans:
                     f.write(f"{vid},{field},{cnt}\n")
-            print(f"  WARNING: {len(live_orphans)} orphan vocab IDs exported to {csv_path}")
+            print(f"  WARNING: {len(live_orphans)} orphan vocab IDs exported to {repo_path(csv_path)}")
             print(f"  Review and add missing codes to EXTERNAL_VOCAB before re-running Phase 3.")
             if args.stop_on_orphans:
                 # #228: bail before Phase 3's integer-encoding drops these mappings.
                 print()
                 print(f"  --stop-on-orphans set: halting before Phase 3.")
-                print(f"  Review {csv_path}, then resume with one of:")
+                print(f"  Review {repo_path(csv_path)}, then resume with one of:")
                 print(f"    a) Drop the orphans (accept silent loss): --phase 5")
                 print(f"       (skips already-completed phases; runs orphan audit + Phase 3 only).")
                 print(f"    b) Preserve some orphans: add their codes to EXTERNAL_VOCAB,")
@@ -5815,6 +5874,7 @@ def main():
 
     print("=== Phase 3: Validation & Post-processing ===")
     dumps_dir_override = Path(args.dumps_dir) if args.dumps_dir else None
+    t0 = time.time()
     run_phase3(
         conn,
         geo_csv=args.geo_csv,
@@ -5822,6 +5882,31 @@ def main():
         skip_enrichment=args.skip_enrichment,
         dumps_dir=dumps_dir_override,
     )
+    PHASE_DURATIONS["phase3"] = time.time() - t0
+
+    # #230: Stamp run-level provenance now that Phase 3 created version_info.
+    # `built_at` was set inside run_phase3; we add finish timestamp, the harvest
+    # script's git commit, and per-phase wall durations so the DB self-describes
+    # which run produced it. Resumes (--start-phase N) only stamp the phases
+    # that actually ran — keys for skipped phases are absent.
+    finished_at = datetime.now(timezone.utc).isoformat()
+    run_provenance: list[tuple[str, str]] = [
+        ("harvest_started_at", HARVEST_STARTED_AT or ""),
+        ("harvest_finished_at", finished_at),
+        ("harvest_script_commit", git_commit),
+        ("harvest_script_dirty", "1" if git_dirty else "0"),
+        ("harvest_start_phase", str(args.start_phase)),
+    ]
+    for phase_key, secs in PHASE_DURATIONS.items():
+        run_provenance.append((f"{phase_key}_duration_sec", f"{secs:.1f}"))
+    conn.executemany(
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)",
+        run_provenance,
+    )
+    conn.commit()
+    print("\n--- run provenance (#230) ---")
+    for k, v in run_provenance:
+        print(f"  {k}: {v}")
 
     # Final audit summary (#222) — writes JSON artifact and exits non-zero on
     # FAIL when --strict-audit is set. Runs after run_phase3 so phase 3 drops
@@ -5833,9 +5918,10 @@ def main():
     )
 
     conn.close()
-    print(f"\nDone. Database at: {DB_PATH}")
+    print(f"\nDone. Database at: {repo_path(DB_PATH)}")
     db_size = DB_PATH.stat().st_size / (1024 * 1024)
     print(f"Database size: {db_size:.1f} MB")
+    print(f"Finished at: {finished_at}")
 
 
 if __name__ == "__main__":
