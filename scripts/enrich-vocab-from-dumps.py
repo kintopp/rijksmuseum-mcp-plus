@@ -16,6 +16,9 @@ Phases (run in order):
   2d. Places — broader_id + external_id from 2025 place dump (direct ID match)
   2a. Actors — birth/death/gender/bio from 2019 EDM actors dump (name matching)
   2b. Wikidata — wikidata_id from 2025 person dump (direct ID + name fallback)
+  2e-a. Wikidata 21xxx backfill — propagate Wikidata Q-ids already harvested into
+       vocabulary_external_ids onto vocabulary.wikidata_id for 21xxx LA-shape
+       persons (issue #323). Pure local SQL, sub-second, idempotent.
   2c. Thesaurus — broader_id from 2019 SKOS thesaurus (AAT + label matching)
   2f. v0.25 snapshot geo backfill — populate lat/lon/placetype/is_areal/coord_method
       from data/vocabulary-v0.25-snapshot.db.gz where present (no-op otherwise).
@@ -92,7 +95,7 @@ RE_SCHEMA_SAME_AS = re.compile(
 RE_YEAR = re.compile(r"\b(\d{4})\b")
 RE_WIKIDATA_QID = re.compile(r"wikidata\.org/entity/(Q\d+)")
 
-PHASE_ORDER = ["1", "2d", "2a", "2b", "2c", "2f", "3", "4"]
+PHASE_ORDER = ["1", "2d", "2a", "2b", "2e-a", "2c", "2f", "3", "4"]
 
 V025_SNAPSHOT_GZ = PROJECT_DIR / "data" / "vocabulary-v0.25-snapshot.db.gz"
 
@@ -506,6 +509,61 @@ def phase_2b_wikidata(conn, dry_run=False):
     log(f"  Updated: {updates} wikidata_id values")
 
 
+# ─── Phase 2e-a: Wikidata 21xxx backfill from vocabulary_external_ids ─
+
+
+def phase_2e_a_wikidata_21xxx_backfill(conn, dry_run=False):
+    """Propagate already-harvested Wikidata Q-ids onto vocabulary.wikidata_id
+    for 21xxx LA-shape persons. Issue #323.
+
+    Phase 2b only sources from the 31xxx Schema.org dump, so 21xxx persons
+    (the actual artwork creators) get no wikidata_id even though the harvest
+    already extracted Wikidata URIs from each LA payload's equivalent[] into
+    vocabulary_external_ids. This phase is the missing JOIN.
+    """
+    log("Phase 2e-a: Wikidata 21xxx backfill from vocabulary_external_ids")
+
+    eligible = conn.execute(
+        """
+        SELECT COUNT(DISTINCT v.id)
+        FROM vocabulary v
+        JOIN vocabulary_external_ids vei ON vei.vocab_id = v.id
+        WHERE v.type = 'person'
+          AND v.id LIKE '21%'
+          AND v.wikidata_id IS NULL
+          AND vei.authority = 'wikidata'
+        """
+    ).fetchone()[0]
+    log(f"  Eligible 21xxx persons (NULL wikidata_id, has wikidata in vei): {eligible}")
+
+    if dry_run:
+        log(f"  [DRY RUN] Would update up to {eligible} wikidata_id values")
+        return
+
+    cur = conn.execute(
+        """
+        UPDATE vocabulary
+        SET wikidata_id = (
+            SELECT vei.id
+            FROM vocabulary_external_ids vei
+            WHERE vei.vocab_id = vocabulary.id
+              AND vei.authority = 'wikidata'
+            LIMIT 1
+        )
+        WHERE type = 'person'
+          AND id LIKE '21%'
+          AND wikidata_id IS NULL
+          AND EXISTS (
+            SELECT 1 FROM vocabulary_external_ids vei2
+            WHERE vei2.vocab_id = vocabulary.id
+              AND vei2.authority = 'wikidata'
+          )
+        """
+    )
+    conn.commit()
+    log(f"  Updated: {cur.rowcount} wikidata_id values")
+
+
 # ─── Phase 2c: Concept hierarchy from SKOS thesaurus ────────────────
 
 
@@ -787,7 +845,7 @@ def update_version_info(conn):
         (now,),
     )
     conn.execute(
-        "INSERT OR REPLACE INTO version_info (key, value) VALUES ('enrichment', 'actors+places+thesaurus')",
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES ('enrichment', 'actors+places+thesaurus+wikidata21xxx')",
     )
     conn.execute(
         "UPDATE version_info SET value = ? WHERE key = 'built_at'",
@@ -845,6 +903,9 @@ def main():
 
         if "2b" in phases_to_run:
             phase_2b_wikidata(conn, dry_run=args.dry_run)
+
+        if "2e-a" in phases_to_run:
+            phase_2e_a_wikidata_21xxx_backfill(conn, dry_run=args.dry_run)
 
         if "2c" in phases_to_run:
             phase_2c_thesaurus(conn, dry_run=args.dry_run)
