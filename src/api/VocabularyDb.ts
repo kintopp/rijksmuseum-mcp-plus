@@ -712,6 +712,32 @@ export const FILTER_ART_IDS_KEYS: ReadonlySet<string> = new Set([
   "dateMatch",
 ]);
 
+/**
+ * Get-or-create with insertion-order LRU eviction. Re-inserts an existing entry
+ * to bump it to most-recent; evicts the least-recently-used (first) entry once
+ * size exceeds `cap`. Used by `filterArtIds` (#79) — exported for tests.
+ */
+export function lruGetOrCreate<K, V>(
+  map: Map<K, V>,
+  key: K,
+  factory: () => V,
+  cap: number,
+): V {
+  const existing = map.get(key);
+  if (existing !== undefined) {
+    map.delete(key);
+    map.set(key, existing);
+    return existing;
+  }
+  const value = factory();
+  map.set(key, value);
+  if (map.size > cap) {
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
+  }
+  return value;
+}
+
 /** Row shape returned by place-candidate queries (findPlaceCandidates, resolveMultiWordPlace). */
 type PlaceCandidateRow = {
   id: string;
@@ -917,6 +943,9 @@ export class VocabularyDb {
   /** Keep in sync with `RijksmuseumApiClient.IIIF_BASE`. Duplicated here to avoid
    *  a DB → API client dependency. */
   private static readonly IIIF_BASE = "https://iiif.micr.io";
+  // LRU-capped — SQL shape varies with IN-list length per filter (#79).
+  // 256 entries × ~8KB compiled-statement worst case ≈ 2MB ceiling.
+  private static readonly FILTER_ART_IDS_CACHE_CAP = 256;
   private stmtFilterArtIds = new Map<string, Statement>();
   // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
   private stmtLookupTypesCache = new Map<number, Statement>();
@@ -4452,11 +4481,12 @@ export class VocabularyDb {
     if (vocabResult.conditions.length === 0) return null; // no effective filters — fall back to unfiltered
 
     const sql = `SELECT a.art_id FROM artworks a WHERE ${vocabResult.conditions.join(" AND ")} LIMIT ${FILTER_ART_IDS_LIMIT}`;
-    let stmt = this.stmtFilterArtIds.get(sql);
-    if (!stmt) {
-      stmt = this.db.prepare(sql);
-      this.stmtFilterArtIds.set(sql, stmt);
-    }
+    const stmt = lruGetOrCreate<string, Statement>(
+      this.stmtFilterArtIds,
+      sql,
+      () => this.db!.prepare(sql),
+      VocabularyDb.FILTER_ART_IDS_CACHE_CAP,
+    );
     const rows = stmt.all(...vocabResult.bindings) as { art_id: number }[];
     return rows.map(r => r.art_id);
   }
