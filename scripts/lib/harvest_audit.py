@@ -171,7 +171,7 @@ EXPECTATIONS: list[AuditTarget] = [
         column=None,
         min_rows=60,
         max_rows=100,
-        rationale="Static seed from museum-rooms.json (#229 part A); SKIP until JSON committed",
+        rationale="Static seed from data/seed/museum-rooms.json (#229A); 75 rows. SKIP only if a harvest is run with the seed missing.",
         required=False,
     ),
     AuditTarget(

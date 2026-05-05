@@ -5,7 +5,8 @@ Runs every EXPECTATIONS target against the current data/vocabulary.db without
 mutating the database. The expected output for the v0.24 DB is:
 
   - Several FAILs matching the known #218 / #219 / #220 / #236 regressions
-  - SKIP on phase3.museum_rooms (museum-rooms.json not committed yet, #229)
+  - phase3.museum_rooms PASS (~75 rows since #229A landed; SKIP only if a
+    future harvest runs without data/seed/museum-rooms.json present)
   - Everything else PASS
 
 If a target we believe to be good (e.g. attribution_qualifier mappings) comes

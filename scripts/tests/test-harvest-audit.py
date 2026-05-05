@@ -119,7 +119,7 @@ def test_fail_zero_rows_required():
 
 
 def test_skip_zero_rows_optional():
-    """Empty non-required table (e.g. museum_rooms before #229) → SKIP."""
+    """Empty non-required table → SKIP. Covers any optional seed-backed table whose seed file is missing at harvest time."""
     conn = make_db_with_counts({"optional": 0})
     target = t("test.optional", "optional", 60, 100, required=False)
     actual, note = count_target(conn, target)
