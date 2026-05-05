@@ -10,7 +10,7 @@ The core pipeline that produces the two databases (vocabulary + embeddings) from
 |--------|------|-------------|
 | `harvest-vocabulary-db.py` | Python | Full vocabulary DB builder. 6 phases: data dump parsing, OAI-PMH harvest (836K records), vocab resolution, Linked Art enrichment, post-processing (FTS5, importance, geocoding import, **offline-dump enrichment** — actor bios, wikidata, place/concept hierarchy, coordinate inheritance). Hours to run. Pass `--skip-enrichment` to bypass the dump-based enrichment step. |
 | `compute_importance.py` | Python | Computes the `importance` column on artworks. Called by harvest Phase 3 but also runnable standalone. |
-| `harvest-person-names.py` | Python | Harvests person name variants from Linked Art into `person_names` table + FTS5 index. |
+| `harvest-person-names.py` | Python | Targeted-refetch tool for LA-shape (21xxx) person name variants. Canonical population is in `harvest-vocabulary-db.py` (covers both 21xxx LA-shape and 31xxx Schema.org-shape via `INSERT OR IGNORE`); this script is for ad-hoc upstream-correction refetch only. Idempotent — never deletes. |
 | `package-harvest-artifacts.sh` | Bash | Bundle post-harvest artifacts (report, log, audit JSON + CSVs) into a single tarball for transfer back from a remote harvest machine. Run from the repo root with the harvest version label, e.g. `scripts/package-harvest-artifacts.sh v0.27`. The DB is excluded by default — pass `--with-db` to include it. Closes #229B (audit transfer hygiene). |
 
 ## Enrichment & Backfill

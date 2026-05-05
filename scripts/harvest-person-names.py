@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""Harvest all person name variants from Linked Art into person_names table + FTS5 index.
+"""Targeted-refetch tool for Linked Art person name variants.
 
-Queries person IDs from the vocabulary table, fetches each person's Linked Art entity,
-and extracts all identified_by name variants with language + AAT classification.
+Canonical population of `person_names` is done by `harvest-vocabulary-db.py`
+(LA-shape `identified_by[]` for 21xxx persons + Schema.org `alternateName`
+for 31xxx persons, both via `INSERT OR IGNORE`). This script is a post-hoc
+refetch over the LA endpoint for the 21xxx cohort only — useful when you
+want to pick up upstream corrections without rerunning the full harvest.
+
+Writes are always `INSERT OR IGNORE` and never delete existing rows; persons
+already present in `person_names` are skipped by default. Run as often as
+you like — it is idempotent and cannot lose data on partial failure.
 
 Usage:
     python3 scripts/harvest-person-names.py                    # Default: data/vocabulary.db
     python3 scripts/harvest-person-names.py --db path/to.db    # Custom DB path
-    python3 scripts/harvest-person-names.py --resume           # Skip persons already harvested
+    python3 scripts/harvest-person-names.py --refetch-all      # Re-fetch every person (still INSERT OR IGNORE)
 """
 
 import argparse
@@ -116,9 +123,13 @@ def fetch_person_names(person_id: str) -> list[dict] | None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Harvest person name variants into vocabulary DB")
+    parser = argparse.ArgumentParser(description="Targeted refetch of Linked Art person name variants")
     parser.add_argument("--db", type=str, default=str(DB_PATH), help="Path to vocabulary.db")
-    parser.add_argument("--resume", action="store_true", help="Skip persons already in person_names")
+    parser.add_argument(
+        "--refetch-all",
+        action="store_true",
+        help="Re-fetch every person (default skips persons already in person_names). Writes use INSERT OR IGNORE.",
+    )
     args = parser.parse_args()
 
     conn = sqlite3.connect(args.db)
@@ -134,18 +145,15 @@ def main():
     ).fetchall()]
     print(f"Total persons in vocabulary: {len(all_persons):,}")
 
-    # Optionally skip already-harvested persons
-    if args.resume:
+    if args.refetch_all:
+        persons = all_persons
+        print(f"Refetch-all: {len(persons):,} persons (INSERT OR IGNORE — no rows will be deleted)")
+    else:
         done = {r[0] for r in conn.execute(
             "SELECT DISTINCT person_id FROM person_names"
         ).fetchall()}
         persons = [p for p in all_persons if p not in done]
-        print(f"Resuming: {len(done):,} already done, {len(persons):,} remaining")
-    else:
-        # Fresh run — clear existing data
-        conn.execute("DELETE FROM person_names")
-        conn.commit()
-        persons = all_persons
+        print(f"Skipping persons already in person_names: {len(done):,} done, {len(persons):,} remaining")
 
     if not persons:
         print("Nothing to do.")
@@ -169,7 +177,7 @@ def main():
         if i % BATCH_SIZE == 0:
             if batch:
                 conn.executemany(
-                    "INSERT INTO person_names (person_id, name, lang, classification) "
+                    "INSERT OR IGNORE INTO person_names (person_id, name, lang, classification) "
                     "VALUES (:person_id, :name, :lang, :classification)",
                     batch,
                 )
@@ -189,7 +197,7 @@ def main():
     # Flush remaining batch
     if batch:
         conn.executemany(
-            "INSERT INTO person_names (person_id, name, lang, classification) "
+            "INSERT OR IGNORE INTO person_names (person_id, name, lang, classification) "
             "VALUES (:person_id, :name, :lang, :classification)",
             batch,
         )
