@@ -91,28 +91,21 @@ def main() -> int:
             prirefs,
         ).fetchall()
 
-        already_mapped = 0
         inserted = 0
         for priref, work_id, art_id in rows:
-            existing = conn.execute(
-                "SELECT 1 FROM mappings "
-                "WHERE artwork_id = ? AND vocab_rowid = ? AND field_id = ?",
-                (art_id, vocab_int_id, field_id_subject),
-            ).fetchone()
-            if existing:
-                already_mapped += 1
+            if args.dry_run:
+                inserted += 1
                 continue
-            if not args.dry_run:
-                conn.execute(
-                    "INSERT OR IGNORE INTO mappings (artwork_id, vocab_rowid, field_id) "
-                    "VALUES (?, ?, ?)",
-                    (art_id, vocab_int_id, field_id_subject),
-                )
-            inserted += 1
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO mappings (artwork_id, vocab_rowid, field_id) "
+                "VALUES (?, ?, ?)",
+                (art_id, vocab_int_id, field_id_subject),
+            )
+            inserted += cur.rowcount
 
         print(f"  {vocab_id} ({notation!r}, {label_en!r}): "
               f"LIDO prirefs={len(prirefs)} matched_artworks={len(rows)} "
-              f"already={already_mapped} new_mappings={inserted}")
+              f"new_mappings={inserted}")
         total_inserted += inserted
 
     if args.dry_run:

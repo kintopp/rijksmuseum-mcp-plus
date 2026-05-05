@@ -73,7 +73,7 @@ def main() -> int:
     print(f"iconclass.db resolver loaded.")
 
     conn = sqlite3.connect(args.db)
-    conn.execute("PRAGMA foreign_keys = OFF")  # keep writes simple
+    conn.execute("PRAGMA foreign_keys = OFF")
     existing_ids: set[str] = {
         r[0] for r in conn.execute("SELECT id FROM vocabulary").fetchall()
     }

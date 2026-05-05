@@ -29,11 +29,21 @@ OUT_TSV = REPO_ROOT / "data" / "audit" / "issue-318-external-stubs.tsv"
 
 PLACE_TYPE_URI = "<http://schema.org/Place>"
 
-NT_PREDICATE = re.compile(
-    r'^<https://id\.rijksmuseum\.nl/(\d+)>\s+<([^>]+)>\s+(.+?)\s*\.\s*$'
+LABEL_PREDICATES = (
+    "<http://schema.org/name>",
+    "<http://www.w3.org/2004/02/skos/core#prefLabel>",
+    "<http://www.w3.org/2004/02/skos/core#altLabel>",
+    "<http://www.w3.org/2000/01/rdf-schema#label>",
+    "<http://www.cidoc-crm.org/cidoc-crm/P190_has_symbolic_content>",
+    "<http://schema.org/alternateName>",
 )
 
-# External authority recognisers
+SAMEAS_TARGET_RE = re.compile(r'<((?:https?:)?//[^>]+)>\s*\.\s*$')
+TGN_RE = re.compile(r"tgn/(\d+)")
+WIKIDATA_QID_RE = re.compile(r"(?:entity|wiki)/(Q\d+)")
+GEONAMES_ID_RE = re.compile(r"geonames\.org/(?:rdf/|wiki/)?(\d+)")
+
+
 def classify_external(uri: str) -> str | None:
     if "vocab.getty.edu/tgn" in uri:
         return "tgn"
@@ -50,23 +60,17 @@ def classify_external(uri: str) -> str | None:
     return None
 
 
-def canon_geonames(uri: str) -> str:
-    """Canonicalize GeoNames variants to a single form for joins."""
-    m = re.search(r"geonames\.org/(?:rdf/|wiki/)?(\d+)", uri)
-    if m:
-        return f"geonames:{m.group(1)}"
-    return uri
-
-
-def canon_authority(uri: str, auth: str) -> str:
+def canon_authority(uri: str, auth: str | None) -> str:
     if auth == "geonames":
-        return canon_geonames(uri)
-    if auth == "tgn":
-        m = re.search(r"tgn/(\d+)", uri)
+        m = GEONAMES_ID_RE.search(uri)
+        if m:
+            return f"geonames:{m.group(1)}"
+    elif auth == "tgn":
+        m = TGN_RE.search(uri)
         if m:
             return f"tgn:{m.group(1)}"
-    if auth == "wikidata":
-        m = re.search(r"(?:entity|wiki)/(Q\d+)", uri)
+    elif auth == "wikidata":
+        m = WIKIDATA_QID_RE.search(uri)
         if m:
             return f"wikidata:{m.group(1)}"
     return uri
@@ -92,21 +96,11 @@ def parse_stub(filepath: str) -> tuple[str, list[str]] | None:
             if "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>" in line and PLACE_TYPE_URI in line:
                 is_place = True
 
-            # Any flavour of label/name → mark as labelled (don't keep)
-            if any(p in line for p in (
-                "<http://schema.org/name>",
-                "<http://www.w3.org/2004/02/skos/core#prefLabel>",
-                "<http://www.w3.org/2004/02/skos/core#altLabel>",
-                "<http://www.w3.org/2000/01/rdf-schema#label>",
-                "<http://www.cidoc-crm.org/cidoc-crm/P190_has_symbolic_content>",
-                "<http://schema.org/alternateName>",
-            )) and '"' in line:
-                # Has a literal label — not a stub for our purposes
+            if '"' in line and any(p in line for p in LABEL_PREDICATES):
                 has_label = True
 
-            # schema:sameAs links
             if "<http://schema.org/sameAs>" in line or "<https://schema.org/sameAs>" in line:
-                m = re.search(r'<((?:https?:)?//[^>]+)>\s*\.\s*$', line)
+                m = SAMEAS_TARGET_RE.search(line)
                 if m:
                     target = m.group(1)
                     if "id.rijksmuseum.nl/" in target:
@@ -201,23 +195,18 @@ def main() -> int:
     n_lido_places = conn.execute("SELECT COUNT(*) FROM lido_places").fetchone()[0]
     print(f"  LIDO distinct (place_uri, place_name) pairs: {n_lido_places:,}")
 
-    # Canonicalise LIDO URIs same way as stubs
     rows = conn.execute("SELECT uri, name FROM lido_places").fetchall()
     conn.execute("CREATE TABLE lido_canon (canonical TEXT, name TEXT)")
     canon_rows = []
     for uri, name in rows:
         if not uri:
             continue
-        if "geonames.org" in uri:
-            canon_rows.append((canon_geonames(uri), name))
-        elif "vocab.getty.edu/tgn" in uri:
-            m = re.search(r"tgn/(\d+)", uri)
-            if m:
-                canon_rows.append((f"tgn:{m.group(1)}", name))
-        elif "wikidata.org" in uri:
-            m = re.search(r"(?:entity|wiki)/(Q\d+)", uri)
-            if m:
-                canon_rows.append((f"wikidata:{m.group(1)}", name))
+        auth = classify_external(uri)
+        if auth not in ("geonames", "tgn", "wikidata"):
+            continue
+        canonical = canon_authority(uri, auth)
+        if canonical != uri:
+            canon_rows.append((canonical, name))
     conn.executemany("INSERT INTO lido_canon VALUES (?,?)", canon_rows)
     conn.execute("CREATE INDEX idx_lc_canon ON lido_canon(canonical)")
     print(f"  canonicalised LIDO entries: {len(canon_rows):,}")

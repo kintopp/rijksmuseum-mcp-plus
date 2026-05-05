@@ -107,14 +107,20 @@ def parse_iconclass_notation(uri: str | None) -> str | None:
     return None
 
 
-def extract_subjects(rec) -> list[dict]:
-    """Return a list of subject-row dicts for one <lido:lido> record.
+SUBJECT_COLS = [
+    "priref", "subject_index", "concept_id", "concept_id_type",
+    "notation", "term_text", "term_lang",
+]
+
+
+def extract_subjects(rec, priref: int) -> list[tuple]:
+    """Return SUBJECT_COLS-shaped tuples for one <lido:lido> record.
 
     Walks every subjectConcept inside every subjectSet/subject. One row per
     (subjectConcept, term) pair so multiple language labels become multiple
     rows that share the same concept_id/notation.
     """
-    rows: list[dict] = []
+    rows: list[tuple] = []
     sub_idx = 0
     for sset in rec.findall(".//lido:subjectSet/lido:subject", NS):
         for sc in sset.findall(".//lido:subjectConcept", NS):
@@ -125,31 +131,13 @@ def extract_subjects(rec) -> list[dict]:
             notation = parse_iconclass_notation(concept_id)
             terms = sc.findall("./lido:term", NS)
             if not terms:
-                rows.append({
-                    "subject_index": sub_idx,
-                    "concept_id": concept_id,
-                    "concept_id_type": concept_type,
-                    "notation": notation,
-                    "term_text": None,
-                    "term_lang": None,
-                })
+                rows.append((priref, sub_idx, concept_id, concept_type,
+                             notation, None, None))
                 continue
             for term in terms:
-                rows.append({
-                    "subject_index": sub_idx,
-                    "concept_id": concept_id,
-                    "concept_id_type": concept_type,
-                    "notation": notation,
-                    "term_text": text_of(term),
-                    "term_lang": lang_of(term),
-                })
+                rows.append((priref, sub_idx, concept_id, concept_type,
+                             notation, text_of(term), lang_of(term)))
     return rows
-
-
-SUBJECT_COLS = [
-    "priref", "subject_index", "concept_id", "concept_id_type",
-    "notation", "term_text", "term_lang",
-]
 
 
 def stream_records(path: Path):
@@ -213,14 +201,12 @@ def main() -> int:
         if priref is None:
             continue
         total_records += 1
-        rows = extract_subjects(rec)
+        rows = extract_subjects(rec, priref)
         if rows:
             records_with_subjects += 1
-            if any(r["notation"] for r in rows):
+            if any(r[4] for r in rows):  # notation index in SUBJECT_COLS
                 records_with_iconclass += 1
-            for r in rows:
-                pending.append(tuple(r.get(k) if k != "priref" else priref
-                                     for k in SUBJECT_COLS))
+            pending.extend(rows)
             total_subjects += len(rows)
 
         if total_records % 10000 == 0:
