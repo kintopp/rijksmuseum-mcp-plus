@@ -397,9 +397,10 @@ def main():
             coord_tier = em.tier_for(detail)
             for vocab_id, (lat, lon) in results.items():
                 cursor.execute(
-                    "UPDATE vocabulary SET lat = ?, lon = ?, coord_method = ? "
+                    "UPDATE vocabulary SET lat = ?, lon = ?, "
+                    "  coord_method = ?, coord_method_detail = ? "
                     "WHERE id = ? AND lat IS NULL",
-                    (lat, lon, coord_tier, vocab_id),
+                    (lat, lon, coord_tier, detail, vocab_id),
                 )
                 updated += cursor.rowcount
         conn.commit()
