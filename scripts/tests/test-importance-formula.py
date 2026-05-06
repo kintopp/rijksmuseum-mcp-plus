@@ -1,27 +1,25 @@
 #!/usr/bin/env python3
 """Unit test for compute_importance_scores formula.
 
-Validates the v0.27 formula:
+Validates:
     importance = 3*has_image + 3*has_narrative
                + min(mapping_count, 100)
                + min(set_count, 20)
 
-where set_count counts field_id=3 mappings, which are also included in
-mapping_count (so collection_set mappings effectively carry 2x weight).
-
-See kintopp/rijksmuseum-mcp-plus-offline#321.
+set_count counts collection_set mappings, which are also included in
+mapping_count (so collection_set mappings effectively carry 2× weight).
 """
-import importlib.util
 import pathlib
 import sqlite3
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location(
-    "compute_importance", ROOT / "scripts" / "compute_importance.py")
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-compute_importance_scores = mod.compute_importance_scores
+sys.path.insert(0, str(ROOT / "scripts"))
+from compute_importance import compute_importance_scores  # noqa: E402
+
+
+SET_FIELD_ID = 3
+SUBJECT_FIELD_ID = 12
 
 
 def make_db():
@@ -44,6 +42,11 @@ def make_db():
             PRIMARY KEY (artwork_id, vocab_rowid, field_id)
         ) WITHOUT ROWID
     """)
+    conn.execute("CREATE TABLE field_lookup (id INTEGER PRIMARY KEY, name TEXT UNIQUE)")
+    conn.executemany(
+        "INSERT INTO field_lookup (id, name) VALUES (?, ?)",
+        [(SET_FIELD_ID, "collection_set"), (SUBJECT_FIELD_ID, "subject")],
+    )
     return conn
 
 
@@ -52,18 +55,16 @@ def insert_artwork(conn, art_id, has_image=0, narrative=None,
     """Insert an artwork plus its mappings.
 
     non_set_mappings + set_mappings = total mapping_count for this artwork.
-    set_mappings use field_id=3 (collection_set); non_set use field_id=12 (subject).
     """
     conn.execute(
         "INSERT INTO artworks (object_number, art_id, has_image, narrative_text) "
         "VALUES (?, ?, ?, ?)",
         (f"OBJ-{art_id}", art_id, has_image, narrative),
     )
-    rows = []
-    for v in range(non_set_mappings):
-        rows.append((art_id, 1000 + v, 12))   # subject mappings
-    for v in range(set_mappings):
-        rows.append((art_id, 2000 + v, 3))    # collection_set mappings
+    rows = (
+        [(art_id, 1000 + v, SUBJECT_FIELD_ID) for v in range(non_set_mappings)]
+        + [(art_id, 2000 + v, SET_FIELD_ID) for v in range(set_mappings)]
+    )
     if rows:
         conn.executemany(
             "INSERT INTO mappings (artwork_id, vocab_rowid, field_id) VALUES (?, ?, ?)",

@@ -13,16 +13,10 @@ import time
 import sys
 from pathlib import Path
 
-# Caps on the count-based terms. Both are no-ops on current data
-# (max mapping_count ≈ 93, max set_count = 13) but bound future drift
-# from new LDES channels so a single outlier can't dominate the top
-# of the ranking.
+# Caps on the count-based terms — bound future drift so a single
+# outlier can't dominate the top of the ranking.
 MAPPING_COUNT_CAP = 100
 SET_COUNT_CAP = 20
-
-# field_id for collection_set in field_lookup. Held constant across
-# integer-encoded harvests since v0.21.
-COLLECTION_SET_FIELD_ID = 3
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "data" / "vocabulary.db"
 
@@ -33,20 +27,13 @@ def compute_importance_scores(conn: sqlite3.Connection, cur: sqlite3.Cursor) -> 
     Expects the 'importance' column and 'art_id' column to already exist.
     Returns a dict with timing and distribution info.
 
-    v0.27 formula (kintopp/rijksmuseum-mcp-plus-offline#321):
-        importance = 3*has_image
-                   + 3*has_narrative
+    Formula:
+        importance = 3*has_image + 3*has_narrative
                    + min(mapping_count, MAPPING_COUNT_CAP)
                    + min(set_count,     SET_COUNT_CAP)
 
-    set_count = mappings with field_id = COLLECTION_SET_FIELD_ID. These are
-    *also* counted in mapping_count, so collection_set mappings effectively
-    carry 2× weight — intentional, as set membership is a stronger
-    curatorial-effort signal than other mapping types.
-
-    Replaces the v0.21 formula `floor(log2(1+mapping_count))`, which collapsed
-    65.9% of the corpus into a single integer score. The raw-with-cap design
-    yields ~75 distinct scores with the largest bucket at ~8.6%.
+    set_count is collection_set mappings, which are *also* counted in
+    mapping_count — collection_set membership effectively carries 2× weight.
     """
     total = cur.execute("SELECT COUNT(*) FROM artworks").fetchone()[0]
     t0 = time.time()
@@ -59,23 +46,23 @@ def compute_importance_scores(conn: sqlite3.Connection, cur: sqlite3.Cursor) -> 
     """)
     conn.commit()
 
-    # Step 2: mapping_count + set_count bonuses — computed in Python to avoid
-    # slow correlated UPDATEs. Two GROUP BY scans, one merged update pass.
-    total_counts = dict(cur.execute(
-        "SELECT artwork_id, COUNT(*) FROM mappings GROUP BY artwork_id"
-    ).fetchall())
-    set_counts = dict(cur.execute(
-        "SELECT artwork_id, COUNT(*) FROM mappings WHERE field_id = ? GROUP BY artwork_id",
-        (COLLECTION_SET_FIELD_ID,),
-    ).fetchall())
-    aids = set(total_counts) | set(set_counts)
+    set_field_id = cur.execute(
+        "SELECT id FROM field_lookup WHERE name = 'collection_set'"
+    ).fetchone()[0]
+
+    # Single grouped scan yields both mapping_count and set_count per artwork.
+    rows = cur.execute(
+        """
+        SELECT artwork_id,
+               COUNT(*) AS mc,
+               SUM(CASE WHEN field_id = ? THEN 1 ELSE 0 END) AS sc
+        FROM mappings GROUP BY artwork_id
+        """,
+        (set_field_id,),
+    ).fetchall()
     items = [
-        (
-            min(total_counts.get(aid, 0), MAPPING_COUNT_CAP)
-            + min(set_counts.get(aid, 0), SET_COUNT_CAP),
-            aid,
-        )
-        for aid in aids
+        (min(mc, MAPPING_COUNT_CAP) + min(sc, SET_COUNT_CAP), aid)
+        for aid, mc, sc in rows
     ]
     CHUNK = 5000
     for i in range(0, len(items), CHUNK):
