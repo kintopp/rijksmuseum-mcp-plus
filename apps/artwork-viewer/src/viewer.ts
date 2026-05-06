@@ -242,11 +242,11 @@ function setNavButtonsEnabled(enabled: boolean): void {
   const disabledHint = 'No co-productions available';
   if (prev) {
     prev.disabled = !enabled;
-    prev.title = enabled ? 'Previous co-production (j)' : disabledHint;
+    prev.title = enabled ? 'Previous co-production' : disabledHint;
   }
   if (next) {
     next.disabled = !enabled;
-    next.title = enabled ? 'Next co-production (l)' : disabledHint;
+    next.title = enabled ? 'Next co-production' : disabledHint;
   }
 }
 
@@ -549,8 +549,8 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="zoom-in" title="Zoom In (+)">+</button>
           <button id="zoom-out" title="Zoom Out (-)">&minus;</button>
           <button id="reset-view" title="Reset / return to seed (0 / k)">Reset</button>
-          <button id="prev-related" title="Previous co-production (j)" disabled>&#9664;</button>
-          <button id="next-related" title="Next co-production (l)" disabled>&#9654;</button>
+          <button id="prev-related" title="Previous co-production" disabled>&#9664;</button>
+          <button id="next-related" title="Next co-production" disabled>&#9654;</button>
           <button id="select-mode" title="Select Region (i)">&#9744;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
