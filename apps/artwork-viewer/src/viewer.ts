@@ -377,7 +377,7 @@ function updateSelectButton(): void {
   const btn = document.getElementById('select-mode');
   if (btn) {
     btn.textContent = '☐';
-    btn.title = selectMode ? 'Exit Select Mode (i)' : 'Select Region (i)';
+    btn.title = selectMode ? 'Exit Select Mode' : 'Select Region';
     btn.classList.toggle('active', selectMode);
   }
   // Change cursor on the OSD canvas
@@ -545,13 +545,13 @@ function renderViewer(data: ArtworkImageData): void {
       <div class="content">
         <div id="openseadragon-viewer"></div>
         <div class="image-controls">
-          <button id="show-shortcuts" title="Keyboard Shortcuts (?)">?</button>
-          <button id="zoom-in" title="Zoom In (+)">+</button>
-          <button id="zoom-out" title="Zoom Out (-)">&minus;</button>
-          <button id="reset-view" title="Reset / return to seed (0 / k)">Reset</button>
+          <button id="show-shortcuts" title="Keyboard Shortcuts">?</button>
+          <button id="zoom-in" title="Zoom In">+</button>
+          <button id="zoom-out" title="Zoom Out">&minus;</button>
+          <button id="reset-view" title="Reset / return to seed">Reset</button>
           <button id="prev-related" title="Previous co-production" disabled>&#9664;</button>
           <button id="next-related" title="Next co-production" disabled>&#9654;</button>
-          <button id="select-mode" title="Select Region (i)">&#9744;</button>
+          <button id="select-mode" title="Select Region">&#9744;</button>
         </div>
         <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
           <div class="shortcuts-content">
