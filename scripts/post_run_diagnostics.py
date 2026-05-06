@@ -24,8 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.geo_math import haversine_km  # noqa: E402
-
-VALID_TIERS = {"authority", "derived", "human"}
+from enrichment_tiers import VALID_TIERS  # noqa: E402
 
 
 def compute_whg_distance_rate(conn: sqlite3.Connection,
