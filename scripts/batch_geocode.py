@@ -267,6 +267,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Show counts but don't update")
     parser.add_argument("--skip-geonames", action="store_true",
                         help="Skip GeoNames (slow, requires API key for bulk)")
+    parser.add_argument("--skip-getty", action="store_true",
+                        help="Skip Getty TGN SPARQL (use when vocab.getty.edu is unreachable)")
     args = parser.parse_args()
 
     db_path = Path(args.db)
@@ -371,8 +373,11 @@ def main():
         result_sets.append((geocode_wikidata(wikidata), em.WIKIDATA_P625))
 
     # 2. Getty TGN (batch SPARQL)
-    if getty:
+    if getty and not args.skip_getty:
         result_sets.append((geocode_getty(getty), em.TGN_DIRECT))
+    elif getty and args.skip_getty:
+        print(f"  (skipping {len(getty)} TGN-tagged places — --skip-getty)",
+              file=sys.stderr)
 
     # 3. GeoNames (slow — one-by-one API, skip by default)
     if geonames and not args.skip_geonames:
