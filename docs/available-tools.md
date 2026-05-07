@@ -42,7 +42,7 @@
 
 ## Similarity
 
-- **`find_similar`** — HTML comparison page across 8 independent similarity channels: Visual, Related Object, Lineage, Iconclass, Description, Theme, Depicted Person, Depicted Place + Pooled (feature-gated via `ENABLE_FIND_SIMILAR`; Theme channel further gated by `ENABLE_THEME_SIMILAR`).
+- **`find_similar`** — HTML comparison page across 9 independent similarity channels: Visual, Related Co-Production, Related Object, Lineage, Iconclass, Description, Theme, Depicted Person, Depicted Place + Pooled (feature-gated via `ENABLE_FIND_SIMILAR`; Theme channel further gated by `ENABLE_THEME_SIMILAR`).
 
 ## Viewer Navigation
 

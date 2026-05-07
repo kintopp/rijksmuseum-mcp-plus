@@ -5,7 +5,7 @@
  *   - Carries the discriminator-first "Use when…" lead-in (or close variant).
  *   - Cross-links to the alternative tools by name.
  *   - Doesn't reference filters that were dropped in clusters A or B.
- *   - For find_similar: mentions all 8 channel names.
+ *   - For find_similar: mentions all 9 channel names.
  *   - For list_curated_sets: mentions the category heuristic.
  *
  * Substring matches deliberately, so incidental wording tweaks don't break
@@ -96,12 +96,12 @@ assert(fs.includes("semantic_search") && fs.includes("search_artwork"),
   "find_similar cross-links to semantic_search and search_artwork");
 
 // ══════════════════════════════════════════════════════════════════
-//  find_similar: 8 channels
+//  find_similar: 9 channels
 // ══════════════════════════════════════════════════════════════════
 
-section("find_similar: 8 channel names");
+section("find_similar: 9 channel names");
 
-const channels = ["Visual", "Related Object", "Lineage", "Iconclass", "Description", "Theme", "Depicted Person", "Depicted Place"];
+const channels = ["Visual", "Related Co-Production", "Related Object", "Lineage", "Iconclass", "Description", "Theme", "Depicted Person", "Depicted Place"];
 for (const ch of channels) {
   assert(fs.includes(ch), `find_similar mentions "${ch}" channel`);
 }
