@@ -416,11 +416,11 @@ async function runHttp(): Promise<void> {
       }
     })();
 
-    // Periodic 5-min RSS snapshot for issue #272 — single log line so it
+    // Periodic 15-min RSS snapshot for issue #272 — single log line so it
     // costs nothing to leave on. unref() so it doesn't block shutdown.
     const memInterval = setInterval(() => {
       console.error(formatMemorySnapshotOneLine(captureMemorySnapshot(buildMemoryDbHandles())));
-    }, 5 * 60 * 1000);
+    }, 15 * 60 * 1000);
     memInterval.unref();
   });
 }
