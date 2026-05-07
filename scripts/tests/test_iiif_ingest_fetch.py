@@ -191,6 +191,43 @@ def test_build_manifest_reflects_state_and_tar():
     assert set(manifest["dead"].keys()) == {"B"}
 
 
+def test_is_case_sensitive_dir_detects_macos_default():
+    """`/private/tmp` on stock macOS APFS Data is case-insensitive — verify probe agrees."""
+    with tempfile.TemporaryDirectory(dir="/tmp") as td:
+        # We don't assert a specific value (depends on the FS the test runs on),
+        # we assert determinism: probe leaves no junk files behind.
+        result = ingest._is_case_sensitive_dir(Path(td))
+        assert isinstance(result, bool)
+        assert not list(Path(td).iterdir()), "case-sensitivity probe left files behind"
+
+
+def test_check_case_collisions_flags_collision_on_case_insensitive_fs():
+    """Repro of the v0.24 ingest bug: two iiif_ids case-folding equal must error fast."""
+    with tempfile.TemporaryDirectory(dir="/tmp") as td:
+        if ingest._is_case_sensitive_dir(Path(td)):
+            print("(skipped: /tmp is case-sensitive on this machine)")
+            return
+        s = ingest.ShardState(shard_id=0, total_shards=200, iiif_size="1568,")
+        s.expected = {"jWNRD": {"art_id": 1, "object_number": "X"},
+                      "JWNrd": {"art_id": 2, "object_number": "Y"}}
+        try:
+            ingest._check_case_collisions(s, Path(td))
+        except SystemExit as e:
+            assert "case-collision" in str(e)
+            assert "case-insensitive" in str(e)
+            return
+        raise AssertionError("expected SystemExit was not raised")
+
+
+def test_check_case_collisions_passes_when_no_collisions():
+    """No case-folded duplicates → no error regardless of FS."""
+    with tempfile.TemporaryDirectory(dir="/tmp") as td:
+        s = ingest.ShardState(shard_id=0, total_shards=200, iiif_size="1568,")
+        s.expected = {"AAA00": {"art_id": 1, "object_number": "X"},
+                      "BBB01": {"art_id": 2, "object_number": "Y"}}
+        ingest._check_case_collisions(s, Path(td))  # must not raise
+
+
 if __name__ == "__main__":
     test_pick_artworks_for_shard_mod_arithmetic()
     test_pick_artworks_empty_shard_returns_empty_dict()
@@ -202,4 +239,7 @@ if __name__ == "__main__":
     test_fetch_one_404_is_permanent_across_ladder()
     test_pack_tarball_from_disk_files()
     test_build_manifest_reflects_state_and_tar()
+    test_is_case_sensitive_dir_detects_macos_default()
+    test_check_case_collisions_flags_collision_on_case_insensitive_fs()
+    test_check_case_collisions_passes_when_no_collisions()
     print("ok")

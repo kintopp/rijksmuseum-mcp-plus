@@ -318,6 +318,56 @@ def _purge_download_dir(download_dir: Path) -> int:
     return total
 
 
+def _is_case_sensitive_dir(d: Path) -> bool:
+    """Probe whether the directory's filesystem distinguishes case in filenames.
+
+    Critical for the download dir: if two iiif_ids in a shard differ only in
+    case, a case-insensitive FS will collapse their JPEG files into one,
+    silently producing a tarball whose member content does not match its
+    sha256 in the manifest.
+    """
+    d.mkdir(parents=True, exist_ok=True)
+    lo = d / ".cs_probe_a"
+    hi = d / ".cs_probe_A"
+    try:
+        lo.write_text("lo")
+        hi.write_text("hi")
+        return lo.read_text() == "lo" and hi.read_text() == "hi"
+    finally:
+        for p in (lo, hi):
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def _check_case_collisions(state, dl_dir: Path) -> None:
+    """Fail fast if the shard contains case-collision iiif_ids on a case-insensitive FS.
+
+    See `offline/explorations/iiif-case-collision-postmortem.md` for the
+    incident this guards against (v0.24 ingest produced 126 silently corrupted
+    tarball entries because the SSD scratch volume was case-insensitive APFS).
+    """
+    case_groups: dict[str, list[str]] = {}
+    for iid in state.expected:
+        case_groups.setdefault(iid.lower(), []).append(iid)
+    collisions = {k: v for k, v in case_groups.items() if len(v) > 1}
+    if not collisions:
+        return
+    if _is_case_sensitive_dir(dl_dir):
+        return  # safe: FS will keep them distinct
+    examples = list(collisions.values())[:3]
+    raise SystemExit(
+        f"shard contains {len(collisions)} case-collision group(s) of iiif_ids "
+        f"(e.g. {examples}) but {dl_dir} is on a case-insensitive filesystem. "
+        f"Two iiif_ids that differ only by letter case would silently collapse "
+        f"into one file at write time, producing a corrupted tarball. "
+        f"Re-run with --cache-root pointing at a case-sensitive volume "
+        f"(e.g. an APFS volume created with `diskutil apfs addVolume <disk> "
+        f"\"Case-sensitive APFS\" <name>`)."
+    )
+
+
 # Import state types here so the script can still be loaded without the sidecar
 # being on sys.path (the test harness pre-inserts it; the CLI's main() runs with
 # the script's own dir on sys.path per the argparse flow).
@@ -359,6 +409,10 @@ def process_shard(
     )
     expected = pick_artworks_for_shard(db_path, shard_id=shard_id, total_shards=total_shards)
     state.reconcile(expected)
+
+    # Pre-flight: refuse to download if case-collisions would corrupt the tar
+    # on a case-insensitive working dir. See _check_case_collisions docstring.
+    _check_case_collisions(state, dl_dir)
 
     # Peek at bucket.
     s3 = make_bucket_client(creds)
