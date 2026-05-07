@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.3.0"
-  last_updated: "2026-05-03"
+  version: "0.30"
+  last_updated: "2026-05-07"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -54,7 +54,7 @@ metadata:
 
 
 **Choosing between `search_artwork` (provenance-aware filters) and `search_provenance`:**
-`search_artwork` no longer accepts a `provenance` text filter (use `search_provenance` for keyword/text search over provenance). For cross-domain "what kinds of works have provenance" questions, use `hasProvenance: true` on `search_artwork` or `collection_stats` (e.g. `collection_stats(dimension="type", hasProvenance=true)`). `search_provenance` returns structured, parsed chains with dates, prices, transfer types, and ownership periods — use it when you need to reason about the *sequence* of ownership, filter by event type, or rank by price or duration. For the last link in the chain — how the Rijksmuseum acquired a work — also check `creditLine`, which covers ~360K artworks (vs~ 49K with parsed provenance) and often names donors or funds absent from the provenance chain (e.g. "Drucker-Fraser", "Vereniging Rembrandt").
+For keyword/text search over provenance, use `search_provenance` — `search_artwork` does not search provenance text. For cross-domain "what kinds of works have provenance" questions, use `hasProvenance: true` on `search_artwork` or `collection_stats` (e.g. `collection_stats(dimension="type", hasProvenance=true)`). `search_provenance` returns structured, parsed chains with dates, prices, transfer types, and ownership periods — use it when you need to reason about the *sequence* of ownership, filter by event type, or rank by price or duration. For the last link in the chain — how the Rijksmuseum acquired a work — also check `creditLine`, which covers ~360K artworks (vs ~49K with parsed provenance) and often names donors or funds absent from the provenance chain (e.g. "Drucker-Fraser", "Vereniging Rembrandt").
 
 ---
 
@@ -87,7 +87,7 @@ distinguish objects *from* Asia versus European images *of* Asia.
 
 ### `dateMatch` — controlling how date ranges are binned
 
-Most artworks have date *ranges* (e.g. "1630–1640"), not exact years. `dateMatch` controls how these ranges interact with `creationDate` wildcards and `collection_stats` decade/century dimensions:
+Most artworks have date *ranges* (e.g. "1630–1640"), not exact years. `dateMatch` controls how these ranges interact with `creationDate` wildcards in `search_artwork` and `semantic_search`:
 
 
 | Mode                   | Behaviour                                                            | Use when                                                                                        |
@@ -97,15 +97,13 @@ Most artworks have date *ranges* (e.g. "1630–1640"), not exact years. `dateMat
 | `"midpoint"`           | Each artwork counted in exactly one bin (midpoint of its date range) | **Statistical comparisons, charts, decade-by-decade counts** — no double-counting, no data loss |
 
 
-**Rule of thumb:** use `midpoint` whenever you're comparing counts across bins (decade trends, century breakdowns, gender ratios by period). Use the default `overlaps` for discovery queries where inclusiveness matters more than precision.
+**Rule of thumb:** when issuing centuries/decades wildcards from `search_artwork` for counting purposes, use `midpoint`. Use the default `overlaps` for discovery queries where inclusiveness matters more than precision.
 
-Available on `search_artwork`, `semantic_search`, and implicitly via `collection_stats` `creationDateFrom`/`creationDateTo` filters.
+Scope: `dateMatch` applies only to `search_artwork` and `semantic_search`, and only fires when `creationDate` is supplied (year or wildcard). It is **not** a parameter on `collection_stats` — `collection_stats` accepts numeric `creationDateFrom`/`creationDateTo` (strict within-bounds), and its `decade`/`century` dimensions bin each artwork by `date_earliest` (one bin per artwork, no double-counting to escape).
 
 ### `attributionQualifier` + `creator` — structural limitation
 
-> ⚠ **TODO (v0.3.0 audit)** — re-validate against v0.27 on a known case (e.g. "follower of Rembrandt"). With `attribution_evidence` now harvested and `assignment_pairs` reused by `find_similar(lineage)`, the structural picture may have shifted. Confirm whether `attributionQualifier` + `creator` now resolves to the source artist, or amend.
-
-The parameter description suggests combining `attributionQualifier` with `creator` to filter by source artist (e.g. "find all followers of Rembrandt"). Verified across all qualifier types (`follower of`, `workshop of`, `circle of`, `attributed to`): the structured `creator` field was always `Unknown [painter]` or `anonymous`, regardless of qualifier. The source artist's name appeared only in the composite display string and was not exposed as a searchable entity field.
+The parameter description suggests combining `attributionQualifier` with `creator` to filter by source artist (e.g. "find all followers of Rembrandt"). In practice this does not work: across all qualifier types (`follower of`, `workshop of`, `circle of`, `attributed to`), the structured `creator` field is `Unknown [painter]` or `anonymous`, regardless of qualifier. The source artist's name appears only in the composite display string and is not exposed as a searchable entity field. For citation rigour at the single-work level, `get_artwork_details` exposes an `attributionEvidence` array.
 
 **The correct strategy by qualifier type:**
 
@@ -113,38 +111,38 @@ The parameter description suggests combining `attributionQualifier` with `creato
 | Goal                                      | Working approach                                                                  |
 | ----------------------------------------- | --------------------------------------------------------------------------------- |
 | Works in the manner/style of artist X     | `aboutActor: "X"` + `type: "painting"` (or other type)                            |
-| All "follower of" works in the collection | `attributionQualifier: "follower of"` alone (returns ~111 works)                  |
+| All "follower of" works in the collection | `attributionQualifier: "follower of"` alone (returns 111 works)                   |
 | Sub-filter those by source artist         | Not possible via parameters — requires fetching and inspecting individual records |
 
 
-**Additional complication — "manner of" is not a valid qualifier value.** The Rijksmuseum uses "manner of" as a distinct attribution category, but `"manner of"` is not in the `attributionQualifier` controlled vocabulary and returns zero results. Works attributed in this way are retrievable only via `aboutActor`.
+The full enumerated set is: `primary, undetermined, after, secondary, possibly, attributed to, circle of, workshop of, copyist of, manner of, follower of, falsification, free-form`. `manner of` is a real value (362 mappings) — long-tail, but valid; do not assume it returns zero.
 
 **Canonical name form matters.** The Rijksmuseum catalogue uses historical Dutch/Latin spellings for some artists. Bosch is catalogued as **"Jheronimus Bosch"**, not "Hieronymus Bosch". Always check `get_artwork_details` on a known work to confirm the canonical form before filtering.
 
 ### `creator` vs `aboutActor` vs `depictedPerson`
 
 - `creator`: who made it — accepts canonical name forms ("Rembrandt van Rijn") **or a vocab ID** returned by `search_persons`
-- `depictedPerson`: who is *shown* in it — matches ~709K name variants across~ 291K persons, including historical forms
+- `depictedPerson`: who is *shown* in it — matches ~709K name variants across ~291K persons, including historical forms
 - `aboutActor`: broader cross-field search; more tolerant of name variants and cross-language forms ("Louis XIV" finds "Lodewijk XIV")
 
-**Demographic gating is a two-step pattern in v0.27.** To find works by women painters born after 1850, first call `search_persons(gender="female", profession="painter", bornAfter=1850)` to get vocab IDs, then pass those IDs to `search_artwork(creator=[id1, id2, …], type="painting")`. Note: `search_persons` demographic filters (gender, born*) return zero rows on a freshly harvested DB without person enrichment.
+**Demographic gating is a two-step pattern.** To find works by women painters born after 1850, first call `search_persons(gender="female", profession="painter", bornAfter=1850)` to get vocab IDs, then pass those IDs to `search_artwork(creator=[id1, id2, …], type="painting")`. Note: `search_persons` demographic filters (gender, born*) return zero rows on a freshly harvested DB without person enrichment.
 
 ### Title language coverage — the catalogue is mostly Dutch
 
-The Rijksmuseum has translated only **~4% of artwork titles into English** (~35K of 834K works). The remaining~ 96% have Dutch titles only — typically medals, coins, prints, decorative arts, and other minor objects. Famous paintings and curatorially-prominent works almost always have both languages; the long tail does not.
+The Rijksmuseum has translated only **~5% of artwork titles into English** (~39K of 834K works). The remaining ~95% have Dutch titles only — typically medals, coins, prints, decorative arts, and other minor objects. Famous paintings and curatorially-prominent works almost always have both languages; the long tail does not.
 
 **Implications for research:**
 
 - **Result presentation**: when reporting results to the user, use whatever title language exists rather than insisting on English. For an 18th-century medal, "Wilhelmina Koningin der Nederlanden" *is* the canonical title — there is no English version, and inventing one would misrepresent the catalogue.
 - **Ranking**: title BM25 scores are computed across both languages, so an English title query against a Dutch-only object scores zero on title (but the object may still surface via `description`, `subject`, `iconclass`, or `semantic_search`, all of which have stronger English coverage).
-- `**get_artwork_details` now returns the full set of title variants** with language and qualifier (Dutch/English × brief/full/display/former). When reporting a work, prefer the variant whose language matches the user's query — the field exposes language per variant so this is straightforward.
+- **`get_artwork_details` returns the full set of title variants** with language and qualifier (Dutch/English × brief/full/display/former). When reporting a work, prefer the variant whose language matches the user's query — the field exposes language per variant so this is straightforward.
 
 ### `search_provenance`: two query layers
 
 `search_provenance` has two data layers that answer fundamentally different questions.
 
 - `layer: "events"` (default): individual transactions — each with a date, location, price, parties (with roles and positions), and transfer type. Think of it as a ledger of *what happened*. Events-only parameters: `transferType`, `excludeTransferType`, `hasPrice`, `currency`, `hasGap`, `relatedTo`.
-- `layer: "periods"`: interpreted ownership spans — who held the work, how they acquired it, and for how long. Think of it as a timeline of *who owned what*. Periods-only parameters: `ownerName`, `acquisitionMethod`, `minDuration`, `maxDuration`, `sortBy: "duration"`.
+- `layer: "periods"`: interpreted ownership spans — who held the work, how they acquired it, and for how long. Think of it as a timeline of *who owned what*. Periods-only parameters: `ownerName`, `acquisitionMethod`, `periodLocation`, `minDuration`, `maxDuration`, `sortBy: "duration"`. Use `periodLocation` (period-level, ~45% populated) in preference to event-level `location` when scoping a periods-layer query — they AND-combine when both are supplied.
 
 Shared parameters work on both layers: `party`, `location`, `creator`, `dateFrom`/`dateTo`, `objectNumber`, `categoryMethod`, `positionMethod`, `sortBy`, `offset`, `facets`.
 
@@ -250,17 +248,19 @@ Multiple codes AND-combine — this is how you express compound iconographic que
 
 ### 3. Century / Decade Wildcards
 
-For longitudinal analysis, prefer `collection_stats` with decade or century binning. **Use `dateMatch: "midpoint"` for statistical comparisons** — the default `overlaps` mode double-counts broadly-dated objects across bins (see Critical Parameter Distinctions above):
+For longitudinal analysis, prefer `collection_stats` with decade or century binning. `collection_stats` bins each artwork into exactly one bin (by `date_earliest`), so there is no double-counting and no `dateMatch` parameter is needed:
 
 ```
 collection_stats(dimension="decade", technique="etching", creationDateFrom=1500, creationDateTo=1800)
-# → decade-by-decade etching counts in one call (default overlaps — inclusive but inflated)
+# → decade-by-decade etching counts in one call
 
 collection_stats(dimension="decade", technique="etching", creationDateFrom=1500, creationDateTo=1800, binWidth=50)
 # → half-century bins
 ```
 
-For queries that need individual object numbers (not just counts), use `creationDate` wildcards with `search_artwork`:
+Note: `creationDateFrom`/`creationDateTo` here are strict within-bounds — an artwork dated "c. 1490–1510" is excluded from a 1500-1800 window because its earliest year is below 1500.
+
+For queries that need individual object numbers (not just counts), use `creationDate` wildcards with `search_artwork`. `dateMatch` matters here because `search_artwork` defaults to `overlaps` and a broadly-dated object can otherwise appear in multiple century buckets across separate calls:
 
 ```
 search_artwork(technique="etching", creationDate="16*", dateMatch="midpoint")
@@ -284,7 +284,7 @@ semantic_search(query="loneliness and isolation in a vast empty space", type="pa
 # Compare overlap: works only reachable via semantic search are the interesting gap cases
 ```
 
-**Pre-filtering:** `semantic_search` accepts all vocabulary filters from `search_artwork` as pre-filters — `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, `imageAvailable`, `dateMatch`. These narrow the candidate set *before* semantic ranking, combining structured precision with conceptual search:
+**Pre-filtering:** `semantic_search` accepts a substantial subset of `search_artwork`'s filters as pre-filters — `type`, `material`, `technique`, `creator`, `creationDate`, `dateMatch`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, `imageAvailable`. These narrow the candidate set *before* semantic ranking, combining structured precision with conceptual search:
 
 ```
 semantic_search(query="vanitas symbolism", subject="skull", type="painting")
@@ -341,18 +341,17 @@ publisher seals, and poem cartouches that the catalogue has not transcribed.
 Provenance research moves through three levels of detail:
 
 1. **Scope and profile** — `search_artwork` with `creditLine` for fast counts
-nd facets. `creditLine` covers ~360K artworks (vs~ 49K with parsed
-rovenance) and captures the last link: how the museum acquired the work.
-ombine with `productionPlace` + `expandPlaceHierarchy` for geographic
-ross-tabulation. (The `provenance` keyword filter on `search_artwork` was
-emoved in v0.27 — for keyword search over raw provenance text use
-search_provenance` instead.)
+   and facets. `creditLine` covers ~360K artworks (vs ~49K with parsed
+   provenance) and captures the last link: how the museum acquired the work.
+   Combine with `productionPlace` + `expandPlaceHierarchy` for geographic
+   cross-tabulation. For keyword search over raw provenance text, use
+   `search_provenance` (this is not a `search_artwork` parameter).
 2. **Structured chain analysis** — `search_provenance` for parsed chains with
-ates, prices, transfer types, and ownership periods. Add `facets: true`
-or quick distributional context alongside chain results.
+   dates, prices, transfer types, and ownership periods. Add `facets: true`
+   for quick distributional context alongside chain results.
 3. **Single-object deep dive** — `search_provenance(objectNumber=...)` for the
-ull chain, then `get_artwork_details` for narrative text and curatorial
-ontext.
+   full chain, then `get_artwork_details` for narrative text and curatorial
+   context.
 
 **Cross-domain queries**: `hasProvenance: true` on `search_artwork` or
 `collection_stats` bridges the two systems — e.g.
@@ -373,12 +372,11 @@ time series), and enrichment methodology, see `references/provenance-and-enrichm
 
 ### 7. Source–Copy and Related-Object Navigation
 
-In v0.27 there are three complementary paths between a work and its peers,
-copies, sources, pendants, components, or derivatives:
+Three complementary paths connect a work to its peers, copies, sources, pendants, components, or derivatives:
 
 1. **Curator-declared edges via `find_similar`** — the most direct path. `find_similar(objectNumber)` returns one HTML page that includes a **Related Co-Production** column (creator-invariant edges: pendants, production stadia, different examples of one design) and a **Related Object** column (derivative + grouping edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights). Surface the link to the user; they read off the channel column relevant to their question.
-2. **Direct cross-references on the work itself** — `get_artwork_details` returns a `relatedObjects[]` field with each peer's `objectNumber` (canonical handle) plus a Linked Art `objectUri`. Pass either back to `get_artwork_details({objectNumber: …})` or `get_artwork_details({uri: …})` to navigate. ~77K artworks have at least one outgoing related-object edge.
-3. **Reproductive-print keyword path** — when the curator-declared edges are absent, `productionRole` still works for tracing reproductive prints to their painted sources:
+2. **Direct cross-references on the work itself** — `get_artwork_details` returns a `relatedObjects[]` field, scoped to the three creator-invariant relationships (`different example`, `production stadia`, `pendant`). Each entry carries the peer's `objectNumber` (canonical handle) plus a Linked Art `objectUri`; pass either back to `get_artwork_details({objectNumber: …})` or `get_artwork_details({uri: …})` to navigate. For pairs, sets, recto/verso, reproductions, and general related-object links, read off `find_similar`'s Related Object column instead — these are not exposed on `relatedObjects[]`.
+3. **Reproductive-print keyword path** — when curator-declared edges are absent, `productionRole` traces reproductive prints to their painted sources:
 
 ```
 search_artwork(productionRole="after painting by", creator="Rembrandt van Rijn")
@@ -405,9 +403,7 @@ search_artwork(productionPlace="Japan", type="print", maxResults=10)  # sample w
 
 ### 9. Gender and Demographic Analysis
 
-In v0.27 demographic gating is a **two-step pattern** via `search_persons`. The
-old `creatorGender` / `creatorBornAfter` / `creatorBornBefore` modifiers and the
-`collection_stats(dimension="creatorGender")` aggregation no longer exist.
+Demographic gating is a **two-step pattern** via `search_persons`. There are no `creatorGender` / `creatorBornAfter` / `creatorBornBefore` modifiers on `search_artwork` and no `creatorGender` dimension on `collection_stats` — demographic predicates live exclusively on `search_persons`, which returns vocab IDs you then feed to `search_artwork(creator=…)`.
 
 ```
 # Step 1 — find the persons matching the demographic profile
@@ -423,7 +419,7 @@ search_artwork(creator=[vocabId_1, vocabId_2, ...], type="painting", dateMatch="
 
 **Coverage caveat:** `search_persons` demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB. On a freshly harvested DB without enrichment they return zero rows. Structural filters (`birthPlace`, `deathPlace`, `profession`) and `name` work on any harvest.
 
-Of ~291K persons in the catalogue,~ 60K appear as creators on at least one artwork — the default `hasArtworks: true` limits results to that subset.
+Of ~291K persons in the catalogue, ~60K appear as creators on at least one artwork — the default `hasArtworks: true` limits results to that subset.
 
 ### 10. Similarity Research
 
@@ -460,19 +456,18 @@ The HTML page renders all channels in a single view; `maxResults` defaults to 20
 
 | Issue                                                                  | Workaround                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `navigate_viewer` reports `viewerConnected: false`                     | Means the inline viewer iframe hasn't polled within 5s (no WebSocket — the viewer polls `poll_viewer_commands` every 500ms). Commands are still queued server-side and delivered on the next poll. If `viewerConnected: false` persists across multiple fresh `get_artwork_image` calls, the iframe likely failed to mount on the host — surface this to the user rather than silently falling back to `inspect_artwork_image`.                                                                                                                                                                                                                                                                    |
+| `navigate_viewer` `deliveryState` field                                | Three values: `delivered_recently` (iframe polled within 5s — commands flowed through), `queued_waiting_for_viewer` (iframe exists but is paused/offscreen — overlays preserved server-side and applied when polling resumes; **do NOT narrate this as a delivery failure** to the user), `no_live_viewer_seen` (no iframe has connected yet — likely a host-mount failure across multiple fresh `get_artwork_image` calls; surface this to the user rather than silently falling back to `inspect_artwork_image`). Read `deliveryState` rather than the boolean `viewerConnected` mirror. |
 | No `subject` results in English                                        | Try the Dutch term — vocabulary is bilingual ("fotograaf" not "photographer")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `semantic_search` skews toward prints/drawings                         | Filter with `type: "painting"` — prints and drawings outnumber paintings ~77:1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `semantic_search` with very broad filter                               | Single broad filters (`type: "print"`, `material: "paper"`) exceed the candidate limit — results are good but not exhaustive. Combine filters for better coverage.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Inscription field empty in catalogue                                   | Use `inspect_artwork_image` — AI vision can often read text directly from the image. Try `quality: "gray"` for better contrast on faded inscriptions or signatures.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `facets` on `search_artwork`                                           | Multiple dimensions including type, material, technique, century, theme, sourceType, rights, imageAvailable, creator, depictedPerson, depictedPlace, productionPlace. Configure with `facetLimit` (1–50, default 5). Pass `facets=true` for all or `facets=["creator","type"]` for specific ones. Dimensions already filtered on are excluded automatically. All entries include percentage.                                                                                                                                                                                                                                                                                                       |
 | `facets` on `search_provenance`                                        | 5 dimensions: transferType, decade, location, transferCategory, partyPosition. Set `facets=true`. Percentages included.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Collection-wide distributions                                          | Use `collection_stats` instead of `compact=true` counting loops. Artwork dimensions: `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `sourceType`, `theme`, `exhibition`, `century`, `decade`, `decadeModified`, `height`, `width`. Provenance dimensions: `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod`. Cross-domain filters combine freely. One call replaces N iterations. (`creatorGender` is **not** a valid dimension in v0.27 — for gender breakdowns, run `search_persons` then `collection_stats(creator=…)`.) |
+| Collection-wide distributions                                          | Use `collection_stats` instead of `compact=true` counting loops. Artwork dimensions: `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `sourceType`, `theme`, `exhibition`, `century`, `decade`, `decadeModified`, `height`, `width`. Provenance dimensions: `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod`. Cross-domain filters combine freely. One call replaces N iterations. (`creatorGender` is **not** a valid dimension — for gender breakdowns, run `search_persons` then `collection_stats(creator=…)`.) |
 | `search_provenance` data model details                                 | Batch prices, unsold lots, historical currencies, gap flags, parse methods, party coverage, 0-year durations, and `sortBy: "eventCount"` unreliability — see `references/provenance-and-enrichment-patterns.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `attributionQualifier: "manner of"`                                    | This is a real value, but it's a long-tail one (only 362 mappings DB-wide).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Canonical artist name forms                                            | Some artists use historical spellings (e.g. "Jheronimus Bosch"). If a known artist returns no results, check the canonical form via `get_artwork_details` on a known work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `search_persons` returns 0 rows for a demographic filter               | The `gender`, `bornAfter`, `bornBefore` filters require person enrichment to be present on the vocab DB. On a fresh harvest without enrichment they return zero rows — name-token matching and structural filters (`birthPlace`, `deathPlace`, `profession`) still work.                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `relatedObjects` field on `get_artwork_details`                        | ~77K artworks have ≥1 outgoing related-object edge. Each entry carries `objectNumber` plus a Linked Art `objectUri`; pass either back to `get_artwork_details`. For curated-edge similarity discovery, use `find_similar` and read its Related Co-Production and Related Object columns.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `relatedObjects` field on `get_artwork_details`                        | Scoped to the 3 creator-invariant relationships (`different example`, `production stadia`, `pendant`). Each entry carries `objectNumber` plus a Linked Art `objectUri`; pass either back to `get_artwork_details`. Pairs/sets/recto-verso/reproductions/general related-object are NOT in this field — read them off `find_similar`'s Related Object column.                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Multi-folio works dominate results (sketchbooks, albums, print series) | The Rijksmuseum catalogues sketchbooks/albums/print-series as a parent record plus child records per folio, so a single physical object can fill the first page of results. Use `groupBy: "parent"` on `search_artwork` to collapse children whose parent is also in the result set (the parent gains a `groupedChildCount`). When `groupBy` isn't set, the response's `warnings` field flags clustering (e.g. "8 results are folios/components of BI-1898-1748A"). Affects ~4.6% of artworks (object numbers with parenthetical suffixes).                                                                                                                                                        |
 
 
