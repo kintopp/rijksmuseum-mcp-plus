@@ -91,18 +91,13 @@ assert(Array.isArray(nw.parents) && nw.parents.length === 0,
 assert(typeof nw.childCount === "number" && nw.childCount === 0,
   "Night Watch has no children (childCount=0)");
 
-// Task C: relatedObjects
+// Task C: relatedObjects (post-cluster-E: co-production-only — Night Watch has none)
 assert(Array.isArray(nw.relatedObjects),
   "relatedObjects[] returned as array");
 assert(typeof nw.relatedObjectsTotalCount === "number",
   "relatedObjectsTotalCount is a number");
-assert(nw.relatedObjectsTotalCount === 14,
-  `Night Watch carries 14 related entries (got ${nw.relatedObjectsTotalCount})`);
-const relRow = nw.relatedObjects[0];
-assert(typeof relRow?.relationship === "string" && relRow.relationship.length > 0,
-  "first relatedObject has relationship label");
-assert(typeof relRow?.objectUri === "string" && relRow.objectUri.startsWith("https://"),
-  "first relatedObject carries objectUri");
+assert(nw.relatedObjectsTotalCount === 0,
+  `Night Watch has 0 co-production peers (got ${nw.relatedObjectsTotalCount})`);
 
 // ══════════════════════════════════════════════════════════════════
 section("3. get_artwork_details(BI-1898-1748A) — sketchbook parent (#28)");
@@ -139,6 +134,34 @@ assert(folio.parents[0].objectNumber === "BI-1898-1748A",
 assert(typeof folio.parents[0].title === "string" && folio.parents[0].title.length > 0,
   "parent record carries a resolved title");
 assert(folio.childCount === 0, "folio is a leaf (no children)");
+
+// ══════════════════════════════════════════════════════════════════
+section("5. get_artwork_details(RP-P-1997-361) — co-production peers");
+// ══════════════════════════════════════════════════════════════════
+// Cluster E narrowed relatedObjects[] to the 3 co-production labels
+// ('different example' / 'production stadia' / 'pendant'). RP-P-1997-361
+// carries 7 such entries across 2 distinct labels.
+
+const r5 = await client.callTool({
+  name: "get_artwork_details",
+  arguments: { objectNumber: "RP-P-1997-361" },
+});
+const rp = unwrap(r5);
+
+assert(rp.relatedObjectsTotalCount === 7,
+  `RP-P-1997-361 carries 7 co-production entries (got ${rp.relatedObjectsTotalCount})`);
+assert(rp.relatedObjects.length === 7,
+  `relatedObjects[] returns all 7 (got ${rp.relatedObjects.length})`);
+const rpDistinct = new Set(rp.relatedObjects.map(r => r.relationship));
+assert(rpDistinct.size === 2,
+  `2 distinct relationship labels (got ${rpDistinct.size})`);
+assert(rpDistinct.has("different example") && rpDistinct.has("production stadia"),
+  "covers both 'different example' and 'production stadia'");
+const firstRow = rp.relatedObjects[0];
+assert(typeof firstRow?.relationship === "string" && firstRow.relationship.length > 0,
+  "first relatedObject has relationship label");
+assert(typeof firstRow?.objectUri === "string" && firstRow.objectUri.startsWith("https://"),
+  "first relatedObject carries objectUri");
 
 // ══════════════════════════════════════════════════════════════════
 section("6. search_artwork(creator='Schedel') — default behaviour");
@@ -212,8 +235,9 @@ assert(folioText.includes("[Parent]"),
 assert(folioText.includes("BI-1898-1748A"),
   "[Parent] line names the parent objectNumber");
 
-assert(nwText.includes("[Related objects]"),
-  "[Related objects] section rendered when relatedObjectsTotalCount > 0");
+const rpText = textOf(r5);
+assert(rpText.includes("[Co-productions]"),
+  "[Co-productions] section rendered when relatedObjectsTotalCount > 0");
 
 // ══════════════════════════════════════════════════════════════════
 section("9. Text-channel sentinels — search_artwork groupedChildCount (#277 High)");
