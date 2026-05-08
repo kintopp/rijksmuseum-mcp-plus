@@ -1162,11 +1162,11 @@ def parse_nt_file(filepath: str, default_type: str, iconclass_resolver=None) -> 
         seen.add(key)
         external_ids_out.append((authority, local_id, uri))
 
-    # Parse coordinates for places
+    # Parse coordinates for places. #328: do NOT assign the WKT POINT to
+    # `notation` — that column is reserved for Iconclass classifications.
     lat = None
     lon = None
     if defined_by and defined_by.startswith("POINT"):
-        notation = defined_by
         m_coord = re.match(r"POINT\(([-\d.]+)\s+([-\d.]+)\)", defined_by)
         if m_coord:
             lon = float(m_coord.group(1))
@@ -1203,9 +1203,11 @@ def parse_nt_file(filepath: str, default_type: str, iconclass_resolver=None) -> 
             #   2. URL path of any iconclass.org URI in `linked.art/equivalent`
             #      (the ~11 files that carry only the URI, no P190 literal —
             #      e.g. `<...> equivalent <https://iconclass.org/61BB11%28%2B0%29>`)
-            # Places (notation = "POINT(...)") are excluded.
+            # Places never reach this branch (vocab_type == "classification"
+            # required above), so `notation` here is always either a real
+            # Iconclass code or None.
             candidate_notation: str | None = None
-            if notation and not notation.startswith("POINT"):
+            if notation:
                 candidate_notation = notation
             else:
                 for eq in equivalents:
@@ -2039,8 +2041,8 @@ def resolve_uri(entity_id: str) -> tuple[dict | None, str | None]:
     if vocab_type == "place":
         defined_by = data.get("defined_by", "")
         if isinstance(defined_by, str) and defined_by.startswith("POINT"):
-            notation = defined_by
-            # Parse POINT(lon lat)
+            # Parse POINT(lon lat). #328: don't assign WKT to `notation` —
+            # that column is reserved for Iconclass classifications.
             m = re.match(r"POINT\(([-\d.]+)\s+([-\d.]+)\)", defined_by)
             if m:
                 lon = float(m.group(1))

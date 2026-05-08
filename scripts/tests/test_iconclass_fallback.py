@@ -184,15 +184,36 @@ with tempfile.TemporaryDirectory() as tmp:
           r is not None and r["label_en"] == "sleeves" and r["notation"] == "41D224(SIERMOUWEN)",
           f"got {r}")
 
-    # Resolver should NOT fire on places (notation is "POINT(...)")
+    # Resolver should NOT fire on places. Per #328, places no longer carry
+    # POINT in `notation` — the WKT lives only in `defined_by` for lat/lon
+    # extraction. A place fixture with no labels is dropped regardless.
     p3 = write_fixture(tmpdir, "place-fixture", [
         f'<https://id.rijksmuseum.nl/place-fixture> '
         f'<http://www.cidoc-crm.org/cidoc-crm/P168_place_is_defined_by> '
         f'"POINT(4.5 52.3)" .',
     ])
     r = parse_nt_file(str(p3), "place", iconclass_resolver=resolver)
-    check("place with POINT notation doesn't trigger iconclass resolver",
+    check("label-less place is dropped, regardless of POINT defined_by",
           r is None, f"got {r}")
+
+    # #328: a labelled place keeps lat/lon from POINT but notation stays None.
+    p3b = write_fixture(tmpdir, "labelled-place-fixture", [
+        f'<https://id.rijksmuseum.nl/labelled-place-fixture> '
+        f'<http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by> _:b1 .',
+        f'_:b1 <{aat_p190}> "Amsterdam" .',
+        f'_:b1 <http://www.cidoc-crm.org/cidoc-crm/P72_has_language> <{en_lang}> .',
+        f'_:b1 <http://www.cidoc-crm.org/cidoc-crm/P2_has_type> <{aat_display}> .',
+        f'<https://id.rijksmuseum.nl/labelled-place-fixture> '
+        f'<http://www.cidoc-crm.org/cidoc-crm/P168_place_is_defined_by> '
+        f'"POINT(4.916667 52.3500)" .',
+    ])
+    r = parse_nt_file(str(p3b), "place", iconclass_resolver=resolver)
+    check("labelled place: lat/lon populated, notation is None (#328)",
+          r is not None
+          and r["notation"] is None
+          and r["lat"] == 52.3500
+          and r["lon"] == 4.916667,
+          f"got {r}")
 
     # Resolver should NOT fire on non-classification types
     p4 = write_fixture(tmpdir, "person-fixture", [
