@@ -22,7 +22,6 @@ import { UsageStats } from "./utils/UsageStats.js";
 import {
   captureMemorySnapshot,
   formatMemorySnapshotDetailed,
-  formatMemorySnapshotOneLine,
   type DbHandle,
 } from "./utils/MemoryStats.js";
 import { registerAll, similarPages, enrichmentReviewPages } from "./registration.js";
@@ -415,13 +414,6 @@ async function runHttp(): Promise<void> {
         ready = true; // don't leave /ready stuck — failure is logged
       }
     })();
-
-    // Periodic 15-min RSS snapshot for issue #272 — single log line so it
-    // costs nothing to leave on. unref() so it doesn't block shutdown.
-    const memInterval = setInterval(() => {
-      console.error(formatMemorySnapshotOneLine(captureMemorySnapshot(buildMemoryDbHandles())));
-    }, 15 * 60 * 1000);
-    memInterval.unref();
   });
 }
 

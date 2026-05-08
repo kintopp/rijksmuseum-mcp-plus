@@ -2,8 +2,8 @@ import fs from "node:fs";
 
 // Memory observability for issue #272 — captures process RSS breakdown,
 // per-DB SQLite pragma state, and (on Linux) per-DB mmap'd resident bytes
-// from /proc/self/smaps. Used for the startup log line, the 5-min periodic
-// log line, and the /debug/memory HTTP endpoint.
+// from /proc/self/smaps. Used for the startup log line and the
+// /debug/memory HTTP endpoint.
 
 export interface DbPragmaInfo {
   name: string;
@@ -172,12 +172,6 @@ export function captureMemorySnapshot(handles: DbHandle[]): MemorySnapshot {
 
 function mb(n: number): string {
   return (n / (1024 * 1024)).toFixed(1);
-}
-
-// One-line periodic log: "mem rss=2451MB heap=124/156MB ext=412MB ab=320MB up=1234s"
-export function formatMemorySnapshotOneLine(snap: MemorySnapshot): string {
-  const p = snap.process;
-  return `mem rss=${mb(p.rssBytes)}MB heap=${mb(p.heapUsedBytes)}/${mb(p.heapTotalBytes)}MB ext=${mb(p.externalBytes)}MB ab=${mb(p.arrayBuffersBytes)}MB up=${snap.uptimeSeconds}s`;
 }
 
 // Multi-line startup log with full per-DB breakdown
