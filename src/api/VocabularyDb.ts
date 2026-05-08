@@ -1920,7 +1920,7 @@ export class VocabularyDb {
       SELECT m.vocab_rowid, COUNT(DISTINCT m.artwork_id) as df
       FROM mappings m
       JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-      WHERE m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
+      WHERE m.field_id = ? AND v.notation IS NOT NULL
       GROUP BY m.vocab_rowid
     `).all(subjectFieldId) as { vocab_rowid: number; df: number }[];
 
@@ -1933,7 +1933,7 @@ export class VocabularyDb {
       SELECT COUNT(DISTINCT m.artwork_id) as n
       FROM mappings m
       JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-      WHERE m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
+      WHERE m.field_id = ? AND v.notation IS NOT NULL
     `).get(subjectFieldId) as { n: number };
     this.iconclassN = countRow.n;
     this.ensureMappingsStmt();
@@ -1961,7 +1961,7 @@ export class VocabularyDb {
       SELECT m.vocab_rowid, v.notation, COALESCE(v.label_en, v.label_nl, '') as label
       FROM mappings m
       JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid
-      WHERE m.artwork_id = ? AND +m.field_id = ? AND v.notation IS NOT NULL AND v.notation NOT LIKE 'POINT(%'
+      WHERE m.artwork_id = ? AND +m.field_id = ? AND v.notation IS NOT NULL
     `).all(queryArtId, subjectFieldId) as { vocab_rowid: number; notation: string; label: string }[];
 
     // Filter noise labels
