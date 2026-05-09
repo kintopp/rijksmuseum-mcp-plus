@@ -1,22 +1,5 @@
 # rijksmuseum-mcp-plus tools
 
-## Decision: which tool?
-
-| Question | Tool |
-|---|---|
-| Specific filters (subject, material, dates, place, person, theme, …)? | `search_artwork` |
-| Free-text concept query? | `semantic_search` |
-| Artwork-to-artwork similarity? | `find_similar` |
-| Demographic person query (gender, born, profession, birth/death place)? | `search_persons` → `search_artwork({creator: <vocabId>})` |
-| Provenance / ownership history? | `search_provenance` |
-| Single artwork's full metadata? | `get_artwork_details` |
-| Open the deep-zoom viewer (user-facing)? | `get_artwork_image` |
-| Get image bytes for LLM visual analysis? | `inspect_artwork_image` |
-| Aggregate counts, distributions, cross-tabs? | `collection_stats` |
-| Discover curated sets? | `list_curated_sets` |
-| Enumerate set members? | `browse_set` |
-| What changed since YYYY-MM-DD? | `get_recent_changes` (OAI delta) or `search_artwork({modifiedAfter: …})` (static filter) |
-
 ## Search & Discovery
 
 - **`search_artwork`** — Filter the collection by structured criteria (subject, material, technique, dates, place, person, theme, …). Combinable filters; AND semantics on arrays.
@@ -49,8 +32,3 @@
 - **`navigate_viewer`** — Navigate the open deep-zoom viewer to a specific region; add or clear labelled overlays.
 
 ---
-
-*14 tools total (12 standard + 2 internal app tools). `find_similar` is feature-gated
-via `ENABLE_FIND_SIMILAR` (default: true). `semantic_search` is
-particularly powerful for humanities research — query conceptually rather than by keyword.
-For Iconclass taxonomy navigation, prefer the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).*

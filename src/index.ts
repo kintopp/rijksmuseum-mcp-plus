@@ -201,47 +201,42 @@ function createServer(httpPort?: number): McpServer {
     {
       capabilities: { tools: {}, resources: {}, prompts: {}, logging: {} },
       instructions:
-        "Rijksmuseum collection explorer — circa 830,000 artworks from antiquity to the present day " +
+        "Rijksmuseum collection explorer — circa 834,000 artworks from antiquity to the present day " +
         "spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.\n\n" +
 
-        "Search uses a vocabulary database with structured filters " +
-        "(subject, material, technique, creator, depicted persons/places, Iconclass notation, dates, dimensions, and more). " +
-        "All filters combine freely with each other. Results are ranked by BM25 relevance when text search is used, " +
-        "by geographic proximity for nearPlace, and by importance (image availability, curatorial attention) otherwise. " +
-        "Use search_artwork for discovery, get_artwork_details for full metadata on a specific work.\n\n" +
+        "Search uses a vocabulary database. All filters combine freely; array values are AND-combined. " +
+        "Vocabulary labels are bilingual (English/Dutch) — fall back to the Dutch term when an English query " +
+        "returns nothing (e.g. 'fotograaf' for 'photographer').\n\n" +
 
-        "Images are served via IIIF deep-zoom. get_artwork_image opens an interactive viewer (metadata + viewer link, no image bytes). " +
-        "To get actual image bytes for visual analysis, use inspect_artwork_image — it returns base64 image data that the LLM can see directly. " +
-        "Call it with region 'full' for the complete artwork, or 'pct:x,y,w,h' to zoom into a specific area. " +
-        "After analyzing a crop, you can call navigate_viewer with the same region to zoom the viewer for the user. " +
-        "For overlay placement, always inspect before overlaying: full image first to understand layout, " +
-        "then close-up crops to verify target positions. Coordinates use full-image space — the same " +
-        "pct:x,y,w,h works identically in both inspect_artwork_image and navigate_viewer.\n\n" +
+        "Images are served via IIIF deep-zoom. Three viewer-family tools: get_artwork_image opens an interactive " +
+        "viewer for the user; inspect_artwork_image returns base64 bytes for the LLM's own visual analysis; " +
+        "navigate_viewer highlights regions in an already-open viewer.\n\n" +
 
-        "Person names are matched against 210K name variants (76K persons) using phrase matching with fallback " +
-        "to token intersection — partial names and historical variants often work. " +
-        "aboutActor searches both subject and creator vocabulary for broader person matching.\n\n" +
+        "For demographic person queries (gender, birth/death year/place, profession), use search_persons → feed " +
+        "the returned vocabId into search_artwork({creator}). For artworks depicting a known person, use " +
+        "search_artwork({aboutActor}) — broader recall than depictedPerson because it searches both subject and " +
+        "creator vocabularies and tolerates cross-language name forms.\n\n" +
 
-        "Place searches support proximity (nearPlace), depicted places, and production places. " +
-        "64% of places are geocoded. Multi-word queries like 'Oude Kerk Amsterdam' are resolved " +
-        "via progressive token splitting with geo-disambiguation.\n\n" +
+        "Place searches support depictedPlace and productionPlace as vocabulary filters. " +
+        "For proximity, most place vocabulary entries lack coordinates — nearPlace only works for the subset that has been " +
+        "authority-geocoded, but nearLat/nearLon with explicit coordinates always works for searching artworks near any point. " +
+        "Multi-word place names like 'Oude Kerk Amsterdam' still resolve to a single vocabulary entry regardless of " +
+        "coordinate coverage.\n\n" +
 
         "Iconclass covers 40,675 subject notations. Use the Iconclass server's search tool to find notation codes by concept, " +
         "then pass them to search_artwork for precise iconographic filtering.\n\n" +
 
-        "Descriptions (Dutch, cataloguer-written) cover 61% of artworks. " +
-        "Curatorial narratives (English, interpretive wall text) cover ~14K works. " +
-        "Both are searchable but use exact word matching — no stemming.\n\n" +
+        "Two free-text corpora are searchable through search_artwork: descriptions (Dutch, cataloguer-written, " +
+        "~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the " +
+        "relevant language, prefer semantic_search.\n\n" +
 
-        "For concept and theme searches where exact vocabulary terms are unknown, use semantic_search — " +
-        "it ranks artworks by embedding similarity to a free-text query. " +
-        "Use search_artwork when the query names a specific artist, place, date, material, or Iconclass term. " +
-        "Use semantic_search when the concept cannot be expressed as structured metadata " +
-        "(atmosphere, emotion, composition, art-historical interpretation), or when search_artwork returned zero results. " +
-        "For queries where paintings are the expected result type, always combine semantic_search with " +
-        "a follow-up search_artwork(type: 'painting', subject: ...) or search_artwork(type: 'painting', creator: ...) — " +
-        "paintings are underrepresented in semantic results and the absence of key works is not visible in the output. " +
-        "Do not use technique: 'painting' to filter to paintings — use type: 'painting' instead.",
+        "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that " +
+        "resist structured metadata, find_similar for artwork-to-artwork similarity from a known objectNumber. " +
+        "For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.\n\n" +
+
+        "Specialised tools: search_provenance for ownership-history questions across the ~48K artworks with " +
+        "parsed provenance; list_curated_sets + browse_set for exhibition/thematic groupings curated by Rijksmuseum " +
+        "staff; get_recent_changes for OAI-PMH delta tracking against a harvest checkpoint.",
     }
   );
 
