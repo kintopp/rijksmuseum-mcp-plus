@@ -647,6 +647,17 @@ def revalidate_tgn_rdf(db_path: Path,
         print(f"Discrepancy CSV written: {discrepancy_csv} "
               f"({len(discrepancies)} rows)", file=sys.stderr)
 
+    # No-action CSV: errors + settlement-without-centroid edge cases. Useful
+    # for investigating fetch errors and surfacing TGN data anomalies.
+    if no_action:
+        no_action_csv = db_path.parent / "tgn-rdf-no-action.csv"
+        with open(no_action_csv, "w", newline="") as f:
+            w = _csv.DictWriter(f, fieldnames=list(no_action[0].keys()))
+            w.writeheader()
+            w.writerows(no_action)
+        print(f"No-action CSV written: {no_action_csv} "
+              f"({len(no_action)} rows)", file=sys.stderr)
+
     if dry_run:
         print("Dry run — no DB changes applied.", file=sys.stderr)
         return
