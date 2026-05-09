@@ -2,10 +2,14 @@
 """
 Batch geocode depicted places using external IDs already in the vocabulary DB.
 
-Strategy:
+Default strategy (top-up — fills missing coords only):
   1. Wikidata SPARQL — batch query P625 coordinates for QIDs (fast, ~500 QIDs/query)
   2. GeoNames API — resolve GeoNames IDs to coordinates (fast, bulk JSON)
   3. Getty TGN SPARQL — batch query coordinates from Getty Thesaurus
+
+Alternate mode — full TGN re-validation via per-entity RDF dereferencing
+(use this when vocab.getty.edu/sparql is broken but the LOD CDN still works):
+    python3 scripts/batch_geocode.py --revalidate-tgn-rdf [--dry-run] [--rdf-workers N]
 
 Usage:
     python3 scripts/batch_geocode.py [--db PATH] [--dry-run]
@@ -15,14 +19,21 @@ import argparse
 import json
 import sqlite3
 import sys
+import threading
 import time
 import urllib.request
 import urllib.parse
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 GETTY_SPARQL = "http://vocab.getty.edu/sparql"
+GETTY_RDF_BASE = "http://vocab.getty.edu/tgn/"   # per-entity dereferencing: GETTY_RDF_BASE + "{id}.rdf"
 GEONAMES_API = "http://api.geonames.org/getJSON"
+
+UA = "rijksmuseum-mcp-geocoder/2.0 (https://github.com/kintopp/rijksmuseum-mcp-plus)"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -258,6 +269,429 @@ def geocode_getty(places: list[dict], batch_size: int = 200) -> dict[str, tuple[
 
 
 # ---------------------------------------------------------------------------
+# 3b. Getty TGN per-entity RDF dereferencing
+# ---------------------------------------------------------------------------
+#
+# Substitute for the SPARQL path when vocab.getty.edu/sparql is unreachable
+# (it 500s as of 2026-05-09 while the static LOD layer still serves valid
+# RDF). The RDF payload carries lat/long, gvp:placeTypePreferred, and the
+# broader-chain in a single fetch — so this is also the right path for a
+# "full re-validation" pass that upgrades coord_method_detail provenance
+# and refreshes vocabulary.placetype/placetype_source on TGN-tagged places.
+#
+# Tagged em.TGN_RDF_DIRECT (separate from em.TGN_DIRECT, which records the
+# SPARQL path). The two constants exist side-by-side so consumers can tell
+# which mechanism produced a given row — preserves audit-trail fidelity per
+# the #258 append-only gate.
+
+_RDF_NS = {
+    "wgs":  "http://www.w3.org/2003/01/geo/wgs84_pos#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "gvp":  "http://vocab.getty.edu/ontology#",
+    "rdf":  "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+}
+_RDF_RESOURCE = f"{{{_RDF_NS['rdf']}}}resource"
+
+
+@dataclass
+class TGNRecord:
+    """Facts harvested from a single TGN entity's .rdf payload.
+
+    Returned by ``geocode_getty_rdf`` — caller decides write strategy
+    (coord upgrade vs. discrepancy log, placetype fill, etc.).
+    """
+    tgn_id: str
+    lat: float | None = None
+    lon: float | None = None
+    placetype_aat: str | None = None     # full URI: http://vocab.getty.edu/aat/300008389
+    broader_tgn: str | None = None       # bare ID of immediate gvp:broader parent
+    label_en: str | None = None
+    fetch_status: int = 0                # HTTP status (0 = transport error before status line)
+    fetch_error: str | None = None       # populated on non-200 or parse failure
+
+
+def _parse_tgn_rdf(body: bytes, tgn_id: str) -> TGNRecord:
+    """Parse one TGN entity's RDF payload into a TGNRecord.
+
+    Tolerant of missing fields — TGN often has placeType but no coords (areal
+    entities). Returns the record with whatever was found; the caller checks
+    individual field presence.
+    """
+    rec = TGNRecord(tgn_id=tgn_id, fetch_status=200)
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as e:
+        rec.fetch_status = 0
+        rec.fetch_error = f"parse error: {e}"
+        return rec
+
+    for elem in root.iter():
+        if "}" not in elem.tag:
+            continue
+        ns, _, tag = elem.tag[1:].partition("}")
+        if ns == _RDF_NS["wgs"]:
+            if tag == "lat" and elem.text and rec.lat is None:
+                try:
+                    rec.lat = float(elem.text)
+                except ValueError:
+                    pass
+            elif tag == "long" and elem.text and rec.lon is None:
+                try:
+                    rec.lon = float(elem.text)
+                except ValueError:
+                    pass
+        elif ns == _RDF_NS["skos"] and tag == "prefLabel":
+            if (elem.get("{http://www.w3.org/XML/1998/namespace}lang") == "en"
+                    and rec.label_en is None and elem.text):
+                rec.label_en = elem.text
+        elif ns == _RDF_NS["gvp"]:
+            if tag == "placeTypePreferred" and rec.placetype_aat is None:
+                ref = elem.get(_RDF_RESOURCE, "")
+                if "/aat/" in ref:
+                    rec.placetype_aat = ref
+            elif tag == "broader" and rec.broader_tgn is None:
+                ref = elem.get(_RDF_RESOURCE, "")
+                if "/tgn/" in ref:
+                    rec.broader_tgn = ref.rsplit("/", 1)[-1]
+    return rec
+
+
+def _fetch_tgn_rdf(session, tgn_id: str, timeout: int = 20) -> TGNRecord:
+    """Fetch and parse one TGN entity's .rdf. Network errors surface in
+    ``fetch_error``; the caller decides whether to retry."""
+    url = f"{GETTY_RDF_BASE}{tgn_id}.rdf"
+    try:
+        resp = session.get(url, timeout=timeout, allow_redirects=True)
+    except Exception as e:
+        return TGNRecord(tgn_id=tgn_id, fetch_status=0,
+                         fetch_error=f"transport: {e.__class__.__name__}: {e}")
+    if resp.status_code != 200:
+        return TGNRecord(tgn_id=tgn_id, fetch_status=resp.status_code,
+                         fetch_error=f"HTTP {resp.status_code}")
+    return _parse_tgn_rdf(resp.content, tgn_id)
+
+
+def geocode_getty_rdf(places: list[dict],
+                      *,
+                      max_workers: int = 6,
+                      request_timeout: int = 20,
+                      progress_every: int = 500) -> dict[str, TGNRecord]:
+    """
+    Full re-validation pass over places with TGN authority IDs, using
+    per-entity RDF dereferencing instead of the SPARQL endpoint.
+
+    Returns ``{vocab_id: TGNRecord}`` covering every input place (including
+    failures — check ``rec.fetch_status`` / ``rec.fetch_error``). The caller
+    decides write strategy: top-up missing coords, upgrade existing-coord
+    provenance to ``em.TGN_RDF_DIRECT``, refresh ``placetype`` /
+    ``placetype_source``, log discrepancies between TGN and existing values.
+
+    Unlike ``geocode_getty()``, this function does NOT pre-filter to
+    ungeocoded places — full re-validation requires touching the rows that
+    already have coords too. Trust-tier enforcement (``WHERE lat IS NULL``)
+    is the caller's job and is generally inappropriate for the upgrade-mode
+    use case.
+
+    HTTP keep-alive via per-worker ``requests.Session`` (sessions aren't
+    thread-safe across simultaneous calls, so each worker thread gets its
+    own from ``threading.local``). Avg latency drops from ~1.9s/req with
+    cold-connection ``urlopen`` to ~200-300ms/req with keep-alive.
+    """
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    tgn_to_vocab: dict[str, list[str]] = {}
+    for p in places:
+        tgn_id = extract_tgn_id(p["external_id"])
+        if tgn_id:
+            tgn_to_vocab.setdefault(tgn_id, []).append(p["id"])
+
+    if not tgn_to_vocab:
+        return {}
+
+    n_unique = len(tgn_to_vocab)
+    n_vocab_rows = sum(len(v) for v in tgn_to_vocab.values())
+    print(f"Getty TGN (RDF): {n_unique} unique IDs across {n_vocab_rows} "
+          f"vocab rows (max_workers={max_workers})", file=sys.stderr)
+
+    thread_local = threading.local()
+
+    def _session() -> "requests.Session":
+        s = getattr(thread_local, "session", None)
+        if s is None:
+            s = requests.Session()
+            s.headers.update({
+                "User-Agent": UA,
+                "Accept": "application/rdf+xml",
+                "Accept-Encoding": "gzip",
+            })
+            retry = Retry(
+                total=3,
+                backoff_factor=0.5,
+                status_forcelist=[429, 502, 503, 504],
+                allowed_methods=frozenset(["GET"]),
+                raise_on_status=False,
+            )
+            adapter = HTTPAdapter(pool_connections=1, pool_maxsize=1, max_retries=retry)
+            s.mount("http://", adapter)
+            s.mount("https://", adapter)
+            thread_local.session = s
+        return s
+
+    results: dict[str, TGNRecord] = {}
+    fetched = coords_found = placetypes_found = errors = 0
+    t0 = time.perf_counter()
+
+    def _fetch(tgn_id: str) -> tuple[str, TGNRecord]:
+        return tgn_id, _fetch_tgn_rdf(_session(), tgn_id, timeout=request_timeout)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = [ex.submit(_fetch, tgn) for tgn in tgn_to_vocab]
+        for fut in as_completed(futures):
+            tgn_id, rec = fut.result()
+            for vocab_id in tgn_to_vocab[tgn_id]:
+                results[vocab_id] = rec
+            fetched += 1
+            if rec.fetch_error:
+                errors += 1
+            if rec.lat is not None and rec.lon is not None:
+                coords_found += 1
+            if rec.placetype_aat:
+                placetypes_found += 1
+
+            if fetched % progress_every == 0:
+                elapsed = time.perf_counter() - t0
+                rate = fetched / elapsed if elapsed > 0 else 0
+                eta_min = (n_unique - fetched) / rate / 60 if rate > 0 else 0
+                print(f"  ... {fetched}/{n_unique} ({rate:.1f} req/s, "
+                      f"eta {eta_min:.1f} min) — coords={coords_found}, "
+                      f"placetypes={placetypes_found}, errors={errors}",
+                      file=sys.stderr)
+
+    elapsed = time.perf_counter() - t0
+    print(f"Getty TGN (RDF): {fetched} fetches in {elapsed:.1f}s "
+          f"({fetched/elapsed:.1f} req/s avg) — "
+          f"coords={coords_found}, placetypes={placetypes_found}, "
+          f"errors={errors}", file=sys.stderr)
+    return results
+
+
+# ---------------------------------------------------------------------------
+# 3c. Full re-validation orchestrator (TGN RDF)
+# ---------------------------------------------------------------------------
+
+# Coordinate match tolerance: ~0.05° ≈ 5.5 km at the equator. Below this,
+# treat the existing coord and TGN's coord as agreeing (provenance-upgrade
+# only). Above, log a discrepancy and leave the existing coord untouched.
+# 0.05° was chosen to absorb sub-degree rounding noise (TGN's coords are
+# often manually rounded to 1-2 decimals) while still surfacing genuine
+# wrong-entity matches like the Wikidata-reconciliation Texas-vs-Italy
+# error caught in the 30-row smoke pass.
+TGN_RDF_COORD_MATCH_DEG = 0.05
+
+
+def _load_tgn_revalidation_set(conn: sqlite3.Connection) -> list[dict]:
+    """Pull every place with a TGN authority ID, with its current coord/
+    placetype state. Manual rows are included — the writer handles
+    per-column manual-override skip rules row-by-row."""
+    rows = conn.execute("""
+        SELECT v.id,
+               vei.uri AS external_id,
+               v.label_en,
+               v.lat, v.lon,
+               v.coord_method, v.coord_method_detail,
+               v.placetype, v.placetype_source
+        FROM vocabulary_external_ids vei
+        JOIN vocabulary v ON v.id = vei.vocab_id
+        WHERE vei.authority = 'tgn' AND v.type = 'place'
+    """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def revalidate_tgn_rdf(db_path: Path,
+                       *,
+                       max_workers: int = 6,
+                       dry_run: bool = False,
+                       coord_match_tolerance_deg: float = TGN_RDF_COORD_MATCH_DEG,
+                       discrepancy_csv: Path | None = None) -> None:
+    """Full re-validation pass over TGN-authority places via per-entity RDF.
+
+    Branches per row:
+      A) had_coords + RDF coords agree (≤ tolerance) → upgrade
+         ``coord_method_detail`` to ``tgn_rdf_direct`` (coord untouched).
+      B) had_coords + RDF coords disagree → discrepancy CSV row, no DB change.
+      C) !had_coords + RDF has coords → fill lat/lon and set
+         ``coord_method`` / ``coord_method_detail``.
+      D) !had_coords + RDF has no coords + placetype not in settlement
+         allow-list → set ``is_areal = 1`` (areal entity confirmed).
+      E) Neither side has coords + placetype unclear → no action; logged.
+
+    Independently: if TGN returns a ``placetype_aat`` AND the row's existing
+    ``placetype_source`` is not ``manual``, refresh ``placetype`` /
+    ``placetype_source`` to the TGN value. Manual placetype edits are sacred.
+
+    Manual coord overrides (``coord_method='manual'``) are skipped entirely
+    on the coord side. Their placetype may still be refreshed if its source
+    isn't manual.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import csv as _csv
+    import enrichment_methods as em
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    places = _load_tgn_revalidation_set(conn)
+    conn.close()
+
+    print(f"TGN RDF revalidation: {len(places)} TGN-tagged places loaded "
+          f"(tolerance={coord_match_tolerance_deg}°, workers={max_workers})",
+          file=sys.stderr)
+
+    records = geocode_getty_rdf(places, max_workers=max_workers)
+
+    # Plan writes per row by branch. We accumulate three lists for the
+    # SQL phase + one for the discrepancy CSV.
+    coord_upgrades: list[tuple[str]] = []   # (vocab_id,) → set coord_method_detail only
+    coord_fills: list[tuple[float, float, str]] = []  # (lat, lon, vocab_id)
+    areal_flags: list[tuple[str]] = []      # (vocab_id,) → set is_areal=1
+    placetype_writes: list[tuple[str, str]] = []  # (placetype_uri, vocab_id)
+    discrepancies: list[dict] = []
+    no_action: list[dict] = []
+
+    for row in places:
+        rec = records.get(row["id"])
+        if rec is None or rec.fetch_error:
+            no_action.append({
+                "vocab_id": row["id"],
+                "tgn_id": rec.tgn_id if rec else "?",
+                "reason": (rec.fetch_error if rec else "no_record"),
+            })
+            continue
+
+        # Placetype refresh — independent of coord branching.
+        if rec.placetype_aat and row["placetype_source"] != em.MANUAL:
+            placetype_writes.append((rec.placetype_aat, row["id"]))
+
+        # Coord branching.
+        had = row["lat"] is not None
+        manual_coord = (row["coord_method"] == em.MANUAL and had)
+        rdf_has_coords = rec.lat is not None and rec.lon is not None
+
+        if manual_coord:
+            # Skip coord side entirely — placetype refresh above already done.
+            continue
+
+        if had and rdf_has_coords:
+            if (abs(row["lat"] - rec.lat) <= coord_match_tolerance_deg
+                    and abs(row["lon"] - rec.lon) <= coord_match_tolerance_deg):
+                # Branch A: provenance upgrade.
+                coord_upgrades.append((row["id"],))
+            else:
+                # Branch B: discrepancy.
+                discrepancies.append({
+                    "vocab_id": row["id"],
+                    "tgn_id": rec.tgn_id,
+                    "label_en": row["label_en"] or "",
+                    "existing_lat": row["lat"],
+                    "existing_lon": row["lon"],
+                    "existing_method_detail": row["coord_method_detail"] or "",
+                    "tgn_lat": rec.lat,
+                    "tgn_lon": rec.lon,
+                    "delta_lat": row["lat"] - rec.lat,
+                    "delta_lon": row["lon"] - rec.lon,
+                    "placetype_aat": rec.placetype_aat or "",
+                })
+        elif not had and rdf_has_coords:
+            # Branch C: new coord fill.
+            coord_fills.append((rec.lat, rec.lon, row["id"]))
+        elif not had and not rdf_has_coords:
+            # Branch D vs E: settlement-tier placetype means TGN simply lacks
+            # the centroid (anomalous, log only); anything else is areal.
+            if rec.placetype_aat and rec.placetype_aat not in em.INHERITANCE_ALLOWED_PLACETYPES:
+                areal_flags.append((row["id"],))
+            else:
+                no_action.append({
+                    "vocab_id": row["id"],
+                    "tgn_id": rec.tgn_id,
+                    "reason": ("settlement_no_centroid"
+                               if rec.placetype_aat
+                               else "no_coords_no_placetype"),
+                })
+
+    # Summary.
+    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"TGN RDF revalidation plan:", file=sys.stderr)
+    print(f"  A) provenance upgrades (coord match):  {len(coord_upgrades):>6,}",
+          file=sys.stderr)
+    print(f"  B) discrepancies (coord mismatch):     {len(discrepancies):>6,}  → CSV only",
+          file=sys.stderr)
+    print(f"  C) new coord fills:                    {len(coord_fills):>6,}",
+          file=sys.stderr)
+    print(f"  D) areal flags (no coord + non-settlement placetype): {len(areal_flags):>6,}",
+          file=sys.stderr)
+    print(f"  --- placetype writes (independent):    {len(placetype_writes):>6,}",
+          file=sys.stderr)
+    print(f"  no-action (errors, settlement w/o centroid, etc.): {len(no_action):>6,}",
+          file=sys.stderr)
+    print(f"{'='*60}", file=sys.stderr)
+
+    # Discrepancy CSV.
+    if discrepancies:
+        if discrepancy_csv is None:
+            discrepancy_csv = db_path.parent / "tgn-rdf-discrepancies.csv"
+        with open(discrepancy_csv, "w", newline="") as f:
+            w = _csv.DictWriter(f, fieldnames=list(discrepancies[0].keys()))
+            w.writeheader()
+            w.writerows(discrepancies)
+        print(f"Discrepancy CSV written: {discrepancy_csv} "
+              f"({len(discrepancies)} rows)", file=sys.stderr)
+
+    if dry_run:
+        print("Dry run — no DB changes applied.", file=sys.stderr)
+        return
+
+    # Apply writes in a single transaction.
+    coord_tier = em.tier_for(em.TGN_RDF_DIRECT)
+    conn = sqlite3.connect(str(db_path))
+    cur = conn.cursor()
+    try:
+        if coord_upgrades:
+            cur.executemany(
+                "UPDATE vocabulary SET coord_method = ?, coord_method_detail = ? "
+                "WHERE id = ? AND coord_method != ?",
+                [(coord_tier, em.TGN_RDF_DIRECT, vid, em.MANUAL)
+                 for (vid,) in coord_upgrades],
+            )
+            print(f"  applied: {cur.rowcount} provenance upgrades", file=sys.stderr)
+        if coord_fills:
+            cur.executemany(
+                "UPDATE vocabulary SET lat = ?, lon = ?, "
+                "  coord_method = ?, coord_method_detail = ? "
+                "WHERE id = ? AND lat IS NULL",
+                [(lat, lon, coord_tier, em.TGN_RDF_DIRECT, vid)
+                 for (lat, lon, vid) in coord_fills],
+            )
+            print(f"  applied: {cur.rowcount} new coord fills", file=sys.stderr)
+        if areal_flags:
+            cur.executemany(
+                "UPDATE vocabulary SET is_areal = 1 WHERE id = ? AND lat IS NULL",
+                areal_flags,
+            )
+            print(f"  applied: {cur.rowcount} is_areal=1 flags", file=sys.stderr)
+        if placetype_writes:
+            cur.executemany(
+                "UPDATE vocabulary SET placetype = ?, placetype_source = 'tgn' "
+                "WHERE id = ? AND COALESCE(placetype_source, '') != 'manual'",
+                placetype_writes,
+            )
+            print(f"  applied: {cur.rowcount} placetype refreshes", file=sys.stderr)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -269,6 +703,12 @@ def main():
                         help="Skip GeoNames (slow, requires API key for bulk)")
     parser.add_argument("--skip-getty", action="store_true",
                         help="Skip Getty TGN SPARQL (use when vocab.getty.edu is unreachable)")
+    parser.add_argument("--revalidate-tgn-rdf", action="store_true",
+                        help="Run a full re-validation pass over all TGN-authority "
+                             "places via per-entity RDF dereferencing. Skips the "
+                             "normal Wikidata/GeoNames/Getty-SPARQL flow.")
+    parser.add_argument("--rdf-workers", type=int, default=8,
+                        help="Concurrent workers for --revalidate-tgn-rdf (default: 8)")
     args = parser.parse_args()
 
     db_path = Path(args.db)
@@ -278,6 +718,15 @@ def main():
     if not db_path.exists():
         print(f"DB not found: {args.db}", file=sys.stderr)
         sys.exit(1)
+
+    # --revalidate-tgn-rdf: full re-validation over all TGN-authority places
+    # via per-entity RDF dereferencing. Branches on existing coord state
+    # (upgrade / discrepancy log / fill / areal flag) — see revalidate_tgn_rdf.
+    if args.revalidate_tgn_rdf:
+        revalidate_tgn_rdf(db_path,
+                           max_workers=args.rdf_workers,
+                           dry_run=args.dry_run)
+        return
 
     # Get ungeocoded places with external-authority links. Source of truth
     # is vocabulary_external_ids (populated by #238's Schema.org sweep); we

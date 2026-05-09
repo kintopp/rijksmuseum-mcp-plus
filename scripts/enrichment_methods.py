@@ -37,7 +37,8 @@ WIKIDATA_P625 = "wikidata_p625"
 WIKIDATA_P159 = "wikidata_p159"
 WIKIDATA_P131 = "wikidata_p131"
 WIKIDATA_P276 = "wikidata_p276"
-TGN_DIRECT = "tgn_direct"
+TGN_DIRECT = "tgn_direct"               # SPARQL endpoint (vocab.getty.edu/sparql)
+TGN_RDF_DIRECT = "tgn_rdf_direct"       # per-entity RDF dereference (used while SPARQL was out 2026-05; resilient successor)
 TGN_VIA_WIKIDATA = "tgn_via_wikidata_p1667"
 TGN_VIA_REPLACEMENT = "tgn_via_replacement"  # one-shot: follow dc:isReplacedBy on obsolete TGN IDs
 WOF_AUTHORITY = "wof_authority"
@@ -71,6 +72,7 @@ DETAIL_TO_TIER = {
     WIKIDATA_P131: AUTHORITY,
     WIKIDATA_P276: AUTHORITY,
     TGN_DIRECT: AUTHORITY,
+    TGN_RDF_DIRECT: AUTHORITY,
     TGN_VIA_WIKIDATA: AUTHORITY,
     TGN_VIA_REPLACEMENT: AUTHORITY,
     WOF_AUTHORITY: AUTHORITY,
