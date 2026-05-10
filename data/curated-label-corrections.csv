@@ -1,0 +1,2 @@
+vocab_id,field,old_label,new_label,reviewed_by,reviewed_at,evidence
+2304716,label_nl,Boxburghshire,Roxburghshire,arno,2026-05-10,"Spelling correction: 'Boxburghshire' is a B/R typo for 'Roxburghshire' — the historic county in southern Scotland. Confirmed via Wikidata Q664892 (label 'Roxburghshire' in en/nl/de/fr), Getty TGN 7002444, and broader_chain (Schotland -> Great Britain -> United Kingdom). The typo likely originated in Rijksmuseum's source data and survived multiple harvests because nothing downstream cross-checked label spelling against the authority record."

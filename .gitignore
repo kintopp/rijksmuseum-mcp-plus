@@ -49,4 +49,9 @@ data/seed/pleiades-places.json.gz.sha256
 !data/audit/
 data/audit/*
 !data/audit/MANIFEST.md
+# Exception: hand-curated CSVs that drive the post-harvest backfill chain
+# (place-overrides, vei-additions, coord-corrections, label-corrections).
+# Small, stable, versioned — these are the system of record for manual
+# interventions that must survive a fresh harvest. See scripts/RELEASE.md.
+!data/curated-*.csv
 __pycache__/

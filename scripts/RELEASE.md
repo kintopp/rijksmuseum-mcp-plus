@@ -68,6 +68,70 @@ python3 scripts/backfills/2026-05-01-apply-theme-en-labels.py --apply
 
 # Coord-method authority audit-trail — see scripts/backfill_coord_method_authority.py
 python3 scripts/backfill_coord_method_authority.py --apply
+
+# Curated VEI additions: authority concordances discovered out-of-band that
+# the harvest pipeline didn't surface (e.g. Wikidata QIDs found via online
+# research after the dump was made). Source: data/curated-vei-additions.csv.
+# MUST run before promote_snapshot_backfill_to_authority.py so the new
+# concordances are visible when that script checks VEI for authority backing.
+python3 scripts/apply_curated_vei_additions.py
+
+# Tier-correction: promote 'v0.25-snapshot-backfill:*' rows whose underlying
+# authority is verifiable in vocabulary_external_ids from coord_method='inferred'
+# to 'deterministic'. The snapshot prefix on coord_method_detail is preserved as
+# an honest provenance breadcrumb. ~2,000 rows in v0.30; idempotent (no-op when
+# nothing to promote).
+python3 scripts/promote_snapshot_backfill_to_authority.py
+
+# Strict 'Rijks-supplied IDs only' coord backfill (3,547 places: 3,130 TGN-RDF + 417
+# Wikidata-P625). Reads data/tgn-rdf-rijks-tgn-authoritative.csv and
+# data/tgn-rdf-rijks-wikidata-coords.csv. Writes lat/lon + coord_method/_detail
+# only — does NOT touch external_id (left as the harvest set it).
+python3 scripts/apply_rijks_authority_coords.py
+
+# Phase-2-extended: promote 'inferred + reconciliation' rows that have a
+# Rijks-supplied Wikidata QID in VEI (but were never in the TGN-RDF
+# discrepancies CSV because they have no TGN equivalent). Fetches Wikidata
+# P625 with on-disk cache (data/inferred-rijks-wikidata-coords.csv).
+# ~430 promotions in v0.30; idempotent; --skip-fetch uses cache only.
+python3 scripts/promote_inferred_via_rijks_wikidata.py
+
+# Phase-2-extended (TGN edition): the same pattern, but for places with a
+# Rijks-supplied TGN ID. Targets 'inferred + reconciliation' rows whose TGN
+# concordance is verifiable in the Rijksmuseum dump (filters out
+# reconciliation-introduced TGN IDs). Fetches TGN-RDF via parallel sessions
+# in batch_geocode.geocode_getty_rdf. Cache: data/inferred-rijks-tgn-coords.csv.
+# ~2,770 promotions in v0.30; idempotent; --skip-fetch uses cache only.
+python3 scripts/promote_inferred_via_rijks_tgn.py
+
+# Areal flag for places where TGN's RDF response confirmed no centroid AND
+# the placetype is non-settlement (Branch D of the original revalidate_tgn_rdf
+# logic, applied to the no_coords rows that promote_inferred_via_rijks_tgn.py
+# skipped silently). 9 rows in v0.30: city squares, capes, lakes, etc.
+# Idempotent.
+python3 scripts/apply_tgn_areal_flag.py
+
+# Curated label corrections: typos / spelling errors that originate in
+# Rijksmuseum's source data and survive harvests. Source:
+# data/curated-label-corrections.csv. Currently 1 row in v0.30
+# (Boxburghshire -> Roxburghshire). Safety: refuses to overwrite if
+# DB's current label doesn't match the recorded old_label.
+python3 scripts/apply_curated_label_corrections.py
+
+# Curated coord corrections: rows promoted to a specific authority tier
+# (e.g. 'wikidata_p625') whose lat/lon was never updated to match the
+# authority. Distinct from the manual-override flow below — these rows
+# stay in their authority tier; only the coord is corrected.
+# Source: data/curated-coord-corrections.csv. Currently 3 rows in v0.30.
+python3 scripts/apply_curated_coord_corrections.py
+
+# Curated place overrides (manual exceptions where Rijks's TGN equivalent is
+# demonstrably wrong per artwork evidence — currently 3 rows: Ohio, Montmorency,
+# Bournemouth). Order vs. apply_rijks_authority_coords.py doesn't matter
+# functionally — both scripts read curated-place-overrides.csv to exclude these
+# vocab_ids — but conceptually 'default first, exceptions second' reads more
+# clearly.
+python3 scripts/apply_curated_place_overrides.py
 ```
 
 Each script is idempotent — re-running on an already-backfilled DB updates 0 rows.
