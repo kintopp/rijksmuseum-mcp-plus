@@ -34,7 +34,13 @@ ALLOWED_OVERRIDE_KINDS = {
     em.WHG_REVIEW_ACCEPTED,
     em.WHG_BRIDGE_REVIEW_ACCEPTED,
     em.WOF_REVIEW_ACCEPTED,
+    em.MANUAL_CENTROID,
 }
+
+# Override kinds where reject_tgn/accept_tgn fields are not meaningful
+# (no TGN swap is happening — we're just supplying a manual coord). For
+# these rows, the TGN-presence-in-VEI validation is also skipped.
+NO_TGN_SWAP_KINDS = {em.MANUAL_CENTROID}
 
 REQUIRED_COLS = (
     "vocab_id", "label", "override_kind",
@@ -123,15 +129,20 @@ def main() -> int:
         if cur is None:
             errors.append(f"vocab_id {vid}: not found in vocabulary table")
             continue
-        if not vei_has_tgn(conn, vid, o["accept_tgn"]):
-            errors.append(
-                f"vocab_id {vid}: accept_tgn {o['accept_tgn']} not present "
-                "in vocabulary_external_ids — cannot promote a TGN ID the "
-                "DB doesn't know about."
-            )
-            continue
 
-        target_external = f"http://vocab.getty.edu/tgn/{o['accept_tgn']}"
+        is_tgn_swap = o["override_kind"] not in NO_TGN_SWAP_KINDS
+        if is_tgn_swap:
+            if not vei_has_tgn(conn, vid, o["accept_tgn"]):
+                errors.append(
+                    f"vocab_id {vid}: accept_tgn {o['accept_tgn']} not present "
+                    "in vocabulary_external_ids — cannot promote a TGN ID the "
+                    "DB doesn't know about."
+                )
+                continue
+            target_external = f"http://vocab.getty.edu/tgn/{o['accept_tgn']}"
+        else:
+            # No TGN swap — keep whatever external_id the harvest set.
+            target_external = cur["external_id"]
         target_lat = float(o["lat"])
         target_lon = float(o["lon"])
         target_placetype = o["placetype_aat"] or cur["placetype"]
@@ -139,10 +150,15 @@ def main() -> int:
 
         print(f"━━━ vocab_id={vid}  ({o['label']})  by {o['reviewed_by']} "
               f"on {o['reviewed_at']} ━━━")
-        print(f"   reject_tgn={o['reject_tgn']}  accept_tgn={o['accept_tgn']}")
+        if is_tgn_swap:
+            print(f"   reject_tgn={o['reject_tgn']}  accept_tgn={o['accept_tgn']}")
+        else:
+            print(f"   override_kind={target_kind}  (no TGN swap; "
+                  f"external_id left as harvest set it)")
         print(diff_line("lat",                  cur["lat"],                  target_lat))
         print(diff_line("lon",                  cur["lon"],                  target_lon))
-        print(diff_line("external_id",          cur["external_id"],          target_external))
+        if is_tgn_swap:
+            print(diff_line("external_id",      cur["external_id"],          target_external))
         print(diff_line("coord_method",         cur["coord_method"],         em.MANUAL))
         print(diff_line("coord_method_detail",  cur["coord_method_detail"],  target_kind))
         print(diff_line("placetype",            cur["placetype"],            target_placetype))
@@ -167,37 +183,65 @@ def main() -> int:
     with conn:
         for o, _cur, target_external in plans:
             target_placetype = o["placetype_aat"] or None
-            conn.execute(
-                """
-                UPDATE vocabulary SET
-                    lat = ?,
-                    lon = ?,
-                    external_id = ?,
-                    coord_method = ?,
-                    coord_method_detail = ?,
-                    placetype = COALESCE(?, placetype),
-                    placetype_source = ?
-                WHERE id = ?
-                """,
-                (
-                    float(o["lat"]),
-                    float(o["lon"]),
-                    target_external,
-                    em.MANUAL,
-                    o["override_kind"],
-                    target_placetype,
-                    em.MANUAL,
-                    o["vocab_id"],
-                ),
-            )
+            is_tgn_swap = o["override_kind"] not in NO_TGN_SWAP_KINDS
+            if is_tgn_swap:
+                conn.execute(
+                    """
+                    UPDATE vocabulary SET
+                        lat = ?,
+                        lon = ?,
+                        external_id = ?,
+                        coord_method = ?,
+                        coord_method_detail = ?,
+                        placetype = COALESCE(?, placetype),
+                        placetype_source = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        float(o["lat"]),
+                        float(o["lon"]),
+                        target_external,
+                        em.MANUAL,
+                        o["override_kind"],
+                        target_placetype,
+                        em.MANUAL,
+                        o["vocab_id"],
+                    ),
+                )
+            else:
+                # MANUAL_CENTROID: no external_id swap; clear is_areal since
+                # we're now providing a centroid coord.
+                conn.execute(
+                    """
+                    UPDATE vocabulary SET
+                        lat = ?,
+                        lon = ?,
+                        coord_method = ?,
+                        coord_method_detail = ?,
+                        placetype = COALESCE(?, placetype),
+                        placetype_source = ?,
+                        is_areal = 0
+                    WHERE id = ?
+                    """,
+                    (
+                        float(o["lat"]),
+                        float(o["lon"]),
+                        em.MANUAL,
+                        o["override_kind"],
+                        target_placetype,
+                        em.MANUAL,
+                        o["vocab_id"],
+                    ),
+                )
 
     print("Verifying post-write state...")
     for o, _cur, target_external in plans:
         after = fetch_current(conn, o["vocab_id"])
+        is_tgn_swap = o["override_kind"] not in NO_TGN_SWAP_KINDS
         ok = (
             after["lat"] == float(o["lat"])
             and after["lon"] == float(o["lon"])
-            and after["external_id"] == target_external
+            and (after["external_id"] == target_external if is_tgn_swap else True)
             and after["coord_method"] == em.MANUAL
             and after["coord_method_detail"] == o["override_kind"]
             and after["placetype_source"] == em.MANUAL

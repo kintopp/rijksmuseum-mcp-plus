@@ -62,6 +62,10 @@ RECONCILED_REVIEW_ACCEPTED = "reconciled_review_accepted"
 WHG_REVIEW_ACCEPTED = "whg_review_accepted"
 WHG_BRIDGE_REVIEW_ACCEPTED = "whg_bridge_review_accepted"
 WOF_REVIEW_ACCEPTED = "wof_review_accepted"
+# Curator-supplied centroid for an entity TGN classified as areal (squares,
+# capes, lakes, etc.) where a single point coord is acceptable for downstream
+# rendering. Source is typically Wikidata P625 of the same entity.
+MANUAL_CENTROID = "manual_centroid"
 
 
 # ── Single source of truth: detail → coarse mapping ────────────────────
@@ -92,6 +96,7 @@ DETAIL_TO_TIER = {
     WHG_REVIEW_ACCEPTED: HUMAN,
     WHG_BRIDGE_REVIEW_ACCEPTED: HUMAN,
     WOF_REVIEW_ACCEPTED: HUMAN,
+    MANUAL_CENTROID: HUMAN,
 }
 
 
