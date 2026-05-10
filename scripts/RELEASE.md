@@ -104,6 +104,15 @@ python3 scripts/promote_inferred_via_rijks_wikidata.py
 # ~2,770 promotions in v0.30; idempotent; --skip-fetch uses cache only.
 python3 scripts/promote_inferred_via_rijks_tgn.py
 
+# Aggressive NULL-detail recovery: for the ~4,549 rows that are
+# coord_method='inferred' with NULL coord_method_detail (legacy pre-audit-trail
+# coords with no provenance), check whether ANY Rijks-supplied authority in VEI
+# (Wikidata, TGN, GeoNames) can provide a coord. If yes, overwrite the existing
+# coord with the authority value and tier-promote to 'deterministic'. ~186
+# promotions in v0.30; the rest are stripped by the next script.
+# Cache: data/null-detail-authority-coords.csv. Reads GEONAMES_USERNAME from .env.
+python3 scripts/promote_null_detail_via_authority.py
+
 # Areal flag for places where TGN's RDF response confirmed no centroid AND
 # the placetype is non-settlement (Branch D of the original revalidate_tgn_rdf
 # logic, applied to the no_coords rows that promote_inferred_via_rijks_tgn.py
@@ -132,6 +141,16 @@ python3 scripts/apply_curated_coord_corrections.py
 # vocab_ids — but conceptually 'default first, exceptions second' reads more
 # clearly.
 python3 scripts/apply_curated_place_overrides.py
+
+# FINAL STEP — strip lat/lon AND coord_method from rows still in
+# 'inferred' with NULL detail after every promotion script has had its
+# chance. These are coords with no provenance breadcrumb AND no authority
+# in VEI that can verify them. Under the strict policy they shouldn't be
+# presented as geocoded. ~4,363 rows in v0.30. Idempotent. MUST run last.
+# Drops total places-with-coords from ~76% to ~65% — policy-driven, not
+# data loss. The vocabulary_external_ids rows are preserved so future
+# authority publications can re-geocode these places automatically.
+python3 scripts/strip_unprovenanced_inferred_coords.py
 ```
 
 Each script is idempotent — re-running on an already-backfilled DB updates 0 rows.
