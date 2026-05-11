@@ -870,7 +870,7 @@ const overlayElements: HTMLElement[] = [];
 // conversation re-render. So poll fast right after a (re)mount, then back off
 // to POLL_SLOW_MS once a run of polls comes back empty; any command received,
 // or a new mount (startPolling re-runs), snaps it back to fast.
-const POLL_FAST_MS = 1500;
+const POLL_FAST_MS = 1000;
 const POLL_SLOW_MS = 4000;
 const POLL_EMPTY_RUNS_BEFORE_SLOW = 8;
 
