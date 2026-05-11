@@ -24,10 +24,10 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from enrichment_tiers import DETERMINISTIC, INFERRED, MANUAL, VALID_TIERS, assert_tier
-import enrichment_methods as em
-import provenance_enrichment_methods as pem
-import altname_methods as am
+from lib.enrichment_tiers import DETERMINISTIC, INFERRED, MANUAL, VALID_TIERS, assert_tier
+from lib import enrichment_methods as em
+from lib import provenance_enrichment_methods as pem
+from lib import altname_methods as am
 
 
 def test_canonical_tiers() -> None:
@@ -93,7 +93,7 @@ def test_js_twin_in_sync() -> None:
     updating the JS twin. Reads literal exports and compares against the
     Python METHOD_TO_TIER table. Doesn't run JS — that's CI's job.
     """
-    js_path = ROOT / "scripts" / "provenance-enrichment-methods.mjs"
+    js_path = ROOT / "scripts" / "lib" / "provenance-enrichment-methods.mjs"
     src = js_path.read_text()
 
     # Pull "export const NAME = "value";" pairs.

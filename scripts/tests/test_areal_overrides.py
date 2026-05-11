@@ -17,7 +17,7 @@ from _test_helpers import CheckRecorder  # noqa: E402
 
 def load_apply():
     spec = importlib.util.spec_from_file_location(
-        "apply_areal_overrides", SCRIPT_DIR / "apply_areal_overrides.py"
+        "apply_areal_overrides", SCRIPT_DIR / "geocoding" / "apply_areal_overrides.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

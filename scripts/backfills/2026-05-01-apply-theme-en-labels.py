@@ -13,7 +13,7 @@ and applies `label_en` only where the DB row currently has `label_en IS NULL`.
 Idempotent: re-running with the same TSV updates 0 rows. Empty `label_en`
 cells are skipped (user has not yet curated that row).
 
-Pattern matches `scripts/backfill_coord_method_authority.py`.
+Pattern matches `scripts/geocoding/backfill_coord_method_authority.py`.
 
 Usage:
   python3 scripts/backfills/2026-05-01-apply-theme-en-labels.py             # dry-run

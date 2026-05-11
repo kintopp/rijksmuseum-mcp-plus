@@ -18,7 +18,7 @@ import Database from "better-sqlite3";
 import { parseProvenanceRaw } from "../dist/provenance-peg.js";
 import { interpretPeriods } from "../dist/provenance-interpret.js";
 import { inferPosition, TRANSFER_TYPE_TO_CATEGORY } from "../dist/provenance.js";
-import * as M from "./provenance-enrichment-methods.mjs";
+import * as M from "./lib/provenance-enrichment-methods.mjs";
 
 // ─── CLI args ───────────────────────────────────────────────────────
 

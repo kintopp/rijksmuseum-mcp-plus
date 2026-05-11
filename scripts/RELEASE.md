@@ -66,35 +66,35 @@ Two DBs on this server's Railway volume: vocabulary, embeddings. (Iconclass move
 # Theme English labels (top-100 by DF) — see #300, scripts/README.md "Enrichment & Backfill"
 python3 scripts/backfills/2026-05-01-apply-theme-en-labels.py --apply
 
-# Coord-method authority audit-trail — see scripts/backfill_coord_method_authority.py
-python3 scripts/backfill_coord_method_authority.py --apply
+# Coord-method authority audit-trail — see scripts/geocoding/backfill_coord_method_authority.py
+python3 scripts/geocoding/backfill_coord_method_authority.py --apply
 
 # Curated VEI additions: authority concordances discovered out-of-band that
 # the harvest pipeline didn't surface (e.g. Wikidata QIDs found via online
 # research after the dump was made). Source: data/backfills/curated-vei-additions.csv.
 # MUST run before promote_snapshot_backfill_to_authority.py so the new
 # concordances are visible when that script checks VEI for authority backing.
-python3 scripts/apply_curated_vei_additions.py
+python3 scripts/geocoding/apply_curated_vei_additions.py
 
 # Tier-correction: promote 'v0.25-snapshot-backfill:*' rows whose underlying
 # authority is verifiable in vocabulary_external_ids from coord_method='inferred'
 # to 'deterministic'. The snapshot prefix on coord_method_detail is preserved as
 # an honest provenance breadcrumb. ~2,000 rows in v0.30; idempotent (no-op when
 # nothing to promote).
-python3 scripts/promote_snapshot_backfill_to_authority.py
+python3 scripts/geocoding/promote_snapshot_backfill_to_authority.py
 
 # Strict 'Rijks-supplied IDs only' coord backfill (3,547 places: 3,130 TGN-RDF + 417
 # Wikidata-P625). Reads data/tgn-rdf-rijks-tgn-authoritative.csv and
 # data/tgn-rdf-rijks-wikidata-coords.csv. Writes lat/lon + coord_method/_detail
 # only — does NOT touch external_id (left as the harvest set it).
-python3 scripts/apply_rijks_authority_coords.py
+python3 scripts/geocoding/apply_rijks_authority_coords.py
 
 # Phase-2-extended: promote 'inferred + reconciliation' rows that have a
 # Rijks-supplied Wikidata QID in VEI (but were never in the TGN-RDF
 # discrepancies CSV because they have no TGN equivalent). Fetches Wikidata
 # P625 with on-disk cache (data/inferred-rijks-wikidata-coords.csv).
 # ~430 promotions in v0.30; idempotent; --skip-fetch uses cache only.
-python3 scripts/promote_inferred_via_rijks_wikidata.py
+python3 scripts/geocoding/promote_inferred_via_rijks_wikidata.py
 
 # Phase-2-extended (TGN edition): the same pattern, but for places with a
 # Rijks-supplied TGN ID. Targets 'inferred + reconciliation' rows whose TGN
@@ -102,7 +102,7 @@ python3 scripts/promote_inferred_via_rijks_wikidata.py
 # reconciliation-introduced TGN IDs). Fetches TGN-RDF via parallel sessions
 # in batch_geocode.geocode_getty_rdf. Cache: data/inferred-rijks-tgn-coords.csv.
 # ~2,770 promotions in v0.30; idempotent; --skip-fetch uses cache only.
-python3 scripts/promote_inferred_via_rijks_tgn.py
+python3 scripts/geocoding/promote_inferred_via_rijks_tgn.py
 
 # Aggressive NULL-detail recovery: for the ~4,549 rows that are
 # coord_method='inferred' with NULL coord_method_detail (legacy pre-audit-trail
@@ -111,14 +111,14 @@ python3 scripts/promote_inferred_via_rijks_tgn.py
 # coord with the authority value and tier-promote to 'deterministic'. ~186
 # promotions in v0.30; the rest are stripped by the next script.
 # Cache: data/null-detail-authority-coords.csv. Reads GEONAMES_USERNAME from .env.
-python3 scripts/promote_null_detail_via_authority.py
+python3 scripts/geocoding/promote_null_detail_via_authority.py
 
 # Areal flag for places where TGN's RDF response confirmed no centroid AND
 # the placetype is non-settlement (Branch D of the original revalidate_tgn_rdf
 # logic, applied to the no_coords rows that promote_inferred_via_rijks_tgn.py
 # skipped silently). 9 rows in v0.30: city squares, capes, lakes, etc.
 # Idempotent.
-python3 scripts/apply_tgn_areal_flag.py
+python3 scripts/geocoding/apply_tgn_areal_flag.py
 
 # Curated label corrections: typos / spelling errors that originate in
 # Rijksmuseum's source data and survive harvests. Source:
@@ -132,7 +132,7 @@ python3 scripts/apply_curated_label_corrections.py
 # authority. These rows stay in their authority tier; only the coord is
 # corrected.
 # Source: data/backfills/curated-coord-corrections.csv. Currently 3 rows in v0.30.
-python3 scripts/apply_curated_coord_corrections.py
+python3 scripts/geocoding/apply_curated_coord_corrections.py
 
 # FINAL STEP — two-tier geo policy: strip lat/lon AND coord_method from
 # EVERY place whose coord_method is not 'deterministic' (i.e. not traceable
@@ -156,7 +156,7 @@ python3 scripts/apply_curated_coord_corrections.py
 # etc. They're left in the chain for now; a follow-up should prune the dead
 # ones. (apply_curated_place_overrides.py + curated-place-overrides.csv were
 # pruned 2026-05-11 — the first such follow-up.)
-python3 scripts/strip_non_authority_coords.py
+python3 scripts/geocoding/strip_non_authority_coords.py
 ```
 
 Each script is idempotent — re-running on an already-backfilled DB updates 0 rows.

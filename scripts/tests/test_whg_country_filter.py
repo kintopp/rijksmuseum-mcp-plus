@@ -28,7 +28,7 @@ from _test_helpers import CheckRecorder  # noqa: E402
 
 def load_geocode_module():
     spec = importlib.util.spec_from_file_location(
-        "geocode_places", SCRIPT_DIR / "geocode_places.py"
+        "geocode_places", SCRIPT_DIR / "geocoding" / "geocode_places.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

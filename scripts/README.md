@@ -25,19 +25,54 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 | `reimport-snapshots.py` | Python | Reimports all supplementary data from snapshot CSVs in `data/` after a fresh harvest. COALESCE semantics (fills NULLs only). Supports `--only actors|broader|geo|dates` and `--dry-run`. |
 | `backfills/2026-05-01-apply-theme-en-labels.py` | Python | Applies hand-curated English labels to top-100 theme vocab terms (#300). Reads `backfills/theme-en-labels-top-100.tsv`, idempotent (only writes where `label_en IS NULL`). Re-apply after every fresh harvest. |
 
-## Geocoding
+## Shared modules (`lib/`)
+
+Importable library modules (not standalone scripts) used by the harvest, geocoding, and provenance scripts. Resolved as a PEP 420 namespace package: importers put `scripts/` on `sys.path` and do `from lib import X` / `from lib.X import …`.
+
+| Module | Lang | Description |
+|--------|------|-------------|
+| `lib/enrichment_methods.py` | Python | Detail-value vocabulary for `vocabulary.coord_method` + `coord_method_detail` (#218). Two-layer granularity: coarse `deterministic`/`inferred`/`manual`/NULL, fine 18 detail values. `DETAIL_TO_TIER` is the single source of truth — write sites call `tier_for(detail)` to derive the coarse tag. |
+| `lib/enrichment_tiers.py` | Python | The three canonical tier string constants (`DETERMINISTIC` / `INFERRED` / `MANUAL`) + `assert_tier` / `VALID_TIERS`. The single point of truth the Python and `.mjs` twins both pin to. |
+| `lib/altname_methods.py` | Python | `tier_for_row` semantics for person/group alt-name candidates (#268): exact matches stay deterministic; only reviewed fuzzy candidates are elevated to manual. |
+| `lib/provenance_enrichment_methods.py` | Python | `METHOD_TO_TIER` for provenance event/party enrichment method literals. |
+| `lib/provenance-enrichment-methods.mjs` | Node | JS twin of `provenance_enrichment_methods.py`, imported by the provenance `.mjs` writeback/audit scripts. `test-enrichment-tiers.py` asserts the two stay in sync. |
+| `lib/placetype_map.py` | Python | `AAT_IS_AREAL` (206 entries) + `WD_IS_AREAL` (632 entries) areal-place classifier dicts. Append-only contract — never modify existing values. v0.25 extension 2026-04-26 added 129 AAT + 565 WD entries (100% TGN coverage, 89.7% Wikidata). |
+| `lib/geo_math.py` | Python | Haversine + pairwise-distance helpers (`haversine_km`, `trimmed_pairwise_km`, `max_pairwise_km`) used by the coord-inheritance audit. |
+| `lib/harvest_audit.py` | Python | Per-phase harvest audit framework (#222): `run_phase_audit`, `AuditResult`, table/summary formatters. |
+| `lib/id-remap.mjs` | Node | `art_id` remap helper for `.mjs` scripts that survive a re-harvest. |
+
+## Geocoding (`geocoding/`)
+
+The place-geocoding subsystem — the multi-phase pipeline plus the apply/promote/backfill scripts and one-shot audit probes that grew up around the strict-authority-only policy. All under `scripts/geocoding/`. `harvest-placetypes.py` and `post_run_diagnostics.py` stay in `scripts/` (one is `harvest-` prefixed, the other is a general post-run report).
 
 | Script | Lang | Description |
 |--------|------|-------------|
-| `geocode_places.py` | Python | Multi-phase geocoding pipeline: GeoNames, Wikidata, Getty TGN, entity reconciliation, WHG fuzzy matching. Produces CSVs in `offline/geo/` (audit trail) and `data/backfills/` (active). |
-| `batch_geocode.py` | Python | Batch geocode using external IDs already in the DB (Wikidata SPARQL, GeoNames API, Getty TGN). Simpler than `geocode_places.py`. |
-| `map_depicted_places.py` | Python | Extracts depicted places, geocodes missing coords, generates an interactive Leaflet map. |
-| `harvest-placetypes.py` | Python | Populates `vocabulary.placetype` / `placetype_source` / `is_areal` via TGN + Wikidata SPARQL. Uses the classifier in `placetype_map.py`. Supports `--reclassify-only` to re-apply an updated classifier without re-querying upstream. |
-| `propagate_place_coordinates` (in `harvest-vocabulary-db.py`) | Python | Step 7: inheritance-based coord propagation. v0.25 adds Layer B fail-closed allow-list of inhabited-places parent placetypes — see `enrichment_methods.py` + `placetype_map.py`. |
-| `apply_areal_overrides.py` | Python | Applies manual `is_areal=1` overrides from `areal_overrides.tsv` to vocab rows whose centroid is meaningless for point-based queries (continents, oceans, historical polities, region-scale entities). v0.25 pre-harvest action: spot-pass for *Coromandel*, *Levant*, *Westindien* and similar misclassifications. |
-| `areal_overrides.tsv` | Data | 101-entry curated list of vocab IDs that need `is_areal=1` despite the auto-classifier's verdict. Maintained file. |
-| `placetype_map.py` | Python module | `AAT_IS_AREAL` (206 entries) + `WD_IS_AREAL` (632 entries) classifier dicts. Append-only contract — never modify existing values. v0.25 extension 2026-04-26 added 129 AAT + 565 WD entries (100% TGN coverage, 89.7% Wikidata). |
-| `enrichment_methods.py` | Python module | Detail-value vocabulary for `vocabulary.coord_method` + `coord_method_detail` (#218). Two-layer granularity: coarse `authority`/`derived`/`human`/NULL, fine 18 detail values. `DETAIL_TO_TIER` is the single source of truth — write sites call `tier_for(detail)` to derive the coarse tag. |
+| `geocoding/geocode_places.py` | Python | Multi-phase geocoding pipeline: GeoNames, Wikidata, Getty TGN, entity reconciliation, WHG fuzzy matching. `--propagate-coords` runs Step 7 (broader_id coord inheritance) by delegating to `harvest-vocabulary-db.py`'s `propagate_place_coordinates`. Produces CSVs in `offline/geo/` (audit trail) and `data/backfills/` (active). |
+| `geocoding/batch_geocode.py` | Python | Batch geocode using external IDs already in the DB (Wikidata SPARQL, GeoNames API, Getty TGN, TGN-RDF revalidation). Simpler than `geocode_places.py`; its TGN-RDF parser/fetcher is reused by the `promote_*` scripts. |
+| `geocoding/run_clean_regeo.py` | Python | Orchestrator: chains the 8-step clean re-geocode (placetypes → areal overrides → batch → geocode_places → propagate → broader-id audit → diagnostics → CSV export) with per-step retry + resume. |
+| `geocoding/run_authority_only_geocode.py` | Python | Orchestrator for the strict authority-only re-geocode (no inferred-tier writes). |
+| `geocoding/preflight_regeo.py` | Python | Pre-flight checker for a re-geocode run: required env vars, committed-file presence, DB schema/columns, disk space. `--skip-live-api` for offline checks. |
+| `harvest-placetypes.py` *(in `scripts/`)* | Python | Populates `vocabulary.placetype` / `placetype_source` / `is_areal` via TGN + Wikidata SPARQL using `lib/placetype_map.py`. `--reclassify-only` re-applies an updated classifier without re-querying upstream. |
+| `geocoding/apply_areal_overrides.py` + `areal_overrides.tsv` | Python + Data | Applies manual `is_areal=1` overrides from the curated 101-entry TSV to vocab rows whose centroid is meaningless for point queries (continents, oceans, historical polities, region-scale entities). `build_areal_overrides.py` regenerates the TSV from a seed + DB sweep. |
+| `geocoding/apply_rijks_authority_coords.py` | Python | Writes coords for places whose Rijks-supplied authority ID (TGN/Wikidata/GeoNames) resolves to a point. |
+| `geocoding/apply_tgn_areal_flag.py` | Python | Flags `is_areal=1` for places whose Rijks-supplied TGN ID is a region/polity. |
+| `geocoding/apply_curated_coord_corrections.py` | Python | Applies hand-verified coord fixes from `data/backfills/curated-coord-corrections.csv`. |
+| `geocoding/apply_curated_vei_additions.py` | Python | Adds curated `vocabulary_external_ids` rows from `data/backfills/curated-vei-additions.csv` (re-apply after every fresh harvest). |
+| `geocoding/promote_inferred_via_rijks_tgn.py` / `promote_inferred_via_rijks_wikidata.py` | Python | Promote former `inferred`-tier coords to `deterministic` where a Rijks-supplied TGN / Wikidata ID actually backs the value. |
+| `geocoding/promote_null_detail_via_authority.py` | Python | Recovers coords for NULL-detail rows that turn out to have an authority ID. |
+| `geocoding/promote_snapshot_backfill_to_authority.py` | Python | Re-tiers v0.25-snapshot backfilled coords to `deterministic` where authority-traceable. |
+| `geocoding/strip_non_authority_coords.py` | Python | The two-tier-policy enforcement step: NULLs every coord whose `coord_method` isn't `deterministic` (drops the entire `inferred` tier + the 8 `manual` centroids). VEI rows are preserved for a future re-geocode. |
+| `geocoding/backfill_coord_method_authority.py` / `backfill_place_method_authority.py` | Python | Backfill `coord_method` / `external_id_method` audit-trail columns from existing data. |
+| `geocoding/backfill_place_geo_from_v025.py` | Python | Pull `lat/lon/placetype/is_areal/coord_method` from a `vocabulary-v0.25-snapshot.db.gz` (used when Getty TGN is unreachable). |
+| `geocoding/backfill_vei_from_la.py` | Python | Backfill `vocabulary_external_ids` from Linked Art payloads. |
+| `geocoding/classify_tgn_discrepancies_by_rijks_authority.py` | Python | Triage TGN-RDF-vs-DB coord discrepancies by whether a Rijks authority ID backs the disputed value. |
+| `geocoding/lookup_wikidata_coords_for_rijks_authority.py` | Python | Resolve Wikidata P625 for places with a Rijks-supplied Wikidata QID. |
+| `geocoding/phase4_pip_validation.py` | Python | WOF point-in-polygon audit (read-only) — requires `duckdb`. Invoked by `geocode_places.py --phase 4-pip`. |
+| `geocoding/fetch_country_qid_to_iso2.py` + `country_qid_to_iso2.tsv` | Python + Data | Regenerates / holds the Wikidata-country-QID → ISO-3166-1-alpha-2 lookup used by the geocoders. |
+| `geocoding/export_backfill_csv.py` | Python | Exports the 16-column geocoded-places backfill CSV. |
+| `geocoding/regeo_parent_fallback.py` | Python | Parent-fallback re-geocode pass (loads `geocode_places.py` as a module). |
+| `geocoding/cold_rerun_clear.sql` | Data | The user-gated cold-reset SQL (wipes `lat`/`lon`/`coord_method` before a clean re-geocode). |
+| `geocoding/_audit_*.py`, `geocoding/_probe_*.py`, `geocoding/_search_wikidata_for_outliers.py`, `geocoding/_summarize_wikidata_coord_diffs.py`, `geocoding/_list_nicolaaskerk_artworks.py` | Python | One-shot diagnostic probes from the strict-policy session (tier consistency, outlier context, TGN-vs-authority disagreements, Wikidata coord sanity, NULL-detail recoverability, …). The `_` prefix marks them as ephemeral. |
 
 ### v0.25 pre-harvest TGN audit (2026-04-26)
 
@@ -45,9 +80,9 @@ One-shot diagnostic probes + apply script that surfaced and fixed 13 obsolete-TG
 
 | Script | Lang | Description |
 |--------|------|-------------|
-| `_tgn_direct_lookup.py` | Python | Probe: queries Getty SPARQL for direct `wgs:lat`/`wgs:long` on TGN entities in the no-coords gap. Returned 0% on the v0.24 131-row population — the empirical evidence that justified dropping Phase 1c-direct. |
-| `_tgn_obsolete_chain.py` | Python | Classifier: characterises the same 131-row gap as live-no-coords vs obsolete-with-replacement. Follows `dc:isReplacedBy` chains and re-queries replacements for coords. Surfaced the 13-row redirect fix. |
-| `_tgn_apply_redirect_fix.py` | Python | Apply: writes the 13 redirected coords to `vocabulary` with `coord_method='authority'` + `coord_method_detail='tgn_via_replacement'`, inserts the replacement TGN URIs into `vocabulary_external_ids`, exports audit log to `data/backfills/2026-04-26-tgn-redirect-fix.tsv`. Applied 2026-04-26 to local DB; recurring TGN-deprecation check deferred to `harvest-v0.25-deferred-work.md` §6 for v0.26+ cycles. |
+| `geocoding/_tgn_direct_lookup.py` | Python | Probe: queries Getty SPARQL for direct `wgs:lat`/`wgs:long` on TGN entities in the no-coords gap. Returned 0% on the v0.24 131-row population — the empirical evidence that justified dropping Phase 1c-direct. |
+| `geocoding/_tgn_obsolete_chain.py` | Python | Classifier: characterises the same 131-row gap as live-no-coords vs obsolete-with-replacement. Follows `dc:isReplacedBy` chains and re-queries replacements for coords. Surfaced the 13-row redirect fix. |
+| `geocoding/_tgn_apply_redirect_fix.py` | Python | Apply: writes the 13 redirected coords to `vocabulary` with `coord_method='deterministic'` + `coord_method_detail='tgn_via_replacement'`, inserts the replacement TGN URIs into `vocabulary_external_ids`, exports audit log to `data/backfills/2026-04-26-tgn-redirect-fix.tsv`. Applied 2026-04-26 to local DB; recurring TGN-deprecation check deferred to `harvest-v0.25-deferred-work.md` §6 for v0.26+ cycles. |
 
 ## Embeddings
 
@@ -56,7 +91,8 @@ One-shot diagnostic probes + apply script that surfaced and fixed 13 obsolete-TG
 | `generate-embeddings-mps.py` | Python | Generates artwork embeddings locally using Apple MPS GPU. Streaming to SQLite. |
 | `generate-vocabulary-embeddings-modal.py` | Python | Generates artwork embeddings on Modal cloud GPUs (A10) under different source text strategies. Production script for `no-subjects` strategy. |
 | `generate-description-embeddings-modal.py` | Python | Generates description-only embeddings on Modal A10G. PCA dimensionality reduction (384→256), int8 quantisation. Writes `desc_embeddings` + `vec_desc_artworks` tables to embeddings DB. |
-| `generate-embeddings-outdated.py` | Python | **Superseded** by `generate-embeddings-mps.py`. Original non-streaming version. |
+
+(The original non-streaming generator, `generate-embeddings-outdated.py`, now lives in `legacy/` — see below.)
 
 ## Analysis & Probing
 
@@ -122,8 +158,8 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 
 | Script | Lang | Description |
 |--------|------|-------------|
-| `profile-cross-filters.mjs` | Node | Profiles multi-filter vocab query performance with timing and `EXPLAIN QUERY PLAN`. |
-| `profile-db-space.mjs` | Node | Analyses table/column/index space usage via `dbstat`. |
+| `tests/profile-cross-filters.mjs` | Node | Profiles multi-filter vocab query performance with timing and `EXPLAIN QUERY PLAN`. |
+| `tests/profile-db-space.mjs` | Node | Analyses table/column/index space usage via `dbstat`. |
 | `analyse-railway-logs.sh` | Bash | Fetches Railway logs via CLI, passes to `.py` for analysis. |
 | `analyse-railway-logs.py` | Python | Produces 7-section markdown report from Railway deployment logs. |
 | `generate-session-trace.py` | Python | Generates debug traces from Claude Desktop MCP logs. |
@@ -146,6 +182,9 @@ Scripts retained for reference but no longer part of any release path. Do not ru
 |--------|------|-------------|
 | `legacy/build-iconclass-db.py` | Python | Built the standalone `iconclass.db` from the CC0 Iconclass data dump + artwork counts from vocab DB. Iconclass moved to its own MCP service in v0.23.1 (`kintopp/rijksmuseum-iconclass-mcp`). Counts sidecar refresh now lives in that repo — see RELEASE.md Phase B-bis. |
 | `legacy/generate-iconclass-embeddings-modal.py` | Python | Generated Iconclass notation embeddings on Modal. Same Iconclass-MCP split — embedding generation now belongs to that repo. |
+| `legacy/test-iconclass-compliance.py` | Python | 40-case compliance suite (data integrity + MCP behaviour) for the standalone `iconclass.db`. Belongs with the Iconclass-MCP split above; kept here for reference only. |
+| `legacy/generate-embeddings-outdated.py` | Python | **Superseded** by `generate-embeddings-mps.py`. Original non-streaming artwork-embedding generator. |
+| `legacy/backfill-from-v23.1.mjs` | Node | One-time migration that carried supplementary columns forward from a v0.23.1 vocab DB into the v0.24 re-harvest. Not part of any current release path. |
 
 ## Tests (`tests/`)
 
@@ -162,6 +201,8 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `test-new-filters.mjs` | 19 | v0.20 filters: creatorGender, creatorBornAfter/Before, expandPlaceHierarchy |
 | `test-find-similar.mjs` | ~51 | All find_similar signal modes (Visual, Lineage, Iconclass, Description, Person, Place, Pooled). Requires `ENABLE_FIND_SIMILAR=true`. |
 | `bench-find-similar.mjs` | — | Benchmark find_similar across diverse artworks to profile performance across signal profiles. |
+| `bench-thread-count.py` | — | Benchmarks harvest-style Linked Art HTTP resolution at 8–16 threads (success rate, latency percentiles, throughput) against a fixed artwork sample. Used to tune harvest concurrency. |
+| `bench-thread-count-low.py` | — | Same benchmark at 1–8 threads — checks whether the ~10 req/s server cap holds at lower concurrency. |
 | `test-description-similarity.mjs` | ~4 | Smoke test for find_similar description mode. Requires `ENABLE_FIND_SIMILAR=true`. |
 | `test-attribution-qualifiers.mjs` | ~5 | Verifies `attributionQualifier` extraction from Linked Art `assigned_by[].classified_as`. |
 | `test-provenance-parser.mjs` | ~39 | Unit tests for Layer 1 provenance parser functions (splitEvents, classifyTransfer, parseDate, parsePrice, etc.) |

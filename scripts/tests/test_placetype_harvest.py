@@ -73,7 +73,7 @@ def run_test_schema_migration_idempotent(hp, check: CheckRecorder) -> None:
 
 def run_test_classify_functions(hp, check: CheckRecorder) -> None:
     """Direct classify_aat / classify_qid calls via placetype_map."""
-    import placetype_map as pm  # noqa: E402
+    from lib import placetype_map as pm  # noqa: E402
     cases_aat = [
         ("300008376", True),   # continents
         ("300128176", True),   # continents (TGN variant)

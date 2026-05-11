@@ -21,7 +21,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import enrichment_methods as em
+from lib import enrichment_methods as em
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TGN_TSV = REPO_ROOT / "data/backfills/2026-04-26-tgn-redirect-fix.tsv"

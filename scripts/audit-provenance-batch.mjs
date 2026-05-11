@@ -34,7 +34,7 @@
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import Database from "better-sqlite3";
 import Anthropic from "@anthropic-ai/sdk";
-import * as M from "./provenance-enrichment-methods.mjs";
+import * as M from "./lib/provenance-enrichment-methods.mjs";
 
 // ─── Modes ──────────────────────────────────────────────────────────
 

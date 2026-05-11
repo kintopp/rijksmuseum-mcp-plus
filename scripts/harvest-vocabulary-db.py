@@ -77,7 +77,7 @@ from lib.harvest_audit import (  # noqa: E402
     format_stdout_table,
     run_phase_audit,
 )
-import enrichment_methods as em  # noqa: E402
+from lib import enrichment_methods as em  # noqa: E402
 
 HARVEST_VERSION = "v0.24"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
@@ -4934,7 +4934,7 @@ def run_phase3(
     #   placetype_source — 'tgn' | 'wikidata' | 'manual' | 'label_heuristic'
     #   is_areal         — 1 | 0 | NULL (NULL = we have no opinion yet)
     # Populated by scripts/harvest-placetypes.py (SPARQL side-pass) and
-    # scripts/apply_areal_overrides.py (manual TSV). Side-pass is idempotent
+    # scripts/geocoding/apply_areal_overrides.py (manual TSV). Side-pass is idempotent
     # via WHERE placetype_source IS NULL guards; manual overrides take
     # precedence over authority-sourced values. Survives cold-reset of
     # lat/lon/coord_method since these are attributes of the entity, not

@@ -706,7 +706,7 @@ def phase_2f_v025_geo_snapshot_backfill(conn, dry_run=False):
     import tempfile
     if str(SCRIPT_DIR) not in _sys.path:
         _sys.path.insert(0, str(SCRIPT_DIR))
-    from backfill_place_geo_from_v025 import apply_v025_geo_backfill  # type: ignore
+    from geocoding.backfill_place_geo_from_v025 import apply_v025_geo_backfill  # type: ignore
 
     with tempfile.TemporaryDirectory() as tmpdir:
         target = Path(tmpdir) / "v025.db"

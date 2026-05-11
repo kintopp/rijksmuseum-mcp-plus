@@ -40,8 +40,8 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR / "scripts"))
-from altname_methods import tier_for_row  # noqa: E402
-from enrichment_tiers import DETERMINISTIC, MANUAL  # noqa: E402, F401
+from lib.altname_methods import tier_for_row  # noqa: E402
+from lib.enrichment_tiers import DETERMINISTIC, MANUAL  # noqa: E402, F401
 
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 

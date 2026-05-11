@@ -12,7 +12,7 @@
  */
 
 import Database from "better-sqlite3";
-import * as M from "./provenance-enrichment-methods.mjs";
+import * as M from "./lib/provenance-enrichment-methods.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");

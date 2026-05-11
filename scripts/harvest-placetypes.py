@@ -10,7 +10,7 @@ this script is idempotent and safe to re-run):
 
   1. TGN wins when present (authoritative art-historical classification).
   2. Wikidata fills remaining rows.
-  3. Manual overrides (scripts/apply_areal_overrides.py) run separately
+  3. Manual overrides (scripts/geocoding/apply_areal_overrides.py) run separately
      AFTER this script and can override any authority value — manual is
      the top tier.
 
@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import placetype_map as pm  # noqa: E402
+from lib import placetype_map as pm  # noqa: E402
 
 TGN_SPARQL = "https://vocab.getty.edu/sparql.json"
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"

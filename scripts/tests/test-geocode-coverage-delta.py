@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _test_helpers import run_test_functions
 
-GP_PATH = REPO_ROOT / "scripts" / "geocode_places.py"
+GP_PATH = REPO_ROOT / "scripts" / "geocoding" / "geocode_places.py"
 spec = importlib.util.spec_from_file_location("geocode_places", GP_PATH)
 gp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gp)

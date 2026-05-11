@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import batch_geocode
+from geocoding import batch_geocode
 
 DB = Path(__file__).resolve().parent.parent.parent / "data" / "vocabulary.db"
 

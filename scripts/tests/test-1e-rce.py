@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from _test_helpers import create_minimal_vocab_schema, run_test_functions
 
 spec = importlib.util.spec_from_file_location(
-    "geocode_places", REPO_ROOT / "scripts" / "geocode_places.py"
+    "geocode_places", REPO_ROOT / "scripts" / "geocoding" / "geocode_places.py"
 )
 gp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gp)
