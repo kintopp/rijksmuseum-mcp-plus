@@ -1,5 +1,5 @@
 """Apply manually curated additions to vocabulary_external_ids from
-``data/curated-vei-additions.csv``.
+``data/backfills/curated-vei-additions.csv``.
 
 Purpose: capture authority-ID concordances we discovered out-of-band
 (e.g. via online research) but that the harvest pipeline didn't surface.
@@ -21,7 +21,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
-CSV_PATH = PROJECT_DIR / "data" / "curated-vei-additions.csv"
+CSV_PATH = PROJECT_DIR / "data" / "backfills" / "curated-vei-additions.csv"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 
 REQUIRED_COLS = ("vocab_id", "authority", "id", "uri",

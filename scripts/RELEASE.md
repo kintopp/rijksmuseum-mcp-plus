@@ -71,7 +71,7 @@ python3 scripts/backfill_coord_method_authority.py --apply
 
 # Curated VEI additions: authority concordances discovered out-of-band that
 # the harvest pipeline didn't surface (e.g. Wikidata QIDs found via online
-# research after the dump was made). Source: data/curated-vei-additions.csv.
+# research after the dump was made). Source: data/backfills/curated-vei-additions.csv.
 # MUST run before promote_snapshot_backfill_to_authority.py so the new
 # concordances are visible when that script checks VEI for authority backing.
 python3 scripts/apply_curated_vei_additions.py
@@ -122,7 +122,7 @@ python3 scripts/apply_tgn_areal_flag.py
 
 # Curated label corrections: typos / spelling errors that originate in
 # Rijksmuseum's source data and survive harvests. Source:
-# data/curated-label-corrections.csv. Currently 1 row in v0.30
+# data/backfills/curated-label-corrections.csv. Currently 1 row in v0.30
 # (Boxburghshire -> Roxburghshire). Safety: refuses to overwrite if
 # DB's current label doesn't match the recorded old_label.
 python3 scripts/apply_curated_label_corrections.py
@@ -131,7 +131,7 @@ python3 scripts/apply_curated_label_corrections.py
 # (e.g. 'wikidata_p625') whose lat/lon was never updated to match the
 # authority. Distinct from the manual-override flow below — these rows
 # stay in their authority tier; only the coord is corrected.
-# Source: data/curated-coord-corrections.csv. Currently 3 rows in v0.30.
+# Source: data/backfills/curated-coord-corrections.csv. Currently 3 rows in v0.30.
 python3 scripts/apply_curated_coord_corrections.py
 
 # Curated place overrides (manual exceptions where Rijks's TGN equivalent is

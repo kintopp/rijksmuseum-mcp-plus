@@ -15,7 +15,7 @@ Eligibility:
   - vocab_id has authority='tgn' in vocabulary_external_ids
   - the TGN ID is ALSO published by Rijksmuseum's 2025 places dump
     (i.e. NOT a reconciliation-introduced TGN ID)
-  - vocab_id NOT in data/curated-place-overrides.csv (defensive)
+  - vocab_id NOT in data/backfills/curated-place-overrides.csv (defensive)
   - current coord_method != 'manual' (defensive)
 
 For each eligible row:
@@ -53,7 +53,7 @@ import batch_geocode as bg       # noqa: E402  — reuse TGN-RDF parser/fetcher
 
 DATA_DIR = PROJECT_DIR / "data"
 DB_PATH = DATA_DIR / "vocabulary.db"
-OVERRIDES_CSV = DATA_DIR / "curated-place-overrides.csv"
+OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 COORDS_CACHE = DATA_DIR / "inferred-rijks-tgn-coords.csv"
 DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
 

@@ -1,4 +1,4 @@
-"""Apply curated coord corrections from data/curated-coord-corrections.csv.
+"""Apply curated coord corrections from data/backfills/curated-coord-corrections.csv.
 
 Use case: a row was promoted to a known authority tier (e.g. via
 promote_snapshot_backfill_to_authority.py) but the lat/lon currently in
@@ -29,7 +29,7 @@ PROJECT_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 import enrichment_methods as em  # noqa: E402
 
-CSV_PATH = PROJECT_DIR / "data" / "curated-coord-corrections.csv"
+CSV_PATH = PROJECT_DIR / "data" / "backfills" / "curated-coord-corrections.csv"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 
 REQUIRED_COLS = ("vocab_id", "label", "source_authority", "authority_uri",

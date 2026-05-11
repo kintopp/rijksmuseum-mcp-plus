@@ -22,7 +22,7 @@ Rijksmuseum's 2025 places dump publishes for each place:
                                  backfilled under any authority-only
                                  policy without curator review.
 
-Rows already overridden via data/curated-place-overrides.csv are excluded
+Rows already overridden via data/backfills/curated-place-overrides.csv are excluded
 entirely — they're locked as MANUAL and shouldn't be re-evaluated.
 
 Outputs:
@@ -42,7 +42,7 @@ DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extract
 DATA_DIR = PROJECT_DIR / "data"
 
 INPUT_CSV = DATA_DIR / "tgn-rdf-discrepancies.csv"
-OVERRIDES_CSV = DATA_DIR / "curated-place-overrides.csv"
+OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 
 OUT_MASTER = DATA_DIR / "tgn-rdf-discrepancies-classified.csv"
 OUT_TGN = DATA_DIR / "tgn-rdf-rijks-tgn-authoritative.csv"

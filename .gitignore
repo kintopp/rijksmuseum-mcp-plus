@@ -53,5 +53,10 @@ data/audit/*
 # (place-overrides, vei-additions, coord-corrections, label-corrections).
 # Small, stable, versioned — these are the system of record for manual
 # interventions that must survive a fresh harvest. See scripts/RELEASE.md.
-!data/curated-*.csv
+# They sit in data/backfills/ alongside large regenerable harvest inputs that
+# stay ignored — so un-ignore the dir, re-ignore its contents, then re-include
+# just the curated-*.csv files (same shape as the seed/ block above).
+!data/backfills/
+data/backfills/*
+!data/backfills/curated-*.csv
 __pycache__/

@@ -8,7 +8,7 @@ Eligibility:
         'v0.25-snapshot-backfill:whg_reconciliation',
         'v0.25-snapshot-backfill:wikidata_reconciliation')
   - vocab_id has authority='wikidata' in vocabulary_external_ids
-  - vocab_id NOT in data/curated-place-overrides.csv (defensive)
+  - vocab_id NOT in data/backfills/curated-place-overrides.csv (defensive)
   - current coord_method != 'manual' (defensive)
 
 For each eligible row:
@@ -47,7 +47,7 @@ import enrichment_methods as em  # noqa: E402
 
 DATA_DIR = PROJECT_DIR / "data"
 DB_PATH = DATA_DIR / "vocabulary.db"
-OVERRIDES_CSV = DATA_DIR / "curated-place-overrides.csv"
+OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 COORDS_CACHE = DATA_DIR / "inferred-rijks-wikidata-coords.csv"
 
 ELIGIBLE_DETAILS = (

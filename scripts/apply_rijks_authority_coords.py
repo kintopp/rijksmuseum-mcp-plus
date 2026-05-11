@@ -17,7 +17,7 @@ Two buckets, both produced by upstream phases:
 
 Defensive skips (in addition to whatever the upstream classifier already
 excluded):
-  - vocab_ids listed in data/curated-place-overrides.csv
+  - vocab_ids listed in data/backfills/curated-place-overrides.csv
   - rows where the current vocabulary row has coord_method='manual'
 
 Idempotent: re-applying against the current DB is a no-op for rows that
@@ -46,7 +46,7 @@ DB_PATH = DATA_DIR / "vocabulary.db"
 
 TGN_CSV = DATA_DIR / "tgn-rdf-rijks-tgn-authoritative.csv"
 WIKIDATA_CSV = DATA_DIR / "tgn-rdf-rijks-wikidata-coords.csv"
-OVERRIDES_CSV = DATA_DIR / "curated-place-overrides.csv"
+OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 
 DETAIL_BY_BUCKET = {
     "tgn": em.TGN_RDF_DIRECT,

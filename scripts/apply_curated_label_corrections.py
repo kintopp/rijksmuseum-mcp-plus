@@ -1,4 +1,4 @@
-"""Apply curated label corrections from data/curated-label-corrections.csv.
+"""Apply curated label corrections from data/backfills/curated-label-corrections.csv.
 
 Use case: spelling errors / typos in vocabulary.label_en or label_nl that
 originate in Rijksmuseum's source data and survive harvests because the
@@ -22,7 +22,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
-CSV_PATH = PROJECT_DIR / "data" / "curated-label-corrections.csv"
+CSV_PATH = PROJECT_DIR / "data" / "backfills" / "curated-label-corrections.csv"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 
 REQUIRED_COLS = ("vocab_id", "field", "old_label", "new_label",

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Apply curated place-identification overrides from
-``data/curated-place-overrides.csv`` to ``data/vocabulary.db``.
+``data/backfills/curated-place-overrides.csv`` to ``data/vocabulary.db``.
 
 Each CSV row records a manual decision to use a reconciled TGN ID +
 coordinates instead of the one Rijksmuseum's place dump publishes. Rows lock
@@ -26,7 +26,7 @@ PROJECT_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 import enrichment_methods as em  # noqa: E402
 
-CSV_PATH = PROJECT_DIR / "data" / "curated-place-overrides.csv"
+CSV_PATH = PROJECT_DIR / "data" / "backfills" / "curated-place-overrides.csv"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 
 ALLOWED_OVERRIDE_KINDS = {
