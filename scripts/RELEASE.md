@@ -142,27 +142,27 @@ python3 scripts/apply_curated_coord_corrections.py
 # clearly.
 python3 scripts/apply_curated_place_overrides.py
 
-# Curated areal coord strip: 49 of the 64 inferred-AND-areal places, hand-
-# reviewed, whose single-point centroid is either meaningless (regions,
-# rivers, seas, valleys, moors, ...) or actually wrong (5 islands that
-# resolved to a same-named place in the wrong country via a WHG name
-# collision; 2 neighbourhoods sitting on the England country centroid
-# 53.0,-2.0). NULLs lat/lon/coord_method/coord_method_detail, keeps
-# is_areal=1; VEI rows preserved. The 15 kept rows (3 piazzas, 2 Deshima,
-# 3 well-located neighbourhoods, 7 correct islands) are not in the CSV.
-# Source: data/curated-areal-null-coords.csv. Only fires on rows still
-# tagged 'inferred', so a future authority promotion wins. Idempotent.
-python3 scripts/null_areal_inferred_coords.py
-
-# FINAL STEP — strip lat/lon AND coord_method from rows still in
-# 'inferred' with NULL detail after every promotion script has had its
-# chance. These are coords with no provenance breadcrumb AND no authority
-# in VEI that can verify them. Under the strict policy they shouldn't be
-# presented as geocoded. ~4,363 rows in v0.30. Idempotent. MUST run last.
-# Drops total places-with-coords from ~76% to ~65% — policy-driven, not
-# data loss. The vocabulary_external_ids rows are preserved so future
-# authority publications can re-geocode these places automatically.
-python3 scripts/strip_unprovenanced_inferred_coords.py
+# FINAL STEP — two-tier geo policy: strip lat/lon AND coord_method from
+# EVERY place whose coord_method is not 'deterministic' (i.e. not traceable
+# to a Rijks-supplied authority ID). This wipes the entire 'inferred' tier
+# (WHG / Wikidata / Pleiades reconciliations, parent/city fallbacks, country
+# centroids) and the small 'manual' centroid tier — too many of those coords
+# were confidently wrong (homonym collisions, areal entities reduced to a
+# point, POIs on a city centroid). Also clears orphan coord_method_detail
+# strings left on NULL-coord rows by backfill_place_geo_from_v025.py
+# (~3,499 of them). After this the DB has just two states: 'deterministic'
+# (kept) and NULL (unenriched). ~3,042 coord rows stripped vs the pre-strip
+# v0.30 build; coverage settles around the deterministic share (~56% of
+# places). vocabulary_external_ids rows are preserved so a future authority
+# publication re-geocodes these places automatically on the next harvest.
+# Idempotent. MUST run last.
+#
+# NOTE: this makes the upstream 'inferred'-producing steps effectively
+# no-ops (their output is wiped here) — apply_curated_place_overrides.py,
+# the MANUAL_CENTROID slot in enrichment_methods.py, backfill_place_geo_
+# from_v025.py, promote_inferred_via_rijks_{tgn,wikidata}.py, etc. They're
+# left in the chain for now; a follow-up should prune the dead ones.
+python3 scripts/strip_non_authority_coords.py
 ```
 
 Each script is idempotent — re-running on an already-backfilled DB updates 0 rows.
