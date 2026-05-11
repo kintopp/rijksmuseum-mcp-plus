@@ -142,6 +142,18 @@ python3 scripts/apply_curated_coord_corrections.py
 # clearly.
 python3 scripts/apply_curated_place_overrides.py
 
+# Curated areal coord strip: 49 of the 64 inferred-AND-areal places, hand-
+# reviewed, whose single-point centroid is either meaningless (regions,
+# rivers, seas, valleys, moors, ...) or actually wrong (5 islands that
+# resolved to a same-named place in the wrong country via a WHG name
+# collision; 2 neighbourhoods sitting on the England country centroid
+# 53.0,-2.0). NULLs lat/lon/coord_method/coord_method_detail, keeps
+# is_areal=1; VEI rows preserved. The 15 kept rows (3 piazzas, 2 Deshima,
+# 3 well-located neighbourhoods, 7 correct islands) are not in the CSV.
+# Source: data/curated-areal-null-coords.csv. Only fires on rows still
+# tagged 'inferred', so a future authority promotion wins. Idempotent.
+python3 scripts/null_areal_inferred_coords.py
+
 # FINAL STEP — strip lat/lon AND coord_method from rows still in
 # 'inferred' with NULL detail after every promotion script has had its
 # chance. These are coords with no provenance breadcrumb AND no authority
