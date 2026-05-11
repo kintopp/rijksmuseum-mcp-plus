@@ -6,11 +6,9 @@ the DB doesn't match what that authority publishes. This script writes
 the authority's coord without changing the tier label or detail (which
 were set correctly by upstream promotion scripts).
 
-Differs from apply_curated_place_overrides.py: that script locks
-coord_method='manual' for *curator-decided exceptions* (e.g. choosing
-the reconciled TGN over Rijks's TGN). This script writes
-*authority-aligned* coords without locking — the row was already
-correctly tagged as deterministic/<authority>, just with the wrong coord.
+This only touches rows that are already in the 'deterministic' tier — it
+writes *authority-aligned* coords without changing the tier or detail, so
+strip_non_authority_coords.py (the final policy step) leaves them alone.
 
 Idempotent: re-running on already-corrected rows is a no-op.
 

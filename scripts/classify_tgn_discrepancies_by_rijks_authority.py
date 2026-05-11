@@ -22,9 +22,6 @@ Rijksmuseum's 2025 places dump publishes for each place:
                                  backfilled under any authority-only
                                  policy without curator review.
 
-Rows already overridden via data/backfills/curated-place-overrides.csv are excluded
-entirely — they're locked as MANUAL and shouldn't be re-evaluated.
-
 Outputs:
   data/tgn-rdf-discrepancies-classified.csv  (master, all rows + new columns)
   data/tgn-rdf-rijks-tgn-authoritative.csv   (bucket 1)
@@ -42,7 +39,6 @@ DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extract
 DATA_DIR = PROJECT_DIR / "data"
 
 INPUT_CSV = DATA_DIR / "tgn-rdf-discrepancies.csv"
-OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 
 OUT_MASTER = DATA_DIR / "tgn-rdf-discrepancies-classified.csv"
 OUT_TGN = DATA_DIR / "tgn-rdf-rijks-tgn-authoritative.csv"
@@ -73,16 +69,13 @@ def rijks_external_uris(vocab_id: str) -> list[str]:
 
 
 def load_overrides() -> set[str]:
-    if not OVERRIDES_CSV.exists():
-        return set()
-    with OVERRIDES_CSV.open(newline="") as f:
-        return {r["vocab_id"] for r in csv.DictReader(f)}
+    # curated-place-overrides.csv retired 2026-05-11 (two-tier geo policy);
+    # the 'manual' tier is gone, so nothing is excluded any more.
+    return set()
 
 
 def main() -> int:
     excluded = load_overrides()
-    print(f"Excluding {len(excluded)} vocab_id(s) already in {OVERRIDES_CSV.name}: "
-          f"{sorted(excluded)}")
 
     with INPUT_CSV.open(newline="") as f:
         reader = csv.DictReader(f)

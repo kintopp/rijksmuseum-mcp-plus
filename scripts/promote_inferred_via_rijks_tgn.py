@@ -15,7 +15,6 @@ Eligibility:
   - vocab_id has authority='tgn' in vocabulary_external_ids
   - the TGN ID is ALSO published by Rijksmuseum's 2025 places dump
     (i.e. NOT a reconciliation-introduced TGN ID)
-  - vocab_id NOT in data/backfills/curated-place-overrides.csv (defensive)
   - current coord_method != 'manual' (defensive)
 
 For each eligible row:
@@ -53,7 +52,6 @@ import batch_geocode as bg       # noqa: E402  — reuse TGN-RDF parser/fetcher
 
 DATA_DIR = PROJECT_DIR / "data"
 DB_PATH = DATA_DIR / "vocabulary.db"
-OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 COORDS_CACHE = DATA_DIR / "inferred-rijks-tgn-coords.csv"
 DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
 
@@ -80,10 +78,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_excluded() -> set[str]:
-    if not OVERRIDES_CSV.exists():
-        return set()
-    with OVERRIDES_CSV.open(newline="") as f:
-        return {r["vocab_id"] for r in csv.DictReader(f)}
+    # curated-place-overrides.csv retired 2026-05-11 (two-tier geo policy);
+    # the 'manual' tier is gone, so nothing is excluded any more.
+    return set()
 
 
 def load_cache() -> dict[str, dict]:
@@ -176,7 +173,6 @@ def fetch_state(conn, vid):
 def main() -> int:
     args = parse_args()
     excluded = load_excluded()
-    print(f"Excluded vocab_ids (from {OVERRIDES_CSV.name}): {sorted(excluded)}")
 
     conn = sqlite3.connect(str(args.db))
     eligible = fetch_eligible(conn, excluded)

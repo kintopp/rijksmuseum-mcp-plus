@@ -129,18 +129,10 @@ python3 scripts/apply_curated_label_corrections.py
 
 # Curated coord corrections: rows promoted to a specific authority tier
 # (e.g. 'wikidata_p625') whose lat/lon was never updated to match the
-# authority. Distinct from the manual-override flow below — these rows
-# stay in their authority tier; only the coord is corrected.
+# authority. These rows stay in their authority tier; only the coord is
+# corrected.
 # Source: data/backfills/curated-coord-corrections.csv. Currently 3 rows in v0.30.
 python3 scripts/apply_curated_coord_corrections.py
-
-# Curated place overrides (manual exceptions where Rijks's TGN equivalent is
-# demonstrably wrong per artwork evidence — currently 3 rows: Ohio, Montmorency,
-# Bournemouth). Order vs. apply_rijks_authority_coords.py doesn't matter
-# functionally — both scripts read curated-place-overrides.csv to exclude these
-# vocab_ids — but conceptually 'default first, exceptions second' reads more
-# clearly.
-python3 scripts/apply_curated_place_overrides.py
 
 # FINAL STEP — two-tier geo policy: strip lat/lon AND coord_method from
 # EVERY place whose coord_method is not 'deterministic' (i.e. not traceable
@@ -158,10 +150,12 @@ python3 scripts/apply_curated_place_overrides.py
 # Idempotent. MUST run last.
 #
 # NOTE: this makes the upstream 'inferred'-producing steps effectively
-# no-ops (their output is wiped here) — apply_curated_place_overrides.py,
-# the MANUAL_CENTROID slot in enrichment_methods.py, backfill_place_geo_
-# from_v025.py, promote_inferred_via_rijks_{tgn,wikidata}.py, etc. They're
-# left in the chain for now; a follow-up should prune the dead ones.
+# no-ops (their output is wiped here) — the MANUAL_CENTROID slot in
+# enrichment_methods.py, backfill_place_geo_from_v025.py, the
+# 'inferred'-leaving paths in promote_inferred_via_rijks_{tgn,wikidata}.py,
+# etc. They're left in the chain for now; a follow-up should prune the dead
+# ones. (apply_curated_place_overrides.py + curated-place-overrides.csv were
+# pruned 2026-05-11 — the first such follow-up.)
 python3 scripts/strip_non_authority_coords.py
 ```
 

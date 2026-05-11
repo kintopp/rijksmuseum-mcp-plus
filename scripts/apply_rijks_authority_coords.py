@@ -17,7 +17,6 @@ Two buckets, both produced by upstream phases:
 
 Defensive skips (in addition to whatever the upstream classifier already
 excluded):
-  - vocab_ids listed in data/backfills/curated-place-overrides.csv
   - rows where the current vocabulary row has coord_method='manual'
 
 Idempotent: re-applying against the current DB is a no-op for rows that
@@ -46,7 +45,6 @@ DB_PATH = DATA_DIR / "vocabulary.db"
 
 TGN_CSV = DATA_DIR / "tgn-rdf-rijks-tgn-authoritative.csv"
 WIKIDATA_CSV = DATA_DIR / "tgn-rdf-rijks-wikidata-coords.csv"
-OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 
 DETAIL_BY_BUCKET = {
     "tgn": em.TGN_RDF_DIRECT,
@@ -86,10 +84,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_excluded() -> set[str]:
-    if not OVERRIDES_CSV.exists():
-        return set()
-    with OVERRIDES_CSV.open(newline="") as f:
-        return {r["vocab_id"] for r in csv.DictReader(f)}
+    # curated-place-overrides.csv retired 2026-05-11 (two-tier geo policy);
+    # the 'manual' tier is gone, so nothing is excluded any more.
+    return set()
 
 
 def fetch_state(conn: sqlite3.Connection, vid: str) -> dict | None:
@@ -321,7 +318,6 @@ def verify(conn: sqlite3.Connection, plans: list[Plan]) -> int:
 def main() -> int:
     args = parse_args()
     excluded = load_excluded()
-    print(f"Excluded vocab_ids (from {OVERRIDES_CSV.name}): {sorted(excluded)}")
 
     conn = sqlite3.connect(str(args.db))
 

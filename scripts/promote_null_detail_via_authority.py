@@ -6,7 +6,6 @@ Eligibility:
   - vocabulary.coord_method = 'inferred'
   - vocabulary.coord_method_detail IS NULL
   - vocab_id has a probeable authority in VEI: Wikidata, TGN, or GeoNames
-  - vocab_id NOT in data/backfills/curated-place-overrides.csv (defensive)
   - current coord_method != 'manual' (defensive)
 
 Authority precedence per place (the *first* one with a successful coord
@@ -48,7 +47,6 @@ import batch_geocode as bg  # noqa: E402
 
 DATA_DIR = PROJECT_DIR / "data"
 DB_PATH = DATA_DIR / "vocabulary.db"
-OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 CACHE_CSV = DATA_DIR / "null-detail-authority-coords.csv"
 ENV_FILE = PROJECT_DIR / ".env"
 
@@ -88,10 +86,9 @@ def load_geonames_username() -> str | None:
 
 
 def load_excluded() -> set[str]:
-    if not OVERRIDES_CSV.exists():
-        return set()
-    with OVERRIDES_CSV.open(newline="") as f:
-        return {r["vocab_id"] for r in csv.DictReader(f)}
+    # curated-place-overrides.csv retired 2026-05-11 (two-tier geo policy);
+    # the 'manual' tier is gone, so nothing is excluded any more.
+    return set()
 
 
 def load_cache() -> dict[str, dict]:

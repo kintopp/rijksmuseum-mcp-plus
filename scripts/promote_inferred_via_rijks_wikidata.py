@@ -8,7 +8,6 @@ Eligibility:
         'v0.25-snapshot-backfill:whg_reconciliation',
         'v0.25-snapshot-backfill:wikidata_reconciliation')
   - vocab_id has authority='wikidata' in vocabulary_external_ids
-  - vocab_id NOT in data/backfills/curated-place-overrides.csv (defensive)
   - current coord_method != 'manual' (defensive)
 
 For each eligible row:
@@ -47,7 +46,6 @@ import enrichment_methods as em  # noqa: E402
 
 DATA_DIR = PROJECT_DIR / "data"
 DB_PATH = DATA_DIR / "vocabulary.db"
-OVERRIDES_CSV = DATA_DIR / "backfills" / "curated-place-overrides.csv"
 COORDS_CACHE = DATA_DIR / "inferred-rijks-wikidata-coords.csv"
 
 ELIGIBLE_DETAILS = (
@@ -81,10 +79,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_excluded() -> set[str]:
-    if not OVERRIDES_CSV.exists():
-        return set()
-    with OVERRIDES_CSV.open(newline="") as f:
-        return {r["vocab_id"] for r in csv.DictReader(f)}
+    # curated-place-overrides.csv retired 2026-05-11 (two-tier geo policy);
+    # the 'manual' tier is gone, so nothing is excluded any more.
+    return set()
 
 
 def load_cache() -> dict[str, dict]:
@@ -177,7 +174,6 @@ def fetch_state(conn, vid):
 def main() -> int:
     args = parse_args()
     excluded = load_excluded()
-    print(f"Excluded vocab_ids (from {OVERRIDES_CSV.name}): {sorted(excluded)}")
 
     conn = sqlite3.connect(str(args.db))
     eligible = fetch_eligible(conn, excluded)

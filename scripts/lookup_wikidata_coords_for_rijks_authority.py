@@ -4,8 +4,7 @@
 ``data/tgn-rdf-rijks-wikidata-coords.csv``.
 
 Network-dependent, idempotent, re-runnable. Does NOT write to vocabulary.db
-— that's Phase 2 (separate apply script, modeled on
-apply_curated_place_overrides.py).
+— that's Phase 2 (apply_rijks_authority_coords.py --bucket wikidata).
 
 The Wikidata QID is the Rijks-supplied authority for these 417 places, so
 their coords from P625 are 'authority' tier under the existing
