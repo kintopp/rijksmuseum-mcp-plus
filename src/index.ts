@@ -279,12 +279,14 @@ async function runHttp(): Promise<void> {
 
   // ── MCP endpoint (stateless — no sessions, no SSE streams) ─────
   //
-  // The McpServer (with all registered tools/resources/prompts) is created
-  // once and reused across requests. Only the transport is per-request.
-  // Protocol.connect() requires _transport to be unset, which transport.close()
-  // ensures via the _onclose callback. No long-lived connections to time out (#41).
-
-  const server = createServer(port);
+  // Each POST creates a fresh transport+server, processes the request, responds,
+  // and closes both. A single shared McpServer cannot be used here: Protocol.connect()
+  // requires _transport to be unset, so two overlapping requests would collide
+  // ("Already connected to a transport") — and the ChatGPT app bridge fires
+  // concurrent call_mcp requests (in-viewer co-production nav + the poll loop).
+  // No long-lived connections to time out (#41). createServer() is cheap — the DBs,
+  // API clients, and embedding model are module-scope singletons; only tool/Zod
+  // registration runs per request.
 
   // 30s safety net — respond 504 before Railway's proxy kills the connection silently
   app.use("/mcp", (_req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -297,18 +299,21 @@ async function runHttp(): Promise<void> {
   });
 
   app.post("/mcp", async (req: express.Request, res: express.Response) => {
+    const server = createServer(port);
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
     try {
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-      });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
-      await transport.close();
     } catch (err) {
       console.error("MCP endpoint error:", err);
       if (!res.headersSent) {
         res.status(500).json({ error: "Internal server error" });
       }
+    } finally {
+      await transport.close();
+      await server.close();
     }
   });
 
