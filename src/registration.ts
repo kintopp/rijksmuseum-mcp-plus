@@ -1993,9 +1993,14 @@ function registerTools(
         objectNumber: z.string().describe("Object number of the artwork to remount into the viewer"),
       }).strict() as z.ZodTypeAny,
       ...withOutputSchema(ImageInfoOutput),
+      // No ui.resourceUri here: this is an app-only tool (visibility:["app"]),
+      // and a template binding on a tool the user never sees is contradictory.
+      // The iframe consumes the result directly via app.callServerTool(); it
+      // never relies on the host re-rendering a resource. ChatGPT warns when a
+      // template is bound to a hidden tool ("templates tied to hidden tools
+      // won't be usable") — the binding lives on get_artwork_image only.
       _meta: {
         ui: {
-          resourceUri: ARTWORK_VIEWER_RESOURCE_URI,
           visibility: ["app"],
         },
       },
@@ -2574,9 +2579,12 @@ function registerTools(
       inputSchema: z.object({
         viewUUID: z.string(),
       }).strict() as z.ZodTypeAny,
+      // App-only tool (visibility:["app"]) — no ui.resourceUri. The iframe polls
+      // this via app.callServerTool() and reads the result directly; it never
+      // needs the host to render a template for it. Avoids ChatGPT's
+      // "templates tied to hidden tools won't be usable" warning.
       _meta: {
         ui: {
-          resourceUri: ARTWORK_VIEWER_RESOURCE_URI,
           visibility: ["app"],
         },
       },
