@@ -43,11 +43,12 @@ data/seed/wof/*.parquet
 data/seed/pleiades-places.json.gz
 data/seed/pleiades-places.json.gz.sha256
 !data/seed/wof/MANIFEST.tsv
-# Exception: audit manifest (documents which LLM batches were collected,
-# by date/model/cost) — small, stable, versioned, enables cross-session
-# reconstruction when the audit JSON files themselves are regenerated.
+# Exception: audit README + manifest (document which audit files exist, which
+# LLM batches were collected, by date/model/cost) — small, stable, versioned,
+# enable cross-session reconstruction when the audit JSON files are regenerated.
 !data/audit/
 data/audit/*
+!data/audit/README.md
 !data/audit/MANIFEST.md
 # Exception: hand-curated CSVs that drive the post-harvest backfill chain
 # (place-overrides, vei-additions, coord-corrections, label-corrections).
