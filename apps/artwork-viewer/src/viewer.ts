@@ -47,7 +47,9 @@ let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 let visibilityObserver: IntersectionObserver | null = null;
 let currentDisplayMode: 'inline' | 'fullscreen' | 'pip' = 'inline';
 let viewUUID: string | null = null;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+let pollGen = 0; // bumped by start/stopPolling so a stale in-flight poll won't reschedule
+let pollEmptyRuns = 0;
 
 // seedObjectNumber is set ONLY on host-initiated mounts; in-viewer j/l updates
 // the index but never the seed, so `k` always returns to the host's artwork.
@@ -155,7 +157,15 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }):
   // is incremental and drifts if these vars outlive the previous viewer.
   currentRotation = 0;
   isFlipped = false;
-  renderViewer(data);
+  // Seed mounts (and the first mount) build the full layout + a fresh OSD
+  // instance. Peer navigation between co-productions only changes the artwork:
+  // keep the OSD instance, toolbar, and listeners alive and swap the tile
+  // source — no blank-canvas flicker, no DOM/listener churn.
+  if (!opts.isSeed && viewer) {
+    swapArtwork(data);
+  } else {
+    renderViewer(data);
+  }
   // renderViewer re-creates the toolbar from a static HTML template where
   // prev/next-related start disabled; fetchRelatedObjectsForCurrent only
   // re-enables them on the seed-mount path. Re-assert the state here so peer
@@ -167,6 +177,38 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }):
     viewUUID = data.viewUUID;
     startPolling();
   }
+}
+
+// Peer-navigation path: the layout is identical between co-productions, so
+// refresh only the header/footer text and load the new tile source into the
+// existing OSD instance. Overlays + the user highlight belonged to the
+// previous artwork. (Doesn't silence OSD's "tile loaded before reset" console
+// warnings — those are inherent to switching images mid-load — but removes the
+// flicker, listener re-attach, and visibility-observer churn of a full render.)
+function swapArtwork(data: ArtworkImageData): void {
+  const headerEl = document.querySelector('.header');
+  const footerEl = document.querySelector('.footer');
+  if (headerEl) headerEl.innerHTML = headerInnerHtml(data);
+  if (footerEl) footerEl.innerHTML = footerInnerHtml(data);
+  attachMetadataListeners();
+
+  clearUserHighlight();
+  clearAllOverlays();
+  if (viewer) {
+    viewer.viewport.setRotation(0);
+    viewer.viewport.setFlip(false);
+    // OSD's bundled types under-narrow open()'s parameter; an info.json URL
+    // string is the same value the constructor's `tileSources` option takes.
+    viewer.open(data.iiifInfoUrl as unknown as Parameters<typeof viewer.open>[0]);
+  }
+
+  requestAnimationFrame(() => {
+    const mainEl = document.querySelector('.main');
+    if (mainEl) {
+      const rect = mainEl.getBoundingClientRect();
+      app.sendSizeChanged({ width: rect.width, height: rect.height });
+    }
+  });
 }
 
 function applyHostContext(
@@ -520,27 +562,44 @@ async function sendSelectionToChat(region: string): Promise<void> {
 
 // ── Rendering ───────────────────────────────────────────────────────
 
+// Header/footer markup is factored out so swapArtwork() (peer navigation) can
+// refresh just the text without rebuilding the OSD container or re-attaching
+// listeners.
+function headerInnerHtml(data: ArtworkImageData): string {
+  const collectionUrl = sanitizeUrl(data.collectionUrl);
+  return `
+    <div class="header-title-row">
+      <h1><span class="copyable" data-copy="${escapeHtml(data.title)}" data-tooltip="Click to copy"><span class="title-text">${escapeHtml(data.title)}</span></span></h1>
+      <div class="external-links">
+        <a href="${collectionUrl}" data-external-url="${collectionUrl}">Rijksmuseum</a>
+      </div>
+    </div>
+    <div class="metadata">
+      <span class="copyable" data-copy="${escapeHtml(data.creator)}" data-tooltip="Click to copy">${escapeHtml(data.creator)}</span>
+      <span>${escapeHtml(data.date)}</span>
+      <span class="copyable" data-copy="${escapeHtml(data.objectNumber)}" data-tooltip="Click to copy">${escapeHtml(data.objectNumber)}</span>
+    </div>
+  `;
+}
+
+function footerInnerHtml(data: ArtworkImageData): string {
+  const lic = formatLicense(data.license);
+  const licenseHtml = lic
+    ? `<a href="${sanitizeUrl(lic.url)}" data-external-url="${sanitizeUrl(lic.url)}">${escapeHtml(lic.label)}</a>`
+    : '';
+  return `
+    <span class="license">${licenseHtml}</span>
+    <span class="dimensions">${data.physicalDimensions ? escapeHtml(capitalize(data.physicalDimensions)) : ''}</span>
+  `;
+}
+
 function renderViewer(data: ArtworkImageData): void {
   const appEl = document.getElementById('app');
   if (!appEl) return;
 
-  const collectionUrl = sanitizeUrl(data.collectionUrl);
-
   appEl.innerHTML = `
     <div class="main">
-      <header class="header">
-        <div class="header-title-row">
-          <h1><span class="copyable" data-copy="${escapeHtml(data.title)}" data-tooltip="Click to copy"><span class="title-text">${escapeHtml(data.title)}</span></span></h1>
-          <div class="external-links">
-            <a href="${collectionUrl}" data-external-url="${collectionUrl}">Rijksmuseum</a>
-          </div>
-        </div>
-        <div class="metadata">
-          <span class="copyable" data-copy="${escapeHtml(data.creator)}" data-tooltip="Click to copy">${escapeHtml(data.creator)}</span>
-          <span>${escapeHtml(data.date)}</span>
-          <span class="copyable" data-copy="${escapeHtml(data.objectNumber)}" data-tooltip="Click to copy">${escapeHtml(data.objectNumber)}</span>
-        </div>
-      </header>
+      <header class="header">${headerInnerHtml(data)}</header>
 
       <div class="content">
         <div id="openseadragon-viewer"></div>
@@ -573,13 +632,7 @@ function renderViewer(data: ArtworkImageData): void {
         </div>
       </div>
 
-      <div class="footer">
-        <span class="license">${(() => {
-          const lic = formatLicense(data.license);
-          return lic ? `<a href="${sanitizeUrl(lic.url)}" data-external-url="${sanitizeUrl(lic.url)}">${escapeHtml(lic.label)}</a>` : '';
-        })()}</span>
-        <span class="dimensions">${data.physicalDimensions ? escapeHtml(capitalize(data.physicalDimensions)) : ''}</span>
-      </div>
+      <div class="footer">${footerInnerHtml(data)}</div>
     </div>
   `;
 
@@ -640,7 +693,12 @@ function initializeViewer(iiifInfoUrl: string): void {
   });
 }
 
-function attachEventListeners(): void {
+// Listeners on the header/footer metadata (external links + click-to-copy).
+// Split out from attachEventListeners() so swapArtwork() can re-bind them
+// after replacing the header/footer HTML without re-touching the toolbar or
+// keyboard handler. The toolbar, shortcuts overlay, and keydown handler are
+// bound once per full render in attachEventListeners().
+function attachMetadataListeners(): void {
   // External links via app.openLink() for sandboxed iframe
   document.querySelectorAll('a[data-external-url]').forEach((link) => {
     link.addEventListener('click', async (e) => {
@@ -668,6 +726,10 @@ function attachEventListeners(): void {
       }
     });
   });
+}
+
+function attachEventListeners(): void {
+  attachMetadataListeners();
 
   // Rotate (r / Shift+r) and fullscreen (f) are keyboard-only — no toolbar icons.
   document
@@ -801,6 +863,17 @@ const OVERLAY_STROKE = 'rgba(255,100,0,0.7)';
 const OVERLAY_FILL = 'rgba(255,100,0,0.1)';
 const overlayElements: HTMLElement[] = [];
 
+// Adaptive polling. Each poll_viewer_commands call is a call_mcp round-trip
+// the host records as a (hidden, app-only) message in the transcript — at the
+// old fixed 2 Hz that meant hundreds of such messages per session, which
+// ChatGPT's renderer re-walks (and noisily logs "[Unknown tool]" for) on every
+// conversation re-render. So poll fast right after a (re)mount, then back off
+// to POLL_SLOW_MS once a run of polls comes back empty; any command received,
+// or a new mount (startPolling re-runs), snaps it back to fast.
+const POLL_FAST_MS = 1500;
+const POLL_SLOW_MS = 4000;
+const POLL_EMPTY_RUNS_BEFORE_SLOW = 8;
+
 function startPolling(): void {
   stopPolling();
   const caps = app.getHostCapabilities();
@@ -808,34 +881,43 @@ function startPolling(): void {
     app.sendLog({ level: 'info', data: 'Polling skipped: serverTools not supported' });
     return;
   }
-  pollTimer = setInterval(pollForCommands, 500);
+  pollEmptyRuns = 0;
+  const gen = ++pollGen;
+  pollTimer = setTimeout(() => { void pollForCommands(gen); }, POLL_FAST_MS);
   app.sendLog({ level: 'info', data: `Polling started for ${viewUUID}` });
 }
 
 function stopPolling(): void {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  pollGen++; // invalidate any in-flight poll so it won't reschedule itself
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
 }
 
-async function pollForCommands(): Promise<void> {
-  if (!viewUUID) return;
+async function pollForCommands(gen: number): Promise<void> {
+  if (gen !== pollGen || !viewUUID) return;
+  let gotCommands = false;
   try {
     const result = await app.callServerTool({
       name: 'poll_viewer_commands',
       arguments: { viewUUID },
     });
-    if (result.isError) return;
-    const data = result.structuredContent as { commands?: ViewerCommand[] } | undefined;
-    let commands: ViewerCommand[] = [];
-    if (data?.commands) {
-      commands = data.commands;
-    } else {
-      const textContent = result.content?.find((b: { type: string }) => b.type === 'text') as { text: string } | undefined;
-      if (textContent) {
-        try { commands = JSON.parse(textContent.text)?.commands ?? []; } catch { /* not JSON */ }
+    if (!result.isError) {
+      const data = result.structuredContent as { commands?: ViewerCommand[] } | undefined;
+      let commands: ViewerCommand[] = [];
+      if (data?.commands) {
+        commands = data.commands;
+      } else {
+        const textContent = result.content?.find((b: { type: string }) => b.type === 'text') as { text: string } | undefined;
+        if (textContent) {
+          try { commands = JSON.parse(textContent.text)?.commands ?? []; } catch { /* not JSON */ }
+        }
       }
+      if (commands.length) { processCommands(commands); gotCommands = true; }
     }
-    if (commands.length) processCommands(commands);
-  } catch { /* retry next interval */ }
+  } catch { /* retry on next tick */ }
+  if (gen !== pollGen || !viewUUID) return; // superseded or torn down mid-poll
+  pollEmptyRuns = gotCommands ? 0 : pollEmptyRuns + 1;
+  const delay = pollEmptyRuns >= POLL_EMPTY_RUNS_BEFORE_SLOW ? POLL_SLOW_MS : POLL_FAST_MS;
+  pollTimer = setTimeout(() => { void pollForCommands(gen); }, delay);
 }
 
 function processCommands(commands: ViewerCommand[]): void {
