@@ -20,6 +20,11 @@
   --color-accent-primary: #c13832;
   --color-accent-secondary: #a02e29;
 
+  /* Surface for the header/footer chrome bands. Not a host-injected variable
+     (unlike --color-background-secondary, which hosts override at runtime), so
+     this value always wins regardless of the host's theme. */
+  --color-header-surface: #efeeeb;
+
   --border-radius-sm: 4px;
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
@@ -37,6 +42,7 @@
   --color-text-tertiary: #808080;
   --color-border-primary: #333;
   --color-border-secondary: #444;
+  --color-header-surface: #222;
 }
 
 * {
@@ -105,7 +111,7 @@ html, body {
 
 /* Header */
 .header {
-  background: var(--color-background-secondary);
+  background: var(--color-header-surface);
   color: var(--color-text-primary);
   padding: 0.75rem 1rem;
   display: flex;
@@ -348,7 +354,7 @@ html, body {
 
 /* Footer */
 .footer {
-  background: var(--color-background-secondary);
+  background: var(--color-header-surface);
   color: var(--color-text-secondary);
   padding: 0.5rem 1rem;
   display: flex;
