@@ -125,6 +125,9 @@ const VIEW_UUID = 'dev-host-uuid-0001';
 
 let bridge: AppBridge | null = null;
 let currentDisplayMode: 'inline' | 'fullscreen' | 'pip' = 'inline';
+let setupRun = 0;
+let setupDocument: Document | null = null;
+let setupInProgressDocument: Document | null = null;
 
 const logEl = document.getElementById('log') as HTMLDivElement;
 const stateDisplayModeEl = document.getElementById('state-display-mode') as HTMLElement;
@@ -219,6 +222,13 @@ async function setupBridge(): Promise<void> {
     { openLinks: {}, serverTools: {}, logging: {} },
   );
 
+  const initialized = new Promise<void>((resolve) => {
+    bridge!.oninitialized = () => {
+      log('lifecycle', 'view initialized');
+      resolve();
+    };
+  });
+
   bridge.oncalltool = async (params) => {
     const name = params.name;
     const args = (params.arguments as Record<string, unknown>) ?? {};
@@ -282,10 +292,6 @@ async function setupBridge(): Promise<void> {
     log('note', `viewer log [${params.level}]: ${data}`);
   };
 
-  bridge.oninitialized = () => {
-    log('lifecycle', 'view initialized');
-  };
-
   if (!iframe.contentWindow) {
     log('error', 'iframe.contentWindow is null');
     return;
@@ -293,6 +299,7 @@ async function setupBridge(): Promise<void> {
   const transport = new PostMessageTransport(iframe.contentWindow, iframe.contentWindow);
   await bridge.connect(transport);
   log('lifecycle', 'bridge connected');
+  await initialized;
 }
 
 async function mount(objectNumber: string): Promise<void> {
@@ -315,24 +322,41 @@ async function mount(objectNumber: string): Promise<void> {
   });
 }
 
+async function setupBridgeAndAutoMount(): Promise<void> {
+  const frameDocument = iframe.contentDocument;
+  if (!frameDocument) return;
+  if (setupDocument === frameDocument || setupInProgressDocument === frameDocument) return;
+
+  setupInProgressDocument = frameDocument;
+  const run = ++setupRun;
+  try {
+    await setupBridge();
+    if (run !== setupRun) return;
+    setupDocument = frameDocument;
+    // Auto-mount the seed so the viewer is immediately usable when the page loads.
+    await mount('SK-A-1115');
+  } finally {
+    if (setupInProgressDocument === frameDocument) setupInProgressDocument = null;
+  }
+}
+
 function bindControls(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-mount]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const action = btn.dataset.mount;
       if (action === 'seed') void mount('SK-A-1115');
       else if (action === 'peerless') void mount('SK-A-135');
-      else if (action === 'reload') iframe.src = iframe.src;
+      else if (action === 'reload') iframe.src = iframe.dataset.src ?? './index.html';
     });
   });
 }
 
 iframe.addEventListener('load', async () => {
-  await setupBridge();
-  // Auto-mount the seed so the viewer is immediately usable when the page loads.
-  await mount('SK-A-1115');
+  await setupBridgeAndAutoMount();
 });
 
 bindControls();
+iframe.src = iframe.dataset.src ?? './index.html';
 
 // Surface uncaught errors in the bridge log so they're visible without devtools.
 window.addEventListener('error', (e) => log('error', `window error: ${e.message}`));
