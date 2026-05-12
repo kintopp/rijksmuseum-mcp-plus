@@ -49,7 +49,6 @@ let currentDisplayMode: 'inline' | 'fullscreen' | 'pip' = 'inline';
 let viewUUID: string | null = null;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let pollGen = 0; // bumped by start/stopPolling so a stale in-flight poll won't reschedule
-let pollEmptyRuns = 0;
 
 // seedObjectNumber is set ONLY on host-initiated mounts; in-viewer j/l updates
 // the index but never the seed, so `k` always returns to the host's artwork.
@@ -202,6 +201,13 @@ function swapArtwork(data: ArtworkImageData): void {
     viewer.open(data.iiifInfoUrl as unknown as Parameters<typeof viewer.open>[0]);
   }
 
+  notifySizeChanged();
+}
+
+// Report the .main element's post-layout size back to the host after a render
+// or swap so the iframe can be sized correctly. Deferred to the next frame so
+// freshly assigned innerHTML / OSD canvas resizes have settled first.
+function notifySizeChanged(): void {
   requestAnimationFrame(() => {
     const mainEl = document.querySelector('.main');
     if (mainEl) {
@@ -640,13 +646,7 @@ function renderViewer(data: ArtworkImageData): void {
   attachEventListeners();
   setupVisibilityObserver();
 
-  requestAnimationFrame(() => {
-    const mainEl = document.querySelector('.main');
-    if (mainEl) {
-      const rect = mainEl.getBoundingClientRect();
-      app.sendSizeChanged({ width: rect.width, height: rect.height });
-    }
-  });
+  notifySizeChanged();
 }
 
 function initializeViewer(iiifInfoUrl: string): void {
@@ -881,9 +881,8 @@ function startPolling(): void {
     app.sendLog({ level: 'info', data: 'Polling skipped: serverTools not supported' });
     return;
   }
-  pollEmptyRuns = 0;
   const gen = ++pollGen;
-  pollTimer = setTimeout(() => { void pollForCommands(gen); }, POLL_FAST_MS);
+  pollTimer = setTimeout(() => { void pollForCommands(gen, 0); }, POLL_FAST_MS);
   app.sendLog({ level: 'info', data: `Polling started for ${viewUUID}` });
 }
 
@@ -892,7 +891,7 @@ function stopPolling(): void {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
 }
 
-async function pollForCommands(gen: number): Promise<void> {
+async function pollForCommands(gen: number, emptyRuns: number): Promise<void> {
   if (gen !== pollGen || !viewUUID) return;
   let gotCommands = false;
   try {
@@ -915,9 +914,9 @@ async function pollForCommands(gen: number): Promise<void> {
     }
   } catch { /* retry on next tick */ }
   if (gen !== pollGen || !viewUUID) return; // superseded or torn down mid-poll
-  pollEmptyRuns = gotCommands ? 0 : pollEmptyRuns + 1;
-  const delay = pollEmptyRuns >= POLL_EMPTY_RUNS_BEFORE_SLOW ? POLL_SLOW_MS : POLL_FAST_MS;
-  pollTimer = setTimeout(() => { void pollForCommands(gen); }, delay);
+  const nextEmptyRuns = gotCommands ? 0 : emptyRuns + 1;
+  const delay = nextEmptyRuns >= POLL_EMPTY_RUNS_BEFORE_SLOW ? POLL_SLOW_MS : POLL_FAST_MS;
+  pollTimer = setTimeout(() => { void pollForCommands(gen, nextEmptyRuns); }, delay);
 }
 
 function processCommands(commands: ViewerCommand[]): void {
