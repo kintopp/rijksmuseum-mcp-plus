@@ -1949,7 +1949,11 @@ function registerTools(
           objectNumber: args.objectNumber,
           error: payload.error,
         };
-        return structuredResponse(errorData, payload.error);
+        // Signal failure with isError so the agent treats it as such and the
+        // viewer iframe surfaces the real reason ("No artwork found" / "No image
+        // available") instead of a generic fallback. Mirrors remount_viewer and
+        // inspect_artwork_image's no_artwork path.
+        return { ...structuredResponse(errorData, payload.error), isError: true as const };
       }
 
       const viewUUID = randomUUID();
@@ -3863,6 +3867,24 @@ function loadViewerHtml(): string {
   }
 }
 
+// Single source of truth for the viewer's UI resource metadata. Declared both
+// on the resources/list entry (so hosts can review CSP/permissions at
+// connection time) and on the resources/read content item (the authoritative
+// copy — content-item _meta.ui takes precedence per the MCP Apps spec). The
+// bundle is a self-contained single file (vite-plugin-singlefile), so the only
+// external origin is the IIIF image server: tiles load as <img> (img-src →
+// resourceDomains) and info.json via fetch (connect-src → connectDomains).
+const ARTWORK_VIEWER_UI_META = {
+  csp: {
+    resourceDomains: ["https://iiif.micr.io"],
+    connectDomains: ["https://iiif.micr.io"],
+  },
+  permissions: {
+    clipboardWrite: {},
+  },
+  prefersBorder: false,
+} as const;
+
 function registerAppViewerResource(server: McpServer): void {
   registerAppResource(
     server,
@@ -3872,6 +3894,7 @@ function registerAppViewerResource(server: McpServer): void {
       description:
         "Interactive IIIF deep-zoom viewer for Rijksmuseum artworks",
       mimeType: RESOURCE_MIME_TYPE,
+      _meta: { ui: ARTWORK_VIEWER_UI_META },
     },
     async () => ({
       contents: [
@@ -3879,22 +3902,7 @@ function registerAppViewerResource(server: McpServer): void {
           uri: ARTWORK_VIEWER_RESOURCE_URI,
           mimeType: RESOURCE_MIME_TYPE,
           text: loadViewerHtml(),
-          _meta: {
-            ui: {
-              csp: {
-                resourceDomains: [
-                  "https://iiif.micr.io",
-                ],
-                connectDomains: [
-                  "https://iiif.micr.io",
-                ],
-              },
-              permissions: {
-                clipboardWrite: {},
-              },
-              prefersBorder: false,
-            },
-          },
+          _meta: { ui: ARTWORK_VIEWER_UI_META },
         },
       ],
     })

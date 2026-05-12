@@ -67,9 +67,14 @@ let userHighlightEl: HTMLElement | null = null;
 const HIGHLIGHT_STROKE = 'rgba(59,130,246,0.8)';
 const HIGHLIGHT_FILL = 'rgba(59,130,246,0.12)';
 
+// The view does not expose any app-side tools (no app.registerTool calls), so
+// it must NOT advertise the `tools` capability — a spec-conformant host that
+// sees `appCapabilities.tools` may issue `tools/list` to the view, which the
+// SDK answers with "No handler for method tools/list registered". Only declare
+// what the view actually implements: the supported display modes.
 const app = new App(
   { name: 'Rijksmuseum Artwork Viewer', version: '1.0.0' },
-  { tools: { listChanged: false }, availableDisplayModes: ['inline', 'fullscreen'] },
+  { availableDisplayModes: ['inline', 'fullscreen'] },
   { autoResize: true }
 );
 
