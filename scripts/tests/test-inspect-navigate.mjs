@@ -440,8 +440,6 @@ console.log("\n--- 4j/4k: deliveryState transitions ---");
     `recentlyPolledByViewer false when never polled`);
   assert(nav4j.lastPolledAt === undefined,
     `lastPolledAt absent when never polled`);
-  assert(nav4j.viewerConnected === false,
-    `viewerConnected deprecated alias mirrors recentlyPolledByViewer`);
   assert(typeof nav4j.pendingCommandCount === "number",
     `pendingCommandCount populated (${nav4j.pendingCommandCount})`);
   const text4j = r4j.content?.[0]?.text ?? "";
@@ -469,8 +467,6 @@ console.log("\n--- 4j/4k: deliveryState transitions ---");
     `recentlyPolledByViewer true after fresh poll`);
   assert(typeof nav4k.lastPolledAt === "string" && nav4k.lastPolledAt.includes("T"),
     `lastPolledAt is ISO timestamp ("${nav4k.lastPolledAt}")`);
-  assert(nav4k.viewerConnected === true,
-    `viewerConnected deprecated alias still populated`);
   const text4k = r4k.content?.[0]?.text ?? "";
   assert(text4k.startsWith("Delivered"),
     `text-channel narration leads with "Delivered" ("${text4k.slice(0, 60)}")`);

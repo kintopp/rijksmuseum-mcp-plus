@@ -2362,11 +2362,9 @@ function registerTools(
     lastPolledAt: z.string().optional()
       .describe("ISO timestamp of the iframe's last poll. Absent if the iframe has never polled this session."),
     recentlyPolledByViewer: z.boolean().optional()
-      .describe("True if the iframe polled within the last 5s. Replaces viewerConnected semantically."),
+      .describe("True if the iframe polled within the last 5s."),
     deliveryState: z.enum(["delivered_recently", "queued_waiting_for_viewer", "no_live_viewer_seen"]).optional()
       .describe("Server's view of command delivery: delivered, queued for an existing-but-offscreen viewer, or no viewer ever connected."),
-    viewerConnected: z.boolean().optional()
-      .describe("DEPRECATED: use recentlyPolledByViewer or deliveryState. Will be removed in v0.28."),
     error: z.string().optional(),
   };
 
@@ -2551,7 +2549,6 @@ function registerTools(
         lastPolledAt: queue.lastPolledAt != null ? new Date(queue.lastPolledAt).toISOString() : undefined,
         recentlyPolledByViewer,
         deliveryState,
-        viewerConnected: recentlyPolledByViewer,
       };
 
       const overlayCount = queue.activeOverlays.length;
@@ -2573,6 +2570,18 @@ function registerTools(
 
   // ── poll_viewer_commands (app-only) ───────────────────────────
 
+  // Mirrors the ViewerCommand interface — the queue holds navigate_viewer's
+  // input commands plus inspect_artwork_image's internal auto-zoom push.
+  const PollViewerCommandsOutput = {
+    commands: z.array(z.object({
+      action: z.enum(["navigate", "add_overlay", "clear_overlays"]),
+      region: z.string().optional(),
+      relativeTo: z.string().optional(),
+      label: z.string().optional(),
+      color: z.string().optional(),
+    })).describe("Pending viewer commands drained from the queue, in order. Empty when nothing is queued."),
+  };
+
   registerAppTool(
     server,
     "poll_viewer_commands",
@@ -2583,6 +2592,7 @@ function registerTools(
       inputSchema: z.object({
         viewUUID: z.string(),
       }).strict() as z.ZodTypeAny,
+      ...withOutputSchema(PollViewerCommandsOutput),
       // App-only tool (visibility:["app"]) — no ui.resourceUri. The iframe polls
       // this via app.callServerTool() and reads the result directly; it never
       // needs the host to render a template for it. Avoids ChatGPT's
