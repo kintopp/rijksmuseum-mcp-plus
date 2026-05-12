@@ -59,8 +59,13 @@ html, body {
   flex-direction: column;
 }
 
+/* Inline default: no fixed height — the host (autoResize) sizes the iframe to
+   our content, so .main flexes to header + content + footer. .content carries
+   the intrinsic size via aspect-ratio (see below), which scales with the
+   host-set iframe width instead of dropping a constant 700px slab into narrow
+   layouts (e.g. ChatGPT mobile). The :fullscreen rule below restores a
+   definite height. */
 .main {
-  height: 700px;
   display: flex;
   flex-direction: column;
   border-radius: var(--border-radius-lg);
@@ -217,12 +222,19 @@ html, body {
   color: white;
 }
 
-/* Content area — full-width image viewer */
+/* Content area — full-width image viewer.
+   flex-basis: auto (not the `flex:1` shorthand's 0%) so the aspect-ratio box
+   has a real automatic height when .main is content-sized (inline mode); the
+   flex-grow:1 still lets it fill the extra space when .main has a definite
+   height (:fullscreen). aspect-ratio derives the inline height from the iframe
+   width — ~4:3 keeps the desktop card close to its old ~700px while shrinking
+   gracefully on phones. */
 .content {
-  flex: 1;
+  flex: 1 1 auto;
   position: relative;
   min-height: 0;
   overflow: hidden;
+  aspect-ratio: 4 / 3;
 }
 
 #openseadragon-viewer {
