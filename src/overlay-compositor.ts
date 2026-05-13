@@ -123,6 +123,8 @@ export interface CompositeResult {
   mimeType: string;
   rendered: number;
   skipped: number;
+  width?: number;
+  height?: number;
 }
 
 const JPEG_MIME = "image/jpeg";
@@ -148,7 +150,7 @@ export async function compositeOverlays(
   const jpegW = meta.width;
   const jpegH = meta.height;
   if (jpegW == null || jpegH == null) {
-    return { buffer: jpegBytes, mimeType: JPEG_MIME, rendered: 0, skipped: overlays.length };
+    return { buffer: jpegBytes, mimeType: JPEG_MIME, rendered: 0, skipped: overlays.length, width: jpegW, height: jpegH };
   }
 
   const rects: string[] = [];
@@ -165,7 +167,7 @@ export async function compositeOverlays(
   }
 
   if (rects.length === 0) {
-    return { buffer: jpegBytes, mimeType: JPEG_MIME, rendered: 0, skipped };
+    return { buffer: jpegBytes, mimeType: JPEG_MIME, rendered: 0, skipped, width: jpegW, height: jpegH };
   }
 
   const svg =
@@ -176,5 +178,5 @@ export async function compositeOverlays(
     .jpeg({ quality: 85 })
     .toBuffer();
 
-  return { buffer, mimeType: JPEG_MIME, rendered: rects.length, skipped };
+  return { buffer, mimeType: JPEG_MIME, rendered: rects.length, skipped, width: jpegW, height: jpegH };
 }

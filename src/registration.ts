@@ -1076,6 +1076,12 @@ export interface OobWarning {
   };
 }
 
+/** Shape an out-of-bounds error: `emit` returns a tool error in the caller's format. */
+function oobError<E>(oob: OobWarning, hint: string, emit: (error: string, text?: string) => E): E {
+  const payload = JSON.stringify(oob, null, 2);
+  return emit(`overlay_region_out_of_bounds: ${oob.details.issue}`, `${payload}\n\n${hint}`);
+}
+
 // Exported for testing
 /**
  * Validate region bounds. Returns null if in-bounds (or bounds-check skipped).
@@ -2222,11 +2228,7 @@ function registerTools(
         {
           const oob = checkRegionBounds(args.region, imageInfo.width, imageInfo.height);
           if (oob) {
-            const payload = JSON.stringify(oob, null, 2);
-            return cropError(
-              `overlay_region_out_of_bounds: ${oob.details.issue}`,
-              `${payload}\n\nYour coordinates fall outside valid bounds — please re-examine the region and retry with a corrected bounding box.`,
-            );
+            return oobError(oob, "Your coordinates fall outside valid bounds — please re-examine the region and retry with a corrected bounding box.", cropError);
           }
         }
 
@@ -2273,11 +2275,6 @@ function registerTools(
         let imageBuffer: Buffer<ArrayBufferLike> = Buffer.from(base64, "base64");
         let cropPixelWidth: number | undefined;
         let cropPixelHeight: number | undefined;
-        try {
-          ({ width: cropPixelWidth, height: cropPixelHeight } = await readImageDimensions(imageBuffer));
-        } catch {
-          // Non-fatal: image bytes are still valid for the content response.
-        }
 
         let overlaysRendered: number | undefined;
         let overlaysSkipped: number | undefined;
@@ -2300,6 +2297,8 @@ function registerTools(
                 mimeType = composite.mimeType;
                 overlaysRendered = composite.rendered;
                 overlaysSkipped = composite.skipped;
+                cropPixelWidth = composite.width;
+                cropPixelHeight = composite.height;
               } catch (err) {
                 // Non-fatal: return the plain crop and flag so the failure
                 // isn't indistinguishable from "all overlays fell outside".
@@ -2314,6 +2313,14 @@ function registerTools(
               overlaysSkipped = 0;
             }
           }
+        }
+
+        // Fallback when the composite path didn't run or didn't expose dims.
+        // Non-fatal on error: image bytes remain valid for the content response.
+        if (cropPixelWidth == null || cropPixelHeight == null) {
+          try {
+            ({ width: cropPixelWidth, height: cropPixelHeight } = await readImageDimensions(imageBuffer));
+          } catch { /* keep dims undefined */ }
         }
 
         const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
@@ -2536,11 +2543,7 @@ function registerTools(
         if (cmd.relativeTo) continue;
         const oob = checkRegionBounds(cmd.region, queue.imageWidth, queue.imageHeight);
         if (oob) {
-          const payload = JSON.stringify(oob, null, 2);
-          return navError(
-            `overlay_region_out_of_bounds: ${oob.details.issue}`,
-            `${payload}\n\nYour coordinates fall outside valid bounds — please re-examine the image and return a corrected bounding box.`,
-          );
+          return oobError(oob, "Your coordinates fall outside valid bounds — please re-examine the image and return a corrected bounding box.", navError);
         }
       }
 
@@ -2550,11 +2553,7 @@ function registerTools(
           if (cmd.region.startsWith("crop_pixels:") && cmd.relativeToSize) {
             const localOob = checkRegionBounds(cmd.region, cmd.relativeToSize.width, cmd.relativeToSize.height);
             if (localOob) {
-              const payload = JSON.stringify(localOob, null, 2);
-              return navError(
-                `overlay_region_out_of_bounds: ${localOob.details.issue}`,
-                `${payload}\n\nYour crop-local pixel coordinates fall outside the inspected crop dimensions — please re-examine the crop and return a corrected bounding box.`,
-              );
+              return oobError(localOob, "Your crop-local pixel coordinates fall outside the inspected crop dimensions — please re-examine the crop and return a corrected bounding box.", navError);
             }
           }
           const projected = projectToFullImage(cmd.region, cmd.relativeTo, cmd.relativeToSize);
@@ -2564,11 +2563,7 @@ function registerTools(
           cmd.region = projected;
           const oobPost = checkRegionBounds(cmd.region);
           if (oobPost) {
-            const payload = JSON.stringify(oobPost, null, 2);
-            return navError(
-              `overlay_region_out_of_bounds: ${oobPost.details.issue}`,
-              `${payload}\n\nProjected coordinates fall outside 0-100 — the source region or relativeTo box extends outside the image.`,
-            );
+            return oobError(oobPost, "Projected coordinates fall outside 0-100 — the source region or relativeTo box extends outside the image.", navError);
           }
         }
         delete cmd.relativeTo; // Never forward to viewer
