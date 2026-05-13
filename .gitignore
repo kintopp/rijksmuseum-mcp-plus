@@ -23,10 +23,12 @@ Thumbs.db
 # Local files
 offline/
 .claude/
+.codex/
 .agents/
 skills-lock.json
 CLAUDE.md
 CLAUDE.md.bak
+AGENTS.md
 
 # Vocabulary database (generated, ~1 GB)
 # Using data/* instead of data/ so we can negate seed/ below — git won't
