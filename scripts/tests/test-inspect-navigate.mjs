@@ -1024,9 +1024,10 @@ section("8. Schema surface — no $ref");
 
   // 8b. MCP tool annotations present on every tool (issue #259).
   // Without these, destructiveHint defaults to true and read tools get mislabelled.
+  // openWorldHint is false on every tool — per the spec example (memory = closed,
+  // web search = open), the server's entire domain is the bounded Rijksmuseum corpus.
   const ANN_READ_CLOSED = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-  const ANN_READ_OPEN   = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
-  const ANN_VIEWER      = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
+  const ANN_VIEWER      = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
   const EXPECTED_ANNOTATIONS = {
     search_artwork:        ANN_READ_CLOSED,
     search_persons:        ANN_READ_CLOSED,
@@ -1035,10 +1036,10 @@ section("8. Schema surface — no $ref");
     semantic_search:       ANN_READ_CLOSED,
     find_similar:          ANN_READ_CLOSED,
     search_provenance:     ANN_READ_CLOSED,
-    get_recent_changes:    ANN_READ_OPEN,
-    list_curated_sets:     ANN_READ_OPEN,
-    browse_set:            ANN_READ_OPEN,
-    inspect_artwork_image: ANN_READ_OPEN,
+    get_recent_changes:    ANN_READ_CLOSED,
+    list_curated_sets:     ANN_READ_CLOSED,
+    browse_set:            ANN_READ_CLOSED,
+    inspect_artwork_image: ANN_READ_CLOSED,
     get_artwork_image:     ANN_VIEWER,
     remount_viewer:        ANN_VIEWER,
     navigate_viewer:       ANN_VIEWER,

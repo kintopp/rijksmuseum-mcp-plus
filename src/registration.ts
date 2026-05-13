@@ -30,9 +30,11 @@ const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
 // MCP tool annotations (behavioural hints; see issue #259).
 // `destructiveHint` defaults to true in the spec, so omitting annotations mislabels read-only tools.
+// `openWorldHint` is false on every tool: per the spec example (memory tool = closed,
+// web search = open), this server's entire domain is the bounded ~834K-artwork
+// Rijksmuseum corpus — including viewer tools, which target artworks from the same set.
 const ANN_READ_CLOSED = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
-const ANN_READ_OPEN = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
-const ANN_VIEWER = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } as const;
+const ANN_VIEWER = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 
 /**
  * Per-tool result limits. Defaults reflect payload weight:
@@ -2055,7 +2057,7 @@ function registerTools(
     "inspect_artwork_image",
     {
       title: "Inspect Artwork Image",
-      annotations: ANN_READ_OPEN,
+      annotations: ANN_READ_CLOSED,
       description:
         "Use when YOU (the LLM) need to look at an artwork image or region for visual analysis — identifying details, reading inscriptions, comparing compositions, planning overlays. " +
         "Returns image bytes (base64) in the tool response — the LLM can see and reason about the image immediately. " +
@@ -2620,7 +2622,7 @@ function registerTools(
     "list_curated_sets",
     {
       title: "List Curated Sets",
-      annotations: ANN_READ_OPEN,
+      annotations: ANN_READ_CLOSED,
       description:
         "Use when you want to discover curated collection sets (193 total) ranging from substantive sub-collections " +
         "(drawings, paintings, photographs) through iconographic groupings to umbrella sets (Alle gepubliceerde objecten = 834K members). " +
@@ -2678,7 +2680,7 @@ function registerTools(
     "browse_set",
     {
       title: "Browse Set",
-      annotations: ANN_READ_OPEN,
+      annotations: ANN_READ_CLOSED,
       description:
         "Use when you have a setSpec (from list_curated_sets) and want to enumerate its member artworks. " +
         "DB-backed since v0.27 (~600× faster than the prior OAI-PMH path; warm calls in tens of ms). " +
@@ -2753,7 +2755,7 @@ function registerTools(
     "get_recent_changes",
     {
       title: "Get Recent Changes",
-      annotations: ANN_READ_OPEN,
+      annotations: ANN_READ_CLOSED,
       description:
         "Use when you need OAI-PMH delta semantics specifically — tracking what changed since a known harvest checkpoint, with resumption-token pagination. " +
         "Returns records changed within a date range. Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). " +

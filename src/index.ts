@@ -25,6 +25,7 @@ import {
   type DbHandle,
 } from "./utils/MemoryStats.js";
 import { registerAll, similarPages, enrichmentReviewPages } from "./registration.js";
+import { isAllowedOrigin, parseMcpAllowedOrigins } from "./utils/origin.js";
 
 const SERVER_NAME = "rijksmuseum-mcp+";
 
@@ -298,6 +299,38 @@ async function runHttp(): Promise<void> {
     next();
   });
 
+  // ── Origin validation (DNS-rebinding mitigation, spec §Streamable HTTP) ─
+  //
+  // Spec: https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
+  // Allow categories: missing Origin (CLI/stdio), non-web schemes (app://,
+  // chrome-extension://, file://, "null"), localhost/loopback, and the
+  // configured web-host allowlist. Defaults cover claude.ai / chatgpt.com /
+  // *.openai.com; override via MCP_ALLOWED_ORIGINS (comma-separated, or "*"
+  // to disable web-host checking).
+  const mcpOriginAllowlist = parseMcpAllowedOrigins(process.env.MCP_ALLOWED_ORIGINS);
+  if (mcpOriginAllowlist === "*") {
+    console.warn("[mcp-origin] WARNING: web-host validation disabled (MCP_ALLOWED_ORIGINS=*)");
+  }
+  const recentOriginRejections = new Map<string, number>();
+  const ORIGIN_LOG_INTERVAL_MS = 60_000;
+  app.use("/mcp", (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const origin = req.get("origin");
+    if (isAllowedOrigin(origin, mcpOriginAllowlist)) {
+      next();
+      return;
+    }
+    const now = Date.now();
+    const lastLogged = recentOriginRejections.get(origin!) ?? 0;
+    if (now - lastLogged >= ORIGIN_LOG_INTERVAL_MS) {
+      recentOriginRejections.set(origin!, now);
+      console.warn(`[mcp-origin] 403 rejected origin=${origin} ip=${req.ip}`);
+    }
+    res.status(403).json({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Origin not allowed" },
+    });
+  });
+
   app.post("/mcp", async (req: express.Request, res: express.Response) => {
     const server = createServer(port);
     const transport = new StreamableHTTPServerTransport({
@@ -317,7 +350,13 @@ async function runHttp(): Promise<void> {
     }
   });
 
-  // Reject GET/DELETE/etc. — stateless mode has no SSE streams or sessions
+  // Reject GET/DELETE/etc. — stateless mode has no SSE streams or sessions.
+  //
+  // Spec-conformant: §Streamable HTTP → Listening for Messages from the Server
+  // says the server MUST either return Content-Type: text/event-stream OR
+  // HTTP 405 Method Not Allowed, "indicating that the server does not offer an
+  // SSE stream at this endpoint":
+  //   https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
   app.all("/mcp", (_req: express.Request, res: express.Response) => {
     res.setHeader("Allow", "POST");
     res.status(405).json({ error: "Method not allowed — this server is stateless (POST only)" });
