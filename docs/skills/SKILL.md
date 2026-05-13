@@ -14,7 +14,7 @@ description: >
   the user doesn't name the collection.
 metadata:
   version: "0.30"
-  last_updated: "2026-05-07"
+  last_updated: "2026-05-14"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -300,42 +300,35 @@ or German query returns unexpected results, reformulate in English.
 
 ### 5. Image Inspection and Overlay Placement
 
-**Two image tools, different purposes.** `get_artwork_image` opens the inline IIIF deep-zoom viewer and returns metadata plus a `viewUUID` handle for follow-up navigation — use it when the user wants to *see* the image themselves. `inspect_artwork_image` returns image bytes as base64 so the model can analyse the image directly — use it whenever *you* need to read inscriptions, identify details, or reason about composition. They compose cleanly: open with `get_artwork_image`, then `inspect_artwork_image` for analysis (which also auto-navigates the open viewer to whatever region you inspected, so the user sees what you're looking at).
-
-**Basic inspection + zoom is a single step.** `inspect_artwork_image` automatically navigates the open viewer to the inspected region (`navigateViewer` defaults to `true`). No separate `navigate_viewer` call is needed for basic zoom — the viewer stays in sync with your analysis.
+**Two image tools, different purposes.** `get_artwork_image` opens the inline IIIF deep-zoom viewer for the **user** to see. `inspect_artwork_image` returns image bytes for the **model** to analyse directly. They compose: open with `get_artwork_image`, then `inspect_artwork_image` auto-navigates the open viewer to whatever region you inspect, so the user sees what you're looking at — no separate `navigate_viewer` call needed for basic zoom.
 
 ```
-# Single call: inspect a region AND zoom the viewer there
 inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
 # → base64 image for AI analysis + viewer auto-zooms to the same region
 ```
 
-**For overlays, use the inspect → overlay two-step with `relativeTo`:**
+**Tight detail boxes: snap to the feature's actual edges.** Overlays around signatures, faces, inscriptions, or depicted objects should outline the feature, not loosely contain it — the overlay is a communicative claim to the user about where a feature sits, not a vague gesture toward its neighbourhood. Estimating "what percentage of this crop" is the weakest step in the accuracy chain — frame the overlay in the **same pixel grid you just analysed** instead. `inspect_artwork_image` returns `cropPixelWidth`, `cropPixelHeight`, and `cropRegion`; copy them into `navigate_viewer`'s `relativeToSize` alongside a `crop_pixels:` region and the server projects deterministically.
 
 ```
 # Step 1: inspect the area
 inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
-# → found a detail at roughly the center of this crop
+# → cropPixelWidth=1200, cropPixelHeight=600, cropRegion="pct:70,60,20,20"
 
-# Step 2: place overlay using crop-local coordinates — the server projects to full-image space
+# Step 2: place a tight overlay in crop-local pixels
 navigate_viewer(viewUUID=..., commands=[{
   action: "add_overlay",
-  region: "pct:30,30,40,40",      # coordinates within the crop
-  relativeTo: "pct:70,60,20,20",  # the crop region from Step 1
-  label: "Detail"
+  region: "crop_pixels:600,300,240,120",        # pixels within the inspected crop
+  relativeTo: "pct:70,60,20,20",
+  relativeToSize: {width: 1200, height: 600},   # cropPixelWidth/cropPixelHeight
+  label: "Signature"
 }])
 ```
 
-The `relativeTo` parameter eliminates manual coordinate conversion — specify where the feature is within the crop, and the server handles the projection. Both `region` and `relativeTo` must use `pct:` format.
+**Coarser variant — crop-local percentages.** When the feature lacks identifiable edges (atmospheric region, gradient, undefined area), omit `relativeToSize` and pass `region: "pct:..."` with the same `relativeTo`. For any feature with discernible edges, prefer `crop_pixels:`.
 
-For pixel-precision work on dense compositions (e.g. cataloguing several insects on a flower piece), use `crop_pixels:x,y,w,h` instead — coordinates are full-image pixels, so no `relativeTo` projection is needed. `inspect_artwork_image` echoes `nativeWidth`/`nativeHeight` in both the structured payload and the caption so you can bound pixel values to the actual image.
+`inspect_artwork_image` can surface content **absent from structured metadata** — unsigned Japanese prints often have readable artist signatures, publisher seals, and poem cartouches that the catalogue has not transcribed. Use `region="full"` for an initial composition overview before cropping to details.
 
-Use `region="full"` for an initial composition overview before cropping to
-details. `inspect_artwork_image` can surface content **absent from structured
-metadata** — unsigned Japanese prints often have readable artist signatures,
-publisher seals, and poem cartouches that the catalogue has not transcribed.
-
-**Other inspect parameters:** `size` defaults to 1568 px (range 200–2016, aligned to multiples of 28 for clean LLM coordinate handling). `show_overlays: true` composites any active viewer overlays onto the returned crop (response clamped to 448 px when enabled — useful for verifying overlay placement). `viewUUID` targets a specific viewer session when the user has multiple open; omit to auto-discover a viewer for the artwork.
+**Verifying overlay placement with `show_overlays`.** Inspect a region that encloses your overlay(s), not `full` — at the 448 px clamp, small overlays on a full-image view shrink below visual threshold (the server rejects this combination with a `show_overlays_on_full_not_supported` warning).
 
 ### 6. Provenance and Acquisition Research
 
