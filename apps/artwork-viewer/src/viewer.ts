@@ -83,14 +83,16 @@ const app = new App(
 app.ontoolinputpartial = (params) => {
   const args = params.arguments as { objectNumber?: string } | undefined;
   const objectNumber = args?.objectNumber || '...';
-  showLoading(`Loading artwork: ${objectNumber}`);
+  if (!currentData) showLoading(`Loading artwork: ${objectNumber}`);
   app.sendLog({ level: 'info', data: `Partial input: ${objectNumber}` });
 };
 
 app.ontoolinput = (params) => {
   const args = params.arguments as { objectNumber?: string } | undefined;
   const objectNumber = args?.objectNumber || 'unknown';
-  showLoading(`Fetching image: ${objectNumber}`);
+  // Tool input notifications do not identify the source tool. After an
+  // artwork is mounted, inspect/navigate echoes must not tear down the viewer.
+  if (!currentData) showLoading(`Fetching image: ${objectNumber}`);
   app.sendLog({ level: 'info', data: `Full input received: ${objectNumber}` });
 };
 
