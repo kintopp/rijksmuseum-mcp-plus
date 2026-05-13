@@ -233,8 +233,17 @@ section("projectToFullImage");
     "known projection math"
   );
 }
+{
+  // Same projection, but the local box is expressed in rendered crop pixels.
+  assertEq(
+    projectToFullImage("crop_pixels:600,300,240,120", "pct:50,50,50,50", { width: 1200, height: 600 }),
+    "pct:75,75,10,10",
+    "crop-local pixels project through relativeToSize"
+  );
+}
 assertEq(projectToFullImage("full", "pct:50,50,50,50"), null, "invalid local → null");
 assertEq(projectToFullImage("pct:50,50,50,50", "garbage"), null, "invalid relativeTo → null");
+assertEq(projectToFullImage("crop_pixels:600,300,240,120", "pct:50,50,50,50"), null, "crop-local pixels require local size");
 
 // ── parseCropPixelsRegion ───────────────────────────────────────
 

@@ -21,7 +21,7 @@ import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
 import { parseProvenance } from "./provenance.js";
-import { compositeOverlays, computeCropRect } from "./overlay-compositor.js";
+import { compositeOverlays, computeCropRect, readImageDimensions } from "./overlay-compositor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -880,6 +880,12 @@ const InspectImageOutput = {
   requestedSize: z.number().int(),
   nativeWidth: z.number().int().optional(),
   nativeHeight: z.number().int().optional(),
+  cropPixelWidth: z.number().int().optional()
+    .describe("Actual width in pixels of the returned inspect image/crop. Use with cropPixelHeight for crop-local pixel overlays."),
+  cropPixelHeight: z.number().int().optional()
+    .describe("Actual height in pixels of the returned inspect image/crop. Use with cropPixelWidth for crop-local pixel overlays."),
+  cropRegion: z.string().optional()
+    .describe("Normalized IIIF region used for the fetch; crop_pixels: inputs are normalized to plain IIIF pixel regions."),
   rotation: z.number().int(),
   quality: z.string(),
   fetchTimeMs: z.number().int().optional().describe("Time spent fetching from IIIF server (ms)"),
@@ -977,6 +983,7 @@ interface ViewerCommand {
   action: "navigate" | "add_overlay" | "clear_overlays";
   region?: string;
   relativeTo?: string;
+  relativeToSize?: CropLocalSize;
   label?: string;
   color?: string;
 }
@@ -1168,11 +1175,27 @@ export function computeDeliveryState(
 }
 
 // Exported for testing
-/** Project crop-local coordinates to full-image space. Both must be pct: format. */
-export function projectToFullImage(local: string, relativeTo: string): string | null {
-  const l = parsePctRegion(local);
+interface CropLocalSize {
+  width: number;
+  height: number;
+}
+
+// Exported for testing
+/** Project crop-local pct or crop-local pixel coordinates to full-image pct space. */
+export function projectToFullImage(local: string, relativeTo: string, localSize?: CropLocalSize): string | null {
   const o = parsePctRegion(relativeTo);
-  if (!l || !o) return null;
+  if (!o) return null;
+  const pct = parsePctRegion(local);
+  const px = parseCropPixelsRegion(local);
+  if (!pct && !px) return null;
+  if (px && !localSize) return null;
+
+  const l = pct ?? [
+    (px![0] / localSize!.width) * 100,
+    (px![1] / localSize!.height) * 100,
+    (px![2] / localSize!.width) * 100,
+    (px![3] / localSize!.height) * 100,
+  ];
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const fx = round2(o[0] + (l[0] / 100) * o[2]);
   const fy = round2(o[1] + (l[1] / 100) * o[3]);
@@ -2064,7 +2087,10 @@ function registerTools(
         "Not for the user to view — use get_artwork_image for the interactive viewer. " +
         "Not for listing or summarising artworks — use search_artwork.\n\n" +
         "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
-        "region to zoom into details, read inscriptions, or examine specific areas.\n\n" +
+        "region to zoom into details, read inscriptions, or examine specific areas. " +
+        "The response includes cropPixelWidth/cropPixelHeight: the actual pixel dimensions " +
+        "of the returned image. Use those with navigate_viewer's relativeToSize when placing " +
+        "crop-local crop_pixels overlays.\n\n" +
         "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), " +
         "'crop_pixels:x,y,w,h' (pixel coordinates of the full image — use with " +
         "nativeWidth/nativeHeight from a prior response), or 'x,y,w,h' (legacy IIIF " +
@@ -2244,6 +2270,14 @@ function registerTools(
           return cropError(`Failed to fetch image: ${message}`);
         }
         const fetchTimeMs = Math.round(performance.now() - fetchStart);
+        let imageBuffer: Buffer<ArrayBufferLike> = Buffer.from(base64, "base64");
+        let cropPixelWidth: number | undefined;
+        let cropPixelHeight: number | undefined;
+        try {
+          ({ width: cropPixelWidth, height: cropPixelHeight } = await readImageDimensions(imageBuffer));
+        } catch {
+          // Non-fatal: image bytes are still valid for the content response.
+        }
 
         let overlaysRendered: number | undefined;
         let overlaysSkipped: number | undefined;
@@ -2260,8 +2294,9 @@ function registerTools(
             if (overlays.length > 0 && cropRect) {
               const frame = { rect: cropRect, imageWidth: imageInfo.width, imageHeight: imageInfo.height };
               try {
-                const composite = await compositeOverlays(Buffer.from(base64, "base64"), overlays, frame);
-                base64 = composite.buffer.toString("base64");
+                const composite = await compositeOverlays(imageBuffer, overlays, frame);
+                imageBuffer = composite.buffer;
+                base64 = imageBuffer.toString("base64");
                 mimeType = composite.mimeType;
                 overlaysRendered = composite.rendered;
                 overlaysSkipped = composite.skipped;
@@ -2302,6 +2337,9 @@ function registerTools(
         if (imageInfo.width && imageInfo.height) {
           captionParts.push(`| native ${imageInfo.width}×${imageInfo.height}px`);
         }
+        if (cropPixelWidth && cropPixelHeight) {
+          captionParts.push(`| crop ${cropPixelWidth}×${cropPixelHeight}px`);
+        }
         if (viewerNavigated) captionParts.push("| viewer navigated");
         else if (activeViewUUID) captionParts.push(`| viewer open (${activeViewUUID.slice(0, 8)})`);
         if (overlaysRendered != null) {
@@ -2322,6 +2360,9 @@ function registerTools(
           requestedSize: effectiveSize,
           nativeWidth: imageInfo.width,
           nativeHeight: imageInfo.height,
+          cropPixelWidth,
+          cropPixelHeight,
+          cropRegion: iiifRegion,
           rotation: args.rotation,
           quality: args.quality,
           fetchTimeMs,
@@ -2380,16 +2421,18 @@ function registerTools(
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
         "Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image. " +
         "Commands execute in order: typically clear_overlays → navigate → add_overlay.\n\n" +
-        "All region coordinates are in full-image space (percentages or pixels of the original image), " +
+        "By default, region coordinates are in full-image space (percentages or pixels of the original image), " +
         "not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image " +
-        "will target the identical area in the viewer.\n\n" +
+        "will target the identical area in the viewer. Exception: when a command includes relativeTo, " +
+        "region is interpreted in that inspected crop's local coordinate space.\n\n" +
         "For accurate overlay placement: inspect the target area with inspect_artwork_image first, " +
         "verify the region contains what you expect, then use the same or refined coordinates here. " +
         "Do not estimate overlay positions from memory — always inspect first.\n\n" +
         "Region formats:\n" +
         "- 'pct:x,y,w,h' — percentage of full image.\n" +
-        "- 'crop_pixels:x,y,w,h' — pixel coordinates of the full image. Use the nativeWidth/nativeHeight " +
-        "returned by inspect_artwork_image to bound values.\n" +
+        "- 'crop_pixels:x,y,w,h' — pixel coordinates of the full image. Use nativeWidth/nativeHeight " +
+        "returned by inspect_artwork_image to bound values. When used with relativeTo + relativeToSize, " +
+        "crop_pixels is instead interpreted as pixels within that inspected crop.\n" +
         "- 'x,y,w,h' — equivalent to crop_pixels: (legacy IIIF form, kept for compatibility).\n" +
         "- 'full' | 'square' — whole image shortcuts.\n\n" +
         "Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — " +
@@ -2399,8 +2442,10 @@ function registerTools(
         "30 minutes of idle inactivity — any polling or navigation resets the clock.\n\n" +
         "Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, " +
         "use 'relativeTo' with the crop's region string. Specify 'region' as coordinates within " +
-        "the crop's local space (pct: format) and the server projects to full-image space " +
-        "deterministically — eliminates manual coordinate conversion math.\n\n" +
+        "the crop's local space and the server projects to full-image space deterministically. " +
+        "Use pct:x,y,w,h for crop-local percentages, or crop_pixels:x,y,w,h plus " +
+        "relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from inspect_artwork_image " +
+        "for crop-local rendered pixels. Crop-local pixels are preferred for tight detail boxes.\n\n" +
         "Response field deliveryState reports whether the iframe drained the commands immediately " +
         "(`delivered_recently`), the iframe exists but hasn't polled recently and the commands are " +
         "queued (`queued_waiting_for_viewer` — typical when scrolled out of view), or no iframe has " +
@@ -2415,7 +2460,15 @@ function registerTools(
           relativeTo: optStr().optional().describe(
             "Crop region from a prior inspect_artwork_image call. When provided, " +
             "'region' is interpreted as coordinates within that crop's local space " +
-            "and projected to full-image space by the server. Both must use pct: format."
+            "and projected to full-image space by the server. Use pct: region values directly, " +
+            "or crop_pixels: values with relativeToSize from inspect_artwork_image."
+          ),
+          relativeToSize: z.object({
+            width: z.number().int().positive(),
+            height: z.number().int().positive(),
+          }).strict().optional().describe(
+            "Actual pixel dimensions of the inspected crop, copied from inspect_artwork_image " +
+            "cropPixelWidth/cropPixelHeight. Required when relativeTo is set and region uses crop_pixels:."
           ),
           label: optStr().optional().describe("Label text for add_overlay"),
           color: optStr().optional().describe("CSS color for add_overlay border (default: orange)"),
@@ -2463,6 +2516,15 @@ function registerTools(
         if (cmd.relativeTo && !parsePctRegion(cmd.relativeTo)) {
           return navError(`Invalid relativeTo '${cmd.relativeTo}'. Must be in pct:x,y,w,h format.`);
         }
+        if (cmd.relativeToSize && !cmd.relativeTo) {
+          return navError("relativeToSize requires relativeTo. Use it with a crop region from inspect_artwork_image.");
+        }
+        if (cmd.relativeTo && cmd.region?.startsWith("crop_pixels:") && !cmd.relativeToSize) {
+          return navError("relativeTo + crop_pixels requires relativeToSize. Copy { width: cropPixelWidth, height: cropPixelHeight } from the inspect_artwork_image response.");
+        }
+        if (cmd.relativeTo && cmd.relativeToSize && !cmd.region?.startsWith("crop_pixels:")) {
+          return navError("relativeToSize is only valid when region uses crop_pixels:. Omit relativeToSize for pct: crop-local coordinates.");
+        }
       }
 
       // OOB check — reject rather than silent-clamp (P7, #247).
@@ -2485,9 +2547,19 @@ function registerTools(
       // Project relativeTo coordinates to full-image space
       for (const cmd of args.commands) {
         if (cmd.relativeTo && cmd.region) {
-          const projected = projectToFullImage(cmd.region, cmd.relativeTo);
+          if (cmd.region.startsWith("crop_pixels:") && cmd.relativeToSize) {
+            const localOob = checkRegionBounds(cmd.region, cmd.relativeToSize.width, cmd.relativeToSize.height);
+            if (localOob) {
+              const payload = JSON.stringify(localOob, null, 2);
+              return navError(
+                `overlay_region_out_of_bounds: ${localOob.details.issue}`,
+                `${payload}\n\nYour crop-local pixel coordinates fall outside the inspected crop dimensions — please re-examine the crop and return a corrected bounding box.`,
+              );
+            }
+          }
+          const projected = projectToFullImage(cmd.region, cmd.relativeTo, cmd.relativeToSize);
           if (!projected) {
-            return navError(`relativeTo requires both 'region' and 'relativeTo' in pct: format. Got region='${cmd.region}', relativeTo='${cmd.relativeTo}'.`);
+            return navError(`relativeTo requires 'relativeTo' in pct: format and 'region' in pct: format, or crop_pixels: format with relativeToSize. Got region='${cmd.region}', relativeTo='${cmd.relativeTo}'.`);
           }
           cmd.region = projected;
           const oobPost = checkRegionBounds(cmd.region);
@@ -2500,6 +2572,7 @@ function registerTools(
           }
         }
         delete cmd.relativeTo; // Never forward to viewer
+        delete cmd.relativeToSize; // Never forward to viewer
       }
 
       // Strip crop_pixels: prefix before forwarding — viewer understands plain IIIF pixels (P2, #247)

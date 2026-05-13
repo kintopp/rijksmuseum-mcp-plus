@@ -181,6 +181,9 @@ if (sc) {
   assert(sc.objectNumber === "SK-C-5", `structuredContent.objectNumber (${sc.objectNumber})`);
   assert(typeof sc.nativeWidth === "number", `structuredContent.nativeWidth (${sc.nativeWidth})`);
   assert(typeof sc.nativeHeight === "number", `structuredContent.nativeHeight (${sc.nativeHeight})`);
+  assert(typeof sc.cropPixelWidth === "number" && sc.cropPixelWidth > 0, `structuredContent.cropPixelWidth (${sc.cropPixelWidth})`);
+  assert(typeof sc.cropPixelHeight === "number" && sc.cropPixelHeight > 0, `structuredContent.cropPixelHeight (${sc.cropPixelHeight})`);
+  assert(sc.cropRegion === "full", `structuredContent.cropRegion (${sc.cropRegion})`);
   assert(sc.region === "full", `structuredContent.region (${sc.region})`);
   assert(typeof sc.fetchTimeMs === "number" && sc.fetchTimeMs > 0, `structuredContent.fetchTimeMs (${sc.fetchTimeMs}ms)`);
 } else {
@@ -508,6 +511,75 @@ const pollA = polledA.structuredContent ?? JSON.parse(polledA.content[0].text);
 const cpOverlay = pollA.commands?.find((c) => c.action === "add_overlay" && c.label === "cp-test");
 assert(cpOverlay != null, "cp-test overlay is in queue");
 assert(cpOverlay?.region === "100,200,300,400", `crop_pixels: prefix stripped (got "${cpOverlay?.region}")`);
+
+// 4bis-a2. crop_pixels with relativeTo is interpreted as crop-local rendered pixels.
+console.log("\n--- 4bis-a2: crop-local crop_pixels via relativeToSize ---");
+const r4bisA2 = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [
+      {
+        action: "add_overlay",
+        region: "crop_pixels:600,300,240,120",
+        relativeTo: "pct:50,50,50,50",
+        relativeToSize: { width: 1200, height: 600 },
+        label: "crop-local-px",
+      },
+    ],
+  },
+});
+assert(!r4bisA2.isError, "crop-local crop_pixels add_overlay should succeed");
+const navA2 = r4bisA2.structuredContent ?? JSON.parse(r4bisA2.content[0].text);
+const localPxOverlay = navA2.overlays?.find((c) => c.label === "crop-local-px");
+assert(localPxOverlay?.region === "pct:75,75,10,10", `crop-local pixels projected to pct:75,75,10,10 (got "${localPxOverlay?.region}")`);
+assert(localPxOverlay?.pixelRect != null, "Projected crop-local overlay has full-image pixelRect");
+const polledA2 = await client.callTool({
+  name: "poll_viewer_commands",
+  arguments: { viewUUID: viewUUIDcp },
+});
+const pollA2 = polledA2.structuredContent ?? JSON.parse(polledA2.content[0].text);
+const cropLocalCmd = pollA2.commands?.find((c) => c.action === "add_overlay" && c.label === "crop-local-px");
+assert(cropLocalCmd?.region === "pct:75,75,10,10", "Polled crop-local command is projected full-image pct");
+
+// 4bis-a3. crop-local pixels require the inspected crop dimensions.
+console.log("\n--- 4bis-a3: crop-local crop_pixels requires relativeToSize ---");
+const r4bisA3 = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [
+      {
+        action: "add_overlay",
+        region: "crop_pixels:600,300,240,120",
+        relativeTo: "pct:50,50,50,50",
+        label: "missing-size",
+      },
+    ],
+  },
+});
+assert(r4bisA3.isError === true, "relativeTo + crop_pixels without relativeToSize returns isError");
+assert((r4bisA3.content?.[0]?.text ?? "").includes("relativeToSize"), "missing-size error mentions relativeToSize");
+
+// 4bis-a4. crop-local pixels are bounds-checked against relativeToSize.
+console.log("\n--- 4bis-a4: crop-local crop_pixels OOB rejected ---");
+const r4bisA4 = await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDcp,
+    commands: [
+      {
+        action: "add_overlay",
+        region: "crop_pixels:1190,10,50,50",
+        relativeTo: "pct:50,50,50,50",
+        relativeToSize: { width: 1200, height: 600 },
+        label: "local-oob",
+      },
+    ],
+  },
+});
+assert(r4bisA4.isError === true, "crop-local OOB returns isError");
+assert((r4bisA4.content?.[0]?.text ?? "").includes("inspected crop dimensions"), "crop-local OOB error mentions crop dimensions");
 
 // 4bis-b. add_overlay with OOB pct returns structured warning + isError
 console.log("\n--- 4bis-b: OOB pct (y=325) rejected with structured warning ---");

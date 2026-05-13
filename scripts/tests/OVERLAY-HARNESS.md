@@ -7,7 +7,7 @@ Measurement scaffolding for evaluating how well LLMs place bounding-box overlays
 Two user-visible behaviours in `src/registration.ts` are informed by measurements produced with this harness:
 
 - `inspect_artwork_image`'s `size` parameter defaults to **1568** and maxes at **2016**. Both are multiples of 28, aligning with Claude's internal image-tiling grid so bounding-box coordinates emitted by the LLM land cleanly in the image's coordinate space. 1568 is Claude Sonnet 4.6's native-resolution ceiling; 2016 is the highest ×28 value that stays within Claude Opus 4.7's per-image token budget for common painting aspect ratios.
-- The tool descriptions in the MCP protocol surface suggest `pct:` coordinates for `add_overlay`. Evidence shows Opus-class models produce more accurate overlays when given `crop_pixels:` framing — a future-facing change tracked in issue #247, not yet implemented.
+- The tool descriptions in the MCP protocol surface support crop-local `crop_pixels:` coordinates for `add_overlay` when paired with `relativeTo` and `relativeToSize`. Evidence shows Opus-class models produce more accurate overlays with pixel framing.
 
 Full written verdicts, per-run result JSON, and the curator-authored ground-truth files all live in the private `offline/` submodule under `offline/overlay-test/`. Start at `offline/overlay-test/FINDINGS.md` for the summary; each experiment has its own `VERDICT.md`.
 

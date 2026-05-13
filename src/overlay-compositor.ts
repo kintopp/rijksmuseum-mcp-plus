@@ -128,6 +128,11 @@ export interface CompositeResult {
 const JPEG_MIME = "image/jpeg";
 const DEFAULT_OVERLAY_COLOR = "#ff6b35";
 
+export async function readImageDimensions(imageBytes: Buffer): Promise<{ width?: number; height?: number }> {
+  const meta = await sharp(imageBytes).metadata();
+  return { width: meta.width, height: meta.height };
+}
+
 /**
  * Draw stroke-only rectangles for each visible overlay onto the crop JPEG.
  * Overlays that fall outside the crop are silently skipped (counted).
