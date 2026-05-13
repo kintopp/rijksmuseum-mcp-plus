@@ -21,6 +21,10 @@ export const DEFAULT_WEB_HOST_PATTERNS: readonly RegExp[] = [
   /^chatgpt\.com$/i,
   /^.+\.chatgpt\.com$/i,
   /^.+\.openai\.com$/i,
+  /^mistral\.ai$/i,
+  /^.+\.mistral\.ai$/i,
+  /^unibas\.ch$/i,
+  /^.+\.unibas\.ch$/i,
 ];
 
 export type OriginAllowlist = "*" | RegExp[];
