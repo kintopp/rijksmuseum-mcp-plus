@@ -13,7 +13,7 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.31"
+  version: "0.32"
   last_updated: "2026-05-14"
 ---
 
@@ -323,6 +323,8 @@ navigate_viewer(viewUUID=..., commands=[{
   label: "Signature"
 }])
 ```
+
+**Magnify before measuring.** The "same pixel grid" only helps when the grid resolves the feature — a 30 px subject in a `region: "full"` inspection (≈1568 px wide) has no edges you can read precisely, and the resulting overlay will be loosely placed and oversized however careful the `crop_pixels:` arithmetic. Inspect first at a tight `pct:` region so the feature spans **hundreds of pixels** in the returned crop, then read its edges off that crop. For multiple spatially distinct features (e.g. a shell group on the left, a grasshopper on the right), prefer **one targeted inspect per region** over a single wide inspect — each crop's `cropPixelWidth`/`cropPixelHeight` then serves as its own `relativeToSize` for the overlays in that region.
 
 **Coarser variant — crop-local percentages.** When the feature lacks identifiable edges (atmospheric region, gradient, undefined area), omit `relativeToSize` and pass `region: "pct:..."` with the same `relativeTo`. For any feature with discernible edges, prefer `crop_pixels:`.
 
