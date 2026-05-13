@@ -223,8 +223,8 @@ html, body {
 }
 
 .external-links a:hover {
-  background: var(--color-accent-primary);
-  border-color: var(--color-accent-primary);
+  background: rgb(204, 76, 39);
+  border-color: rgb(204, 76, 39);
   color: white;
 }
 
