@@ -64,6 +64,19 @@ AUTHORITY_CASES = [
     ("http://pic.nypl.org/agent/abc", "nypl", "abc"),
     ("http://example.com/weird", "other", "http://example.com/weird"),
     ("", "other", ""),
+    # #335: host-matched URIs with malformed local_id route to 'other'.
+    # An Iconclass notation wrapped inside a TGN URI must not pollute the
+    # tgn bucket — `25H214` contains an uppercase letter, so the numeric
+    # format check fails.
+    ("http://vocab.getty.edu/tgn/25H214", "other",
+     "http://vocab.getty.edu/tgn/25H214"),
+    # Same defence for Wikidata: a bare numeric ID (no Q prefix) is not a
+    # valid QID and shouldn't be silently accepted.
+    ("http://www.wikidata.org/entity/144178830", "other",
+     "http://www.wikidata.org/entity/144178830"),
+    # An Iconclass URI carrying a numeric-only local_id is also rejected —
+    # genuine notations always contain an uppercase branch letter.
+    ("https://iconclass.org/12345", "other", "https://iconclass.org/12345"),
 ]
 for uri, exp_auth, exp_id in AUTHORITY_CASES:
     auth, local = classify_authority(uri)
