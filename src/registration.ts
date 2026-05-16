@@ -2915,9 +2915,9 @@ function registerTools(
 
   const ProvenanceSearchOutput = {
     totalArtworks: z.number().int()
-      .describe("Number of artworks with matching provenance events/periods. Capped at 10,001 — see totalArtworksCapped."),
+      .describe("Number of artworks with matching provenance events/periods. Capped at 50,000 — see totalArtworksCapped."),
     totalArtworksCapped: z.boolean().optional()
-      .describe("True when the actual total exceeds 10,001. Narrow the search to bring the total under the cap if you need an exact figure."),
+      .describe("True when the actual total reaches the 50,000 cap. Narrow the search to bring the total under the cap if you need an exact figure."),
     results: z.array(z.object({
       objectNumber: z.string(),
       title: z.string(),
@@ -3174,7 +3174,11 @@ function registerTools(
 
         // Text channel
         const lines: string[] = [];
-        lines.push(`${pluralize(result.totalArtworks, "artwork")} with matching provenance`);
+        if (result.totalArtworksCapped) {
+          lines.push(`≥${result.totalArtworks.toLocaleString()} artworks with matching provenance (capped — narrow the query for an exact total)`);
+        } else {
+          lines.push(`${pluralize(result.totalArtworks, "artwork")} with matching provenance`);
+        }
         for (const artwork of result.results) {
           lines.push("");
           lines.push(`${artwork.objectNumber} | "${artwork.title}" — ${artwork.creator}${artwork.date ? ` (${artwork.date})` : ""}`);

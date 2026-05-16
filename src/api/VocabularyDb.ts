@@ -646,6 +646,14 @@ const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]
 /** Safety cap — actual per-tool limits are defined in TOOL_LIMITS (registration.ts). */
 const INTERNAL_MAX_RESULTS_CAP = 100;
 
+/**
+ * Provenance-search count cap. Sits comfortably above the 48,535 distinct
+ * provenance-bearing artworks (and the 28,664 distinct period-bearing artworks)
+ * — acts as a safety guard against future growth while keeping the count query
+ * bounded.
+ */
+const PROVENANCE_COUNT_CAP = 50000;
+
 interface VocabFilter {
   param: keyof VocabSearchParams;
   fields: string[];
@@ -5300,8 +5308,6 @@ export class VocabularyDb {
 
     if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
 
-    // Count total — capped at 10001 to avoid slow full scans on broad filters
-    const COUNT_CAP = 10001;
     const totalArtworks = (this.db.prepare(`
       SELECT COUNT(*) AS cnt FROM (
         SELECT DISTINCT pe.artwork_id
@@ -5310,7 +5316,7 @@ export class VocabularyDb {
         WHERE ${where}
         LIMIT ?
       )
-    `).get(...bindings, COUNT_CAP) as { cnt: number }).cnt;
+    `).get(...bindings, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt;
 
     // Step 2: Fetch full chains for matched artworks
     const placeholders = artworkIds.map(() => "?").join(", ");
@@ -5336,7 +5342,7 @@ export class VocabularyDb {
       results.push(this.buildProvenanceArtwork(rows, false, params));
     }
 
-    const capped = totalArtworks >= COUNT_CAP;
+    const capped = totalArtworks >= PROVENANCE_COUNT_CAP;
 
     // Compute provenance facets if requested
     let facets: Record<string, Array<{ label: string; count: number }>> | undefined;
@@ -5554,8 +5560,6 @@ export class VocabularyDb {
 
     if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
 
-    // Count total
-    const COUNT_CAP = 10001;
     const totalArtworks = (this.db.prepare(`
       SELECT COUNT(*) AS cnt FROM (
         SELECT DISTINCT pp.artwork_id
@@ -5564,7 +5568,7 @@ export class VocabularyDb {
         WHERE ${where}
         LIMIT ?
       )
-    `).get(...bindings, COUNT_CAP) as { cnt: number }).cnt;
+    `).get(...bindings, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt;
 
     // Fetch full period chains
     const placeholders = artworkIds.map(() => "?").join(", ");
@@ -5590,7 +5594,7 @@ export class VocabularyDb {
       results.push(this.buildProvenanceArtworkPeriods(rows, false, params));
     }
 
-    const capped = totalArtworks >= COUNT_CAP;
+    const capped = totalArtworks >= PROVENANCE_COUNT_CAP;
     return { totalArtworks, totalArtworksCapped: capped || undefined, results };
   }
 
