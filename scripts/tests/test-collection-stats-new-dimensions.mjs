@@ -28,8 +28,12 @@ function section(name) {
 async function call(name, args) {
   const r = await client.callTool({ name, arguments: args });
   const text = r.content?.[0]?.text ?? "";
-  return { text, isError: !!r.isError };
+  return { text, isError: !!r.isError, structured: r.structuredContent };
 }
+
+// (no separate raw-request helper needed — the SDK surfaces server-side Zod rejections
+// either as a thrown error or as { isError: true } on the tool result; both shapes are
+// caught in section 12 below.)
 
 const transport = new StdioClientTransport({
   command: "node",
@@ -124,6 +128,162 @@ section("5. Regression: century dimension");
   const { text, isError } = await call("collection_stats", { dimension: "century", topN: 5 });
   assert(!isError, "century dimension still works");
   assert(/^\s+\S.*\d+(,\d+)*\s+\(\d/m.test(text), "Returns formatted entries");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  6. Structured output: material (multi-valued vocab dim)
+// ══════════════════════════════════════════════════════════════════
+section("6. Structured output: material (multi-valued)");
+
+{
+  const { isError, structured, text } = await call("collection_stats", { dimension: "material", topN: 10 });
+  assert(!isError, "material returns no error");
+  assert(!!structured, "structuredContent present");
+  if (structured) {
+    assert(structured.dimension === "material", `dimension === "material" (got ${structured.dimension})`);
+    assert(structured.denominatorScope === "artwork", `denominatorScope === "artwork" (got ${structured.denominatorScope})`);
+    assert(structured.multiValued === true, `multiValued === true (got ${structured.multiValued})`);
+    assert(structured.groupingKey === "label", `groupingKey === "label" (got ${structured.groupingKey})`);
+    assert(structured.ordering === "count_desc", `ordering === "count_desc" (got ${structured.ordering})`);
+    assert(typeof structured.totalBuckets === "number" && structured.totalBuckets > 0, `totalBuckets > 0 (got ${structured.totalBuckets})`);
+    assert(structured.coverage.withBucket + structured.coverage.withoutBucket === structured.total,
+      `coverage withBucket+withoutBucket === total (${structured.coverage.withBucket}+${structured.coverage.withoutBucket} vs ${structured.total})`);
+    assert(structured.bucketUnit === undefined, `bucketUnit absent for vocab dim (got ${structured.bucketUnit})`);
+    assert(structured.entries.length === 10, `entries.length === topN (got ${structured.entries.length})`);
+  }
+  assert(text.includes("multi-valued"), "Text channel includes multi-valued hint");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  7. Structured output: decade (single-valued ordinal) + sortBy override
+// ══════════════════════════════════════════════════════════════════
+section("7. Structured output: decade + sortBy override");
+
+{
+  const { isError, structured } = await call("collection_stats", { dimension: "decade", topN: 10 });
+  assert(!isError, "decade default returns no error");
+  if (structured) {
+    assert(structured.multiValued === false, `multiValued === false (got ${structured.multiValued})`);
+    assert(structured.groupingKey === "computed_bucket", `groupingKey === "computed_bucket" (got ${structured.groupingKey})`);
+    assert(structured.ordering === "label_asc", `default ordering === "label_asc" (got ${structured.ordering})`);
+    assert(structured.bucketUnit === "year", `bucketUnit === "year" (got ${structured.bucketUnit})`);
+    assert(structured.bucketWidth === 10, `bucketWidth === 10 (got ${structured.bucketWidth})`);
+    // Ascending label order
+    const labels = structured.entries.map(e => Number(e.label));
+    let ascending = true;
+    for (let i = 1; i < labels.length; i++) if (labels[i] < labels[i - 1]) { ascending = false; break; }
+    assert(ascending, `Default entries ascend by label: ${labels.slice(0, 5).join(", ")}`);
+  }
+}
+
+{
+  const { isError, structured } = await call("collection_stats", { dimension: "decade", topN: 10, sortBy: "count" });
+  assert(!isError, "decade sortBy=count returns no error");
+  if (structured) {
+    assert(structured.ordering === "count_desc", `sortBy override → ordering === "count_desc" (got ${structured.ordering})`);
+    const counts = structured.entries.map(e => e.count);
+    let descending = true;
+    for (let i = 1; i < counts.length; i++) if (counts[i] > counts[i - 1]) { descending = false; break; }
+    assert(descending, `sortBy=count: entries descend by count: ${counts.slice(0, 5).join(", ")}`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  8. Structured output: exhibition (entity grouping)
+// ══════════════════════════════════════════════════════════════════
+section("8. Structured output: exhibition (groupingKey=entity)");
+
+{
+  const { isError, structured } = await call("collection_stats", { dimension: "exhibition", topN: 5 });
+  assert(!isError, "exhibition returns no error");
+  if (structured) {
+    assert(structured.groupingKey === "entity", `groupingKey === "entity" (got ${structured.groupingKey})`);
+    assert(structured.multiValued === true, `multiValued === true (got ${structured.multiValued})`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  9. Structured output: decadeModified bucketDomain + clamp residual
+// ══════════════════════════════════════════════════════════════════
+section("9. Structured output: decadeModified bucketDomain");
+
+{
+  const { isError, structured, text } = await call("collection_stats", { dimension: "decadeModified" });
+  assert(!isError, "decadeModified returns no error");
+  if (structured) {
+    assert(structured.bucketDomain?.min === 1990, `bucketDomain.min === 1990 (got ${structured.bucketDomain?.min})`);
+    assert(structured.bucketDomain?.maxExclusive === 2030, `bucketDomain.maxExclusive === 2030 (got ${structured.bucketDomain?.maxExclusive})`);
+    // Residual should be >0 since ~318K artworks have NULL record_modified (verified against local DB)
+    assert(structured.coverage.withoutBucket > 0,
+      `coverage.withoutBucket > 0 (got ${structured.coverage.withoutBucket})`);
+  }
+  assert(/window: 1990–2029/.test(text), "Text channel includes window note");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  10. appliedFilters round-trip
+// ══════════════════════════════════════════════════════════════════
+section("10. appliedFilters round-trip");
+
+{
+  const { isError, structured } = await call("collection_stats", {
+    dimension: "century", type: "painting", creator: "Rembrandt", topN: 3,
+  });
+  assert(!isError, "filtered query returns no error");
+  if (structured) {
+    assert(structured.appliedFilters?.type === "painting", `appliedFilters.type echoed (got ${structured.appliedFilters?.type})`);
+    assert(structured.appliedFilters?.creator === "Rembrandt", `appliedFilters.creator echoed (got ${structured.appliedFilters?.creator})`);
+    assert(structured.appliedFilters?.topN === undefined, `appliedFilters does NOT include control param topN`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  11. Party-conjunction fix (reviewer Finding 1 on #346)
+//  Pre-fix: total could include artworks with party-match on one pp row
+//  and positionMethod-match on a different pp row, contributing 0 buckets.
+//  Post-fix: total === artworks with both filters on the SAME pp row.
+//  Structural invariant always-true: total === withBucket + withoutBucket.
+// ══════════════════════════════════════════════════════════════════
+section("11. Party-conjunction regression");
+
+{
+  const { isError, structured } = await call("collection_stats", {
+    dimension: "party", party: "Bredius", positionMethod: "llm_enrichment", topN: 5,
+  });
+  assert(!isError, "party + positionMethod returns no error");
+  if (structured) {
+    assert(structured.total === structured.coverage.withBucket + structured.coverage.withoutBucket,
+      `total === withBucket + withoutBucket (${structured.total} vs ${structured.coverage.withBucket}+${structured.coverage.withoutBucket})`);
+    // For party dimension, withBucket is "artworks with ≥1 matching pp row" — same shape as total
+    // post-fix (because filters ARE the same-row conjunction). withoutBucket should be 0.
+    assert(structured.coverage.withoutBucket === 0,
+      `withoutBucket === 0 for party dim with same-row filters (got ${structured.coverage.withoutBucket})`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  12. Rename rejection — old names removed by Zod .strict()
+// ══════════════════════════════════════════════════════════════════
+section("12. Rename rejection: dateFrom/dateTo/location no longer accepted");
+
+for (const oldArg of [{ dateFrom: 1700 }, { dateTo: 1800 }, { location: "Amsterdam" }]) {
+  const argName = Object.keys(oldArg)[0];
+  // The SDK's Zod-strict server-side validation surfaces in one of two shapes:
+  //  - thrown error on client.callTool (when the server returns a JSON-RPC error)
+  //  - { isError: true } tool result with the error in the content text
+  let rejected = false;
+  let detail = "";
+  try {
+    const r = await client.callTool({ name: "collection_stats", arguments: { dimension: "century", ...oldArg } });
+    if (r.isError) {
+      rejected = true;
+      detail = `isError result: ${r.content?.[0]?.text?.slice(0, 80) ?? ""}`;
+    }
+  } catch (err) {
+    rejected = /Unrecognized key|unknown|invalid|strict/i.test(String(err.message ?? err));
+    detail = String(err.message ?? err).slice(0, 100);
+  }
+  assert(rejected, `Old arg "${argName}" rejected (${detail})`);
 }
 
 // ══════════════════════════════════════════════════════════════════

@@ -505,6 +505,8 @@ export interface CollectionStatsParams {
   topN?: number;
   offset?: number;
   binWidth?: number;
+  /** Override per-dimension default ordering. Vocab/exhibition default to count_desc; ordinal dims default to label_asc. */
+  sortBy?: "count" | "label";
   // Artwork filters
   type?: string;
   material?: string;
@@ -521,29 +523,53 @@ export interface CollectionStatsParams {
   imageAvailable?: boolean;
   creationDateFrom?: number;
   creationDateTo?: number;
-  // Provenance filters
+  // Provenance filters — names mirror their dimension counterparts (provenanceDecade, provenanceLocation).
   transferType?: string;
-  location?: string;
+  provenanceLocation?: string;
   party?: string;
-  dateFrom?: number;
-  dateTo?: number;
+  provenanceDateFrom?: number;
+  provenanceDateTo?: number;
   hasProvenance?: boolean;
   categoryMethod?: string;
   positionMethod?: string;
 }
 
 export interface StatsEntry {
-  label: string;
+  label: string | number;
   count: number;
   percentage?: number;
 }
 
 export interface CollectionStatsResult {
   dimension: string;
+  /** Artwork pool size after filters (always artwork-scoped, even for provenance dimensions). */
   total: number;
-  totalDistinct: number;
+  /** Always "artwork" — explicit signal that count/total = artwork-share, never event-share or party-share. */
+  denominatorScope: "artwork";
+  /** When true, an artwork can match multiple buckets, so Σ(percentage) can exceed 100%. */
+  multiValued: boolean;
+  /** How rows are collapsed into entries:
+   *  - "label"           — vocab/string dims group by display label (creator, material, …)
+   *  - "entity"          — exhibition groups by exhibition_id
+   *  - "computed_bucket" — ordinal dims group by a SELECT-time expression (decade, century, height, width, decadeModified) */
+  groupingKey: "label" | "entity" | "computed_bucket";
+  /** Effective ordering of `entries`. */
+  ordering: "count_desc" | "label_asc";
+  /** Unit for `bucketWidth` (year for date dims, cm for height/width). Omitted for non-binned dims. */
+  bucketUnit?: "year" | "cm";
+  /** Effective bin width for binned dims (echoes `binWidth` param). Omitted for non-binned dims. */
+  bucketWidth?: number;
+  /** Inclusive `min` / exclusive `maxExclusive` window for clamped dims (e.g. decadeModified 1990–2030). */
+  bucketDomain?: { min?: number; maxExclusive?: number };
+  /** Coverage residual for the filtered pool. `withBucket + withoutBucket === total`.
+   *  withoutBucket explains the gap to 100% on single-valued dims (missing source value, out-of-range, etc.). */
+  coverage: { withBucket: number; withoutBucket: number };
+  /** Number of distinct buckets in the filtered pool (under the dimension's groupingKey). Replaces the old `totalDistinct`. */
+  totalBuckets: number;
   offset: number;
   entries: StatsEntry[];
+  /** Round-trip echo of accepted filter args (excluding control params like topN/offset/binWidth/sortBy/dimension). */
+  appliedFilters: Record<string, unknown>;
   warnings?: string[];
 }
 
@@ -629,6 +655,59 @@ export const STATS_DIMENSION_NAMES = [
   "decadeModified",                       // record_modified bucketed by decade (1990s–2020s)
   ...PROV_DIMENSION_DEFS.map(d => d.label),
 ] as const;
+
+/** Per-dimension classification. Drives the structured-output fields that disclose the
+ *  implicit contract a consumer otherwise couldn't recover from the schema alone:
+ *  - multiValued: artwork can match >1 bucket (Σ percentage may exceed 100%)
+ *  - groupingKey: how rows are collapsed into entries
+ *  - defaultOrdering: ORDER BY used when no explicit sortBy is passed
+ *  - bucketUnit/bucketDomain: only for binned/clamped dims
+ */
+interface StatsDimensionMeta {
+  multiValued: boolean;
+  groupingKey: "label" | "entity" | "computed_bucket";
+  defaultOrdering: "count_desc" | "label_asc";
+  bucketUnit?: "year" | "cm";
+  bucketDomain?: { min?: number; maxExclusive?: number };
+}
+
+const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
+  // Single-valued artwork attributes — one row per artwork in the source data.
+  // Note: century defaults to count_desc (preserved from pre-v0.31 behaviour; the rest of the
+  // ordinal dims default to label_asc). Pass sortBy:"label" to override.
+  century:         { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "count_desc", bucketUnit: "year" },
+  decade:          { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year" },
+  height:          { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "cm" },
+  width:           { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "cm" },
+  decadeModified:  {
+    multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year",
+    bucketDomain: { min: 1990, maxExclusive: 2030 },
+  },
+  // Multi-valued artwork attributes — vocabulary fan-out via mappings.
+  type:            { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  material:        { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  technique:       { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  creator:         { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  depictedPerson:  { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  depictedPlace:   { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  productionPlace: { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  subject:         { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  sourceType:      { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  theme:           { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  exhibition:      { multiValued: true,  groupingKey: "entity",          defaultOrdering: "count_desc" },
+  // Provenance dimensions — count = distinct artworks with ≥1 event/party matching this bucket.
+  // Multi-valued because one artwork can have multiple events/parties (so it can hit multiple buckets).
+  provenanceDecade:  { multiValued: true, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year" },
+  transferType:      { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  transferCategory:  { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  provenanceLocation:{ multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  currency:          { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  categoryMethod:    { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  parseMethod:       { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  party:             { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  partyPosition:     { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  positionMethod:    { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+};
 
 // ─── Filter definitions ─────────────────────────────────────────────
 // Each entry maps a VocabSearchParams key to the SQL constraints used
@@ -3641,8 +3720,13 @@ export class VocabularyDb {
 
   // ── Collection-wide stats ─────────────────────────────────────────
 
-  /** Artwork-domain dimensions: count artworks grouped by a vocab field or date. */
-  private artworkDimensionSql(dim: string, topN: number, offset: number, binWidth: number): { sql: string; extraBindings: unknown[] } | null {
+  /** Artwork-domain dimensions: count artworks grouped by a vocab field or date.
+   *  `ordering` selects ORDER BY: "count_desc" → cnt DESC, "label_asc" → label. */
+  private artworkDimensionSql(
+    dim: string, topN: number, offset: number, binWidth: number,
+    ordering: "count_desc" | "label_asc",
+  ): { sql: string; extraBindings: unknown[] } | null {
+    const orderBy = ordering === "count_desc" ? "cnt DESC" : "label";
     const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
     if (vocabDef) {
       const fieldId = this.fieldIdMap.get(vocabDef.field);
@@ -3657,7 +3741,7 @@ export class VocabularyDb {
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
           WHERE +m.field_id = ? AND v.label_en IS NOT NULL${typeFilter}${arealFilter}
           AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)
-          GROUP BY label ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
       };
     }
@@ -3669,7 +3753,7 @@ export class VocabularyDb {
               COUNT(*) AS cnt
           FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
           WHERE a.date_earliest IS NOT NULL
-          GROUP BY label ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [topN, offset],
       };
     }
@@ -3679,7 +3763,7 @@ export class VocabularyDb {
         sql: `SELECT (a.date_earliest / ?) * ? AS label, COUNT(*) AS cnt
           FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
           WHERE a.date_earliest IS NOT NULL
-          GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, topN, offset],
       };
     }
@@ -3691,7 +3775,7 @@ export class VocabularyDb {
         sql: `SELECT CAST((${dimCol} / ?) * ? AS INTEGER) AS label, COUNT(*) AS cnt
           FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
           WHERE ${dimCol} > 0
-          GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, topN, offset],
       };
     }
@@ -3707,7 +3791,7 @@ export class VocabularyDb {
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
           WHERE +m.field_id = ? AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
             AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)
-          GROUP BY label ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
       };
     }
@@ -3720,7 +3804,7 @@ export class VocabularyDb {
           JOIN exhibitions e ON e.exhibition_id = ae.exhibition_id
           WHERE ae.art_id IN (SELECT art_id FROM _stats_artworks)
             AND (e.title_en IS NOT NULL OR e.title_nl IS NOT NULL)
-          GROUP BY ae.exhibition_id ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+          GROUP BY ae.exhibition_id ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [topN, offset],
       };
     }
@@ -3735,7 +3819,7 @@ export class VocabularyDb {
           WHERE a.record_modified IS NOT NULL
             AND a.record_modified >= '1990-01-01'
             AND a.record_modified <  '2030-01-01'
-          GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [topN, offset],
       };
     }
@@ -3745,13 +3829,16 @@ export class VocabularyDb {
 
   /** Provenance-domain dimensions: count artworks grouped by event/party attribute.
    *  eventConditions/partyConditions filter at the row level so that only matching
-   *  events/parties contribute to the dimension counts (not all events for matching artworks). */
+   *  events/parties contribute to the dimension counts (not all events for matching artworks).
+   *  `ordering` selects ORDER BY: "count_desc" → cnt DESC, "label_asc" → label. */
   private provenanceDimensionSql(
     dim: string, topN: number, offset: number, binWidth: number,
+    ordering: "count_desc" | "label_asc",
     eventConditions?: { conds: string[]; bindings: unknown[] },
     partyConditions?: { conds: string[]; bindings: unknown[] },
   ): { sql: string; extraBindings: unknown[] } | null {
     if (!this.hasProvenanceTables_) return null;
+    const orderBy = ordering === "count_desc" ? "cnt DESC" : "label";
 
     // Build event-level WHERE fragment
     const evExtra = eventConditions?.conds.length
@@ -3772,7 +3859,7 @@ export class VocabularyDb {
           FROM provenance_events pe
           WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
             AND pe.date_year IS NOT NULL${evExtra}
-          GROUP BY label ORDER BY label LIMIT ? OFFSET ?`,
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, ...evBindings, topN, offset],
       };
     }
@@ -3793,13 +3880,158 @@ export class VocabularyDb {
         FROM ${tbl} ${alias}
         WHERE ${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)
           ${notNull}${rowFilter}
-        GROUP BY ${alias}.${def.col} ORDER BY cnt DESC LIMIT ? OFFSET ?`,
+        GROUP BY ${alias}.${def.col} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
       extraBindings: [...rowBindings, topN, offset],
     };
   }
 
+  /** Coverage count: artworks in the filtered pool that have ≥1 value for the given dimension.
+   *  Used to populate the structured-output `coverage.withBucket` field, which lets a consumer
+   *  reconstruct the residual to 100% without per-dim NULL knowledge. */
+  private dimensionCoverageCount(
+    dim: string,
+    eventConditions?: { conds: string[]; bindings: unknown[] },
+    partyConditions?: { conds: string[]; bindings: unknown[] },
+  ): number {
+    if (!this.db) return 0;
+    const evExtra = eventConditions?.conds.length ? " AND " + eventConditions.conds.join(" AND ") : "";
+    const evBindings = eventConditions?.bindings ?? [];
+    const ppExtra = partyConditions?.conds.length ? " AND " + partyConditions.conds.join(" AND ") : "";
+    const ppBindings = partyConditions?.bindings ?? [];
+
+    // Vocab-backed dim: count artworks with ≥1 mapping for this field.
+    const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
+    if (vocabDef) {
+      const fieldId = this.fieldIdMap.get(vocabDef.field);
+      if (fieldId === undefined) return 0;
+      const typeFilter = vocabDef.vocabType ? ` AND v.type = '${vocabDef.vocabType}'` : "";
+      const arealFilter = vocabDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
+      const row = this.db.prepare(
+        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM mappings m
+         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+         WHERE +m.field_id = ? AND v.label_en IS NOT NULL${typeFilter}${arealFilter}
+           AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)`,
+      ).get(fieldId) as { cnt: number };
+      return row.cnt;
+    }
+
+    if (dim === "century" || dim === "decade") {
+      const row = this.db.prepare(
+        `SELECT COUNT(*) AS cnt FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+         WHERE a.date_earliest IS NOT NULL`,
+      ).get() as { cnt: number };
+      return row.cnt;
+    }
+
+    if ((dim === "height" || dim === "width") && this.hasDimensions) {
+      const col = dim === "height" ? "a.height_cm" : "a.width_cm";
+      const row = this.db.prepare(
+        `SELECT COUNT(*) AS cnt FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+         WHERE ${col} > 0`,
+      ).get() as { cnt: number };
+      return row.cnt;
+    }
+
+    if (dim === "theme") {
+      const fieldId = this.fieldIdMap.get("theme");
+      if (fieldId === undefined) return 0;
+      const row = this.db.prepare(
+        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM mappings m
+         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+         WHERE +m.field_id = ? AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
+           AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)`,
+      ).get(fieldId) as { cnt: number };
+      return row.cnt;
+    }
+
+    if (dim === "exhibition") {
+      const row = this.db.prepare(
+        `SELECT COUNT(DISTINCT ae.art_id) AS cnt FROM artwork_exhibitions ae
+         JOIN exhibitions e ON e.exhibition_id = ae.exhibition_id
+         WHERE ae.art_id IN (SELECT art_id FROM _stats_artworks)
+           AND (e.title_en IS NOT NULL OR e.title_nl IS NOT NULL)`,
+      ).get() as { cnt: number };
+      return row.cnt;
+    }
+
+    if (dim === "decadeModified") {
+      const row = this.db.prepare(
+        `SELECT COUNT(*) AS cnt FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+         WHERE a.record_modified IS NOT NULL
+           AND a.record_modified >= '1990-01-01'
+           AND a.record_modified <  '2030-01-01'`,
+      ).get() as { cnt: number };
+      return row.cnt;
+    }
+
+    if (!this.hasProvenanceTables_) return 0;
+
+    if (dim === "provenanceDecade") {
+      const row = this.db.prepare(
+        `SELECT COUNT(DISTINCT pe.artwork_id) AS cnt FROM provenance_events pe
+         WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
+           AND pe.date_year IS NOT NULL${evExtra}`,
+      ).get(...evBindings) as { cnt: number };
+      return row.cnt;
+    }
+
+    const def = PROV_DIMENSION_DEFS.find(d => d.label === dim);
+    if (!def) return 0;
+    if (def.table === "parties" && !this.hasPartyTable_) return 0;
+
+    const tbl = def.table === "events" ? "provenance_events" : "provenance_parties";
+    const alias = def.table === "events" ? "pe" : "pp";
+    const notNull = def.notNull ? `AND ${alias}.${def.col} IS NOT NULL` : "";
+    const rowFilter = def.table === "events" ? evExtra : ppExtra;
+    const rowBindings = def.table === "events" ? evBindings : ppBindings;
+    const row = this.db.prepare(
+      `SELECT COUNT(DISTINCT ${alias}.artwork_id) AS cnt FROM ${tbl} ${alias}
+       WHERE ${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)
+         ${notNull}${rowFilter}`,
+    ).get(...rowBindings) as { cnt: number };
+    return row.cnt;
+  }
+
+  /** Echo of accepted filter args for round-trip in structuredContent. Excludes control params. */
+  private buildAppliedFilters(params: CollectionStatsParams): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    const keys: (keyof CollectionStatsParams)[] = [
+      "type", "material", "technique", "creator", "productionPlace",
+      "depictedPerson", "depictedPlace", "subject", "iconclass",
+      "collectionSet", "theme", "sourceType", "imageAvailable",
+      "creationDateFrom", "creationDateTo",
+      "hasProvenance", "transferType", "provenanceLocation", "party",
+      "provenanceDateFrom", "provenanceDateTo", "categoryMethod", "positionMethod",
+    ];
+    for (const k of keys) {
+      const v = params[k];
+      if (v != null) out[k] = v;
+    }
+    return out;
+  }
+
   computeCollectionStats(params: CollectionStatsParams): CollectionStatsResult {
-    if (!this.db) return { dimension: params.dimension, total: 0, totalDistinct: 0, offset: 0, entries: [] };
+    // Resolve dim metadata once — drives structured-output fields + default ordering.
+    const meta = STATS_DIMENSION_META[params.dimension];
+    const groupingKey = meta?.groupingKey ?? "label";
+    const multiValued = meta?.multiValued ?? false;
+    const ordering: "count_desc" | "label_asc" =
+      params.sortBy === "count" ? "count_desc" :
+      params.sortBy === "label" ? "label_asc" :
+      meta?.defaultOrdering ?? "count_desc";
+    const appliedFilters = this.buildAppliedFilters(params);
+    const baseShape = {
+      dimension: params.dimension,
+      denominatorScope: "artwork" as const,
+      multiValued, groupingKey, ordering,
+      ...(meta?.bucketUnit && { bucketUnit: meta.bucketUnit }),
+      ...(meta?.bucketDomain && { bucketDomain: meta.bucketDomain }),
+      appliedFilters,
+    };
+
+    if (!this.db) {
+      return { ...baseShape, total: 0, coverage: { withBucket: 0, withoutBucket: 0 }, totalBuckets: 0, offset: 0, entries: [] };
+    }
 
     const topN = Math.min(params.topN ?? 25, 500);
     const offset = params.offset ?? 0;
@@ -3832,7 +4064,7 @@ export class VocabularyDb {
           : this.findVocabIdsFts(val, typeClause, typeBindings);
         if (vocabIds.length === 0) {
           // Filter matched zero vocab terms → no artworks can match → return empty immediately
-          return { dimension: params.dimension, total: 0, totalDistinct: 0, offset: 0, entries: [],
+          return { ...baseShape, total: 0, coverage: { withBucket: 0, withoutBucket: 0 }, totalBuckets: 0, offset: 0, entries: [],
             warnings: [`No vocabulary matches found for ${key}="${val}". No artworks match this filter.`] };
         }
         const ftsFilter = this.mappingFilterDirect(fields, vocabIds);
@@ -3871,9 +4103,9 @@ export class VocabularyDb {
       const evConds: string[] = [];
       const evBindings: unknown[] = [];
       if (params.transferType) { evConds.push("pe.transfer_type = ?"); evBindings.push(params.transferType); }
-      if (params.location) { evConds.push("pe.location LIKE '%' || ? || '%'"); evBindings.push(params.location); }
-      if (params.dateFrom != null) { evConds.push("pe.date_year >= ?"); evBindings.push(params.dateFrom); }
-      if (params.dateTo != null) { evConds.push("pe.date_year <= ?"); evBindings.push(params.dateTo); }
+      if (params.provenanceLocation) { evConds.push("pe.location LIKE '%' || ? || '%'"); evBindings.push(params.provenanceLocation); }
+      if (params.provenanceDateFrom != null) { evConds.push("pe.date_year >= ?"); evBindings.push(params.provenanceDateFrom); }
+      if (params.provenanceDateTo != null) { evConds.push("pe.date_year <= ?"); evBindings.push(params.provenanceDateTo); }
       if (params.categoryMethod) { evConds.push("pe.category_method = ?"); evBindings.push(params.categoryMethod); }
 
       if (evConds.length > 0) {
@@ -3884,22 +4116,24 @@ export class VocabularyDb {
         conditions.push("EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
       }
 
+      // Party filters — same-row conjunction in the artwork pool to match the dim-level filter's
+      // semantics. Before #346, two separate EXISTS clauses let party+positionMethod match on
+      // *different* pp rows for the same artwork, so `total` could include artworks contributing
+      // zero buckets to `entries` (reviewer Finding 1).
       const ppConds: string[] = [];
       const ppBindings: unknown[] = [];
       if (params.party && this.hasPartyTable_) {
         ppConds.push("pp.party_name LIKE '%' || ? || '%'");
         ppBindings.push(params.party);
-        conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = a.art_id AND pp.party_name LIKE '%' || ? || '%')");
-        bindings.push(params.party);
       }
       if (params.positionMethod && this.hasPartyTable_) {
         ppConds.push("pp.position_method = ?");
         ppBindings.push(params.positionMethod);
-        conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = a.art_id AND pp.position_method = ?)");
-        bindings.push(params.positionMethod);
       }
       if (ppConds.length > 0) {
         provPartyConds = { conds: ppConds, bindings: ppBindings };
+        conditions.push(`EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = a.art_id AND ${ppConds.join(" AND ")})`);
+        bindings.push(...ppBindings);
       }
     }
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
@@ -3920,7 +4154,8 @@ export class VocabularyDb {
 
     if (total === 0) {
       if (filtered) this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
-      return { dimension: params.dimension, total: 0, totalDistinct: 0, offset, entries: [], ...(warnings.length > 0 && { warnings }) };
+      return { ...baseShape, total: 0, coverage: { withBucket: 0, withoutBucket: 0 }, totalBuckets: 0, offset, entries: [],
+        ...(warnings.length > 0 && { warnings }) };
     }
 
     // _stats_artworks is referenced inside dimension SQL fragments.
@@ -3931,14 +4166,15 @@ export class VocabularyDb {
       ? `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM "${tableId}"`
       : `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM artworks`);
     try {
-      const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth)
-        || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth, provEventConds, provPartyConds);
+      const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth, ordering)
+        || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth, ordering, provEventConds, provPartyConds);
 
       if (!dimQuery) {
         return {
-          dimension: params.dimension,
+          ...baseShape,
           total,
-          totalDistinct: 0,
+          coverage: { withBucket: 0, withoutBucket: total },
+          totalBuckets: 0,
           offset,
           entries: [],
           warnings: [`Unknown dimension: '${params.dimension}'. Available: ${STATS_DIMENSION_NAMES.join(", ")}.`],
@@ -3948,23 +4184,46 @@ export class VocabularyDb {
       // Run the dimension query (with LIMIT/OFFSET)
       const rows = this.db.prepare(dimQuery.sql).all(...dimQuery.extraBindings) as { label: string | number; cnt: number }[];
       const entries: StatsEntry[] = rows.map(r => ({
-        label: String(r.label),
+        label: r.label,
         count: r.cnt,
         percentage: Math.round((r.cnt / total) * 1000) / 10,
       }));
 
-      // Count total distinct values (only when paging, to avoid unnecessary work)
-      let totalDistinct = entries.length + offset;
+      // Count total distinct buckets (only when paging, to avoid unnecessary work)
+      let totalBuckets = entries.length + offset;
       if (entries.length === topN) {
         // There may be more — run a count query (reuse the same SQL shape without LIMIT/OFFSET)
         const countSql = dimQuery.sql.replace(/\sORDER BY.*$/s, "");
         const countResult = this.db.prepare(`SELECT COUNT(*) AS cnt FROM (${countSql})`).get(
           ...dimQuery.extraBindings.slice(0, -2),  // strip topN + offset bindings
         ) as { cnt: number };
-        totalDistinct = countResult.cnt;
+        totalBuckets = countResult.cnt;
       }
 
-      return { dimension: params.dimension, total, totalDistinct, offset, entries, ...(warnings.length > 0 && { warnings }) };
+      // Coverage: artworks in the filtered pool that have ≥1 row in this dimension's source.
+      // Lets a consumer reconstruct the gap to 100% on single-valued dims without per-dim
+      // NULL/clamp knowledge.
+      const withBucket = this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds);
+      const withoutBucket = Math.max(0, total - withBucket);
+
+      // Effective bucketWidth — only meaningful for binned dims; meta carries bucketUnit.
+      const bucketWidth =
+        meta?.bucketUnit === "year" && (params.dimension === "decade" || params.dimension === "provenanceDecade") ? binWidth :
+        meta?.bucketUnit === "cm" ? binWidth :
+        meta?.bucketUnit === "year" && params.dimension === "decadeModified" ? 10 :
+        meta?.bucketUnit === "year" && params.dimension === "century" ? 100 :
+        undefined;
+
+      return {
+        ...baseShape,
+        total,
+        coverage: { withBucket, withoutBucket },
+        totalBuckets,
+        offset,
+        entries,
+        ...(bucketWidth !== undefined && { bucketWidth }),
+        ...(warnings.length > 0 && { warnings }),
+      };
     } finally {
       this.db.exec(`DROP VIEW IF EXISTS _stats_artworks`);
       if (filtered) this.db.exec(`DROP TABLE IF EXISTS "${tableId}"`);
