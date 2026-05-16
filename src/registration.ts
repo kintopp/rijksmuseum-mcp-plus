@@ -297,13 +297,15 @@ async function fetchVisualSimilar(
   }
 }
 
-// provenanceChain is excluded from ArtworkDetailOutput (schema too large for some clients)
-// but still available on the raw data for text channel formatting.
 interface ProvenanceChainEvent {
-  gap: boolean; party: { name: string; uncertain: boolean } | null;
-  transferType: string; date: { text: string; year: number | null } | null;
-  location: string | null; price: { currency: string; amount: number | null; text: string } | null;
+  sequence: number;
+  gap: boolean;
   uncertain: boolean;
+  transferType: string;
+  party: { name: string } | null;
+  location: string | null;
+  date: { year: number | null; text: string } | null;
+  price: { currency: string; amount: number | null; text: string } | null;
 }
 type DetailWithChain = (InferOutput<typeof ArtworkDetailOutput> | ArtworkDetailFromDb) & { provenanceChain?: ProvenanceChainEvent[] | null };
 
@@ -363,7 +365,9 @@ function formatDetailSummary(d: DetailWithChain): string {
 
     // Acquisition: how the museum got it (last event)
     if (last) {
-      const priceFmt = last.price ? `${last.price.currency} ${last.price.amount?.toLocaleString("en") ?? last.price.text}` : null;
+      const priceFmt = last.price
+        ? `${last.price.currency} ${last.price.amount?.toLocaleString("en") ?? last.price.text}`
+        : null;
       const parts = [last.transferType !== "unknown" ? last.transferType : null, last.date?.text, priceFmt].filter(Boolean);
       if (parts.length) lines.push(`  Acquired: ${parts.join(", ")}`);
     }
@@ -765,6 +769,26 @@ const ArtworkDetailOutput = {
   techniqueStatement: z.string().nullable(),
   dimensionStatement: z.string().nullable(),
   provenance: z.string().nullable(),
+  provenanceChain: z.array(z.object({
+    sequence: z.number().int(),
+    gap: z.boolean(),
+    uncertain: z.boolean(),
+    transferType: z.string().describe("Normalized transfer type: sale, inheritance, by_descent, widowhood, bequest, commission, confiscation, theft, looting, recuperation, loan, transfer, collection, gift, exchange, deposit, restitution, inventory, or unknown."),
+    party: z.object({
+      name: z.string(),
+    }).nullable(),
+    location: z.string().nullable(),
+    date: z.object({
+      year: z.number().int().nullable().describe("Best-effort single year; null if the date couldn't be reduced to a year."),
+      text: z.string().describe("Original date expression as it appeared in the source."),
+    }).nullable(),
+    price: z.object({
+      currency: z.string(),
+      amount: z.number().nullable(),
+      text: z.string(),
+    }).nullable(),
+  })).nullable()
+    .describe("Parsed provenance events derived from the raw `provenance` string via the project's PEG parser. Null when no provenance text is available. Clients can re-derive counts, gaps, year spans, transfer-type histograms, and earliest-known-owner from this array; the text channel renders a summary built from the same data."),
   creditLine: z.string().nullable(),
   inscriptions: z.array(z.string()),
   location: z.object({
@@ -1886,13 +1910,23 @@ function registerTools(
       const detail = vocabDb.getArtworkDetail(objNum);
       if (!detail) throw new Error(`No artwork found: ${objNum}`);
 
-      // Parse provenance chain for text summary
-      const provenanceChain = detail.provenance
-        ? parseProvenance(detail.provenance).events
+      const provenanceChain: ProvenanceChainEvent[] | null = detail.provenance
+        ? parseProvenance(detail.provenance).events.map(e => ({
+            sequence: e.sequence,
+            gap: e.gap,
+            uncertain: e.uncertain,
+            transferType: e.transferType,
+            party: e.party ? { name: e.party.name } : null,
+            location: e.location,
+            date: e.date ? { year: e.date.year, text: e.date.text } : null,
+            price: e.price
+              ? { currency: e.price.currency, amount: e.price.amount, text: e.price.text }
+              : null,
+          }))
         : null;
 
       const text = formatDetailSummary({ ...detail, provenanceChain });
-      return structuredResponse(detail, text);
+      return structuredResponse({ ...detail, provenanceChain }, text);
     })
   );
 
