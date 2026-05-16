@@ -1,17 +1,17 @@
 # Search Parameters
 
-`search_artwork` accepts 40 search filters and 5 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
+`search_artwork` accepts 37 search filters and 9 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
 
 Parameters that accept arrays (marked **[]**) AND-combine their values: `subject: ["landscape", "seascape"]` returns artworks tagged with *both* subjects.
 
-All searches are backed by a vocabulary database of ~417,000 controlled terms mapped to ~833,000 artworks via ~14.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~29.7K geocoded places, 81% of known places).
+All searches are backed by a vocabulary database of ~418,000 controlled terms mapped to ~834,000 artworks via ~14.8 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~29.7K geocoded places, 81% of known places). Demographic person filters (gender, birth/death year, birth/death place, profession) are exposed through the separate [`search_persons`](mcp-tool-parameters.md#search_persons) tool — feed the returned vocab IDs into `creator` here.
 
 - [Ranking](#ranking)
 - [Result limits and pagination](#result-limits-and-pagination)
-- [1. Vocabulary label filters](#1-vocabulary-label-filters) (17 parameters)
-- [2. Full-text search filters](#2-full-text-search-filters) (7 parameters)
-- [3. Column and metadata filters](#3-column-and-metadata-filters) (16 parameters)
-- [4. Output controls](#4-output-controls) (5 parameters)
+- [1. Vocabulary label filters](#1-vocabulary-label-filters) (16 parameters)
+- [2. Full-text search filters](#2-full-text-search-filters) (6 parameters)
+- [3. Column and metadata filters](#3-column-and-metadata-filters) (15 parameters)
+- [4. Output controls](#4-output-controls) (9 parameters)
 - [Semantic search](#semantic-search)
 - [Artwork detail fields](#artwork-detail-fields)
 
@@ -19,9 +19,10 @@ All searches are backed by a vocabulary database of ~417,000 controlled terms ma
 
 Results are ranked differently depending on which filters are active:
 
-- **BM25** — when any full-text filter is active (`title`, `description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), results are ranked by text relevance.
+- **BM25** — when any full-text filter is active (`title`, `description`, `inscription`, `creditLine`, `curatorialNarrative`), results are ranked by text relevance.
 - **Geographic proximity** — when `nearPlace` or `nearLat`/`nearLon` is active (without text filters), results are ranked by distance from the search point.
 - **Importance** — when only vocabulary, column, or modifier filters are active, results are ordered by a composite importance score reflecting image availability, curatorial attention, and metadata richness.
+- **Column sort** — `sortBy` overrides all of the above when set (see [Output controls](#4-output-controls)).
 
 ---
 
@@ -62,16 +63,8 @@ Match against ~417,000 controlled terms. Labels are bilingual (English and Dutch
 | `creator` | string **[]** | Artist or maker name. ~510K artworks, ~21K unique names. Uses canonical name forms (e.g. "Rembrandt van Rijn"). | `"Rembrandt van Rijn"` |
 | `aboutActor` | string | Broader person search across depicted persons *and* creators. More tolerant of cross-language name forms than `depictedPerson` (e.g. "Louis XIV" finds "Lodewijk XIV"). | `"Louis XIV"` |
 | `productionPlace` | string **[]** | Where the artwork was made. 9,002 places. Supports multi-word names with geo-disambiguation. | `"Delft"` |
-| `productionRole` | string **[]** | Role an actor played in creating this specific work — distinct from `profession` (what the person *was*). [178 terms](vocabulary-production-roles.md). Key terms: "print maker" (382K), "publisher" (185K), "after painting by" (46K). | `"after painting by"` |
-| `attributionQualifier` | string **[]** | Attribution qualifier. 7 values: "primary", "attributed to", "workshop of", "circle of", "follower of", "secondary", "undetermined". Combine with `creator` to narrow attribution. | `"workshop of"` |
-
-### Creator biography
-
-| Parameter | Type | Description | Example |
-|-----------|------|-------------|---------|
-| `birthPlace` | string **[]** | Artist's place of birth. ~2K places, ~196K artworks. Search-only: not returned by `get_artwork_details`. | `"Leiden"` |
-| `deathPlace` | string **[]** | Artist's place of death. ~1.3K places, ~180K artworks. Useful for tracking artist migration — compare `birthPlace: "Antwerp"` with `deathPlace: "Amsterdam"`. | `"Paris"` |
-| `profession` | string **[]** | Artist's profession. [600 terms](vocabulary-professions.md), bilingual. Search-only: not returned by `get_artwork_details`. | `"printmaker"` |
+| `productionRole` | string **[]** | Role an actor played in creating *this specific work* — distinct from the person's profession (which lives on `search_persons`). [178 terms](vocabulary-production-roles.md). Key terms: "print maker" (382K), "publisher" (185K), "after painting by" (46K). | `"after painting by"` |
+| `attributionQualifier` | string **[]** | Attribution qualifier. 13 values (ordered by DB frequency): "primary", "undetermined", "after", "secondary", "possibly", "attributed to", "circle of", "workshop of", "copyist of", "manner of", "follower of", "falsification", "free-form". Mixes connoisseurship terms (workshop/circle/manner/follower/copyist of), editorial-confidence terms (attributed to, possibly, undetermined), and structural markers (primary, secondary, after, falsification, free-form). Combine with `creator` to narrow attribution. | `"workshop of"` |
 
 ### Object classification
 
@@ -80,6 +73,13 @@ Match against ~417,000 controlled terms. Labels are bilingual (English and Dutch
 | `type` | string **[]** | Object type. 4,385 terms (e.g. "painting", "print", "drawing", "photograph", "sculpture"). | `"painting"` |
 | `material` | string **[]** | Material or support. [734 terms](vocabulary-materials.md) (e.g. "canvas", "paper", "panel", "oil paint"). | `"panel"` |
 | `technique` | string **[]** | Artistic technique. [967 terms](vocabulary-techniques.md) (e.g. "oil painting", "etching", "mezzotint"). | `"etching"` |
+
+### Curatorial classification
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `theme` | string **[]** | Curatorial thematic tag (e.g. "overzeese geschiedenis", "economische geschiedenis", "costume"). Distinct from `subject` (Iconclass) and depicted persons/places — themes group works around collection-level narratives. ~7% of artworks have at least one theme; most labels are Dutch (~17% have curated English labels). | `"overzeese geschiedenis"` |
+| `sourceType` | string **[]** | Source-channel classification reflecting the cataloguing source (distinct from `type`, which uses Linked Art object-classification vocabulary). 6 values: `designs` (90K), `drawings` (49K), `paintings` (46K), `prints (visual works)` (19K), `sculpture (visual works)` (5K), `photographs` (3K). | `"paintings"` |
 
 ### Collection
 
@@ -100,9 +100,10 @@ BM25-ranked search on FTS5 indexes. Exact word matching, no stemming (except `su
 | `query` | string | Alias for `title`. Provided as a convenience for exploratory queries. When both are provided, `title` takes precedence. | `"Night Watch"` |
 | `description` | string | Cataloguer descriptions (~510K artworks, 61% coverage). Compositional details, motifs, condition notes, attribution remarks. Dutch-language. | `"zwart krijt"` |
 | `inscription` | string | Inscription texts (~500K artworks). Signatures, mottoes, dates on the object surface. | `"fecit"`, `"Rembrandt f."` |
-| `provenance` | string | Ownership history (~48K artworks). Auction records, dealer transactions, collection transfers. Coverage weighted toward paintings and major works. | `"Napoleon"`, `"Goudstikker"` |
 | `creditLine` | string | Credit/donor lines (~358K artworks). Acquisition mode — purchase, bequest, gift, loan. | `"Drucker"`, `"purchase"` |
 | `curatorialNarrative` | string | Curatorial wall text (~14K artworks). Art-historical interpretation written by museum curators — distinct from `description`. | `"civic guard"` |
+
+Ownership-history text is no longer searched from `search_artwork` — use the dedicated [`search_provenance`](mcp-tool-parameters.md#search_provenance) tool, which queries the parsed event/period structures with party-, transfer-type-, date-, location-, and price-based filters.
 
 ---
 
@@ -117,7 +118,9 @@ Direct filters on artwork table columns, JOIN-based demographic filters, and spa
 | `creationDate` | string | Creation date. ~628K artworks with dates (3000 BCE–2025). Exact year or wildcard. | `"1642"`, `"16*"`, `"164*"` |
 | `dateMatch` | string | How `creationDate` matches artwork date ranges. `"overlaps"` (default): artwork range overlaps query range — inclusive, but broadly-dated objects appear in multiple bins. `"within"`: artwork range falls entirely within query range — exclusive bins, but drops ~43% of collection with ranges >1 decade. `"midpoint"`: assigns each artwork to one bin by midpoint — every object counted exactly once. Best for statistical comparisons. | `"midpoint"` |
 | `imageAvailable` | boolean | When `true`, only artworks with a digital image (~728K artworks). *Modifier.* | `true` |
-| `hasProvenance` | boolean | When `true`, only artworks with parsed provenance records (~48.5K of 833K). *Modifier.* | `true` |
+| `hasProvenance` | boolean | When `true`, only artworks with parsed provenance records (~48.5K of 834K). *Modifier.* | `true` |
+| `modifiedAfter` | string | ISO 8601 date — only records whose catalogue entry was last modified at or after this date. Powers "what changed since YYYY-MM-DD?" without OAI-PMH resumption tokens; combinable with any other filter. *Modifier.* | `"2024-01-01"` |
+| `modifiedBefore` | string | ISO 8601 date — only records whose catalogue entry was last modified at or before this date. *Modifier.* | `"2025-12-31"` |
 
 ### Dimensions
 
@@ -129,16 +132,6 @@ All values in centimeters.
 | `maxHeight` | number | Maximum height. | `50` |
 | `minWidth` | number | Minimum width. | `300` |
 | `maxWidth` | number | Maximum width. | `40` |
-
-### Creator demographics
-
-Based on enrichment data from Rijksmuseum actor authority files (~49K with life dates, ~64K with gender). *Modifiers* — cannot be the sole filter.
-
-| Parameter | Type | Description | Example |
-|-----------|------|-------------|---------|
-| `creatorGender` | string | Creator gender: "male" or "female". | `"female"` |
-| `creatorBornAfter` | integer | Creators born in or after this year. Combine with `creatorBornBefore` for a range. | `1800` |
-| `creatorBornBefore` | integer | Creators born in or before this year. | `1900` |
 
 ### Geographic proximity
 
@@ -155,7 +148,7 @@ Searches both depicted and production places within the specified radius, using 
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `expandPlaceHierarchy` | boolean | Expand place filters (`productionPlace`, `depictedPlace`, `birthPlace`, `deathPlace`) to include sub-places in the administrative hierarchy, up to 3 levels deep. E.g. `productionPlace: "Netherlands"` includes Amsterdam, Delft, etc. *Modifier.* | `true` |
+| `expandPlaceHierarchy` | boolean | Expand place filters (`productionPlace`, `depictedPlace`) to include sub-places in the administrative hierarchy, up to 3 levels deep. E.g. `productionPlace: "Netherlands"` includes Amsterdam, Delft, etc. *Modifier.* | `true` |
 
 ---
 
@@ -168,8 +161,12 @@ Not filters — these control how results are returned.
 | `maxResults` | integer | 25 | Maximum results (1–50). All results include full metadata unless `compact` is true. |
 | `offset` | integer | 0 | Skip this many results (for pagination). Use with `maxResults`. |
 | `compact` | boolean | `false` | Returns only total count and object IDs without resolving metadata (faster for counting). |
-| `facets` | boolean or string[] | — | Compute facet counts when results are truncated. Pass `true` for all dimensions, or an array of specific dimension names. Available dimensions: `type`, `material`, `technique`, `century`, `creatorGender`, `rights`, `imageAvailable`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`. Dimensions already filtered on are excluded automatically. |
+| `facets` | boolean or string[] | — | Compute facet counts when results are truncated. Pass `true` for all dimensions, or an array of specific dimension names. Available dimensions: `type`, `material`, `technique`, `century`, `rights`, `imageAvailable`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `theme`, `sourceType`. Dimensions already filtered on are excluded automatically. |
 | `facetLimit` | integer | 5 | Maximum entries per facet dimension (1–50). |
+| `groupBy` | string | — | Set to `parent` to collapse component records under their parent (sketchbook folios, album leaves, print-series sheets). Children whose parent is also a hit are dropped; the parent gains a `groupedChildCount`. Children whose parent isn't a hit remain in the result. |
+| `sortBy` | string | — | Order results by a column instead of relevance/importance. Values: `height` / `width` (cm), `dateEarliest` / `dateLatest` (year), `recordModified` (ISO date). Overrides BM25 and geo-proximity ordering when set; tie-broken by `art_id`. Cannot be used alone — needs at least one substantive filter. |
+| `sortOrder` | string | `desc` | Sort direction when `sortBy` is set: `asc` or `desc`. NULLs always sort last regardless of direction. |
+| `pageToken` | string | — | Opaque continuation token returned by a previous response (used for stable deep pagination on sorted queries). |
 
 ---
 
@@ -192,4 +189,4 @@ Fields are concatenated as `[Title] ... [Inscriptions] ... [Description] ... [Na
 
 ## Artwork detail fields
 
-`get_artwork_details` returns [24 metadata categories](metadata-categories.md) per artwork, plus summary fields (`id`, `title`, `creator`, `date`, `url`). Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters — see the [metadata categories reference](metadata-categories.md) for the full list, including a table of search-only filters that have no corresponding return field.
+`get_artwork_details` returns the [full metadata category reference](metadata-categories.md) per artwork, plus summary fields (`id`, `title`, `creator`, `date`, `url`). Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters — see the [metadata categories reference](metadata-categories.md) for the full list, including a table of search-only filters that have no corresponding return field.

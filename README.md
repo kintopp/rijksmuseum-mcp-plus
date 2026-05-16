@@ -106,7 +106,7 @@ flowchart LR
 
     AI <-->|"MCP tool calls
     (agentic loop)"| Server["rijksmuseum-mcp+
-    13 tools"]
+    15 tools"]
 
     Server --> Search["Search & Discovery
     structured filters,
@@ -165,12 +165,10 @@ Soon:
 
 - fix bugs and fine-tune queries and tool descriptions
 - update README and other documentation
-- add full support for additional MCP clients (e.g. ChatGPT, Goose)
+- add support for more MCP clients (e.g. ChatGPT)
 
 Later:
 
-- improve the `description` signal for find_similar (e.g. via LLM re-ranker)
-- investigate image histogram or index colour signals for find_similar
 - paper/presentation
 
 Maybe:
@@ -178,10 +176,11 @@ Maybe:
 - implement incremental metadata updates via the LDES endpoint
 - implement incremental updates of the vector embeddings database
 - investigate new bibliographic SRU MCP server (rijksmuseum-biblio-mcp)
-- investigate separate windows for chat and image viewer
 - investigate incorporating historical exhibition data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - add support for inferred geolocation data
+- improve the `description` signal for find_similar (e.g. via LLM re-ranker)
+- investigate image histogram or index colour signals for find_similar
 
 ## Authors
 
@@ -193,7 +192,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
 
 **APA (7th ed.)**
 
-> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.24.0) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
+> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.30.0) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
 
 **BibTeX**
 ```bibtex
@@ -201,7 +200,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
   author    = {Bosse, Arno},
   title     = {{rijksmuseum-mcp+}},
   year      = {2026},
-  version   = {0.24.0},
+  version   = {0.30.0},
   publisher = {Research and Infrastructure Support (RISE), University of Basel},
   url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
   orcid     = {0000-0003-3681-1289},

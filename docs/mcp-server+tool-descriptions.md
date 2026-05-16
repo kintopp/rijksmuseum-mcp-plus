@@ -36,7 +36,7 @@ Ranking: relevance (BM25) when text search (description, title, etc.) or geograp
 
 At least one filter is required. There is no full-text search across all metadata. For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), ALWAYS start with subject — it searches ~832K artworks tagged with structured Iconclass vocabulary and has by far the highest recall for conceptual queries. Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. For broader concept discovery beyond structured vocabulary, use semantic_search — but combine it with search_artwork(type: 'painting', …) for painting queries since paintings are underrepresented there.
 
-Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; do not open the viewer for list/count/summary requests). All parameters combine freely. Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt'). v0.27 added theme, sourceType, modifiedAfter, modifiedBefore filters; removed the per-tool provenance text filter and 6 demographic creator filters (use search_persons → creator: <vocabId> instead).
+Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; do not open the viewer for list/count/summary requests). All parameters combine freely. Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt'). Creator-demographic queries (gender, born/died, profession, birth/death place) go through `search_persons` → feed the returned vocabId into `creator` here.
 
 ### 2. `search_persons`
 
@@ -44,7 +44,7 @@ Use when the user has a demographic or structural query about persons (artists, 
 
 Not for free-text concept queries — use semantic_search. Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.
 
-By default restricts to persons with ≥1 artwork in the collection (~60K of ~290K). Coverage note (v0.27): demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB; on a freshly harvested DB without person enrichment they return zero rows. Name search and structural filters (birthPlace / deathPlace / profession) work on any harvest.
+By default restricts to persons with ≥1 artwork in the collection (~60K of ~290K). Coverage note: demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB; on a freshly harvested DB without person enrichment they return zero rows. Name search and structural filters (birthPlace / deathPlace / profession) work on any harvest.
 
 ### 3. `get_artwork_details`
 
@@ -113,7 +113,7 @@ Use when you want to discover curated collection sets (193 total) ranging from s
 
 ### 10. `browse_set`
 
-Use when you have a setSpec (from list_curated_sets) and want to enumerate its member artworks. DB-backed since v0.27 (~600× faster than the prior OAI-PMH path; warm calls in tens of ms). Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. Supports pagination via resumptionToken (stateless base64; not portable across pre-v0.27 deploys). Not for set discovery — use list_curated_sets first.
+Use when you have a setSpec (from list_curated_sets) and want to enumerate its member artworks. DB-backed (~600× faster than the legacy OAI-PMH path; warm calls in tens of ms). Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. Supports pagination via a stateless base64 resumptionToken. Not for set discovery — use list_curated_sets first.
 
 ### 11. `get_recent_changes`
 
@@ -123,7 +123,7 @@ Use when you need OAI-PMH delta semantics specifically — tracking what changed
 
 Use when the user has a provenance question — ownership history, collectors, sales, inheritances, gifts, confiscations, restitutions, or a search across the parsed provenance corpus (~48K artworks with structured records). Returns full provenance chains grouped by artwork, with matching events flagged.
 
-Not for catalogue keyword search — use search_artwork. Not for aggregate provenance counts — use collection_stats with provenance dimensions/filters. v0.27 added periodLocation (period-level location filter, preferred over location at layer='periods' for clarity).
+Not for catalogue keyword search — use search_artwork. Not for aggregate provenance counts — use collection_stats with provenance dimensions/filters. periodLocation is a period-level location filter, preferred over location at layer='periods' for clarity.
 
 Each chain tells the complete ownership story: collectors, sales, inheritances, gifts, confiscations, and restitutions, with dates, locations, prices, and citations.
 
@@ -137,23 +137,23 @@ Every record carries provenance-of-provenance metadata: parseMethod shows how th
 
 IMPORTANT: When results contain LLM-enriched records, the response text ends with a REVIEW_URL or REVIEW_FILE line. You MUST copy this URL or file path verbatim into your response as a clickable link or openable path. Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). The user cannot see tool output — if you do not include the path, they have no way to find the review page.
 
-Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable; raw-text full-text search across provenance was removed in v0.27. For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). At least one filter is required.
+Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable. For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). At least one filter is required.
 
 ### 13. `collection_stats`
 
-Use when the user wants aggregate counts, percentages, or distributions across the collection (one call instead of search_artwork(compact=true) loops). Returns formatted text tables — no structured output schema. Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.
+Use when the user wants aggregate counts, percentages, or distributions across the collection (one call instead of search_artwork(compact=true) loops). Returns formatted text tables plus a structured payload that mirrors the same data (denominator/grouping/coverage semantics disclosed in the schema). Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.
 
 Examples:
 - "What types of artworks have provenance?" → dimension='type', hasProvenance=true
 - "Transfer type distribution for Rembrandt" → dimension='transferType', creator='Rembrandt'
 - "Top 20 depicted persons" → dimension='depictedPerson', topN=20
-- "Sales by decade 1600–1900" → dimension='provenanceDecade', transferType='sale', dateFrom=1600, dateTo=1900
+- "Sales by decade 1600–1900" → dimension='provenanceDecade', transferType='sale', provenanceDateFrom=1600, provenanceDateTo=1900
 - "How many artworks have LLM-mediated interpretations?" → dimension='categoryMethod'
 
 Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width, theme (thematic vocab — labels in NL until #300 backfill), sourceType (cataloguing-channel taxonomy — 6 values), exhibition (top exhibitions by member count), decadeModified (record_modified bucketed by decade, clamped to 1990–2030).
 Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, currency, categoryMethod, positionMethod, parseMethod.
 
-Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters further restrict to artworks matching those provenance criteria. For demographic-filtered counts (e.g. female artists by century), first run search_persons to get vocab IDs, then pass them as creator here.
+Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters further restrict to artworks matching those provenance criteria. Provenance event-level filters (transferType + provenanceLocation + provenanceDateFrom/To + categoryMethod) compose on the same event row; party-level filters (party + positionMethod) compose on the same party row. For demographic-filtered counts (e.g. female artists by century), first run search_persons to get vocab IDs, then pass them as creator here.
 
 ### 14. `find_similar`
 

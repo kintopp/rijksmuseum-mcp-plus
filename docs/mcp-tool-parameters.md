@@ -26,15 +26,13 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 | `description` | Full-text search on cataloguer descriptions (~510K artworks) |
 | `curatorialNarrative` | Full-text search on museum wall text (~14K artworks) |
 | `inscription` | Full-text search on inscription texts (signatures, mottoes, dates on objects) |
-| `provenance` | Full-text search on provenance/ownership history |
 | `creditLine` | Full-text search on credit/donor lines |
 | `depictedPerson` | Artworks depicting a named person |
 | `depictedPlace` | Artworks depicting a named place |
 | `productionPlace` | Place where the work was made |
-| `birthPlace` | Artist's birth place |
-| `deathPlace` | Artist's death place |
-| `profession` | Artist's profession: `painter`, `draughtsman`, `sculptor`, etc. |
 | `productionRole` | e.g. `painter`, `printmaker`, `attributed to` |
+| `theme` | Curatorial thematic tag (e.g. `overzeese geschiedenis`, `costume`). Distinct from `subject`/Iconclass. ~7% coverage, mostly Dutch labels. |
+| `sourceType` | Source-channel classification (6 values: `designs`, `drawings`, `paintings`, `prints (visual works)`, `sculpture (visual works)`, `photographs`). Distinct from `type`. |
 | `collectionSet` | Named curated collection set (use `list_curated_sets` to discover) |
 | `license` | Rights filter: `publicdomain`, `zero` (CC0), `by` (CC BY) |
 
@@ -46,18 +44,17 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 | `minHeight` | Minimum height in cm |
 | `maxHeight` | Maximum height in cm |
 
-### Creator demographic filters
+### Attribution filter
 | Parameter | Description |
 |---|---|
-| `creatorGender` | Filter by creator gender: `male` or `female` (~64K of ~76K person entries have gender data) |
-| `creatorBornAfter` | Filter to creators born in or after this year, e.g. `1800` (~49K person entries have birth year data) |
-| `creatorBornBefore` | Filter to creators born in or before this year, e.g. `1700`. Combine with `creatorBornAfter` for a range |
-| `attributionQualifier` | Filter by attribution qualifier: `primary`, `attributed to`, `workshop of`, `circle of`, `follower of`, `secondary`, `undetermined` |
+| `attributionQualifier` | Filter by attribution qualifier (13 values, ordered by frequency): `primary`, `undetermined`, `after`, `secondary`, `possibly`, `attributed to`, `circle of`, `workshop of`, `copyist of`, `manner of`, `follower of`, `falsification`, `free-form`. Combine with `creator` to narrow attribution. |
+
+> Demographic person filters (gender, birth/death year, birth/death place, profession) live on the [`search_persons`](#search_persons) tool — feed the returned vocab IDs into `creator` here.
 
 ### Place and proximity filters
 | Parameter | Description |
 |---|---|
-| `expandPlaceHierarchy` | When `true`, place searches (`productionPlace`, `depictedPlace`, `birthPlace`, `deathPlace`) expand to include sub-places. E.g. `productionPlace: 'Netherlands'` includes Amsterdam, Delft, etc. (up to 3 levels) |
+| `expandPlaceHierarchy` | When `true`, place searches (`productionPlace`, `depictedPlace`) expand to include sub-places. E.g. `productionPlace: 'Netherlands'` includes Amsterdam, Delft, etc. (up to 3 levels) |
 | `nearPlace` | Proximity search by place name |
 | `nearLat` / `nearLon` | Proximity search by coordinates |
 | `nearPlaceRadius` | Radius in km for proximity search (default 25) |
@@ -67,12 +64,41 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 |---|---|
 | `aboutActor` | Artworks about a person — broader recall than `depictedPerson`, searches both subject and creator vocabulary |
 | `imageAvailable` | `true` to return only works with a digital image |
-| `hasProvenance` | `true` to return only works with parsed provenance records (~48.5K of 833K) |
+| `hasProvenance` | `true` to return only works with parsed provenance records (~48.5K of 834K) |
+| `modifiedAfter` | ISO 8601 date — only records modified at or after this date (e.g. `2024-01-01`). Combine with any other filter to ask "what changed since …?" |
+| `modifiedBefore` | ISO 8601 date — only records modified at or before this date |
+
+### Output controls
+| Parameter | Description |
+|---|---|
 | `maxResults` | 1–50 (default 25) |
 | `offset` | Skip this many results (for pagination) |
 | `compact` | `true` returns IDs only without full metadata (faster) |
-| `facets` | `true` for all facet dimensions, or an array of specific dimensions to compute |
+| `facets` | `true` for all facet dimensions, or an array of specific dimensions to compute. Available: `type`, `material`, `technique`, `century`, `rights`, `imageAvailable`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `theme`, `sourceType` |
 | `facetLimit` | Maximum entries per facet dimension (1–50, default 5) |
+| `groupBy` | Set to `parent` to collapse component records (sketchbook folios, album leaves, print-series sheets) under their parent. Parent gains `groupedChildCount`. |
+| `sortBy` | Order by a column instead of relevance/importance: `height`, `width`, `dateEarliest`, `dateLatest`, `recordModified`. Overrides BM25/geo ordering when set; tie-broken by `art_id`. |
+| `sortOrder` | `asc` or `desc` (default `desc`). NULLs always sort last. |
+| `pageToken` | Opaque continuation token from a previous response (stable deep pagination on sorted queries) |
+
+---
+
+## search_persons
+
+Search the ~290K person + ~12K group authority records by name (~700K name variants), demographic (gender, birth/death year) or structural (birth/death place, profession) criteria. Returns vocab IDs to feed into `search_artwork({creator: <vocabId>})` for works *by* them, or `search_artwork({aboutActor: <name>})` for works *depicting* them.
+
+| Parameter | Description |
+|---|---|
+| `name` | Phrase or token match against ~700K name variants. Tries exact phrase first, then token AND with stop-word stripping. |
+| `gender` | Categorical: `female`, `male`, or other normalised values. Returns 0 rows if person enrichment is absent on the DB. |
+| `bornAfter` | Birth year ≥ this value (integer) |
+| `bornBefore` | Birth year ≤ this value (integer) |
+| `birthPlace` | Place name (string or array, AND-combined). Resolved by pivot through creator-mapped artworks. |
+| `deathPlace` | Place name (string or array, AND-combined) |
+| `profession` | Profession (e.g. `painter`, `engraver`; string or array, AND-combined) |
+| `hasArtworks` | Restrict to persons appearing as creator on ≥1 artwork. Default `true`. |
+| `maxResults` | 1–100 (default 25) |
+| `offset` | Skip this many results (for pagination) |
 
 ---
 
@@ -104,38 +130,49 @@ Natural language / concept-based search. Best for atmospheric, thematic, or art-
 
 ## collection_stats
 
-Aggregate statistics, counts, and distributions across the collection. Returns formatted text tables.
+Aggregate statistics, counts, and distributions across the collection. Returns text tables plus a structured payload (denominator/grouping/coverage semantics disclosed in the output schema). Artwork filters and provenance filters combine freely; event-level provenance filters compose on the same event row, party-level filters on the same party row.
 
+### Core
 | Parameter | Description |
 |---|---|
-| `dimension` | What to count/group by. Artwork: `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `century`, `decade`, `height`, `width`. Provenance: `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod` |
+| `dimension` | What to count/group by. **Artwork:** `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `century`, `decade`, `height`, `width`, `theme`, `sourceType`, `exhibition`, `decadeModified` (record_modified bucketed by decade, clamped 1990–2030). **Provenance:** `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod`. |
 | `topN` | Maximum entries to return (1–500, default 25) |
 | `offset` | Skip this many entries (for pagination) |
-| `binWidth` | Bin width for decade dimensions (default 10; use 50 or 100 for half-centuries or centuries) |
+| `binWidth` | Bin width for binned dimensions. Unit follows the dimension's natural unit: years for `decade`/`provenanceDecade` (default 10), centimeters for `height`/`width` (default 10). `century` is hardcoded to 100-year buckets; `decadeModified` is hardcoded to 10-year buckets. |
+| `sortBy` | Override the dimension's default ordering: `count` (desc) or `label` (asc). Echoed back as `ordering` in structured output. |
+
+### Artwork filters
+| Parameter | Description |
+|---|---|
 | `type` | Filter to artworks of this type |
 | `material` | Filter by material |
 | `technique` | Filter by technique |
 | `creator` | Filter by creator (partial match) |
-| `productionPlace` | Filter by production place (partial match) |
+| `productionPlace` | Filter by production place (partial match). Areal places (continents/oceans/empires) are excluded from depictedPlace/productionPlace rollups. |
 | `depictedPerson` | Filter by depicted person (partial match) |
 | `depictedPlace` | Filter by depicted place (partial match) |
 | `subject` | Filter by subject (partial match on Iconclass labels) |
 | `iconclass` | Filter by exact Iconclass notation code (e.g. `73D82`) |
 | `collectionSet` | Filter by curated set name (partial match) |
-| `creatorGender` | Filter by creator gender: `male` or `female` |
-| `creatorBornAfter` | Filter to creators born in or after this year |
-| `creatorBornBefore` | Filter to creators born in or before this year |
+| `theme` | Filter by curatorial thematic tag (partial match) |
+| `sourceType` | Filter by source-channel taxonomy (e.g. `designs`, `paintings`, `prints (visual works)`) |
 | `imageAvailable` | Restrict to artworks with a digital image |
-| `creationDateFrom` | Earliest creation year |
-| `creationDateTo` | Latest creation year |
-| `hasProvenance` | Restrict to artworks with provenance records |
-| `transferType` | Filter by provenance transfer type |
-| `location` | Filter by provenance location (partial match) |
-| `party` | Filter by party/collector (partial match) |
-| `dateFrom` | Earliest provenance event year |
-| `dateTo` | Latest provenance event year |
-| `categoryMethod` | Filter by category method |
-| `positionMethod` | Filter by position method |
+| `creationDateFrom` | Earliest creation year (inclusive) |
+| `creationDateTo` | Latest creation year (inclusive) |
+
+### Provenance filters
+| Parameter | Description |
+|---|---|
+| `hasProvenance` | Restrict to artworks with provenance records (~48K of 834K) |
+| `transferType` | [events] Filter to artworks with at least one provenance event of this transfer type |
+| `provenanceLocation` | [events] Filter by provenance event location (partial match) |
+| `party` | [parties] Filter to artworks involving this party/collector (partial match) |
+| `provenanceDateFrom` | [events] Earliest provenance event year (inclusive) |
+| `provenanceDateTo` | [events] Latest provenance event year (inclusive) |
+| `categoryMethod` | [events] Filter by category method (e.g. `llm_enrichment`) |
+| `positionMethod` | [parties] Filter by position method (e.g. `llm_enrichment`). When combined with `party`, both filters must hold on the same party row. |
+
+> Demographic-filtered counts (e.g. female artists by century) go through [`search_persons`](#search_persons) first to resolve vocab IDs; pass the IDs as `creator` here.
 
 ---
 
@@ -169,6 +206,7 @@ Search ownership and provenance history across ~48K artworks with parsed provena
 |---|---|
 | `ownerName` | Owner name (partial match) |
 | `acquisitionMethod` | Acquisition method (exact match) |
+| `periodLocation` | Place name on the ownership-period record (45% populated). Preferred over `location` when scoping a periods-layer query — distinguishable from event-level location. AND-combined with `location` when both are supplied. |
 | `minDuration` | Minimum ownership years |
 | `maxDuration` | Maximum ownership years |
 
@@ -213,11 +251,12 @@ Fetch an artwork image or region as base64 for direct visual analysis by the LLM
 | Parameter | Description |
 |---|---|
 | `objectNumber` | Object identifier, e.g. `SK-C-5` |
-| `region` | IIIF region: `full` (default), `square`, `pct:x,y,w,h` (percentage), or `x,y,w,h` (pixels) |
-| `size` | Width of returned image in pixels (200–2000, default 1200) |
+| `region` | IIIF region: `full` (default), `square`, `pct:x,y,w,h` (percentage), `crop_pixels:x,y,w,h` (pixels of the full image; use with `nativeWidth`/`nativeHeight` from a prior response), or `x,y,w,h` (legacy IIIF pixels) |
+| `size` | Width of returned image in pixels (200–2016, default 1568). Defaults align to multiples of 28 for clean LLM coordinate handling (1568 = Sonnet 4.6's native cap; 2016 = max for Opus 4.7 per-image token budget). |
 | `rotation` | Clockwise rotation: `0`, `90`, `180`, or `270` |
 | `quality` | `default` or `gray` (can help read inscriptions) |
 | `navigateViewer` | Auto-navigate open viewer to inspected region (default `true`) |
+| `show_overlays` | Composite active-viewer overlays onto the returned crop (default `false`; response width is clamped to 448 px when enabled) |
 | `viewUUID` | Target a specific viewer session (auto-discovered when omitted) |
 
 ---
@@ -251,9 +290,15 @@ Find artworks similar to a given artwork across multiple signals (feature-gated 
 
 ## list_curated_sets
 
+Discover curated collection sets (193 total). Results carry `memberCount`, top `dominantTypes`, top `dominantCenturies`, and a `category` heuristic (`object_type` / `iconographic` / `album` / `sub_collection` / `umbrella`).
+
 | Parameter | Description |
 |---|---|
 | `query` | Filter sets by name (case-insensitive substring match) |
+| `sortBy` | `name` (alphabetical, default), `size` (smallest first), `size_desc` (largest first) |
+| `minMembers` | Filter to sets with at least this many members |
+| `maxMembers` | Filter to sets with at most this many members. Use ~100,000 to exclude umbrella sets like "Alle gepubliceerde objecten" (834K) and "Entire Public Domain Set" (732K). |
+| `includeStats` | Include `memberCount`/`dominantTypes`/`dominantCenturies`/`category` (default `true`). Set `false` for the lightweight legacy shape. |
 
 ---
 
