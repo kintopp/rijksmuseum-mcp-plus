@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.32"
-  last_updated: "2026-05-14"
+  version: "0.33"
+  last_updated: "2026-05-16"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -191,7 +191,7 @@ collection_stats(dimension="type", creator="Rembrandt van Rijn")
 # → painting 314 (38.2%), print 289 (35.2%), drawing 218 (26.5%)
 
 # Cross-domain: what types of artworks have provenance events in Amsterdam?
-collection_stats(dimension="type", hasProvenance=true, location="Amsterdam")
+collection_stats(dimension="type", hasProvenance=true, provenanceLocation="Amsterdam")
 
 # Top 30 depicted persons
 collection_stats(dimension="depictedPerson", topN=30)
@@ -218,6 +218,8 @@ Use `compact: true` on `search_artwork` only when you need the actual object num
 | Artwork    | `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `sourceType`, `theme`, `exhibition`, `century`, `decade`, `decadeModified`, `height`, `width`                         |
 | Provenance | `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod`                                                   |
 
+
+`decadeModified` is clamped to 1990–2030; records modified outside that window land in the coverage residual rather than a bucket. Pass `sortBy: "count"` to flip ordinal dimensions (`decade`, `height`, `width`, etc.) from natural-order to most-populous-first.
 
 Filters from both domains combine freely; one call replaces N iterations. For gender breakdowns (no `creatorGender` dimension exists) run `search_persons` first, then pass vocab IDs to `collection_stats(creator=…)`.
 

@@ -4,10 +4,6 @@ Reference material for `search_provenance`. Consult this file when you need to
 interpret raw provenance text, understand the data model, or construct
 specialised query patterns beyond the examples in the main skill.
 
-> **v0.3.0 audit status (2026-05-03):** the CMOA/AAM data model is unchanged. Coverage counts re-derived from the v0.27-RC1 vocab DB (~360K artworks with `creditLine` vs ~49K with parsed provenance). `parseMethod` shares re-confirmed (peg 80.1% / cross_ref 19.6% / llm_structural 0.2% / credit_line 0.1%). Audit-trail vocabulary cross-reference added. Items still flagged for live spot-tests:
-> - **`hasGap` + `dateFrom`/`dateTo` interaction** — verify artwork-level vs event-level filtering described under "Wartime provenance".
-> - **`transferType=["by_descent","widowhood"]` + `layer="periods"`** — verify end-to-end parse against current `search_provenance` implementation.
-
 ## Contents
 
 1. [Provenance Text Format (AAM Standard)](#provenance-text-format-aam-standard)
@@ -120,10 +116,9 @@ tracks how each party's position was determined: `role_mapping` (deterministic),
 `llm_enrichment` (LLM-classified), `llm_structural` (LLM resolved from event
 structure), or `llm_disambiguation` (LLM-resolved merged party text).
 
-Coverage: ~90K parties across ~100K events. Not all events have named parties —
-bare-name `collection` events and cross-references often lack structured party
-data. (Spot-checked 2026-05-03 against the v0.27-RC1 DB: ~49K artworks have at
-least one parsed provenance event.)
+Coverage: ~90K parties across ~100K events, ~49K artworks with at least one
+parsed provenance event. Not all events have named parties — bare-name
+`collection` events and cross-references often lack structured party data.
 
 ---
 
@@ -181,8 +176,8 @@ The four fields above (`parseMethod`, `categoryMethod`, `positionMethod`,
 `enrichmentReasoning`) are **event-level** audit metadata — they record how
 each parsed provenance event was produced.
 
-In v0.27 the vocabulary DB also carries an **entity-level** 3-tier audit
-vocabulary that runs alongside this:
+The vocabulary DB also carries an **entity-level** 3-tier audit vocabulary
+that runs alongside this:
 
 | Tier | Meaning |
 |------|---------|
@@ -214,6 +209,12 @@ search_provenance(positionMethod="llm_disambiguation", maxResults=10)
 # → artworks where merged party text was decomposed by LLM (low hundreds of splits)
 ```
 
+Combining `party` with `positionMethod` enforces same-row matching: both
+filters must hold on the *same* party of the *same* event, not just somewhere
+in the artwork's chain. A query like `party="Bredius", positionMethod="llm_enrichment"`
+returns events where Bredius himself was llm-enriched, not events where some
+other party on the same event happened to be llm-enriched.
+
 For collection-wide distribution of methods:
 ```python
 collection_stats(dimension="categoryMethod")
@@ -227,17 +228,17 @@ collection_stats(dimension="parseMethod")
 
 The `parseMethod` field records how each provenance record was processed:
 
-| Value | Share (v0.27-RC1) | Description |
-|-------|-------------------|-------------|
-| `peg` | 80.1% | PEG grammar parser — highest confidence |
-| `cross_ref` | 19.6% | Cross-reference links |
-| `llm_structural` | 0.2% | LLM-resolved structural cases the PEG grammar could not parse |
-| `credit_line` | 0.1% | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
+| Value | Share | Description |
+|-------|-------|-------------|
+| `peg` | ~80% | PEG grammar parser — highest confidence |
+| `cross_ref` | ~20% | Cross-reference links |
+| `llm_structural` | <1% | LLM-resolved structural cases the PEG grammar could not parse |
+| `credit_line` | <1% | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
 | `regex_fallback` | — | Legacy, currently unused |
 
 `credit_line` events are particularly useful: they recover acquisition context
-(donor name, purchase fund) that the provenance text omits. Re-derive these
-shares any time after a new harvest with `collection_stats(dimension="parseMethod")`.
+(donor name, purchase fund) that the provenance text omits. Re-derive current
+shares with `collection_stats(dimension="parseMethod")`.
 
 ---
 
@@ -291,7 +292,6 @@ search_provenance(layer="periods", ownerName="Six",
 
 ```python
 # creditLine covers ~360K artworks — far more than parsed provenance (~49K).
-# (Recounted 2026-05-03 against the v0.27-RC1 DB.)
 # Use it to profile how the museum acquired works from a donor or fund
 search_artwork(creditLine="Drucker-Fraser", compact=true)
 search_artwork(creditLine="Vereniging Rembrandt", type="painting", compact=true)
@@ -308,8 +308,6 @@ search_provenance(transferType="confiscation",
 # Note: hasGap is artwork-level (any gap anywhere in the chain);
 # dateFrom/dateTo filters on event date_year. The gap itself may fall
 # outside the target range — always inspect the returned chain to confirm.
-# ⚠ TODO (v0.3.0 audit): re-validate the artwork-level vs event-level
-# semantics against the current search_provenance implementation.
 search_provenance(hasGap=true, creator="Rembrandt",
                   dateFrom=1933, dateTo=1945, maxResults=20)
 
@@ -334,10 +332,8 @@ search_provenance(objectNumber="SK-A-2344", layer="events")
 ### Multi-generation family collections
 
 ```python
-# ⚠ TODO (v0.3.0 audit): verify that transferType arrays still parse end-to-end
-# against the current search_provenance with layer="periods". (Period rows don't
-# carry transfer_type directly — the filter applies to the period's acquisition
-# event.)
+# transferType on layer="periods" applies to the period's acquisition event
+# (period rows don't carry transfer_type directly).
 search_provenance(transferType=["by_descent", "widowhood"],
                   layer="periods", minDuration=50,
                   sortBy="duration", sortOrder="desc", maxResults=20)
@@ -358,14 +354,14 @@ Use `collection_stats` for single-call time series — no manual pagination loop
 ```python
 # Sale events per decade 1600–1900
 collection_stats(dimension="provenanceDecade", transferType="sale",
-                 dateFrom=1600, dateTo=1900)
+                 provenanceDateFrom=1600, provenanceDateTo=1900)
 # → 1600s  234  (3.2%)
 #   1610s  456  (6.1%)
 #   ...
 
 # Half-century bins
 collection_stats(dimension="provenanceDecade", transferType="sale",
-                 dateFrom=1600, dateTo=1900, binWidth=50)
+                 provenanceDateFrom=1600, provenanceDateTo=1900, binWidth=50)
 
 # Confiscation events by decade (wartime distribution)
 collection_stats(dimension="provenanceDecade", transferType="confiscation")

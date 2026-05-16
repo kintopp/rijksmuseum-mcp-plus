@@ -799,7 +799,7 @@ const ArtworkDetailOutput = {
   collectionSets: z.array(z.string()),
   externalIds: z.object({
     handle: z.string().nullable().describe("Persistent handle URI (hdl.handle.net)."),
-    other: z.array(z.string()).describe("Non-handle external IDs (rare — 14 rows DB-wide as of v0.26)."),
+    other: z.array(z.string()).describe("Non-handle external IDs (rare — handful of rows DB-wide)."),
   }),
   // Enriched Group A
   titles: z.array(z.object({
@@ -1302,8 +1302,7 @@ function registerTools(
         (vocabAvailable
           ? " All parameters combine freely. Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. " +
-            "Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt'). " +
-            "v0.27 added theme, sourceType, modifiedAfter, modifiedBefore filters; removed the per-tool provenance text filter and 6 demographic creator filters (use search_persons → creator: <vocabId> instead)."
+            "Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt')."
           : ""),
       inputSchema: z.object({
         query: optStr()
@@ -1779,7 +1778,7 @@ function registerTools(
           "Not for free-text concept queries — use semantic_search. " +
           "Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.\n\n" +
           "By default restricts to persons with ≥1 artwork in the collection (~60K of ~290K). " +
-          "Coverage note (v0.27): demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB; " +
+          "Coverage note: demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB; " +
           "on a freshly harvested DB without person enrichment they return zero rows. Name search and structural filters (birthPlace / deathPlace / profession) work on any harvest.",
         inputSchema: z.object({
           name: optMinStr().optional()
@@ -2785,10 +2784,10 @@ function registerTools(
       annotations: ANN_READ_CLOSED,
       description:
         "Use when you have a setSpec (from list_curated_sets) and want to enumerate its member artworks. " +
-        "DB-backed since v0.27 (~600× faster than the prior OAI-PMH path; warm calls in tens of ms). " +
+        "DB-backed (warm calls in tens of ms). " +
         "Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. " +
         "For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. " +
-        "Supports pagination via resumptionToken (stateless base64; not portable across pre-v0.27 deploys). " +
+        "Supports pagination via resumptionToken (stateless base64; not portable across server upgrades). " +
         "Not for set discovery — use list_curated_sets first.",
       inputSchema: z.object({
         setSpec: optStr()
@@ -2822,7 +2821,7 @@ function registerTools(
         const decoded = decodeBrowseSetToken(args.resumptionToken);
         if (!decoded) {
           return errorResponse(
-            "Invalid resumptionToken. Tokens are not portable across server restarts or pre-v0.27 → v0.27 upgrades. " +
+            "Invalid resumptionToken. Tokens are not portable across server restarts or upgrades. " +
             "Re-issue the original setSpec call to get a fresh token.",
           );
         }
@@ -3050,7 +3049,7 @@ function registerTools(
           "Returns full provenance chains grouped by artwork, with matching events flagged.\n\n" +
           "Not for catalogue keyword search — use search_artwork. " +
           "Not for aggregate provenance counts — use collection_stats with provenance dimensions/filters. " +
-          "v0.27 added periodLocation (period-level location filter, preferred over location at layer='periods' for clarity).\n\n" +
+          "periodLocation is a period-level location filter, preferred over location at layer='periods' for clarity.\n\n" +
           "Each chain tells the complete ownership story: collectors, sales, inheritances, gifts, confiscations, and restitutions, with dates, locations, prices, and citations.\n\n" +
           "Use objectNumber for a single artwork's chain (fast local lookup, no network). " +
           "Use party to trace a collector or dealer across artworks (e.g. 'Six', 'Rothschild'). " +
@@ -3074,7 +3073,7 @@ function registerTools(
           "Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). " +
           "The user cannot see tool output — if you do not include the path, they have no way to find the review page.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
-          "Only the parsed provenance fields exposed below are searchable; raw-text full-text search across provenance was removed in v0.27. " +
+          "Only the parsed provenance fields exposed below are searchable. " +
           "For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — " +
           "also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) " +
           "and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). " +
@@ -3125,7 +3124,9 @@ function registerTools(
           positionMethod: optStr().describe(
             "Filter by how party positions (sender/receiver/agent) were determined. Values: role_mapping (parser), " +
             "type_mapping (from transfer type), llm_enrichment (LLM-classified), llm_disambiguation (LLM-decomposed from merged text). " +
-            "Use positionMethod='llm_enrichment' to find artworks with LLM-mediated party positions.",
+            "Use positionMethod='llm_enrichment' to find artworks with LLM-mediated party positions. " +
+            "When combined with `party`, both filters must hold on the same party row of the same event — " +
+            "useful for auditing whether a specific party's classification was deterministic vs LLM-mediated.",
           ),
           minDuration: z.preprocess(stripNull, z.number().int().min(1).optional())
             .describe("Minimum ownership years. Only used with layer='periods'."),
@@ -3387,7 +3388,7 @@ function registerTools(
     }).describe("withBucket + withoutBucket === total. Lets consumers reconstruct missing-data and clamp residuals without per-dim NULL knowledge."),
     totalBuckets: z.number().int()
       .describe("Number of distinct buckets in the filtered pool (under this dimension's groupingKey). " +
-        "Replaces the pre-v0.31 totalDistinct — renamed because grouping is not always label-based (exhibition collapses on entity, ordinal dims on computed buckets)."),
+        "Named totalBuckets (not totalDistinct) because grouping is not always label-based — exhibition collapses on entity, ordinal dims on computed buckets."),
     offset: z.number().int(),
     entries: z.array(z.object({
       label: z.union([z.string(), z.number()]),
@@ -3465,12 +3466,12 @@ function registerTools(
           hasProvenance: z.preprocess(stripNull, z.boolean().optional())
             .describe("If true, restrict to artworks with provenance records (~48K of 832K)."),
           transferType: optStr().describe("[events] Filter to artworks with at least one provenance event of this transfer type (e.g. 'sale', 'confiscation')."),
-          provenanceLocation: optStr().describe("[events] Filter to artworks with at least one provenance event in this location (partial match). Renamed from `location` in v0.31."),
+          provenanceLocation: optStr().describe("[events] Filter to artworks with at least one provenance event in this location (partial match)."),
           party: optStr().describe("[parties] Filter to artworks involving this party/collector (partial match)."),
           provenanceDateFrom: z.preprocess(stripNull, z.number().int().optional())
-            .describe("[events] Earliest provenance event year (inclusive). Renamed from `dateFrom` in v0.31."),
+            .describe("[events] Earliest provenance event year (inclusive)."),
           provenanceDateTo: z.preprocess(stripNull, z.number().int().optional())
-            .describe("[events] Latest provenance event year (inclusive). Renamed from `dateTo` in v0.31."),
+            .describe("[events] Latest provenance event year (inclusive)."),
           categoryMethod: optStr().describe("[events] Filter by category method (e.g. 'llm_enrichment')."),
           positionMethod: optStr().describe("[parties] Filter by position method (e.g. 'llm_enrichment')."),
         }).strict(),
