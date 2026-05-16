@@ -3542,11 +3542,9 @@ function registerTools(
         const filterStr = filterParts.length > 0 ? ` (${filterParts.join(", ")})` : "";
         lines.push(`${result.dimension} distribution${filterStr}:`);
         lines.push(`Total artworks: ${result.total.toLocaleString()}`);
-        // Disclose multi-valued semantics inline — mirrors the cap-signal idiom on search_provenance (bb0c496).
         if (result.multiValued && result.entries.length > 0) {
           lines.push("(multi-valued: artworks can match multiple buckets, so percentages can sum to >100%)");
         }
-        // Disclose clamp residual for decadeModified.
         if (result.bucketDomain && result.coverage.withoutBucket > 0) {
           const min = result.bucketDomain.min;
           const max = result.bucketDomain.maxExclusive;
@@ -3564,13 +3562,11 @@ function registerTools(
         if (result.entries.length === 0) {
           lines.push("  (no data)");
         } else {
-          // Determine column widths for alignment — labels may be string or number.
-          const labelStr = (label: string | number): string => String(label);
-          const maxLabel = Math.max(...result.entries.map(e => labelStr(e.label).length));
+          const maxLabel = Math.max(...result.entries.map(e => String(e.label).length));
           const maxCount = Math.max(...result.entries.map(e => e.count.toLocaleString().length));
           for (const e of result.entries) {
             const pct = e.percentage != null ? `  (${e.percentage.toFixed(1)}%)` : "";
-            lines.push(`  ${labelStr(e.label).padEnd(maxLabel)}  ${e.count.toLocaleString().padStart(maxCount)}${pct}`);
+            lines.push(`  ${String(e.label).padEnd(maxLabel)}  ${e.count.toLocaleString().padStart(maxCount)}${pct}`);
           }
         }
 

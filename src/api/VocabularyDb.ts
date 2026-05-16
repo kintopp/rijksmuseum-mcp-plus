@@ -668,6 +668,8 @@ interface StatsDimensionMeta {
   groupingKey: "label" | "entity" | "computed_bucket";
   defaultOrdering: "count_desc" | "label_asc";
   bucketUnit?: "year" | "cm";
+  /** Fixed bucket width. Omit on binned dims that use the caller-supplied `binWidth`. */
+  bucketWidth?: number;
   bucketDomain?: { min?: number; maxExclusive?: number };
 }
 
@@ -675,12 +677,12 @@ const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
   // Single-valued artwork attributes — one row per artwork in the source data.
   // Note: century defaults to count_desc (preserved from pre-v0.31 behaviour; the rest of the
   // ordinal dims default to label_asc). Pass sortBy:"label" to override.
-  century:         { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "count_desc", bucketUnit: "year" },
+  century:         { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "count_desc", bucketUnit: "year", bucketWidth: 100 },
   decade:          { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year" },
   height:          { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "cm" },
   width:           { multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "cm" },
   decadeModified:  {
-    multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year",
+    multiValued: false, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year", bucketWidth: 10,
     bucketDomain: { min: 1990, maxExclusive: 2030 },
   },
   // Multi-valued artwork attributes — vocabulary fan-out via mappings.
@@ -4116,10 +4118,8 @@ export class VocabularyDb {
         conditions.push("EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
       }
 
-      // Party filters — same-row conjunction in the artwork pool to match the dim-level filter's
-      // semantics. Before #346, two separate EXISTS clauses let party+positionMethod match on
-      // *different* pp rows for the same artwork, so `total` could include artworks contributing
-      // zero buckets to `entries` (reviewer Finding 1).
+      // Party filters must compose on the same pp row — separate EXISTS clauses let party and
+      // positionMethod match on different rows for the same artwork, inflating `total` beyond `entries`.
       const ppConds: string[] = [];
       const ppBindings: unknown[] = [];
       if (params.party && this.hasPartyTable_) {
@@ -4206,13 +4206,8 @@ export class VocabularyDb {
       const withBucket = this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds);
       const withoutBucket = Math.max(0, total - withBucket);
 
-      // Effective bucketWidth — only meaningful for binned dims; meta carries bucketUnit.
-      const bucketWidth =
-        meta?.bucketUnit === "year" && (params.dimension === "decade" || params.dimension === "provenanceDecade") ? binWidth :
-        meta?.bucketUnit === "cm" ? binWidth :
-        meta?.bucketUnit === "year" && params.dimension === "decadeModified" ? 10 :
-        meta?.bucketUnit === "year" && params.dimension === "century" ? 100 :
-        undefined;
+      // Fixed width from meta, else binWidth for binned dims, else undefined.
+      const bucketWidth = meta?.bucketWidth ?? (meta?.bucketUnit ? binWidth : undefined);
 
       return {
         ...baseShape,
