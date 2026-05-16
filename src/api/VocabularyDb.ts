@@ -5382,12 +5382,18 @@ export class VocabularyDb {
     // Post-enrichment: re-evaluate positionMethod matching per event.
     // positionMethod can't be checked in eventMatchesFilters() because position_method
     // is only available after party enrichment above. Demote events that don't have
-    // any party with the requested positionMethod.
+    // any party with the requested positionMethod. When `party` is also set, the same
+    // party row must satisfy both filters (#347) — mirrors the same-row SQL conjunction
+    // and keeps `matched` aligned with the rows the SQL admitted.
     if (!allMatched && params?.positionMethod) {
+      const partyNeedle = params.party?.toLowerCase();
       matchedCount = 0;
       for (const event of events) {
         if (event.matched) {
-          const hasMatch = event.parties.some(p => p.positionMethod === params.positionMethod);
+          const hasMatch = event.parties.some(p =>
+            p.positionMethod === params.positionMethod &&
+            (partyNeedle == null || p.name.toLowerCase().includes(partyNeedle)),
+          );
           if (!hasMatch) {
             event.matched = false;
           } else {
@@ -5446,7 +5452,16 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
-    if (params.party) {
+    // When both `party` and `positionMethod` are present, the two filters must compose on
+    // the same provenance_parties row of the same event (#347) — otherwise two parties on
+    // the same event can each satisfy one filter and falsely pass. Linkage: provenance_parties
+    // PK (artwork_id, sequence, party_idx) shares (artwork_id, sequence) with provenance_events,
+    // and party_idx maps 1:1 onto positions in pe.parties JSON (relied on by stmtPartyEnrichment_).
+    const sameRowPartyConjunction = !!params.party && !!params.positionMethod && this.hasPartyTable_;
+    if (sameRowPartyConjunction) {
+      conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence AND pp.party_name LIKE '%' || ? || '%' AND pp.position_method = ?)");
+      bindings.push(params.party, params.positionMethod);
+    } else if (params.party) {
       // Event-level filter: match on the event's own parties JSON, not artwork-level EXISTS.
       // Artwork-level EXISTS would return events from artworks where the party appears
       // *somewhere* in the chain, causing false positives when combined with event-level
@@ -5504,7 +5519,7 @@ export class VocabularyDb {
       conditions.push("pe.category_method = ?");
       bindings.push(params.categoryMethod);
     }
-    if (params.positionMethod) {
+    if (params.positionMethod && !sameRowPartyConjunction) {
       if (this.hasPartyTable_) {
         conditions.push("pe.artwork_id IN (SELECT pp2.artwork_id FROM provenance_parties pp2 WHERE pp2.position_method = ?)");
       } else {
