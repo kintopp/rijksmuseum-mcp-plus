@@ -389,25 +389,18 @@ _AUTHORITY_NEEDLES: tuple[tuple[str, str], ...] = (
 )
 
 
-# #335: per-authority local-id format regexes. Only listed authorities are
-# validated; the rest accept any local_id. A URI whose host matches an
-# authority needle but whose local_id fails this format check falls
-# through to ('other', uri) — preventing upstream mis-wrapped IDs (e.g.
-# the Iconclass notation `25H214` wrapped inside `vocab.getty.edu/tgn/`)
-# from polluting the wrong authority bucket. Caveat: this catches charset
-# mismatches only. Numeric IDs that are well-formed but never existed in
-# the target authority still pass here and are caught at validation time
-# (e.g. batch_geocode.py --revalidate-tgn-rdf).
+# Charset guard against upstream sources wrapping non-conforming IDs
+# inside an authority's URI shape. Catches parse-time mismatches only;
+# well-formed-but-nonexistent IDs are caught at lookup time.
+_NUMERIC_ID = re.compile(r"^\d+$")
 _AUTHORITY_ID_PATTERNS: dict[str, re.Pattern[str]] = {
     "wikidata":  re.compile(r"^Q\d+$"),
-    "viaf":      re.compile(r"^\d+$"),
-    "ulan":      re.compile(r"^\d+$"),
-    "tgn":       re.compile(r"^\d+$"),
-    "aat":       re.compile(r"^\d+$"),
-    "geonames":  re.compile(r"^\d+$"),
-    # Iconclass: starts with one or more digits, then at least one
-    # uppercase letter (e.g. 25H214, 59BB1, 25F23(+46)).
     "iconclass": re.compile(r"^\d+[A-Z]"),
+    "viaf":      _NUMERIC_ID,
+    "ulan":      _NUMERIC_ID,
+    "tgn":       _NUMERIC_ID,
+    "aat":       _NUMERIC_ID,
+    "geonames":  _NUMERIC_ID,
 }
 
 
@@ -417,7 +410,7 @@ def classify_authority(uri: str) -> tuple[str, str]:
     Covers all authorities observed in the Nov 2024 data dumps across
     person / organisation / topical_term / place (see #238 sweep).
     Unknown authorities — and host-matched URIs whose local_id fails the
-    per-authority format check (#335) — fall through to ('other', uri).
+    per-authority format check — fall through to ('other', uri).
     """
     if not uri:
         return ("other", uri)
@@ -429,9 +422,6 @@ def classify_authority(uri: str) -> tuple[str, str]:
             local_id = u.rsplit("/", 1)[-1]
             pat = _AUTHORITY_ID_PATTERNS.get(authority)
             if pat is not None and not pat.match(local_id):
-                # Host says <authority>, but local_id is shaped wrong —
-                # don't trust the bucket. Preserve the full URI under
-                # 'other' so the lineage isn't lost.
                 return ("other", uri)
             return (authority, local_id)
     return ("other", uri)
