@@ -103,11 +103,7 @@ export class RijksmuseumApiClient {
       RijksmuseumApiClient.TTL_IMAGE
     );
 
-    // Constrain the longest edge: w, for landscape; ,h for portrait
-    // (iiif.micr.io's !w,h best-fit syntax is broken — forces exact w×h)
-    const sizeParam = info.width >= info.height
-      ? `${thumbnailWidth},`
-      : `,${thumbnailWidth}`;
+    const sizeParam = `!${thumbnailWidth},${thumbnailWidth}`;
 
     return {
       iiifId,

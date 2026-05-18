@@ -2282,10 +2282,11 @@ function registerTools(
           ? (cropPixelsToIiifPixels(args.region) ?? args.region)
           : args.region;
 
-        // iiif.micr.io rejects upscaling; pct regions suffer from implementation-
-        // specific rounding that can yield up to 3px less than the ideal pixel
-        // width, so we subtract 3 to stay inside the boundary. The 448 clamp
-        // when show_overlays is on is an LLM-only context-cost guard.
+        // Policy: never upscale — interpolated pixels add no real detail for LLM
+        // inspection. pct regions suffer from server-side rounding that can yield
+        // up to 3px less than the ideal pixel width, so we subtract 3 to stay
+        // inside the boundary. The 448 clamp when show_overlays is on is an
+        // LLM-only context-cost guard.
         let effectiveSize = args.show_overlays ? Math.min(args.size, 448) : args.size;
         if (imageInfo.width) {
           let regionWidth = imageInfo.width;
