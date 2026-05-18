@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.33"
-  last_updated: "2026-05-16"
+  version: "0.34"
+  last_updated: "2026-05-18"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -66,6 +66,7 @@ These rules govern how to present results regardless of which tool produced them
 - For citation, use the persistent handle.net URI from `get_artwork_details` → `externalIds` (work-level external IDs surface here, including handle and other authority links).
 - For person-level external IDs (Wikidata Q-id and others), consult `production[].creator.wikidataId` on `get_artwork_details`, or `wikidataId` on `search_persons` results.
 - The `attributionEvidence` array on `get_artwork_details` cites the specific text/object that supports each attribution — useful for citation rigour.
+- When citing a creator from a result, preserve any qualifier prefix exactly as the result returned it ("attributed to Claes van Beresteyn", "workshop of Rembrandt", "after Rembrandt van Rijn"). The formatter injects these prefixes deliberately; stripping them in summary text misrepresents the catalogue's attribution position.
 - When presenting multiple works, lead with the most significant first (the default importance ranking handles this for vocabulary queries).
 - For image inspection findings, distinguish explicitly between what the structured metadata says and what the AI reads directly from the image — the distinction matters for research rigour.
 
@@ -104,9 +105,25 @@ Most artworks have date *ranges* (e.g. "1630–1640"), not exact years — see t
 
 Scope: `dateMatch` applies only to `search_artwork` and `semantic_search`, and only fires when `creationDate` is supplied (year or wildcard). It is **not** a parameter on `collection_stats` — `collection_stats` accepts numeric `creationDateFrom`/`creationDateTo` (strict within-bounds), and its `decade`/`century` dimensions bin each artwork by `date_earliest` (one bin per artwork, no double-counting to escape).
 
-### `attributionQualifier` + `creator` — structural limitation
+### `attributionQualifier` + `creator` — defaults, user phrasings, and structural limit
 
-The parameter description suggests combining `attributionQualifier` with `creator` to filter by source artist (e.g. "find all followers of Rembrandt"). In practice this does not work: across all qualifier types (`follower of`, `workshop of`, `circle of`, `attributed to`), the structured `creator` field is `Unknown [painter]` or `anonymous`, regardless of qualifier. The source artist's name appears only in the composite display string and is not exposed as a searchable entity field. For citation rigour at the single-work level, `get_artwork_details` exposes an `attributionEvidence` array.
+**Default attribution scope.** For vague queries about a named artist's work ("show me Rembrandts"), default to `creator: "X"` + `attributionQualifier: "primary"` plus the implied `type`. Without this, workshop/follower works *and* reproductive prints/photographs (catalogued with the master as `creator` + `productionRole: "after painting by"`) surface together — yielding "Rembrandt made a 19th-century photograph." State the scope you applied so the user can widen it.
+
+**Mapping user phrasings to filters.** Common English phrasings map to the catalogue's controlled vocabulary as follows:
+
+
+| User phrasing                                          | Catalogue filter                                                                 |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| "Rembrandt's own work" / "autograph" / "by Rembrandt"  | `creator: "Rembrandt van Rijn"` + `attributionQualifier: "primary"`              |
+| "attributed to X" / "possibly by X"                    | `attributionQualifier: "attributed to"` (or `"possibly"`) — see structural limit |
+| "workshop of X" / "studio of X"                        | `attributionQualifier: "workshop of"` — see structural limit                     |
+| "follower of X" / "circle of X" / "school of X"        | corresponding `attributionQualifier` value — see structural limit                |
+| "in the style of X" / "in the manner of X"             | `aboutActor: "X"` (preferred — see below) or `attributionQualifier: "manner of"` |
+| "after X" / "reproductions of X" / "copies of X"       | `productionRole: "after painting by"` + `creator: "X"`                           |
+| "inspired by X" (ambiguous)                            | Ask the user — could mean `manner of`, `after`, or `follower of`                 |
+
+
+**Structural limitation.** Combining `attributionQualifier` with `creator` to filter by *source* artist (e.g. "followers of Rembrandt") does not work — for all qualifier types the structured `creator` field is `Unknown [painter]` or `anonymous`. The source artist's name lives only in the composite display string, not as a searchable entity. For single-work citation, use `attributionEvidence` from `get_artwork_details`.
 
 **The correct strategy by qualifier type:**
 
