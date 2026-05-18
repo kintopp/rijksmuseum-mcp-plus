@@ -3585,9 +3585,9 @@ function registerTools(
           }
         }
 
-        if (result.warnings) {
+        if (result.warnings?.length) {
           lines.push("");
-          for (const w of result.warnings) lines.push(`Warning: ${w}`);
+          lines.push(...result.warnings.map(w => `⚠ ${w}`));
         }
 
         return structuredResponse(result, lines.join("\n"));
@@ -4026,7 +4026,7 @@ function registerTools(
           results,
           ...(warnings.length > 0 && { warnings }),
         };
-        if (warnings.length) textParts.push("\n[WARNING] " + warnings.join("\n[WARNING] "));
+        if (warnings.length) textParts.push("\n" + warnings.map(w => `⚠ ${w}`).join("\n"));
         return structuredResponse(data, textParts.join("\n"));
       })
     );

@@ -2273,7 +2273,7 @@ export class VocabularyDb {
         queryTitle: artRow?.title ?? "",
         queryLineage: [],
         results: [],
-        warnings: ["Lineage similarity requires vocabulary DB v0.24+ (assignment_pairs table). The deployed DB does not include it."],
+        warnings: ["Lineage similarity is not supported on this server."],
       };
     }
     this.ensureLineageCache();
@@ -4439,7 +4439,7 @@ export class VocabularyDb {
           bindings.push(effective[param]!);
         }
       } else {
-        warnings.push("Dimension range filters require vocabulary DB v1.0+. These filters were ignored.");
+        warnings.push("Dimension range filters are not supported on this server and were ignored.");
       }
     }
 
@@ -4465,9 +4465,9 @@ export class VocabularyDb {
     let sortByClause = "";
     if (effective.sortBy) {
       if (effective.sortBy === "recordModified" && !this.hasRecordModified_) {
-        warnings.push("sortBy: 'recordModified' requires vocabulary DB v0.27+. Sort was ignored.");
+        warnings.push("sortBy: 'recordModified' is not supported on this server. Sort was ignored.");
       } else if ((effective.sortBy === "height" || effective.sortBy === "width") && !this.hasDimensions) {
-        warnings.push(`sortBy: '${effective.sortBy}' requires vocabulary DB v1.0+. Sort was ignored.`);
+        warnings.push(`sortBy: '${effective.sortBy}' is not supported on this server. Sort was ignored.`);
       } else {
         const expr = SORT_COLUMN_MAP[effective.sortBy];
         const dir = effective.sortOrder === "asc" ? "ASC" : "DESC";
