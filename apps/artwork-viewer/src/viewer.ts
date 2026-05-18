@@ -34,7 +34,7 @@ export interface ArtworkImageData {
   date: string;
   license: string | null;
   physicalDimensions: string | null;
-  collectionUrl: string;
+  url: string;
   viewUUID?: string;
 }
 
@@ -579,7 +579,7 @@ async function sendSelectionToChat(region: string): Promise<void> {
 // refresh just the text without rebuilding the OSD container or re-attaching
 // listeners.
 function headerInnerHtml(data: ArtworkImageData): string {
-  const collectionUrl = sanitizeUrl(data.collectionUrl);
+  const collectionUrl = sanitizeUrl(data.url);
   return `
     <div class="header-title-row">
       <h1><span class="copyable" data-copy="${escapeHtml(data.title)}" data-tooltip="Click to copy"><span class="title-text">${escapeHtml(data.title)}</span></span></h1>
@@ -1108,7 +1108,7 @@ function loadDevMock(): void {
     date: '1642',
     license: 'http://creativecommons.org/publicdomain/zero/1.0/',
     physicalDimensions: 'height 379.5 cm x width 453.5 cm x weight 337 kg x weight 170 kg',
-    collectionUrl: 'https://www.rijksmuseum.nl/en/collection/SK-C-5',
+    url: 'https://www.rijksmuseum.nl/en/collection/SK-C-5',
   };
   currentData = mockData;
   renderViewer(mockData);

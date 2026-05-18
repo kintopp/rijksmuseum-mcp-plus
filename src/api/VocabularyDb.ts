@@ -60,7 +60,6 @@ export interface ArtworkDetailFromDb {
   children: { objectNumber: string; title: string }[];
   curatorialNarrative: { en: string | null; nl: string | null };
   license: string | null;
-  webPage: string | null;
   dimensions: { type: DimensionType; value: number; unit: string; note: string | null }[];
   relatedObjects: {
     relationship: string;
@@ -1806,7 +1805,6 @@ export class VocabularyDb {
       ...this.fetchArtworkLineage(row.art_id),
       curatorialNarrative: { en: row.narrative_text, nl: null },
       license: row.rights_uri,
-      webPage: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
       dimensions,
       ...this.fetchRelatedObjects(row.art_id),
       persistentId: row.art_id ? `http://hdl.handle.net/10934/RM0001.COLLECT.${row.art_id}` : null,

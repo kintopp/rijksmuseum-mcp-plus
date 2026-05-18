@@ -167,7 +167,7 @@ function fixtureToArtworkResult(f: Fixture): ArtworkImageData {
     date: f.date,
     license: f.license,
     physicalDimensions: f.physicalDimensions,
-    collectionUrl: `https://www.rijksmuseum.nl/en/collection/${f.objectNumber}`,
+    url: `https://www.rijksmuseum.nl/en/collection/${f.objectNumber}`,
   };
 }
 

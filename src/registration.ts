@@ -809,7 +809,6 @@ const ArtworkDetailOutput = {
   })),
   curatorialNarrative: z.object({ en: z.string().nullable(), nl: z.string().nullable() }),
   license: z.string().nullable(),
-  webPage: z.string().nullable(),
   dimensions: z.array(z.object({
     type: z.enum(DIMENSION_TYPES), value: z.union([z.number(), z.string()]), unit: z.string(), note: z.string().nullable(),
   })),
@@ -892,7 +891,7 @@ const ImageInfoOutput = {
   height: z.number().int().optional(),
   license: z.string().nullable().optional(),
   physicalDimensions: z.string().nullable().optional(),
-  collectionUrl: z.string().optional(),
+  url: z.string().optional(),
   iiifInfoUrl: z.string().optional(),
   viewUUID: z.string().optional().describe("Viewer session ID for use with navigate_viewer."),
   error: z.string().optional(),
@@ -1990,7 +1989,7 @@ function registerTools(
       date: artwork.date,
       license: artwork.license,
       physicalDimensions,
-      collectionUrl: `https://www.rijksmuseum.nl/en/collection/${artwork.objectNumber}`,
+      url: `https://www.rijksmuseum.nl/en/collection/${artwork.objectNumber}`,
     };
     const dims = data.width && data.height ? ` | ${data.width}×${data.height}px` : "";
     const licenseTag = artwork.license ? ` [${artwork.license}]` : "";
