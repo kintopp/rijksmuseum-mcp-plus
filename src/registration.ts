@@ -48,17 +48,17 @@ const ANN_VIEWER = { readOnlyHint: false, destructiveHint: false, idempotentHint
  * search_provenance defaults to 1 because each artwork's full chain is large;
  *   totalArtworks in the response + offset enables paging when more are needed.
  *
- * Max caps: 50 for individual results, 100 for vocabulary, 500 for stats.
+ * Max caps: 50 for individual results (100 for persons), 500 for stats.
  */
 const TOOL_LIMITS = {
-  search_artwork:     { max: 50,  default: 25 },
-  search_vocabulary:  { max: 100, default: 25 },
-  semantic_search:    { max: 50,  default: 15 },
-  search_provenance:  { max: 50,  default: 1 },
-  browse_set:         { max: 50,  default: 10 },
-  list_changes:       { max: 50,  default: 10 },
-  find_similar:       { max: 50,  default: 20 },
-  collection_stats:   { max: 500, default: 25 },
+  search_artwork:      { max: 50,  default: 25 },
+  search_persons:      { max: 100, default: 25 },
+  semantic_search:     { max: 50,  default: 15 },
+  search_provenance:   { max: 50,  default: 1 },
+  browse_set:          { max: 50,  default: 10 },
+  get_recent_changes:  { max: 50,  default: 10 },
+  find_similar:        { max: 50,  default: 20 },
+  collection_stats:    { max: 500, default: 25 },
 } as const;
 
 /** Params that narrow results but are too broad to stand alone as the only filter. */
@@ -1811,8 +1811,8 @@ function registerTools(
             .describe("Profession (e.g. 'painter', 'engraver'). Multi-value AND. Resolved by pivot through creator-mapped artworks."),
           hasArtworks: z.preprocess(stripNull, z.boolean().optional().default(true))
             .describe("Restrict to persons appearing as creator on ≥1 artwork. Default true."),
-          maxResults: z.number().int().min(1).max(100).default(25)
-            .describe("Maximum persons to return (1-100, default 25)."),
+          maxResults: z.number().int().min(1).max(TOOL_LIMITS.search_persons.max).default(TOOL_LIMITS.search_persons.default)
+            .describe(`Maximum persons to return (1-${TOOL_LIMITS.search_persons.max}, default ${TOOL_LIMITS.search_persons.default}).`),
           offset: z.preprocess(stripNull, z.number().int().min(0).default(0).optional())
             .describe("Skip this many results (for pagination)."),
         }).strict(),
@@ -2900,9 +2900,9 @@ function registerTools(
           .number()
           .int()
           .min(1)
-          .max(TOOL_LIMITS.list_changes.max)
-          .default(TOOL_LIMITS.list_changes.default)
-          .describe(`Maximum records to return (1-${TOOL_LIMITS.list_changes.max}, default ${TOOL_LIMITS.list_changes.default})`),
+          .max(TOOL_LIMITS.get_recent_changes.max)
+          .default(TOOL_LIMITS.get_recent_changes.default)
+          .describe(`Maximum records to return (1-${TOOL_LIMITS.get_recent_changes.max}, default ${TOOL_LIMITS.get_recent_changes.default})`),
         resumptionToken: optStr()
           .optional()
           .describe(
