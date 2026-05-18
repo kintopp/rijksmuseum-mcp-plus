@@ -270,6 +270,9 @@ export interface VocabSearchParams {
   aboutActor?: string;
   // Place hierarchy expansion
   expandPlaceHierarchy?: boolean;
+  // #357: same-row matching for creator + productionRole (autograph detection).
+  // Default false — when true, only "making" roles on the creator's own production row match.
+  sameRowMatching?: boolean;
   // Cross-domain
   hasProvenance?: boolean;
   // Record-modified date range (require record_modified column)
@@ -1064,6 +1067,9 @@ export class VocabularyDb {
   private lineageQualifierMap: Map<string, { label: string; strength: number; aatUri: string }> | null = null; // vocabulary.id → info
   private stmtLineageShared: Statement | null = null; // cached: artwork_id by (qualifier_id, creator_id) — assignment_pairs
   private hasAssignmentPairs = false; // #144: v0.24+ harvest persists qualifier↔creator assignments
+  private hasProductionRolePairs = false; // #357: backfill-only table for creator↔role same-row matching
+  private assignmentPairsQualifierIds: Set<string> | null = null; // #349: qualifier vocab IDs present in assignment_pairs (connoisseurship codes — excludes priority-level primary/secondary/undetermined)
+  private priorityLevelQualifierIds: Set<string> | null = null; // #349: the 3 priority-level vocab IDs (primary/secondary/undetermined) — used to emit a specific warning when these are combined with creator
   private iconclassNoiseIds: Set<number> | null = null; // vocab_rowids to exclude
   // Depicted person cache
   private personDf: Map<number, number> | null = null; // person vocab_rowid → document frequency
@@ -1201,6 +1207,34 @@ export class VocabularyDb {
 
       // #144: detect v0.24+ assignment_pairs table for the lineage similarity rewrite
       this.hasAssignmentPairs = this.tableExists("assignment_pairs");
+      // #357: production_role_pairs is a backfill-only table — present when scripts/backfill-production-role-pairs.py has been run
+      this.hasProductionRolePairs = this.tableExists("production_role_pairs");
+
+      // #349: cache the set of qualifier IDs that actually appear in assignment_pairs.
+      // These are the 11 connoisseurship AAT codes (after, attributed to, workshop of, …).
+      // Priority-level qualifiers (primary, secondary, undetermined) are NOT in this set —
+      // they live in the mappings table only, with no part_index association, so they can't
+      // enforce same-row matching with creator. Used by buildVocabConditions() to route.
+      if (this.hasAssignmentPairs) {
+        const rows = this.db.prepare(
+          "SELECT DISTINCT qualifier_id FROM assignment_pairs"
+        ).all() as { qualifier_id: string }[];
+        this.assignmentPairsQualifierIds = new Set(rows.map(r => r.qualifier_id));
+      }
+      // #349: identify the priority-level qualifier vocab IDs by their AAT URIs.
+      // Used to emit a precise warning ("don't combine creator with primary/secondary/...")
+      // rather than a generic one whenever a label-FTS match resolves to vocab outside
+      // assignment_pairs (which would also trigger on harmless Iconclass false positives).
+      const PRIORITY_LEVEL_AAT = [
+        "http://vocab.getty.edu/aat/300404450", // primary
+        "http://vocab.getty.edu/aat/300404451", // secondary
+        "http://vocab.getty.edu/aat/300379012", // undetermined
+      ];
+      this.priorityLevelQualifierIds = new Set(
+        (this.db.prepare(
+          `SELECT id FROM vocabulary WHERE external_id IN (${PRIORITY_LEVEL_AAT.map(() => "?").join(", ")})`
+        ).all(...PRIORITY_LEVEL_AAT) as { id: string }[]).map(r => r.id)
+      );
 
       // Warn if performance-critical indexes are missing (must be created during harvest/enrichment — DB is read-only)
       if (this.hasCoordinates) {
@@ -1209,6 +1243,9 @@ export class VocabularyDb {
       this.warnIfIndexMissing("idx_vocab_broader_id", "expandPlaceHierarchy will be slow. Run enrichment script to create it.");
       if (this.hasAssignmentPairs) {
         this.warnIfIndexMissing("idx_assignment_pairs_qualifier", "find_similar mode=lineage IDF aggregation will be slower. Re-run harvest to create it.");
+      }
+      if (this.hasProductionRolePairs) {
+        this.warnIfIndexMissing("idx_production_role_pairs_role", "creator+productionRole same-row matching will be slower. Re-run scripts/backfill-production-role-pairs.py with --rebuild-indexes.");
       }
 
       // Cache frequently-used prepared statements
@@ -4575,7 +4612,19 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
+    // ── Same-row matching intercepts ─────────────────────────────────
+    // When creator combines with attributionQualifier (#349) or productionRole + sameRowMatching (#357),
+    // the default per-filter loop produces two independent EXISTS clauses that match across separate
+    // production rows of the same artwork (the `mappings` table has no part_index). The intercepts
+    // below replace those clauses with a single same-row EXISTS against row-aware tables.
+    const intercept = this.applySameRowIntercepts(effective, warnings);
+    if (intercept === null) return null;
+    conditions.push(...intercept.conditions);
+    bindings.push(...intercept.bindings);
+    const skipParams = intercept.skipParams;
+
     for (const filter of VOCAB_FILTERS) {
+      if (skipParams.has(filter.param)) continue;
       const rawValue = effective[filter.param];
       if (rawValue === undefined) continue;
 
@@ -4982,6 +5031,156 @@ export class VocabularyDb {
       )`,
       bindings: [...fieldBindings, ...rowids],
     };
+  }
+
+  /**
+   * Resolve a filter value to vocabulary.id (TEXT) IDs, mirroring buildVocabConditions()'s
+   * FTS-vs-LIKE routing for the same filter definition. Returns the matching TEXT IDs —
+   * the shape needed by assignment_pairs / production_role_pairs lookups, which key on
+   * TEXT vocabulary.id (not the integer vocab_int_id used by mappings).
+   *
+   * Place-specific extras (multi-word fallback, hierarchy expansion) are intentionally
+   * skipped — same-row matching applies to creator/qualifier/role, none of which are
+   * place-typed vocabularies.
+   */
+  private resolveVocabTextIds(filter: VocabFilter, value: unknown): string[] {
+    const typeClause = filter.vocabType ? ` AND type = ?` : "";
+    const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
+    const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
+
+    if (useFts) {
+      let vocabIds = filter.vocabType === "person" && this.hasPersonNames
+        ? this.findPersonIdsFts(String(value))
+        : this.findVocabIdsFts(String(value), typeClause, typeBindings);
+      if (this.hasEntityAltNames && filter.param === "creator") {
+        const orgIds = this.findOrgIdsFts(String(value));
+        if (orgIds.length > 0) {
+          vocabIds = Array.from(new Set([...vocabIds, ...orgIds]));
+        }
+      }
+      return vocabIds;
+    }
+
+    const { where, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
+    const rows = this.db!.prepare(
+      `SELECT id FROM vocabulary WHERE ${where}${typeClause}`
+    ).all(...matchBindings, ...typeBindings) as { id: string }[];
+    return rows.map(r => r.id);
+  }
+
+  /**
+   * Same-row matching intercepts for creator+attributionQualifier (#349) and
+   * creator+productionRole+sameRowMatching (#357). Emits same-row EXISTS clauses
+   * against row-aware tables (assignment_pairs / production_role_pairs) instead of
+   * the two independent EXISTS clauses the default loop would produce.
+   *
+   * Returns the set of param keys the caller should skip (their constraints are
+   * already encoded in the emitted clauses). Returns null if any required value
+   * resolved to zero vocab IDs (signal to short-circuit the whole query).
+   *
+   * Priority-level qualifiers (primary/secondary/undetermined) are not present in
+   * assignment_pairs — when supplied alongside creator, we emit a warning and let
+   * the default loop run instead. SKILL.md guidance steers callers toward
+   * productionRole + sameRowMatching for autograph queries.
+   */
+  private applySameRowIntercepts(
+    effective: Record<string, unknown>,
+    warnings?: string[],
+  ): { skipParams: Set<string>; conditions: string[]; bindings: unknown[] } | null {
+    const skipParams = new Set<string>();
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+
+    const creatorRaw = effective.creator;
+    if (creatorRaw === undefined) return { skipParams, conditions, bindings };
+
+    const qualifierRaw = effective.attributionQualifier;
+    const productionRoleRaw = effective.productionRole;
+    const sameRowFlag = effective.sameRowMatching === true;
+
+    const creatorFilter = VOCAB_FILTERS.find(f => f.param === "creator")!;
+    const qualifierFilter = VOCAB_FILTERS.find(f => f.param === "attributionQualifier")!;
+    const roleFilter = VOCAB_FILTERS.find(f => f.param === "productionRole")!;
+
+    const creatorValues = Array.isArray(creatorRaw) ? creatorRaw : [creatorRaw];
+    // Resolve creator IDs once — shared by both intercepts when both apply.
+    const creatorIdsPerElement = creatorValues.map(v => this.resolveVocabTextIds(creatorFilter, v));
+    if (creatorIdsPerElement.some(c => c.length === 0)) return null;
+
+    // ── #349: creator + attributionQualifier same-row via assignment_pairs ──
+    // Classifier per qualifier array element:
+    //   inAP non-empty → "same-row eligible" (use only inAP IDs in the EXISTS;
+    //     non-AP IDs from label FTS — usually Iconclass false positives — are
+    //     dropped because they're not real qualifiers)
+    //   inAP empty + priority hit → "priority-level only" (fall through with warning)
+    //   inAP empty + no priority hit → "no real qualifier match" (fall through silently)
+    if (qualifierRaw !== undefined && this.hasAssignmentPairs && this.assignmentPairsQualifierIds) {
+      const qualifierValues = Array.isArray(qualifierRaw) ? qualifierRaw : [qualifierRaw];
+      const apSet = this.assignmentPairsQualifierIds;
+      const priorityIds = this.priorityLevelQualifierIds ?? new Set<string>();
+      const perElement = qualifierValues.map(v => {
+        const allIds = this.resolveVocabTextIds(qualifierFilter, v);
+        const inAP = allIds.filter(id => apSet.has(id));
+        const priorityHits = allIds.filter(id => priorityIds.has(id));
+        return { allIds, inAP, priorityHits };
+      });
+
+      const everyElementHasInAP = perElement.every(q => q.inAP.length > 0);
+      const anyElementIsPriorityOnly = perElement.some(q => q.inAP.length === 0 && q.priorityHits.length > 0);
+
+      if (everyElementHasInAP) {
+        // Pure same-row path — emit (creator × qualifier) cross-product of EXISTS clauses
+        // using only the in-AP IDs per element. Skip the default per-filter loop for both.
+        for (const cIds of creatorIdsPerElement) {
+          for (const qEl of perElement) {
+            const cP = cIds.map(() => "?").join(", ");
+            const qP = qEl.inAP.map(() => "?").join(", ");
+            conditions.push(
+              `EXISTS (SELECT 1 FROM assignment_pairs ap WHERE ap.artwork_id = a.art_id AND ap.creator_id IN (${cP}) AND ap.qualifier_id IN (${qP}))`
+            );
+            bindings.push(...cIds, ...qEl.inAP);
+          }
+        }
+        skipParams.add("creator");
+        skipParams.add("attributionQualifier");
+      } else if (anyElementIsPriorityOnly) {
+        warnings?.push(
+          "attributionQualifier values 'primary' / 'secondary' / 'undetermined' don't enforce same-row matching with creator " +
+          "(they're not present in assignment_pairs). For autograph queries on a named creator, use productionRole + sameRowMatching: true instead."
+        );
+        // Fall through — default loop emits the existing independent EXISTS clauses.
+      }
+      // else: no real qualifier match — silently fall through (default loop returns 0 results)
+    }
+
+    // ── #357: creator + productionRole + sameRowMatching via production_role_pairs ──
+    if (sameRowFlag && productionRoleRaw !== undefined) {
+      if (!this.hasProductionRolePairs) {
+        warnings?.push(
+          "sameRowMatching: true requires the production_role_pairs table (data not yet populated on this DB). " +
+          "Falling back to default behavior — productionRole will match independently of creator's row."
+        );
+      } else {
+        const roleValues = Array.isArray(productionRoleRaw) ? productionRoleRaw : [productionRoleRaw];
+        const roleIdsPerElement = roleValues.map(v => this.resolveVocabTextIds(roleFilter, v));
+        if (roleIdsPerElement.some(r => r.length === 0)) return null;
+
+        for (const cIds of creatorIdsPerElement) {
+          for (const rIds of roleIdsPerElement) {
+            const cP = cIds.map(() => "?").join(", ");
+            const rP = rIds.map(() => "?").join(", ");
+            conditions.push(
+              `EXISTS (SELECT 1 FROM production_role_pairs prp WHERE prp.artwork_id = a.art_id AND prp.creator_id IN (${cP}) AND prp.role_id IN (${rP}))`
+            );
+            bindings.push(...cIds, ...rIds);
+          }
+        }
+        skipParams.add("creator");
+        skipParams.add("productionRole");
+      }
+    }
+
+    return { skipParams, conditions, bindings };
   }
 
   /**

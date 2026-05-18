@@ -107,39 +107,39 @@ Scope: `dateMatch` applies only to `search_artwork` and `semantic_search`, and o
 
 ### `attributionQualifier` + `productionRole` + `creator` — defaults, user phrasings, and known limits
 
-**Default attribution scope for named-artist queries.** For vague queries about a named artist's work ("show me Rembrandts", "Rembrandt's paintings"), narrow with `creator: "X"` + the implied `type` + a *positive* `productionRole` filter for the medium (`"painter"` for paintings, `"draughtsman"` for drawings). The catalogue lists reproductive prints/photographs and workshop/follower works under the master's name; without role narrowing, those surface alongside autograph works and the result reads as "Rembrandt made a 19th-century photograph." Tell the user which production-role scope you applied so they can widen it explicitly.
+**Default attribution scope for named-artist queries.** For vague queries about a named artist's work ("show me Rembrandts", "Rembrandt's paintings"), narrow with `creator: "X"` + `productionRole: "<making-role>"` + `sameRowMatching: true` (plus `type` if known). Making-role values: `"painter"` for paintings, `"draughtsman"` for drawings, `"print maker"` for prints (the canonical label has a space — not `"printmaker"` or `"etcher"`). Without `sameRowMatching: true`, the role filter matches independently of the creator, and reproductive prints/photographs catalogued under the master's name surface alongside autograph works. Tell the user which production-role scope you applied so they can widen it explicitly.
 
-**Don't combine `creator` with `attributionQualifier` to narrow to autograph works.** The current filter shape evaluates `creator` and `attributionQualifier` independently across an artwork's production rows: a work matches if any row names the creator AND any *other* row carries the qualifier. In practice the qualifier filter removes well under 1% of the records returned by `creator` alone — it does not separate autograph from reproductive works. Same-row matching is tracked as kintopp/rijksmuseum-mcp-plus-offline#349; until it lands, lean on `productionRole` instead.
+**`creator + attributionQualifier` enforces same-row matching automatically** for the 11 connoisseurship qualifiers (`after`, `attributed to`, `workshop of`, `circle of`, `manner of`, `follower of`, `copyist of`, `possibly`, `free-form`, `falsification`). A work matches only when the named creator's *own* production row carries the qualifier, so `creator: "Rembrandt van Rijn" + attributionQualifier: "follower of"` returns just the follower-of-Rembrandt subset (not all follower-of-anyone works). The three priority-level qualifiers (`primary`, `secondary`, `undetermined`) are an exception — they're row-level priority markers, not attributions, so the server emits a warning and falls back to artwork-level (independent) matching when combined with `creator`. For autograph queries, use `productionRole + sameRowMatching: true` (above) rather than `attributionQualifier: "primary"`.
 
 **Mapping user phrasings to filters.** Common English phrasings map to the catalogue's controlled vocabulary as follows. The working approach lives in the second column.
 
 
-| User phrasing                                          | Catalogue filter (the one that actually narrows)                                                               |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| "X's own paintings"                                    | `creator: "X"` + `productionRole: "painter"` + `type: "painting"`                                              |
-| "X's own drawings"                                     | `creator: "X"` + `productionRole: "draughtsman"` + `type: "drawing"`                                           |
-| "X's own etchings"                                     | **Can't be cleanly filtered** — autograph etchings carry no role string (catalogue convention, #353). Fall back to `creator + type: "print"` minus reproductive roles, and surface the limitation to the user. |
-| "after X" / "reproductions of X" / "copies of X"       | `productionRole: "after painting by"` (or `"after print by"` / `"after drawing by"`) + `creator: "X"`          |
-| "attributed to X" / "possibly by X"                    | `attributionQualifier: "attributed to"` (or `"possibly"`) — used alone, not combined with `creator` (see above) |
-| "workshop of X" / "studio of X"                        | `attributionQualifier: "workshop of"` — same caveat                                                            |
-| "follower of X" / "circle of X" / "school of X"        | corresponding `attributionQualifier` value — same caveat                                                       |
-| "in the style of X" / "in the manner of X"             | `aboutActor: "X"` (broader, works) or `attributionQualifier: "manner of"` alone                                |
-| "inspired by X" (ambiguous)                            | Ask the user — could mean `manner of`, `after`, or `follower of`                                               |
+| User phrasing                                          | Catalogue filter (the one that actually narrows)                                                                                |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| "X's own paintings"                                    | `creator: "X"` + `productionRole: "painter"` + `sameRowMatching: true` + `type: "painting"`                                     |
+| "X's own drawings"                                     | `creator: "X"` + `productionRole: "draughtsman"` + `sameRowMatching: true` + `type: "drawing"`                                  |
+| "X's own etchings" / "X's own prints"                  | `creator: "X"` + `productionRole: "print maker"` + `sameRowMatching: true` + `type: "print"` (canonical label is `print maker` with a space, not `etcher` or `printmaker`) |
+| "after X" / "reproductions of X" / "copies of X"       | `productionRole: "after painting by"` (or `"after print by"` / `"after drawing by"`) + `creator: "X"` — *no* `sameRowMatching` (X is the source, not the maker) |
+| "attributed to X" / "possibly by X"                    | `attributionQualifier: "attributed to"` (or `"possibly"`) + `creator: "X"` — same-row enforced automatically                    |
+| "workshop of X" / "studio of X"                        | `attributionQualifier: "workshop of"` + `creator: "X"`                                                                          |
+| "follower of X" / "circle of X" / "school of X"        | corresponding `attributionQualifier` value + `creator: "X"`                                                                     |
+| "in the style of X" / "in the manner of X"             | `attributionQualifier: "manner of"` + `creator: "X"` (precise), or `aboutActor: "X"` (broader, cross-language)                  |
+| "inspired by X" (ambiguous)                            | Ask the user — could mean `manner of`, `after`, or `follower of`                                                                |
 
 
 **Array on `productionRole` is AND-combined, not OR.** Passing `productionRole: ["after painting by", "after print by", "after drawing by"]` returns artworks carrying *all three* roles (often 0-3 matches), not the union. To collect a union of reproductive roles, issue separate calls and merge client-side. Tracked as #350.
 
-**Limits when filtering by source artist.** `attributionQualifier: "follower of"` returns every "follower of" work in the collection — there's no parameter to scope to "follower of *Rembrandt* specifically." The structured `creator` field on these works is `Unknown [painter]` or `anonymous`. For the source artist, look at the composite display string in result records, or use `attributionEvidence` from `get_artwork_details` for a single-work citation.
+**Scope qualifier filters to a specific source artist by combining with `creator`.** Standalone, `attributionQualifier: "follower of"` returns every follower-of-anyone work in the collection. Combined with `creator: "X"`, it returns just the follower-of-X subset — the source artist is recorded on the same production row as the qualifier (and the same-row fix surfaces that linkage), even though the work's display `creator` field is typically `Unknown [painter]` or `anonymous`. For citation rigour on a single work, `attributionEvidence` from `get_artwork_details` cites the source text supporting each attribution.
 
 **Strategy table:**
 
 
-| Goal                                      | Working approach                                                                  |
-| ----------------------------------------- | --------------------------------------------------------------------------------- |
-| Autograph paintings/drawings by X         | `creator: "X"` + `productionRole: "painter"` or `"draughtsman"` + `type`           |
-| Works in the manner/style of artist X     | `aboutActor: "X"` + `type: "painting"` (or other type)                            |
-| All "follower of" works in the collection | `attributionQualifier: "follower of"` alone (returns the full collection-wide set) |
-| Sub-filter those by source artist         | Not possible via parameters — requires fetching and inspecting individual records |
+| Goal                                      | Working approach                                                                                                            |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Autograph paintings/drawings/prints by X  | `creator: "X"` + `productionRole: "painter"` / `"draughtsman"` / `"print maker"` + `sameRowMatching: true` + `type`         |
+| Works in the manner/style of artist X     | `attributionQualifier: "manner of"` + `creator: "X"` (precise), or `aboutActor: "X"` (broader, cross-language)              |
+| All "follower of" works in the collection | `attributionQualifier: "follower of"` alone (returns the full collection-wide set)                                          |
+| Follower of source artist X specifically  | `attributionQualifier: "follower of"` + `creator: "X"` (same-row enforced automatically)                                    |
 
 
 **Canonical name form matters.** The Rijksmuseum catalogue uses historical Dutch/Latin spellings for some artists. Bosch is catalogued as **"Jheronimus Bosch"**, not "Hieronymus Bosch". Always check `get_artwork_details` on a known work to confirm the canonical form before filtering.

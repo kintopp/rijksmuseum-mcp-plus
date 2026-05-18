@@ -62,7 +62,7 @@ const TOOL_LIMITS = {
 } as const;
 
 /** Params that narrow results but are too broad to stand alone as the only filter. */
-const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "expandPlaceHierarchy", "modifiedAfter", "modifiedBefore"]);
+const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "expandPlaceHierarchy", "modifiedAfter", "modifiedBefore", "sameRowMatching"]);
 
 /** Provenance filter categorization by layer support. */
 const PROVENANCE_EVENT_ONLY_FILTERS = ["transferType", "excludeTransferType", "currency", "hasPrice", "hasGap", "relatedTo", "categoryMethod", "positionMethod"];
@@ -1271,6 +1271,8 @@ function registerTools(
     "expandPlaceHierarchy",
     // v0.27 — curatorial theme + source-channel taxonomy + record-modified date range
     "theme", "sourceType", "modifiedAfter", "modifiedBefore",
+    // #357 — same-row matching modifier for creator + productionRole
+    "sameRowMatching",
   ] as const;
   // nearPlaceRadius excluded from routing key check: its Zod default (25) would trigger
   // on every query. Forwarded separately. sortBy/sortOrder are also forwarded but never
@@ -1497,6 +1499,16 @@ function registerTools(
                   "E.g. productionPlace: 'Netherlands' with expandPlaceHierarchy: true includes Amsterdam, Delft, etc. " +
                   "Expansion follows up to 3 levels of parent→child relationships. " +
                   "Requires a place filter — cannot be used alone."
+                )),
+              sameRowMatching: z.preprocess(stripNull, z
+                .boolean()
+                .optional()
+                .describe(
+                  "Constrain creator + productionRole to the *same* production row of the artwork (autograph detection). " +
+                  "Without this flag, the two filters evaluate independently across production rows: a work matches if any row names the creator AND any other row carries the role — including reproductive prints and 19th-c. photographs catalogued under the master's name. " +
+                  "Set true for 'making' roles (painter, draughtsman, print maker, etcher, engraver, etc.) when narrowing to autograph works by a named creator. " +
+                  "Leave false (default) for 'relational' roles like 'after painting by' / 'after print by' — those want independence because the named creator is the *source*, not the maker of that row. " +
+                  "Requires creator + productionRole both supplied. The creator+attributionQualifier same-row fix (connoisseurship qualifiers like 'after', 'workshop of', 'manner of') is always on and doesn't require this flag."
                 )),
               minHeight: z
                 .number()
