@@ -4569,6 +4569,7 @@ export class VocabularyDb {
     if (effective.facets && effective.facets.length > 0 && rows.length >= limit) {
       // Only compute requested dimensions, minus those already filtered on
       const requested = new Set(effective.facets);
+      const originallyRequested = new Set(requested);
       if (effective.type) requested.delete("type");
       if (effective.material) requested.delete("material");
       if (effective.technique) requested.delete("technique");
@@ -4579,6 +4580,12 @@ export class VocabularyDb {
       if (effective.depictedPerson) requested.delete("depictedPerson");
       if (effective.depictedPlace) requested.delete("depictedPlace");
       if (effective.productionPlace) requested.delete("productionPlace");
+      const dropped = [...originallyRequested].filter((d) => !requested.has(d));
+      if (dropped.length > 0) {
+        warnings.push(
+          `Facet${dropped.length === 1 ? "" : "s"} omitted because already filtered on the same dimension: ${dropped.join(", ")}`,
+        );
+      }
       if (requested.size > 0) {
         facets = this.computeFacets(conditions, bindings, ftsJoinClause, ftsJoinBinding, requested, effective.facetLimit);
         if (Object.keys(facets).length === 0) facets = undefined;

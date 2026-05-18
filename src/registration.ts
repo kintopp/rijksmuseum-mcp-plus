@@ -1478,7 +1478,9 @@ function registerTools(
                 .describe(
                   "Search by production role (e.g. 'painter', 'printmaker', 'after painting by'). " +
                   "Covers craft roles and relational attribution terms. " +
-                  "For attribution qualifiers (workshop of, follower of, circle of), use attributionQualifier instead."
+                  "For attribution qualifiers (workshop of, follower of, circle of), use attributionQualifier instead. " +
+                  "Array values AND-combine — a work must carry every named role on the same production row, which is rarely satisfied (most works carry one role per part). " +
+                  "To collect a union of roles (e.g. all 'after X by' variants), issue separate calls and merge client-side."
                 ),
               attributionQualifier: stringOrArray()
                 .optional()
@@ -1589,7 +1591,7 @@ function registerTools(
             "Pass an array of dimension names (e.g. [\"theme\", \"rights\"]) to compute only those, " +
             "or true for all dimensions. " +
             `Available: ${FACET_DIMENSIONS.join(", ")}. ` +
-            "Dimensions already filtered on are excluded automatically."
+            "Dimensions already filtered on are excluded automatically and reported in `warnings`."
           ),
         facetLimit: z.preprocess(stripNull, z.number().int().min(1).max(50).default(5).optional())
           .describe("Maximum entries per facet dimension (1–50, default 5)."),

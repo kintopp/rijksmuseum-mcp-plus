@@ -127,7 +127,7 @@ Scope: `dateMatch` applies only to `search_artwork` and `semantic_search`, and o
 | "inspired by X" (ambiguous)                            | Ask the user — could mean `manner of`, `after`, or `follower of`                                                                |
 
 
-**Array on `productionRole` is AND-combined, not OR.** Passing `productionRole: ["after painting by", "after print by", "after drawing by"]` returns artworks carrying *all three* roles (often 0-3 matches), not the union. To collect a union of reproductive roles, issue separate calls and merge client-side. Tracked as #350.
+**Array on `productionRole` is AND-combined, not OR.** Passing `productionRole: ["after painting by", "after print by", "after drawing by"]` returns artworks carrying *all three* roles (often 0-3 matches), not the union. To collect a union of reproductive roles, issue separate calls and merge client-side.
 
 **Scope qualifier filters to a specific source artist by combining with `creator`.** Standalone, `attributionQualifier: "follower of"` returns every follower-of-anyone work in the collection. Combined with `creator: "X"`, it returns just the follower-of-X subset — the source artist is recorded on the same production row as the qualifier (and the same-row fix surfaces that linkage), even though the work's display `creator` field is typically `Unknown [painter]` or `anonymous`. For citation rigour on a single work, `attributionEvidence` from `get_artwork_details` cites the source text supporting each attribution.
 
