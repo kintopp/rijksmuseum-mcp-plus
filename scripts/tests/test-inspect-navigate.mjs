@@ -1239,10 +1239,13 @@ console.log("\n--- 9e: JSON null on semantic_search filters ---");
 
 section("10. provenanceChain structuredContent validation");
 
-// provenanceChain is intentionally excluded from structuredContent (too large
-// for some clients). The text channel includes a provenance summary, and
-// search_provenance provides full structured provenance data.
-console.log("\n--- 10a: get_artwork_details — provenance in text, not structuredContent ---");
+// provenanceChain is exposed in structuredContent as a parsed array of events
+// (sequence, transferType, party, location, date, price, gap, uncertain) so
+// clients reading only structuredContent — web app, agentic pipelines — don't
+// have to re-parse the raw provenance string. The text channel renders a
+// human-readable summary built from the same data. Null when no provenance
+// text is available.
+console.log("\n--- 10a: get_artwork_details — provenanceChain present in structuredContent ---");
 {
   const r = await client.callTool({
     name: "get_artwork_details",
@@ -1251,8 +1254,14 @@ console.log("\n--- 10a: get_artwork_details — provenance in text, not structur
   const { sc, isError } = parseResult(r);
   assert(!isError, "get_artwork_details succeeds for SK-A-2344");
   assert(sc != null, "structuredContent present");
-  assert(sc?.provenanceChain === undefined, "provenanceChain excluded from structuredContent");
   assert(sc?.provenance != null, "provenance raw text present in structuredContent");
+  assert(Array.isArray(sc?.provenanceChain), "provenanceChain is an array");
+  assert((sc?.provenanceChain?.length ?? 0) > 0, "provenanceChain has at least one event");
+  const ev = sc?.provenanceChain?.[0];
+  assert(typeof ev?.sequence === "number" && typeof ev?.transferType === "string",
+    "provenanceChain events carry sequence + transferType");
+  assert(typeof ev?.gap === "boolean" && typeof ev?.uncertain === "boolean",
+    "provenanceChain events carry gap + uncertain booleans");
   // Verify provenance summary is in the text channel
   const text = r.content?.find(c => c.type === "text")?.text ?? "";
   assert(text.includes("[Provenance parsed]"), "text channel includes provenance summary");
@@ -1267,7 +1276,8 @@ console.log("\n--- 10b: artwork without provenance ---");
   });
   const { sc, isError } = parseResult(r);
   if (!isError && sc) {
-    assert(sc.provenanceChain === undefined, "provenanceChain excluded from structuredContent");
+    assert(sc.provenance == null, "provenance raw text is null when no provenance");
+    assert(sc.provenanceChain === null, "provenanceChain is null (not undefined) when no provenance");
   } else {
     assert(true, "skipped — artwork not found");
   }
