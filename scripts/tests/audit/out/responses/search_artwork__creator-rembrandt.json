@@ -1,0 +1,43 @@
+{
+  "tool": "search_artwork",
+  "fixture": "creator-rembrandt",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 761,
+  "bytesText": 584,
+  "structured": {
+    "totalResults": 3717,
+    "results": [
+      {
+        "objectNumber": "RP-P-2015-17",
+        "title": "Verzamelaarsalbum met houtsneden van Christoffel van Sichem",
+        "creator": "Christoffel van Sichem (II)",
+        "date": "1740–1808",
+        "type": "prentalbum",
+        "url": "https://www.rijksmuseum.nl/en/collection/RP-P-2015-17"
+      },
+      {
+        "objectNumber": "KOG-AA-1-61-72",
+        "title": "Artikelen over Rembrandt ter gelegenheid van het 300-jarig jubileum van zijn geboorte",
+        "creator": "",
+        "date": "1906",
+        "type": "magazine",
+        "url": "https://www.rijksmuseum.nl/en/collection/KOG-AA-1-61-72"
+      },
+      {
+        "objectNumber": "RP-P-OB-204.058",
+        "title": "Portretten",
+        "creator": "Arnoldus Cornelius Verhees (mentioned on object)",
+        "date": "1887–1905",
+        "type": "popular print",
+        "url": "https://www.rijksmuseum.nl/en/collection/RP-P-OB-204.058"
+      }
+    ],
+    "source": "vocabulary"
+  },
+  "text": "3 results of 3717 total (vocabulary search)\n1. RP-P-2015-17 | prentalbum | 1740–1808 | \"Verzamelaarsalbum met houtsneden van Christoffel van Sichem\" — Christoffel van Sichem (II) https://www.rijksmuseum.nl/en/collection/RP-P-2015-17\n2. KOG-AA-1-61-72 | magazine | 1906 | \"Artikelen over Rembrandt ter gelegenheid van het 300-jarig jubileum van zijn geboorte\" https://www.rijksmuseum.nl/en/collection/KOG-AA-1-61-72\n3. RP-P-OB-204.058 | popular print | 1887–1905 | \"Portretten\" — Arnoldus Cornelius Verhees (mentioned on object) https://www.rijksmuseum.nl/en/collection/RP-P-OB-204.058",
+  "args": {
+    "creator": "Rembrandt van Rijn",
+    "maxResults": 3
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "tool": "get_recent_changes",
+  "fixture": "recent",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 3272,
+  "bytesText": 359,
+  "structured": {
+    "totalChanges": 840667,
+    "returnedCount": 3,
+    "records": [
+      {
+        "lodUri": "https://id.rijksmuseum.nl/2001",
+        "objectNumber": "RP-P-2010-222-3315",
+        "datestamp": "2026-01-28T07:15:24Z",
+        "title": "Before, Behind, Between, Above, Below",
+        "description": "Links naast de vrouw staat een paal waaraan een opgespannen doek met blote billen erop hangt. De vrouw leunt op een blok met de titel.",
+        "date": "1973",
+        "dimensions": "height 296 mm x width 415 mm",
+        "type": "print",
+        "materials": [
+          "paper"
+        ],
+        "edmType": "IMAGE",
+        "creator": {
+          "name": "Nicolaas Wijnberg",
+          "dateOfBirth": "1918-11-22",
+          "dateOfDeath": "2006-06-11",
+          "authorityLinks": {
+            "viaf": "http://viaf.org/viaf/39465339",
+            "wikidata": "http://www.wikidata.org/entity/Q3324470",
+            "rkd": "https://rkd.nl/artists/84375"
+          }
+        },
+        "imageUrl": null,
+        "iiifServiceUrl": null,
+        "rights": "http://rightsstatements.org/vocab/InC/1.0/",
+        "setMemberships": [
+          "All published objects",
+          "prints"
+        ],
+        "subjects": [
+          {
+            "label": "woman (showing herself) undressed, quasi-nude",
+            "type": "iconclass",
+            "uri": "https://iconclass.org/41D92",
+            "code": "41D92"
+          },
+          {
+            "label": "buttocks, 'partes posteriores'",
+            "type": "iconclass",
+            "uri": "https://iconclass.org/31A2237",
+            "code": "31A2237"
+          }
+        ]
+      },
+      {
+        "lodUri": "https://id.rijksmuseum.nl/20010",
+        "objectNumber": "RP-P-2017-2033-37",
+        "datestamp": "2026-01-28T05:50:37Z",
+        "title": "Badende jongens",
+        "description": "In het midden trekt een jongen zijn hemd over zijn hoofd uit.",
+        "date": "1947",
+        "dimensions": "height 630 mm x width 478 mm",
+        "type": "print",
+        "materials": [
+          "paper"
+        ],
+        "edmType": "IMAGE",
+        "creator": {
+          "name": "Nicolaas Wijnberg",
+          "dateOfBirth": "1918-11-22",
+          "dateOfDeath": "2006-06-11",
+          "authorityLinks": {
+            "viaf": "http://viaf.org/viaf/39465339",
+            "wikidata": "http://www.wikidata.org/entity/Q3324470",
+            "rkd": "https://rkd.nl/artists/84375"
+          }
+        },
+        "imageUrl": "https://iiif.micr.io/wgIZp/full/max/0/default.jpg",
+        "iiifServiceUrl": "https://iiif.micr.io/wgIZp",
+        "rights": "http://rightsstatements.org/vocab/InC/1.0/",
+        "setMemberships": [
+          "All published objects",
+          "prints"
+        ],
+        "subjects": [
+          {
+            "label": "taking a bath - AA - in the open air",
+            "type": "iconclass",
+            "uri": "https://iconclass.org/31AA545",
+            "code": "31AA545"
+          }
+        ]
+      },
+      {
+        "lodUri": "https://id.rijksmuseum.nl/20010000",
+        "objectNumber": "RP-P-1906-2550",
+        "datestamp": "2026-01-27T04:44:32Z",
+        "title": "Portret van Dirk I, graaf van Holland",
+        "description": "Portret van Dirk I, graaf van Holland, staande in een harnas met op zijn schouder het wapen van Holland en in zijn hand een zwaard. Prent uit een serie van 36 prenten met portretten ten voeten uit van graven en gravinnen van Holland.",
+        "date": "1620",
+        "dimensions": "height 130 mm x width 80 mm",
+        "type": "print",
+        "materials": [
+          "paper"
+        ],
+        "edmType": "IMAGE",
+        "creator": null,
+        "imageUrl": "https://iiif.micr.io/owHmZ/full/max/0/default.jpg",
+        "iiifServiceUrl": "https://iiif.micr.io/owHmZ",
+        "rights": "http://creativecommons.org/publicdomain/mark/1.0/",
+        "setMemberships": [
+          "Entire Public Domain Set",
+          "biografic",
+          "All published objects",
+          "prints"
+        ],
+        "subjects": [
+          {
+            "label": "Dirk I (graaf van Holland)",
+            "type": "person"
+          },
+          {
+            "label": "nobility and patriciate; chivalry, knighthood",
+            "type": "iconclass",
+            "uri": "https://iconclass.org/46A12",
+            "code": "46A12"
+          },
+          {
+            "label": "County of Holland",
+            "type": "place",
+            "uri": "http://www.wikidata.org/entity/Q762943"
+          }
+        ]
+      }
+    ],
+    "resumptionToken": "b965ec19-abcb-480e-8fd2-691371c44033",
+    "hint": "Pass this resumptionToken to get_recent_changes to get the next page."
+  },
+  "text": "3 of 840667 records\n1. RP-P-2010-222-3315 | 2026-01-28T07:15:24Z | print | \"Before, Behind, Between, Above, Below\" — Nicolaas Wijnberg\n2. RP-P-2017-2033-37 | 2026-01-28T05:50:37Z | print | \"Badende jongens\" — Nicolaas Wijnberg\n3. RP-P-1906-2550 | 2026-01-27T04:44:32Z | print | \"Portret van Dirk I, graaf van Holland\"\n[resumptionToken available for next page]",
+  "args": {
+    "from": "2025-12-01",
+    "maxResults": 3
+  }
+}

@@ -1,0 +1,5756 @@
+{
+  "tool": "list_curated_sets",
+  "fixture": "default",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 64091,
+  "bytesText": 23033,
+  "structured": {
+    "totalSets": 193,
+    "sets": [
+      {
+        "setSpec": "261125",
+        "name": "'t Vliegend Hart",
+        "lodUri": "https://id.rijksmuseum.nl/261125",
+        "memberCount": 527,
+        "dominantTypes": [
+          {
+            "label": "scherf",
+            "count": 105
+          },
+          {
+            "label": "wijnfles",
+            "count": 99
+          },
+          {
+            "label": "pijpensteel",
+            "count": 45
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 519
+          },
+          {
+            "century": "1600s",
+            "count": 6
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26110",
+        "name": "(under construction) Drawings 2",
+        "lodUri": "https://id.rijksmuseum.nl/26110",
+        "memberCount": 0,
+        "dominantTypes": [],
+        "dominantCenturies": [],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261169",
+        "name": "accessoires",
+        "lodUri": "https://id.rijksmuseum.nl/261169",
+        "memberCount": 5657,
+        "dominantTypes": [
+          {
+            "label": "dameskleding",
+            "count": 1546
+          },
+          {
+            "label": "kleding",
+            "count": 1011
+          },
+          {
+            "label": "herenkleding",
+            "count": 420
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 2076
+          },
+          {
+            "century": "1800s",
+            "count": 2010
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261131",
+        "name": "affiches",
+        "lodUri": "https://id.rijksmuseum.nl/261131",
+        "memberCount": 7803,
+        "dominantTypes": [
+          {
+            "label": "poster",
+            "count": 7802
+          },
+          {
+            "label": "print",
+            "count": 156
+          },
+          {
+            "label": "photomechanical print",
+            "count": 73
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 7108
+          },
+          {
+            "century": "2000s",
+            "count": 575
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "260210",
+        "name": "Against Opacity",
+        "lodUri": "https://id.rijksmuseum.nl/260210",
+        "memberCount": 21169,
+        "dominantTypes": [
+          {
+            "label": "photograph",
+            "count": 12881
+          },
+          {
+            "label": "albumblad",
+            "count": 3884
+          },
+          {
+            "label": "print",
+            "count": 1759
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 12610
+          },
+          {
+            "century": "1800s",
+            "count": 6288
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261111",
+        "name": "Album Ankersmit",
+        "lodUri": "https://id.rijksmuseum.nl/261111",
+        "memberCount": 1,
+        "dominantTypes": [
+          {
+            "label": "album",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 1
+          }
+        ],
+        "category": "album"
+      },
+      {
+        "setSpec": "260251",
+        "name": "Alle gepubliceerde objecten",
+        "lodUri": "https://id.rijksmuseum.nl/260251",
+        "memberCount": 834435,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 369054
+          },
+          {
+            "label": "photograph",
+            "count": 133804
+          },
+          {
+            "label": "albumblad",
+            "count": 61622
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 310489
+          },
+          {
+            "century": "1900s",
+            "count": 198378
+          }
+        ],
+        "category": "umbrella"
+      },
+      {
+        "setSpec": "261121",
+        "name": "ambtskostuums",
+        "lodUri": "https://id.rijksmuseum.nl/261121",
+        "memberCount": 99,
+        "dominantTypes": [
+          {
+            "label": "herenkleding",
+            "count": 16
+          },
+          {
+            "label": "broek",
+            "count": 9
+          },
+          {
+            "label": "jas",
+            "count": 9
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 55
+          },
+          {
+            "century": "1800s",
+            "count": 42
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261162",
+        "name": "archeologische vondsten",
+        "lodUri": "https://id.rijksmuseum.nl/261162",
+        "memberCount": 15,
+        "dominantTypes": [
+          {
+            "label": "fles",
+            "count": 8
+          },
+          {
+            "label": "pot",
+            "count": 3
+          },
+          {
+            "label": "concretionary stone",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 8
+          },
+          {
+            "century": "1600s",
+            "count": 6
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26184",
+        "name": "archief Bonger",
+        "lodUri": "https://id.rijksmuseum.nl/26184",
+        "memberCount": 691,
+        "dominantTypes": [
+          {
+            "label": "letter",
+            "count": 508
+          },
+          {
+            "label": "prentbriefkaart",
+            "count": 113
+          },
+          {
+            "label": "photograph",
+            "count": 27
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 583
+          },
+          {
+            "century": "1800s",
+            "count": 108
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261197",
+        "name": "Architectuur- en Ontwerptekeningen (KOG)",
+        "lodUri": "https://id.rijksmuseum.nl/261197",
+        "memberCount": 14,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 14
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 14
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26186",
+        "name": "Art Nouveau",
+        "lodUri": "https://id.rijksmuseum.nl/26186",
+        "memberCount": 605,
+        "dominantTypes": [
+          {
+            "label": "vase",
+            "count": 155
+          },
+          {
+            "label": "schotel",
+            "count": 90
+          },
+          {
+            "label": "eet- en drinkgerei",
+            "count": 88
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 469
+          },
+          {
+            "century": "1800s",
+            "count": 136
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261184",
+        "name": "Atlas Amsterdam (KOG)",
+        "lodUri": "https://id.rijksmuseum.nl/261184",
+        "memberCount": 12081,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 4439
+          },
+          {
+            "label": "photomechanical print",
+            "count": 2982
+          },
+          {
+            "label": "drawing",
+            "count": 2692
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 5192
+          },
+          {
+            "century": "1900s",
+            "count": 3102
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261207",
+        "name": "Atlas J.M. Coffeng (KOG)",
+        "lodUri": "https://id.rijksmuseum.nl/261207",
+        "memberCount": 96,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 91
+          },
+          {
+            "label": "text sheet",
+            "count": 2
+          },
+          {
+            "label": "print",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 34
+          },
+          {
+            "century": "1700s",
+            "count": 33
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26166",
+        "name": "Atlas Ottens",
+        "lodUri": "https://id.rijksmuseum.nl/26166",
+        "memberCount": 6744,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 6560
+          },
+          {
+            "label": "kaart",
+            "count": 1836
+          },
+          {
+            "label": "boekillustratie",
+            "count": 1667
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 3570
+          },
+          {
+            "century": "1700s",
+            "count": 2995
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261206",
+        "name": "Atlas Van Eck (KOG)",
+        "lodUri": "https://id.rijksmuseum.nl/261206",
+        "memberCount": 1722,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 1717
+          },
+          {
+            "label": "plattegrond",
+            "count": 12
+          },
+          {
+            "label": "krantenknipsel",
+            "count": 4
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 770
+          },
+          {
+            "century": "1900s",
+            "count": 590
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261187",
+        "name": "Atlas Zeden en Gewoonten (KOG)",
+        "lodUri": "https://id.rijksmuseum.nl/261187",
+        "memberCount": 9187,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 6316
+          },
+          {
+            "label": "drawing",
+            "count": 1179
+          },
+          {
+            "label": "boekillustratie",
+            "count": 960
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 4050
+          },
+          {
+            "century": "1700s",
+            "count": 3496
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261191",
+        "name": "autografen",
+        "lodUri": "https://id.rijksmuseum.nl/261191",
+        "memberCount": 15957,
+        "dominantTypes": [
+          {
+            "label": "letter",
+            "count": 10959
+          },
+          {
+            "label": "briefkaart",
+            "count": 2473
+          },
+          {
+            "label": "prentbriefkaart",
+            "count": 508
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 7875
+          },
+          {
+            "century": "1900s",
+            "count": 7814
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261223",
+        "name": "Aziatische keramiek",
+        "lodUri": "https://id.rijksmuseum.nl/261223",
+        "memberCount": 4710,
+        "dominantTypes": [
+          {
+            "label": "schotel",
+            "count": 703
+          },
+          {
+            "label": "kop-en-schotel",
+            "count": 696
+          },
+          {
+            "label": "bowl",
+            "count": 516
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 2590
+          },
+          {
+            "century": "1600s",
+            "count": 1011
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260245",
+        "name": "Aziatische keramiek",
+        "lodUri": "https://id.rijksmuseum.nl/260245",
+        "memberCount": 3193,
+        "dominantTypes": [
+          {
+            "label": "schotel",
+            "count": 436
+          },
+          {
+            "label": "vase",
+            "count": 403
+          },
+          {
+            "label": "bowl",
+            "count": 321
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 1801
+          },
+          {
+            "century": "1600s",
+            "count": 829
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26126",
+        "name": "beeldhouwwerken",
+        "lodUri": "https://id.rijksmuseum.nl/26126",
+        "memberCount": 2467,
+        "dominantTypes": [
+          {
+            "label": "sculpture",
+            "count": 1577
+          },
+          {
+            "label": "figure",
+            "count": 371
+          },
+          {
+            "label": "fragment",
+            "count": 169
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1500s",
+            "count": 450
+          },
+          {
+            "century": "1600s",
+            "count": 446
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261143",
+        "name": "betimmeringen",
+        "lodUri": "https://id.rijksmuseum.nl/261143",
+        "memberCount": 4,
+        "dominantTypes": [
+          {
+            "label": "omlijsting",
+            "count": 4
+          },
+          {
+            "label": "pilaster",
+            "count": 2
+          },
+          {
+            "label": "kroonlijst",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1500s",
+            "count": 4
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261102",
+        "name": "Bik",
+        "lodUri": "https://id.rijksmuseum.nl/261102",
+        "memberCount": 177,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 174
+          },
+          {
+            "label": "topografische tekening",
+            "count": 148
+          },
+          {
+            "label": "aquarel",
+            "count": 17
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 177
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "260241",
+        "name": "biografisch",
+        "lodUri": "https://id.rijksmuseum.nl/260241",
+        "memberCount": 82662,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 41636
+          },
+          {
+            "label": "photograph",
+            "count": 12584
+          },
+          {
+            "label": "albumblad",
+            "count": 5307
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 21674
+          },
+          {
+            "century": "1600s",
+            "count": 21413
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26146",
+        "name": "boeken",
+        "lodUri": "https://id.rijksmuseum.nl/26146",
+        "memberCount": 5556,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 3944
+          },
+          {
+            "label": "kostuumprent",
+            "count": 949
+          },
+          {
+            "label": "book",
+            "count": 592
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 1827
+          },
+          {
+            "century": "1800s",
+            "count": 1570
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261202",
+        "name": "Boot",
+        "lodUri": "https://id.rijksmuseum.nl/261202",
+        "memberCount": 3,
+        "dominantTypes": [
+          {
+            "label": "verfhout",
+            "count": 3
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 3
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26139",
+        "name": "bouwfragmenten",
+        "lodUri": "https://id.rijksmuseum.nl/26139",
+        "memberCount": 1248,
+        "dominantTypes": [
+          {
+            "label": "bouwfragment",
+            "count": 554
+          },
+          {
+            "label": "haardsteen",
+            "count": 408
+          },
+          {
+            "label": "interieuronderdeel",
+            "count": 142
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1500s",
+            "count": 354
+          },
+          {
+            "century": "1600s",
+            "count": 307
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26173",
+        "name": "Braakensiek",
+        "lodUri": "https://id.rijksmuseum.nl/26173",
+        "memberCount": 2,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 2
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261190",
+        "name": "brieven",
+        "lodUri": "https://id.rijksmuseum.nl/261190",
+        "memberCount": 43,
+        "dominantTypes": [
+          {
+            "label": "letter",
+            "count": 33
+          },
+          {
+            "label": "envelop",
+            "count": 21
+          },
+          {
+            "label": "prentbriefkaart",
+            "count": 6
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "2000s",
+            "count": 35
+          },
+          {
+            "century": "1900s",
+            "count": 8
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26160",
+        "name": "buitenlandse geschiedenis",
+        "lodUri": "https://id.rijksmuseum.nl/26160",
+        "memberCount": 489,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 435
+          },
+          {
+            "label": "boekillustratie",
+            "count": 120
+          },
+          {
+            "label": "spotprent",
+            "count": 50
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 202
+          },
+          {
+            "century": "1700s",
+            "count": 112
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "2611",
+        "name": "Cat. 15e en 16e eeuwse Nederlandse Schilderijen",
+        "lodUri": "https://id.rijksmuseum.nl/2611",
+        "memberCount": 6,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 6
+          },
+          {
+            "label": "triptiek",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1500s",
+            "count": 6
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "2612",
+        "name": "Cat. 17e eeuwse Nederlandse Schilderijen I",
+        "lodUri": "https://id.rijksmuseum.nl/2612",
+        "memberCount": 7,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 7
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 5
+          },
+          {
+            "century": "1500s",
+            "count": 2
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "2613",
+        "name": "Cat. 17e eeuwse Vlaamse Schilderijen",
+        "lodUri": "https://id.rijksmuseum.nl/2613",
+        "memberCount": 1,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 1
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261158",
+        "name": "Centraal-Azië (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261158",
+        "memberCount": 21,
+        "dominantTypes": [
+          {
+            "label": "figure",
+            "count": 10
+          },
+          {
+            "label": "sculpture",
+            "count": 6
+          },
+          {
+            "label": "schildering",
+            "count": 6
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 8
+          },
+          {
+            "century": "1400s",
+            "count": 3
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26187",
+        "name": "chalcografie",
+        "lodUri": "https://id.rijksmuseum.nl/26187",
+        "memberCount": 909,
+        "dominantTypes": [
+          {
+            "label": "koperplaat",
+            "count": 372
+          },
+          {
+            "label": "houtblok",
+            "count": 197
+          },
+          {
+            "label": "zinkplaat",
+            "count": 173
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 401
+          },
+          {
+            "century": "1900s",
+            "count": 295
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261132",
+        "name": "China (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261132",
+        "memberCount": 4269,
+        "dominantTypes": [
+          {
+            "label": "kop-en-schotel",
+            "count": 630
+          },
+          {
+            "label": "schotel",
+            "count": 597
+          },
+          {
+            "label": "kop",
+            "count": 444
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 2452
+          },
+          {
+            "century": "1600s",
+            "count": 726
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260242",
+        "name": "Delfts aardewerk",
+        "lodUri": "https://id.rijksmuseum.nl/260242",
+        "memberCount": 1515,
+        "dominantTypes": [
+          {
+            "label": "plate (dishes)",
+            "count": 291
+          },
+          {
+            "label": "schotel",
+            "count": 253
+          },
+          {
+            "label": "vase",
+            "count": 109
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 1035
+          },
+          {
+            "century": "1600s",
+            "count": 391
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26188",
+        "name": "Document Nederland",
+        "lodUri": "https://id.rijksmuseum.nl/26188",
+        "memberCount": 1338,
+        "dominantTypes": [
+          {
+            "label": "documentary photographs",
+            "count": 911
+          },
+          {
+            "label": "photograph",
+            "count": 426
+          },
+          {
+            "label": "book",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "2000s",
+            "count": 952
+          },
+          {
+            "century": "1900s",
+            "count": 386
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261227",
+        "name": "documenten",
+        "lodUri": "https://id.rijksmuseum.nl/261227",
+        "memberCount": 3474,
+        "dominantTypes": [
+          {
+            "label": "prentbriefkaart",
+            "count": 2479
+          },
+          {
+            "label": "photomechanical print",
+            "count": 1890
+          },
+          {
+            "label": "photograph",
+            "count": 618
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 2846
+          },
+          {
+            "century": "1800s",
+            "count": 524
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261101",
+        "name": "documenten en objecten",
+        "lodUri": "https://id.rijksmuseum.nl/261101",
+        "memberCount": 4605,
+        "dominantTypes": [
+          {
+            "label": "sitspapier",
+            "count": 813
+          },
+          {
+            "label": "omslag",
+            "count": 584
+          },
+          {
+            "label": "koperplaat",
+            "count": 404
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 1679
+          },
+          {
+            "century": "1900s",
+            "count": 1502
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "2619",
+        "name": "Drawings by Rembrandt and his School in the Rijksmuseum",
+        "lodUri": "https://id.rijksmuseum.nl/2619",
+        "memberCount": 139,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 139
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 139
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261116",
+        "name": "Drees",
+        "lodUri": "https://id.rijksmuseum.nl/261116",
+        "memberCount": 370,
+        "dominantTypes": [
+          {
+            "label": "photograph",
+            "count": 143
+          },
+          {
+            "label": "albumblad",
+            "count": 85
+          },
+          {
+            "label": "box",
+            "count": 35
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 346
+          },
+          {
+            "century": "1800s",
+            "count": 22
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261194",
+        "name": "Duits steengoed",
+        "lodUri": "https://id.rijksmuseum.nl/261194",
+        "memberCount": 519,
+        "dominantTypes": [
+          {
+            "label": "kruik",
+            "count": 308
+          },
+          {
+            "label": "kan",
+            "count": 92
+          },
+          {
+            "label": "fragment",
+            "count": 51
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1500s",
+            "count": 217
+          },
+          {
+            "century": "1600s",
+            "count": 186
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26112",
+        "name": "Dutch Drawings of the Seventeenth Century in the Rijksmuseum",
+        "lodUri": "https://id.rijksmuseum.nl/26112",
+        "memberCount": 638,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 638
+          },
+          {
+            "label": "ontwerp",
+            "count": 40
+          },
+          {
+            "label": "aquarel",
+            "count": 11
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 618
+          },
+          {
+            "century": "1700s",
+            "count": 13
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26121",
+        "name": "Dutch Paintings of the Seventeenth Century in the Rijksmuseum",
+        "lodUri": "https://id.rijksmuseum.nl/26121",
+        "memberCount": 728,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 725
+          },
+          {
+            "label": "grisaille",
+            "count": 7
+          },
+          {
+            "label": "triptiek",
+            "count": 3
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 718
+          },
+          {
+            "century": "1700s",
+            "count": 6
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "2616",
+        "name": "Early Netherlandish Paintings",
+        "lodUri": "https://id.rijksmuseum.nl/2616",
+        "memberCount": 163,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 159
+          },
+          {
+            "label": "zijpaneel",
+            "count": 18
+          },
+          {
+            "label": "triptiek",
+            "count": 14
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1500s",
+            "count": 128
+          },
+          {
+            "century": "1400s",
+            "count": 31
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26128",
+        "name": "edele metalen",
+        "lodUri": "https://id.rijksmuseum.nl/26128",
+        "memberCount": 3729,
+        "dominantTypes": [
+          {
+            "label": "miniature",
+            "count": 514
+          },
+          {
+            "label": "miniatuur (poppenhuisgoed)",
+            "count": 295
+          },
+          {
+            "label": "jewellery",
+            "count": 266
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 1475
+          },
+          {
+            "century": "1800s",
+            "count": 1027
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261218",
+        "name": "Engels aardewerk",
+        "lodUri": "https://id.rijksmuseum.nl/261218",
+        "memberCount": 653,
+        "dominantTypes": [
+          {
+            "label": "plate (dishes)",
+            "count": 194
+          },
+          {
+            "label": "lid",
+            "count": 72
+          },
+          {
+            "label": "schotel",
+            "count": 69
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 455
+          },
+          {
+            "century": "1700s",
+            "count": 164
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261193",
+        "name": "Engelse spotprenten",
+        "lodUri": "https://id.rijksmuseum.nl/261193",
+        "memberCount": 468,
+        "dominantTypes": [
+          {
+            "label": "spotprent",
+            "count": 452
+          },
+          {
+            "label": "print",
+            "count": 403
+          },
+          {
+            "label": "boekillustratie",
+            "count": 123
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 397
+          },
+          {
+            "century": "1700s",
+            "count": 52
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "260239",
+        "name": "Entire Public Domain Set",
+        "lodUri": "https://id.rijksmuseum.nl/260239",
+        "memberCount": 732438,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 338956
+          },
+          {
+            "label": "photograph",
+            "count": 107855
+          },
+          {
+            "label": "albumblad",
+            "count": 58367
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 305666
+          },
+          {
+            "century": "1700s",
+            "count": 140025
+          }
+        ],
+        "category": "umbrella"
+      },
+      {
+        "setSpec": "26162",
+        "name": "erotica",
+        "lodUri": "https://id.rijksmuseum.nl/26162",
+        "memberCount": 53,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 51
+          },
+          {
+            "label": "titelprent",
+            "count": 2
+          },
+          {
+            "label": "photograph",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 18
+          },
+          {
+            "century": "1900s",
+            "count": 18
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "2618",
+        "name": "European Sculpture in the Rijksmuseum",
+        "lodUri": "https://id.rijksmuseum.nl/2618",
+        "memberCount": 800,
+        "dominantTypes": [
+          {
+            "label": "sculpture",
+            "count": 557
+          },
+          {
+            "label": "figure",
+            "count": 55
+          },
+          {
+            "label": "model",
+            "count": 45
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 231
+          },
+          {
+            "century": "1500s",
+            "count": 212
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261140",
+        "name": "Europees aardewerk",
+        "lodUri": "https://id.rijksmuseum.nl/261140",
+        "memberCount": 2,
+        "dominantTypes": [
+          {
+            "label": "vrouwenfiguur",
+            "count": 1
+          },
+          {
+            "label": "decoratief object",
+            "count": 1
+          },
+          {
+            "label": "figure",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 2
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261224",
+        "name": "Europees keramiek",
+        "lodUri": "https://id.rijksmuseum.nl/261224",
+        "memberCount": 2113,
+        "dominantTypes": [
+          {
+            "label": "service (set)",
+            "count": 709
+          },
+          {
+            "label": "schotel",
+            "count": 359
+          },
+          {
+            "label": "kruik",
+            "count": 311
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 849
+          },
+          {
+            "century": "1800s",
+            "count": 755
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26147",
+        "name": "Europees porselein",
+        "lodUri": "https://id.rijksmuseum.nl/26147",
+        "memberCount": 2967,
+        "dominantTypes": [
+          {
+            "label": "eet- en drinkgerei",
+            "count": 910
+          },
+          {
+            "label": "service (set)",
+            "count": 714
+          },
+          {
+            "label": "plate (dishes)",
+            "count": 625
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 2072
+          },
+          {
+            "century": "1800s",
+            "count": 806
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261200",
+        "name": "Europese wandtapijten",
+        "lodUri": "https://id.rijksmuseum.nl/261200",
+        "memberCount": 131,
+        "dominantTypes": [
+          {
+            "label": "tapestry",
+            "count": 131
+          },
+          {
+            "label": "verdure",
+            "count": 14
+          },
+          {
+            "label": "fragment",
+            "count": 4
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 53
+          },
+          {
+            "century": "1500s",
+            "count": 44
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261129",
+        "name": "ex librissen",
+        "lodUri": "https://id.rijksmuseum.nl/261129",
+        "memberCount": 11402,
+        "dominantTypes": [
+          {
+            "label": "ex libris",
+            "count": 11195
+          },
+          {
+            "label": "photomechanical print",
+            "count": 338
+          },
+          {
+            "label": "nieuwjaarswens",
+            "count": 88
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 9038
+          },
+          {
+            "century": "1800s",
+            "count": 1495
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26118",
+        "name": "Flemish Paintings in the Rijksmuseum",
+        "lodUri": "https://id.rijksmuseum.nl/26118",
+        "memberCount": 129,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 124
+          },
+          {
+            "label": "kunstkast",
+            "count": 5
+          },
+          {
+            "label": "kast",
+            "count": 4
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 122
+          },
+          {
+            "century": "1700s",
+            "count": 7
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26189",
+        "name": "foto-opdrachten",
+        "lodUri": "https://id.rijksmuseum.nl/26189",
+        "memberCount": 2107,
+        "dominantTypes": [
+          {
+            "label": "documentary photographs",
+            "count": 2091
+          },
+          {
+            "label": "photograph",
+            "count": 16
+          },
+          {
+            "label": "negatief",
+            "count": 3
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 2082
+          },
+          {
+            "century": "2000s",
+            "count": 16
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26150",
+        "name": "foto's",
+        "lodUri": "https://id.rijksmuseum.nl/26150",
+        "memberCount": 199678,
+        "dominantTypes": [
+          {
+            "label": "photograph",
+            "count": 126305
+          },
+          {
+            "label": "bladzijde",
+            "count": 46128
+          },
+          {
+            "label": "photomechanical print",
+            "count": 42933
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 118974
+          },
+          {
+            "century": "1900s",
+            "count": 79142
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26192",
+        "name": "fotoalbums uit Nederlands-Indië",
+        "lodUri": "https://id.rijksmuseum.nl/26192",
+        "memberCount": 3693,
+        "dominantTypes": [
+          {
+            "label": "photograph",
+            "count": 3416
+          },
+          {
+            "label": "albumblad",
+            "count": 1477
+          },
+          {
+            "label": "stereograph",
+            "count": 131
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 3169
+          },
+          {
+            "century": "1800s",
+            "count": 524
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261192",
+        "name": "fotografisch geïllustreerde boeken",
+        "lodUri": "https://id.rijksmuseum.nl/261192",
+        "memberCount": 51729,
+        "dominantTypes": [
+          {
+            "label": "bladzijde",
+            "count": 45554
+          },
+          {
+            "label": "photomechanical print",
+            "count": 28805
+          },
+          {
+            "label": "photograph",
+            "count": 19080
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 48428
+          },
+          {
+            "century": "1900s",
+            "count": 3300
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26157",
+        "name": "Frankenportretten",
+        "lodUri": "https://id.rijksmuseum.nl/26157",
+        "memberCount": 30136,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 27960
+          },
+          {
+            "label": "boekillustratie",
+            "count": 6243
+          },
+          {
+            "label": "photomechanical print",
+            "count": 1430
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 9651
+          },
+          {
+            "century": "1800s",
+            "count": 9158
+          }
+        ],
+        "category": "iconographic"
+      },
+      {
+        "setSpec": "26158",
+        "name": "Frederik Muller Historieplaten",
+        "lodUri": "https://id.rijksmuseum.nl/26158",
+        "memberCount": 25963,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 22749
+          },
+          {
+            "label": "historieprent",
+            "count": 4181
+          },
+          {
+            "label": "spotprent",
+            "count": 3168
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 9856
+          },
+          {
+            "century": "1800s",
+            "count": 7518
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261168",
+        "name": "Friderici-collectie",
+        "lodUri": "https://id.rijksmuseum.nl/261168",
+        "memberCount": 15,
+        "dominantTypes": [
+          {
+            "label": "book",
+            "count": 3
+          },
+          {
+            "label": "painting",
+            "count": 3
+          },
+          {
+            "label": "miniature (painting)",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 10
+          },
+          {
+            "century": "1700s",
+            "count": 3
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261251",
+        "name": "gebrandschilderd glas",
+        "lodUri": "https://id.rijksmuseum.nl/261251",
+        "memberCount": 499,
+        "dominantTypes": [
+          {
+            "label": "light (window)",
+            "count": 491
+          },
+          {
+            "label": "wapenruit",
+            "count": 93
+          },
+          {
+            "label": "raam",
+            "count": 31
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 261
+          },
+          {
+            "century": "1500s",
+            "count": 161
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261229",
+        "name": "gelegenheidsgrafiek",
+        "lodUri": "https://id.rijksmuseum.nl/261229",
+        "memberCount": 5435,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 3786
+          },
+          {
+            "label": "nieuwjaarswens",
+            "count": 1598
+          },
+          {
+            "label": "photomechanical print",
+            "count": 988
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 3939
+          },
+          {
+            "century": "1800s",
+            "count": 861
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261127",
+        "name": "Gerritsen",
+        "lodUri": "https://id.rijksmuseum.nl/261127",
+        "memberCount": 2000,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 1426
+          },
+          {
+            "label": "drawing",
+            "count": 570
+          },
+          {
+            "label": "boekillustratie",
+            "count": 125
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 901
+          },
+          {
+            "century": "1700s",
+            "count": 541
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261157",
+        "name": "glas",
+        "lodUri": "https://id.rijksmuseum.nl/261157",
+        "memberCount": 1719,
+        "dominantTypes": [
+          {
+            "label": "kelkglas",
+            "count": 476
+          },
+          {
+            "label": "goblet",
+            "count": 261
+          },
+          {
+            "label": "lid",
+            "count": 202
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 796
+          },
+          {
+            "century": "1600s",
+            "count": 357
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261161",
+        "name": "Gordon Atlas",
+        "lodUri": "https://id.rijksmuseum.nl/261161",
+        "memberCount": 463,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 458
+          },
+          {
+            "label": "albumblad",
+            "count": 389
+          },
+          {
+            "label": "topografische tekening",
+            "count": 69
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 463
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26195",
+        "name": "Gouverneurs-generaal serie",
+        "lodUri": "https://id.rijksmuseum.nl/26195",
+        "memberCount": 94,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 94
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 42
+          },
+          {
+            "century": "1800s",
+            "count": 27
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261114",
+        "name": "handschriften",
+        "lodUri": "https://id.rijksmuseum.nl/261114",
+        "memberCount": 60,
+        "dominantTypes": [
+          {
+            "label": "rectos",
+            "count": 26
+          },
+          {
+            "label": "schetsboekblad",
+            "count": 26
+          },
+          {
+            "label": "manuscript",
+            "count": 20
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 29
+          },
+          {
+            "century": "1700s",
+            "count": 23
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261163",
+        "name": "harnassen(onderdelen)",
+        "lodUri": "https://id.rijksmuseum.nl/261163",
+        "memberCount": 74,
+        "dominantTypes": [
+          {
+            "label": "helmet",
+            "count": 12
+          },
+          {
+            "label": "borstplaat",
+            "count": 8
+          },
+          {
+            "label": "harnas",
+            "count": 7
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1500s",
+            "count": 34
+          },
+          {
+            "century": "1600s",
+            "count": 29
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26172",
+        "name": "heraldiek",
+        "lodUri": "https://id.rijksmuseum.nl/26172",
+        "memberCount": 207,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 167
+          },
+          {
+            "label": "boekillustratie",
+            "count": 40
+          },
+          {
+            "label": "drawing",
+            "count": 32
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 83
+          },
+          {
+            "century": "1600s",
+            "count": 71
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261100",
+        "name": "heraldische objecten",
+        "lodUri": "https://id.rijksmuseum.nl/261100",
+        "memberCount": 76,
+        "dominantTypes": [
+          {
+            "label": "heraldisch object",
+            "count": 27
+          },
+          {
+            "label": "family arms",
+            "count": 26
+          },
+          {
+            "label": "wapenbord",
+            "count": 26
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 32
+          },
+          {
+            "century": "1700s",
+            "count": 31
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26159",
+        "name": "Hinloopen/Raimondi",
+        "lodUri": "https://id.rijksmuseum.nl/26159",
+        "memberCount": 1,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1400s",
+            "count": 1
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261150",
+        "name": "historische foto's",
+        "lodUri": "https://id.rijksmuseum.nl/261150",
+        "memberCount": 1,
+        "dominantTypes": [
+          {
+            "label": "facsimile",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 1
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261109",
+        "name": "Hollandia (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261109",
+        "memberCount": 3527,
+        "dominantTypes": [
+          {
+            "label": "scherf",
+            "count": 375
+          },
+          {
+            "label": "fragment",
+            "count": 327
+          },
+          {
+            "label": "messenheft",
+            "count": 184
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 3525
+          },
+          {
+            "century": "1600s",
+            "count": 2
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26142",
+        "name": "Hollands porselein",
+        "lodUri": "https://id.rijksmuseum.nl/26142",
+        "memberCount": 811,
+        "dominantTypes": [
+          {
+            "label": "schotel",
+            "count": 182
+          },
+          {
+            "label": "kop",
+            "count": 127
+          },
+          {
+            "label": "kop-en-schotel",
+            "count": 110
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 658
+          },
+          {
+            "century": "1800s",
+            "count": 151
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261199",
+        "name": "huishoudtextiel",
+        "lodUri": "https://id.rijksmuseum.nl/261199",
+        "memberCount": 451,
+        "dominantTypes": [
+          {
+            "label": "laken (object)",
+            "count": 161
+          },
+          {
+            "label": "sloop",
+            "count": 127
+          },
+          {
+            "label": "kussensloop",
+            "count": 99
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 155
+          },
+          {
+            "century": "1600s",
+            "count": 131
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261167",
+        "name": "IJkwezen",
+        "lodUri": "https://id.rijksmuseum.nl/261167",
+        "memberCount": 208,
+        "dominantTypes": [
+          {
+            "label": "inhoudsmaat droge waren",
+            "count": 65
+          },
+          {
+            "label": "inhoudsmaat natte waren",
+            "count": 21
+          },
+          {
+            "label": "book",
+            "count": 14
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 181
+          },
+          {
+            "century": "1700s",
+            "count": 17
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26182",
+        "name": "Immerzeel",
+        "lodUri": "https://id.rijksmuseum.nl/26182",
+        "memberCount": 572,
+        "dominantTypes": [
+          {
+            "label": "manuscript",
+            "count": 558
+          },
+          {
+            "label": "enquêteformulier",
+            "count": 540
+          },
+          {
+            "label": "letter",
+            "count": 11
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 571
+          },
+          {
+            "century": "1700s",
+            "count": 1
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "260211",
+        "name": "Indisch erfgoed",
+        "lodUri": "https://id.rijksmuseum.nl/260211",
+        "memberCount": 11827,
+        "dominantTypes": [
+          {
+            "label": "photograph",
+            "count": 7739
+          },
+          {
+            "label": "albumblad",
+            "count": 3129
+          },
+          {
+            "label": "print",
+            "count": 1341
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 7458
+          },
+          {
+            "century": "1800s",
+            "count": 3539
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26143",
+        "name": "interieuronderdelen",
+        "lodUri": "https://id.rijksmuseum.nl/26143",
+        "memberCount": 321,
+        "dominantTypes": [
+          {
+            "label": "interieuronderdeel",
+            "count": 189
+          },
+          {
+            "label": "bouwfragment",
+            "count": 115
+          },
+          {
+            "label": "betimmering",
+            "count": 74
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 196
+          },
+          {
+            "century": "1600s",
+            "count": 71
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26130",
+        "name": "interieurtextiel",
+        "lodUri": "https://id.rijksmuseum.nl/26130",
+        "memberCount": 921,
+        "dominantTypes": [
+          {
+            "label": "gordijn",
+            "count": 117
+          },
+          {
+            "label": "bespanningsstof",
+            "count": 111
+          },
+          {
+            "label": "wandbespanning",
+            "count": 95
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 281
+          },
+          {
+            "century": "1800s",
+            "count": 280
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26134",
+        "name": "Japan (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/26134",
+        "memberCount": 7731,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 4205
+          },
+          {
+            "label": "surimono",
+            "count": 809
+          },
+          {
+            "label": "book",
+            "count": 757
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 3241
+          },
+          {
+            "century": "1900s",
+            "count": 2573
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26169",
+        "name": "Japanse textielsjablonen",
+        "lodUri": "https://id.rijksmuseum.nl/26169",
+        "memberCount": 66,
+        "dominantTypes": [
+          {
+            "label": "katagami",
+            "count": 65
+          },
+          {
+            "label": "decorated paper",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 65
+          },
+          {
+            "century": "1900s",
+            "count": 1
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26140",
+        "name": "juwelen",
+        "lodUri": "https://id.rijksmuseum.nl/26140",
+        "memberCount": 1287,
+        "dominantTypes": [
+          {
+            "label": "brooch",
+            "count": 372
+          },
+          {
+            "label": "jewellery",
+            "count": 233
+          },
+          {
+            "label": "ring (sieraad)",
+            "count": 169
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 807
+          },
+          {
+            "century": "1800s",
+            "count": 186
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26129",
+        "name": "kant",
+        "lodUri": "https://id.rijksmuseum.nl/26129",
+        "memberCount": 3132,
+        "dominantTypes": [
+          {
+            "label": "strook",
+            "count": 1678
+          },
+          {
+            "label": "dameskleding",
+            "count": 458
+          },
+          {
+            "label": "kraag",
+            "count": 201
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 1384
+          },
+          {
+            "century": "1900s",
+            "count": 778
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261155",
+        "name": "Katzenelnbogen serie",
+        "lodUri": "https://id.rijksmuseum.nl/261155",
+        "memberCount": 7,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 7
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 7
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261231",
+        "name": "keramiek (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261231",
+        "memberCount": 7103,
+        "dominantTypes": [
+          {
+            "label": "eet- en drinkgerei",
+            "count": 997
+          },
+          {
+            "label": "schotel",
+            "count": 875
+          },
+          {
+            "label": "tile",
+            "count": 824
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 3301
+          },
+          {
+            "century": "1800s",
+            "count": 1061
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26145",
+        "name": "kerkelijk textiel (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/26145",
+        "memberCount": 205,
+        "dominantTypes": [
+          {
+            "label": "strook",
+            "count": 31
+          },
+          {
+            "label": "fragment",
+            "count": 26
+          },
+          {
+            "label": "aurifries",
+            "count": 25
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 72
+          },
+          {
+            "century": "1500s",
+            "count": 57
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "2601",
+        "name": "KOG",
+        "lodUri": "https://id.rijksmuseum.nl/2601",
+        "memberCount": 30436,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 10936
+          },
+          {
+            "label": "drawing",
+            "count": 3896
+          },
+          {
+            "label": "coin",
+            "count": 3813
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 12010
+          },
+          {
+            "century": "1700s",
+            "count": 8537
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261133",
+        "name": "koloniale kunstnijverheid",
+        "lodUri": "https://id.rijksmuseum.nl/261133",
+        "memberCount": 223,
+        "dominantTypes": [
+          {
+            "label": "furniture",
+            "count": 55
+          },
+          {
+            "label": "stoel",
+            "count": 34
+          },
+          {
+            "label": "lid",
+            "count": 32
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 125
+          },
+          {
+            "century": "1600s",
+            "count": 49
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261144",
+        "name": "koptisch textiel",
+        "lodUri": "https://id.rijksmuseum.nl/261144",
+        "memberCount": 70,
+        "dominantTypes": [
+          {
+            "label": "fragment",
+            "count": 24
+          },
+          {
+            "label": "weefsel",
+            "count": 24
+          },
+          {
+            "label": "tabula",
+            "count": 12
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "500s",
+            "count": 15
+          },
+          {
+            "century": "200s",
+            "count": 14
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261134",
+        "name": "Korea (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261134",
+        "memberCount": 38,
+        "dominantTypes": [
+          {
+            "label": "bowl",
+            "count": 6
+          },
+          {
+            "label": "pot",
+            "count": 4
+          },
+          {
+            "label": "box",
+            "count": 4
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 11
+          },
+          {
+            "century": "1100s",
+            "count": 6
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261172",
+        "name": "kostuum- en modeprenten",
+        "lodUri": "https://id.rijksmuseum.nl/261172",
+        "memberCount": 5694,
+        "dominantTypes": [
+          {
+            "label": "modeprent",
+            "count": 5141
+          },
+          {
+            "label": "magazine",
+            "count": 594
+          },
+          {
+            "label": "print",
+            "count": 271
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 2493
+          },
+          {
+            "century": "1900s",
+            "count": 2178
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261170",
+        "name": "kostuums",
+        "lodUri": "https://id.rijksmuseum.nl/261170",
+        "memberCount": 38,
+        "dominantTypes": [
+          {
+            "label": "broek",
+            "count": 12
+          },
+          {
+            "label": "jas",
+            "count": 5
+          },
+          {
+            "label": "avondjapon",
+            "count": 3
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 30
+          },
+          {
+            "century": "1700s",
+            "count": 5
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26127",
+        "name": "kostuums en accessoires",
+        "lodUri": "https://id.rijksmuseum.nl/26127",
+        "memberCount": 2907,
+        "dominantTypes": [
+          {
+            "label": "bovenkleding",
+            "count": 1123
+          },
+          {
+            "label": "dameskleding",
+            "count": 1009
+          },
+          {
+            "label": "japon",
+            "count": 438
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 1140
+          },
+          {
+            "century": "1900s",
+            "count": 856
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261234",
+        "name": "kraakporselein",
+        "lodUri": "https://id.rijksmuseum.nl/261234",
+        "memberCount": 423,
+        "dominantTypes": [
+          {
+            "label": "scherf",
+            "count": 302
+          },
+          {
+            "label": "plate (dishes)",
+            "count": 261
+          },
+          {
+            "label": "bowl",
+            "count": 87
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 423
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261165",
+        "name": "kranten en tijdschriften",
+        "lodUri": "https://id.rijksmuseum.nl/261165",
+        "memberCount": 361,
+        "dominantTypes": [
+          {
+            "label": "krant",
+            "count": 231
+          },
+          {
+            "label": "magazine",
+            "count": 130
+          },
+          {
+            "label": "print",
+            "count": 48
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 325
+          },
+          {
+            "century": "1800s",
+            "count": 36
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261119",
+        "name": "kunstnijverheid",
+        "lodUri": "https://id.rijksmuseum.nl/261119",
+        "memberCount": 243,
+        "dominantTypes": [
+          {
+            "label": "cloth",
+            "count": 72
+          },
+          {
+            "label": "jewellery",
+            "count": 35
+          },
+          {
+            "label": "heupdoek",
+            "count": 20
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 136
+          },
+          {
+            "century": "1700s",
+            "count": 58
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26152",
+        "name": "L.J. Veen",
+        "lodUri": "https://id.rijksmuseum.nl/26152",
+        "memberCount": 3375,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 3058
+          },
+          {
+            "label": "boekillustratie (ontwerp)",
+            "count": 2604
+          },
+          {
+            "label": "study for binding design",
+            "count": 521
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 2353
+          },
+          {
+            "century": "1800s",
+            "count": 1022
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261173",
+        "name": "lakwerk",
+        "lodUri": "https://id.rijksmuseum.nl/261173",
+        "memberCount": 101,
+        "dominantTypes": [
+          {
+            "label": "box",
+            "count": 28
+          },
+          {
+            "label": "schrijfcassette",
+            "count": 22
+          },
+          {
+            "label": "bowl",
+            "count": 8
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 64
+          },
+          {
+            "century": "1800s",
+            "count": 14
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261174",
+        "name": "Leeuwarden serie",
+        "lodUri": "https://id.rijksmuseum.nl/261174",
+        "memberCount": 41,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 41
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 41
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26148",
+        "name": "lijsten",
+        "lodUri": "https://id.rijksmuseum.nl/26148",
+        "memberCount": 2069,
+        "dominantTypes": [
+          {
+            "label": "frame",
+            "count": 1531
+          },
+          {
+            "label": "frame",
+            "count": 510
+          },
+          {
+            "label": "lijstdeel",
+            "count": 7
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 850
+          },
+          {
+            "century": "1900s",
+            "count": 400
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26141",
+        "name": "linnendamast",
+        "lodUri": "https://id.rijksmuseum.nl/26141",
+        "memberCount": 2942,
+        "dominantTypes": [
+          {
+            "label": "servet",
+            "count": 2269
+          },
+          {
+            "label": "tafellaken",
+            "count": 389
+          },
+          {
+            "label": "patroontekening",
+            "count": 112
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 940
+          },
+          {
+            "century": "1600s",
+            "count": 747
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26137",
+        "name": "Marinemodellenkamer",
+        "lodUri": "https://id.rijksmuseum.nl/26137",
+        "memberCount": 1538,
+        "dominantTypes": [
+          {
+            "label": "demonstration model",
+            "count": 585
+          },
+          {
+            "label": "ship model",
+            "count": 444
+          },
+          {
+            "label": "half model",
+            "count": 330
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 1101
+          },
+          {
+            "century": "1700s",
+            "count": 381
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260249",
+        "name": "maritiem digitaal",
+        "lodUri": "https://id.rijksmuseum.nl/260249",
+        "memberCount": 50,
+        "dominantTypes": [
+          {
+            "label": "ship model",
+            "count": 28
+          },
+          {
+            "label": "fully rigged model",
+            "count": 19
+          },
+          {
+            "label": "scale model",
+            "count": 17
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 35
+          },
+          {
+            "century": "1700s",
+            "count": 13
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261205",
+        "name": "maritieme collecties",
+        "lodUri": "https://id.rijksmuseum.nl/261205",
+        "memberCount": 259,
+        "dominantTypes": [
+          {
+            "label": "bladzijde",
+            "count": 92
+          },
+          {
+            "label": "aquarel",
+            "count": 54
+          },
+          {
+            "label": "manuscript",
+            "count": 49
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 229
+          },
+          {
+            "century": "1700s",
+            "count": 18
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261181",
+        "name": "Maten & gewichten",
+        "lodUri": "https://id.rijksmuseum.nl/261181",
+        "memberCount": 10,
+        "dominantTypes": [
+          {
+            "label": "graanmaat",
+            "count": 4
+          },
+          {
+            "label": "measuring rod",
+            "count": 2
+          },
+          {
+            "label": "meter",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 5
+          },
+          {
+            "century": "1800s",
+            "count": 4
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261124",
+        "name": "Meresteijn",
+        "lodUri": "https://id.rijksmuseum.nl/261124",
+        "memberCount": 29,
+        "dominantTypes": [
+          {
+            "label": "spoon",
+            "count": 3
+          },
+          {
+            "label": "gevest",
+            "count": 3
+          },
+          {
+            "label": "zadelknop",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 28
+          },
+          {
+            "century": "1700s",
+            "count": 1
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261138",
+        "name": "metalen",
+        "lodUri": "https://id.rijksmuseum.nl/261138",
+        "memberCount": 1,
+        "dominantTypes": [
+          {
+            "label": "kleding",
+            "count": 1
+          },
+          {
+            "label": "gordelhaak",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "-1100s",
+            "count": 1
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26132",
+        "name": "meubelen",
+        "lodUri": "https://id.rijksmuseum.nl/26132",
+        "memberCount": 2975,
+        "dominantTypes": [
+          {
+            "label": "furniture",
+            "count": 1335
+          },
+          {
+            "label": "stoel",
+            "count": 552
+          },
+          {
+            "label": "zitmeubel",
+            "count": 468
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 1084
+          },
+          {
+            "century": "1600s",
+            "count": 674
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26191",
+        "name": "Midden-Oosten keramiek",
+        "lodUri": "https://id.rijksmuseum.nl/26191",
+        "memberCount": 286,
+        "dominantTypes": [
+          {
+            "label": "bowl",
+            "count": 170
+          },
+          {
+            "label": "tile",
+            "count": 31
+          },
+          {
+            "label": "fragment",
+            "count": 28
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1100s",
+            "count": 104
+          },
+          {
+            "century": "1200s",
+            "count": 68
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260244",
+        "name": "MIMO: Musical Instruments",
+        "lodUri": "https://id.rijksmuseum.nl/260244",
+        "memberCount": 365,
+        "dominantTypes": [
+          {
+            "label": "musical instrument",
+            "count": 353
+          },
+          {
+            "label": "percussion instrument",
+            "count": 153
+          },
+          {
+            "label": "wind instrument",
+            "count": 119
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 174
+          },
+          {
+            "century": "1700s",
+            "count": 121
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26135",
+        "name": "miniaturen",
+        "lodUri": "https://id.rijksmuseum.nl/26135",
+        "memberCount": 309,
+        "dominantTypes": [
+          {
+            "label": "miniature (painting)",
+            "count": 297
+          },
+          {
+            "label": "box",
+            "count": 7
+          },
+          {
+            "label": "schroefdaalder",
+            "count": 4
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 149
+          },
+          {
+            "century": "1600s",
+            "count": 103
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "260236",
+        "name": "mode",
+        "lodUri": "https://id.rijksmuseum.nl/260236",
+        "memberCount": 2401,
+        "dominantTypes": [
+          {
+            "label": "dameskleding",
+            "count": 457
+          },
+          {
+            "label": "modeprent",
+            "count": 344
+          },
+          {
+            "label": "kleding",
+            "count": 307
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 872
+          },
+          {
+            "century": "1800s",
+            "count": 595
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261106",
+        "name": "munten, penningen en draagtekens",
+        "lodUri": "https://id.rijksmuseum.nl/261106",
+        "memberCount": 17631,
+        "dominantTypes": [
+          {
+            "label": "history medal",
+            "count": 5776
+          },
+          {
+            "label": "coin",
+            "count": 4609
+          },
+          {
+            "label": "jeton",
+            "count": 1992
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 5457
+          },
+          {
+            "century": "1700s",
+            "count": 3997
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261126",
+        "name": "museuminventaris",
+        "lodUri": "https://id.rijksmuseum.nl/261126",
+        "memberCount": 3,
+        "dominantTypes": [
+          {
+            "label": "clockwork",
+            "count": 1
+          },
+          {
+            "label": "box",
+            "count": 1
+          },
+          {
+            "label": "electric clock",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "2000s",
+            "count": 2
+          },
+          {
+            "century": "1800s",
+            "count": 1
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261226",
+        "name": "muziekinstrumenten",
+        "lodUri": "https://id.rijksmuseum.nl/261226",
+        "memberCount": 788,
+        "dominantTypes": [
+          {
+            "label": "musical instrument",
+            "count": 709
+          },
+          {
+            "label": "wind instrument",
+            "count": 329
+          },
+          {
+            "label": "percussion instrument",
+            "count": 207
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 411
+          },
+          {
+            "century": "1700s",
+            "count": 241
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261201",
+        "name": "naaldwerk",
+        "lodUri": "https://id.rijksmuseum.nl/261201",
+        "memberCount": 393,
+        "dominantTypes": [
+          {
+            "label": "proeflap",
+            "count": 68
+          },
+          {
+            "label": "merklap",
+            "count": 59
+          },
+          {
+            "label": "stoplap",
+            "count": 48
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 140
+          },
+          {
+            "century": "1700s",
+            "count": 90
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "2617",
+        "name": "Navy Models in the Rijksmuseum",
+        "lodUri": "https://id.rijksmuseum.nl/2617",
+        "memberCount": 1355,
+        "dominantTypes": [
+          {
+            "label": "demonstration model",
+            "count": 523
+          },
+          {
+            "label": "ship model",
+            "count": 432
+          },
+          {
+            "label": "half model",
+            "count": 330
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 950
+          },
+          {
+            "century": "1700s",
+            "count": 359
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261188",
+        "name": "Nederlands tinglazuur aardewerk",
+        "lodUri": "https://id.rijksmuseum.nl/261188",
+        "memberCount": 1843,
+        "dominantTypes": [
+          {
+            "label": "plate (dishes)",
+            "count": 295
+          },
+          {
+            "label": "schotel",
+            "count": 278
+          },
+          {
+            "label": "dekselpot",
+            "count": 145
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 1276
+          },
+          {
+            "century": "1600s",
+            "count": 461
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26155",
+        "name": "Nova Zembla (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/26155",
+        "memberCount": 794,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 385
+          },
+          {
+            "label": "kostuumprent",
+            "count": 47
+          },
+          {
+            "label": "fragment",
+            "count": 44
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1500s",
+            "count": 793
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26131",
+        "name": "onedele metalen",
+        "lodUri": "https://id.rijksmuseum.nl/26131",
+        "memberCount": 2635,
+        "dominantTypes": [
+          {
+            "label": "sleutel",
+            "count": 412
+          },
+          {
+            "label": "chandelier",
+            "count": 285
+          },
+          {
+            "label": "pijpsleutel",
+            "count": 128
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 680
+          },
+          {
+            "century": "1400s",
+            "count": 561
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26144",
+        "name": "Oosterse tapijten",
+        "lodUri": "https://id.rijksmuseum.nl/26144",
+        "memberCount": 310,
+        "dominantTypes": [
+          {
+            "label": "Oriental rug",
+            "count": 302
+          },
+          {
+            "label": "tapijt",
+            "count": 62
+          },
+          {
+            "label": "bidkleed",
+            "count": 62
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 226
+          },
+          {
+            "century": "1600s",
+            "count": 36
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26170",
+        "name": "opticaprenten",
+        "lodUri": "https://id.rijksmuseum.nl/26170",
+        "memberCount": 1009,
+        "dominantTypes": [
+          {
+            "label": "opticaprent",
+            "count": 1006
+          },
+          {
+            "label": "print",
+            "count": 999
+          },
+          {
+            "label": "lijst (informatiedrager)",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 1000
+          },
+          {
+            "century": "1600s",
+            "count": 8
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26156",
+        "name": "Oranjeportretten",
+        "lodUri": "https://id.rijksmuseum.nl/26156",
+        "memberCount": 3565,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 2681
+          },
+          {
+            "label": "photograph",
+            "count": 433
+          },
+          {
+            "label": "boekillustratie",
+            "count": 319
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 1320
+          },
+          {
+            "century": "1600s",
+            "count": 964
+          }
+        ],
+        "category": "iconographic"
+      },
+      {
+        "setSpec": "26171",
+        "name": "ornamentprenten",
+        "lodUri": "https://id.rijksmuseum.nl/26171",
+        "memberCount": 10139,
+        "dominantTypes": [
+          {
+            "label": "ornamentprent",
+            "count": 9966
+          },
+          {
+            "label": "print",
+            "count": 9898
+          },
+          {
+            "label": "titelprent",
+            "count": 336
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 4505
+          },
+          {
+            "century": "1600s",
+            "count": 3435
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261112",
+        "name": "ornamenttekeningen",
+        "lodUri": "https://id.rijksmuseum.nl/261112",
+        "memberCount": 139,
+        "dominantTypes": [
+          {
+            "label": "ornamenttekening",
+            "count": 138
+          },
+          {
+            "label": "drawing",
+            "count": 129
+          },
+          {
+            "label": "ontwerp",
+            "count": 23
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 75
+          },
+          {
+            "century": "1700s",
+            "count": 60
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "26177",
+        "name": "P.N. van Kampen",
+        "lodUri": "https://id.rijksmuseum.nl/26177",
+        "memberCount": 38,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 35
+          },
+          {
+            "label": "study for binding design",
+            "count": 22
+          },
+          {
+            "label": "boekillustratie (ontwerp)",
+            "count": 10
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 31
+          },
+          {
+            "century": "1900s",
+            "count": 7
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261164",
+        "name": "pamfletten",
+        "lodUri": "https://id.rijksmuseum.nl/261164",
+        "memberCount": 288,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 161
+          },
+          {
+            "label": "pamflet",
+            "count": 120
+          },
+          {
+            "label": "spotprent",
+            "count": 111
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 118
+          },
+          {
+            "century": "1600s",
+            "count": 77
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26197",
+        "name": "Panpoeticon Batavum",
+        "lodUri": "https://id.rijksmuseum.nl/26197",
+        "memberCount": 91,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 91
+          },
+          {
+            "label": "grisaille",
+            "count": 72
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 91
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261222",
+        "name": "papier (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261222",
+        "memberCount": 3256,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 1243
+          },
+          {
+            "label": "print",
+            "count": 502
+          },
+          {
+            "label": "spotprent",
+            "count": 419
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 1730
+          },
+          {
+            "century": "1800s",
+            "count": 639
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26136",
+        "name": "pastels",
+        "lodUri": "https://id.rijksmuseum.nl/26136",
+        "memberCount": 115,
+        "dominantTypes": [
+          {
+            "label": "pastel",
+            "count": 113
+          },
+          {
+            "label": "drawing",
+            "count": 111
+          },
+          {
+            "label": "frame",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 62
+          },
+          {
+            "century": "1800s",
+            "count": 36
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261220",
+        "name": "poppenhuis",
+        "lodUri": "https://id.rijksmuseum.nl/261220",
+        "memberCount": 1882,
+        "dominantTypes": [
+          {
+            "label": "miniatuur (poppenhuisgoed)",
+            "count": 1876
+          },
+          {
+            "label": "schotel",
+            "count": 128
+          },
+          {
+            "label": "stoel",
+            "count": 102
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 1212
+          },
+          {
+            "century": "1700s",
+            "count": 487
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261233",
+        "name": "porselein",
+        "lodUri": "https://id.rijksmuseum.nl/261233",
+        "memberCount": 798,
+        "dominantTypes": [
+          {
+            "label": "scherf",
+            "count": 334
+          },
+          {
+            "label": "plate (dishes)",
+            "count": 249
+          },
+          {
+            "label": "bowl",
+            "count": 127
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 398
+          },
+          {
+            "century": "1600s",
+            "count": 342
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26151",
+        "name": "prenten",
+        "lodUri": "https://id.rijksmuseum.nl/26151",
+        "memberCount": 385422,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 350230
+          },
+          {
+            "label": "boekillustratie",
+            "count": 36065
+          },
+          {
+            "label": "albumblad",
+            "count": 22869
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 105725
+          },
+          {
+            "century": "1600s",
+            "count": 93794
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260250",
+        "name": "prenten",
+        "lodUri": "https://id.rijksmuseum.nl/260250",
+        "memberCount": 12756,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 12513
+          },
+          {
+            "label": "boekillustratie",
+            "count": 583
+          },
+          {
+            "label": "ornamentprent",
+            "count": 265
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 5434
+          },
+          {
+            "century": "1500s",
+            "count": 4685
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261123",
+        "name": "Princesse Maria",
+        "lodUri": "https://id.rijksmuseum.nl/261123",
+        "memberCount": 43,
+        "dominantTypes": [
+          {
+            "label": "brick (clay product)",
+            "count": 11
+          },
+          {
+            "label": "screwcap",
+            "count": 7
+          },
+          {
+            "label": "hand grenade",
+            "count": 5
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 42
+          },
+          {
+            "century": "1700s",
+            "count": 1
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26164",
+        "name": "R.W.P. de Vries Jr.",
+        "lodUri": "https://id.rijksmuseum.nl/26164",
+        "memberCount": 1075,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 582
+          },
+          {
+            "label": "ontwerp",
+            "count": 423
+          },
+          {
+            "label": "photomechanical print",
+            "count": 236
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 594
+          },
+          {
+            "century": "1900s",
+            "count": 480
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260212",
+        "name": "RijksXL",
+        "lodUri": "https://id.rijksmuseum.nl/260212",
+        "memberCount": 6987,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 751
+          },
+          {
+            "label": "miniature",
+            "count": 461
+          },
+          {
+            "label": "photograph",
+            "count": 402
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 2746
+          },
+          {
+            "century": "1600s",
+            "count": 1594
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26190",
+        "name": "Roosdorp",
+        "lodUri": "https://id.rijksmuseum.nl/26190",
+        "memberCount": 490,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 66
+          },
+          {
+            "label": "onderscheiding",
+            "count": 31
+          },
+          {
+            "label": "document",
+            "count": 25
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 472
+          },
+          {
+            "century": "1700s",
+            "count": 9
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26194",
+        "name": "Rotterdamse V.O.C. serie",
+        "lodUri": "https://id.rijksmuseum.nl/26194",
+        "memberCount": 35,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 35
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 24
+          },
+          {
+            "century": "1700s",
+            "count": 11
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261175",
+        "name": "schaalmodellen",
+        "lodUri": "https://id.rijksmuseum.nl/261175",
+        "memberCount": 6,
+        "dominantTypes": [
+          {
+            "label": "scale model",
+            "count": 3
+          },
+          {
+            "label": "maquette",
+            "count": 2
+          },
+          {
+            "label": "half model",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 3
+          },
+          {
+            "century": "1700s",
+            "count": 2
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261107",
+        "name": "scheepsmodellen",
+        "lodUri": "https://id.rijksmuseum.nl/261107",
+        "memberCount": 110,
+        "dominantTypes": [
+          {
+            "label": "ship model",
+            "count": 59
+          },
+          {
+            "label": "fully rigged model",
+            "count": 38
+          },
+          {
+            "label": "show model",
+            "count": 27
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 63
+          },
+          {
+            "century": "1700s",
+            "count": 27
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261110",
+        "name": "scheepswrakvondsten",
+        "lodUri": "https://id.rijksmuseum.nl/261110",
+        "memberCount": 6,
+        "dominantTypes": [
+          {
+            "label": "staaf",
+            "count": 2
+          },
+          {
+            "label": "coin",
+            "count": 1
+          },
+          {
+            "label": "chest",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 3
+          },
+          {
+            "century": "1700s",
+            "count": 2
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261208",
+        "name": "schilderijen",
+        "lodUri": "https://id.rijksmuseum.nl/261208",
+        "memberCount": 4914,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 4835
+          },
+          {
+            "label": "grisaille",
+            "count": 138
+          },
+          {
+            "label": "frame",
+            "count": 48
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 2153
+          },
+          {
+            "century": "1800s",
+            "count": 1284
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261160",
+        "name": "schilderingen",
+        "lodUri": "https://id.rijksmuseum.nl/261160",
+        "memberCount": 48,
+        "dominantTypes": [
+          {
+            "label": "hanging scroll",
+            "count": 22
+          },
+          {
+            "label": "schildering",
+            "count": 16
+          },
+          {
+            "label": "tangka",
+            "count": 7
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 16
+          },
+          {
+            "century": "1800s",
+            "count": 15
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261219",
+        "name": "schutterij",
+        "lodUri": "https://id.rijksmuseum.nl/261219",
+        "memberCount": 410,
+        "dominantTypes": [
+          {
+            "label": "history medal",
+            "count": 140
+          },
+          {
+            "label": "draagteken",
+            "count": 127
+          },
+          {
+            "label": "medal",
+            "count": 116
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 239
+          },
+          {
+            "century": "1700s",
+            "count": 78
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261166",
+        "name": "sieraden",
+        "lodUri": "https://id.rijksmuseum.nl/261166",
+        "memberCount": 71,
+        "dominantTypes": [
+          {
+            "label": "jewellery",
+            "count": 37
+          },
+          {
+            "label": "bracelet",
+            "count": 14
+          },
+          {
+            "label": "ring (sieraad)",
+            "count": 13
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 44
+          },
+          {
+            "century": "1900s",
+            "count": 10
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260235",
+        "name": "sieraden",
+        "lodUri": "https://id.rijksmuseum.nl/260235",
+        "memberCount": 1372,
+        "dominantTypes": [
+          {
+            "label": "brooch",
+            "count": 366
+          },
+          {
+            "label": "jewellery",
+            "count": 330
+          },
+          {
+            "label": "ring (sieraad)",
+            "count": 172
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 784
+          },
+          {
+            "century": "1800s",
+            "count": 206
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261195",
+        "name": "sierpapier",
+        "lodUri": "https://id.rijksmuseum.nl/261195",
+        "memberCount": 1847,
+        "dominantTypes": [
+          {
+            "label": "sitspapier",
+            "count": 810
+          },
+          {
+            "label": "omslag",
+            "count": 571
+          },
+          {
+            "label": "decorated paper",
+            "count": 311
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 1032
+          },
+          {
+            "century": "1800s",
+            "count": 471
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261198",
+        "name": "Slot ter Hooghe",
+        "lodUri": "https://id.rijksmuseum.nl/261198",
+        "memberCount": 4,
+        "dominantTypes": [
+          {
+            "label": "staaf",
+            "count": 2
+          },
+          {
+            "label": "chest",
+            "count": 2
+          },
+          {
+            "label": "baar",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 4
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261153",
+        "name": "Snouckaert",
+        "lodUri": "https://id.rijksmuseum.nl/261153",
+        "memberCount": 200,
+        "dominantTypes": [
+          {
+            "label": "flintlock pistol",
+            "count": 52
+          },
+          {
+            "label": "sabre",
+            "count": 33
+          },
+          {
+            "label": "percussiepistool",
+            "count": 28
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 116
+          },
+          {
+            "century": "1700s",
+            "count": 53
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261130",
+        "name": "Spitsbergen (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261130",
+        "memberCount": 46,
+        "dominantTypes": [
+          {
+            "label": "muts",
+            "count": 14
+          },
+          {
+            "label": "jas",
+            "count": 6
+          },
+          {
+            "label": "kniekous",
+            "count": 4
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 17
+          },
+          {
+            "century": "1400s",
+            "count": 16
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26161",
+        "name": "spotprenten",
+        "lodUri": "https://id.rijksmuseum.nl/26161",
+        "memberCount": 1710,
+        "dominantTypes": [
+          {
+            "label": "spotprent",
+            "count": 1539
+          },
+          {
+            "label": "drawing",
+            "count": 186
+          },
+          {
+            "label": "print",
+            "count": 157
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 934
+          },
+          {
+            "century": "1800s",
+            "count": 776
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260246",
+        "name": "Staten-Generaal",
+        "lodUri": "https://id.rijksmuseum.nl/260246",
+        "memberCount": 393,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 317
+          },
+          {
+            "label": "spotprent",
+            "count": 62
+          },
+          {
+            "label": "historieprent",
+            "count": 61
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 135
+          },
+          {
+            "century": "1700s",
+            "count": 129
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26116",
+        "name": "Surimono from the Goslings Collection in the Rijksmuseum",
+        "lodUri": "https://id.rijksmuseum.nl/26116",
+        "memberCount": 205,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 205
+          },
+          {
+            "label": "surimono",
+            "count": 196
+          },
+          {
+            "label": "egoyomi (kalenderblad)",
+            "count": 19
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 180
+          },
+          {
+            "century": "1700s",
+            "count": 25
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261142",
+        "name": "tegels",
+        "lodUri": "https://id.rijksmuseum.nl/261142",
+        "memberCount": 12,
+        "dominantTypes": [
+          {
+            "label": "tile",
+            "count": 9
+          },
+          {
+            "label": "tegelveld",
+            "count": 2
+          },
+          {
+            "label": "floor tile",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 7
+          },
+          {
+            "century": "1600s",
+            "count": 2
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26133",
+        "name": "tekeningen",
+        "lodUri": "https://id.rijksmuseum.nl/26133",
+        "memberCount": 89398,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 47250
+          },
+          {
+            "label": "schetsboekblad",
+            "count": 36927
+          },
+          {
+            "label": "rectos",
+            "count": 14164
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 40418
+          },
+          {
+            "century": "1900s",
+            "count": 23610
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261228",
+        "name": "textiel",
+        "lodUri": "https://id.rijksmuseum.nl/261228",
+        "memberCount": 814,
+        "dominantTypes": [
+          {
+            "label": "fragment",
+            "count": 135
+          },
+          {
+            "label": "miniatuur (poppenhuisgoed)",
+            "count": 120
+          },
+          {
+            "label": "cloth",
+            "count": 90
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 292
+          },
+          {
+            "century": "1700s",
+            "count": 175
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261182",
+        "name": "tijdschriften",
+        "lodUri": "https://id.rijksmuseum.nl/261182",
+        "memberCount": 82,
+        "dominantTypes": [
+          {
+            "label": "modeprent",
+            "count": 67
+          },
+          {
+            "label": "print",
+            "count": 14
+          },
+          {
+            "label": "kostuumprent",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 65
+          },
+          {
+            "century": "1700s",
+            "count": 17
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260213",
+        "name": "Top 100",
+        "lodUri": "https://id.rijksmuseum.nl/260213",
+        "memberCount": 133,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 69
+          },
+          {
+            "label": "bloempiramide",
+            "count": 13
+          },
+          {
+            "label": "tomb figure",
+            "count": 11
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 60
+          },
+          {
+            "century": "1800s",
+            "count": 18
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260216",
+        "name": "Top 100 prentenkabinet",
+        "lodUri": "https://id.rijksmuseum.nl/260216",
+        "memberCount": 106,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 40
+          },
+          {
+            "label": "drawing",
+            "count": 35
+          },
+          {
+            "label": "photograph",
+            "count": 25
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 25
+          },
+          {
+            "century": "1800s",
+            "count": 22
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260214",
+        "name": "Top 1000",
+        "lodUri": "https://id.rijksmuseum.nl/260214",
+        "memberCount": 1040,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 400
+          },
+          {
+            "label": "print",
+            "count": 79
+          },
+          {
+            "label": "drawing",
+            "count": 62
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 495
+          },
+          {
+            "century": "1500s",
+            "count": 175
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26138",
+        "name": "topografie",
+        "lodUri": "https://id.rijksmuseum.nl/26138",
+        "memberCount": 8713,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 5553
+          },
+          {
+            "label": "photograph",
+            "count": 2472
+          },
+          {
+            "label": "boekillustratie",
+            "count": 1750
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 3732
+          },
+          {
+            "century": "1700s",
+            "count": 2557
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260248",
+        "name": "tweede wereldoorlog",
+        "lodUri": "https://id.rijksmuseum.nl/260248",
+        "memberCount": 3310,
+        "dominantTypes": [
+          {
+            "label": "photograph",
+            "count": 1854
+          },
+          {
+            "label": "albumblad",
+            "count": 966
+          },
+          {
+            "label": "drawing",
+            "count": 593
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 3259
+          },
+          {
+            "century": "2000s",
+            "count": 47
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26154",
+        "name": "uniformen en uitrustingsstukken",
+        "lodUri": "https://id.rijksmuseum.nl/26154",
+        "memberCount": 282,
+        "dominantTypes": [
+          {
+            "label": "uniform",
+            "count": 33
+          },
+          {
+            "label": "sjako",
+            "count": 25
+          },
+          {
+            "label": "pluim",
+            "count": 25
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 271
+          },
+          {
+            "century": "1700s",
+            "count": 7
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261217",
+        "name": "Van Gelder",
+        "lodUri": "https://id.rijksmuseum.nl/261217",
+        "memberCount": 8586,
+        "dominantTypes": [
+          {
+            "label": "history medal",
+            "count": 3487
+          },
+          {
+            "label": "jeton",
+            "count": 1756
+          },
+          {
+            "label": "coin",
+            "count": 558
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 2502
+          },
+          {
+            "century": "1800s",
+            "count": 2501
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26199",
+        "name": "Vanmour serie",
+        "lodUri": "https://id.rijksmuseum.nl/26199",
+        "memberCount": 62,
+        "dominantTypes": [
+          {
+            "label": "painting",
+            "count": 62
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 62
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261221",
+        "name": "varia",
+        "lodUri": "https://id.rijksmuseum.nl/261221",
+        "memberCount": 27,
+        "dominantTypes": [
+          {
+            "label": "cut-paper work",
+            "count": 8
+          },
+          {
+            "label": "clipping",
+            "count": 5
+          },
+          {
+            "label": "mand",
+            "count": 3
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 18
+          },
+          {
+            "century": "1800s",
+            "count": 4
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261176",
+        "name": "Varia 16e eeuw en vroeger",
+        "lodUri": "https://id.rijksmuseum.nl/261176",
+        "memberCount": 46,
+        "dominantTypes": [
+          {
+            "label": "tile",
+            "count": 11
+          },
+          {
+            "label": "tegelvloer",
+            "count": 11
+          },
+          {
+            "label": "tooth (material)",
+            "count": 5
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1300s",
+            "count": 15
+          },
+          {
+            "century": "1500s",
+            "count": 15
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261177",
+        "name": "Varia 17e eeuw",
+        "lodUri": "https://id.rijksmuseum.nl/261177",
+        "memberCount": 103,
+        "dominantTypes": [
+          {
+            "label": "plaque",
+            "count": 9
+          },
+          {
+            "label": "staf",
+            "count": 8
+          },
+          {
+            "label": "fragment",
+            "count": 6
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 94
+          },
+          {
+            "century": "1700s",
+            "count": 3
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261178",
+        "name": "Varia 18e eeuw",
+        "lodUri": "https://id.rijksmuseum.nl/261178",
+        "memberCount": 322,
+        "dominantTypes": [
+          {
+            "label": "toverlantaarnplaat",
+            "count": 129
+          },
+          {
+            "label": "diafanoramaplaat",
+            "count": 22
+          },
+          {
+            "label": "box",
+            "count": 10
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 303
+          },
+          {
+            "century": "1600s",
+            "count": 12
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261179",
+        "name": "Varia 19e eeuw",
+        "lodUri": "https://id.rijksmuseum.nl/261179",
+        "memberCount": 186,
+        "dominantTypes": [
+          {
+            "label": "box",
+            "count": 13
+          },
+          {
+            "label": "pop",
+            "count": 11
+          },
+          {
+            "label": "knikpop",
+            "count": 11
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 180
+          },
+          {
+            "century": "1700s",
+            "count": 5
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261180",
+        "name": "Varia 20e eeuw en later",
+        "lodUri": "https://id.rijksmuseum.nl/261180",
+        "memberCount": 2412,
+        "dominantTypes": [
+          {
+            "label": "photograph",
+            "count": 1487
+          },
+          {
+            "label": "albumblad",
+            "count": 879
+          },
+          {
+            "label": "bord",
+            "count": 258
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 2025
+          },
+          {
+            "century": "2000s",
+            "count": 302
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260215",
+        "name": "Vereniging Rembrandt",
+        "lodUri": "https://id.rijksmuseum.nl/260215",
+        "memberCount": 3755,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 1902
+          },
+          {
+            "label": "print",
+            "count": 709
+          },
+          {
+            "label": "photograph",
+            "count": 387
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 2294
+          },
+          {
+            "century": "1500s",
+            "count": 608
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261113",
+        "name": "verzamelbanden",
+        "lodUri": "https://id.rijksmuseum.nl/261113",
+        "memberCount": 16,
+        "dominantTypes": [
+          {
+            "label": "drawing",
+            "count": 14
+          },
+          {
+            "label": "album",
+            "count": 4
+          },
+          {
+            "label": "reproductie",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 9
+          },
+          {
+            "century": "1700s",
+            "count": 3
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261117",
+        "name": "Visser (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261117",
+        "memberCount": 366,
+        "dominantTypes": [
+          {
+            "label": "flintlock pistol",
+            "count": 208
+          },
+          {
+            "label": "flintlock gun",
+            "count": 56
+          },
+          {
+            "label": "radslotpistool",
+            "count": 30
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 185
+          },
+          {
+            "century": "1700s",
+            "count": 150
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261108",
+        "name": "vlaggen en vaandels",
+        "lodUri": "https://id.rijksmuseum.nl/261108",
+        "memberCount": 154,
+        "dominantTypes": [
+          {
+            "label": "flag",
+            "count": 52
+          },
+          {
+            "label": "banner",
+            "count": 51
+          },
+          {
+            "label": "ship flag",
+            "count": 37
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 60
+          },
+          {
+            "century": "1800s",
+            "count": 58
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "260243",
+        "name": "vogelen",
+        "lodUri": "https://id.rijksmuseum.nl/260243",
+        "memberCount": 3637,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 2478
+          },
+          {
+            "label": "popular print",
+            "count": 431
+          },
+          {
+            "label": "drawing",
+            "count": 415
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 1161
+          },
+          {
+            "century": "1800s",
+            "count": 973
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26165",
+        "name": "volksprenten",
+        "lodUri": "https://id.rijksmuseum.nl/26165",
+        "memberCount": 8429,
+        "dominantTypes": [
+          {
+            "label": "popular print",
+            "count": 8398
+          },
+          {
+            "label": "print",
+            "count": 8396
+          },
+          {
+            "label": "gameboard",
+            "count": 243
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 6647
+          },
+          {
+            "century": "1700s",
+            "count": 1459
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "260247",
+        "name": "vrienden aziatische kunst",
+        "lodUri": "https://id.rijksmuseum.nl/260247",
+        "memberCount": 2311,
+        "dominantTypes": [
+          {
+            "label": "sculpture",
+            "count": 230
+          },
+          {
+            "label": "fragment",
+            "count": 168
+          },
+          {
+            "label": "chaire",
+            "count": 168
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 511
+          },
+          {
+            "century": "1700s",
+            "count": 478
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261189",
+        "name": "wapens & militaria",
+        "lodUri": "https://id.rijksmuseum.nl/261189",
+        "memberCount": 2332,
+        "dominantTypes": [
+          {
+            "label": "flintlock pistol",
+            "count": 296
+          },
+          {
+            "label": "musical instrument",
+            "count": 124
+          },
+          {
+            "label": "musket",
+            "count": 122
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1800s",
+            "count": 895
+          },
+          {
+            "century": "1700s",
+            "count": 667
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261115",
+        "name": "Witte Leeuw",
+        "lodUri": "https://id.rijksmuseum.nl/261115",
+        "memberCount": 1185,
+        "dominantTypes": [
+          {
+            "label": "scherf",
+            "count": 635
+          },
+          {
+            "label": "plate (dishes)",
+            "count": 373
+          },
+          {
+            "label": "bowl",
+            "count": 246
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 1109
+          },
+          {
+            "century": "1700s",
+            "count": 73
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26114",
+        "name": "Works by Hercules Segers in the Rijksmuseum",
+        "lodUri": "https://id.rijksmuseum.nl/26114",
+        "memberCount": 77,
+        "dominantTypes": [
+          {
+            "label": "print",
+            "count": 74
+          },
+          {
+            "label": "drawing",
+            "count": 2
+          },
+          {
+            "label": "painting",
+            "count": 1
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1600s",
+            "count": 77
+          }
+        ],
+        "category": "object_type"
+      },
+      {
+        "setSpec": "261196",
+        "name": "Zeelelie",
+        "lodUri": "https://id.rijksmuseum.nl/261196",
+        "memberCount": 6,
+        "dominantTypes": [
+          {
+            "label": "scherf",
+            "count": 4
+          },
+          {
+            "label": "roofing tile",
+            "count": 3
+          },
+          {
+            "label": "pot",
+            "count": 2
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 6
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "26185",
+        "name": "zijdeweefsels",
+        "lodUri": "https://id.rijksmuseum.nl/26185",
+        "memberCount": 780,
+        "dominantTypes": [
+          {
+            "label": "fragment",
+            "count": 383
+          },
+          {
+            "label": "zijdeweefsel",
+            "count": 154
+          },
+          {
+            "label": "weefsel",
+            "count": 97
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 356
+          },
+          {
+            "century": "1500s",
+            "count": 124
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261135",
+        "name": "Zuid-Azië (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261135",
+        "memberCount": 113,
+        "dominantTypes": [
+          {
+            "label": "sculpture",
+            "count": 41
+          },
+          {
+            "label": "jewellery",
+            "count": 35
+          },
+          {
+            "label": "figure",
+            "count": 29
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1700s",
+            "count": 65
+          },
+          {
+            "century": "900s",
+            "count": 6
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261137",
+        "name": "Zuidoost-Azië, maritiem (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261137",
+        "memberCount": 346,
+        "dominantTypes": [
+          {
+            "label": "sculpture",
+            "count": 93
+          },
+          {
+            "label": "figure",
+            "count": 54
+          },
+          {
+            "label": "cloth",
+            "count": 50
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 107
+          },
+          {
+            "century": "1300s",
+            "count": 77
+          }
+        ],
+        "category": "sub_collection"
+      },
+      {
+        "setSpec": "261136",
+        "name": "Zuidoost-Azië, vasteland (collectie)",
+        "lodUri": "https://id.rijksmuseum.nl/261136",
+        "memberCount": 165,
+        "dominantTypes": [
+          {
+            "label": "sculpture",
+            "count": 57
+          },
+          {
+            "label": "Boeddha-beeld",
+            "count": 37
+          },
+          {
+            "label": "hoofd",
+            "count": 24
+          }
+        ],
+        "dominantCenturies": [
+          {
+            "century": "1900s",
+            "count": 31
+          },
+          {
+            "century": "1400s",
+            "count": 26
+          }
+        ],
+        "category": "sub_collection"
+      }
+    ]
+  },
+  "text": "193 sets\n1. 261125 | 't Vliegend Hart | 527 members | sub_collection | scherf, wijnfles | https://id.rijksmuseum.nl/261125\n2. 26110 | (under construction) Drawings 2 | 0 members | sub_collection | https://id.rijksmuseum.nl/26110\n3. 261169 | accessoires | 5,657 members | sub_collection | dameskleding, kleding | https://id.rijksmuseum.nl/261169\n4. 261131 | affiches | 7,803 members | object_type | poster, print | https://id.rijksmuseum.nl/261131\n5. 260210 | Against Opacity | 21,169 members | sub_collection | photograph, albumblad | https://id.rijksmuseum.nl/260210\n6. 261111 | Album Ankersmit | 1 members | album | album | https://id.rijksmuseum.nl/261111\n7. 260251 | Alle gepubliceerde objecten | 834,435 members | umbrella | print, photograph | https://id.rijksmuseum.nl/260251\n8. 261121 | ambtskostuums | 99 members | sub_collection | herenkleding, broek | https://id.rijksmuseum.nl/261121\n9. 261162 | archeologische vondsten | 15 members | sub_collection | fles, pot | https://id.rijksmuseum.nl/261162\n10. 26184 | archief Bonger | 691 members | sub_collection | letter, prentbriefkaart | https://id.rijksmuseum.nl/26184\n11. 261197 | Architectuur- en Ontwerptekeningen (KOG) | 14 members | object_type | drawing | https://id.rijksmuseum.nl/261197\n12. 26186 | Art Nouveau | 605 members | sub_collection | vase, schotel | https://id.rijksmuseum.nl/26186\n13. 261184 | Atlas Amsterdam (KOG) | 12,081 members | sub_collection | print, photomechanical print | https://id.rijksmuseum.nl/261184\n14. 261207 | Atlas J.M. Coffeng (KOG) | 96 members | sub_collection | drawing, text sheet | https://id.rijksmuseum.nl/261207\n15. 26166 | Atlas Ottens | 6,744 members | object_type | print, kaart | https://id.rijksmuseum.nl/26166\n16. 261206 | Atlas Van Eck (KOG) | 1,722 members | object_type | drawing, plattegrond | https://id.rijksmuseum.nl/261206\n17. 261187 | Atlas Zeden en Gewoonten (KOG) | 9,187 members | sub_collection | print, drawing | https://id.rijksmuseum.nl/261187\n18. 261191 | autografen | 15,957 members | sub_collection | letter, briefkaart | https://id.rijksmuseum.nl/261191\n19. 261223 | Aziatische keramiek | 4,710 members | sub_collection | schotel, kop-en-schotel | https://id.rijksmuseum.nl/261223\n20. 260245 | Aziatische keramiek | 3,193 members | sub_collection | schotel, vase | https://id.rijksmuseum.nl/260245\n21. 26126 | beeldhouwwerken | 2,467 members | sub_collection | sculpture, figure | https://id.rijksmuseum.nl/26126\n22. 261143 | betimmeringen | 4 members | object_type | omlijsting, pilaster | https://id.rijksmuseum.nl/261143\n23. 261102 | Bik | 177 members | object_type | drawing, topografische tekening | https://id.rijksmuseum.nl/261102\n24. 260241 | biografisch | 82,662 members | sub_collection | print, photograph | https://id.rijksmuseum.nl/260241\n25. 26146 | boeken | 5,556 members | sub_collection | print, kostuumprent | https://id.rijksmuseum.nl/26146\n26. 261202 | Boot | 3 members | object_type | verfhout | https://id.rijksmuseum.nl/261202\n27. 26139 | bouwfragmenten | 1,248 members | sub_collection | bouwfragment, haardsteen | https://id.rijksmuseum.nl/26139\n28. 26173 | Braakensiek | 2 members | object_type | print | https://id.rijksmuseum.nl/26173\n29. 261190 | brieven | 43 members | sub_collection | letter, envelop | https://id.rijksmuseum.nl/261190\n30. 26160 | buitenlandse geschiedenis | 489 members | sub_collection | print, boekillustratie | https://id.rijksmuseum.nl/26160\n31. 2611 | Cat. 15e en 16e eeuwse Nederlandse Schilderijen | 6 members | object_type | painting, triptiek | https://id.rijksmuseum.nl/2611\n32. 2612 | Cat. 17e eeuwse Nederlandse Schilderijen I | 7 members | object_type | painting | https://id.rijksmuseum.nl/2612\n33. 2613 | Cat. 17e eeuwse Vlaamse Schilderijen | 1 members | object_type | painting | https://id.rijksmuseum.nl/2613\n34. 261158 | Centraal-Azië (collectie) | 21 members | sub_collection | figure, sculpture | https://id.rijksmuseum.nl/261158\n35. 26187 | chalcografie | 909 members | sub_collection | koperplaat, houtblok | https://id.rijksmuseum.nl/26187\n36. 261132 | China (collectie) | 4,269 members | sub_collection | kop-en-schotel, schotel | https://id.rijksmuseum.nl/261132\n37. 260242 | Delfts aardewerk | 1,515 members | sub_collection | plate (dishes), schotel | https://id.rijksmuseum.nl/260242\n38. 26188 | Document Nederland | 1,338 members | sub_collection | documentary photographs, photograph | https://id.rijksmuseum.nl/26188\n39. 261227 | documenten | 3,474 members | sub_collection | prentbriefkaart, photomechanical print | https://id.rijksmuseum.nl/261227\n40. 261101 | documenten en objecten | 4,605 members | sub_collection | sitspapier, omslag | https://id.rijksmuseum.nl/261101\n41. 2619 | Drawings by Rembrandt and his School in the Rijksmuseum | 139 members | object_type | drawing | https://id.rijksmuseum.nl/2619\n42. 261116 | Drees | 370 members | sub_collection | photograph, albumblad | https://id.rijksmuseum.nl/261116\n43. 261194 | Duits steengoed | 519 members | sub_collection | kruik, kan | https://id.rijksmuseum.nl/261194\n44. 26112 | Dutch Drawings of the Seventeenth Century in the Rijksmuseum | 638 members | object_type | drawing, ontwerp | https://id.rijksmuseum.nl/26112\n45. 26121 | Dutch Paintings of the Seventeenth Century in the Rijksmuseum | 728 members | object_type | painting, grisaille | https://id.rijksmuseum.nl/26121\n46. 2616 | Early Netherlandish Paintings | 163 members | object_type | painting, zijpaneel | https://id.rijksmuseum.nl/2616\n47. 26128 | edele metalen | 3,729 members | sub_collection | miniature, miniatuur (poppenhuisgoed) | https://id.rijksmuseum.nl/26128\n48. 261218 | Engels aardewerk | 653 members | sub_collection | plate (dishes), lid | https://id.rijksmuseum.nl/261218\n49. 261193 | Engelse spotprenten | 468 members | object_type | spotprent, print | https://id.rijksmuseum.nl/261193\n50. 260239 | Entire Public Domain Set | 732,438 members | umbrella | print, photograph | https://id.rijksmuseum.nl/260239\n51. 26162 | erotica | 53 members | object_type | print, titelprent | https://id.rijksmuseum.nl/26162\n52. 2618 | European Sculpture in the Rijksmuseum | 800 members | sub_collection | sculpture, figure | https://id.rijksmuseum.nl/2618\n53. 261140 | Europees aardewerk | 2 members | sub_collection | vrouwenfiguur, decoratief object | https://id.rijksmuseum.nl/261140\n54. 261224 | Europees keramiek | 2,113 members | sub_collection | service (set), schotel | https://id.rijksmuseum.nl/261224\n55. 26147 | Europees porselein | 2,967 members | sub_collection | eet- en drinkgerei, service (set) | https://id.rijksmuseum.nl/26147\n56. 261200 | Europese wandtapijten | 131 members | object_type | tapestry, verdure | https://id.rijksmuseum.nl/261200\n57. 261129 | ex librissen | 11,402 members | object_type | ex libris, photomechanical print | https://id.rijksmuseum.nl/261129\n58. 26118 | Flemish Paintings in the Rijksmuseum | 129 members | object_type | painting, kunstkast | https://id.rijksmuseum.nl/26118\n59. 26189 | foto-opdrachten | 2,107 members | object_type | documentary photographs, photograph | https://id.rijksmuseum.nl/26189\n60. 26150 | foto's | 199,678 members | sub_collection | photograph, bladzijde | https://id.rijksmuseum.nl/26150\n61. 26192 | fotoalbums uit Nederlands-Indië | 3,693 members | sub_collection | photograph, albumblad | https://id.rijksmuseum.nl/26192\n62. 261192 | fotografisch geïllustreerde boeken | 51,729 members | sub_collection | bladzijde, photomechanical print | https://id.rijksmuseum.nl/261192\n63. 26157 | Frankenportretten | 30,136 members | iconographic | print, boekillustratie | https://id.rijksmuseum.nl/26157\n64. 26158 | Frederik Muller Historieplaten | 25,963 members | sub_collection | print, historieprent | https://id.rijksmuseum.nl/26158\n65. 261168 | Friderici-collectie | 15 members | sub_collection | book, painting | https://id.rijksmuseum.nl/261168\n66. 261251 | gebrandschilderd glas | 499 members | object_type | light (window), wapenruit | https://id.rijksmuseum.nl/261251\n67. 261229 | gelegenheidsgrafiek | 5,435 members | sub_collection | print, nieuwjaarswens | https://id.rijksmuseum.nl/261229\n68. 261127 | Gerritsen | 2,000 members | sub_collection | print, drawing | https://id.rijksmuseum.nl/261127\n69. 261157 | glas | 1,719 members | sub_collection | kelkglas, goblet | https://id.rijksmuseum.nl/261157\n70. 261161 | Gordon Atlas | 463 members | object_type | drawing, albumblad | https://id.rijksmuseum.nl/261161\n71. 26195 | Gouverneurs-generaal serie | 94 members | object_type | painting | https://id.rijksmuseum.nl/26195\n72. 261114 | handschriften | 60 members | sub_collection | rectos, schetsboekblad | https://id.rijksmuseum.nl/261114\n73. 261163 | harnassen(onderdelen) | 74 members | sub_collection | helmet, borstplaat | https://id.rijksmuseum.nl/261163\n74. 26172 | heraldiek | 207 members | sub_collection | print, boekillustratie | https://id.rijksmuseum.nl/26172\n75. 261100 | heraldische objecten | 76 members | sub_collection | heraldisch object, family arms | https://id.rijksmuseum.nl/261100\n76. 26159 | Hinloopen/Raimondi | 1 members | object_type | print | https://id.rijksmuseum.nl/26159\n77. 261150 | historische foto's | 1 members | object_type | facsimile | https://id.rijksmuseum.nl/261150\n78. 261109 | Hollandia (collectie) | 3,527 members | sub_collection | scherf, fragment | https://id.rijksmuseum.nl/261109\n79. 26142 | Hollands porselein | 811 members | sub_collection | schotel, kop | https://id.rijksmuseum.nl/26142\n80. 261199 | huishoudtextiel | 451 members | sub_collection | laken (object), sloop | https://id.rijksmuseum.nl/261199\n81. 261167 | IJkwezen | 208 members | sub_collection | inhoudsmaat droge waren, inhoudsmaat natte waren | https://id.rijksmuseum.nl/261167\n82. 26182 | Immerzeel | 572 members | object_type | manuscript, enquêteformulier | https://id.rijksmuseum.nl/26182\n83. 260211 | Indisch erfgoed | 11,827 members | sub_collection | photograph, albumblad | https://id.rijksmuseum.nl/260211\n84. 26143 | interieuronderdelen | 321 members | sub_collection | interieuronderdeel, bouwfragment | https://id.rijksmuseum.nl/26143\n85. 26130 | interieurtextiel | 921 members | sub_collection | gordijn, bespanningsstof | https://id.rijksmuseum.nl/26130\n86. 26134 | Japan (collectie) | 7,731 members | sub_collection | print, surimono | https://id.rijksmuseum.nl/26134\n87. 26169 | Japanse textielsjablonen | 66 members | object_type | katagami, decorated paper | https://id.rijksmuseum.nl/26169\n88. 26140 | juwelen | 1,287 members | sub_collection | brooch, jewellery | https://id.rijksmuseum.nl/26140\n89. 26129 | kant | 3,132 members | sub_collection | strook, dameskleding | https://id.rijksmuseum.nl/26129\n90. 261155 | Katzenelnbogen serie | 7 members | object_type | painting | https://id.rijksmuseum.nl/261155\n91. 261231 | keramiek (collectie) | 7,103 members | sub_collection | eet- en drinkgerei, schotel | https://id.rijksmuseum.nl/261231\n92. 26145 | kerkelijk textiel (collectie) | 205 members | sub_collection | strook, fragment | https://id.rijksmuseum.nl/26145\n93. 2601 | KOG | 30,436 members | sub_collection | print, drawing | https://id.rijksmuseum.nl/2601\n94. 261133 | koloniale kunstnijverheid | 223 members | sub_collection | furniture, stoel | https://id.rijksmuseum.nl/261133\n95. 261144 | koptisch textiel | 70 members | sub_collection | fragment, weefsel | https://id.rijksmuseum.nl/261144\n96. 261134 | Korea (collectie) | 38 members | sub_collection | bowl, pot | https://id.rijksmuseum.nl/261134\n97. 261172 | kostuum- en modeprenten | 5,694 members | sub_collection | modeprent, magazine | https://id.rijksmuseum.nl/261172\n98. 261170 | kostuums | 38 members | sub_collection | broek, jas | https://id.rijksmuseum.nl/261170\n99. 26127 | kostuums en accessoires | 2,907 members | sub_collection | bovenkleding, dameskleding | https://id.rijksmuseum.nl/26127\n100. 261234 | kraakporselein | 423 members | sub_collection | scherf, plate (dishes) | https://id.rijksmuseum.nl/261234\n101. 261165 | kranten en tijdschriften | 361 members | sub_collection | krant, magazine | https://id.rijksmuseum.nl/261165\n102. 261119 | kunstnijverheid | 243 members | sub_collection | cloth, jewellery | https://id.rijksmuseum.nl/261119\n103. 26152 | L.J. Veen | 3,375 members | sub_collection | drawing, boekillustratie (ontwerp) | https://id.rijksmuseum.nl/26152\n104. 261173 | lakwerk | 101 members | sub_collection | box, schrijfcassette | https://id.rijksmuseum.nl/261173\n105. 261174 | Leeuwarden serie | 41 members | object_type | painting | https://id.rijksmuseum.nl/261174\n106. 26148 | lijsten | 2,069 members | sub_collection | frame, frame | https://id.rijksmuseum.nl/26148\n107. 26141 | linnendamast | 2,942 members | sub_collection | servet, tafellaken | https://id.rijksmuseum.nl/26141\n108. 26137 | Marinemodellenkamer | 1,538 members | sub_collection | demonstration model, ship model | https://id.rijksmuseum.nl/26137\n109. 260249 | maritiem digitaal | 50 members | sub_collection | ship model, fully rigged model | https://id.rijksmuseum.nl/260249\n110. 261205 | maritieme collecties | 259 members | sub_collection | bladzijde, aquarel | https://id.rijksmuseum.nl/261205\n111. 261181 | Maten & gewichten | 10 members | sub_collection | graanmaat, measuring rod | https://id.rijksmuseum.nl/261181\n112. 261124 | Meresteijn | 29 members | sub_collection | spoon, gevest | https://id.rijksmuseum.nl/261124\n113. 261138 | metalen | 1 members | object_type | kleding, gordelhaak | https://id.rijksmuseum.nl/261138\n114. 26132 | meubelen | 2,975 members | sub_collection | furniture, stoel | https://id.rijksmuseum.nl/26132\n115. 26191 | Midden-Oosten keramiek | 286 members | sub_collection | bowl, tile | https://id.rijksmuseum.nl/26191\n116. 260244 | MIMO: Musical Instruments | 365 members | object_type | musical instrument, percussion instrument | https://id.rijksmuseum.nl/260244\n117. 26135 | miniaturen | 309 members | object_type | miniature (painting), box | https://id.rijksmuseum.nl/26135\n118. 260236 | mode | 2,401 members | sub_collection | dameskleding, modeprent | https://id.rijksmuseum.nl/260236\n119. 261106 | munten, penningen en draagtekens | 17,631 members | sub_collection | history medal, coin | https://id.rijksmuseum.nl/261106\n120. 261126 | museuminventaris | 3 members | sub_collection | clockwork, box | https://id.rijksmuseum.nl/261126\n121. 261226 | muziekinstrumenten | 788 members | sub_collection | musical instrument, wind instrument | https://id.rijksmuseum.nl/261226\n122. 261201 | naaldwerk | 393 members | sub_collection | proeflap, merklap | https://id.rijksmuseum.nl/261201\n123. 2617 | Navy Models in the Rijksmuseum | 1,355 members | sub_collection | demonstration model, ship model | https://id.rijksmuseum.nl/2617\n124. 261188 | Nederlands tinglazuur aardewerk | 1,843 members | sub_collection | plate (dishes), schotel | https://id.rijksmuseum.nl/261188\n125. 26155 | Nova Zembla (collectie) | 794 members | sub_collection | print, kostuumprent | https://id.rijksmuseum.nl/26155\n126. 26131 | onedele metalen | 2,635 members | sub_collection | sleutel, chandelier | https://id.rijksmuseum.nl/26131\n127. 26144 | Oosterse tapijten | 310 members | object_type | Oriental rug, tapijt | https://id.rijksmuseum.nl/26144\n128. 26170 | opticaprenten | 1,009 members | object_type | opticaprent, print | https://id.rijksmuseum.nl/26170\n129. 26156 | Oranjeportretten | 3,565 members | iconographic | print, photograph | https://id.rijksmuseum.nl/26156\n130. 26171 | ornamentprenten | 10,139 members | object_type | ornamentprent, print | https://id.rijksmuseum.nl/26171\n131. 261112 | ornamenttekeningen | 139 members | object_type | ornamenttekening, drawing | https://id.rijksmuseum.nl/261112\n132. 26177 | P.N. van Kampen | 38 members | sub_collection | drawing, study for binding design | https://id.rijksmuseum.nl/26177\n133. 261164 | pamfletten | 288 members | sub_collection | print, pamflet | https://id.rijksmuseum.nl/261164\n134. 26197 | Panpoeticon Batavum | 91 members | object_type | painting, grisaille | https://id.rijksmuseum.nl/26197\n135. 261222 | papier (collectie) | 3,256 members | sub_collection | drawing, print | https://id.rijksmuseum.nl/261222\n136. 26136 | pastels | 115 members | object_type | pastel, drawing | https://id.rijksmuseum.nl/26136\n137. 261220 | poppenhuis | 1,882 members | object_type | miniatuur (poppenhuisgoed), schotel | https://id.rijksmuseum.nl/261220\n138. 261233 | porselein | 798 members | sub_collection | scherf, plate (dishes) | https://id.rijksmuseum.nl/261233\n139. 26151 | prenten | 385,422 members | sub_collection | print, boekillustratie | https://id.rijksmuseum.nl/26151\n140. 260250 | prenten | 12,756 members | object_type | print, boekillustratie | https://id.rijksmuseum.nl/260250\n141. 261123 | Princesse Maria | 43 members | sub_collection | brick (clay product), screwcap | https://id.rijksmuseum.nl/261123\n142. 26164 | R.W.P. de Vries Jr. | 1,075 members | sub_collection | drawing, ontwerp | https://id.rijksmuseum.nl/26164\n143. 260212 | RijksXL | 6,987 members | sub_collection | painting, miniature | https://id.rijksmuseum.nl/260212\n144. 26190 | Roosdorp | 490 members | sub_collection | print, onderscheiding | https://id.rijksmuseum.nl/26190\n145. 26194 | Rotterdamse V.O.C. serie | 35 members | object_type | painting | https://id.rijksmuseum.nl/26194\n146. 261175 | schaalmodellen | 6 members | sub_collection | scale model, maquette | https://id.rijksmuseum.nl/261175\n147. 261107 | scheepsmodellen | 110 members | sub_collection | ship model, fully rigged model | https://id.rijksmuseum.nl/261107\n148. 261110 | scheepswrakvondsten | 6 members | sub_collection | staaf, coin | https://id.rijksmuseum.nl/261110\n149. 261208 | schilderijen | 4,914 members | object_type | painting, grisaille | https://id.rijksmuseum.nl/261208\n150. 261160 | schilderingen | 48 members | sub_collection | hanging scroll, schildering | https://id.rijksmuseum.nl/261160\n151. 261219 | schutterij | 410 members | sub_collection | history medal, draagteken | https://id.rijksmuseum.nl/261219\n152. 261166 | sieraden | 71 members | sub_collection | jewellery, bracelet | https://id.rijksmuseum.nl/261166\n153. 260235 | sieraden | 1,372 members | sub_collection | brooch, jewellery | https://id.rijksmuseum.nl/260235\n154. 261195 | sierpapier | 1,847 members | sub_collection | sitspapier, omslag | https://id.rijksmuseum.nl/261195\n155. 261198 | Slot ter Hooghe | 4 members | sub_collection | staaf, chest | https://id.rijksmuseum.nl/261198\n156. 261153 | Snouckaert | 200 members | sub_collection | flintlock pistol, sabre | https://id.rijksmuseum.nl/261153\n157. 261130 | Spitsbergen (collectie) | 46 members | sub_collection | muts, jas | https://id.rijksmuseum.nl/261130\n158. 26161 | spotprenten | 1,710 members | sub_collection | spotprent, drawing | https://id.rijksmuseum.nl/26161\n159. 260246 | Staten-Generaal | 393 members | sub_collection | print, spotprent | https://id.rijksmuseum.nl/260246\n160. 26116 | Surimono from the Goslings Collection in the Rijksmuseum | 205 members | object_type | print, surimono | https://id.rijksmuseum.nl/26116\n161. 261142 | tegels | 12 members | sub_collection | tile, tegelveld | https://id.rijksmuseum.nl/261142\n162. 26133 | tekeningen | 89,398 members | sub_collection | drawing, schetsboekblad | https://id.rijksmuseum.nl/26133\n163. 261228 | textiel | 814 members | sub_collection | fragment, miniatuur (poppenhuisgoed) | https://id.rijksmuseum.nl/261228\n164. 261182 | tijdschriften | 82 members | sub_collection | modeprent, print | https://id.rijksmuseum.nl/261182\n165. 260213 | Top 100 | 133 members | sub_collection | painting, bloempiramide | https://id.rijksmuseum.nl/260213\n166. 260216 | Top 100 prentenkabinet | 106 members | sub_collection | print, drawing | https://id.rijksmuseum.nl/260216\n167. 260214 | Top 1000 | 1,040 members | sub_collection | painting, print | https://id.rijksmuseum.nl/260214\n168. 26138 | topografie | 8,713 members | sub_collection | print, photograph | https://id.rijksmuseum.nl/26138\n169. 260248 | tweede wereldoorlog | 3,310 members | sub_collection | photograph, albumblad | https://id.rijksmuseum.nl/260248\n170. 26154 | uniformen en uitrustingsstukken | 282 members | sub_collection | uniform, sjako | https://id.rijksmuseum.nl/26154\n171. 261217 | Van Gelder | 8,586 members | sub_collection | history medal, jeton | https://id.rijksmuseum.nl/261217\n172. 26199 | Vanmour serie | 62 members | object_type | painting | https://id.rijksmuseum.nl/26199\n173. 261221 | varia | 27 members | sub_collection | cut-paper work, clipping | https://id.rijksmuseum.nl/261221\n174. 261176 | Varia 16e eeuw en vroeger | 46 members | sub_collection | tile, tegelvloer | https://id.rijksmuseum.nl/261176\n175. 261177 | Varia 17e eeuw | 103 members | sub_collection | plaque, staf | https://id.rijksmuseum.nl/261177\n176. 261178 | Varia 18e eeuw | 322 members | sub_collection | toverlantaarnplaat, diafanoramaplaat | https://id.rijksmuseum.nl/261178\n177. 261179 | Varia 19e eeuw | 186 members | sub_collection | box, pop | https://id.rijksmuseum.nl/261179\n178. 261180 | Varia 20e eeuw en later | 2,412 members | sub_collection | photograph, albumblad | https://id.rijksmuseum.nl/261180\n179. 260215 | Vereniging Rembrandt | 3,755 members | sub_collection | drawing, print | https://id.rijksmuseum.nl/260215\n180. 261113 | verzamelbanden | 16 members | sub_collection | drawing, album | https://id.rijksmuseum.nl/261113\n181. 261117 | Visser (collectie) | 366 members | sub_collection | flintlock pistol, flintlock gun | https://id.rijksmuseum.nl/261117\n182. 261108 | vlaggen en vaandels | 154 members | sub_collection | flag, banner | https://id.rijksmuseum.nl/261108\n183. 260243 | vogelen | 3,637 members | sub_collection | print, popular print | https://id.rijksmuseum.nl/260243\n184. 26165 | volksprenten | 8,429 members | object_type | popular print, print | https://id.rijksmuseum.nl/26165\n185. 260247 | vrienden aziatische kunst | 2,311 members | sub_collection | sculpture, fragment | https://id.rijksmuseum.nl/260247\n186. 261189 | wapens & militaria | 2,332 members | sub_collection | flintlock pistol, musical instrument | https://id.rijksmuseum.nl/261189\n187. 261115 | Witte Leeuw | 1,185 members | sub_collection | scherf, plate (dishes) | https://id.rijksmuseum.nl/261115\n188. 26114 | Works by Hercules Segers in the Rijksmuseum | 77 members | object_type | print, drawing | https://id.rijksmuseum.nl/26114\n189. 261196 | Zeelelie | 6 members | sub_collection | scherf, roofing tile | https://id.rijksmuseum.nl/261196\n190. 26185 | zijdeweefsels | 780 members | sub_collection | fragment, zijdeweefsel | https://id.rijksmuseum.nl/26185\n191. 261135 | Zuid-Azië (collectie) | 113 members | sub_collection | sculpture, jewellery | https://id.rijksmuseum.nl/261135\n192. 261137 | Zuidoost-Azië, maritiem (collectie) | 346 members | sub_collection | sculpture, figure | https://id.rijksmuseum.nl/261137\n193. 261136 | Zuidoost-Azië, vasteland (collectie) | 165 members | sub_collection | sculpture, Boeddha-beeld | https://id.rijksmuseum.nl/261136",
+  "args": {}
+}

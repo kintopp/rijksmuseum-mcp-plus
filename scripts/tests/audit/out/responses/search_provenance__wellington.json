@@ -1,0 +1,204 @@
+{
+  "tool": "search_provenance",
+  "fixture": "wellington",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 3901,
+  "bytesText": 538,
+  "structured": {
+    "totalArtworks": 1,
+    "results": [
+      {
+        "objectNumber": "RP-T-1961-81",
+        "title": "Reclining Lion",
+        "creator": "school of Rembrandt van Rijn",
+        "date": "1650",
+        "url": "https://www.rijksmuseum.nl/en/collection/RP-T-1961-81",
+        "eventCount": 5,
+        "matchedEventCount": 1,
+        "events": [
+          {
+            "sequence": 1,
+            "rawText": "collection Adelbert Wellington Brownlow Cust, 3rd Earl of Brownlow (1844-1921), Belton House, near Grantham",
+            "gap": true,
+            "transferType": "collection",
+            "unsold": false,
+            "batchPrice": false,
+            "transferCategory": "ownership",
+            "uncertain": false,
+            "parties": [
+              {
+                "name": "Adelbert Wellington Brownlow Cust",
+                "dates": null,
+                "uncertain": false,
+                "role": "collector",
+                "position": "receiver"
+              }
+            ],
+            "dateExpression": null,
+            "dateYear": null,
+            "dateQualifier": null,
+            "location": null,
+            "price": null,
+            "saleDetails": null,
+            "citations": [],
+            "isCrossRef": false,
+            "crossRefTarget": null,
+            "parseMethod": "peg",
+            "categoryMethod": "type_mapping",
+            "correctionMethod": null,
+            "enrichmentReasoning": null,
+            "matched": true
+          },
+          {
+            "sequence": 2,
+            "rawText": "{According to an inscription on the drawing.} his sale, London (Sotheby’s), 29 June 1926 sqq., no. 28, £ 620, to the dealer P. & D. Colnaghi, London",
+            "gap": false,
+            "transferType": "sale",
+            "unsold": false,
+            "batchPrice": false,
+            "transferCategory": "ownership",
+            "uncertain": false,
+            "parties": [
+              {
+                "name": "P. & D. Colnaghi",
+                "dates": null,
+                "uncertain": false,
+                "role": "buyer",
+                "position": "receiver"
+              }
+            ],
+            "dateExpression": "29 June 1926 sqq.",
+            "dateYear": 1926,
+            "dateQualifier": null,
+            "location": "London",
+            "price": {
+              "amount": 620,
+              "currency": "pounds"
+            },
+            "saleDetails": "no. 28",
+            "citations": [
+              {
+                "text": "According to an inscription on the drawing."
+              }
+            ],
+            "isCrossRef": false,
+            "crossRefTarget": null,
+            "parseMethod": "peg",
+            "categoryMethod": "type_mapping",
+            "correctionMethod": null,
+            "enrichmentReasoning": null,
+            "matched": false
+          },
+          {
+            "sequence": 3,
+            "rawText": "collection Isaäc de Bruijn (1872-1953) and his wife, Johanna Geertruida de Bruijn-van der Leeuw (1877-1960), Spiez and Muri, near Bern, by 1929",
+            "gap": true,
+            "transferType": "collection",
+            "unsold": false,
+            "batchPrice": false,
+            "transferCategory": "ownership",
+            "uncertain": false,
+            "parties": [
+              {
+                "name": "Isaäc de Bruijn",
+                "dates": "1872-1953",
+                "uncertain": false,
+                "role": "collector",
+                "position": "receiver"
+              }
+            ],
+            "dateExpression": "by 1929",
+            "dateYear": 1929,
+            "dateQualifier": "before",
+            "location": "Spiez",
+            "price": null,
+            "saleDetails": null,
+            "citations": [],
+            "isCrossRef": false,
+            "crossRefTarget": null,
+            "parseMethod": "peg",
+            "categoryMethod": "type_mapping",
+            "correctionMethod": null,
+            "enrichmentReasoning": null,
+            "matched": false
+          },
+          {
+            "sequence": 4,
+            "rawText": "{London 1929, no. 623.} by whom donated to the museum (L. 2228), 1949, but kept in usufruct",
+            "gap": false,
+            "transferType": "gift",
+            "unsold": false,
+            "batchPrice": false,
+            "transferCategory": "ownership",
+            "uncertain": false,
+            "parties": [
+              {
+                "name": "museum (L. 2228)",
+                "dates": null,
+                "uncertain": false,
+                "role": "recipient",
+                "position": "receiver"
+              }
+            ],
+            "dateExpression": "1949",
+            "dateYear": 1949,
+            "dateQualifier": null,
+            "location": null,
+            "price": null,
+            "saleDetails": null,
+            "citations": [
+              {
+                "text": "London 1929, no. 623."
+              }
+            ],
+            "isCrossRef": false,
+            "crossRefTarget": null,
+            "parseMethod": "peg",
+            "categoryMethod": "type_mapping",
+            "correctionMethod": null,
+            "enrichmentReasoning": null,
+            "matched": false
+          },
+          {
+            "sequence": 5,
+            "rawText": "transferred to the museum, 1960",
+            "gap": false,
+            "transferType": "transfer",
+            "unsold": false,
+            "batchPrice": false,
+            "transferCategory": "ownership",
+            "uncertain": false,
+            "parties": [
+              {
+                "name": "the museum",
+                "dates": null,
+                "uncertain": false,
+                "role": "recipient",
+                "position": "receiver"
+              }
+            ],
+            "dateExpression": "1960",
+            "dateYear": 1960,
+            "dateQualifier": null,
+            "location": null,
+            "price": null,
+            "saleDetails": null,
+            "citations": [],
+            "isCrossRef": false,
+            "crossRefTarget": null,
+            "parseMethod": "peg",
+            "categoryMethod": "rule:transfer_is_ownership",
+            "correctionMethod": null,
+            "enrichmentReasoning": "Deterministic rule: all transfer-type events in the Rijksmuseum corpus are permanent institutional transfers. Verified via LLM pilot batch (50 artworks, 57/57 → ownership) and keyword analysis (0 genuine custody matches among 6,233 events).",
+            "matched": false
+          }
+        ]
+      }
+    ]
+  },
+  "text": "1 artwork with matching provenance\n\nRP-T-1961-81 | \"Reclining Lion\" — school of Rembrandt van Rijn (1650)\n  https://www.rijksmuseum.nl/en/collection/RP-T-1961-81\n  >>> 1. collection | Adelbert Wellington Brownlow Cust  [cat=ownership]\n      2. sale | P. & D. Colnaghi | 29 June 1926 sqq. | London | pounds 620  [cat=ownership]\n      3. collection | Isaäc de Bruijn | by 1929 | Spiez  [cat=ownership]\n      4. gift | museum (L. 2228) | 1949  [cat=ownership]\n      5. transfer | the museum | 1960  [cat=ownership/rule:transfer_is_ownership]",
+  "args": {
+    "party": "Wellington"
+  }
+}

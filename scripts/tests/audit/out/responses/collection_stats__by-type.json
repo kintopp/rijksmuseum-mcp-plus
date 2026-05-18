@@ -1,0 +1,14 @@
+{
+  "tool": "collection_stats",
+  "fixture": "by-type",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 4,
+  "bytesText": 499,
+  "structured": null,
+  "text": "type distribution:\nTotal artworks: 834,435\nShowing entries 1–10 of 632 distinct values\n\n  print                  369,054  (44.2%)\n  photograph             133,804  (16.0%)\n  drawing                 56,763  (6.8%)\n  photomechanical print   52,428  (6.3%)\n  carte-de-visite         17,979  (2.2%)\n  rectos                  15,055  (1.8%)\n  letter                  11,412  (1.4%)\n  stereograph             11,056  (1.3%)\n  versos                  10,534  (1.3%)\n  popular print            9,004  (1.1%)",
+  "args": {
+    "dimension": "type",
+    "topN": 10
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "tool": "get_artwork_details",
+  "fixture": "pieneman",
+  "anchor": "SK-A-1115",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 6545,
+  "bytesText": 2934,
+  "structured": {
+    "id": "https://id.rijksmuseum.nl/8065",
+    "objectNumber": "SK-A-1115",
+    "title": "The Battle of Waterloo",
+    "creator": "Jan Willem Pieneman",
+    "date": "1824",
+    "type": "painting",
+    "url": "https://www.rijksmuseum.nl/en/collection/SK-A-1115",
+    "description": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.",
+    "techniqueStatement": null,
+    "dimensionStatement": "h 567 cm × w 823 cm",
+    "provenance": null,
+    "creditLine": null,
+    "inscriptions": [
+      "signatuur en datum, rechts op een affuit: ‘1824 J.W. Pieneman’",
+      "signature and date: ‘1824 J.W. Pieneman’"
+    ],
+    "location": {
+      "roomId": "1.12",
+      "floor": "first",
+      "roomName": null
+    },
+    "collectionSets": [
+      "261208",
+      "260251",
+      "260239",
+      "260241",
+      "260214",
+      "260213",
+      "260212"
+    ],
+    "externalIds": {
+      "handle": "http://hdl.handle.net/10934/RM0001.COLLECT.5029",
+      "other": []
+    },
+    "titles": [
+      {
+        "title": "De slag bij Waterloo",
+        "language": "nl",
+        "qualifier": "full"
+      },
+      {
+        "title": "De Slag bij Waterloo",
+        "language": "nl",
+        "qualifier": "display"
+      },
+      {
+        "title": "The Battle of Waterloo",
+        "language": "en",
+        "qualifier": "display"
+      },
+      {
+        "title": "The Battle of Waterloo",
+        "language": "en",
+        "qualifier": "full"
+      }
+    ],
+    "parents": [],
+    "childCount": 0,
+    "children": [],
+    "curatorialNarrative": {
+      "en": "Here the Duke of Wellington is receiving the message that Prussian forces are coming to his aid. Wellington, commander of the Anglo-Dutch troops, is the central figure in this group portrait of the major players at Waterloo. Lying wounded on a stretcher in the left foreground is the Dutch Crown Prince, later King William II. Originally intended for Wellington, the painting remained in the Netherlands thanks to William I who bought the picture for his son.",
+      "nl": null
+    },
+    "license": "http://creativecommons.org/publicdomain/mark/1.0/",
+    "webPage": "https://www.rijksmuseum.nl/en/collection/SK-A-1115",
+    "dimensions": [
+      {
+        "type": "height",
+        "value": 567,
+        "unit": "cm",
+        "note": null
+      },
+      {
+        "type": "width",
+        "value": 823,
+        "unit": "cm",
+        "note": null
+      },
+      {
+        "type": "depth",
+        "value": 10,
+        "unit": "cm",
+        "note": null
+      }
+    ],
+    "relatedObjects": [
+      {
+        "relationship": "production stadia",
+        "objectNumber": "RP-T-1964-101A",
+        "title": "Study for The Battle of Waterloo",
+        "objectUri": "https://id.rijksmuseum.nl/200364895",
+        "iiifId": "IFifs"
+      },
+      {
+        "relationship": "production stadia",
+        "objectNumber": "RP-T-1964-102A",
+        "title": "Study for The Battle of Waterloo",
+        "objectUri": "https://id.rijksmuseum.nl/200364889",
+        "iiifId": "cOJsQ"
+      },
+      {
+        "relationship": "production stadia",
+        "objectNumber": "RP-T-1964-103",
+        "title": "Study for The Battle of Waterloo",
+        "objectUri": "https://id.rijksmuseum.nl/200364897",
+        "iiifId": "hkPWp"
+      },
+      {
+        "relationship": "production stadia",
+        "objectNumber": "RP-T-1964-99",
+        "title": "Study for The Battle of Waterloo",
+        "objectUri": "https://id.rijksmuseum.nl/200364898",
+        "iiifId": "fXPEE"
+      }
+    ],
+    "relatedObjectsTotalCount": 4,
+    "persistentId": "http://hdl.handle.net/10934/RM0001.COLLECT.8065",
+    "objectTypes": [
+      {
+        "id": "2208",
+        "label": "painting"
+      }
+    ],
+    "materials": [
+      {
+        "id": "22010",
+        "label": "canvas"
+      },
+      {
+        "id": "2209",
+        "label": "oil paint (paint)"
+      }
+    ],
+    "production": [
+      {
+        "name": "Pieneman, Jan Willem",
+        "role": "painter",
+        "attributionQualifier": "primary",
+        "place": "Abcoude",
+        "actorUri": "2101244",
+        "personInfo": {
+          "birthYear": 1779,
+          "deathYear": 1853,
+          "gender": "male",
+          "wikidataId": "Q512948"
+        }
+      }
+    ],
+    "collectionSetLabels": [
+      {
+        "id": "261208",
+        "label": "schilderijen"
+      },
+      {
+        "id": "260251",
+        "label": "Alle gepubliceerde objecten"
+      },
+      {
+        "id": "260239",
+        "label": "Entire Public Domain Set"
+      },
+      {
+        "id": "260241",
+        "label": "biografisch"
+      },
+      {
+        "id": "260214",
+        "label": "Top 1000"
+      },
+      {
+        "id": "260213",
+        "label": "Top 100"
+      },
+      {
+        "id": "260212",
+        "label": "RijksXL"
+      }
+    ],
+    "subjects": {
+      "iconclass": [
+        {
+          "id": "45E4",
+          "label": "animals used in the army"
+        },
+        {
+          "id": "45H3",
+          "label": "battle"
+        },
+        {
+          "id": "45H52",
+          "label": "putting out of action by wounding"
+        }
+      ],
+      "depictedPersons": [
+        {
+          "id": "21040136",
+          "label": "William II of the Netherlands"
+        },
+        {
+          "id": "21076460",
+          "label": "Wellington, Arthur Wellesley of"
+        },
+        {
+          "id": "2109825",
+          "label": "Hill, sir Rowland"
+        }
+      ],
+      "depictedPlaces": [
+        {
+          "id": "2301002",
+          "label": "Waterloo"
+        }
+      ]
+    },
+    "dateDisplay": "1824",
+    "extentText": "height 567 cm x width 823 cm | length 565.7 cm | length 566.4 cm | length 650 cm x length 592 cm x width 40 cm | length 822.6 cm | length 822.7 cm | length 825.7 cm x width 555.1 cm x depth 10 cm | length 900 cm x length 842 cm x width 40 cm | buitenmaat: lengte 825,7 cm (maten inclusief huidige omlijsting) x breedte 555,1 cm (maten inclusief huidige omlijsting (555,1 (links) -555,8 (rechts))) x diepte 10 cm (maten inclusief huidige omlijsting) | drager: hoogte 567 cm x breedte 823 cm | kort deel 1 spieraam: lengte 565,7 cm | kort deel 2 spieraam: lengte 566,4 cm | kort deel lijst: lengte 650 cm x lengte 592 cm (dagmaat) x breedte 40 cm | lang deel 1 spieraam: lengte 822,7 cm | lang deel 2 spieraam: lengte 822,6 cm | lang deel lijst: lengte 900 cm x lengte 842 cm (dagmaat) x breedte 40 cm",
+    "recordCreated": "2001-03-02T00:00:00Z",
+    "recordModified": "2001-03-02T23:59:59Z",
+    "themes": [
+      {
+        "id": "22015182",
+        "label": "history painting"
+      },
+      {
+        "id": "22014932",
+        "label": "battlefield"
+      },
+      {
+        "id": "22012473",
+        "label": "military history"
+      }
+    ],
+    "themesTotalCount": 3,
+    "exhibitions": [],
+    "exhibitionsTotalCount": 0,
+    "attributionEvidence": [],
+    "provenanceChain": null
+  },
+  "text": "SK-A-1115 — The Battle of Waterloo\nJan Willem Pieneman, 1824\nh 567 cm × w 823 cm\nfirst, room 1.12\n\nTypes: painting\nMaterials: canvas, oil paint (paint)\nIconclass: 45E4 | 45H3 | 45H52\nDepicted persons: William II of the Netherlands, Wellington, Arthur Wellesley of, Hill, sir Rowland\nDepicted places: Waterloo\nProduction: Pieneman, Jan Willem (1779–1853) [painter], Abcoude\n\n[Description] De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.\n[Narrative] Here the Duke of Wellington is receiving the message that Prussian forces are coming to his aid. Wellington, commander of the Anglo-Dutch troops, is the central figure in this group portrait of the major players at Waterloo. Lying wounded on a stretcher in the left foreground is the Dutch Crown Prince, later King William II. Originally intended for Wellington, the painting remained in the Netherlands thanks to William I who bought the picture for his son.\n[Inscriptions] signatuur en datum, rechts op een affuit: ‘1824 J.W. Pieneman’; signature and date: ‘1824 J.W. Pieneman’\n[Titles] (4 variants) full/nl: De slag bij Waterloo | display/nl: De Slag bij Waterloo | display/en: The Battle of Waterloo | full/en: The Battle of Waterloo\n[Co-productions] production stadia: RP-T-1964-101A, RP-T-1964-102A, RP-T-1964-103, RP-T-1964-99\nURL: https://www.rijksmuseum.nl/en/collection/SK-A-1115",
+  "args": {
+    "objectNumber": "SK-A-1115"
+  }
+}

@@ -1,0 +1,5 @@
+# Derived analysis artifacts — regenerated on every run.
+# out/responses/*.json stays tracked as deterministic fixtures for --use-cached.
+out/audit-*.csv
+out/audit-*.html
+out/audit-*.json

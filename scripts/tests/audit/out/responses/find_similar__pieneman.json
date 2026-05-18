@@ -1,0 +1,15 @@
+{
+  "tool": "find_similar",
+  "fixture": "pieneman",
+  "anchor": "SK-A-1115",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 4,
+  "bytesText": 297,
+  "structured": null,
+  "text": "Similar to \"The Battle of Waterloo\" (SK-A-1115)\nVisual: 3 | Co-Production: 3 | Related: 3 | Lineage: 0 | Iconclass: 3 | Description: 3 | Theme: 3 | Person: 3 | Place: 3 | Pooled (4+): 0\n\n/var/folders/14/cd_23cfd3n18qrqgb22ghypc0000gq/T/rijksmuseum-similar-59a20bfe-e162-4f11-a632-5ef0a253727e.html",
+  "args": {
+    "objectNumber": "SK-A-1115",
+    "maxResults": 3
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "tool": "inspect_artwork_image",
+  "fixture": "pieneman-small-region",
+  "anchor": "SK-A-1115",
+  "excludeFields": [
+    "image",
+    "imageBase64",
+    "data",
+    "imageBytes"
+  ],
+  "isError": false,
+  "bytesStructured": 311,
+  "bytesText": 0,
+  "structured": {
+    "objectNumber": "SK-A-1115",
+    "region": "pct:40,40,20,20",
+    "requestedSize": 400,
+    "nativeWidth": 8106,
+    "nativeHeight": 5399,
+    "cropPixelWidth": 400,
+    "cropPixelHeight": 266,
+    "cropRegion": "pct:40,40,20,20",
+    "rotation": 0,
+    "quality": "default",
+    "fetchTimeMs": 35,
+    "viewUUID": "a46b199e-0234-49a4-9448-e02805de3bab",
+    "viewerNavigated": true
+  },
+  "text": "",
+  "args": {
+    "objectNumber": "SK-A-1115",
+    "region": "pct:40,40,20,20",
+    "size": 400
+  }
+}

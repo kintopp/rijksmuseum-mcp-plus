@@ -1,0 +1,328 @@
+{
+  "tool": "get_artwork_details",
+  "fixture": "nightwatch",
+  "anchor": "SK-C-5",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 10109,
+  "bytesText": 6555,
+  "structured": {
+    "id": "https://id.rijksmuseum.nl/8096",
+    "objectNumber": "SK-C-5",
+    "title": "The Night Watch Militia Company of District II under the Command of Captain Frans Banninck Cocq",
+    "creator": "Rembrandt van Rijn",
+    "date": "1642",
+    "type": "painting",
+    "url": "https://www.rijksmuseum.nl/en/collection/SK-C-5",
+    "description": "Het korporaalschap van kapitein Frans Banninck Cocq en luitenant Willem van Ruytenburch, bekend als de 'Nachtwacht'. Schutters van de kloveniersdoelen uit een poort naar buiten tredend. Op een schild aangebracht naast de poort staan de namen van de afgebeelde personen: Frans Banning Cocq, heer van purmerlant en Ilpendam, Capiteijn Willem van Ruijtenburch van Vlaerdingen, heer van Vlaerdingen, Lu[ij]tenant, Jan Visscher Cornelisen Vaendrich, Rombout Kemp Sergeant, Reijnier Engelen Sergeant, Barent Harmansen, Jan Adriaensen Keyser, Elbert Willemsen, Jan Clasen Leydeckers, Jan Ockersen, Jan Pietersen bronchorst, Harman Iacobsen wormskerck, Jacob Dircksen de Roy, Jan vander heede, Walich Schellingwou, Jan brugman, Claes van Cruysbergen, Paulus Schoonhoven. De schutters zijn gewapend met lansen, musketten en hellebaarden. Rechts de tamboer met een grote trommel. Tussen de soldaten links staat een meisje met een dode kip om haar middel, rechts een blaffende hond. Linksboven de vaandrig met de uitgestoken vaandel. | Officieren en andere schutters van wijk II in Amsterdam onder leiding van kapitein Frans Banninck Cocq en luitenant Willem van Ruytenburch, sinds het einde van de 18de eeuw bekend als ‘De Nachtwacht’. Schutters van de Kloveniersdoelen uit een poort naar buiten tredend. Op een schild aangebracht naast de poort staan de namen van de afgebeelde personen: Frans Banning Cocq, heer van purmerlant en Ilpendam, Capiteijn Willem van Ruijtenburch van Vlaerdingen, heer van Vlaerdingen, Lu[ij]tenant, Jan Visscher Cornelisen Vaendrich, Rombout Kemp Sergeant, Reijnier Engelen Sergeant, Barent Harmansen, Jan Adriaensen Keyser, Elbert Willemsen, Jan Clasen Leydeckers, Jan Ockersen, Jan Pietersen bronchorst, Harman Iacobsen wormskerck, Jacob Dircksen de Roy, Jan vander heede, Walich Schellingwou, Jan brugman, Claes van Cruysbergen, Paulus Schoonhoven. De schutters zijn gewapend met onder anderen pieken, musketten en hellebaarden. Rechts de tamboer met een grote trommel. Tussen de soldaten links staat een meisje met een dode kip om haar middel, rechts een blaffende hond. Linksboven de vaandrig met de uitgestoken vaandel.",
+    "techniqueStatement": null,
+    "dimensionStatement": "h 379.5 cm × w 453.5 cm",
+    "provenance": "Commissioned by or for the sitters for the great hall of the Kloveniersdoelen (the headquarters of the arquebusiers’ civic guard), Amsterdam; first mentioned in the Kloveniersdoelen, 1653: 'Ibid. daer naast aanvolgen. Frans Benning Cock Capn. en Witt van Ruijtenburg Lut. geschildert van Rembrand an 1642.';{Schaep 1653, p. 135, no. 4.} transferred to the Small Council of War Chamber (Kleine Krijgsraadkamer) in the Town Hall on Dam square, Amsterdam, 1715 {SAA, Archief van de Thesaurieren Ordinaris, Resolutieboek 28 October 1711-28 January 1723, 23 May 1715: 'Is geordonneert, omme het groote Stuk Schilderij van Rembrandts hangende op de Saal van de Colveniersdoelen Schoon te maken, en als dan hetzelve te Plaetsen op de Kreygsraats Kamer van het Stadhuys'. First published in Dyserinck 1890, p. 245.} transferred to the house of Cornelis Sebille Roos (the 'Trippenhuis'), 29 Kloveniersburgwal, Amsterdam, 1808;{See Brugmans 1913, p. 60.} on loan to the museum from the City of Amsterdam since 1808",
+    "creditLine": "Bruikleen van de gemeente Amsterdam | On loan from the City of Amsterdam",
+    "inscriptions": [
+      "signature and date: ‘Rembrandt f 1642’",
+      "signatuur en datum, linksonder: ‘Rembrandt f 1642’",
+      "inscription: ‘Frans Banning Cocq, heer van purmerlant en Ilpendam, Capiteijn Willem van Ruijtenburch van Vlaerdingen, heer van Vlaerdingen, Lu[ij]tenant, Jan Visscher Cornelisen Vaendrich, Rombout Kemp Sergeant, Reijnier Engelen Sergeant, Barent Harmansen, Jan Adriaensen Keyser, Elbert Willemsen, Jan Clasen Leydeckers, Jan Ockersen, Jan Pietersen bronchorst, Harman Iacobsen wormskerck, Jacob Dircksen de Roy, Jan vander heede, Walich Schellingwou, Jan brugman, Claes van Cruysbergen, Paulus Schoonhoven’",
+      "inscriptie, middenboven op het schild: ‘Frans Banning Cocq, heer van purmerlant en Ilpendam, Capiteijn Willem van Ruijtenburch van Vlaerdingen, heer van Vlaerdingen, Lu[ij]tenant, Jan Visscher Cornelisen Vaendrich, Rombout Kemp Sergeant, Reijnier Engelen Sergeant, Barent Harmansen, Jan Adriaensen Keyser, Elbert Willemsen, Jan Clasen Leydeckers, Jan Ockersen, Jan Pietersen bronchorst, Harman Iacobsen wormskerck, Jacob Dircksen de Roy, Jan vander heede, Walich Schellingwou, Jan brugman, Claes van Cruysbergen, Paulus Schoonhoven’"
+    ],
+    "location": null,
+    "collectionSets": [
+      "261208",
+      "260251",
+      "260239",
+      "260241",
+      "260214",
+      "260213",
+      "260212"
+    ],
+    "externalIds": {
+      "handle": "http://hdl.handle.net/10934/RM0001.COLLECT.5216",
+      "other": []
+    },
+    "titles": [
+      {
+        "title": "Officieren en andere schutters van wijk II in Amsterdam, onder leiding van kapitein Frans Banninck Cocq en luitenant Willem van Ruytenburch, bekend als ‘De Nachtwacht’",
+        "language": "nl",
+        "qualifier": "full"
+      },
+      {
+        "title": "Officers and other civic guardsmen of District II in Amsterdam, under the command of Captain Frans Banninck Cocq and Lieutenant Willem van Ruytenburch, known as ‘The Night Watch’",
+        "language": "en",
+        "qualifier": "full"
+      },
+      {
+        "title": "De Nachtwacht",
+        "language": "nl",
+        "qualifier": "brief"
+      },
+      {
+        "title": "The Night Watch Militia Company of District II under the Command of Captain Frans Banninck Cocq",
+        "language": "en",
+        "qualifier": "display"
+      },
+      {
+        "title": "Het korporaalschap van kapitein Frans Banninck Cocq en luitenant Willem van Ruytenburch, bekend als de 'Nachtwacht'",
+        "language": "nl",
+        "qualifier": "former"
+      },
+      {
+        "title": "The company of Captain Frans Banninck Cocq and Lieutenant Willem van Ruytenburch, known as 'The nightwatch'",
+        "language": "en",
+        "qualifier": "former"
+      }
+    ],
+    "parents": [],
+    "childCount": 0,
+    "children": [],
+    "curatorialNarrative": {
+      "en": "Rembrandt’s largest, most famous canvas was made for the Arquebusiers guild hall. This was one of several halls of Amsterdam’s civic guard, the city’s militia and police. Rembrandt was the first to paint figures in a group portrait actually doing something. The captain, dressed in black, is telling his lieutenant to start the company marching. The guardsmen are getting into formation. Rembrandt used the light to focus on particular details, like the captain’s gesturing hand and the young girl in the background. She was the company mascot.",
+      "nl": null
+    },
+    "license": "http://creativecommons.org/publicdomain/mark/1.0/",
+    "webPage": "https://www.rijksmuseum.nl/en/collection/SK-C-5",
+    "dimensions": [
+      {
+        "type": "height",
+        "value": 379.5,
+        "unit": "cm",
+        "note": null
+      },
+      {
+        "type": "width",
+        "value": 453.5,
+        "unit": "cm",
+        "note": null
+      },
+      {
+        "type": "weight",
+        "value": 337000,
+        "unit": "g",
+        "note": null
+      }
+    ],
+    "relatedObjects": [],
+    "relatedObjectsTotalCount": 0,
+    "persistentId": "http://hdl.handle.net/10934/RM0001.COLLECT.8096",
+    "objectTypes": [
+      {
+        "id": "2208",
+        "label": "painting"
+      }
+    ],
+    "materials": [
+      {
+        "id": "22010",
+        "label": "canvas"
+      },
+      {
+        "id": "2209",
+        "label": "oil paint (paint)"
+      }
+    ],
+    "production": [
+      {
+        "name": "Rijn, Rembrandt van",
+        "role": "painter",
+        "attributionQualifier": "primary",
+        "place": "Amsterdam",
+        "actorUri": "2103429",
+        "personInfo": {
+          "birthYear": 1606,
+          "deathYear": 1669,
+          "gender": "male",
+          "wikidataId": "Q5598"
+        }
+      }
+    ],
+    "collectionSetLabels": [
+      {
+        "id": "261208",
+        "label": "schilderijen"
+      },
+      {
+        "id": "260251",
+        "label": "Alle gepubliceerde objecten"
+      },
+      {
+        "id": "260239",
+        "label": "Entire Public Domain Set"
+      },
+      {
+        "id": "260241",
+        "label": "biografisch"
+      },
+      {
+        "id": "260214",
+        "label": "Top 1000"
+      },
+      {
+        "id": "260213",
+        "label": "Top 100"
+      },
+      {
+        "id": "260212",
+        "label": "RijksXL"
+      }
+    ],
+    "subjects": {
+      "iconclass": [
+        {
+          "id": "45C1",
+          "label": "weapons"
+        },
+        {
+          "id": "45(+26)",
+          "label": "warfare; military affairs (+ citizen soldiery, civil guard, citizen militia)"
+        },
+        {
+          "id": "34B11",
+          "label": "dog"
+        },
+        {
+          "id": "48C7341",
+          "label": "drum (musical instrument)"
+        },
+        {
+          "id": "45D12",
+          "label": "(military) standard-bearer"
+        },
+        {
+          "id": "31D11222",
+          "label": "girl (child between toddler and youth)"
+        }
+      ],
+      "depictedPersons": [
+        {
+          "id": "21051134",
+          "label": "Frans Banninck Cocq"
+        },
+        {
+          "id": "21059514",
+          "label": "Kemp, Rombout"
+        },
+        {
+          "id": "21072542",
+          "label": "Willem van Ruytenburch"
+        },
+        {
+          "id": "21074841",
+          "label": "Engelen, Reijnier Janszn"
+        },
+        {
+          "id": "21074842",
+          "label": "Bolhamer, Barent Harmansen"
+        },
+        {
+          "id": "21074843",
+          "label": "Keijser, Jan Adriaensen"
+        },
+        {
+          "id": "21074846",
+          "label": "Ockersen, Jan"
+        },
+        {
+          "id": "21074845",
+          "label": "Jan Claesen Leijdeckers"
+        },
+        {
+          "id": "21074849",
+          "label": "Jacob Dircksen de Roy"
+        },
+        {
+          "id": "21074850",
+          "label": "Jan van der Heede"
+        },
+        {
+          "id": "21074844",
+          "label": "Elbert Willemsen"
+        },
+        {
+          "id": "21074848",
+          "label": "Harman Jacobsen Wormskerck"
+        },
+        {
+          "id": "21074847",
+          "label": "Jan Pietersen Bronchorst"
+        },
+        {
+          "id": "21074840",
+          "label": "Jan Visscher Cornelisen"
+        }
+      ],
+      "depictedPlaces": [
+        {
+          "id": "23029985",
+          "label": "Amsterdam"
+        }
+      ]
+    },
+    "dateDisplay": "1642",
+    "extentText": "height 379.5 cm x width 453.5 cm x weight 337 kg x weight 170 kg | hoogte 379,5 cm (hoogte van het nog resterende originele doek is 363 cm) x breedte 453,5 cm (breedte van het nog resterende originele doek is 438 cm) x gewicht (eigenschap) 337 kg (gewicht met lijst) x gewicht (eigenschap) 170 kg (gewicht zonder lijst)",
+    "recordCreated": "2001-03-08T00:00:00Z",
+    "recordModified": "2019-07-11T23:59:59Z",
+    "themes": [],
+    "themesTotalCount": 0,
+    "exhibitions": [],
+    "exhibitionsTotalCount": 0,
+    "attributionEvidence": [],
+    "provenanceChain": [
+      {
+        "sequence": 1,
+        "gap": false,
+        "uncertain": false,
+        "transferType": "commission",
+        "party": {
+          "name": "or for the sitters for the great hall of the Kloveniersdoelen (the headquarters of the arquebusiers’ civic guard)"
+        },
+        "location": "Amsterdam",
+        "date": null,
+        "price": null
+      },
+      {
+        "sequence": 2,
+        "gap": false,
+        "uncertain": false,
+        "transferType": "collection",
+        "party": {
+          "name": "first mentioned in the Kloveniersdoelen"
+        },
+        "location": null,
+        "date": {
+          "year": 1653,
+          "text": "1653"
+        },
+        "price": null
+      },
+      {
+        "sequence": 3,
+        "gap": false,
+        "uncertain": false,
+        "transferType": "transfer",
+        "party": null,
+        "location": "Amsterdam",
+        "date": {
+          "year": 1715,
+          "text": "1715"
+        },
+        "price": null
+      },
+      {
+        "sequence": 4,
+        "gap": false,
+        "uncertain": false,
+        "transferType": "loan",
+        "party": null,
+        "location": null,
+        "date": {
+          "year": 1808,
+          "text": "1808"
+        },
+        "price": null
+      }
+    ]
+  },
+  "text": "SK-C-5 — The Night Watch Militia Company of District II under the Command of Captain Frans Banninck Cocq\nRembrandt van Rijn, 1642\nh 379.5 cm × w 453.5 cm\n\nTypes: painting\nMaterials: canvas, oil paint (paint)\nIconclass: 45C1 | 45(+26) | 34B11 | 48C7341 | 45D12 | 31D11222\nDepicted persons: Frans Banninck Cocq, Kemp, Rombout, Willem van Ruytenburch, Engelen, Reijnier Janszn, Bolhamer, Barent Harmansen ...and 9 more\nDepicted places: Amsterdam\nProduction: Rijn, Rembrandt van (1606–1669) [painter], Amsterdam\n\n[Description] Het korporaalschap van kapitein Frans Banninck Cocq en luitenant Willem van Ruytenburch, bekend als de 'Nachtwacht'. Schutters van de kloveniersdoelen uit een poort naar buiten tredend. Op een schild aangebracht naast de poort staan de namen van de afgebeelde personen: Frans Banning Cocq, heer van purmerlant en Ilpendam, Capiteijn Willem van Ruijtenburch van Vlaerdingen, heer van Vlaerdingen, Lu[ij]tenant, Jan Visscher Cornelisen Vaendrich, Rombout Kemp Sergeant, Reijnier Engelen Sergeant, Barent Harmansen, Jan Adriaensen Keyser, Elbert Willemsen, Jan Clasen Leydeckers, Jan Ockersen, Jan Pietersen bronchorst, Harman Iacobsen wormskerck, Jacob Dircksen de Roy, Jan vander heede, Walich Schellingwou, Jan brugman, Claes van Cruysbergen, Paulus Schoonhoven. De schutters zijn gewapend met lansen, musketten en hellebaarden. Rechts de tamboer met een grote trommel. Tussen de soldaten links staat een meisje met een dode kip om haar middel, rechts een blaffende hond. Linksboven de vaandrig met de uitgestoken vaandel. | Officieren en andere schutters van wijk II in Amsterdam onder leiding van kapitein Frans Banninck Cocq en luitenant Willem van Ruytenburch, sinds het einde van de 18de eeuw bekend als ‘De Nachtwacht’. Schutters van de Kloveniersdoelen uit een poort naar buiten tredend. Op een schild aangebracht naast de poort staan de namen van de afgebeelde personen: Frans Banning Cocq, heer van purmerlant en Ilpendam, Capiteijn Willem van Ruijtenburch van Vlaerdingen, heer van Vlaerdingen, Lu[ij]tenant, Jan Visscher Cornelisen Vaendrich, Rombout Kemp Sergeant, Reijnier Engelen Sergeant, Barent Harmansen, Jan Adriaensen Keyser, Elbert Willemsen, Jan Clasen Leydeckers, Jan Ockersen, Jan Pietersen bronchorst, Harman Iacobsen wormskerck, Jacob Dircksen de Roy, Jan vander heede, Walich Schellingwou, Jan brugman, Claes van Cruysbergen, Paulus Schoonhoven. De schutters zijn gewapend met onder anderen pieken, musketten en hellebaarden. Rechts de tamboer met een grote trommel. Tussen de soldaten links staat een meisje met een dode kip om haar middel, rechts een blaffende hond. Linksboven de vaandrig met de uitgestoken vaandel.\n[Narrative] Rembrandt’s largest, most famous canvas was made for the Arquebusiers guild hall. This was one of several halls of Amsterdam’s civic guard, the city’s militia and police. Rembrandt was the first to paint figures in a group portrait actually doing something. The captain, dressed in black, is telling his lieutenant to start the company marching. The guardsmen are getting into formation. Rembrandt used the light to focus on particular details, like the captain’s gesturing hand and the young girl in the background. She was the company mascot.\n[Inscriptions] signature and date: ‘Rembrandt f 1642’; signatuur en datum, linksonder: ‘Rembrandt f 1642’; inscription: ‘Frans Banning Cocq, heer van purmerlant en Ilpendam, Capiteijn Willem van Ruijtenburch van Vlaerdingen, heer van Vlaerdingen, Lu[ij]tenant, Jan Visscher Cornelisen Vaendrich, Rombout Kemp Sergeant, Reijnier Engelen Sergeant, Barent Harmansen, Jan Adriaensen Keyser, Elbert Willemsen, Jan Clasen Leydeckers, Jan Ockersen, Jan Pietersen bronchorst, Harman Iacobsen wormskerck, Jacob Dircksen de Roy, Jan vander heede, Walich Schellingwou, Jan brugman, Claes van Cruysbergen, Paulus Schoonhoven’; inscriptie, middenboven op het schild: ‘Frans Banning Cocq, heer van purmerlant en Ilpendam, Capiteijn Willem van Ruijtenburch van Vlaerdingen, heer van Vlaerdingen, Lu[ij]tenant, Jan Visscher Cornelisen Vaendrich, Rombout Kemp Sergeant, Reijnier Engelen Sergeant, Barent Harmansen, Jan Adriaensen Keyser, Elbert Willemsen, Jan Clasen Leydeckers, Jan Ockersen, Jan Pietersen bronchorst, Harman Iacobsen wormskerck, Jacob Dircksen de Roy, Jan vander heede, Walich Schellingwou, Jan brugman, Claes van Cruysbergen, Paulus Schoonhoven’\n[Provenance] Commissioned by or for the sitters for the great hall of the Kloveniersdoelen (the headquarters of the arquebusiers’ civic guard), Amsterdam; first mentioned in the Kloveniersdoelen, 1653: 'Ibid. daer naast aanvolgen. Frans Benning Cock Capn. en Witt van Ruijtenburg Lut. geschildert van Rembrand an 1642.';{Schaep 1653, p. 135, no. 4.} transferred to the Small Council of War Chamber (Kleine Krijgsraadkamer) in the Town Hall on Dam square, Amsterdam, 1715 {SAA, Archief van de Thesaurieren Ordinaris, Resolutieboek 28 October 1711-28 January 1723, 23 May 1715: 'Is geordonneert, omme het groote Stuk Schilderij van Rembrandts hangende op de Saal van de Colveniersdoelen Schoon te maken, en als dan hetzelve te Plaetsen op de Kreygsraats Kamer van het Stadhuys'. First published in Dyserinck 1890, p. 245.} transferred to the house of Cornelis Sebille Roos (the 'Trippenhuis'), 29 Kloveniersburgwal, Amsterdam, 1808;{See Brugmans 1913, p. 60.} on loan to the museum from the City of Amsterdam since 1808\n[Provenance parsed] 4 events (1653–1808)\n  Acquired: loan, 1808\n  Chain: commission, collection, transfer, loan\n  Earliest: or for the sitters for the great hall of the Kloveniersdoelen (the headquarters of the arquebusiers’ civic guard), Amsterdam\n[Credit line] Bruikleen van de gemeente Amsterdam | On loan from the City of Amsterdam\n[Titles] (6 variants) full/nl: Officieren en andere schutters van wijk II in Amsterdam, onder leiding van kapitein Frans Banninck Cocq en luitenant Willem van Ruytenburch, bekend als ‘De Nachtwacht’ | full/en: Officers and other civic guardsmen of District II in Amsterdam, under the command of Captain Frans Banninck Cocq and Lieutenant Willem van Ruytenburch, known as ‘The Night Watch’ | brief/nl: De Nachtwacht | display/en: The Night Watch Militia Company of District II under the Command of Captain Frans Banninck Cocq | former/nl: Het korporaalschap van kapitein Frans Banninck Cocq en luitenant Willem van Ruytenburch, bekend als de 'Nachtwacht' | former/en: The company of Captain Frans Banninck Cocq and Lieutenant Willem van Ruytenburch, known as 'The nightwatch'\nURL: https://www.rijksmuseum.nl/en/collection/SK-C-5",
+  "args": {
+    "objectNumber": "SK-C-5"
+  }
+}

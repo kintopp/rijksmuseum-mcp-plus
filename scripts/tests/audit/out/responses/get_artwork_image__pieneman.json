@@ -1,0 +1,26 @@
+{
+  "tool": "get_artwork_image",
+  "fixture": "pieneman",
+  "anchor": "SK-A-1115",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 411,
+  "bytesText": 174,
+  "structured": {
+    "iiifInfoUrl": "https://iiif.micr.io/GebpD/info.json",
+    "width": 8106,
+    "height": 5399,
+    "objectNumber": "SK-A-1115",
+    "title": "The Battle of Waterloo",
+    "creator": "Jan Willem Pieneman",
+    "date": "1824",
+    "license": "http://creativecommons.org/publicdomain/mark/1.0/",
+    "physicalDimensions": "h 567 cm × w 823 cm",
+    "collectionUrl": "https://www.rijksmuseum.nl/en/collection/SK-A-1115",
+    "viewUUID": "a46b199e-0234-49a4-9448-e02805de3bab"
+  },
+  "text": "SK-A-1115 — \"The Battle of Waterloo\" by Jan Willem Pieneman | 8106×5399px [http://creativecommons.org/publicdomain/mark/1.0/] | viewUUID: a46b199e-0234-49a4-9448-e02805de3bab",
+  "args": {
+    "objectNumber": "SK-A-1115"
+  }
+}

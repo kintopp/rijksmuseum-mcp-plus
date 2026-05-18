@@ -1,0 +1,53 @@
+{
+  "tool": "semantic_search",
+  "fixture": "ships-at-sea",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 1046,
+  "bytesText": 751,
+  "structured": {
+    "searchMode": "semantic",
+    "query": "ships at sea in a storm",
+    "returnedCount": 3,
+    "results": [
+      {
+        "rank": 1,
+        "objectNumber": "RP-T-00-1672",
+        "title": "Twee schepen op zee bij storm",
+        "creator": "Hendrik Kobell",
+        "date": "1761–1779",
+        "type": "drawing",
+        "similarityScore": 0.885,
+        "sourceText": "[Title] Twee schepen op zee bij storm",
+        "url": "https://www.rijksmuseum.nl/en/collection/RP-T-00-1672"
+      },
+      {
+        "rank": 2,
+        "objectNumber": "SK-C-448",
+        "title": "Ships in a Storm",
+        "creator": "attributed to Andries van Eertvelt",
+        "date": "1600–1652",
+        "type": "painting",
+        "similarityScore": 0.872,
+        "sourceText": "[Title] Ships in a Storm [Inscriptions] signatuur, midden onder: vE. | signature [Description] Zeegezicht met enkele schepen op zee tijdens een storm.",
+        "url": "https://www.rijksmuseum.nl/en/collection/SK-C-448"
+      },
+      {
+        "rank": 3,
+        "objectNumber": "RP-P-OB-15.176",
+        "title": "Zeilsschepen in storm op zee",
+        "creator": "anonymous",
+        "date": "1605–1703",
+        "type": "print",
+        "similarityScore": 0.866,
+        "sourceText": "[Title] Zeilsschepen in storm op zee",
+        "url": "https://www.rijksmuseum.nl/en/collection/RP-P-OB-15.176"
+      }
+    ]
+  },
+  "text": "3 semantic matches for \"ships at sea in a storm\" (semantic mode)\n\n1. RP-T-00-1672 | drawing | 1761–1779 | \"Twee schepen op zee bij storm\" — Hendrik Kobell https://www.rijksmuseum.nl/en/collection/RP-T-00-1672  [0.89]\n   [Title] Twee schepen op zee bij storm\n\n2. SK-C-448 | painting | 1600–1652 | \"Ships in a Storm\" — attributed to Andries van Eertvelt https://www.rijksmuseum.nl/en/collection/SK-C-448  [0.87]\n   [Title] Ships in a Storm [Inscriptions] signatuur, midden onder: vE. | signature [Description] Zeegezicht met enkele schepen op zee tijdens een storm.\n\n3. RP-P-OB-15.176 | print | 1605–1703 | \"Zeilsschepen in storm op zee\" — anonymous https://www.rijksmuseum.nl/en/collection/RP-P-OB-15.176  [0.87]\n   [Title] Zeilsschepen in storm op zee",
+  "args": {
+    "query": "ships at sea in a storm",
+    "maxResults": 3
+  }
+}

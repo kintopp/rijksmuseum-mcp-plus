@@ -1,0 +1,88 @@
+{
+  "tool": "browse_set",
+  "fixture": "top100",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 3766,
+  "bytesText": 415,
+  "structured": {
+    "records": [
+      {
+        "objectNumber": "AK-MAK-187",
+        "title": "Shiva Nataraja",
+        "creator": "anonymous",
+        "date": "ca. 1100 - ca. 1200",
+        "description": "De vierarmige Shiva met wijd uitwaaierende haardos staat op één been in een geheel gebalanceerde danshouding. Omgeven door een ronde vlammenkrans.",
+        "dimensions": "height 153 cm x width 114.5 cm | weight 255 kg | width 73.5 cm x depth 44 cm x height 19 cm x weight 40 kg | beeld: gewicht (eigenschap) 255 kg | geheel: hoogte 153 cm x breedte 114,5 cm | voetstuk: breedte 73,5 cm x diepte 44 cm x hoogte 19 cm x gewicht (eigenschap) 40 kg",
+        "hasImage": true,
+        "imageUrl": "https://iiif.micr.io/LAXcK/full/!1024,1024/0/default.jpg",
+        "iiifServiceUrl": "https://iiif.micr.io/LAXcK/info.json",
+        "edmType": "IMAGE",
+        "lodUri": "https://id.rijksmuseum.nl/6467",
+        "url": "https://www.rijksmuseum.nl/en/collection/AK-MAK-187"
+      },
+      {
+        "objectNumber": "AK-MAK-240",
+        "title": "The bodhisattva Manjushri",
+        "creator": "anonymous",
+        "date": "ca. 800 - ca. 900",
+        "dimensions": "height 138 cm x width 90 cm x depth 60 cm x weight 663 kg | hoogte 138 cm x breedte 90 cm x diepte 60 cm x gewicht (eigenschap) 663 kg",
+        "hasImage": true,
+        "imageUrl": "https://iiif.micr.io/YEdtC/full/!1024,1024/0/default.jpg",
+        "iiifServiceUrl": "https://iiif.micr.io/YEdtC/info.json",
+        "edmType": "IMAGE",
+        "lodUri": "https://id.rijksmuseum.nl/6998",
+        "url": "https://www.rijksmuseum.nl/en/collection/AK-MAK-240"
+      },
+      {
+        "objectNumber": "AK-MAK-84",
+        "title": "Guanyin",
+        "creator": "anonymous",
+        "date": "ca. 1100 - ca. 1200",
+        "description": "Houten Guanyin met resten van beschildering en verguldsel. Guanyin zit in een ontspannen houding: één been heeft hij opgetrokken, de rechterarm rust er losjes op.",
+        "dimensions": "height 117 cm x width 111 cm x depth 74 cm | hoogte 117 cm x breedte 111 cm x diepte 74 cm",
+        "hasImage": true,
+        "imageUrl": "https://iiif.micr.io/blmqI/full/!1024,1024/0/default.jpg",
+        "iiifServiceUrl": "https://iiif.micr.io/blmqI/info.json",
+        "edmType": "IMAGE",
+        "lodUri": "https://id.rijksmuseum.nl/6686",
+        "url": "https://www.rijksmuseum.nl/en/collection/AK-MAK-84"
+      },
+      {
+        "objectNumber": "AK-RAK-2007-1-A",
+        "title": "Temple guardian",
+        "creator": "anonymous",
+        "date": "ca. 1300 - ca. 1400",
+        "description": "Beeld van een tempelwachter: Misshaku kongo (Agyo), hout met sporen van polychromie.",
+        "dimensions": "depth 51 cm | height 239.5 cm x width 131.5 cm x depth 62 cm x weight 175 kg | beeld met sokkel: hoogte 239,5 cm (hoogte op pallet en palletwagen (rijdend)= 256cm) x breedte 131,5 cm (beeld valt in de breedte binnen sokkel) x diepte 62 cm (beeld steekt aan achterzijde 11cm over sokkel heen) x gewicht (eigenschap) 175 kg | sokkel: diepte 51 cm",
+        "hasImage": true,
+        "imageUrl": "https://iiif.micr.io/WAxob/full/!1024,1024/0/default.jpg",
+        "iiifServiceUrl": "https://iiif.micr.io/WAxob/info.json",
+        "edmType": "IMAGE",
+        "lodUri": "https://id.rijksmuseum.nl/389026",
+        "url": "https://www.rijksmuseum.nl/en/collection/AK-RAK-2007-1-A"
+      },
+      {
+        "objectNumber": "AK-RAK-2007-1-B",
+        "title": "Temple guardian",
+        "creator": "anonymous",
+        "date": "c. 1300 - c. 1400",
+        "description": "Beeld van een tempelwachter: Naraen kongo (Ungyo), hout met resten van polychromie.",
+        "dimensions": "height 237 cm x width 146 cm x depth 62.5 cm x weight 175 kg | width 131.5 cm x depth 51 cm | beeld en sokkel: hoogte 237 cm (hoogte op pallet en palletwagen (rijdend)= 252cm) x breedte 146 cm (beeld steekt links 14cm over de sokkel heen) x diepte 62,5 cm (beeld steekt achter 11 cm over de sokkel heen) x gewicht (eigenschap) 175 kg | sokkel: breedte 131,5 cm x diepte 51 cm",
+        "hasImage": true,
+        "imageUrl": "https://iiif.micr.io/PhdEl/full/!1024,1024/0/default.jpg",
+        "iiifServiceUrl": "https://iiif.micr.io/PhdEl/info.json",
+        "edmType": "IMAGE",
+        "lodUri": "https://id.rijksmuseum.nl/389027",
+        "url": "https://www.rijksmuseum.nl/en/collection/AK-RAK-2007-1-B"
+      }
+    ],
+    "totalInSet": 133,
+    "resumptionToken": "MjYwMjEzCTU="
+  },
+  "text": "5 records — offset 0–4 of 133\n1. AK-MAK-187 | \"Shiva Nataraja\" — anonymous (ca. 1100 - ca. 1200) [image]\n2. AK-MAK-240 | \"The bodhisattva Manjushri\" — anonymous (ca. 800 - ca. 900) [image]\n3. AK-MAK-84 | \"Guanyin\" — anonymous (ca. 1100 - ca. 1200) [image]\n4. AK-RAK-2007-1-A | \"Temple guardian\" — anonymous (ca. 1300 - ca. 1400) [image]\n5. AK-RAK-2007-1-B | \"Temple guardian\" — anonymous (c. 1300 - c. 1400) [image]",
+  "args": {
+    "setSpec": "260213",
+    "maxResults": 5
+  }
+}

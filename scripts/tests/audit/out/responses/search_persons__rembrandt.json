@@ -1,0 +1,40 @@
+{
+  "tool": "search_persons",
+  "fixture": "rembrandt",
+  "excludeFields": [],
+  "isError": false,
+  "bytesStructured": 440,
+  "bytesText": 137,
+  "structured": {
+    "totalResults": 2,
+    "persons": [
+      {
+        "vocabId": "2103429",
+        "label": "Rijn, Rembrandt van",
+        "labelEn": "Rijn, Rembrandt van",
+        "labelNl": "Rembrandt Harmensz. van Rijn",
+        "birthYear": 1606,
+        "deathYear": 1669,
+        "gender": "male",
+        "artworkCount": 3717,
+        "wikidataId": "Q5598"
+      },
+      {
+        "vocabId": "210159785",
+        "label": "Rembrandt Peale",
+        "labelEn": "Rembrandt Peale",
+        "labelNl": "Rembrandt Peale",
+        "birthYear": null,
+        "deathYear": null,
+        "gender": null,
+        "artworkCount": 1,
+        "wikidataId": "Q375926"
+      }
+    ]
+  },
+  "text": "2 persons found\n1. Rijn, Rembrandt van (2103429) 1606–1669 · male · 3717 works · Q5598\n2. Rembrandt Peale (210159785) · 1 works · Q375926",
+  "args": {
+    "name": "Rembrandt",
+    "maxResults": 3
+  }
+}
