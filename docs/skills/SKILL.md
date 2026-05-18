@@ -105,33 +105,40 @@ Most artworks have date *ranges* (e.g. "1630–1640"), not exact years — see t
 
 Scope: `dateMatch` applies only to `search_artwork` and `semantic_search`, and only fires when `creationDate` is supplied (year or wildcard). It is **not** a parameter on `collection_stats` — `collection_stats` accepts numeric `creationDateFrom`/`creationDateTo` (strict within-bounds), and its `decade`/`century` dimensions bin each artwork by `date_earliest` (one bin per artwork, no double-counting to escape).
 
-### `attributionQualifier` + `creator` — defaults, user phrasings, and structural limit
+### `attributionQualifier` + `productionRole` + `creator` — defaults, user phrasings, and known limits
 
-**Default attribution scope.** For vague queries about a named artist's work ("show me Rembrandts"), default to `creator: "X"` + `attributionQualifier: "primary"` plus the implied `type`. Without this, workshop/follower works *and* reproductive prints/photographs (catalogued with the master as `creator` + `productionRole: "after painting by"`) surface together — yielding "Rembrandt made a 19th-century photograph." State the scope you applied so the user can widen it.
+**Default attribution scope for named-artist queries.** For vague queries about a named artist's work ("show me Rembrandts", "Rembrandt's paintings"), narrow with `creator: "X"` + the implied `type` + a *positive* `productionRole` filter for the medium (`"painter"` for paintings, `"draughtsman"` for drawings). The catalogue lists reproductive prints/photographs and workshop/follower works under the master's name; without role narrowing, those surface alongside autograph works and the result reads as "Rembrandt made a 19th-century photograph." Tell the user which production-role scope you applied so they can widen it explicitly.
 
-**Mapping user phrasings to filters.** Common English phrasings map to the catalogue's controlled vocabulary as follows:
+**Don't combine `creator` with `attributionQualifier` to narrow to autograph works.** The current filter shape evaluates `creator` and `attributionQualifier` independently across an artwork's production rows: a work matches if any row names the creator AND any *other* row carries the qualifier. In practice the qualifier filter removes well under 1% of the records returned by `creator` alone — it does not separate autograph from reproductive works. Same-row matching is tracked as kintopp/rijksmuseum-mcp-plus-offline#349; until it lands, lean on `productionRole` instead.
 
-
-| User phrasing                                          | Catalogue filter                                                                 |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| "Rembrandt's own work" / "autograph" / "by Rembrandt"  | `creator: "Rembrandt van Rijn"` + `attributionQualifier: "primary"`              |
-| "attributed to X" / "possibly by X"                    | `attributionQualifier: "attributed to"` (or `"possibly"`) — see structural limit |
-| "workshop of X" / "studio of X"                        | `attributionQualifier: "workshop of"` — see structural limit                     |
-| "follower of X" / "circle of X" / "school of X"        | corresponding `attributionQualifier` value — see structural limit                |
-| "in the style of X" / "in the manner of X"             | `aboutActor: "X"` (preferred — see below) or `attributionQualifier: "manner of"` |
-| "after X" / "reproductions of X" / "copies of X"       | `productionRole: "after painting by"` + `creator: "X"`                           |
-| "inspired by X" (ambiguous)                            | Ask the user — could mean `manner of`, `after`, or `follower of`                 |
+**Mapping user phrasings to filters.** Common English phrasings map to the catalogue's controlled vocabulary as follows. The working approach lives in the second column.
 
 
-**Structural limitation.** Combining `attributionQualifier` with `creator` to filter by *source* artist (e.g. "followers of Rembrandt") does not work — for all qualifier types the structured `creator` field is `Unknown [painter]` or `anonymous`. The source artist's name lives only in the composite display string, not as a searchable entity. For single-work citation, use `attributionEvidence` from `get_artwork_details`.
+| User phrasing                                          | Catalogue filter (the one that actually narrows)                                                               |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| "X's own paintings"                                    | `creator: "X"` + `productionRole: "painter"` + `type: "painting"`                                              |
+| "X's own drawings"                                     | `creator: "X"` + `productionRole: "draughtsman"` + `type: "drawing"`                                           |
+| "X's own etchings"                                     | **Can't be cleanly filtered** — autograph etchings carry no role string (catalogue convention, #353). Fall back to `creator + type: "print"` minus reproductive roles, and surface the limitation to the user. |
+| "after X" / "reproductions of X" / "copies of X"       | `productionRole: "after painting by"` (or `"after print by"` / `"after drawing by"`) + `creator: "X"`          |
+| "attributed to X" / "possibly by X"                    | `attributionQualifier: "attributed to"` (or `"possibly"`) — used alone, not combined with `creator` (see above) |
+| "workshop of X" / "studio of X"                        | `attributionQualifier: "workshop of"` — same caveat                                                            |
+| "follower of X" / "circle of X" / "school of X"        | corresponding `attributionQualifier` value — same caveat                                                       |
+| "in the style of X" / "in the manner of X"             | `aboutActor: "X"` (broader, works) or `attributionQualifier: "manner of"` alone                                |
+| "inspired by X" (ambiguous)                            | Ask the user — could mean `manner of`, `after`, or `follower of`                                               |
 
-**The correct strategy by qualifier type:**
+
+**Array on `productionRole` is AND-combined, not OR.** Passing `productionRole: ["after painting by", "after print by", "after drawing by"]` returns artworks carrying *all three* roles (often 0-3 matches), not the union. To collect a union of reproductive roles, issue separate calls and merge client-side. Tracked as #350.
+
+**Limits when filtering by source artist.** `attributionQualifier: "follower of"` returns every "follower of" work in the collection — there's no parameter to scope to "follower of *Rembrandt* specifically." The structured `creator` field on these works is `Unknown [painter]` or `anonymous`. For the source artist, look at the composite display string in result records, or use `attributionEvidence` from `get_artwork_details` for a single-work citation.
+
+**Strategy table:**
 
 
 | Goal                                      | Working approach                                                                  |
 | ----------------------------------------- | --------------------------------------------------------------------------------- |
+| Autograph paintings/drawings by X         | `creator: "X"` + `productionRole: "painter"` or `"draughtsman"` + `type`           |
 | Works in the manner/style of artist X     | `aboutActor: "X"` + `type: "painting"` (or other type)                            |
-| All "follower of" works in the collection | `attributionQualifier: "follower of"` alone (returns 111 works)                   |
+| All "follower of" works in the collection | `attributionQualifier: "follower of"` alone (returns the full collection-wide set) |
 | Sub-filter those by source artist         | Not possible via parameters — requires fetching and inspecting individual records |
 
 
@@ -203,9 +210,12 @@ These narrow results but **require at least one other content filter**:
 For any counting, distributional, or comparative question, **start with `collection_stats`** — it answers in one call what would otherwise require multiple `compact: true` loops.
 
 ```
-# Example: Rembrandt's output across media — one call
+# Example: everything tagged "Rembrandt van Rijn" across media — one call
 collection_stats(dimension="type", creator="Rembrandt van Rijn")
-# → painting 314 (38.2%), print 289 (35.2%), drawing 218 (26.5%)
+# → full type distribution. Note: the `creator` filter matches anyone named
+# on a production row, so reproductive 19th-c. prints and photographs
+# catalogued under the master's name surface alongside autograph works.
+# For autograph-only narrowing, see the productionRole guidance above.
 
 # Cross-domain: what types of artworks have provenance events in Amsterdam?
 collection_stats(dimension="type", hasProvenance=true, provenanceLocation="Amsterdam")
