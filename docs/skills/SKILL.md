@@ -37,8 +37,7 @@ metadata:
 | "Find persons by demographics / lifespan / profession / birth or death place" | `search_persons` → feed `vocabId` to `search_artwork(creator=…)`                                                     |
 | "Curatorial theme tags on a work / theme distribution"                        | `search_artwork(theme=…)` / `collection_stats(dimension="theme")`                                                    |
 | "Cataloguing-channel breakdown (designs, drawings, paintings, prints…)"       | `search_artwork(sourceType=…)` / `collection_stats(dimension="sourceType")`                                          |
-| "What changed since YYYY-MM-DD?" — static date filter, combinable             | `search_artwork` with `modifiedAfter` / `modifiedBefore`                                                             |
-| "Has anything changed since the last harvest checkpoint?" — OAI-PMH delta     | `get_recent_changes` (resumption-token pagination)                                                                   |
+| "What changed since YYYY-MM-DD?" / "Has anything changed since the last harvest checkpoint?" — OAI-PMH delta | `get_recent_changes` (resumption-token pagination)                                                                   |
 | "What does the Rijksmuseum say about this work?"                              | `get_artwork_details`                                                                                                |
 | "Wikidata Q-id, handle.net URI, other external IDs"                           | `get_artwork_details` → `externalIds` (work-level) and `production[].creator.wikidataId`                             |
 | "Show this artwork to the user / open the zoomable viewer"                    | `get_artwork_image`                                                                                                  |
@@ -54,7 +53,7 @@ metadata:
 
 
 **Choosing between `search_artwork` (provenance-aware filters) and `search_provenance`:**
-For keyword/text search over provenance, use `search_provenance` — `search_artwork` does not search provenance text. For cross-domain "what kinds of works have provenance" questions, use `hasProvenance: true` on `search_artwork` or `collection_stats` (e.g. `collection_stats(dimension="type", hasProvenance=true)`). `search_provenance` returns structured, parsed chains with dates, prices, transfer types, and ownership periods — use it when you need to reason about the *sequence* of ownership, filter by event type, or rank by price or duration. For the last link in the chain — how the Rijksmuseum acquired a work — also check `creditLine`, which covers ~360K artworks (vs ~49K with parsed provenance) and often names donors or funds absent from the provenance chain (e.g. "Drucker-Fraser", "Vereniging Rembrandt").
+For keyword/text search over provenance, use `search_provenance` — `search_artwork` does not search provenance text. For cross-domain "what kinds of works have provenance" questions, use `hasProvenance: true` on `search_artwork` or `collection_stats` (e.g. `collection_stats(dimension="type", hasProvenance=true)`). `search_provenance` returns structured, parsed chains with dates, prices, transfer types, and ownership periods — use it when you need to reason about the *sequence* of ownership, filter by event type, or rank by price or duration. Use `search_provenance` (not `search_artwork`) for credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging Rembrandt") — those names sit in the credit line, which covers ~360K artworks (vs ~49K with parsed provenance) but is no longer exposed as a `search_artwork` filter.
 
 ---
 
@@ -184,7 +183,7 @@ For the full provenance data model — AAM text format, transfer type vocabulary
 
 ### Full-text filters vs vocabulary filters (ranking matters)
 
-Activating a text filter (`title`, `description`, `inscription`, `creditLine`, `curatorialNarrative`) switches ranking to BM25 relevance. Drop the text filter to fall back to importance ranking — useful when you want the most *significant* works to surface first.
+Activating a text filter (`query`, `description`, `inscription`, `curatorialNarrative`) switches ranking to BM25 relevance. Drop the text filter to fall back to importance ranking — useful when you want the most *significant* works to surface first.
 
 ---
 
@@ -197,7 +196,6 @@ These narrow results but **require at least one other content filter**:
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `imageAvailable: true`             | Always pair with a content filter                                                                                                          |
 | `hasProvenance: true`              | Restricts to ~49K artworks with parsed provenance. Pair with `type`, `creator`, etc. for cross-domain queries.                             |
-| `modifiedAfter` / `modifiedBefore` | ISO 8601 date — record-level last-modified filter (~516K artworks have a `record_modified` timestamp). Combinable with any content filter. |
 | `expandPlaceHierarchy: true`       | Expands place filters 3 levels deep; pair with `productionPlace` etc.                                                                      |
 
 
@@ -365,15 +363,15 @@ navigate_viewer(viewUUID=..., commands=[{
 
 Provenance research moves through three levels of detail:
 
-1. **Scope and profile** — `search_artwork` with `creditLine` for fast counts
-   and facets. `creditLine` covers ~360K artworks (vs ~49K with parsed
-   provenance) and captures the last link: how the museum acquired the work.
-   Combine with `productionPlace` + `expandPlaceHierarchy` for geographic
-   cross-tabulation. For keyword search over raw provenance text, use
-   `search_provenance` (this is not a `search_artwork` parameter).
-2. **Structured chain analysis** — `search_provenance` for parsed chains with
-   dates, prices, transfer types, and ownership periods. Add `facets: true`
-   for quick distributional context alongside chain results.
+1. **Scope and profile** — `search_provenance` for keyword search over the raw
+   provenance corpus, with `facets: true` for quick distributional context.
+   For credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging
+   Rembrandt") use `search_provenance` — the credit line covers ~360K artworks
+   (vs ~49K with parsed provenance chains) and captures the last link of
+   acquisition.
+2. **Structured chain analysis** — `search_provenance` with structured filters
+   (`transferType`, `party`, `dateFrom`/`dateTo`, etc.) returns parsed chains
+   with dates, prices, transfer types, and ownership periods.
 3. **Single-object deep dive** — `search_provenance(objectNumber=...)` for the
    full chain, then `get_artwork_details` for narrative text and curatorial
    context.

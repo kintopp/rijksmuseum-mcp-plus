@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -62,7 +62,11 @@ const TOOL_LIMITS = {
 } as const;
 
 /** Params that narrow results but are too broad to stand alone as the only filter. */
-const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "expandPlaceHierarchy", "modifiedAfter", "modifiedBefore", "sameRowMatching"]);
+const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "expandPlaceHierarchy", "sameRowMatching"]);
+
+/** Public compound params on search_artwork that get parsed into internal fields
+ *  before forwarding to VocabularyDb — never passed through as-is. */
+const COMPOUND_PUBLIC_KEYS = new Set(["heightRange", "widthRange", "sort"]);
 
 /** Provenance filter categorization by layer support. */
 const PROVENANCE_EVENT_ONLY_FILTERS = ["transferType", "excludeTransferType", "currency", "hasPrice", "hasGap", "relatedTo", "categoryMethod", "positionMethod"];
@@ -212,6 +216,30 @@ function truncateSnippet(s: string | undefined, maxLen: number): string | undefi
   if (s.length <= maxLen) return s;
   const cut = s.lastIndexOf(" ", maxLen);
   return (cut > 0 ? s.slice(0, cut) : s.slice(0, maxLen)) + " [\u2026]";
+}
+
+const DIM_RANGE_RE = /^(\d+(?:\.\d+)?)?-(\d+(?:\.\d+)?)?$/;
+const SORT_PARAM_RE = /^([A-Za-z]+)(?::(asc|desc))?$/;
+const SORT_COLUMN_SET = new Set<string>(SORT_COLUMNS);
+
+/** Parse search_artwork `heightRange` / `widthRange` strings: '10-50', '10-', '-50'. */
+export function parseDimRange(input: unknown): { min?: number; max?: number } | null {
+  if (typeof input !== "string") return null;
+  const m = input.match(DIM_RANGE_RE);
+  if (!m) return null;
+  const min = m[1] ? parseFloat(m[1]) : undefined;
+  const max = m[2] ? parseFloat(m[2]) : undefined;
+  if (min == null && max == null) return null;
+  return { min, max };
+}
+
+/** Parse search_artwork `sort` string: 'column' or 'column:asc|desc' (default desc). */
+export function parseSortParam(input: unknown): { sortBy: SortColumn; sortOrder: "asc" | "desc" } | null {
+  if (typeof input !== "string") return null;
+  const m = input.match(SORT_PARAM_RE);
+  if (!m) return null;
+  if (!SORT_COLUMN_SET.has(m[1])) return null;
+  return { sortBy: m[1] as SortColumn, sortOrder: (m[2] as "asc" | "desc") ?? "desc" };
 }
 
 // ─── Rijksmuseum visual search (website API) ─────────────────────────
@@ -1307,12 +1335,11 @@ function registerTools(
   // With vocab-DB-only routing (v0.19), every parameter routes through the vocab DB.
   const vocabParamKeys = [
     "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
-    "collectionSet", "license",
+    "collectionSet",
     // Tier 2 (vocabulary DB v1.0+)
-    "description", "inscription", "creditLine", "curatorialNarrative", "productionRole", "attributionQualifier",
-    "minHeight", "maxHeight", "minWidth", "maxWidth",
+    "description", "inscription", "curatorialNarrative", "productionRole", "attributionQualifier",
+    "heightRange", "widthRange",
     "nearPlace", "nearLat", "nearLon",
-    "title",
     "material", "technique", "type", "creator",
     "creationDate",
     "imageAvailable",
@@ -1320,15 +1347,15 @@ function registerTools(
     "aboutActor",
     // Place hierarchy
     "expandPlaceHierarchy",
-    // v0.27 — curatorial theme + source-channel taxonomy + record-modified date range
-    "theme", "sourceType", "modifiedAfter", "modifiedBefore",
+    // v0.27 — curatorial theme + source-channel taxonomy
+    "theme", "sourceType",
     // #357 — same-row matching modifier for creator + productionRole
     "sameRowMatching",
   ] as const;
   // nearPlaceRadius excluded from routing key check: its Zod default (25) would trigger
-  // on every query. Forwarded separately. sortBy/sortOrder are also forwarded but never
-  // count as substantive filters for the "at-least-one-filter-required" check.
-  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", "dateMatch", "sortBy", "sortOrder"] as const;
+  // on every query. Forwarded separately. sort is also forwarded but never counts as a
+  // substantive filter for the "at-least-one-filter-required" check.
+  const allVocabKeys = [...vocabParamKeys, "nearPlaceRadius", "dateMatch", "sort"] as const;
 
   server.registerTool(
     "search_artwork",
@@ -1355,17 +1382,16 @@ function registerTools(
         (vocabAvailable
           ? " All parameters combine freely. Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. " +
-            "Use creditLine for acquisition channel analysis (e.g. 'gift', 'bequest', 'Vereniging Rembrandt')."
+            "For acquisition channel / donor analysis (gifts, bequests, fund names like 'Vereniging Rembrandt'), use search_provenance."
           : ""),
       inputSchema: z.object({
         query: optStr()
           .optional()
           .describe(
-            "General search term — maps to title search in the vocabulary database (equivalent to the title parameter). For more targeted results, use the specific field parameters instead (creator, description, subject, etc.)"
+            "Search by artwork title — matches against all title variants (brief, full, former × EN/NL). " +
+            "Note: only ~4% of artworks have an English title (~35K of 833K). " +
+            "For non-title text, use the specific field parameters (description, inscription, curatorialNarrative, creator, subject, etc.)."
           ),
-        title: optStr()
-          .optional()
-          .describe("Search by artwork title, matching against all title variants (brief, full, former × EN/NL). Equivalent to query but explicit. Note: only ~4% of artworks have an English title (~35K of 833K)."),
         creator: stringOrArray()
           .optional()
           .describe("Search by artist name, e.g. 'Rembrandt van Rijn'."),
@@ -1420,19 +1446,6 @@ function registerTools(
           .describe(
             "If true, only return artworks that have parsed provenance records (~48K of 832K). " +
             "Combine with other filters for cross-domain queries (e.g. type='painting' + hasProvenance=true). " +
-            "Cannot be used alone — combine with at least one other filter."
-          ),
-        modifiedAfter: optMinStr()
-          .optional()
-          .describe(
-            "ISO 8601 date — return only artworks whose catalogue record was last modified at or after " +
-            "this date (e.g. '2024-01-01'). Powers \"what changed since YYYY-MM-DD?\" without OAI-PMH. " +
-            "Cannot be used alone — combine with at least one other filter."
-          ),
-        modifiedBefore: optMinStr()
-          .optional()
-          .describe(
-            "ISO 8601 date — return only artworks whose catalogue record was last modified at or before this date. " +
             "Cannot be used alone — combine with at least one other filter."
           ),
         // Vocabulary-backed params
@@ -1498,23 +1511,11 @@ function registerTools(
                   "Distinct from `type` — sourceType reflects the cataloguing source, while type uses " +
                   "Linked Art object-classification vocabulary."
                 ),
-              license: optMinStr()
-                .optional()
-                .describe(
-                  "Filter by license/rights. Common values: 'publicdomain', 'zero' (CC0), 'by' (CC BY). " +
-                  "Matches against the rights URI."
-                ),
               inscription: optMinStr()
                 .optional()
                 .describe(
                   "Full-text search on inscription texts (~500K artworks — signatures, mottoes, dates on the object surface, not conceptual content). " +
                   "Exact word matching, no stemming. E.g. 'Rembrandt f.' for signed works, Latin phrases."
-                ),
-              creditLine: optMinStr()
-                .optional()
-                .describe(
-                  "Full-text search on credit/donor lines (e.g. 'Drucker' for Drucker-Fraser bequest). " +
-                  "Exact word matching, no stemming."
                 ),
               curatorialNarrative: optMinStr()
                 .optional()
@@ -1563,29 +1564,16 @@ function registerTools(
                   "Leave false (default) for 'relational' roles like 'after painting by' / 'after print by' — those want independence because the named creator is the *source*, not the maker of that row. " +
                   "Requires creator + productionRole both supplied. The creator+attributionQualifier same-row fix (connoisseurship qualifiers like 'after', 'workshop of', 'manner of') is always on and doesn't require this flag."
                 )),
-              minHeight: z
-                .number()
+              heightRange: optMinStr()
                 .optional()
                 .describe(
-                  "Minimum height in centimeters."
+                  "Height range in centimeters. Forms: '10-50' (between 10 and 50), '10-' (≥ 10), '-50' (≤ 50). " +
+                  "Inclusive bounds. 0.0 sentinel values (meaning 'unknown') are excluded from upper-bound matches."
                 ),
-              maxHeight: z
-                .number()
+              widthRange: optMinStr()
                 .optional()
                 .describe(
-                  "Maximum height in centimeters."
-                ),
-              minWidth: z
-                .number()
-                .optional()
-                .describe(
-                  "Minimum width in centimeters."
-                ),
-              maxWidth: z
-                .number()
-                .optional()
-                .describe(
-                  "Maximum width in centimeters."
+                  "Width range in centimeters. Same form as heightRange ('10-50', '10-', '-50')."
                 ),
               nearPlace: optMinStr()
                 .optional()
@@ -1662,28 +1650,18 @@ function registerTools(
             "— children whose parent isn't a hit remain in the result. Applied after the BM25 page is selected, " +
             "so a parent that ranks below the maxResults cutoff won't pull its children in. Closes #28.",
           ),
-        sortBy: z
-          .enum(["height", "width", "dateEarliest", "dateLatest", "recordModified"])
+        sort: optMinStr()
           .optional()
           .describe(
-            "Order results by a column instead of relevance/importance. " +
+            "Order results by a column (with optional direction). Forms: 'height', 'height:desc' (default), 'dateEarliest:asc'. " +
             "Overrides BM25 (text-match) and geo-proximity ordering when set. Cannot be used alone — needs at least one substantive filter.\n\n" +
-            "Values: " +
+            "Columns: " +
             "'height' / 'width' (cm — 95% / 94% coverage; 0.0 sentinels are folded to NULL and ordered last), " +
             "'dateEarliest' / 'dateLatest' (year — 99.9% coverage; bracket the dating range, useful for hedged datings like 'c. 1660–1665'), " +
-            "'recordModified' (ISO date — 62% coverage; ~7 implausibly future-dated rows lead a 'desc' sort, ~2K pre-1990 rows lead an 'asc' sort)."
+            "'recordModified' (ISO date — 62% coverage; ~7 implausibly future-dated rows lead a 'desc' sort, ~2K pre-1990 rows lead an 'asc' sort).\n\n" +
+            "Direction defaults to 'desc'. NULLs always sort last regardless of direction. " +
+            "Examples: largest paintings → 'height:desc'; earliest works → 'dateEarliest:asc'; most recently catalogued → 'recordModified:desc'."
           ),
-        sortOrder: z
-          .enum(["asc", "desc"])
-          .optional()
-          .describe(
-            "Sort direction (default 'desc'). NULLs always sort last regardless of direction. " +
-            "Examples: largest paintings → sortBy='height', sortOrder='desc'; earliest works → sortBy='dateEarliest', sortOrder='asc'; " +
-            "most recently catalogued → sortBy='recordModified', sortOrder='desc'."
-          ),
-        pageToken: optStr()
-          .optional()
-          .describe("Deprecated. Pagination is not supported in the current search backend. Use maxResults to control result count."),
       }).strict(),
       ...withOutputSchema(SearchResultOutput),
     },
@@ -1703,8 +1681,8 @@ function registerTools(
         ) || argsRecord["query"] !== undefined;
       if (!hasAnyFilter) {
         return errorResponse(
-          "At least one search filter is required (imageAvailable, hasProvenance, modifiedAfter/Before, " +
-          "and expandPlaceHierarchy are modifiers that cannot be used alone). " +
+          "At least one search filter is required (imageAvailable, hasProvenance, expandPlaceHierarchy " +
+          "are modifiers that cannot be used alone). " +
           "Add a filter like subject, creator, type, material, technique, depictedPerson, or creationDate. " +
           "For demographic queries (gender, birth/death place, profession), use search_persons → search_artwork({creator: <vocabId>}). " +
           "For concept-based search, try semantic_search instead."
@@ -1713,26 +1691,46 @@ function registerTools(
 
       const vocabArgs: Record<string, unknown> = { maxResults: args.maxResults, offset: args.offset };
       for (const k of allVocabKeys) {
-        if (argsRecord[k] !== undefined) vocabArgs[k] = argsRecord[k];
+        if (argsRecord[k] !== undefined && !COMPOUND_PUBLIC_KEYS.has(k)) {
+          vocabArgs[k] = argsRecord[k];
+        }
       }
       if (args.facets) vocabArgs["facets"] = args.facets;
       if (args.facetLimit != null) vocabArgs["facetLimit"] = args.facetLimit;
-      // Map query → title for vocab path (query searches by title)
-      if (argsRecord["query"] && !vocabArgs["title"]) {
+      // query → title (vocab path searches title via title_all_text)
+      if (argsRecord["query"]) {
         vocabArgs["title"] = argsRecord["query"];
       }
-
-      // Warn on deprecated pageToken (applies to both compact and full paths)
-      const pageTokenWarning = argsRecord["pageToken"]
-        ? "pageToken is deprecated — use maxResults to control result count."
-        : undefined;
+      // heightRange / widthRange → min/maxHeight, min/maxWidth
+      const heightBounds = parseDimRange(argsRecord["heightRange"]);
+      if (heightBounds) {
+        if (heightBounds.min != null) vocabArgs["minHeight"] = heightBounds.min;
+        if (heightBounds.max != null) vocabArgs["maxHeight"] = heightBounds.max;
+      } else if (argsRecord["heightRange"] !== undefined) {
+        return errorResponse(`Invalid heightRange "${argsRecord["heightRange"]}". Use forms like '10-50', '10-', or '-50'.`);
+      }
+      const widthBounds = parseDimRange(argsRecord["widthRange"]);
+      if (widthBounds) {
+        if (widthBounds.min != null) vocabArgs["minWidth"] = widthBounds.min;
+        if (widthBounds.max != null) vocabArgs["maxWidth"] = widthBounds.max;
+      } else if (argsRecord["widthRange"] !== undefined) {
+        return errorResponse(`Invalid widthRange "${argsRecord["widthRange"]}". Use forms like '10-50', '10-', or '-50'.`);
+      }
+      // sort → sortBy + sortOrder
+      const sortParsed = parseSortParam(argsRecord["sort"]);
+      if (sortParsed) {
+        vocabArgs["sortBy"] = sortParsed.sortBy;
+        vocabArgs["sortOrder"] = sortParsed.sortOrder;
+      } else if (argsRecord["sort"] !== undefined) {
+        return errorResponse(
+          `Invalid sort "${argsRecord["sort"]}". ` +
+          `Use 'column' or 'column:asc|desc' where column is one of height, width, dateEarliest, dateLatest, recordModified.`
+        );
+      }
 
       // Compact mode: return only IDs without enrichment
       if (args.compact) {
         const compactResult = vocabDb.searchCompact(vocabArgs as any);
-        if (pageTokenWarning) {
-          compactResult.warnings = [...(compactResult.warnings || []), pageTokenWarning];
-        }
 
         const header = (compactResult.totalResults != null
           ? `${compactResult.totalResults} results`
@@ -1749,9 +1747,6 @@ function registerTools(
       }
 
       const result = vocabDb.search(vocabArgs as any);
-      if (pageTokenWarning) {
-        result.warnings = [...(result.warnings || []), pageTokenWarning];
-      }
 
       // Suggest aboutActor when depictedPerson returns 0 results
       if (result.results.length === 0 && argsRecord.depictedPerson) {
@@ -2956,8 +2951,7 @@ function registerTools(
       description:
         "Use when you need OAI-PMH delta semantics specifically — tracking what changed since a known harvest checkpoint, with resumption-token pagination. " +
         "Returns records changed within a date range. Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). " +
-        "Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. " +
-        "For static date-modified filtering across the collection, prefer search_artwork({modifiedAfter: <ISO date>}) — same data, no resumption tokens, combinable with other filters.",
+        "Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image.",
       inputSchema: z.object({
         from: optStr()
           .optional()
@@ -3170,9 +3164,6 @@ function registerTools(
           "The user cannot see tool output — if you do not include the path, they have no way to find the review page.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "Only the parsed provenance fields exposed below are searchable. " +
-          "For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — " +
-          "also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) " +
-          "and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). " +
           "At least one filter is required.",
         inputSchema: z.object({
           layer: z.preprocess(stripNull,

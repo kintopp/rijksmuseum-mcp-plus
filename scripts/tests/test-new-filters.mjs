@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /**
  * test-new-filters.mjs — verify v0.27 cluster B additions (#292):
- *   theme · sourceType · modifiedAfter / modifiedBefore filters on search_artwork,
- *   plus theme + sourceType participation in collection_stats and facets.
+ *   theme · sourceType filters on search_artwork, plus theme + sourceType
+ *   participation in collection_stats and facets.
  *
  * (Pre-v0.27 this file tested creatorGender / creatorBornAfter / creatorBornBefore /
  * expandPlaceHierarchy. Those filters are removed in #305 and replaced by
- * search_persons; see test-search-persons.mjs and test-removed-demographic-filters.mjs.)
+ * search_persons; see test-search-persons.mjs and test-removed-demographic-filters.mjs.
+ * modifiedAfter / modifiedBefore removed in the v0.50 schema-trim pass — use
+ * get_recent_changes for catalogue-modified-since queries.)
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -66,26 +68,8 @@ r = await call("search_artwork", { sourceType: "paintings", maxResults: 1 });
 check("Returns 30K–60K paintings", (r?.totalResults ?? 0) > 30_000 && (r?.totalResults ?? 0) < 60_000);
 console.log(`   totalResults: ${r?.totalResults}`);
 
-// ── 3. modifiedAfter / modifiedBefore ─────────────────────────────────────
-console.log("\n4. modifiedAfter — '2024-01-01' combined with type='painting'");
-r = await call("search_artwork", { type: "painting", modifiedAfter: "2024-01-01", maxResults: 1 });
-check("No error", !r?._error);
-const totalRecent = r?.totalResults ?? 0;
-console.log(`   totalResults: ${totalRecent}`);
-
-console.log("\n5. modifiedBefore — '2024-01-01' combined with type='painting'");
-r = await call("search_artwork", { type: "painting", modifiedBefore: "2024-01-01", maxResults: 1 });
-check("No error", !r?._error);
-const totalOlder = r?.totalResults ?? 0;
-console.log(`   totalResults: ${totalOlder}`);
-
-console.log("\n6. modifiedAfter alone (modifier guard — should be rejected)");
-r = await call("search_artwork", { modifiedAfter: "2024-01-01" });
-check("Rejected as standalone", !!r?._error || !!r?.error);
-console.log(`   → ${r?._error || "rejected"}`);
-
-// ── 4. Facets include theme + sourceType ──────────────────────────────────
-console.log("\n7. Facets — theme + sourceType for type='painting'");
+// ── 3. Facets include theme + sourceType ──────────────────────────────────
+console.log("\n4. Facets — theme + sourceType for type='painting'");
 r = await call("search_artwork", {
   type: "painting", maxResults: 1, facets: ["theme", "sourceType"], facetLimit: 5,
 });
@@ -96,15 +80,15 @@ if (r?.facets?.sourceType) {
   console.log("   sourceType breakdown:", r.facets.sourceType.map(f => `${f.label}:${f.count}`).join(", "));
 }
 
-// ── 5. collection_stats accepts theme + sourceType dimensions ─────────────
+// ── 4. collection_stats accepts theme + sourceType dimensions ─────────────
 //   collection_stats returns formatted text only — no structuredContent.
-console.log("\n8. collection_stats({dimension: 'sourceType'}) — top 6 source-types");
+console.log("\n5. collection_stats({dimension: 'sourceType'}) — top 6 source-types");
 let rt = await callText("collection_stats", { dimension: "sourceType", topN: 6 });
 check("No error", !rt?._error);
 check("Contains 'designs' (largest source-type)", /designs\s+\d/.test(rt?.text ?? ""));
 check("Contains 'paintings'", /paintings\s+\d/.test(rt?.text ?? ""));
 
-console.log("\n9. collection_stats({dimension: 'theme'}) — top 5 themes");
+console.log("\n6. collection_stats({dimension: 'theme'}) — top 5 themes");
 rt = await callText("collection_stats", { dimension: "theme", topN: 5 });
 check("No error", !rt?._error);
 check("theme distribution header present", /theme distribution/.test(rt?.text ?? ""));

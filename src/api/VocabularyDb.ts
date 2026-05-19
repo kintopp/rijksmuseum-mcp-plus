@@ -18,6 +18,10 @@ export type TitleQualifier = (typeof TITLE_QUALIFIERS)[number];
 export const DIMENSION_TYPES = ["height", "width", "depth", "weight", "diameter"] as const;
 export type DimensionType = (typeof DIMENSION_TYPES)[number];
 
+/** Sort columns accepted by `VocabSearchParams.sortBy` (and the public `sort` string parsed in registration.ts). */
+export const SORT_COLUMNS = ["height", "width", "dateEarliest", "dateLatest", "recordModified"] as const;
+export type SortColumn = (typeof SORT_COLUMNS)[number];
+
 const TITLE_LANGUAGES_SET = new Set<TitleLanguage>(TITLE_LANGUAGES);
 const TITLE_QUALIFIERS_SET = new Set<TitleQualifier>(TITLE_QUALIFIERS);
 
@@ -251,19 +255,18 @@ export interface VocabSearchParams {
   collectionSet?: StringOrArray;
   theme?: StringOrArray;
   sourceType?: StringOrArray;
-  license?: string;
   // Tier 2 fields (require vocabulary DB v1.0+)
   description?: string;
   inscription?: string;
-  creditLine?: string;
   curatorialNarrative?: string;
   productionRole?: StringOrArray;
   attributionQualifier?: StringOrArray;
+  // Dimension range bounds — populated from public `heightRange`/`widthRange` strings.
   minHeight?: number;
   maxHeight?: number;
   minWidth?: number;
   maxWidth?: number;
-  // Date and title filters (require vocabulary DB with date/title columns)
+  // Date and title filters (require vocabulary DB with date/title columns).
   creationDate?: string;
   dateMatch?: "overlaps" | "within" | "midpoint";
   title?: string;
@@ -283,12 +286,9 @@ export interface VocabSearchParams {
   sameRowMatching?: boolean;
   // Cross-domain
   hasProvenance?: boolean;
-  // Record-modified date range (require record_modified column)
-  modifiedAfter?: string;
-  modifiedBefore?: string;
-  // Result ordering. Overrides BM25 / geo-proximity / importance defaults.
+  // Result ordering. Overrides BM25 / geo / importance.
   // recordModified requires record_modified column (v0.27+ DB).
-  sortBy?: "height" | "width" | "dateEarliest" | "dateLatest" | "recordModified";
+  sortBy?: SortColumn;
   sortOrder?: "asc" | "desc";
   maxResults?: number;
   offset?: number;
@@ -4380,12 +4380,11 @@ export class VocabularyDb {
     conditions.push(...vocabResult.conditions);
     bindings.push(...vocabResult.bindings);
 
-    // Tier 2: Text FTS filters (inscription, creditLine, curatorialNarrative)
+    // Tier 2: Text FTS filters (description, inscription, curatorialNarrative, title)
     // (provenance text filter dropped in v0.27 — use search_provenance instead.)
     const TEXT_FILTERS: [keyof VocabSearchParams, string][] = [
       ["description", "description_text"],
       ["inscription", "inscription_text"],
-      ["creditLine", "credit_line"],
       ["curatorialNarrative", "narrative_text"],
       ["title", "title_all_text"],
     ];
@@ -4572,7 +4571,6 @@ export class VocabularyDb {
       if (effective.material) requested.delete("material");
       if (effective.technique) requested.delete("technique");
       if (effective.creationDate) requested.delete("century");
-      if (effective.license) requested.delete("rights");
       if (effective.imageAvailable != null) requested.delete("imageAvailable");
       if (effective.creator) requested.delete("creator");
       if (effective.depictedPerson) requested.delete("depictedPerson");
@@ -4753,40 +4751,12 @@ export class VocabularyDb {
       }
     }
 
-    // Direct column filter: license matches against artworks.rights_uri (or rights_lookup)
-    if (effective.license) {
-      if (this.hasRightsLookup) {
-        conditions.push("a.rights_id IN (SELECT id FROM rights_lookup WHERE uri LIKE ?)");
-      } else {
-        conditions.push("a.rights_uri LIKE ?");
-      }
-      bindings.push(`%${effective.license}%`);
-    }
-
     // Image availability filter (requires has_image column from v0.19+ DB)
     if (effective.imageAvailable === true) {
       if (this.hasImageColumn) {
         conditions.push("a.has_image = 1");
       } else {
         warnings?.push("imageAvailable requires vocabulary DB v0.19+. This filter was ignored.");
-      }
-    }
-
-    // Record-modified date range (requires record_modified column from v0.27+ DB)
-    if (effective.modifiedAfter) {
-      if (this.hasRecordModified_) {
-        conditions.push("a.record_modified >= ?");
-        bindings.push(effective.modifiedAfter);
-      } else {
-        warnings?.push("modifiedAfter requires vocabulary DB v0.27+. This filter was ignored.");
-      }
-    }
-    if (effective.modifiedBefore) {
-      if (this.hasRecordModified_) {
-        conditions.push("a.record_modified <= ?");
-        bindings.push(effective.modifiedBefore);
-      } else {
-        warnings?.push("modifiedBefore requires vocabulary DB v0.27+. This filter was ignored.");
       }
     }
 

@@ -29,6 +29,8 @@ import {
   checkRegionBounds,
   computeDeliveryState,
   computeVerificationRegion,
+  parseDimRange,
+  parseSortParam,
 } from "../../dist/registration.js";
 
 import {
@@ -663,6 +665,39 @@ assertEq(computeDeliveryState(NOW - 5000, NOW, 10_000), "delivered_recently",
   "custom recentMs widens the window");
 assertEq(computeDeliveryState(NOW, NOW), "delivered_recently",
   "polled this instant → delivered_recently");
+
+// ── parseDimRange ────────────────────────────────────────────────
+
+section("parseDimRange");
+
+assertDeepEq(parseDimRange("10-50"),  { min: 10, max: 50 }, "two-sided range");
+assertDeepEq(parseDimRange("10-"),    { min: 10 },          "open upper bound");
+assertDeepEq(parseDimRange("-50"),    { max: 50 },          "open lower bound");
+assertDeepEq(parseDimRange("10.5-50.25"), { min: 10.5, max: 50.25 }, "decimal bounds");
+assertEq(parseDimRange("10"),      null, "single number without hyphen → null");
+assertEq(parseDimRange("-"),       null, "lone hyphen → null");
+assertEq(parseDimRange(""),        null, "empty string → null");
+assertEq(parseDimRange("abc"),     null, "non-numeric → null");
+assertEq(parseDimRange("10-50-"),  null, "trailing junk → null");
+assertEq(parseDimRange(undefined), null, "undefined → null");
+assertEq(parseDimRange(42),        null, "non-string input → null");
+
+// ── parseSortParam ───────────────────────────────────────────────
+
+section("parseSortParam");
+
+assertDeepEq(parseSortParam("height"),            { sortBy: "height",         sortOrder: "desc" }, "column only → default desc");
+assertDeepEq(parseSortParam("height:desc"),       { sortBy: "height",         sortOrder: "desc" }, "explicit desc");
+assertDeepEq(parseSortParam("dateEarliest:asc"),  { sortBy: "dateEarliest",   sortOrder: "asc"  }, "column with asc");
+assertDeepEq(parseSortParam("recordModified:desc"), { sortBy: "recordModified", sortOrder: "desc" }, "recordModified column");
+assertDeepEq(parseSortParam("width"),             { sortBy: "width",          sortOrder: "desc" }, "width default desc");
+assertDeepEq(parseSortParam("dateLatest"),        { sortBy: "dateLatest",     sortOrder: "desc" }, "dateLatest default desc");
+assertEq(parseSortParam("bogus"),          null, "unknown column → null");
+assertEq(parseSortParam("height:sideways"), null, "unknown direction → null");
+assertEq(parseSortParam("height:"),        null, "trailing colon → null");
+assertEq(parseSortParam(""),               null, "empty string → null");
+assertEq(parseSortParam(undefined),        null, "undefined → null");
+assertEq(parseSortParam(42),               null, "non-string input → null");
 
 // ── Summary ──────────────────────────────────────────────────────
 

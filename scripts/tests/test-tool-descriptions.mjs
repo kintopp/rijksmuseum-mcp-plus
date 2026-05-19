@@ -159,16 +159,6 @@ const spv = descOf("search_provenance");
 assert(spv.includes("periodLocation"), "search_provenance mentions periodLocation");
 
 // ══════════════════════════════════════════════════════════════════
-//  get_recent_changes: cross-link to modifiedAfter
-// ══════════════════════════════════════════════════════════════════
-
-section("get_recent_changes cross-link");
-
-const grc = descOf("get_recent_changes");
-assert(grc.includes("modifiedAfter") && grc.includes("search_artwork"),
-  "get_recent_changes cross-links to search_artwork({modifiedAfter})");
-
-// ══════════════════════════════════════════════════════════════════
 //  navigate_viewer: deliveryState contract (#287/2)
 // ══════════════════════════════════════════════════════════════════
 
