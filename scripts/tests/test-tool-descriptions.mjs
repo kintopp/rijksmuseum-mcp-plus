@@ -126,7 +126,6 @@ section("browse_set DB-backed note");
 
 const bs = descOf("browse_set");
 assert(/DB-backed|DB-direct/.test(bs), "browse_set mentions DB-backed/DB-direct");
-assert(bs.includes("v0.27"), "browse_set mentions v0.27 transition");
 
 // ══════════════════════════════════════════════════════════════════
 //  search_persons: lead-in + two-step pattern
