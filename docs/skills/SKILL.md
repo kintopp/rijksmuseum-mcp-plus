@@ -13,7 +13,7 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.40"
+  version: "0.41"
   last_updated: "2026-05-19"
 ---
 
