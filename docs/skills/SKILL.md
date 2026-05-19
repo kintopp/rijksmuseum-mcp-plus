@@ -35,6 +35,7 @@ metadata:
 | "How many artworks have LLM-mediated interpretations?"                        | `collection_stats` with `dimension: "categoryMethod"`                                                                |
 | "Of artworks with provenance, how many are paintings?"                        | `collection_stats` with `dimension: "type"` + `hasProvenance: true`                                                  |
 | "Find persons by demographics / lifespan / profession / birth or death place" | `search_persons` → feed `vocabId` to `search_artwork(creator=…)`                                                     |
+| "Find/order artworks by physical size or by date"                             | `search_artwork` with `heightRange`/`widthRange` (e.g. `"10-50"`, `"100-"`, `"-30"`) and/or `sort` (e.g. `"height:desc"`, `"dateEarliest:asc"`)  |
 | "Curatorial theme tags on a work / theme distribution"                        | `search_artwork(theme=…)` / `collection_stats(dimension="theme")`                                                    |
 | "Cataloguing-channel breakdown (designs, drawings, paintings, prints…)"       | `search_artwork(sourceType=…)` / `collection_stats(dimension="sourceType")`                                          |
 | "What changed since YYYY-MM-DD?" / "Has anything changed since the last harvest checkpoint?" — OAI-PMH delta | `get_recent_changes` (resumption-token pagination)                                                                   |
@@ -104,7 +105,14 @@ Most artworks have date *ranges* (e.g. "1630–1640"), not exact years — see t
 
 Scope: `dateMatch` applies only to `search_artwork` and `semantic_search`, and only fires when `creationDate` is supplied (year or wildcard). It is **not** a parameter on `collection_stats` — `collection_stats` accepts numeric `creationDateFrom`/`creationDateTo` (strict within-bounds), and its `decade`/`century` dimensions bin each artwork by `date_earliest` (one bin per artwork, no double-counting to escape).
 
+### `heightRange` / `widthRange` / `sort` — string-form bounds and ordering on `search_artwork`
+
+- `heightRange` / `widthRange`: `"10-50"` (between, cm), `"10-"` (≥ 10), `"-50"` (≤ 50). 0.0 sentinels treated as NULL.
+- `sort`: `"column"` (default desc) or `"column:asc"`/`"column:desc"`. Columns: `height`, `width`, `dateEarliest`, `dateLatest`, `recordModified`. Cannot stand alone — needs at least one substantive filter.
+
 ### `attributionQualifier` + `productionRole` + `creator` — defaults, user phrasings, and known limits
+
+The three attribution-scoping filters (`attributionQualifier`, `productionRole`, `sameRowMatching`) are available on **both `search_artwork` and `collection_stats`** with identical semantics — same-row enforcement against the row-aware tables. The patterns below apply to either tool: use `search_artwork` when you want the matching artwork records, `collection_stats` when you want an aggregate breakdown of that same set.
 
 **Default attribution scope for named-artist queries.** For vague queries about a named artist's work ("show me Rembrandts", "Rembrandt's paintings"), narrow with `creator: "X"` + `productionRole: "<making-role>"` + `sameRowMatching: true` (plus `type` if known). Making-role values: `"painter"` for paintings, `"draughtsman"` for drawings, `"print maker"` for prints (the canonical label has a space — not `"printmaker"` or `"etcher"`). Without `sameRowMatching: true`, the role filter matches independently of the creator, and reproductive prints/photographs catalogued under the master's name surface alongside autograph works. Tell the user which production-role scope you applied so they can widen it explicitly.
 
@@ -417,7 +425,7 @@ Three complementary paths connect a work to its peers, copies, sources, pendants
 ```
 search_artwork(productionRole="after painting by", creator="Rembrandt van Rijn")
 # → get_artwork_details on a result to read its description (often names the source)
-# → search_artwork(creator="Rembrandt van Rijn", type="painting", title="...") to find the source
+# → search_artwork(creator="Rembrandt van Rijn", type="painting", query="...") to find the source
 # → get_artwork_image on both for side-by-side comparison
 ```
 
@@ -459,28 +467,11 @@ Of ~291K persons in the catalogue, ~60K appear as creators on at least one artwo
 
 ### 10. Similarity Research
 
-`find_similar(objectNumber)` renders an HTML comparison page at `${PUBLIC_URL}/similar/:uuid` (cached 30 min) showing the source work alongside nearest neighbours across **9 independent similarity channels** plus a pooled column. **Your job is to surface the URL/path to the user — don't fetch, summarise, or paraphrase the page.** The tool takes only `objectNumber` and `maxResults` (default 20, max 50, per channel); there is no `signal` parameter.
+`find_similar(objectNumber)` renders an HTML comparison page across 9 independent similarity channels (Visual, Related Co-Production, Related Object, Lineage, Iconclass, Description, Theme, Depicted Person, Depicted Place) plus a Pooled column.
 
+**Behavioural rule:** your job is to surface the URL/path to the user — don't fetch, summarise, or paraphrase the page.
 
-| Channel               | Matches on                                                                        | Use when the user wants…                                           |
-| --------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Visual                | Image embedding (composition, palette, format)                                    | Look-alikes regardless of attribution                              |
-| Related Co-Production | Creator-invariant curator edges (pendants, production stadia, different examples) | Pairs/companions/variants by the same hand                         |
-| Related Object        | Other curator edges (pairs, sets, recto/verso, reproductions — tiered)            | Components, derivatives, reproductive copies, sets/series          |
-| Lineage               | Shared creator + assignment-qualifier overlap                                     | Workshop / follower / pupil / copy neighbourhoods                  |
-| Iconclass             | Overlapping Iconclass notations                                                   | Same iconographic programme                                        |
-| Description           | Dutch-description embedding similarity                                            | Shared themes/technique/style in cataloguer text                   |
-| Theme                 | Curatorial-theme set overlap (IDF-weighted)                                       | Same collection-level narrative                                    |
-| Depicted Person       | Same person(s) portrayed                                                          | Sitters across portraits; historical figures                       |
-| Depicted Place        | Same place(s) shown                                                               | Views of the same city, building, or landscape                     |
-| Pooled                | Blend of all nine — works scoring in **4+** channels                              | Exploratory "what else is like this" when the axis isn't yet known |
-
-
-```
-find_similar(objectNumber="RP-P-1958-335", maxResults=50)  # default 20
-```
-
-Feature-gated (`ENABLE_FIND_SIMILAR`); Theme channel separately gated (`ENABLE_THEME_SIMILAR`). Fallback when unavailable: `semantic_search`, or `search_artwork` built from the source's creator + type + subject.
+The tool takes only `objectNumber` and `maxResults` (default 20, max 50, per channel); there is no `signal` parameter. For the full channel reference (when to read which column), see [`references/find-similar-channels.md`](references/find-similar-channels.md).
 
 ---
 
