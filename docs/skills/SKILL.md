@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.34"
-  last_updated: "2026-05-18"
+  version: "0.40"
+  last_updated: "2026-05-19"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -359,7 +359,7 @@ navigate_viewer(viewUUID=..., commands=[{
 
 `inspect_artwork_image` can surface content **absent from structured metadata** — unsigned Japanese prints often have readable artist signatures, publisher seals, and poem cartouches that the catalogue has not transcribed. Use `region="full"` for an initial composition overview before cropping to details.
 
-**Verifying overlay placement with `show_overlays`.** Inspect a region that encloses your overlay(s), not `full` — at the 448 px clamp, small overlays on a full-image view shrink below visual threshold (the server rejects this combination with a `show_overlays_on_full_not_supported` warning).
+**Verifying overlay placement with `show_overlays`.** Pass each overlay's `verificationRegion` (`pct:`, returned by `navigate_viewer`) as the `region` for `inspect_artwork_image(show_overlays: true, viewUUID: …)`. Don't use `full` — the 448 px clamp shrinks overlays below visibility (server rejects with `show_overlays_on_full_not_supported`). Overlays are append-only: to reposition, `clear_overlays` then re-add ALL. Use distinct `color` per command so labels stay readable on overlapping boxes.
 
 ### 6. Provenance and Acquisition Research
 
@@ -448,33 +448,28 @@ Of ~291K persons in the catalogue, ~60K appear as creators on at least one artwo
 
 ### 10. Similarity Research
 
-**Your job with `find_similar` is to surface the result link to the user — not to fetch, summarise, or paraphrase the rendered page.** The tool returns an HTML comparison page; the user reads the channel column relevant to their question.
-
-`find_similar(objectNumber)` renders an HTML comparison page at `${PUBLIC_URL}/similar/:uuid` (cached for 30 minutes) showing the source work alongside nearest neighbours across **9 independent similarity channels** plus a pooled column. The tool takes only `objectNumber` and `maxResults` — there is no `signal` parameter.
-
-The 9 channel columns on the rendered HTML page (column legend, not query parameters):
+`find_similar(objectNumber)` renders an HTML comparison page at `${PUBLIC_URL}/similar/:uuid` (cached 30 min) showing the source work alongside nearest neighbours across **9 independent similarity channels** plus a pooled column. **Your job is to surface the URL/path to the user — don't fetch, summarise, or paraphrase the page.** The tool takes only `objectNumber` and `maxResults` (default 20, max 50, per channel); there is no `signal` parameter.
 
 
-| Channel column        | Matches on                                                                                                                            | Read it when the user is asking about…                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Visual                | Image embedding (composition, palette, format)                                                                                        | Look-alikes regardless of attribution — "other prints with this feel"                |
-| Related Co-Production | Curator-declared creator-invariant edges (pendants, production stadia, different examples)                                            | Pairs/companions/variants of the same composition by the same hand                   |
-| Related Object        | Curator-declared derivative + grouping edges (pairs, sets, recto/verso, reproductions, general related-object links — tiered weights) | Components, derivatives, reproductive copies, sets/series                            |
-| Lineage               | Shared creator + assignment-qualifier overlap                                                                                         | Workshop, follower, pupil, copy neighbourhoods                                       |
-| Iconclass             | Overlapping Iconclass notations                                                                                                       | Works with the same iconographic programme                                           |
-| Description           | Dutch-description embedding similarity                                                                                                | Shared themes, technique, style vocabulary in cataloguer text                        |
-| Theme                 | Curatorial-theme set overlap (IDF-weighted)                                                                                           | Works grouped under the same collection-level narrative                              |
-| Depicted Person       | Same person(s) portrayed                                                                                                              | Sitters across multiple portraits; historical figures                                |
-| Depicted Place        | Same place(s) shown                                                                                                                   | Views of the same city, building, or landscape                                       |
-| Pooled                | Blend of all nine — works that score in **4+** channels                                                                               | Exploratory "what else is like this" when you don't yet know which dimension matters |
+| Channel               | Matches on                                                                        | Use when the user wants…                                           |
+| --------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Visual                | Image embedding (composition, palette, format)                                    | Look-alikes regardless of attribution                              |
+| Related Co-Production | Creator-invariant curator edges (pendants, production stadia, different examples) | Pairs/companions/variants by the same hand                         |
+| Related Object        | Other curator edges (pairs, sets, recto/verso, reproductions — tiered)            | Components, derivatives, reproductive copies, sets/series          |
+| Lineage               | Shared creator + assignment-qualifier overlap                                     | Workshop / follower / pupil / copy neighbourhoods                  |
+| Iconclass             | Overlapping Iconclass notations                                                   | Same iconographic programme                                        |
+| Description           | Dutch-description embedding similarity                                            | Shared themes/technique/style in cataloguer text                   |
+| Theme                 | Curatorial-theme set overlap (IDF-weighted)                                       | Same collection-level narrative                                    |
+| Depicted Person       | Same person(s) portrayed                                                          | Sitters across portraits; historical figures                       |
+| Depicted Place        | Same place(s) shown                                                               | Views of the same city, building, or landscape                     |
+| Pooled                | Blend of all nine — works scoring in **4+** channels                              | Exploratory "what else is like this" when the axis isn't yet known |
 
 
 ```
-find_similar(objectNumber="RP-P-1958-335")  # one call → HTML page with all 9 channels + pooled
-find_similar(objectNumber="RP-P-1958-335", maxResults=50)  # widen each column
+find_similar(objectNumber="RP-P-1958-335", maxResults=50)  # default 20
 ```
 
-The HTML page renders all channels in a single view; `maxResults` defaults to 20 (max 50) candidates per channel. The tool is feature-gated (`ENABLE_FIND_SIMILAR`); the Theme channel is independently gated by `ENABLE_THEME_SIMILAR`. If unavailable, fall back to `semantic_search` or a structured `search_artwork` built from the source artwork's filters (shared creator + type + subject).
+Feature-gated (`ENABLE_FIND_SIMILAR`); Theme channel separately gated (`ENABLE_THEME_SIMILAR`). Fallback when unavailable: `semantic_search`, or `search_artwork` built from the source's creator + type + subject.
 
 ---
 
