@@ -3493,9 +3493,10 @@ function registerTools(
     server.registerTool(
       "collection_stats",
       {
-        title: "Collection Statistics",
+        title: "Collection-wide Aggregate Counts (Distributions, Histograms, Statistics)",
         annotations: ANN_READ_CLOSED,
         description:
+          "Aggregate counts, percentages, distributions, histograms, totals, summaries, and group-by / count-by / distribution-of breakdowns across the Rijksmuseum collection. Statistics / stats over any structured dimension.\n\n" +
           "Use when the user wants aggregate counts, percentages, or distributions across the collection (one call instead of search_artwork(compact=true) loops). " +
           "Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). " +
           "Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.\n\n" +
@@ -3684,7 +3685,8 @@ function registerTools(
           "Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), " +
           "Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.\n\n" +
           "Not for free-text concept queries — use semantic_search. " +
-          "Not for filter-based search — use search_artwork.\n\n" +
+          "Not for filter-based search — use search_artwork. " +
+          "Not for aggregate counts or distributions — use collection_stats.\n\n" +
           "IMPORTANT: The result is a file path or URL to an HTML page. " +
           "Your ONLY job is to show the user the path/URL so they can open it in a browser. " +
           "Do NOT attempt to open, read, fetch, summarise, or characterise the page contents. " +
@@ -3943,7 +3945,8 @@ function registerTools(
           "Returns artworks ranked by Dutch-description embedding similarity to the query, with source text for grounding — " +
           "use that text to explain why results are relevant or to flag false positives.\n\n" +
           "Not for queries expressible as structured metadata (specific artists, dates, places, materials) — use search_artwork for those. " +
-          "Not for artwork-to-artwork similarity — use find_similar with an objectNumber.\n\n" +
+          "Not for artwork-to-artwork similarity — use find_similar with an objectNumber. " +
+          "Not for aggregate counts or distributions — use collection_stats.\n\n" +
           "Best for concepts that resist structured metadata: atmospheric qualities ('sense of loneliness'), compositional descriptions " +
           "('artist gazing directly at the viewer'), art-historical concepts ('cultural exchange under VOC trade'), or cross-language queries. " +
           "Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly; " +
