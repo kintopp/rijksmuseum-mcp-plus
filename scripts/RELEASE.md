@@ -170,8 +170,9 @@ shasum -a 256 data/<db-file>.db.gz
 gh release create v0.XX --prerelease data/<db-file>.db.gz \
   --title "v0.XX" --notes-file RELEASE_NOTES_v0.XX.md
 
-# 5. Rename old DB on Railway volume (required — see note below)
-railway ssh --service rijksmuseum-mcp-plus -- mv /data/<db-file>.db /data/<db-file>.db.bak
+# 5. Remove old DB + journal siblings from Railway volume.
+#    The .db-wal and .db-shm files MUST be removed alongside the .db — see "WAL/SHM gotcha" below.
+railway ssh --service rijksmuseum-mcp-plus "rm -f /data/<db-file>.db /data/<db-file>.db-wal /data/<db-file>.db-shm"
 
 # 5b. (Optional) Delete any dead env vars now — `variable delete` does NOT trigger a deploy,
 #     so bundle these here to piggy-back on the step 6 deploy.
@@ -183,14 +184,15 @@ railway variables --set "<DB_URL_VAR>=https://github.com/kintopp/rijksmuseum-mcp
   --service rijksmuseum-mcp-plus
 
 # 7. Verify (see "Verification queries" below)
-
-# 8. Delete the backup once verified
-railway ssh --service rijksmuseum-mcp-plus -- rm /data/<db-file>.db.bak
 ```
 
-**Steps 5+6 are both required.** `ensureDb()` checks for a validation table, not DB version. If the old DB exists and passes validation, the download is skipped regardless of the URL. The old DB must be moved aside first. The running server keeps serving from the renamed inode (open file descriptor) until the new container replaces it — so the rename is safe under live traffic.
+**Steps 5+6 are both required.** `ensureDb()` checks for a validation table, not DB version. If the old DB exists and passes validation, the download is skipped regardless of the URL. The old DB must be removed first. The running server keeps serving from the unlinked inode (open file descriptors keep the file alive on disk until the process exits) until the new container replaces it — so the `rm` is safe under live traffic.
 
-**One DB at a time.** Complete steps 5–8 for one DB, confirm it is healthy, then start the next. Do not rename multiple DBs before verifying the first upgrade succeeded. BUT do not linger — the intermediate-window warning above applies.
+**Why `rm` and not `mv → .bak`:** Railway's `/data` volume is 4.6 GB. Keeping a `.bak` of vocab (1.9 GB) alongside the new vocab + existing embeddings peaks at ~4.9 GB and overflows. Rollback target is the previous version's GitHub release URL (see Fallback below), not a local `.bak`.
+
+**WAL/SHM gotcha** (v0.40 swap repro, 2026-05-19): A bare `rm /data/vocabulary.db` leaves `vocabulary.db-wal` and `vocabulary.db-shm` behind. When the new container downloads `vocabulary.db.gz` and SQLite opens the result, it finds the orphaned journal, tries to replay its frames against the fresh pages (whose page checksums don't match the journal headers), and bails with `"database disk image is malformed"` — even though the new DB itself is intact (`PRAGMA integrity_check` ⇒ `ok`, SHA-256 matches the published asset). Symptom: `/ready` returns warm (only embeddings warmed) and `/health` shows the new version, **but `tools/list` is missing every vocab-DB-dependent tool** (`collection_stats`, `find_similar`, `search_persons`, `search_provenance`); `db[vocab]: dbSize=0.0MB` in the memory snapshot. Recovery: `rm -f /data/<db-file>.db-wal /data/<db-file>.db-shm`, then `railway redeploy`.
+
+**One DB at a time.** Complete steps 5–7 for one DB, confirm it is healthy, then start the next. Do not remove multiple DBs before verifying the first upgrade succeeded. BUT do not linger — the intermediate-window warning above applies.
 
 **Railway `variable delete` quirks** (learned 2026-04-20):
 - Does **not** accept `--skip-deploys` (exits with `unexpected argument '--skip-deploys' found`).
@@ -201,11 +203,20 @@ railway ssh --service rijksmuseum-mcp-plus -- rm /data/<db-file>.db.bak
 
 Run these after each DB swap's deploy completes:
 
+**First, confirm the vocab DB actually opened** (catches the WAL/SHM gotcha and any other open-time failure):
+```bash
+curl -sS -X POST https://rijksmuseum-mcp-plus-production.up.railway.app/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  | grep -oE '"name":"[a-z_]+"' | sort -u | wc -l
+```
+- Expected: **15** (12 standard + 3 app tools). Anything less means a vocab-DB-dependent tool failed to register — almost always a sign the DB handle didn't open. Check `railway logs --service rijksmuseum-mcp-plus --since 5m | grep -i "malformed\|vocab"` for the cause before doing anything else.
+
 **Vocab DB swap verification:**
 ```
 collection_stats(dimension: "type")
 ```
-- Confirm `Total artworks: <N>` matches the release-notes count exactly (e.g. 833,432 for v0.24).
+- Confirm `Total artworks: <N>` matches the release-notes count exactly (e.g. 833,432 for v0.24; 834,435 for v0.30 and v0.40).
 - For v0.24+ specifically: `collection_stats(dimension: "categoryMethod")` returns the enrichment-audit-trail dimension. A pre-v0.24 DB rejects the dimension entirely, so this is a definitive v0.24-or-later check.
 
 **Embeddings DB swap verification:**
@@ -220,12 +231,15 @@ semantic_search(query: "moonlit harbor with ships")
 
 ### Fallback if download fails
 
-```bash
-railway ssh --service rijksmuseum-mcp-plus -- mv /data/<db-file>.db.bak /data/<db-file>.db
-```
-Then trigger a restart (`railway redeploy` or set a dummy env var). The server uses the old DB — backward-compat guards in the code keep it functional.
+There is no local `.bak` to restore (see "Why `rm` and not `mv → .bak`" above). The rollback target is the **previous version's GitHub release URL**:
 
-**Reminder: this is a destructive production action. Always ask the user for confirmation before steps 5, 6, and 8.**
+```bash
+railway variables --service rijksmuseum-mcp-plus \
+  --set "<DB_URL_VAR>=https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/<previous-tag>/<db-file>.db.gz"
+```
+The env-var change triggers one redeploy that downloads the previous version. Slower than a `.bak` swap (~5 min download for vocab, ~6 min for embeddings) but reliable. Backward-compat guards in the code keep the older DB functional under the newer server.
+
+**Reminder: this is a destructive production action. Always ask the user for confirmation before steps 5 and 6.**
 
 ## Phase B-bis: Iconclass counts sidecar push (separate service)
 
