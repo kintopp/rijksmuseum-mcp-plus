@@ -531,6 +531,12 @@ export interface CollectionStatsParams {
   collectionSet?: string;
   theme?: string;
   sourceType?: string;
+  // Attribution scoping (parity with search_artwork). attributionQualifier + creator
+  // auto-enforces same-row matching via assignment_pairs (always on). productionRole
+  // + creator becomes same-row only when sameRowMatching is set true (via production_role_pairs).
+  attributionQualifier?: string;
+  productionRole?: string;
+  sameRowMatching?: boolean;
   imageAvailable?: boolean;
   creationDateFrom?: number;
   creationDateTo?: number;
@@ -817,18 +823,20 @@ interface StatsVocabFilter {
 
 /** Vocab filters available on collection_stats. Subset of VOCAB_FILTERS with simpler matching. */
 const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
-  { key: "type",            fields: ["type"] },
-  { key: "material",        fields: ["material"] },
-  { key: "technique",       fields: ["technique"] },
-  { key: "creator",         fields: ["creator"] },
-  { key: "productionPlace", fields: ["spatial"],            vocabType: "place" },
-  { key: "depictedPerson",  fields: ["subject"],            vocabType: "person" },
-  { key: "depictedPlace",   fields: ["subject", "spatial"], vocabType: "place" },
-  { key: "subject",         fields: ["subject"] },
-  { key: "iconclass",       fields: ["subject"],  exactNotation: true },
-  { key: "collectionSet",   fields: ["collection_set"],     vocabType: "set" },
-  { key: "theme",           fields: ["theme"] },
-  { key: "sourceType",      fields: ["source_type"] },
+  { key: "type",                 fields: ["type"] },
+  { key: "material",             fields: ["material"] },
+  { key: "technique",            fields: ["technique"] },
+  { key: "creator",              fields: ["creator"] },
+  { key: "productionPlace",      fields: ["spatial"],            vocabType: "place" },
+  { key: "depictedPerson",       fields: ["subject"],            vocabType: "person" },
+  { key: "depictedPlace",        fields: ["subject", "spatial"], vocabType: "place" },
+  { key: "subject",              fields: ["subject"] },
+  { key: "iconclass",            fields: ["subject"],  exactNotation: true },
+  { key: "collectionSet",        fields: ["collection_set"],     vocabType: "set" },
+  { key: "theme",                fields: ["theme"] },
+  { key: "sourceType",           fields: ["source_type"] },
+  { key: "productionRole",       fields: ["production_role"] },
+  { key: "attributionQualifier", fields: ["attribution_qualifier"] },
 ];
 
 /**
@@ -4069,8 +4077,9 @@ export class VocabularyDb {
     const keys: (keyof CollectionStatsParams)[] = [
       "type", "material", "technique", "creator", "productionPlace",
       "depictedPerson", "depictedPlace", "subject", "iconclass",
-      "collectionSet", "theme", "sourceType", "imageAvailable",
-      "creationDateFrom", "creationDateTo",
+      "collectionSet", "theme", "sourceType",
+      "attributionQualifier", "productionRole", "sameRowMatching",
+      "imageAvailable", "creationDateFrom", "creationDateTo",
       "hasProvenance", "transferType", "provenanceLocation", "party",
       "provenanceDateFrom", "provenanceDateTo", "categoryMethod", "positionMethod",
     ];
@@ -4113,10 +4122,25 @@ export class VocabularyDb {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
+    // Same-row matching intercepts (#349/#357) — shared with search_artwork via
+    // applySameRowIntercepts. When creator combines with attributionQualifier (always
+    // same-row) or productionRole + sameRowMatching=true, emit a single same-row EXISTS
+    // against assignment_pairs / production_role_pairs instead of letting the default
+    // per-filter loop produce two independent cross-row EXISTS clauses.
+    const intercept = this.applySameRowIntercepts(params as unknown as Record<string, unknown>, warnings);
+    if (intercept === null) {
+      return { ...baseShape, total: 0, coverage: { withBucket: 0, withoutBucket: 0 }, totalBuckets: 0, offset, entries: [],
+        warnings: ["No vocabulary matches for the supplied creator / attributionQualifier / productionRole. No artworks match these filters."] };
+    }
+    conditions.push(...intercept.conditions);
+    bindings.push(...intercept.bindings);
+    const interceptSkip = intercept.skipParams;
+
     // Artwork vocab filters — data-driven to avoid copy-paste.
     // Uses FTS5 when available (50-100x faster than LIKE '%...%' on 194K vocab terms).
     // All paths use the two-step subquery pattern (narrow vocab first, then index-lookup on mappings).
     for (const { key, fields, vocabType, exactNotation } of STATS_VOCAB_FILTERS) {
+      if (interceptSkip.has(key)) continue;
       const val = params[key];
       if (val == null || typeof val !== "string") continue;
 

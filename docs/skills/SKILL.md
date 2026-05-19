@@ -213,7 +213,20 @@ collection_stats(dimension="type", creator="Rembrandt van Rijn")
 # → full type distribution. Note: the `creator` filter matches anyone named
 # on a production row, so reproductive 19th-c. prints and photographs
 # catalogued under the master's name surface alongside autograph works.
-# For autograph-only narrowing, see the productionRole guidance above.
+
+# Autograph-only narrowing — same-row matching via the row-aware tables.
+# Mirrors search_artwork's productionRole + sameRowMatching pattern.
+collection_stats(dimension="type", creator="Rembrandt van Rijn",
+                 productionRole="print maker", sameRowMatching=true)
+# → only works where 'print maker' sits on Rembrandt's own production row,
+# excluding reproductive prints whose actual maker is someone else.
+
+# Connoisseurship subset — attributionQualifier auto-enforces same-row.
+collection_stats(dimension="type", creator="Rembrandt van Rijn",
+                 attributionQualifier="workshop of")
+# → only works where 'workshop of' sits on Rembrandt's row, not on any
+# other creator's row of the same artwork. Same auto-same-row applies to
+# the 11 connoisseurship qualifiers (after, attributed to, circle of, etc.).
 
 # Cross-domain: what types of artworks have provenance events in Amsterdam?
 collection_stats(dimension="type", hasProvenance=true, provenanceLocation="Amsterdam")

@@ -3505,7 +3505,9 @@ function registerTools(
           "- \"Transfer type distribution for Rembrandt\" → dimension='transferType', creator='Rembrandt'\n" +
           "- \"Top 20 depicted persons\" → dimension='depictedPerson', topN=20\n" +
           "- \"Sales by decade 1600–1900\" → dimension='provenanceDecade', transferType='sale', provenanceDateFrom=1600, provenanceDateTo=1900\n" +
-          "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n\n" +
+          "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n" +
+          "- \"Type breakdown of Rembrandt's autograph paintings\" → dimension='type', creator='Rembrandt van Rijn', productionRole='painter', sameRowMatching=true\n" +
+          "- \"Workshop-of-Rembrandt works by type\" → dimension='type', creator='Rembrandt van Rijn', attributionQualifier='workshop of'\n\n" +
           "Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width, " +
           "theme (thematic vocab — labels in NL until #300 backfill), sourceType (cataloguing-channel taxonomy — 6 values), " +
           "exhibition (top exhibitions by member count), decadeModified (record_modified bucketed by decade, clamped to 1990–2030).\n" +
@@ -3543,6 +3545,29 @@ function registerTools(
           collectionSet: optStr().describe("Filter to artworks in this curated set (partial match on set name)."),
           theme: optStr().describe("Filter to artworks tagged with this curatorial theme (partial match)."),
           sourceType: optStr().describe("Filter by source-channel taxonomy: 'designs', 'drawings', 'paintings', 'prints (visual works)', 'sculpture (visual works)', 'photographs'."),
+          // Attribution scoping — mirrors search_artwork. Same-row matching with creator
+          // is automatic for attributionQualifier (connoisseurship terms) and opt-in via
+          // sameRowMatching for productionRole (making vs reproductive roles).
+          attributionQualifier: optStr()
+            .describe(
+              "Filter by attribution qualifier. Values: 'primary', 'undetermined', 'after', " +
+              "'secondary', 'possibly', 'attributed to', 'circle of', 'workshop of', 'copyist of', " +
+              "'manner of', 'follower of', 'falsification', 'free-form'. " +
+              "Combine with creator for autograph/connoisseurship narrowing — same-row matching is enforced automatically " +
+              "(e.g. attributionQualifier='workshop of' + creator='Rembrandt' counts only works where 'workshop of' sits on Rembrandt's row, not on any other creator's row of the same artwork)."
+            ),
+          productionRole: optStr()
+            .describe(
+              "Filter by production role (e.g. 'painter', 'draughtsman', 'print maker', 'after painting by'). " +
+              "Combine with creator + sameRowMatching=true for autograph narrowing on making roles."
+            ),
+          sameRowMatching: z.preprocess(stripNull, z.boolean().optional())
+            .describe(
+              "Constrain creator + productionRole to the *same* production row (autograph detection). " +
+              "Required for accurate autograph counts: without it, productionRole matches independently of creator, inflating counts with reproductive works catalogued under the master's name. " +
+              "Set true for making roles (painter, draughtsman, print maker); leave default-false for 'after X by' relational roles. " +
+              "The creator+attributionQualifier same-row fix is always on and doesn't require this flag."
+            ),
           imageAvailable: z.preprocess(stripNull, z.boolean().optional())
             .describe("If true, restrict to artworks with a digital image."),
           creationDateFrom: z.preprocess(stripNull, z.number().int().optional())
@@ -3585,6 +3610,9 @@ function registerTools(
         if (args.collectionSet) params.collectionSet = args.collectionSet as string;
         if (args.theme) params.theme = args.theme as string;
         if (args.sourceType) params.sourceType = args.sourceType as string;
+        if (args.attributionQualifier) params.attributionQualifier = args.attributionQualifier as string;
+        if (args.productionRole) params.productionRole = args.productionRole as string;
+        if (args.sameRowMatching != null) params.sameRowMatching = args.sameRowMatching as boolean;
         if (args.imageAvailable != null) params.imageAvailable = args.imageAvailable as boolean;
         if (args.creationDateFrom != null) params.creationDateFrom = args.creationDateFrom as number;
         if (args.creationDateTo != null) params.creationDateTo = args.creationDateTo as number;
@@ -3614,6 +3642,9 @@ function registerTools(
         if (params.collectionSet) filterParts.push(`collectionSet=${params.collectionSet}`);
         if (params.theme) filterParts.push(`theme=${params.theme}`);
         if (params.sourceType) filterParts.push(`sourceType=${params.sourceType}`);
+        if (params.attributionQualifier) filterParts.push(`attributionQualifier=${params.attributionQualifier}`);
+        if (params.productionRole) filterParts.push(`productionRole=${params.productionRole}`);
+        if (params.sameRowMatching) filterParts.push("sameRowMatching");
         if (params.imageAvailable) filterParts.push("imageAvailable");
         if (params.creationDateFrom != null || params.creationDateTo != null) {
           filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);
