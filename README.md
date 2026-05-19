@@ -173,8 +173,6 @@ Later:
 
 Maybe:
 
-- implement incremental metadata updates via the LDES endpoint
-- implement incremental updates of the vector embeddings database
 - investigate new bibliographic SRU MCP server (rijksmuseum-biblio-mcp)
 - investigate incorporating historical exhibition data
 - investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
@@ -192,7 +190,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
 
 **APA (7th ed.)**
 
-> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.30.0) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
+> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.40.0) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
 
 **BibTeX**
 ```bibtex
@@ -200,7 +198,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
   author    = {Bosse, Arno},
   title     = {{rijksmuseum-mcp+}},
   year      = {2026},
-  version   = {0.30.0},
+  version   = {0.40.0},
   publisher = {Research and Infrastructure Support (RISE), University of Basel},
   url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
   orcid     = {0000-0003-3681-1289},
