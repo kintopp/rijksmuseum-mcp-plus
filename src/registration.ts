@@ -1068,6 +1068,58 @@ export function regionToPixels(region: string, w: number, h: number): string | u
 }
 
 // Exported for testing
+/**
+ * Compute a ready-to-paste pct: crop for verifying a placed overlay via
+ * inspect_artwork_image(show_overlays:true). The result is centred on the
+ * overlay and expanded to ≥1.4× the overlay's footprint, ≥12% per axis,
+ * shift-clamped to stay inside 0–100. The 12% floor keeps the overlay
+ * visible after the 448 px clamp that show_overlays applies.
+ *
+ * Returns undefined for full/square/unparseable inputs or when image
+ * dimensions are missing.
+ */
+export function computeVerificationRegion(
+  region: string,
+  imageWidth?: number,
+  imageHeight?: number,
+): string | undefined {
+  if (!imageWidth || !imageHeight) return undefined;
+  if (region === "full" || region === "square") return undefined;
+
+  let x: number, y: number, w: number, h: number;
+  const pct = parsePctRegion(region);
+  if (pct) {
+    [x, y, w, h] = pct;
+  } else {
+    const cp = parseCropPixelsRegion(region);
+    const plainMatch = region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
+    const px: [number, number, number, number] | null = cp
+      ?? (plainMatch
+        ? [parseInt(plainMatch[1], 10), parseInt(plainMatch[2], 10), parseInt(plainMatch[3], 10), parseInt(plainMatch[4], 10)]
+        : null);
+    if (!px) return undefined;
+    x = (px[0] / imageWidth) * 100;
+    y = (px[1] / imageHeight) * 100;
+    w = (px[2] / imageWidth) * 100;
+    h = (px[3] / imageHeight) * 100;
+  }
+  if (w <= 0 || h <= 0) return undefined;
+
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const vw = Math.min(100, Math.max(w * 1.4, 12));
+  const vh = Math.min(100, Math.max(h * 1.4, 12));
+  const vx = Math.max(0, Math.min(100 - vw, cx - vw / 2));
+  const vy = Math.max(0, Math.min(100 - vh, cy - vh / 2));
+
+  const fmt = (n: number) => {
+    const s = n.toFixed(1);
+    return s.endsWith(".0") ? s.slice(0, -2) : s;
+  };
+  return `pct:${fmt(vx)},${fmt(vy)},${fmt(vw)},${fmt(vh)}`;
+}
+
+// Exported for testing
 export function parsePctRegion(region: string): [number, number, number, number] | null {
   const m = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
   if (!m) return null;
@@ -2156,7 +2208,11 @@ function registerTools(
         "Start with region 'full' to understand the layout, then use close-up crops (600–800px) " +
         "to pinpoint specific features before calling navigate_viewer with add_overlay. " +
         "Use navigate_viewer's 'relativeTo' parameter to place overlays using crop-local coordinates — " +
-        "the server handles the projection to full-image space, avoiding manual coordinate math.\n\n" +
+        "the server handles the projection to full-image space, avoiding manual coordinate math. " +
+        "After placing, verify each overlay with show_overlays:true and a tight pct: crop around it " +
+        "(the navigate_viewer response includes a ready-to-paste verificationRegion per overlay). " +
+        "To reposition an overlay, issue clear_overlays then re-add ALL overlays with corrected coordinates — " +
+        "there is no move/delete-one operation.\n\n" +
         "Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms " +
         "to the inspected region (navigateViewer defaults to true, no effect when region is 'full'). " +
         "This keeps the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom. " +
@@ -2196,7 +2252,7 @@ function registerTools(
         show_overlays: z
           .boolean()
           .default(false)
-          .describe("Composite active-viewer overlays onto the returned crop (opt-in). Response size is clamped to 448 px when enabled."),
+          .describe("Composite active-viewer overlays onto the returned crop — opt-in verification step for navigate_viewer add_overlay. Requires a non-'full' region tightly around the overlay being checked (use the verificationRegion field from the navigate_viewer response). Response size is clamped to 448 px when enabled, so feature-scale crops are needed for overlays to be visible."),
         viewUUID: optStr()
           .optional()
           .describe("Target a specific viewer session (from get_artwork_image). When omitted, auto-discovers a viewer for this artwork."),
@@ -2448,6 +2504,8 @@ function registerTools(
       label: z.string().optional(),
       region: z.string(),
       pixelRect: z.string().optional(),
+      verificationRegion: z.string().optional()
+        .describe("Ready-to-paste pct: crop centred on this overlay (≥12% per axis). Use with inspect_artwork_image(show_overlays:true, region:<this>, viewUUID:<same UUID>) to verify placement after add_overlay."),
     })).optional(),
     currentOverlays: z.array(z.object({
       label: z.string().optional(),
@@ -2491,7 +2549,11 @@ function registerTools(
         "- 'full' | 'square' — whole image shortcuts.\n\n" +
         "Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — " +
         "correct the coordinates and retry.\n\n" +
-        "Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set. " +
+        "Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set " +
+        "(overlays are append-only; there is no move/delete-one operation, so repositioning requires clear_overlays " +
+        "then re-adding ALL overlays you want to keep). When placing more than one overlay, prefer distinct 'color' " +
+        "values so the rectangles are distinguishable in inspect_artwork_image(show_overlays:true). " +
+        "Each add_overlay response includes a per-overlay verificationRegion (pct: crop) for the verify-after step. " +
         "Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for " +
         "30 minutes of idle inactivity — any polling or navigation resets the clock.\n\n" +
         "Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, " +
@@ -2648,6 +2710,7 @@ function registerTools(
               label: c.label,
               region: c.region!,
               pixelRect: regionToPixels(c.region!, queue.imageWidth!, queue.imageHeight!),
+              verificationRegion: computeVerificationRegion(c.region!, queue.imageWidth, queue.imageHeight),
             }))
         : undefined;
 
@@ -2671,7 +2734,7 @@ function registerTools(
       const overlayCount = queue.activeOverlays.length;
       const overlayClause = overlayCount ? ` | ${overlayCount} active overlays` : "";
       const shortUuid = args.viewUUID.slice(0, 8);
-      const text = (() => {
+      const baseText = (() => {
         switch (deliveryState) {
           case "delivered_recently":
             return `Delivered ${args.commands.length} commands to active viewer ${shortUuid}${overlayClause}`;
@@ -2681,6 +2744,25 @@ function registerTools(
             return `Queued ${args.commands.length} commands for viewer ${shortUuid} (no viewer has connected yet)${overlayClause}`;
         }
       })();
+
+      // Verify-and-adjust loop nudge: fires whenever the batch contained an
+      // add_overlay AND the queue has image dimensions (so verificationRegion
+      // is computable). Surfaces the exact pct: crop the model should pass to
+      // inspect_artwork_image, plus the clear-and-redraw-all repositioning
+      // model (overlays are append-only). #337.
+      const verifiable = overlayDetails?.filter((o) => o.verificationRegion) ?? [];
+      const nudge = verifiable.length && queue.objectNumber
+        ? (() => {
+          const pairs = verifiable
+            .map((o) => `${o.label ? `"${o.label}" → ` : ""}${o.verificationRegion}`)
+            .join("; ");
+          return (
+            ` | Verify each overlay with inspect_artwork_image(objectNumber:"${queue.objectNumber}", show_overlays:true, viewUUID:"${args.viewUUID}", region:"<verificationRegion>"): ${pairs}. ` +
+            `To reposition, issue clear_overlays then re-add ALL overlays with corrected coordinates (overlays are append-only — there is no move/delete-one).`
+          );
+        })()
+        : "";
+      const text = baseText + nudge;
       return structuredResponse(navData, text);
     })
   );

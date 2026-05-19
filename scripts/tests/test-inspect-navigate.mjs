@@ -302,6 +302,46 @@ assert(nav1.viewUUID === viewUUID1, `viewUUID echoed back`);
 assert(!nav1.error, "No error");
 assert(!r4a.isError, "Not marked as error");
 
+// 4a-vr. verificationRegion + nudge text for the verify-and-adjust loop (#337)
+console.log("\n--- 4a-vr: verificationRegion + verify nudge ---");
+assert(Array.isArray(nav1.overlays) && nav1.overlays.length === 2,
+  `2 overlay entries returned (got ${nav1.overlays?.length})`);
+const overlayEntry1 = nav1.overlays.find(o => o.label === "Test overlay 1");
+const overlayEntry2 = nav1.overlays.find(o => o.label === "Test overlay 2");
+assert(overlayEntry1 != null, "overlay 1 present in response");
+assert(overlayEntry2 != null, "overlay 2 present in response");
+
+for (const entry of [overlayEntry1, overlayEntry2]) {
+  if (!entry) continue;
+  assert(typeof entry.verificationRegion === "string" && entry.verificationRegion.startsWith("pct:"),
+    `${entry.label}: verificationRegion is pct: string (got ${entry.verificationRegion})`);
+  const m = entry.verificationRegion.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+  assert(m != null, `${entry.label}: verificationRegion parseable`);
+  if (m) {
+    const [vx, vy, vw, vh] = m.slice(1).map(Number);
+    assert(vx >= 0 && vy >= 0, `${entry.label}: x/y >= 0`);
+    assert(vx + vw <= 100.001 && vy + vh <= 100.001,
+      `${entry.label}: x+w and y+h within 0–100 (got ${vx + vw}, ${vy + vh})`);
+    assert(vw >= 12 - 0.01 && vh >= 12 - 0.01,
+      `${entry.label}: each axis >= 12% (got ${vw}×${vh})`);
+    // Original overlay rect should fit inside the verification rect.
+    const orig = entry.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
+    if (orig) {
+      const [ox, oy, ow, oh] = orig.slice(1).map(Number);
+      assert(vx <= ox + 0.01 && vy <= oy + 0.01 && vx + vw + 0.01 >= ox + ow && vy + vh + 0.01 >= oy + oh,
+        `${entry.label}: verification rect contains the original overlay`);
+    }
+  }
+}
+
+const navText1 = r4a.content?.find(c => c.type === "text")?.text ?? "";
+assert(navText1.includes("show_overlays:true"),
+  "navigate_viewer text response mentions show_overlays:true");
+assert(navText1.includes("clear_overlays") && navText1.includes("re-add ALL"),
+  "navigate_viewer text response mentions clear_overlays + re-add ALL guidance");
+assert(overlayEntry1 && navText1.includes(overlayEntry1.verificationRegion),
+  "navigate_viewer text response includes the suggested verificationRegion verbatim");
+
 // 4b. Invalid viewUUID
 console.log("\n--- 4b: Invalid viewUUID ---");
 const r4b = await client.callTool({

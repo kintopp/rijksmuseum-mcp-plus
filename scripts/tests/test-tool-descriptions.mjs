@@ -184,6 +184,35 @@ assert(nv.includes("do not narrate") && nv.toLowerCase().includes("failure"),
   "navigate_viewer description tells the model not to narrate the queued state as a failure");
 
 // ══════════════════════════════════════════════════════════════════
+//  navigate_viewer / inspect_artwork_image: overlay verify-and-adjust loop (#337)
+// ══════════════════════════════════════════════════════════════════
+
+section("Overlay verify-and-adjust loop affordances (#337)");
+
+assert(/append-only/i.test(nv) && nv.includes("clear_overlays") && nv.includes("re-add"),
+  "navigate_viewer description spells out the append-only / clear_overlays-then-re-add model");
+assert(nv.includes("verificationRegion"),
+  "navigate_viewer description mentions the per-overlay verificationRegion");
+assert(nv.includes("distinct") && nv.includes("color"),
+  "navigate_viewer description recommends distinct colors for multiple overlays");
+
+const inspect = expect("inspect_artwork_image");
+const inspectDesc = inspect.description ?? "";
+assert(inspectDesc.includes("verificationRegion"),
+  "inspect_artwork_image description references verificationRegion (from navigate_viewer)");
+assert(/clear_overlays/.test(inspectDesc) && /re-add ALL/.test(inspectDesc),
+  "inspect_artwork_image description spells out clear_overlays + re-add ALL repositioning model");
+
+const showOverlaysDesc =
+  inspect.inputSchema?.properties?.show_overlays?.description ?? "";
+assert(/verification/i.test(showOverlaysDesc),
+  "show_overlays param description names its verification purpose");
+assert(/non-'?full/i.test(showOverlaysDesc) || /not 'full/i.test(showOverlaysDesc),
+  "show_overlays param description requires a non-'full' region");
+assert(/448/.test(showOverlaysDesc),
+  "show_overlays param description retains the 448 px clamp note");
+
+// ══════════════════════════════════════════════════════════════════
 //  No references to dropped filters (scoped to the affected tools)
 // ══════════════════════════════════════════════════════════════════
 
