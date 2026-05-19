@@ -90,6 +90,18 @@ const FACET_DIMENSIONS = [
 const stripNull = (v: unknown) =>
   (v === null || v === undefined || v === "null" || v === "") ? undefined : v;
 
+/** Preprocessor for boolean input fields. Composes stripNull with string-coerce
+ *  for "true"/"false" — defence in depth against client wrappers that may
+ *  serialize booleans as strings (the bug shape reported in the 2026-05-19
+ *  transcript, never reproduced in controlled testing but cheap to hedge).
+ *  Lowercase only — strict canonical form. */
+export const stripNullCoerceBool = (v: unknown) => {
+  const stripped = stripNull(v);
+  if (stripped === "true") return true;
+  if (stripped === "false") return false;
+  return stripped;
+};
+
 /** Normalize null/arrays into string | string[] | undefined. */
 function normalizeStringOrArray(v: unknown): unknown {
   if (v === null || v === undefined || v === "null" || v === "") return undefined;
@@ -1433,16 +1445,12 @@ function registerTools(
             "Cataloguer observations including compositional details, motifs, physical condition, and attribution remarks. " +
             "Exact word matching, no stemming."
           ),
-        imageAvailable: z
-          .boolean()
-          .optional()
+        imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional())
           .describe(
             "If true, only return artworks that have a digital image available. " +
             "Cannot be used alone — combine with at least one other filter."
           ),
-        hasProvenance: z
-          .boolean()
-          .optional()
+        hasProvenance: z.preprocess(stripNullCoerceBool, z.boolean().optional())
           .describe(
             "If true, only return artworks that have parsed provenance records (~48K of 832K). " +
             "Combine with other filters for cross-domain queries (e.g. type='painting' + hasProvenance=true). " +
@@ -1544,7 +1552,7 @@ function registerTools(
                   "editorial-confidence terms (attributed to, possibly, undetermined), and structural markers (primary, secondary, after, falsification, free-form). " +
                   "Combine with creator to narrow attribution (e.g. attributionQualifier: 'workshop of' + creator: 'Rembrandt')."
                 ),
-              expandPlaceHierarchy: z.preprocess(stripNull, z
+              expandPlaceHierarchy: z.preprocess(stripNullCoerceBool, z
                 .boolean()
                 .optional()
                 .describe(
@@ -1554,7 +1562,7 @@ function registerTools(
                   "Expansion follows up to 3 levels of parent→child relationships. " +
                   "Requires a place filter — cannot be used alone."
                 )),
-              sameRowMatching: z.preprocess(stripNull, z
+              sameRowMatching: z.preprocess(stripNullCoerceBool, z
                 .boolean()
                 .optional()
                 .describe(
@@ -1634,9 +1642,7 @@ function registerTools(
           ),
         facetLimit: z.preprocess(stripNull, z.number().int().min(1).max(50).default(5).optional())
           .describe("Maximum entries per facet dimension (1–50, default 5)."),
-        compact: z
-          .boolean()
-          .default(false)
+        compact: z.preprocess(stripNullCoerceBool, z.boolean().default(false))
           .describe(
             "If true, returns only total count and IDs without resolving details (faster)."
           ),
@@ -1855,7 +1861,7 @@ function registerTools(
             .describe("Place name. Multi-value AND. Resolved by pivot through creator-mapped artworks."),
           profession: stringOrArray().optional()
             .describe("Profession (e.g. 'painter', 'engraver'). Multi-value AND. Resolved by pivot through creator-mapped artworks."),
-          hasArtworks: z.preprocess(stripNull, z.boolean().optional().default(true))
+          hasArtworks: z.preprocess(stripNullCoerceBool, z.boolean().optional().default(true))
             .describe("Restrict to persons appearing as creator on ≥1 artwork. Default true."),
           maxResults: z.number().int().min(1).max(TOOL_LIMITS.search_persons.max).default(TOOL_LIMITS.search_persons.default)
             .describe(`Maximum persons to return (1-${TOOL_LIMITS.search_persons.max}, default ${TOOL_LIMITS.search_persons.default}).`),
@@ -2240,13 +2246,9 @@ function registerTools(
           .enum(["default", "gray"])
           .default("default")
           .describe("Image quality — 'gray' can help read inscriptions or signatures"),
-        navigateViewer: z
-          .boolean()
-          .default(true)
+        navigateViewer: z.preprocess(stripNullCoerceBool, z.boolean().default(true))
           .describe("Auto-navigate the open viewer to the inspected region (default: true). Only effective when a viewer is open for this artwork."),
-        show_overlays: z
-          .boolean()
-          .default(false)
+        show_overlays: z.preprocess(stripNullCoerceBool, z.boolean().default(false))
           .describe("Composite active-viewer overlays onto the returned crop — opt-in verification step for navigate_viewer add_overlay. Requires a non-'full' region tightly around the overlay being checked (use the verificationRegion field from the navigate_viewer response). Response size is clamped to 448 px when enabled, so feature-scale crops are needed for overlays to be visible."),
         viewUUID: optStr()
           .optional()
@@ -2835,7 +2837,7 @@ function registerTools(
           .describe("Filter to sets with at least this many members."),
         maxMembers: z.preprocess(stripNull, z.number().int().min(0).optional())
           .describe("Filter to sets with at most this many members. Use ~100,000 to exclude umbrella sets like 'Alle gepubliceerde objecten' (834K) and 'Entire Public Domain Set' (732K)."),
-        includeStats: z.preprocess(stripNull, z.boolean().optional())
+        includeStats: z.preprocess(stripNullCoerceBool, z.boolean().optional())
           .describe("Include memberCount, dominantTypes, dominantCenturies, category. Default true. Set false for the lightweight legacy shape."),
       }).strict(),
       ...withOutputSchema(CuratedSetsOutput),
@@ -2966,9 +2968,7 @@ function registerTools(
         setSpec: optStr()
           .optional()
           .describe("Restrict to changes within a specific set"),
-        identifiersOnly: z
-          .boolean()
-          .default(false)
+        identifiersOnly: z.preprocess(stripNullCoerceBool, z.boolean().default(false))
           .describe(
             "If true, returns only record headers (identifier, datestamp, set memberships) — much faster. Preserved automatically across continuation pages."
           ),
@@ -3198,9 +3198,9 @@ function registerTools(
           currency: z.preprocess(stripNull,
             z.enum(["guilders", "euros", "pounds", "francs", "dollars", "livres", "napoléons", "deutschmarks", "reichsmarks", "swiss_francs", "guineas", "belgian_francs", "yen", "marks", "louis_d_or"]).optional(),
           ).describe("Price currency filter (exact match). Only used with layer='events'."),
-          hasPrice: z.preprocess(stripNull, z.boolean().optional())
+          hasPrice: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, only events with recorded prices. Only used with layer='events'."),
-          hasGap: z.preprocess(stripNull, z.boolean().optional())
+          hasGap: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, only artworks with provenance gaps (undocumented periods). Only used with layer='events'."),
           relatedTo: optStr().describe("Reverse cross-reference: find all artworks whose provenance references this object number (e.g. 'BK-14656'). Only used with layer='events'."),
           categoryMethod: optStr().describe(
@@ -3231,7 +3231,7 @@ function registerTools(
           maxResults: z.preprocess(stripNull,
             z.number().int().min(1).max(TOOL_LIMITS.search_provenance.max).default(TOOL_LIMITS.search_provenance.default).optional(),
           ).describe(`Maximum artworks to return (1–${TOOL_LIMITS.search_provenance.max}, default ${TOOL_LIMITS.search_provenance.default}). Each artwork includes its full chain.`),
-          facets: z.preprocess(stripNull, z.boolean().optional())
+          facets: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, compute provenance facets: transferType, decade, location, transferCategory, partyPosition."),
         }).strict(),
         ...withOutputSchema(ProvenanceSearchOutput),
@@ -3561,14 +3561,14 @@ function registerTools(
               "Filter by production role (e.g. 'painter', 'draughtsman', 'print maker', 'after painting by'). " +
               "Combine with creator + sameRowMatching=true for autograph narrowing on making roles."
             ),
-          sameRowMatching: z.preprocess(stripNull, z.boolean().optional())
+          sameRowMatching: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe(
               "Constrain creator + productionRole to the *same* production row (autograph detection). " +
               "Required for accurate autograph counts: without it, productionRole matches independently of creator, inflating counts with reproductive works catalogued under the master's name. " +
               "Set true for making roles (painter, draughtsman, print maker); leave default-false for 'after X by' relational roles. " +
               "The creator+attributionQualifier same-row fix is always on and doesn't require this flag."
             ),
-          imageAvailable: z.preprocess(stripNull, z.boolean().optional())
+          imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, restrict to artworks with a digital image."),
           creationDateFrom: z.preprocess(stripNull, z.number().int().optional())
             .describe("Earliest artwork creation year (inclusive). For century buckets, the label is the start year (label=1600 means the 17th century)."),
@@ -3576,7 +3576,7 @@ function registerTools(
             .describe("Latest artwork creation year (inclusive)."),
           // Provenance filters — names mirror their dimension counterparts. All filters tagged
           // [events] compose on the same event row; [parties] filters compose on the same party row.
-          hasProvenance: z.preprocess(stripNull, z.boolean().optional())
+          hasProvenance: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, restrict to artworks with provenance records (~48K of 832K)."),
           transferType: optStr().describe("[events] Filter to artworks with at least one provenance event of this transfer type (e.g. 'sale', 'confiscation')."),
           provenanceLocation: optStr().describe("[events] Filter to artworks with at least one provenance event in this location (partial match)."),
@@ -4010,7 +4010,7 @@ function registerTools(
           productionPlace: stringOrArray().optional().describe("Pre-filter by production place before semantic ranking."),
           collectionSet: stringOrArray().optional().describe("Pre-filter by collection set before semantic ranking."),
           aboutActor: optStr().optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
-          imageAvailable: z.boolean().optional().describe("Pre-filter to artworks with images"),
+          imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Pre-filter to artworks with images"),
           maxResults: z.number().int().min(1).max(TOOL_LIMITS.semantic_search.max).default(TOOL_LIMITS.semantic_search.default).optional()
             .describe("Number of results to return (default 15). Similarity scores plateau after ~15 results; request more only if needed."),
           offset: z.number().int().min(0).default(0).optional()

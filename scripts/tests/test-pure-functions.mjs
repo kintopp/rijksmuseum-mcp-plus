@@ -31,6 +31,7 @@ import {
   computeVerificationRegion,
   parseDimRange,
   parseSortParam,
+  stripNullCoerceBool,
 } from "../../dist/registration.js";
 
 import {
@@ -698,6 +699,26 @@ assertEq(parseSortParam("height:"),        null, "trailing colon → null");
 assertEq(parseSortParam(""),               null, "empty string → null");
 assertEq(parseSortParam(undefined),        null, "undefined → null");
 assertEq(parseSortParam(42),               null, "non-string input → null");
+
+// ── stripNullCoerceBool ──────────────────────────────────────────
+
+section("stripNullCoerceBool");
+
+assertEq(stripNullCoerceBool(true),         true,      "literal true → true");
+assertEq(stripNullCoerceBool(false),        false,     "literal false → false");
+assertEq(stripNullCoerceBool("true"),       true,      "'true' string → true (the bug shape)");
+assertEq(stripNullCoerceBool("false"),      false,     "'false' string → false");
+assertEq(stripNullCoerceBool(null),         undefined, "null → undefined (stripped)");
+assertEq(stripNullCoerceBool(undefined),    undefined, "undefined → undefined");
+assertEq(stripNullCoerceBool("null"),       undefined, "'null' string → undefined (stripped)");
+assertEq(stripNullCoerceBool(""),           undefined, "empty string → undefined (stripped)");
+// Strict canonical form — case-sensitive
+assertEq(stripNullCoerceBool("True"),       "True",    "'True' (capital) NOT coerced — Zod will reject it");
+assertEq(stripNullCoerceBool("TRUE"),       "TRUE",    "'TRUE' (uppercase) NOT coerced — Zod will reject it");
+assertEq(stripNullCoerceBool("yes"),        "yes",     "'yes' NOT coerced — only the canonical strings");
+// Non-string non-bool falls through to Zod for type-checking
+assertEq(stripNullCoerceBool(1),            1,         "1 falls through unchanged (Zod will reject)");
+assertEq(stripNullCoerceBool(0),            0,         "0 falls through unchanged (Zod will reject)");
 
 // ── Summary ──────────────────────────────────────────────────────
 
