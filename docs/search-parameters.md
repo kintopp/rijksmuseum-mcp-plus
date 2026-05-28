@@ -1,17 +1,17 @@
 # Search Parameters
 
-`search_artwork` accepts 37 search filters and 9 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
+`search_artwork` accepts 31 search filters and 7 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
 
 Parameters that accept arrays (marked **[]**) AND-combine their values: `subject: ["landscape", "seascape"]` returns artworks tagged with *both* subjects.
 
-All searches are backed by a vocabulary database of ~418,000 controlled terms mapped to ~834,000 artworks via ~14.8 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~29.7K geocoded places, 81% of known places). Demographic person filters (gender, birth/death year, birth/death place, profession) are exposed through the separate [`search_persons`](mcp-tool-parameters.md#search_persons) tool — feed the returned vocab IDs into `creator` here.
+All searches are backed by a vocabulary database of ~418,000 controlled terms mapped to ~834,000 artworks via ~14.8 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~20.9K authority-geocoded places). Demographic person filters (gender, birth/death year, birth/death place, profession) are exposed through the separate [`search_persons`](mcp-tool-parameters.md#search_persons) tool — feed the returned vocab IDs into `creator` here.
 
 - [Ranking](#ranking)
 - [Result limits and pagination](#result-limits-and-pagination)
-- [1. Vocabulary label filters](#1-vocabulary-label-filters) (16 parameters)
-- [2. Full-text search filters](#2-full-text-search-filters) (6 parameters)
-- [3. Column and metadata filters](#3-column-and-metadata-filters) (15 parameters)
-- [4. Output controls](#4-output-controls) (9 parameters)
+- [1. Vocabulary label filters](#1-vocabulary-label-filters) (15 parameters)
+- [2. Full-text search filters](#2-full-text-search-filters) (4 parameters)
+- [3. Column and metadata filters](#3-column-and-metadata-filters) (12 parameters)
+- [4. Output controls](#4-output-controls) (7 parameters)
 - [Semantic search](#semantic-search)
 - [Artwork detail fields](#artwork-detail-fields)
 
@@ -19,10 +19,10 @@ All searches are backed by a vocabulary database of ~418,000 controlled terms ma
 
 Results are ranked differently depending on which filters are active:
 
-- **BM25** — when any full-text filter is active (`title`, `description`, `inscription`, `creditLine`, `curatorialNarrative`), results are ranked by text relevance.
+- **BM25** — when any full-text filter is active (`query`, `description`, `inscription`, `curatorialNarrative`), results are ranked by text relevance.
 - **Geographic proximity** — when `nearPlace` or `nearLat`/`nearLon` is active (without text filters), results are ranked by distance from the search point.
 - **Importance** — when only vocabulary, column, or modifier filters are active, results are ordered by a composite importance score reflecting image availability, curatorial attention, and metadata richness.
-- **Column sort** — `sortBy` overrides all of the above when set (see [Output controls](#4-output-controls)).
+- **Column sort** — `sort` overrides all of the above when set (see [Output controls](#4-output-controls)).
 
 ---
 
@@ -86,7 +86,6 @@ Match against ~417,000 controlled terms. Labels are bilingual (English and Dutch
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `collectionSet` | string **[]** | Curated collection set by name. [192 sets](vocabulary-collection-sets.md). Use `list_curated_sets` to discover sets. | `"Rembrandt"` |
-| `license` | string | Rights/license filter. Values: "publicdomain" ([PDM 1.0](http://creativecommons.org/publicdomain/mark/1.0/) — 728K), "zero" ([CC0 1.0](http://creativecommons.org/publicdomain/zero/1.0/) — 1.7K), "InC" ([In Copyright](http://rightsstatements.org/vocab/InC/1.0/) — 101K). Uses substring matching, so "by" also works for CC BY. | `"publicdomain"` |
 
 ---
 
@@ -96,11 +95,9 @@ BM25-ranked search on FTS5 indexes. Exact word matching, no stemming (except `su
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `title` | string | Search across all title variants (brief, full, former x EN/NL). ~826K artworks. | `"Night Watch"` |
-| `query` | string | Alias for `title`. Provided as a convenience for exploratory queries. When both are provided, `title` takes precedence. | `"Night Watch"` |
+| `query` | string | Search across all title variants (brief, full, former x EN/NL). ~826K artworks. Only ~4% of artworks have an English title (~35K of 834K). | `"Night Watch"` |
 | `description` | string | Cataloguer descriptions (~510K artworks, 61% coverage). Compositional details, motifs, condition notes, attribution remarks. Dutch-language. | `"zwart krijt"` |
 | `inscription` | string | Inscription texts (~500K artworks). Signatures, mottoes, dates on the object surface. | `"fecit"`, `"Rembrandt f."` |
-| `creditLine` | string | Credit/donor lines (~358K artworks). Acquisition mode — purchase, bequest, gift, loan. | `"Drucker"`, `"purchase"` |
 | `curatorialNarrative` | string | Curatorial wall text (~14K artworks). Art-historical interpretation written by museum curators — distinct from `description`. | `"civic guard"` |
 
 Ownership-history text is no longer searched from `search_artwork` — use the dedicated [`search_provenance`](mcp-tool-parameters.md#search_provenance) tool, which queries the parsed event/period structures with party-, transfer-type-, date-, location-, and price-based filters.
@@ -119,28 +116,30 @@ Direct filters on artwork table columns, JOIN-based demographic filters, and spa
 | `dateMatch` | string | How `creationDate` matches artwork date ranges. `"overlaps"` (default): artwork range overlaps query range — inclusive, but broadly-dated objects appear in multiple bins. `"within"`: artwork range falls entirely within query range — exclusive bins, but drops ~43% of collection with ranges >1 decade. `"midpoint"`: assigns each artwork to one bin by midpoint — every object counted exactly once. Best for statistical comparisons. | `"midpoint"` |
 | `imageAvailable` | boolean | When `true`, only artworks with a digital image (~728K artworks). *Modifier.* | `true` |
 | `hasProvenance` | boolean | When `true`, only artworks with parsed provenance records (~48.5K of 834K). *Modifier.* | `true` |
-| `modifiedAfter` | string | ISO 8601 date — only records whose catalogue entry was last modified at or after this date. Powers "what changed since YYYY-MM-DD?" without OAI-PMH resumption tokens; combinable with any other filter. *Modifier.* | `"2024-01-01"` |
-| `modifiedBefore` | string | ISO 8601 date — only records whose catalogue entry was last modified at or before this date. *Modifier.* | `"2025-12-31"` |
 
 ### Dimensions
 
-All values in centimeters.
+All values in centimeters. Both range parameters accept the same shape: `'10-50'` (between 10 and 50), `'10-'` (≥ 10), `'-50'` (≤ 50). Bounds are inclusive.
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `minHeight` | number | Minimum height. | `40` |
-| `maxHeight` | number | Maximum height. | `50` |
-| `minWidth` | number | Minimum width. | `300` |
-| `maxWidth` | number | Maximum width. | `40` |
+| `heightRange` | string | Height range in centimeters. | `"10-50"` |
+| `widthRange` | string | Width range in centimeters. | `"-40"` |
+
+### Same-row matching
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `sameRowMatching` | boolean | Constrain `creator` + `productionRole` to the *same* production row of the artwork (autograph detection). Without this flag the two filters evaluate independently across production rows, so reproductive prints and 19th-c. photographs catalogued under a master's name still match. Set true for "making" roles (painter, printmaker, etcher, …) when narrowing to autograph works; leave false (default) for relational roles like `"after painting by"`. Requires both `creator` and `productionRole`. The `creator` + `attributionQualifier` same-row conjunction is always on and doesn't need this flag. *Modifier.* | `true` |
 
 ### Geographic proximity
 
-Searches both depicted and production places within the specified radius, using coordinates from ~29,700 geocoded places ([Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), [World Historical Gazetteer](https://whgazetteer.org/)).
+Searches both depicted and production places within the specified radius, using coordinates from ~20,900 authority-geocoded places (strict-authority policy since v0.40 — only `coord_method='deterministic'` rows from Rijks-supplied [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/) IDs are retained).
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `nearPlace` | string | Named location for proximity search. Supports multi-word names with geo-disambiguation. | `"Oude Kerk Amsterdam"` |
-| `nearLat` | number | Latitude (-90 to 90). Use with `nearLon` for coordinate-based search. Takes precedence over `nearPlace` if both provided. | `52.3676` |
+| `nearPlace` | string | Named location for proximity search. Only works for places that have been authority-geocoded. Supports multi-word names with geo-disambiguation. | `"Oude Kerk Amsterdam"` |
+| `nearLat` | number | Latitude (-90 to 90). Use with `nearLon` for coordinate-based search. Always works (does not require authority-geocoded places). Takes precedence over `nearPlace` if both provided. | `52.3676` |
 | `nearLon` | number | Longitude (-180 to 180). Use with `nearLat`. | `4.8945` |
 | `nearPlaceRadius` | number | Radius in km (0.1–500, default 25). | `15` |
 
@@ -164,15 +163,13 @@ Not filters — these control how results are returned.
 | `facets` | boolean or string[] | — | Compute facet counts when results are truncated. Pass `true` for all dimensions, or an array of specific dimension names. Available dimensions: `type`, `material`, `technique`, `century`, `rights`, `imageAvailable`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `theme`, `sourceType`. Dimensions already filtered on are excluded automatically. |
 | `facetLimit` | integer | 5 | Maximum entries per facet dimension (1–50). |
 | `groupBy` | string | — | Set to `parent` to collapse component records under their parent (sketchbook folios, album leaves, print-series sheets). Children whose parent is also a hit are dropped; the parent gains a `groupedChildCount`. Children whose parent isn't a hit remain in the result. |
-| `sortBy` | string | — | Order results by a column instead of relevance/importance. Values: `height` / `width` (cm), `dateEarliest` / `dateLatest` (year), `recordModified` (ISO date). Overrides BM25 and geo-proximity ordering when set; tie-broken by `art_id`. Cannot be used alone — needs at least one substantive filter. |
-| `sortOrder` | string | `desc` | Sort direction when `sortBy` is set: `asc` or `desc`. NULLs always sort last regardless of direction. |
-| `pageToken` | string | — | Opaque continuation token returned by a previous response (used for stable deep pagination on sorted queries). |
+| `sort` | string | — | Order results by a column instead of relevance/importance. Forms: `'column'` or `'column:asc\|desc'` (default direction `desc`). Columns: `height` / `width` (cm), `dateEarliest` / `dateLatest` (year), `recordModified` (ISO date). Overrides BM25 and geo-proximity ordering when set; tie-broken by `art_id`. NULLs always sort last regardless of direction. Cannot be used alone — needs at least one substantive filter. |
 
 ---
 
 ## Semantic search
 
-For concepts that cannot be expressed as structured vocabulary terms — atmosphere, emotion, composition, art-historical interpretation — use the `semantic_search` tool instead. It accepts free-text queries in any language and ranks all ~833,000 artworks by embedding similarity. It supports pre-filtering by `type`, `material`, `technique`, `creationDate`, `dateMatch`, `creator`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, and `imageAvailable` — a subset of those listed above. See the [tool parameters reference](mcp-tool-parameters.md#semantic_search) for the full parameter list.
+For concepts that cannot be expressed as structured vocabulary terms — atmosphere, emotion, composition, art-historical interpretation — use the `semantic_search` tool instead. It accepts free-text queries in any language and ranks all ~832,000 artworks by embedding similarity. It supports pre-filtering by `type`, `material`, `technique`, `creationDate`, `dateMatch`, `creator`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, and `imageAvailable` — a subset of those listed above. See the [tool parameters reference](mcp-tool-parameters.md#semantic_search) for the full parameter list.
 
 Each artwork's embedding is generated from a composite source text built from four metadata fields (the "no-subjects" strategy — subject vocabulary is excluded to avoid duplicating the structured search path):
 

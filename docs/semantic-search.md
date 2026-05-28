@@ -1,6 +1,6 @@
 ## Semantic search
 
-The `semantic_search` tool finds artworks by meaning, concept, or theme using natural language. Unlike `search_artwork`, which matches against structured metadata fields (titles, vocabulary terms, Iconclass notations), semantic search ranks all ~834,000 artworks by embedding similarity to a free-text query.
+The `semantic_search` tool finds artworks by meaning, concept, or theme using natural language. Unlike `search_artwork`, which matches against structured metadata fields (titles, vocabulary terms, Iconclass notations), semantic search ranks all ~832,000 artworks with embeddings by similarity to a free-text query.
 
 ### How it works
 
@@ -11,7 +11,7 @@ Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 38
 | Title | All title variants (brief, full, former × EN/NL) | ~99% |
 | Inscriptions | Transcribed text from the object surface | ~60% |
 | Description | Cataloguer observations (Dutch) | ~61% |
-| Curatorial narrative | Museum wall text (English/Dutch) | ~2% (14K works) |
+| Curatorial narrative | Museum wall text (English only — Dutch column always null) | ~2% (14K works) |
 
 Iconclass subject labels and creator names are deliberately excluded — benchmarking showed that including subject labels biased results toward tagged vocabulary matches rather than semantic meaning, reducing the number of paintings surfaced by 71% in painting-expected queries. Creator names are excluded because they duplicate the structured `creator` filter path (#72).
 
@@ -69,7 +69,7 @@ The tool uses two internal search paths:
 
 | Mode | When | How |
 |------|------|-----|
-| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of all ~833,000 vectors |
+| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of all ~832,000 vectors |
 | **Filtered KNN** | One or more filters specified | Vocabulary DB narrows candidates by metadata, then `vec_distance_cosine()` ranks the filtered set |
 
 The search mode (`semantic` or `semantic+filtered`) is reported in the response.
@@ -99,6 +99,6 @@ A second, description-only embedding set is stored alongside the main vectors an
 ### Technical details
 
 - **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The quantized ONNX model is sourced from the [Xenova mirror](https://huggingface.co/Xenova/multilingual-e5-small).
-- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec). Brute-force scan (no ANN index). ~834,000 × int8[384] ≈ 305 MB in the vec0 table, plus a regular `artwork_embeddings` table for filtered queries.
+- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) pinned to 0.1.9. Brute-force scan (no ANN index). ~832,000 × int8[384] ≈ 305 MB in the vec0 table, plus a regular `artwork_embeddings` table for filtered queries.
 - **Query embedding prefix:** The model uses the `query:` prefix for queries and `passage:` for documents, following the E5 instruction format.
 - **Database size:** ~1.1 GB uncompressed (includes `desc_embeddings` for description-based `find_similar`); ~595 MB gzipped for deployment. Auto-downloaded on first start when `EMBEDDINGS_DB_URL` is set.

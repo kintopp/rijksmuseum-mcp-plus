@@ -20,13 +20,11 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 ### Vocabulary-based filters
 | Parameter | Description |
 |---|---|
-| `title` | Search all title variants (brief, full, former × EN/NL) |
-| `subject` | Primary concept/theme search — searches ~833K artworks via Iconclass vocabulary. Start here for thematic queries |
+| `subject` | Primary concept/theme search — searches ~832K artworks via Iconclass vocabulary. Start here for thematic queries |
 | `iconclass` | Exact Iconclass notation code (e.g. `34B11` for dogs). More precise than `subject` |
 | `description` | Full-text search on cataloguer descriptions (~510K artworks) |
 | `curatorialNarrative` | Full-text search on museum wall text (~14K artworks) |
 | `inscription` | Full-text search on inscription texts (signatures, mottoes, dates on objects) |
-| `creditLine` | Full-text search on credit/donor lines |
 | `depictedPerson` | Artworks depicting a named person |
 | `depictedPlace` | Artworks depicting a named place |
 | `productionPlace` | Place where the work was made |
@@ -34,15 +32,12 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 | `theme` | Curatorial thematic tag (e.g. `overzeese geschiedenis`, `costume`). Distinct from `subject`/Iconclass. ~7% coverage, mostly Dutch labels. |
 | `sourceType` | Source-channel classification (6 values: `designs`, `drawings`, `paintings`, `prints (visual works)`, `sculpture (visual works)`, `photographs`). Distinct from `type`. |
 | `collectionSet` | Named curated collection set (use `list_curated_sets` to discover) |
-| `license` | Rights filter: `publicdomain`, `zero` (CC0), `by` (CC BY) |
 
 ### Dimension filters
 | Parameter | Description |
 |---|---|
-| `minWidth` | Minimum width in cm |
-| `maxWidth` | Maximum width in cm |
-| `minHeight` | Minimum height in cm |
-| `maxHeight` | Maximum height in cm |
+| `heightRange` | Height range in cm. Forms: `10-50`, `10-` (≥ 10), `-50` (≤ 50). Inclusive bounds; 0.0 sentinels excluded from upper-bound matches. |
+| `widthRange` | Width range in cm. Same form as `heightRange` (`10-50`, `10-`, `-50`). |
 
 ### Attribution filter
 | Parameter | Description |
@@ -65,8 +60,7 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 | `aboutActor` | Artworks about a person — broader recall than `depictedPerson`, searches both subject and creator vocabulary |
 | `imageAvailable` | `true` to return only works with a digital image |
 | `hasProvenance` | `true` to return only works with parsed provenance records (~48.5K of 834K) |
-| `modifiedAfter` | ISO 8601 date — only records modified at or after this date (e.g. `2024-01-01`). Combine with any other filter to ask "what changed since …?" |
-| `modifiedBefore` | ISO 8601 date — only records modified at or before this date |
+| `sameRowMatching` | Constrain `creator` + `productionRole` to the *same* production row (autograph detection). For "making" roles only — leave default off for "after X by" relational roles. Requires both `creator` and `productionRole`. |
 
 ### Output controls
 | Parameter | Description |
@@ -77,9 +71,7 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 | `facets` | `true` for all facet dimensions, or an array of specific dimensions to compute. Available: `type`, `material`, `technique`, `century`, `rights`, `imageAvailable`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `theme`, `sourceType` |
 | `facetLimit` | Maximum entries per facet dimension (1–50, default 5) |
 | `groupBy` | Set to `parent` to collapse component records (sketchbook folios, album leaves, print-series sheets) under their parent. Parent gains `groupedChildCount`. |
-| `sortBy` | Order by a column instead of relevance/importance: `height`, `width`, `dateEarliest`, `dateLatest`, `recordModified`. Overrides BM25/geo ordering when set; tie-broken by `art_id`. |
-| `sortOrder` | `asc` or `desc` (default `desc`). NULLs always sort last. |
-| `pageToken` | Opaque continuation token from a previous response (stable deep pagination on sorted queries) |
+| `sort` | Order results by a column with optional direction: `height`, `height:desc`, `dateEarliest:asc`, `recordModified:desc`, etc. Columns: `height`, `width`, `dateEarliest`, `dateLatest`, `recordModified`. Direction defaults to `desc`; NULLs always sort last. Overrides BM25/geo ordering when set; tie-broken by `art_id`. |
 
 ---
 
@@ -156,6 +148,9 @@ Aggregate statistics, counts, and distributions across the collection. Returns t
 | `collectionSet` | Filter by curated set name (partial match) |
 | `theme` | Filter by curatorial thematic tag (partial match) |
 | `sourceType` | Filter by source-channel taxonomy (e.g. `designs`, `paintings`, `prints (visual works)`) |
+| `attributionQualifier` | Filter by attribution qualifier (`primary`, `attributed to`, `workshop of`, `circle of`, etc. — 13 values). Combined with `creator`, same-row matching is enforced automatically. |
+| `productionRole` | Filter by production role (e.g. `painter`, `draughtsman`, `print maker`, `after painting by`). Combine with `creator` + `sameRowMatching=true` for autograph narrowing. |
+| `sameRowMatching` | Constrain `creator` + `productionRole` to the *same* production row (autograph detection). Required for accurate autograph counts on making roles; leave default-false for "after X by" relational roles. |
 | `imageAvailable` | Restrict to artworks with a digital image |
 | `creationDateFrom` | Earliest creation year (inclusive) |
 | `creationDateTo` | Latest creation year (inclusive) |
@@ -272,6 +267,7 @@ Navigate the artwork viewer to a specific region and/or add visual overlays.
 | ↳ `action` | `navigate`, `add_overlay`, or `clear_overlays` |
 | ↳ `region` | IIIF region (required for `navigate`/`add_overlay`) |
 | ↳ `relativeTo` | Crop region from a prior `inspect_artwork_image` — coordinates in `region` are projected from crop-local to full-image space |
+| ↳ `relativeToSize` | `{ width, height }` — actual pixel dimensions of the inspected crop (copy from `cropPixelWidth`/`cropPixelHeight`). Required when `relativeTo` is set and `region` uses `crop_pixels:`. |
 | ↳ `label` | Label text (for `add_overlay`) |
 | ↳ `color` | CSS color for overlay border (default: orange) |
 

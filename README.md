@@ -70,7 +70,7 @@ Note: the use of the interactive image viewer feature requires [Claude Desktop](
 
 ### Find similar artworks 
 
-A search for artworks 'similar to' other artworks (e.g. "find artworks similar to van Gogh's Zelfportret") creates a comparison webpage that places an artwork alongside the works most similar to it, evaluated across eight dimensions: visual appearance, curator-declared related objects (different examples, production stages, pendants), artistic lineage (shared creators, workshops, or attribution chains), Iconclass subject classification, semantic description, shared curatorial themes, depicted persons, and depicted places. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection. Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2860.html) of a `find_similar` analysis. Note: all generated comparison webpages are automatically deleted from the server after 30 minutes. Use your browser's 'Save As' (not bookmark) feature to save a copy.
+A search for artworks 'similar to' other artworks (e.g. "find artworks similar to van Gogh's Zelfportret") creates a comparison webpage that places an artwork alongside the works most similar to it, evaluated across nine dimensions: visual appearance, related co-production (curator-declared pendants, production stadia, different examples), related object (other curator-declared edges such as pairs, sets, recto/verso, and reproductions), artistic lineage (shared creators, workshops, or attribution chains), Iconclass subject classification, semantic description, shared curatorial themes, depicted persons, and depicted places. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection. Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2860.html) of a `find_similar` analysis. Note: all generated comparison webpages are automatically deleted from the server after 30 minutes. Use your browser's 'Save As' (not bookmark) feature to save a copy.
 
 ### Analyse provenance events (experimental)
 
@@ -123,11 +123,11 @@ flowchart LR
     overlay annotations"]
 
     Search --> VocabDB[("Vocab DB
-    833K artworks
-    417K vocab terms
-    14.7M mappings")]
+    834K artworks
+    418K vocab terms
+    14.8M mappings")]
     Search --> EmbeddingsDB[("Embeddings DB
-    833K vectors
+    832K vectors
     semantic search")]
     Details --> VocabDB
     Images --> IIIF["IIIF Image API
@@ -136,11 +136,11 @@ flowchart LR
     subgraph Harvest ["Periodic harvest (offline)"]
         OAI["OAI-PMH
         data.rijksmuseum.nl/oai"]
-        LA["Linked Art resolver
+        LA["Linked Art
         id.rijksmuseum.nl
-        (harvest-time only)"]
+        (harvest-time)"]
     end
-    OAI -.->|"833K records"| VocabDB
+    OAI -.->|"834K records"| VocabDB
     LA -.->|"vocab + artwork
     enrichment"| VocabDB
     VocabDB -.->|"embedding

@@ -26,7 +26,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-The vocabulary and embeddings databases are downloaded automatically on first start (~442 MB + ~595 MB compressed; ~1.8 GB + ~1.1 GB uncompressed). The server works without them, but [vocabulary-backed search parameters](search-parameters.md) and `semantic_search` won't be available. The embedding model (~130 MB) is also downloaded on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
+The vocabulary and embeddings databases are downloaded automatically on first start (~463 MB + ~595 MB compressed; ~1.9 GB + ~1.1 GB uncompressed). The server works without them, but [vocabulary-backed search parameters](search-parameters.md) and `semantic_search` won't be available. The embedding model (~130 MB) is also downloaded on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
 
 Restart your MCP client after updating the config.
 
