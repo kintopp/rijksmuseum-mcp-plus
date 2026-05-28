@@ -65,7 +65,6 @@ aligned with the **PLOD framework** (Art Institute of Chicago).
 | `loan` | custody | On loan (temporary custody, no ownership change) |
 | `deposit` | custody | On deposit or in storage |
 | `transfer` | ownership | Administrative or intra-organisational transfer (predominantly ownership; a handful of custody/ambiguous variants also exist) |
-| `non_provenance` | — | Text identified as non-provenance content (citations, notes, inventory references); exclude from provenance analysis |
 | `unknown` | ambiguous | Parser could not classify (includes cross-references) |
 
 Extensions beyond CMOA: `recuperation` (physical recovery vs legal return),
@@ -112,9 +111,10 @@ stem catches more than an exact role match.
 
 Positions (`sender`/`receiver`/`agent`) are derived from roles via deterministic
 mapping, with LLM enrichment for ambiguous cases. The `positionMethod` field
-tracks how each party's position was determined: `role_mapping` (deterministic),
-`llm_enrichment` (LLM-classified), `llm_structural` (LLM resolved from event
-structure), or `llm_disambiguation` (LLM-resolved merged party text).
+tracks how each party's position was determined: `role_mapping` (deterministic,
+from the party's role), `type_mapping` (deterministic, from the event's
+transfer type), `llm_enrichment` (LLM-classified), or `llm_disambiguation`
+(LLM-decomposed from merged party text).
 
 Coverage: ~90K parties across ~100K events, ~49K artworks with at least one
 parsed provenance event. Not all events have named parties — bare-name
@@ -160,9 +160,9 @@ individual item in the batch. These events are flagged with `batchPrice: true`
 Every record carries provenance-of-provenance metadata tracking how it was
 determined:
 
-- `parseMethod`: how the event was parsed (`peg`, `cross_ref`, `llm_structural`, `credit_line`; `regex_fallback` is legacy and unused)
+- `parseMethod`: how the event was parsed (`peg`, `regex_fallback`, `cross_ref`, `credit_line`, `llm_structural`)
 - `categoryMethod`: how the transfer type/category was determined (`type_mapping` = parser, `rule:transfer_is_ownership` = validated rule, `llm_enrichment` = LLM)
-- `positionMethod` (on parties): how the party position was determined (`role_mapping` = parser, `llm_enrichment` = LLM, `llm_structural` = LLM from event structure, `llm_disambiguation` = LLM-decomposed merged text)
+- `positionMethod` (on parties): how the party position was determined (`role_mapping` = parser from party role, `type_mapping` = parser from event type, `llm_enrichment` = LLM, `llm_disambiguation` = LLM-decomposed merged text)
 - `enrichmentReasoning`: the LLM's reasoning for any non-deterministic decision
 
 When results contain LLM-enriched records, `search_provenance` provides a URL
@@ -188,10 +188,10 @@ that runs alongside this:
 This 3-tier vocabulary appears on `entity_alt_names.tier`, on geo-enrichment
 audit columns (`coord_method` / `placetype_source`), and on the entity-level
 audit twins of provenance enrichment. Don't confuse them — *event*-level
-methods (`peg` / `cross_ref` / `llm_enrichment` / `llm_structural`) describe
-the parsed event provenance, while the 3-tier vocabulary describes the
-provenance of supporting entity data (places, alt-names, external IDs) that
-the event references.
+methods (`peg` / `regex_fallback` / `cross_ref` / `credit_line` /
+`llm_structural` / `llm_enrichment`) describe the parsed event provenance,
+while the 3-tier vocabulary describes the provenance of supporting entity
+data (places, alt-names, external IDs) that the event references.
 
 ### Querying by enrichment method
 
@@ -228,17 +228,17 @@ collection_stats(dimension="parseMethod")
 
 The `parseMethod` field records how each provenance record was processed:
 
-| Value | Share | Description |
-|-------|-------|-------------|
-| `peg` | ~80% | PEG grammar parser — highest confidence |
-| `cross_ref` | ~20% | Cross-reference links |
-| `llm_structural` | <1% | LLM-resolved structural cases the PEG grammar could not parse |
-| `credit_line` | <1% | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
-| `regex_fallback` | — | Legacy, currently unused |
+| Value | Description |
+|-------|-------------|
+| `peg` | PEG grammar parser — highest confidence |
+| `regex_fallback` | Regex fallback applied when the PEG grammar fails on a segment |
+| `cross_ref` | Cross-reference links |
+| `credit_line` | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
+| `llm_structural` | LLM-resolved structural cases the PEG grammar could not parse |
 
 `credit_line` events are particularly useful: they recover acquisition context
-(donor name, purchase fund) that the provenance text omits. Re-derive current
-shares with `collection_stats(dimension="parseMethod")`.
+(donor name, purchase fund) that the provenance text omits. For the current
+distribution of methods, use `collection_stats(dimension="parseMethod")`.
 
 ---
 
@@ -291,10 +291,11 @@ search_provenance(layer="periods", ownerName="Six",
 ### Acquisition channel analysis
 
 ```python
-# creditLine covers ~360K artworks — far more than parsed provenance (~49K).
-# Use it to profile how the museum acquired works from a donor or fund
-search_artwork(creditLine="Drucker-Fraser", compact=true)
-search_artwork(creditLine="Vereniging Rembrandt", type="painting", compact=true)
+# Use search_provenance to profile how the museum acquired works from a donor
+# or fund. `credit_line`-derived events recover acquisition context (donor name,
+# purchase fund) for works whose provenance text omits it.
+search_provenance(party="Drucker-Fraser", maxResults=20)
+search_provenance(party="Vereniging Rembrandt", transferType="gift", maxResults=20)
 ```
 
 ### Wartime provenance
@@ -332,10 +333,12 @@ search_provenance(objectNumber="SK-A-2344", layer="events")
 ### Multi-generation family collections
 
 ```python
-# transferType on layer="periods" applies to the period's acquisition event
-# (period rows don't carry transfer_type directly).
-search_provenance(transferType=["by_descent", "widowhood"],
-                  layer="periods", minDuration=50,
+# On layer="periods", filter by acquisitionMethod (the period's incoming
+# transfer type), not transferType — transferType is an event-layer filter
+# and will be rejected here. acquisitionMethod takes one value only, so for
+# a union (e.g. by_descent + widowhood) issue separate calls and merge.
+search_provenance(layer="periods", acquisitionMethod="by_descent",
+                  minDuration=50,
                   sortBy="duration", sortOrder="desc", maxResults=20)
 ```
 

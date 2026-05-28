@@ -2,7 +2,7 @@
 name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts,
-  crafts, and history (~834,000 objects). Capabilities include keyword and
+  crafts, and history across the museum's full holdings. Capabilities include keyword and
   semantic search, geospatial queries, deep-zoom inspection, collection
   statistics, AI-driven image analysis, Iconclass-driven iconographic
   discovery, AAM/CMOA-aligned provenance, demographic analysis of creators
@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.42"
-  last_updated: "2026-05-19"
+  version: "0.43"
+  last_updated: "2026-05-28"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -54,7 +54,7 @@ metadata:
 
 
 **Choosing between `search_artwork` (provenance-aware filters) and `search_provenance`:**
-For keyword/text search over provenance, use `search_provenance` — `search_artwork` does not search provenance text. For cross-domain "what kinds of works have provenance" questions, use `hasProvenance: true` on `search_artwork` or `collection_stats` (e.g. `collection_stats(dimension="type", hasProvenance=true)`). `search_provenance` returns structured, parsed chains with dates, prices, transfer types, and ownership periods — use it when you need to reason about the *sequence* of ownership, filter by event type, or rank by price or duration. Use `search_provenance` (not `search_artwork`) for credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging Rembrandt") — those names sit in the credit line, which covers ~360K artworks (vs ~49K with parsed provenance) but is no longer exposed as a `search_artwork` filter.
+For keyword/text search over provenance, use `search_provenance` — `search_artwork` does not search provenance text. For cross-domain "what kinds of works have provenance" questions, use `hasProvenance: true` on `search_artwork` or `collection_stats` (e.g. `collection_stats(dimension="type", hasProvenance=true)`). `search_provenance` returns structured, parsed chains with dates, prices, transfer types, and ownership periods — use it when you need to reason about the *sequence* of ownership, filter by event type, or rank by price or duration. Use `search_provenance` (not `search_artwork`) for credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging Rembrandt") — those names sit in the credit line, which covers a much larger share of the catalogue than parsed provenance does but is no longer exposed as a `search_artwork` filter.
 
 ---
 
@@ -88,7 +88,7 @@ distinguish objects *from* Asia versus European images *of* Asia.
 ### `subject` vs `iconclass`
 
 - `subject`: morphological stemming against the subject vocabulary (Iconclass-aligned classifications and depicted-subject labels — a six-figure pool of bilingual terms; English coverage is strongest); best first pass; try natural phrases ("winter landscape", "vanitas", "civic guard")
-- `iconclass`: the Iconclass classification system — ~40,675 notations across 13 languages. A retrieval tool, not a descriptive language: a notation's meaning comes from its position in the hierarchy, not just its label. Use the **Iconclass server** (`search`, `browse`, `resolve`, `expand_keys`, `search_prefix`) to discover notation codes by keyword, concept, or hierarchy navigation — see its SKILL file for full workflows and query patterns. Each result includes collection counts signalling how many artworks carry that notation. Pass the code to `search_artwork`'s `iconclass` parameter for precise filtering.
+- `iconclass`: the Iconclass classification system — a large notation set across 13 languages. A retrieval tool, not a descriptive language: a notation's meaning comes from its position in the hierarchy, not just its label. Use the **Iconclass server** (`search`, `browse`, `resolve`, `expand_keys`, `search_prefix`) to discover notation codes by keyword, concept, or hierarchy navigation — see its SKILL file for full workflows and query patterns. Each result includes collection counts signalling how many artworks carry that notation. Pass the code to `search_artwork`'s `iconclass` parameter for precise filtering.
 
 **Decision rule:** start with `subject` — it's faster and handles most queries well. Switch to `iconclass` when:
 
@@ -161,7 +161,7 @@ Three person-search axes, used for different questions: `creator` (who made it),
 
 ### Title language coverage — the catalogue is mostly Dutch
 
-The Rijksmuseum has translated only **~5% of artwork titles into English** (~39K of 834K works). The remaining ~95% have Dutch titles only — typically medals, coins, prints, decorative arts, and other minor objects. Famous paintings and curatorially-prominent works almost always have both languages; the long tail does not.
+The Rijksmuseum has translated only **a small minority of artwork titles into English** — most works have Dutch titles only, typically medals, coins, prints, decorative arts, and other minor objects. Famous paintings and curatorially-prominent works almost always have both languages; the long tail does not.
 
 **Implications for research:**
 
@@ -205,7 +205,7 @@ These narrow results but **require at least one other content filter**:
 | Modifier                           | Notes                                                                                                                                      |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `imageAvailable: true`             | Always pair with a content filter                                                                                                          |
-| `hasProvenance: true`              | Restricts to ~49K artworks with parsed provenance. Pair with `type`, `creator`, etc. for cross-domain queries.                             |
+| `hasProvenance: true`              | Restricts to the subset of artworks with parsed provenance. Pair with `type`, `creator`, etc. for cross-domain queries.                    |
 | `expandPlaceHierarchy: true`       | Expands place filters 3 levels deep; pair with `productionPlace` etc.                                                                      |
 
 
@@ -342,7 +342,7 @@ semantic_search(query="vanitas symbolism", subject="skull", type="painting")
 # → paintings with skull subjects, ranked by how well they match "vanitas symbolism"
 ```
 
-**Filter specificity matters.** Very broad single filters (e.g. `type: "print"` alone — 421K works, or `material: "paper"` — 643K) exceed the internal candidate limit, so semantic ranking operates on a subset. Results are still high-quality (distances are near-optimal), but a different subset might surface equally-good alternatives. For best coverage, combine two or more filters or pair a broad filter with a specific one (e.g. `type: "print", subject: "landscape"`).
+**Filter specificity matters.** Very broad single filters (e.g. `type: "print"` alone, or `material: "paper"`) exceed the internal candidate limit, so semantic ranking operates on a subset. Results are still high-quality (distances are near-optimal), but a different subset might surface equally-good alternatives. For best coverage, combine two or more filters or pair a broad filter with a specific one (e.g. `type: "print", subject: "landscape"`).
 
 **Language note**: English queries yield slightly higher precision against the
 bilingual catalogue even though the embedding model is multilingual. If a Dutch
@@ -389,9 +389,9 @@ Provenance research moves through three levels of detail:
 1. **Scope and profile** — `search_provenance` for keyword search over the raw
    provenance corpus, with `facets: true` for quick distributional context.
    For credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging
-   Rembrandt") use `search_provenance` — the credit line covers ~360K artworks
-   (vs ~49K with parsed provenance chains) and captures the last link of
-   acquisition.
+   Rembrandt") use `search_provenance` — the credit line covers a much larger
+   share of the catalogue than parsed provenance chains do and captures the
+   last link of acquisition.
 2. **Structured chain analysis** — `search_provenance` with structured filters
    (`transferType`, `party`, `dateFrom`/`dateTo`, etc.) returns parsed chains
    with dates, prices, transfer types, and ownership periods.
@@ -465,7 +465,7 @@ search_artwork(creator=[vocabId_1, vocabId_2, ...], type="painting", dateMatch="
 
 **Coverage caveat:** `search_persons` demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB. On a freshly harvested DB without enrichment they return zero rows. Structural filters (`birthPlace`, `deathPlace`, `profession`) and `name` work on any harvest.
 
-Of ~291K persons in the catalogue, ~60K appear as creators on at least one artwork — the default `hasArtworks: true` limits results to that subset.
+Most persons in the catalogue never appear as a creator on any artwork — the default `hasArtworks: true` limits results to those who do.
 
 ### 10. Similarity Research
 
