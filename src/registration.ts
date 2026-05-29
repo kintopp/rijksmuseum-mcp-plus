@@ -3123,6 +3123,20 @@ function registerTools(
       count: z.number().int(),
       percentage: z.number().optional(),
     }))).optional().describe("Provenance facets when facets=true. Dimensions: transferType, decade, location, transferCategory, partyPosition."),
+    creditLineResults: z.array(z.object({
+      objectNumber: z.string(),
+      title: z.string(),
+      creator: z.string(),
+      date: z.string().optional(),
+      url: z.string(),
+      creditLine: z.string(),
+    })).optional().describe(
+      "UNSTRUCTURED fallback matches from the artwork credit-line field (acquisition/funding statements), " +
+      "returned only when creditLineQuery is used, and only for artworks that have NO parsed provenance. " +
+      "These are NOT curated provenance chains — they describe how the museum acquired the work (often just a " +
+      "funding body), with no parsed parties, dates, or transfer types. When presenting these to the user you " +
+      "MUST state that the answer derives from unstructured credit-line text, not parsed provenance.",
+    ),
     warnings: z.array(z.string()).optional(),
     error: z.string().optional(),
   };
@@ -3164,7 +3178,14 @@ function registerTools(
           "The user cannot see tool output — if you do not include the path, they have no way to find the review page.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "Only the parsed provenance fields exposed below are searchable. " +
-          "At least one filter is required.",
+          "At least one filter is required.\n\n" +
+          "FALLBACK — creditLineQuery: only ~48K artworks have parsed provenance, but many more carry an unstructured " +
+          "credit-line field (acquisition/funding statements). Use creditLineQuery as a SECOND step: run a normal structured " +
+          "search first; if the relevant artworks turn out to have no parsed provenance, offer to extend the search with " +
+          "creditLineQuery. It runs a standalone free-text search over credit lines of artworks lacking parsed provenance, " +
+          "returns matches in creditLineResults (not results), and ignores all other filters. Credit-line data is a weaker, " +
+          "less reliable source (the museum's terminal acquisition channel, not prior ownership) — when you present these " +
+          "results you MUST tell the user the answer derives from unstructured credit-line text, not structured provenance.",
         inputSchema: z.object({
           layer: z.preprocess(stripNull,
             z.enum(["events", "periods"]).default("events").optional(),
@@ -3194,6 +3215,16 @@ function registerTools(
           dateTo: z.preprocess(stripNull, z.number().int().optional())
             .describe("Latest year (inclusive) for provenance event/period dates."),
           objectNumber: optStr().describe("Get full provenance chain for a specific artwork (e.g. 'SK-A-2344'). Fast local lookup."),
+          creditLineQuery: optStr().describe(
+            "UNSTRUCTURED fallback search. Free-text query against the artwork credit-line field (acquisition/funding " +
+            "statements like 'Gift of F.G. Waller, Amsterdam' or 'Purchased with the support of the Mondriaan Fonds'), " +
+            "restricted to artworks that have NO parsed provenance. Use this ONLY as a second step: run a normal " +
+            "structured search first, and if relevant artworks turn out to have no parsed provenance, extend the search " +
+            "here. The query is tokenized on whitespace and AND-combined (e.g. 'Waller Amsterdam' matches credit lines " +
+            "containing both terms in any order). This is a standalone mode — when set, all other provenance filters are " +
+            "ignored. Results are returned in creditLineResults (not results) and are NOT curated provenance; you MUST " +
+            "tell the user the answer comes from unstructured credit-line text.",
+          ),
           creator: optStr().describe("Artist name (partial match on creator, e.g. 'Rembrandt', 'Vermeer')."),
           currency: z.preprocess(stripNull,
             z.enum(["guilders", "euros", "pounds", "francs", "dollars", "livres", "napoléons", "deutschmarks", "reichsmarks", "swiss_francs", "guineas", "belgian_francs", "yen", "marks", "louis_d_or"]).optional(),
@@ -3238,6 +3269,60 @@ function registerTools(
       },
       withLogging("search_provenance", async (args: Record<string, unknown>) => {
         const layer = (args.layer as string | undefined) ?? "events";
+
+        // ── Credit-line fallback (standalone unstructured mode) ──
+        // When creditLineQuery is set we ignore all structured provenance filters and
+        // run a free-text search of the credit-line field, restricted to artworks with
+        // no parsed provenance. Results are clearly fenced off as a lower-confidence source.
+        if (args.creditLineQuery) {
+          const clQuery = args.creditLineQuery as string;
+          // credit-line rows are one line each, so default to a larger page than the
+          // structured default of 1 (which exists because full chains are large).
+          const clMax = Math.min(Math.max((args.maxResults as number | undefined) ?? 10, 1), TOOL_LIMITS.search_provenance.max);
+          const clResult = vocabDb!.searchCreditLineFallback(clQuery, {
+            maxResults: clMax,
+            offset: (args.offset as number | undefined) ?? 0,
+          });
+
+          const ignored = [...PROVENANCE_ALL_FILTERS, "facets", "sortBy"]
+            .filter(k => args[k] !== undefined);
+          const warnings: string[] = [];
+          if (ignored.length > 0) {
+            warnings.push(
+              `creditLineQuery runs a standalone unstructured search; these filters were ignored: ${ignored.join(", ")}. ` +
+              `Run them in a separate structured search_provenance call.`,
+            );
+          }
+
+          const clLines: string[] = [];
+          if (clResult.totalArtworksCapped) {
+            clLines.push(`≥${clResult.totalArtworks.toLocaleString()} artworks matched on UNSTRUCTURED credit-line text (capped — narrow the query for an exact total)`);
+          } else {
+            clLines.push(`${pluralize(clResult.totalArtworks, "artwork")} matched on UNSTRUCTURED credit-line text`);
+          }
+          clLines.push(
+            "SOURCE: artwork credit-line / acquisition-credit field — NOT curated provenance. " +
+            "These artworks have no parsed provenance; credit lines record how the museum acquired the work " +
+            "(often just a funding body), not prior ownership. You MUST tell the user this answer comes from " +
+            "unstructured credit-line text, not structured provenance.",
+          );
+          for (const r of clResult.results) {
+            clLines.push("");
+            clLines.push(`${r.objectNumber} | "${r.title}" — ${r.creator}${r.date ? ` (${r.date})` : ""}`);
+            clLines.push(`  ${r.url}`);
+            clLines.push(`  Credit line: ${r.creditLine}`);
+          }
+
+          const clData: InferOutput<typeof ProvenanceSearchOutput> = {
+            totalArtworks: clResult.totalArtworks,
+            ...(clResult.totalArtworksCapped && { totalArtworksCapped: true }),
+            results: [],
+            creditLineResults: clResult.results,
+            ...(warnings.length > 0 && { warnings }),
+          };
+          return structuredResponse(clData, clLines.join("\n"));
+        }
+
         const params: ProvenanceSearchParams = {
           maxResults: (args.maxResults as number | undefined) ?? TOOL_LIMITS.search_provenance.default,
           layer: layer as "events" | "periods",

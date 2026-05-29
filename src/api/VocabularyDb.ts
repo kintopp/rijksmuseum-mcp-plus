@@ -1,5 +1,5 @@
 import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
-import { escapeFts5, expandFtsQuery, resolveDbPath } from "../utils/db.js";
+import { escapeFts5, escapeFts5Token, expandFtsQuery, resolveDbPath } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -507,6 +507,22 @@ export interface ProvenanceSearchResult {
   results: ProvenanceArtworkResult[];
   facets?: Record<string, Array<{ label: string; count: number }>>;
   warnings?: string[];
+}
+
+/** One unstructured credit-line fallback match (artwork with no parsed provenance). */
+export interface CreditLineFallbackRow {
+  objectNumber: string;
+  title: string;
+  creator: string;
+  date?: string;
+  url: string;
+  creditLine: string;
+}
+
+export interface CreditLineFallbackResult {
+  totalArtworks: number;
+  totalArtworksCapped?: boolean;
+  results: CreditLineFallbackRow[];
 }
 
 // ─── Collection stats types ─────────────────────────────────────────
@@ -5842,6 +5858,84 @@ export class VocabularyDb {
     }
 
     return { totalArtworks, totalArtworksCapped: capped || undefined, results, ...(facets && { facets }), ...(warnings.length > 0 && { warnings }) };
+  }
+
+  // ── Credit-line fallback (unstructured acquisition-credit search) ──
+
+  /**
+   * Full-text search the artwork credit-line field — a SECONDARY, lower-confidence
+   * provenance source used only when no parsed provenance exists.
+   *
+   * Credit lines are templated acquisition/funding statements (e.g.
+   * "Gift of F.G. Waller, Amsterdam | Schenking van de heer F.G. Waller, Amsterdam").
+   * They describe the museum's terminal acquisition channel — often just a funding
+   * body — not the prior ownership chain, so they are NOT curated provenance and
+   * carry no parsed parties / dates / transfer types.
+   *
+   * Results are restricted to artworks with NO rows in provenance_events: where
+   * structured provenance exists the acquisition is already captured there, so the
+   * credit line adds nothing. The query is tokenized on whitespace and AND-combined
+   * (each token escaped + quoted), so "Waller Amsterdam" matches credit lines
+   * containing both terms in any order, without FTS5 syntax injection.
+   */
+  searchCreditLineFallback(
+    query: string,
+    opts: { maxResults?: number; offset?: number } = {},
+  ): CreditLineFallbackResult {
+    if (!this.db || !this.hasTextFts) {
+      return { totalArtworks: 0, results: [] };
+    }
+
+    const maxResults = Math.min(Math.max(opts.maxResults ?? 10, 1), 50);
+    const offset = opts.offset ?? 0;
+
+    // Tokenize → AND of quoted tokens (order-independent, injection-safe)
+    const ftsMatch = query
+      .trim()
+      .split(/\s+/)
+      .map((t) => escapeFts5Token(t))
+      .filter((t): t is string => t !== null)
+      .join(" AND ");
+    if (!ftsMatch) return { totalArtworks: 0, results: [] };
+
+    const totalArtworks = (this.db.prepare(`
+      SELECT COUNT(*) AS cnt FROM (
+        SELECT a.art_id
+        FROM artwork_texts_fts fts
+        JOIN artworks a ON a.rowid = fts.rowid
+        WHERE fts.credit_line MATCH ?
+          AND NOT EXISTS (SELECT 1 FROM provenance_events pe WHERE pe.artwork_id = a.art_id)
+        LIMIT ?
+      )
+    `).get(ftsMatch, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt;
+
+    const rows = this.db.prepare(`
+      SELECT a.object_number, a.title, a.creator_label, a.date_earliest, a.date_latest, a.credit_line
+      FROM artwork_texts_fts fts
+      JOIN artworks a ON a.rowid = fts.rowid
+      WHERE fts.credit_line MATCH ?
+        AND NOT EXISTS (SELECT 1 FROM provenance_events pe WHERE pe.artwork_id = a.art_id)
+      ORDER BY a.art_id
+      LIMIT ? OFFSET ?
+    `).all(ftsMatch, maxResults, offset) as {
+      object_number: string; title: string | null; creator_label: string | null;
+      date_earliest: number | null; date_latest: number | null; credit_line: string;
+    }[];
+
+    const results: CreditLineFallbackRow[] = rows.map((r) => ({
+      objectNumber: r.object_number,
+      title: r.title ?? "",
+      creator: r.creator_label ?? "",
+      date: formatDateRange(r.date_earliest, r.date_latest) || undefined,
+      url: `https://www.rijksmuseum.nl/en/collection/${r.object_number}`,
+      creditLine: r.credit_line,
+    }));
+
+    return {
+      totalArtworks,
+      totalArtworksCapped: totalArtworks >= PROVENANCE_COUNT_CAP || undefined,
+      results,
+    };
   }
 
   // ── Layer 2: Provenance Periods ───────────────────────────────────
