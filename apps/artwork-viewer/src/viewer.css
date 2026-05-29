@@ -241,6 +241,13 @@ html, body {
   min-height: 0;
   overflow: hidden;
   aspect-ratio: 4 / 3;
+  /* Establish an inline-axis containment context so the toolbar can size
+     itself against the *actual rendered width of the content box* (via the
+     @container rule below) rather than a vw/device proxy — which each MCP host
+     maps differently. Inline-only containment leaves the block axis free, so
+     the aspect-ratio above still derives height from width and OSD's
+     width:100%/height:100% child is unaffected. */
+  container-type: inline-size;
 }
 
 #openseadragon-viewer {
@@ -277,6 +284,13 @@ html, body {
   padding: 0.5rem;
   border-radius: var(--border-radius-md);
   z-index: 10;
+  /* Universal backstop: never exceed the content box, and wrap to a second row
+     instead of overflowing. 100% is the iframe's own content width whatever the
+     host set, so this cannot clip in any MCP client — worst case it wraps. The
+     @container rule below keeps it a single row on a normal phone. */
+  max-width: calc(100% - 1rem);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .image-controls button {
@@ -331,6 +345,33 @@ html, body {
 
 .image-controls #select-mode {
   font-size: 1.1rem;
+}
+
+/* Adaptive single-row preservation. Keys off the *rendered width of .content*
+   (container-type: inline-size, set above) rather than a vw/device proxy — the
+   one dimension every MCP host honors identically. Tightens only the toolbar so
+   it stays a single row on a normal phone before the flex-wrap backstop kicks
+   in. Hosts whose webview predates @container ignore this and fall back to the
+   wrapping backstop — no client regresses to clipping. */
+@container (max-width: 380px) {
+  .image-controls {
+    gap: 0.3rem;
+    padding: 0.35rem;
+  }
+
+  .image-controls #show-shortcuts,
+  .image-controls #zoom-in,
+  .image-controls #zoom-out,
+  .image-controls #prev-related,
+  .image-controls #next-related,
+  .image-controls #select-mode {
+    width: 2rem;
+  }
+
+  .image-controls #reset-view {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+  }
 }
 
 /* Suppress the browser's default focus ring after a mouse click — keyboard
