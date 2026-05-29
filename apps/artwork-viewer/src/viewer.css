@@ -228,6 +228,25 @@ html, body {
   color: white;
 }
 
+/* Viewport wrapper — holds the image box (.content) plus the controls.
+   Takes over the flex-item role so the image still sizes correctly, and is the
+   positioning + container-query context for .image-controls. On wide widths the
+   controls are absolutely positioned, so this box collapses to the image height
+   and bottom:1rem floats them over the image exactly as before. On narrow
+   widths the container query makes the controls in-flow, so this box grows to
+   image + control-band height. container-type: inline-size keys the query off
+   the *rendered content width* — the one dimension every MCP host honors
+   identically — not a vw/device proxy. Inline-only containment leaves the block
+   axis free, so .content's aspect-ratio still derives height from width. */
+.viewport-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  container-type: inline-size;
+}
+
 /* Content area — full-width image viewer.
    flex-basis: auto (not the `flex:1` shorthand's 0%) so the aspect-ratio box
    has a real automatic height when .main is content-sized (inline mode); the
@@ -241,13 +260,6 @@ html, body {
   min-height: 0;
   overflow: hidden;
   aspect-ratio: 4 / 3;
-  /* Establish an inline-axis containment context so the toolbar can size
-     itself against the *actual rendered width of the content box* (via the
-     @container rule below) rather than a vw/device proxy — which each MCP host
-     maps differently. Inline-only containment leaves the block axis free, so
-     the aspect-ratio above still derives height from width and OSD's
-     width:100%/height:100% child is unaffected. */
-  container-type: inline-size;
 }
 
 #openseadragon-viewer {
@@ -272,7 +284,13 @@ html, body {
   margin-top: 0.5rem;
 }
 
-/* Image controls overlay */
+/* Image controls — WIDE default: a floating translucent pill over the bottom
+   of the image, positioned against .viewport-wrap (which collapses to the image
+   box here, so bottom:1rem floats over the image bottom exactly as before). The
+   @container rule below converts this into an in-flow band only on narrow
+   widths, so desktop is unchanged. The max-width + flex-wrap are a degradation
+   safety net: on an engine too old for @container (none of the MCP hosts we
+   target), the band never activates and this wraps instead of clipping. */
 .image-controls {
   position: absolute;
   bottom: 1rem;
@@ -284,10 +302,6 @@ html, body {
   padding: 0.5rem;
   border-radius: var(--border-radius-md);
   z-index: 10;
-  /* Universal backstop: never exceed the content box, and wrap to a second row
-     instead of overflowing. 100% is the iframe's own content width whatever the
-     host set, so this cannot clip in any MCP client — worst case it wraps. The
-     @container rule below keeps it a single row on a normal phone. */
   max-width: calc(100% - 1rem);
   flex-wrap: wrap;
   justify-content: center;
@@ -347,30 +361,22 @@ html, body {
   font-size: 1.1rem;
 }
 
-/* Adaptive single-row preservation. Keys off the *rendered width of .content*
-   (container-type: inline-size, set above) rather than a vw/device proxy — the
-   one dimension every MCP host honors identically. Tightens only the toolbar so
-   it stays a single row on a normal phone before the flex-wrap backstop kicks
-   in. Hosts whose webview predates @container ignore this and fall back to the
-   wrapping backstop — no client regresses to clipping. */
+/* NARROW: when the viewport-wrap is too narrow for the floating pill to fit one
+   row, drop the controls out of the image into an in-flow band below it. Keyed
+   off .viewport-wrap's rendered inline width (its container-type), not a
+   vw/device proxy, so it triggers on the same real estate in every MCP host.
+   The band can never clip or cover the artwork; it wraps tidily if even it runs
+   out of room. Dark surface keeps the existing white-on-translucent buttons
+   legible regardless of host theme (matching the over-image pill they replace). */
 @container (max-width: 380px) {
   .image-controls {
-    gap: 0.3rem;
-    padding: 0.35rem;
-  }
-
-  .image-controls #show-shortcuts,
-  .image-controls #zoom-in,
-  .image-controls #zoom-out,
-  .image-controls #prev-related,
-  .image-controls #next-related,
-  .image-controls #select-mode {
-    width: 2rem;
-  }
-
-  .image-controls #reset-view {
-    padding: 0.4rem 0.5rem;
-    font-size: 0.85rem;
+    position: static;
+    transform: none;
+    max-width: none;
+    border-radius: 0;
+    gap: 0.4rem;
+    background: #1c1c1c;
+    border-top: 1px solid var(--color-border-primary);
   }
 }
 

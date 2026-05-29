@@ -614,18 +614,10 @@ function renderViewer(data: ArtworkImageData): void {
     <div class="main">
       <header class="header">${headerInnerHtml(data)}</header>
 
-      <div class="content">
-        <div id="openseadragon-viewer"></div>
-        <div class="image-controls">
-          <button id="show-shortcuts" title="Keyboard Shortcuts">?</button>
-          <button id="zoom-in" title="Zoom In">+</button>
-          <button id="zoom-out" title="Zoom Out">&minus;</button>
-          <button id="reset-view" title="Reset / return to seed">Reset</button>
-          <button id="prev-related" title="Previous co-production" disabled>&#9664;</button>
-          <button id="next-related" title="Next co-production" disabled>&#9654;</button>
-          <button id="select-mode" title="Select Region">&#9744;</button>
-        </div>
-        <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
+      <div class="viewport-wrap">
+        <div class="content">
+          <div id="openseadragon-viewer"></div>
+          <div id="shortcuts-overlay" class="shortcuts-overlay hidden">
           <div class="shortcuts-content">
             <div class="shortcuts-header">Keyboard Shortcuts</div>
             <div class="shortcuts-list">
@@ -642,6 +634,16 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
             </div>
           </div>
+        </div>
+        </div>
+        <div class="image-controls">
+          <button id="show-shortcuts" title="Keyboard Shortcuts">?</button>
+          <button id="zoom-in" title="Zoom In">+</button>
+          <button id="zoom-out" title="Zoom Out">&minus;</button>
+          <button id="reset-view" title="Reset / return to seed">Reset</button>
+          <button id="prev-related" title="Previous co-production" disabled>&#9664;</button>
+          <button id="next-related" title="Next co-production" disabled>&#9654;</button>
+          <button id="select-mode" title="Select Region">&#9744;</button>
         </div>
       </div>
 
