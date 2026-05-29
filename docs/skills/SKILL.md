@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.43"
-  last_updated: "2026-05-28"
+  version: "0.44"
+  last_updated: "2026-05-29"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -54,7 +54,7 @@ metadata:
 
 
 **Choosing between `search_artwork` (provenance-aware filters) and `search_provenance`:**
-For keyword/text search over provenance, use `search_provenance` — `search_artwork` does not search provenance text. For cross-domain "what kinds of works have provenance" questions, use `hasProvenance: true` on `search_artwork` or `collection_stats` (e.g. `collection_stats(dimension="type", hasProvenance=true)`). `search_provenance` returns structured, parsed chains with dates, prices, transfer types, and ownership periods — use it when you need to reason about the *sequence* of ownership, filter by event type, or rank by price or duration. Use `search_provenance` (not `search_artwork`) for credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging Rembrandt") — those names sit in the credit line, which covers a much larger share of the catalogue than parsed provenance does but is no longer exposed as a `search_artwork` filter.
+For keyword/text search over provenance, use `search_provenance` — `search_artwork` does not search provenance text. For cross-domain "what kinds of works have provenance" questions, use `hasProvenance: true` on `search_artwork` or `collection_stats` (e.g. `collection_stats(dimension="type", hasProvenance=true)`). `search_provenance` returns structured, parsed chains with dates, prices, transfer types, and ownership periods — use it when you need to reason about the *sequence* of ownership, filter by event type, or rank by price or duration. Use `search_provenance` (not `search_artwork`) for credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging Rembrandt") — those names sit in the credit line, which covers a much larger share of the catalogue than parsed provenance does. For the credit-line-only population (works with no parsed provenance), reach it via `search_provenance`'s `creditLineQuery` fallback — see "`creditLineQuery` — unstructured credit-line fallback" below.
 
 ---
 
@@ -188,6 +188,8 @@ The periods interpretation is much more restrictive — `dateFrom=1933, dateTo=1
 **Anti-join pattern** (`transferType` + `excludeTransferType`): artwork-level set difference. `transferType: "confiscation", excludeTransferType: "restitution"` returns artworks that were confiscated but *never* restituted. Note: items *recuperated* (recovered by Allied forces) are not the same as items *restituted* (formally returned to original owners) — they will appear in anti-join results.
 
 **Filter requirement**: both layers reject bare queries. At least one content filter is required. If you need a collection-wide ranking, use a broad filter such as `dateFrom: 1400` as a catch-all.
+
+**`creditLineQuery` — unstructured credit-line fallback.** Parsed provenance covers only a small share of the catalogue; the raw credit-line field ("Gift of …", "Bequest of …", "Purchased with the support of the … Fonds") covers much more. When a structured query is empty or thin, extend it with `creditLineQuery` — a free-text, tokenized-AND search restricted to works with *no* parsed provenance (so no overlap, no dedup). It is a standalone mode: other filters are ignored, and matches return in `creditLineResults`, **not** `results`. Treat them as lower-confidence — credit lines record how the *museum* acquired the work, not prior ownership — so tell the user the answer is from unstructured credit-line text.
 
 For the full provenance data model — AAM text format, transfer type vocabulary, party roles and positions, date/currency representations, and tested query patterns — see `references/provenance-and-enrichment-patterns.md`.
 
