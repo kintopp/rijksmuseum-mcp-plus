@@ -3276,16 +3276,16 @@ function registerTools(
         // no parsed provenance. Results are clearly fenced off as a lower-confidence source.
         if (args.creditLineQuery) {
           const clQuery = args.creditLineQuery as string;
-          // credit-line rows are one line each, so default to a larger page than the
-          // structured default of 1 (which exists because full chains are large).
-          const clMax = Math.min(Math.max((args.maxResults as number | undefined) ?? 10, 1), TOOL_LIMITS.search_provenance.max);
+          // searchCreditLineFallback owns the default (10 — credit-line rows are one line
+          // each, unlike the structured default of 1) and the [1,max] clamp.
           const clResult = vocabDb!.searchCreditLineFallback(clQuery, {
-            maxResults: clMax,
+            maxResults: args.maxResults as number | undefined,
             offset: (args.offset as number | undefined) ?? 0,
           });
 
-          const ignored = [...PROVENANCE_ALL_FILTERS, "facets", "sortBy"]
-            .filter(k => args[k] !== undefined);
+          // Everything except the three params this branch honours is ignored.
+          const ignored = Object.keys(args)
+            .filter(k => !["creditLineQuery", "maxResults", "offset"].includes(k));
           const warnings: string[] = [];
           if (ignored.length > 0) {
             warnings.push(
@@ -3315,7 +3315,7 @@ function registerTools(
 
           const clData: InferOutput<typeof ProvenanceSearchOutput> = {
             totalArtworks: clResult.totalArtworks,
-            ...(clResult.totalArtworksCapped && { totalArtworksCapped: true }),
+            totalArtworksCapped: clResult.totalArtworksCapped,
             results: [],
             creditLineResults: clResult.results,
             ...(warnings.length > 0 && { warnings }),

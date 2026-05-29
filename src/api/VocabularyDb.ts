@@ -5931,11 +5931,8 @@ export class VocabularyDb {
       creditLine: r.credit_line,
     }));
 
-    return {
-      totalArtworks,
-      totalArtworksCapped: totalArtworks >= PROVENANCE_COUNT_CAP || undefined,
-      results,
-    };
+    const capped = totalArtworks >= PROVENANCE_COUNT_CAP;
+    return { totalArtworks, totalArtworksCapped: capped || undefined, results };
   }
 
   // ── Layer 2: Provenance Periods ───────────────────────────────────
