@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import https from "node:https";
 import { XMLParser } from "fast-xml-parser";
+import { USER_AGENT } from "../utils/userAgent.js";
 import type {
   OaiSet,
   OaiRecordHeader,
@@ -57,7 +58,7 @@ export class OaiPmhClient {
     this.http = axios.create({
       baseURL: OAI_BASE_URL,
       timeout: 30_000,
-      headers: { Accept: "text/xml" },
+      headers: { Accept: "text/xml", "User-Agent": USER_AGENT },
       httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 5 }),
     });
 

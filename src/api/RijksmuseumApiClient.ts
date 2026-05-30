@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import https from "node:https";
 import { ResponseCache } from "../utils/ResponseCache.js";
+import { USER_AGENT } from "../utils/userAgent.js";
 import { ArtworkImageInfo, IIIFInfoResponse } from "../types.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ export class RijksmuseumApiClient {
     this.cache = cache ?? new ResponseCache(1000, RijksmuseumApiClient.TTL_IMAGE);
     this.imageCache = imageCache ?? new ResponseCache(50, 5 * 60_000); // 50 entries, 5-min TTL
     this.http = axios.create({
-      headers: { Accept: "application/ld+json" },
+      headers: { Accept: "application/ld+json", "User-Agent": USER_AGENT },
       timeout: 15_000,
       httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 25 }),
     });
