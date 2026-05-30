@@ -144,12 +144,19 @@ function prefixTerm(stem: string): string | null {
   return tok ? `${tok}*` : null;
 }
 
-/** Expand a NEAR spec into a (possibly OR-joined) FTS5 expression.
- *  FTS5's NEAR() takes plain phrase arguments only — no sub-expressions — so a
- *  slot offering alternatives (string[]) is expanded as an OR of flat NEAR()
- *  calls (the cartesian product across slots). Returns null on bad shape.
- *  Pushes each emitted phrase onto `termSink` for the global term cap. */
-function compileNear(near: TextQueryNear, termSink: string[]): string | null {
+/** OR-join FTS5 sub-expressions, parenthesising only when more than one. */
+function orGroup(parts: string[]): string {
+  return parts.length === 1 ? parts[0] : `(${parts.join(" OR ")})`;
+}
+
+/** Expand a NEAR spec into a (possibly OR-joined) FTS5 expression plus its
+ *  emitted-term count. FTS5's NEAR() takes plain phrase arguments only — no
+ *  sub-expressions — so a slot offering alternatives (string[]) is expanded as
+ *  an OR of flat NEAR() calls (the cartesian product across slots). That product
+ *  is exponential in slot count, so it is bounded against the term cap *before*
+ *  being materialised. Returns null on bad shape, or `{ error }` when the
+ *  expansion would exceed the cap. */
+function compileNear(near: TextQueryNear): { expr: string; terms: number } | { error: string } | null {
   if (!Number.isInteger(near.distance) || near.distance <= 0) return null;
   if (!Array.isArray(near.terms) || near.terms.length < 2) return null;
 
@@ -163,56 +170,62 @@ function compileNear(near: TextQueryNear, termSink: string[]): string | null {
     slots.push(escaped);
   }
 
-  // Cartesian product → one flat NEAR() per combination.
-  let combos: string[][] = [[]];
-  for (const slot of slots) {
-    const next: string[][] = [];
-    for (const combo of combos) for (const alt of slot) next.push([...combo, alt]);
-    combos = next;
+  // Each combination emits `slots.length` phrases, so the total term count is
+  // (number of combinations) × (slot count). Reject up front if it blows the cap.
+  const comboCount = slots.reduce((n, slot) => n * slot.length, 1);
+  const terms = comboCount * slots.length;
+  if (terms > TEXT_QUERY_MAX_TERMS) {
+    return { error: `near clause expands to ${terms} terms (max ${TEXT_QUERY_MAX_TERMS}); reduce its alternatives` };
   }
 
-  const calls = combos.map((combo) => {
-    combo.forEach((t) => termSink.push(t));
-    return `NEAR(${combo.join(" ")}, ${near.distance})`;
-  });
+  // Cartesian product → one flat NEAR() per combination.
+  let rows: string[][] = [[]];
+  for (const slot of slots) {
+    const next: string[][] = [];
+    for (const combo of rows) for (const alt of slot) next.push([...combo, alt]);
+    rows = next;
+  }
   // Un-parenthesised: the clause's column-scope wrapper provides the grouping,
   // and every term in a clause is OR-combined, so a flat OR list is correct.
-  return calls.join(" OR ");
+  const expr = rows.map((combo) => `NEAR(${combo.join(" ")}, ${near.distance})`).join(" OR ");
+  return { expr, terms };
 }
 
-/** Compile one clause into a column-scoped, OR-combined FTS5 sub-expression.
- *  Every term the clause contributes (phrase, prefix, any/anyPrefix tokens,
- *  near expression) is OR-joined, then wrapped in `{cols} : ( … )`.
- *  Returns null if the clause yields no usable term, or a string error. */
+/** Compile one clause into a column-scoped, OR-combined FTS5 sub-expression
+ *  plus its leaf-term count. Every term the clause contributes (phrase, prefix,
+ *  any/anyPrefix tokens, near expression) is OR-joined, then wrapped in
+ *  `{cols} : ( … )`. Returns null if the clause yields no usable term, or a
+ *  string error. */
 function compileClause(
-  clause: TextQueryClause,
-  termSink: string[]
-): { expr: string } | { error: string } | null {
+  clause: TextQueryClause
+): { expr: string; terms: number } | { error: string } | null {
   if (clause.field !== undefined && !(clause.field in TEXT_QUERY_FIELD_COLUMNS)) {
     return { error: `unknown textQuery field "${clause.field}"` };
   }
   const parts: string[] = [];
+  let terms = 0;
 
   if (clause.phrase) {
     const p = escapeFts5(clause.phrase);
-    if (p) { parts.push(p); termSink.push(p); }
+    if (p) { parts.push(p); terms++; }
   }
   if (clause.prefix) {
     const p = prefixTerm(clause.prefix);
-    if (p) { parts.push(p); termSink.push(p); }
+    if (p) { parts.push(p); terms++; }
   }
   for (const tok of clause.any ?? []) {
     const t = escapeFts5Token(tok);
-    if (t) { parts.push(t); termSink.push(t); }
+    if (t) { parts.push(t); terms++; }
   }
   for (const stem of clause.anyPrefix ?? []) {
     const p = prefixTerm(stem);
-    if (p) { parts.push(p); termSink.push(p); }
+    if (p) { parts.push(p); terms++; }
   }
   if (clause.near) {
-    const n = compileNear(clause.near, termSink);
+    const n = compileNear(clause.near);
     if (n === null) return { error: "invalid near clause (needs ≥2 non-empty term slots and a positive distance)" };
-    parts.push(n);
+    if ("error" in n) return n;
+    parts.push(n.expr); terms += n.terms;
   }
 
   if (parts.length === 0) return null; // clause empty after escaping → skip
@@ -223,23 +236,24 @@ function compileClause(
   const columns = clause.field
     ? [TEXT_QUERY_FIELD_COLUMNS[clause.field]]
     : DEFAULT_TEXT_QUERY_COLUMNS;
-  return { expr: `{${columns.join(" ")}} : (${inner})` };
+  return { expr: `{${columns.join(" ")}} : (${inner})`, terms };
 }
 
-/** Compile a list of clauses, dropping empties. Returns the compiled exprs,
- *  or the first clause error encountered. */
+/** Compile a list of clauses, dropping empties. Returns the compiled exprs and
+ *  their total term count, or the first clause error encountered. */
 function compileClauseList(
-  clauses: TextQueryClause[],
-  termSink: string[]
-): { exprs: string[] } | { error: string } {
+  clauses: TextQueryClause[]
+): { exprs: string[]; terms: number } | { error: string } {
   const exprs: string[] = [];
+  let terms = 0;
   for (const c of clauses) {
-    const r = compileClause(c, termSink);
+    const r = compileClause(c);
     if (r === null) continue;
     if ("error" in r) return { error: r.error };
     exprs.push(r.expr);
+    terms += r.terms;
   }
-  return { exprs };
+  return { exprs, terms };
 }
 
 /** Compile the structured `textQuery` DSL into one FTS5 MATCH string (#363).
@@ -257,23 +271,21 @@ export function compileTextQuery(dsl: TextQueryDsl): { match: string } | { error
     return { error: "textQuery needs at least one must or should clause" };
   }
 
-  const terms: string[] = [];
-  const mustR = compileClauseList(must, terms);
+  const mustR = compileClauseList(must);
   if ("error" in mustR) return mustR;
-  const shouldR = compileClauseList(should, terms);
+  const shouldR = compileClauseList(should);
   if ("error" in shouldR) return shouldR;
-  const mustNotR = compileClauseList(mustNot, terms);
+  const mustNotR = compileClauseList(mustNot);
   if ("error" in mustNotR) return mustNotR;
 
-  if (terms.length > TEXT_QUERY_MAX_TERMS) {
-    return { error: `textQuery expands to ${terms.length} terms (max ${TEXT_QUERY_MAX_TERMS}); narrow the query` };
+  const totalTerms = mustR.terms + shouldR.terms + mustNotR.terms;
+  if (totalTerms > TEXT_QUERY_MAX_TERMS) {
+    return { error: `textQuery expands to ${totalTerms} terms (max ${TEXT_QUERY_MAX_TERMS}); narrow the query` };
   }
 
   // Positive part: must clauses AND-joined, plus the should group as one OR.
   const positiveParts: string[] = [...mustR.exprs];
-  if (shouldR.exprs.length > 0) {
-    positiveParts.push(shouldR.exprs.length === 1 ? shouldR.exprs[0] : `(${shouldR.exprs.join(" OR ")})`);
-  }
+  if (shouldR.exprs.length > 0) positiveParts.push(orGroup(shouldR.exprs));
   if (positiveParts.length === 0) {
     // Every positive clause escaped to empty (e.g. all-punctuation terms).
     return { error: "textQuery has no usable terms after escaping" };
@@ -284,9 +296,8 @@ export function compileTextQuery(dsl: TextQueryDsl): { match: string } | { error
   // FTS5 precedence is NOT > AND > OR, so a multi-part positive (top-level AND)
   // must be parenthesised before NOT; a single atomic part needs no wrap.
   if (mustNotR.exprs.length > 0) {
-    const neg = mustNotR.exprs.length === 1 ? mustNotR.exprs[0] : `(${mustNotR.exprs.join(" OR ")})`;
     const pos = positiveParts.length > 1 ? `(${match})` : match;
-    match = `${pos} NOT ${neg}`;
+    match = `${pos} NOT ${orGroup(mustNotR.exprs)}`;
   }
   return { match };
 }
