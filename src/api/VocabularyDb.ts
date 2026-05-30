@@ -1,5 +1,6 @@
 import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
-import { escapeFts5, escapeFts5Token, expandFtsQuery, resolveDbPath } from "../utils/db.js";
+import { escapeFts5, escapeFts5Token, expandFtsQuery, compileTextQuery, resolveDbPath } from "../utils/db.js";
+import type { TextQueryDsl } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -259,6 +260,9 @@ export interface VocabSearchParams {
   description?: string;
   inscription?: string;
   curatorialNarrative?: string;
+  // #363: opt-in structured boolean/phrase/proximity/prefix text query, compiled
+  // server-side into one safe FTS5 MATCH over the text columns.
+  textQuery?: TextQueryDsl;
   productionRole?: StringOrArray;
   attributionQualifier?: StringOrArray;
   // Dimension range bounds — populated from public `heightRange`/`widthRange` strings.
@@ -4429,23 +4433,46 @@ export class VocabularyDb {
       ["title", "title_all_text"],
     ];
     const requestedTextFilters = TEXT_FILTERS.filter(([param]) => typeof effective[param] === "string");
-    // BM25 ranking: the first text FTS filter is promoted to a JOIN so we can
-    // ORDER BY fts.rank. Additional text filters remain as IN-subqueries.
+    // BM25 ranking: one text FTS filter is promoted to a JOIN so we can
+    // ORDER BY fts.rank. Remaining text filters become IN-subqueries.
     let ftsJoinClause = "";
     let ftsJoinBinding: unknown | null = null;
     let ftsRankOrder = false;
+    let joinClaimed = false; // true once something holds the rank JOIN slot
+
+    // #363: structured textQuery DSL — compiled into one multi-column MATCH and
+    // promoted to the JOIN so its bm25 rank spans the whole text query. Flat
+    // filters (below) then all fall through to IN-subqueries.
+    if (effective.textQuery) {
+      if (this.hasTextFts) {
+        const compiled = compileTextQuery(effective.textQuery);
+        if ("error" in compiled) {
+          warnings.push(`textQuery ignored: ${compiled.error}.`);
+        } else {
+          // Full-table (multi-column) match: the left operand is the FTS table's
+          // hidden table-named column, referenced via the alias (`fts.artwork_texts_fts`)
+          // so `ORDER BY fts.rank` below stays consistent with the flat-filter path.
+          ftsJoinClause = `JOIN artwork_texts_fts fts ON fts.rowid = a.rowid AND fts.artwork_texts_fts MATCH ?`;
+          ftsJoinBinding = compiled.match;
+          ftsRankOrder = true;
+          joinClaimed = true;
+        }
+      } else {
+        warnings.push("textQuery requires vocabulary DB v1.0+. It was ignored.");
+      }
+    }
+
     if (requestedTextFilters.length > 0) {
       if (this.hasTextFts) {
-        let isFirst = true;
         for (const [param, column] of requestedTextFilters) {
           const ftsPhrase = escapeFts5(effective[param] as string);
           if (!ftsPhrase) continue; // skip empty-after-stripping queries
-          if (isFirst) {
+          if (!joinClaimed) {
             // JOIN for BM25 rank access
             ftsJoinClause = `JOIN artwork_texts_fts fts ON fts.rowid = a.rowid AND fts.${column} MATCH ?`;
             ftsJoinBinding = ftsPhrase;
             ftsRankOrder = true;
-            isFirst = false;
+            joinClaimed = true;
           } else {
             conditions.push(`a.rowid IN (SELECT rowid FROM artwork_texts_fts WHERE ${column} MATCH ?)`);
             bindings.push(ftsPhrase);

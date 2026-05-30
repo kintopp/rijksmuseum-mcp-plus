@@ -123,6 +123,29 @@ const stringOrArray = () => z.preprocess(
 const optStr = () => z.preprocess(stripNull, z.string().optional());
 const optMinStr = () => z.preprocess(stripNull, z.string().min(1).optional());
 
+// #363: structured textQuery DSL schema. Built via factories so each of
+// must/should/mustNot gets a *distinct* clause-schema instance — sharing one
+// instance would make zod-to-json-schema emit $defs/$ref, which the inputSchema
+// conformance test forbids (must stay $ref-free).
+const textQueryClauseSchema = () =>
+  z.object({
+    field: z.enum(["title", "description", "inscription", "curatorialNarrative"]).optional(),
+    phrase: z.string().min(1).optional(),
+    any: z.array(z.string().min(1)).min(1).optional(),
+    anyPrefix: z.array(z.string().min(1)).min(1).optional(),
+    prefix: z.string().min(1).optional(),
+    near: z.object({
+      terms: z.array(z.union([z.string().min(1), z.array(z.string().min(1)).min(1)])).min(2),
+      distance: z.number().int().positive(),
+    }).strict().optional(),
+  }).strict();
+const textQuerySchema = () =>
+  z.object({
+    must: z.array(textQueryClauseSchema()).min(1).optional(),
+    should: z.array(textQueryClauseSchema()).min(1).optional(),
+    mustNot: z.array(textQueryClauseSchema()).min(1).optional(),
+  }).strict();
+
 type ToolResponse = { content: [{ type: "text"; text: string }] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
 
@@ -1349,7 +1372,7 @@ function registerTools(
     "subject", "iconclass", "depictedPerson", "depictedPlace", "productionPlace",
     "collectionSet",
     // Tier 2 (vocabulary DB v1.0+)
-    "description", "inscription", "curatorialNarrative", "productionRole", "attributionQualifier",
+    "description", "inscription", "curatorialNarrative", "textQuery", "productionRole", "attributionQualifier",
     "heightRange", "widthRange",
     "nearPlace", "nearLat", "nearLon",
     "material", "technique", "type", "creator",
@@ -1532,6 +1555,17 @@ function registerTools(
                   "Best for art-historical interpretation, exhibition context, and scholarly commentary — " +
                   "content written by curators that goes beyond what structured vocabulary captures. " +
                   "Exact word matching, no stemming. For broad concept searches, start with subject instead."
+                ),
+              textQuery: textQuerySchema()
+                .optional()
+                .describe(
+                  "Advanced structured text search over the four text fields (title, description, inscription, curatorialNarrative). " +
+                  "Use ONLY when the flat text filters above cannot express the query — boolean nesting, cross-field either/or, proximity, or prefix. " +
+                  "Shape: { must?: Clause[], should?: Clause[], mustNot?: Clause[] }. must=AND, should=OR-group, mustNot=excluded. At least one must/should clause is required (mustNot alone is rejected). " +
+                  "Each Clause targets one field (default: all four) and OR-combines its terms: " +
+                  "{ field?, phrase?: exact words, any?: [tokens] (OR), prefix?: stem (matches stem*), anyPrefix?: [stems] (OR), near?: { terms: [t1, t2, …], distance } }. " +
+                  "In near.terms, a nested array is OR alternatives at that position. Combine with the other filters (type, creator, creationDate, …) freely. " +
+                  "Example — a theme phrased differently per field: { should: [{ field: 'description', phrase: 'beeldenstorm' }, { field: 'curatorialNarrative', any: ['iconoclasm','iconoclastic'] }], mustNot: [{ field: 'title', phrase: 'geschiedenis' }] }."
                 ),
               productionRole: stringOrArray()
                 .optional()

@@ -197,6 +197,28 @@ For the full provenance data model — AAM text format, transfer type vocabulary
 
 Activating a text filter (`query`, `description`, `inscription`, `curatorialNarrative`) switches ranking to BM25 relevance. Drop the text filter to fall back to importance ranking — useful when you want the most *significant* works to surface first.
 
+**`textQuery` — structured boolean/phrase/proximity/prefix text search.** The flat text filters above each match one field and are AND-combined, and the text you pass is treated as a single literal phrase. When that is not enough — you need either/or logic, an either/or *across* fields, words near each other, or a word-stem wildcard — use the opt-in `textQuery` object instead. It compiles into one relevance-ranked query over the four text fields. Use it sparingly: for the common case the flat filters are simpler.
+
+Shape: `{ must?: Clause[], should?: Clause[], mustNot?: Clause[] }` — `must` is AND, `should` is an OR-group, `mustNot` excludes. At least one `must`/`should` clause is required (`mustNot` alone is rejected, since exclusion needs something to exclude *from*). Each `Clause` targets one `field` (omit for all four) and OR-combines whatever terms it carries:
+
+- `phrase` — exact words in order
+- `any` — a list of tokens, matched as OR
+- `prefix` — a stem; matches the stem plus any continuation (so `sculp` also matches `sculptor`, `sculpsit`)
+- `anyPrefix` — a list of stems, matched as OR
+- `near` — `{ terms: [...], distance }` requires the terms within `distance` words of each other; a nested list inside `terms` offers alternatives at that position
+
+`textQuery` combines freely with the structured filters (`type`, `creator`, `creationDate`, …). Example — a theme written up differently in each field, excluding history prints:
+
+```
+search_artwork(textQuery={
+  should: [ { field: "description",        phrase: "beeldenstorm" },
+            { field: "curatorialNarrative", any: ["iconoclasm", "iconoclastic"] } ],
+  mustNot: [ { field: "title", phrase: "geschiedenis" } ]
+})
+```
+
+If a `textQuery` is malformed (e.g. `mustNot` with no positive clause), it is dropped with a `warnings` note rather than failing the search.
+
 ---
 
 ## Modifier Parameters (cannot stand alone)

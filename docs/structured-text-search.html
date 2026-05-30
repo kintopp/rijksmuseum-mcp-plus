@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Giving the search box real query power — boolean, phrase, proximity and prefix</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f1f5f9; color: #334155; line-height: 1.65; }
+    .container { max-width: 920px; margin: 0 auto; padding: 0 24px 64px; }
+
+    /* Slate/teal hero */
+    .hero { background: linear-gradient(135deg, #334155 0%, #0f766e 100%); color: white; padding: 56px 24px 48px; margin-bottom: 32px; }
+    .hero-inner { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+    .hero h1 { font-size: 30px; font-weight: 700; margin-bottom: 12px; line-height: 1.3; }
+    .hero .subtitle { font-size: 16px; opacity: 0.88; max-width: 700px; }
+    .hero .meta { font-size: 13px; opacity: 0.7; margin-top: 16px; }
+
+    h2 { font-size: 22px; font-weight: 600; color: #0f172a; margin-top: 44px; margin-bottom: 12px; }
+    h3 { font-size: 16px; font-weight: 600; color: #0f172a; margin-top: 24px; margin-bottom: 8px; }
+    p { margin-bottom: 14px; font-size: 15px; }
+    ul, ol { margin: 0 0 14px 22px; }
+    li { margin-bottom: 6px; font-size: 15px; }
+
+    .question { background: white; border-left: 4px solid #0f766e; border-radius: 6px; padding: 18px 22px; color: #475569; margin-bottom: 24px; }
+    .question .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #0f766e; font-weight: 600; margin-bottom: 8px; }
+
+    .def { background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px 20px; margin: 16px 0; font-size: 14px; }
+    .def-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #0f766e; font-weight: 600; margin-bottom: 6px; }
+
+    .analogy { background: #fff; border: 1px dashed #94a3b8; border-radius: 6px; padding: 18px 22px; margin: 18px 0; font-size: 15px; color: #475569; }
+    .analogy .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; font-weight: 600; margin-bottom: 8px; }
+
+    pre { background: #0f172a; color: #e2e8f0; padding: 16px 18px; border-radius: 6px; font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace; font-size: 13px; overflow-x: auto; line-height: 1.55; margin: 12px 0 20px; }
+    code { font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace; font-size: 13px; background: #e2e8f0; padding: 1px 5px; border-radius: 3px; color: #0f172a; }
+    pre code { background: none; padding: 0; color: inherit; font-size: 13px; }
+
+    table { width: 100%; border-collapse: collapse; background: white; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; margin: 12px 0 20px; font-size: 14px; }
+    th { background: #f8fafc; padding: 10px 14px; text-align: left; font-weight: 600; color: #334155; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #e2e8f0; }
+    td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+
+    .corpus td:first-child { font-weight: 600; color: #0f172a; width: 26%; }
+
+    .before-after { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0 22px; }
+    .ba-card { flex: 1; min-width: 240px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px 18px; }
+    .ba-card .tag { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 8px; }
+    .ba-card.today .tag { color: #64748b; }
+    .ba-card.future .tag { color: #0f766e; }
+    .ba-card p { font-size: 14px; margin-bottom: 8px; }
+    .ba-card .typed { font-family: 'SF Mono', Menlo, Monaco, monospace; font-size: 12.5px; background: #f1f5f9; border-radius: 4px; padding: 4px 8px; display: inline-block; color: #0f172a; }
+
+    .scenario { background: white; border: 1px solid #e2e8f0; border-left: 4px solid #0f766e; border-radius: 6px; padding: 18px 22px; margin: 20px 0; }
+    .scenario .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #0f766e; font-weight: 600; margin-bottom: 8px; }
+    .scenario h3 { margin-top: 0; }
+    .scenario .ask { font-style: italic; color: #475569; margin-bottom: 12px; }
+
+    .footnote { color: #64748b; font-size: 13px; font-style: italic; margin-top: 6px; }
+    .takeaway { background: #f1f5f9; border-left: 4px solid #475569; border-radius: 6px; padding: 16px 22px; margin: 24px 0; font-size: 15px; color: #334155; }
+    .takeaway .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; font-weight: 600; margin-bottom: 8px; }
+    .refs { font-size: 13px; color: #64748b; border-top: 1px solid #cbd5e1; margin-top: 40px; padding-top: 18px; }
+    .refs code { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="hero-inner">
+      <h1>Giving the search box real query power</h1>
+      <div class="subtitle">
+        A plain-language look at the gap a structured text query would close — letting searches combine words with <code style="background:rgba(255,255,255,0.18);color:#fff">AND</code> / <code style="background:rgba(255,255,255,0.18);color:#fff">OR</code> / <code style="background:rgba(255,255,255,0.18);color:#fff">NOT</code>, match exact phrases, require words near each other, and grow word-stems with <code style="background:rgba(255,255,255,0.18);color:#fff">*</code> — with three real examples of what it unlocks.
+      </div>
+      <div class="meta">2026-05-30 · background note for issue #363 (split from #214 item 4) · supersedes <code>offline/explorations/fts-inert-text-vs-query-dsl.html</code></div>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <div class="question">
+      <div class="label">The idea in one line</div>
+      Our text search treats whatever you type as <strong>one literal phrase to find</strong>, never as a query with logic in it. A structured <code>textQuery</code> would let you (or an LLM searching for you) compose real boolean, phrase, proximity and prefix searches — <em>safely</em> — over the catalogue's free-text fields.
+    </div>
+
+    <h2>The gap today</h2>
+
+    <p>
+      Our collection search runs on SQLite's full-text engine, <strong>FTS5</strong>, which has its own little query language: <code>AND</code>, <code>OR</code>, <code>NOT</code>, proximity (<code>NEAR</code>), quoted phrases, and prefixes like <code>paint*</code>. But the server doesn't let any of it through. Before your words reach the database we <strong>strip out the operators and wrap everything in quotes</strong>, so the whole thing is matched as one exact phrase. Your text becomes pure <em>data to look up</em>, never <em>instructions for how to search</em>.
+    </p>
+
+    <div class="analogy">
+      <div class="label">An analogy</div>
+      Imagine a very literal-minded librarian. You ask for <strong>"paintings of cats and dogs"</strong> hoping for pictures with either animal. They don't read "and" as logic — they go hunting for a book titled, word for word, <em>"paintings of cats and dogs."</em> That literal-mindedness is exactly what the search enforces on purpose.
+    </div>
+
+    <p>
+      This is a deliberate <strong>safety choice</strong>: raw FTS5 input can crash on a stray bracket, silently change the meaning of ordinary words like "and", or let callers poke at the internal shape of our index. Force-quoting kills all three risks at once. The cost is <em>expressiveness</em> — and there are four common things a researcher simply cannot ask for today:
+    </p>
+    <ul>
+      <li><strong>Boolean logic</strong> — "water lilies <em>or</em> nymphéas, but <em>not</em> by Monet"</li>
+      <li><strong>Either/or across fields</strong> — match a word in one field <em>or</em> a different word in another</li>
+      <li><strong>Proximity</strong> — two words appearing close together, not just somewhere on the page</li>
+      <li><strong>Prefix</strong> — <code>sculp*</code> to catch <em>sculpsit, sculptor, sculp.</em> all at once</li>
+    </ul>
+    <p>
+      The current workaround is our separate flat filters (<code>title</code>, <code>description</code>, <code>inscription</code>, <code>curatorialNarrative</code>), which are simply combined with AND, plus <code>semantic_search</code> for fuzzy meaning. That covers a great deal — but not precise, composed text logic.
+    </p>
+
+    <h2>What a structured query would add</h2>
+
+    <p>
+      The fix (detailed in <strong>#363</strong>) keeps the user's <strong>words</strong> inert — always quoted, always stripped of operators, exactly as today — but lets the <strong>structure</strong> around them be built by <em>our own code</em> from a small, validated request. The user's text only ever lands inside a safe quoted slot; the logic is ours, so it can never be malformed. Here are the building blocks, each with a tiny example:
+    </p>
+
+    <div class="def">
+      <div class="def-label">should — either/or</div>
+      Match <em>any</em> of several clauses. <code>{ should: [ A, B ] }</code> → "A or B". This is the only way to search two different fields with an either/or, which the flat filters can't do.
+    </div>
+    <div class="def">
+      <div class="def-label">must / mustNot — and / not</div>
+      <code>must</code> requires every clause; <code>mustNot</code> excludes. <code>{ must: [A], mustNot: [B] }</code> → "A but not B".
+    </div>
+    <div class="def">
+      <div class="def-label">phrase vs. any — exact words vs. loose words</div>
+      <code>{ phrase: "cum privilegio" }</code> matches those two words in that order; <code>{ any: ["x", "y"] }</code> matches either word anywhere.
+    </div>
+    <div class="def">
+      <div class="def-label">near — proximity</div>
+      <code>{ near: { terms: ["gesigneerd", "gedateerd"], distance: 4 } }</code> → the two words within four words of each other.
+    </div>
+    <div class="def">
+      <div class="def-label">prefix — grow a word-stem</div>
+      <code>{ prefix: "excud" }</code> matches <em>excudit, excud., exc.</em> — useful when the same idea is spelled many ways.
+    </div>
+
+    <h2>The three fields it would search</h2>
+    <p>
+      The catalogue's long-form text lives in three quite different corpora, which is exactly why composed queries help — a concept may be phrased one way in one field and another way (or another language) in the next.
+    </p>
+    <table class="corpus">
+      <thead>
+        <tr><th>Field</th><th>Roughly</th><th>Character</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>description</code></td><td>~512,000 works</td><td><strong>Dutch, denotative</strong> — what is shown, the materials, the signature facts</td></tr>
+        <tr><td><code>curatorialNarrative</code></td><td>~14,000 works</td><td><strong>Mostly English, interpretive</strong> — meaning, theme, the story behind the work</td></tr>
+        <tr><td><code>inscription</code></td><td>~502,000 works</td><td><strong>Literal transcription</strong> — the words actually written on the object</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Three things it would unlock</h2>
+    <p>
+      Each example below leans on a different building block, and each reaches works the flat filters and <code>semantic_search</code> genuinely cannot. (These appear as scenarios 26–28 in <code>docs/research-scenarios.md</code>.)
+    </p>
+
+    <div class="scenario">
+      <div class="label">Example 1 · either/or across fields</div>
+      <h3>A theme written up two different ways</h3>
+      <p class="ask">"Find works about the Beeldenstorm — the 1566 wave of iconoclasm — whether a Dutch cataloguer called it <em>beeldenstorm</em> in the description, or an English curator called it <em>iconoclasm</em> in the wall text."</p>
+      <pre><code>textQuery: {
+  should: [ { field: "description",        phrase: "beeldenstorm" },
+            { field: "curatorialNarrative", any: ["iconoclasm","iconoclastic"] } ],
+  mustNot: [ { field: "title", phrase: "geschiedenis" } ]
+}</code></pre>
+      <p>
+        The two corpora describe the same event with different words, in different languages, and the matches barely overlap. Today's flat filters can only <em>AND</em> the two fields — giving the near-empty overlap — never the <em>union</em>. The <code>should</code> (either/or across fields) is the missing piece.
+      </p>
+    </div>
+
+    <div class="scenario">
+      <div class="label">Example 2 · proximity</div>
+      <h3>Signed <em>and</em> dated, together</h3>
+      <p class="ask">"Find paintings the museum describes as both signed and dated in the same breath — the strongest statement that a work is genuinely by the artist's own hand."</p>
+      <pre><code>textQuery: { field: "description",
+             near: { terms: ["gesigneerd","gedateerd"], distance: 4 } }</code></pre>
+      <p>
+        A description that mentions a signature in one place and a date somewhere else is not the same as one asserting both together (<em>"gesigneerd … en gedateerd 1749"</em>). Requiring the two Dutch words to sit close drops the loose coincidences. Neither vocabulary filters nor <code>semantic_search</code> can demand that two words be near each other.
+      </p>
+    </div>
+
+    <div class="scenario">
+      <div class="label">Example 3 · prefix + and/or</div>
+      <h3>Who made the print — designer, engraver, publisher</h3>
+      <p class="ask">"Old prints name their makers on the plate in Latin: who <em>designed</em> it (invenit), who <em>engraved</em> it (sculpsit/fecit), who <em>published</em> it (excudit). Find prints that record all three roles."</p>
+      <pre><code>textQuery: { field: "inscription",
+  must: [ { anyPrefix: ["inven","delineav"] },             // designer
+          { anyPrefix: ["sculp","incid"], any: ["fecit"] }, // engraver
+          { prefix: "excud" } ] }                           // publisher</code></pre>
+      <p>
+        The same role is written many ways — <em>sculpsit, sculptor, Sculpt., sculp.</em> — because engravers abbreviated to fit the margin. A prefix like <code>sculp*</code> finds many times more works than the exact word <code>sculpsit</code> alone. The structured "production role" filter can't help here: it normalises everything into a few tidy English labels, so it loses the literal Latin and can't spot one person doing two jobs (<em>"sculptor et excudit"</em>). The inscription is the original source; this reads it directly.
+      </p>
+    </div>
+
+    <h2>How it stays safe</h2>
+
+    <div class="def">
+      <div class="def-label">The core trick</div>
+      We already do a tiny version of this. A helper called <code>expandFtsQuery</code> takes one word and builds a safe <code>("paint" OR "paints" OR "painted")</code> group — each variant individually quoted, the <code>OR</code> supplied by us. A structured <code>textQuery</code> just generalises that pattern: walk the small request, quote every leaf word, and emit the operators from our own code. The user's words can never break out of their quotes.
+    </div>
+
+    <div class="before-after">
+      <div class="ba-card today">
+        <div class="tag">Option A — raw passthrough</div>
+        <p>Just stop stripping operators; let clients send FTS5 query text directly.</p>
+        <p><strong>~10 lines.</strong> But it re-opens every risk — crashes, confusion, index probing. Not recommended.</p>
+      </div>
+      <div class="ba-card future">
+        <div class="tag">Option B — structured compiler <em>(recommended)</em></div>
+        <p>Accept the small <code>{ should, must, mustNot, near, prefix, field }</code> request and compile it into a guaranteed-safe query.</p>
+        <p><strong>~80–150 lines.</strong> User words stay inert; we generate only well-formed queries. As a bonus, combining everything into one match means relevance ranking finally covers the whole text query, not just the first field.</p>
+      </div>
+    </div>
+
+    <p>
+      It would run entirely on the full-text indexes we <em>already</em> ship — no Elasticsearch, no new database, no re-harvest. It would be added as an <strong>opt-in</strong> field, so the plain string search stays exactly as it is.
+    </p>
+
+    <h2>Open questions before we'd commit</h2>
+    <ul>
+      <li>Is there real demand for composed text logic, or do the flat filters plus <code>semantic_search</code> already satisfy it?</li>
+      <li>What shape should the request take — mirror Elasticsearch's vocabulary, or a thinner one of our own?</li>
+      <li>Does combining everything into a single match risk changing today's result ordering in ways users would notice?</li>
+      <li>Is the added input complexity worth it, given we recently <em>trimmed</em> the search tool's parameters for discoverability?</li>
+    </ul>
+
+    <div class="takeaway">
+      <div class="label">Bottom line</div>
+      The "inert text" behaviour is a sound safety choice, not a bug — but it's also why precise searches quietly fail. We could lift the ceiling without giving up the safety, by having the server build the query logic around the user's still-inert words. The three examples above — an either/or across the bilingual catalogue, a proximity test for signed-and-dated works, and a prefix search over Latin maker's inscriptions — each reach works that nothing else in the toolkit can. The capability is already in the database; what's undecided is whether the demand justifies the added complexity. Tracked as <strong>#363</strong>, implementation deliberately left open.
+    </div>
+
+    <div class="refs">
+      <strong>References.</strong> Issue #363 (this proposal, split from #214 item 4) ·
+      Scenarios 26–28 in <code>docs/research-scenarios.md</code> ·
+      Code: <code>src/utils/db.ts</code> — <code>escapeFts5</code>, <code>escapeFts5Token</code>, <code>expandFtsQuery</code>;
+      <code>src/api/VocabularyDb.ts</code> — text-FTS filter block (~lines 4423–4459).
+      The four full-text indexes already shipped: <code>vocabulary_fts</code>, <code>artwork_texts_fts</code>, <code>person_names_fts</code>, <code>entity_alt_names_fts</code>.
+    </div>
+
+  </div>
+</body>
+</html>
