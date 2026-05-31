@@ -1429,7 +1429,11 @@ function registerTools(
           ),
         creator: stringOrArray()
           .optional()
-          .describe("Search by artist name, e.g. 'Rembrandt van Rijn'."),
+          .describe(
+            "Search by artist name (e.g. 'Rembrandt van Rijn'), or pass a vocabId from search_persons " +
+            "(e.g. '210169673') for an exact match to that one person — preferred over the name when you " +
+            "have it, since shared names can match multiple distinct artists."
+          ),
         aboutActor: optStr()
           .optional()
           .describe(

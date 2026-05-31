@@ -4740,6 +4740,18 @@ export class VocabularyDb {
       const values = Array.isArray(rawValue) ? rawValue : [rawValue];
 
       for (const value of values) {
+        // #364: bare-numeric `creator` = a vocabId handoff from search_persons.
+        // Resolve it directly (exact id→rowid) instead of FTS label matching.
+        if (filter.param === "creator") {
+          const litIds = this.resolveNumericVocabId(value);
+          if (litIds) {
+            const litFilter = this.mappingFilterDirect(filter.fields, litIds);
+            conditions.push(litFilter.condition);
+            bindings.push(...litFilter.bindings);
+            continue;
+          }
+        }
+
         const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
 
         if (useFts) {
@@ -5104,6 +5116,28 @@ export class VocabularyDb {
   }
 
   /**
+   * #364: a bare-numeric `creator` value is a vocabId handoff from search_persons
+   * (e.g. "210169673" for "Dou, Gerard"). Resolve it directly to its vocabulary.id —
+   * an exact id→rowid lookup, the same path artworkCount is computed from — instead
+   * of FTS label matching, which can't match a numeric token (the original bug) and
+   * for shared labels would over-match multiple distinct artists. The id/label spaces
+   * are disjoint: every person/group/organisation id is all-digits and no person
+   * label is, so this never misfires on a typed name.
+   *
+   * Returns [id] when `value` is all digits AND names a real vocab row; otherwise
+   * null, so the caller falls back to the FTS label path (preserves current
+   * behaviour for non-id numeric input).
+   */
+  private resolveNumericVocabId(value: unknown): string[] | null {
+    const s = String(value).trim();
+    if (!/^\d+$/.test(s)) return null;
+    const row = this.db!.prepare(
+      `SELECT id FROM vocabulary WHERE id = ? LIMIT 1`
+    ).get(s) as { id: string } | undefined;
+    return row ? [row.id] : null;
+  }
+
+  /**
    * Resolve a filter value to vocabulary.id (TEXT) IDs, mirroring buildVocabConditions()'s
    * FTS-vs-LIKE routing for the same filter definition. Returns the matching TEXT IDs —
    * the shape needed by assignment_pairs / production_role_pairs lookups, which key on
@@ -5114,6 +5148,10 @@ export class VocabularyDb {
    * place-typed vocabularies.
    */
   private resolveVocabTextIds(filter: VocabFilter, value: unknown): string[] {
+    if (filter.param === "creator") {
+      const litIds = this.resolveNumericVocabId(value);
+      if (litIds) return litIds;
+    }
     const typeClause = filter.vocabType ? ` AND type = ?` : "";
     const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
     const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
