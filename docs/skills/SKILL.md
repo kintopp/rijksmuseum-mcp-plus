@@ -13,7 +13,7 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.45"
+  version: "0.46"
   last_updated: "2026-05-31"
 ---
 
@@ -159,7 +159,7 @@ Three person-search axes, used for different questions: `creator` (who made it),
 
 **`creator` accepts a name string or a `vocabId` from `search_persons`.** When you have the `vocabId`, pass it: it resolves to exactly that one person, whereas a name string matches every artist sharing it — distinct artists often share a name (e.g. several "Frans van Mieris"), so a name can silently merge their œuvres while the `vocabId` returns only the person you selected.
 
-**Demographic gating is a two-step pattern.** To find works by women painters born after 1850: first `search_persons(gender="female", profession="painter", bornAfter=1850)` for vocab IDs, then `search_artwork(creator=[id1, id2, …], type="painting")`. Demographic filters (`gender`, `bornAfter`, `bornBefore`) need person enrichment present on the vocab DB — they return zero rows on a freshly harvested DB without enrichment.
+**Demographic gating is a two-step pattern.** To find works by women painters born after 1850: first `search_persons(gender="female", profession="painter", bornAfter=1850)` for vocab IDs, then issue one `search_artwork(creator=<vocabId>, type="painting")` call **per person** and union the results client-side (dedupe by `objectNumber`). A `creator` array is AND-combined, not OR — `creator=[id1, id2]` asks for works made jointly by *both* artists (usually 0), not by either, so it cannot express a cohort. Demographic filters (`gender`, `bornAfter`, `bornBefore`) need person enrichment present on the vocab DB — they return zero rows on a freshly harvested DB without enrichment.
 
 ### Title language coverage — the catalogue is mostly Dutch
 
@@ -295,7 +295,7 @@ Use `compact: true` on `search_artwork` only when you need the actual object num
 
 `decadeModified` is clamped to 1990–2030; records modified outside that window land in the coverage residual rather than a bucket. Pass `sortBy: "count"` to flip ordinal dimensions (`decade`, `height`, `width`, etc.) from natural-order to most-populous-first.
 
-Filters from both domains combine freely; one call replaces N iterations. For gender breakdowns (no `creatorGender` dimension exists) run `search_persons` first, then pass vocab IDs to `collection_stats(creator=…)`.
+Filters from both domains combine freely; one call replaces N iterations. For gender breakdowns (no `creatorGender` dimension exists) run `search_persons` first, then call `collection_stats(creator=<vocabId>)` once per person and aggregate client-side — `creator` takes a single vocab ID, and (as in `search_artwork`) an array is AND-combined, not a cohort.
 
 ### 2. Iconclass Research
 
@@ -482,12 +482,18 @@ Demographic gating is a **two-step pattern** via `search_persons`. There are no 
 search_persons(gender="female", profession="painter", bornBefore=1800, bornAfter=1700)
 # → returns vocabIds (bare numeric strings, e.g. "210169673")
 
-# Step 2 — fetch their works (creator accepts vocab IDs as well as name strings;
-#          the vocabId is the exact handle — a name can match several same-named artists)
-search_artwork(creator=[vocabId_1, vocabId_2, ...], type="painting", dateMatch="midpoint")
+# Step 2 — fetch each person's works, then union the result sets client-side
+#          (dedupe by objectNumber). creator accepts a vocabId (the exact handle —
+#          a name can match several same-named artists). One call PER person:
+search_artwork(creator=vocabId_1, type="painting", dateMatch="midpoint")
+search_artwork(creator=vocabId_2, type="painting", dateMatch="midpoint")
+# …one per vocabId, then merge yourself.
+#
+# Do NOT pass creator=[vocabId_1, vocabId_2, …]: array values are AND-combined, so that
+# asks for works made jointly by ALL listed artists (usually 0), not by any cohort member.
 
 # To compare structurally over time, repeat Step 1 with bornBefore/bornAfter shifted by century
-# and feed each cohort into Step 2.
+# and union each cohort's per-person calls.
 ```
 
 **Coverage caveat:** demographic filters (`gender`, `bornAfter`, `bornBefore`) need person-enrichment — zero rows without it, undercounts where it's sparse. Structural filters (`birthPlace`, `deathPlace`, `profession`) pivot through creator-mapped artworks, so the artwork-level attribute leaks to co-creators on multi-creator works (e.g. prints) — expect false positives (incl. `anonymous`/`unknown` placeholders). Treat these person lists as approximate, not authoritative cohorts.
