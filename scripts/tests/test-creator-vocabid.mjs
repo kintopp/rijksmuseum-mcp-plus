@@ -85,6 +85,27 @@ console.log("\nUnknown numeric id: creator='999999999999' → graceful 0");
 const r2 = await call("search_artwork", { creator: "999999999999", compact: true });
 check("no error, zero results", !r2?._error && (r2?.totalResults ?? 0) === 0);
 
+// #367: a creator ARRAY is AND-combined (works jointly crediting ALL listed
+// creators), NOT an OR cohort. Two distinct solo painters share ~no joint works,
+// so the array result is ≤ the smaller single result — never the union (≥ max).
+// This is why passing a demographic cohort as one creator=[…] array was wrong
+// (skill guidance corrected in SKILL.md v0.46).
+console.log("\ncreator array is AND, not OR (#367 cohort trap)");
+const dou = (await call("search_persons", { name: "Gerrit Dou", maxResults: 1 }))?.persons?.[0];
+const mieris = (await call("search_persons", { name: "Frans van Mieris", maxResults: 1 }))?.persons?.[0];
+check("both persons resolved", !!dou?.vocabId && !!mieris?.vocabId);
+if (dou?.vocabId && mieris?.vocabId) {
+  const a = await call("search_artwork", { creator: dou.vocabId, compact: true });
+  const b = await call("search_artwork", { creator: mieris.vocabId, compact: true });
+  const both = await call("search_artwork", { creator: [dou.vocabId, mieris.vocabId], compact: true });
+  const lo = Math.min(a?.totalResults ?? 0, b?.totalResults ?? 0);
+  const hi = Math.max(a?.totalResults ?? 0, b?.totalResults ?? 0);
+  console.log(`   ${dou.label}=${a?.totalResults}, ${mieris.label}=${b?.totalResults}, [both]=${both?.totalResults}`);
+  check("each single creator is non-zero", (a?.totalResults ?? 0) > 0 && (b?.totalResults ?? 0) > 0);
+  check("array result ≤ min single (AND ⊆ each set)", (both?.totalResults ?? 0) <= lo);
+  check("array result is NOT the OR union (≥ max)", (both?.totalResults ?? 0) < hi);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 await client.close();
 process.exit(failed === 0 ? 0 : 1);
