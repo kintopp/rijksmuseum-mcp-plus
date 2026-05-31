@@ -57,6 +57,18 @@ async function reconcile(name) {
   check("vocabId path is non-zero (was 0 before #364 fix)", (byId?.totalResults ?? 0) > 0);
   check("vocabId path reconciles exactly with artworkCount", byId?.totalResults === artworkCount);
   check("label path still works", (byLabel?.totalResults ?? 0) > 0);
+
+  // #366: collection_stats must honour the same creator=<vocabId> handoff.
+  // Before the fix the stats path FTS-matched the numeric id as a label → total 0.
+  const statsById = await call("collection_stats", { dimension: "century", creator: vocabId, topN: 5 });
+  const statsByLabel = await call("collection_stats", { dimension: "century", creator: label, topN: 5 });
+  console.log(`   collection_stats creator=<vocabId> → total ${statsById?.total}`);
+  console.log(`   collection_stats creator=<label>  → total ${statsByLabel?.total}`);
+  check("stats vocabId path is non-zero (was 0 before #366 fix)", (statsById?.total ?? 0) > 0);
+  check("stats vocabId path reconciles with artworkCount", statsById?.total === artworkCount);
+  // Label path stays label-based (may span multiple same-named people, like the
+  // search_artwork case above) — only assert it resolves, not that it equals the id path.
+  check("stats label path still works", (statsByLabel?.total ?? 0) > 0);
 }
 
 await reconcile("Gerrit Dou");          // unique label — both paths agree

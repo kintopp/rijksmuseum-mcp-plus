@@ -4167,6 +4167,19 @@ export class VocabularyDb {
       const typeClause = vocabType ? " AND type = ?" : "";
       const typeBindings: unknown[] = vocabType ? [vocabType] : [];
 
+      // #366: bare-numeric `creator` = a vocabId handoff from search_persons.
+      // Resolve it directly (exact id→rowid), mirroring buildVocabConditions()
+      // (#364), instead of FTS label matching — which can't match a numeric id.
+      if (key === "creator") {
+        const litIds = this.resolveNumericVocabId(val);
+        if (litIds) {
+          const litFilter = this.mappingFilterDirect(fields, litIds);
+          conditions.push(litFilter.condition);
+          bindings.push(...litFilter.bindings);
+          continue;
+        }
+      }
+
       if (exactNotation) {
         // Exact notation match (Iconclass codes) — two-step subquery, no FTS
         const filter = this.mappingFilterSubquery(fields, `notation = ?${typeClause}`, [val, ...typeBindings]);
