@@ -490,7 +490,7 @@ search_artwork(creator=[vocabId_1, vocabId_2, ...], type="painting", dateMatch="
 # and feed each cohort into Step 2.
 ```
 
-**Coverage caveat:** `search_persons` demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB. On a freshly harvested DB without enrichment they return zero rows. Structural filters (`birthPlace`, `deathPlace`, `profession`) and `name` work on any harvest.
+**Coverage caveat:** demographic filters (`gender`, `bornAfter`, `bornBefore`) need person-enrichment — zero rows without it, undercounts where it's sparse. Structural filters (`birthPlace`, `deathPlace`, `profession`) pivot through creator-mapped artworks, so the artwork-level attribute leaks to co-creators on multi-creator works (e.g. prints) — expect false positives (incl. `anonymous`/`unknown` placeholders). Treat these person lists as approximate, not authoritative cohorts.
 
 Most persons in the catalogue never appear as a creator on any artwork — the default `hasArtworks: true` limits results to those who do.
 

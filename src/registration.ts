@@ -1882,23 +1882,30 @@ function registerTools(
           "Not for free-text concept queries — use semantic_search. " +
           "Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.\n\n" +
           "By default restricts to persons with ≥1 artwork in the collection (~60K of ~290K). " +
-          "Coverage note: demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB; " +
-          "on a freshly harvested DB without person enrichment they return zero rows. Name search and structural filters (birthPlace / deathPlace / profession) work on any harvest.",
+          "Coverage note: demographic filters (gender, bornAfter, bornBefore) require person-enrichment on the vocabulary DB — they return zero rows on a freshly harvested DB without it, and undercount where enrichment is sparse. " +
+          "The structural filters (birthPlace / deathPlace / profession) work on any harvest but resolve by pivoting through creator-mapped artworks, so on multi-creator works the artwork-level attribute leaks to co-creators — expect false positives (incl. 'anonymous'/'unknown' placeholders ranked high by output volume). " +
+          "Treat all of these filtered lists as approximate, not authoritative cohorts. Name search is exact and unaffected.",
         inputSchema: z.object({
           name: optMinStr().optional()
             .describe("Phrase or token match against ~700K name variants (~290K persons). Tries exact phrase first, then token AND with stop-word stripping."),
           gender: optMinStr().optional()
-            .describe("Categorical: 'female', 'male', or other normalised values. Returns 0 rows if person enrichment is absent."),
+            .describe("Categorical: 'female', 'male', or other normalised values. From person-enrichment, whose coverage is partial: returns 0 rows if enrichment is absent entirely, and undercounts where it is sparse — a missing match does not mean the person lacks the attribute, so don't treat the result count as the full population."),
           bornAfter: z.preprocess(stripNull, z.number().int().optional())
-            .describe("Birth year ≥ this value. Returns 0 rows if person enrichment is absent."),
+            .describe("Birth year ≥ this value. From person-enrichment, whose coverage is partial: returns 0 rows if enrichment is absent entirely, and undercounts where birth years are unrecorded — don't treat the result count as the full population."),
           bornBefore: z.preprocess(stripNull, z.number().int().optional())
-            .describe("Birth year ≤ this value. Returns 0 rows if person enrichment is absent."),
+            .describe("Birth year ≤ this value. From person-enrichment, whose coverage is partial: returns 0 rows if enrichment is absent entirely, and undercounts where birth years are unrecorded — don't treat the result count as the full population."),
           birthPlace: stringOrArray().optional()
-            .describe("Place name (vocab + FTS match). Multi-value AND. Resolved by pivot through creator-mapped artworks."),
+            .describe("Place name (vocab + FTS match). Multi-value AND. Resolved by pivoting through the person's creator-mapped artworks. " +
+              "Caveat: the place is an artwork-level attribute, not bound to a specific creator, so on multi-creator works (e.g. prints with designer + engraver + publisher) it leaks to co-creators who were NOT born there. " +
+              "Expect false positives — including 'anonymous'/'unknown' placeholder agents ranked high by output volume — so treat the returned list as approximate, not an authoritative birthplace cohort."),
           deathPlace: stringOrArray().optional()
-            .describe("Place name. Multi-value AND. Resolved by pivot through creator-mapped artworks."),
+            .describe("Place name. Multi-value AND. Resolved by pivoting through the person's creator-mapped artworks. " +
+              "Same caveat as birthPlace: the place is an artwork-level attribute, so on multi-creator works it leaks to co-creators who did not die there. " +
+              "Expect false positives — treat the returned list as approximate, not authoritative."),
           profession: stringOrArray().optional()
-            .describe("Profession (e.g. 'painter', 'engraver'). Multi-value AND. Resolved by pivot through creator-mapped artworks."),
+            .describe("Profession (e.g. 'painter', 'engraver'). Multi-value AND. Resolved by pivoting through the person's creator-mapped artworks. " +
+              "Same caveat as birthPlace: the profession is an artwork-level attribute, so on multi-creator works it leaks to co-creators who do not hold it. " +
+              "Expect false positives — treat the returned list as approximate, not authoritative."),
           hasArtworks: z.preprocess(stripNullCoerceBool, z.boolean().optional().default(true))
             .describe("Restrict to persons appearing as creator on ≥1 artwork. Default true."),
           maxResults: z.number().int().min(1).max(TOOL_LIMITS.search_persons.max).default(TOOL_LIMITS.search_persons.default)
