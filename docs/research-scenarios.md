@@ -45,7 +45,6 @@ The links following each research question show you how the query was answered i
 **How the tools enable it:**
 - `collection_stats` with `dimension: "decade"`, `type: "print"`, `technique: "engraving"` returns the full chronological distribution of engravings — repeat with `technique: "etching"` to compare the two curves
 - Extend to `technique: "mezzotint"`, `"woodcut"`, `"aquatint"` to map the full technical repertoire over time
-- Use `dateMatch: "midpoint"` for non-overlapping decade bins (each artwork counted exactly once)
 - `search_artwork` and `get_artwork_details` on selected works from each technique to examine materials and production context
 
 **Why it matters:** The shift from engraving to etching is a defining transition in European printmaking. Date-wildcard queries make this transition quantifiable at collection scale, and the results reveal whether the Rijksmuseum's holdings reflect the standard chronology or complicate it.
@@ -54,7 +53,7 @@ The links following each research question show you how the query was answered i
 
 ## Subject and Iconographic Search
 
-`search_artwork` includes [40 database-backed filters](search-parameters.md) drawn from a vocabulary database of ~417,000 controlled terms mapped to ~833,000 artworks via ~14.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~29.7K geocoded places, 81% of known places). These enable searches by what is depicted, where it was made, who made it (including life dates, gender, and production roles), what is written on it, what the museum says about it, and how large it is.
+`search_artwork` includes [40 database-backed filters](search-parameters.md) drawn from a vocabulary database of ~417,000 controlled terms mapped to ~833,000 artworks via ~14.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~20.9K geocoded places, 64% of known places). These enable searches by what is depicted, where it was made, who made it (including life dates, gender, and production roles), what is written on it, what the museum says about it, and how large it is.
 
 ### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -76,7 +75,7 @@ The links following each research question show you how the query was answered i
 - `collection_stats` with `dimension: "productionPlace"`, `type: "print"` returns the top print-producing cities ranked by count
 - `collection_stats` with `dimension: "creator"`, `type: "print"`, `productionPlace: "Haarlem"` to identify the key printmakers at each centre — repeat for `"Amsterdam"`, `"Leiden"`, `"Antwerp"`
 - Add `creationDateFrom`/`creationDateTo` to narrow by period
-- Cross-reference with `profession: "printmaker"` and `birthPlace: "Haarlem"` to distinguish artists born in a city from those who merely worked there
+- Use `search_persons` with `profession: "print maker"` and `birthPlace: "Haarlem"` to find printmakers born in the city, then feed a name into `search_artwork({creator})`; compare against `productionPlace: "Haarlem"` (artists who *worked* there) — though birth-place matching is approximate for collaborative prints, where several hands share one plate
 - `search_artwork` to browse specific subsets and `get_artwork_details` for full metadata
 
 **Why it matters:** Haarlem was the dominant centre of printmaking in the late 16th century until Amsterdam overtook it in the 17th. Production-place queries reveal the relative weight of each city in the collection, and comparing the leading printmakers at each centre surfaces secondary figures whose role may have been overlooked.
@@ -105,7 +104,7 @@ The links following each research question show you how the query was answered i
 *Were there standard panel sizes used in Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?* [Link](https://claude.ai/share/51f0d0c8-bb82-4e84-aa7e-22d5eb386fdf)
 
 **How the tools enable it:**
-- `search_artwork` with `type: "painting"`, `material: "panel"`, and dimension ranges (e.g. `minHeight: 40`, `maxHeight: 50`, `minWidth: 30`, `maxWidth: 40`) to find panels of a specific size cluster
+- `search_artwork` with `type: "painting"`, `material: "panel"`, and dimension ranges in centimetres (e.g. `heightRange: "40-50"`, `widthRange: "30-40"`) to find panels of a specific size cluster
 - Compare across size ranges to identify recurring dimensions that suggest standard panel formats
 - `get_artwork_details` on results to check exact measurements, creator, and production context — add `creationDate` to narrow by period (e.g. `17*` for the 17th century)
 
@@ -116,26 +115,23 @@ The links following each research question show you how the query was answered i
 *How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, or state allocation, and when?* [Link](https://claude.ai/share/094cc47e-6381-49ab-a22a-a098254a3945)
 
 **How the tools enable it:**
-- `search_artwork` with `creditLine: "purchase"` and `creator: "Rembrandt"` to find works acquired by purchase — repeat with `"bequest"`, `"gift"`, `"loan"`
+- `search_provenance` with `creditLineQuery: "purchase"` and `creator: "Rembrandt"` to search the credit-line text for an acquisition mode — repeat with `"bequest"`, `"gift"`, `"loan"` (or the Dutch `"aankoop"`, `"legaat"`, `"schenking"`, since credit lines are catalogued in Dutch)
 - `search_provenance` with `creator: "Rembrandt"` for the full parsed ownership chain of each work — filter by `transferType: "sale"` or `"bequest"` to trace specific acquisition modes, or sort by `sortBy: "price"` to rank by transaction value
 - `collection_stats` with `dimension: "transferType"` and `creator: "Rembrandt"` for a single-call distribution of how Rembrandt works changed hands
 - `get_artwork_details` on each for full provenance chain and credit line context
 
-**Why it matters:** The `creditLine` and `provenance` filters enable full-text search across acquisition records (~358,000 credit lines, ~48,000 provenance entries). `search_provenance` goes further with parsed, structured provenance data — searchable by party, transfer type, date, location, and price — making collection history systematically researchable without examining each artwork individually.
+**Why it matters:** The `creditLineQuery` and provenance filters enable full-text search across acquisition records (~360,000 credit lines, ~48,000 provenance entries). `search_provenance` goes further with parsed, structured provenance data — searchable by party, transfer type, date, location, and price — making collection history systematically researchable without examining each artwork individually.
 
-### 9. Women Artists Across Centuries and Media
+### 9. The Most Prolific Women Artists
 
-*What is the representation of women artists in the Rijksmuseum's collection? How does their presence vary across centuries and media — and which women produced the most works in the collection?* [Link](https://claude.ai/share/35fdb5da-37f5-4f74-b34d-143a330669d8)
+*Who are the most prolific women artists in the Rijksmuseum's collection, when were they active, and how do I move from a name to the works themselves?*
 
 **How the tools enable it:**
-- `collection_stats` with `dimension: "type"` and `creatorGender: "female"` returns the full media distribution for women artists in a single call — compare with `creatorGender: "male"` for the ratio
-- `collection_stats` with `dimension: "decade"` and `creatorGender: "female"` to map the distribution over time. Use `dateMatch: "midpoint"` for non-overlapping bins
-- `collection_stats` with `dimension: "creator"` and `creatorGender: "female"`, `type: "painting"` to identify the leading women painters
-- `search_artwork` with `creatorBornAfter: 1800`, `creatorBornBefore: 1900`, `creatorGender: "female"`, `type: "painting"` to focus on 19th-century women painters specifically
-- Combine with `expandPlaceHierarchy: true` and `productionPlace: "Netherlands"` to include works from all Dutch cities
-- `get_artwork_details` on selected works — the `personInfo` on production entries shows birth/death years and biographical notes
+- `search_persons` with `gender: "female"` and `hasArtworks: true` returns every woman with attributed works — over 2,200 of them — ranked by output, led by Jeanne Bieruma Oosting (1,125 works), Eva Pennink-Boelen (766), and Maria Vos (557)
+- Add `bornAfter: 1800` and `bornBefore: 1900` to isolate a generation — some 646 women born in the 19th century — using the life-date fields the person index carries
+- Feed a name into `search_artwork` with `creator: "Bieruma Oosting, Jeanne"` to browse her works, then `get_artwork_details` / `get_artwork_image` on individual pieces
 
-**Why it matters:** The gender filter makes visible a dimension of collection composition that is otherwise buried in individual records. Rather than searching by name for artists the researcher already knows to be women, `creatorGender` reveals the full extent of women's presence — including lesser-known figures whose work may not appear in standard art historical narratives. The century and medium breakdowns expose structural patterns: whether women were more active in certain media, whether their representation grew or shrank over time, and which individuals anchor the collection's holdings.
+**Why it matters:** Gender is a property of the artist, not the artwork, so it lives in the `search_persons` person index rather than as a filter on works. Querying it there surfaces the full population of women artists — including the many the canon overlooks — ranked by how much of the collection they actually account for, and dated so the cohort can be split by generation. An artist's work count reconciles exactly with a `creator` search, giving a clean path from a name in the person index to the works themselves.
 
 ---
 
@@ -154,16 +150,16 @@ The links following each research question show you how the query was answered i
 
 **Why it matters:** Technical metadata — support material, paint type, exact dimensions — frames what the viewer reveals. Knowing a canvas is 363 x 437 cm contextualises the scale of visible brushwork; knowing the inscription text lets the user verify it against the painted surface at full zoom. Direct image inspection by the AI adds a layer of visual analysis that goes beyond metadata alone.
 
-### 11. Comparative Detail Analysis Across Works
+### 11. Disambiguating an Artist Dynasty
 
-*How many paintings by Leiden-born painters versus Haarlem-born painters does the Rijksmuseum hold, and who are the leading artists from each school? Open a representative work from each — a Gerrit Dou and a Frans Hals — for side-by-side examination at high zoom.* [Link](https://claude.ai/share/383f023a-a3b3-449e-bedf-773525ae9c25)
+*The van Mieris family ran a Leiden painting workshop across three generations, several of them sharing the name Frans. Which van Mierises does the Rijksmuseum hold, how do I tell them apart, and can I compare the founder's fijnschilder touch with a son's at high magnification?*
 
 **How the tools enable it:**
-- `search_artwork` with `birthPlace: "Leiden"`, `profession: "painter"`, `type: "painting"`, `compact: true` for a count — repeat with `birthPlace: "Haarlem"`
-- Non-compact searches to identify the principal artists from each city
-- `get_artwork_image` on a Dou and a Hals to open both in the deep-zoom viewer
+- `search_persons` with `name: "van Mieris"` returns the family disambiguated by life dates — Frans the Elder (1635–1681), his sons Jan (1660–1690) and Willem (1662–1747), and grandson Frans the Younger (1689–1763) — each with its own work count
+- Feed a member's exact returned name into `search_artwork` with `creator: "Frans van Mieris (I)"` to retrieve only that hand's works — the count reconciles exactly with the person record — then repeat for each son to assemble the family's output
+- `get_artwork_image` on a panel by the elder — e.g. *The Letter Writer* (SK-A-261) — and one by a son, to open both in the deep-zoom viewer for side-by-side comparison of the fijnschilder surface
 
-**Why it matters:** The `birthPlace` filter identifies artists by geographic origin without requiring the researcher to already know who belongs to which school. The quantitative comparison reveals the relative weight of each school in the collection, and the viewer delivers the images for visual analysis of their contrasting techniques.
+**Why it matters:** A plain creator search collapses an artist dynasty into one ambiguous string — three generations of van Mierises, several named Frans, tangled into a single result. `search_persons` separates them by life dates, so a researcher can pick the exact hand before retrieving any works. The disambiguated name passed back as `creator` returns only that artist's output, and the viewer then supports the close looking that distinguishes a master's touch from his workshop's. This two-step pattern — resolve the person, then query the works — is how the toolset now handles every identity question, since the artist layer lives in `search_persons`.
 
 ### 12. Reading Inscriptions and Examining Details with AI Vision
 
@@ -213,7 +209,7 @@ The links following each research question show you how the query was answered i
 *George Hendrik Breitner worked as a painter, draughtsman, and photographer. Does the timeline of his works in the Rijksmuseum reveal a clear sequence — drawing first, then painting, then photography — or did he work across media simultaneously?* [Link](https://claude.ai/share/9c62f373-2dfc-4a63-bd87-26d376b1cac3)
 
 **How the tools enable it:**
-- `search_artwork` with `profession: "painter"` and `creator: "Breitner"` to confirm his multi-profession classification
+- `collection_stats` with `dimension: "type"` and `creator: "Breitner"` confirms the multi-media practice at a glance — some 700 drawings, 160 photographs, and 50 paintings, alongside prints and studies
 - `search_artwork` with `creator: "George Hendrik Breitner"`, then sort by date
 - `get_artwork_details` on each work to extract medium and technique
 - Plot medium against date: do drawings cluster in the early years, paintings in the middle, photographs at the end — or is the practice mixed throughout?
@@ -224,7 +220,7 @@ The links following each research question show you how the query was answered i
 
 ## Curated Sets
 
-`list_curated_sets` and `browse_set` expose the museum's 192 curatorial groupings — thematic, scholarly, and exhibition-based. These sets encode expert knowledge about how objects relate to each other.
+`list_curated_sets` and `browse_set` expose the museum's 193 curatorial groupings — thematic, scholarly, and exhibition-based. These sets encode expert knowledge about how objects relate to each other.
 
 ### 16. Reconstructing Past Exhibitions
 
@@ -301,7 +297,7 @@ The links following each research question show you how the query was answered i
 **How the tools enable it:**
 - `semantic_search` with `query: "loneliness and isolation in a vast empty space"`
 - The model matches against embedded titles, descriptions, narratives, and inscriptions — a farmhouse described as standing alone in flat terrain, a ship on an empty horizon, a solitary figure in a landscape
-- Filter with `type: "painting"` to focus on paintings if the initial results skew toward works on paper (a known bias — prints and drawings outnumber paintings ~77:1 in the collection)
+- Filter with `type: "painting"` to focus on paintings if the initial results skew toward works on paper (a known bias — prints and drawings outnumber paintings ~87:1 in the collection)
 - Use the source text to assess whether the "loneliness" is in the curatorial interpretation or inferred from sparse descriptions — this distinction matters for research rigour
 
 **Why it matters:** Emotional and atmospheric qualities are not catalogued as metadata. No Iconclass code maps to "loneliness." The `description` and `curatorialNarrative` text filters require exact word matches and won't find synonyms or related concepts. Semantic search bridges this gap — imperfectly, since it depends on what curators have written, but it is often the only available path. The source text grounding makes this limitation transparent.
@@ -333,7 +329,7 @@ The links following each research question show you how the query was answered i
 - `search_provenance` with `transferType: "confiscation"`, `dateFrom: 1933`, `dateTo: 1945`, `excludeTransferType: "restitution"` to find confiscated works that were *never* restituted — the `excludeTransferType` applies artwork-level negation
 - `search_provenance` with `hasGap: true`, `dateFrom: 1933`, `dateTo: 1945` to find works with undocumented periods during the war years — these are red flags for unresolved displacement
 - Each result includes the full provenance chain, so the ownership story before and after the wartime event is immediately visible
-- `collection_stats` with `dimension: "transferType"`, `dateFrom: 1933`, `dateTo: 1945` for a quantitative overview of how artworks changed hands during this period
+- `collection_stats` with `dimension: "transferType"`, `provenanceDateFrom: 1933`, `provenanceDateTo: 1945` for a quantitative overview of how artworks changed hands during this period
 
 **Why it matters:** Provenance research for the period 1933–1945 is a legal and ethical obligation for museums holding works that may have been looted or forcibly sold. The combination of `transferType` filtering, `excludeTransferType` negation, and `hasGap` detection makes it possible to systematically identify works requiring further investigation — confiscated but not restituted, or with undocumented gaps during the critical years. Without structured provenance data, this work requires manually reading each artwork's free-text ownership history.
 
@@ -345,7 +341,7 @@ The links following each research question show you how the query was answered i
 - `search_provenance` with `layer: "periods"`, `acquisitionMethod: "by_descent"`, `minDuration: 80`, `sortBy: "duration"`, `sortOrder: "desc"` to find the longest-held family collections (80+ years approximates four generations)
 - Examine the full chains — look for consecutive `by_descent` events involving the same family name, followed by a `sale` event marking the dispersal
 - `search_provenance` with `transferType: "by_descent"`, `sortBy: "eventCount"`, `sortOrder: "desc"` to find works with the most provenance events of this type — a proxy for the deepest generational chains
-- `collection_stats` with `dimension: "transferType"`, `hasProvenance: true` to see the overall prevalence of `by_descent` transfers (~13,700 events) relative to sales, gifts, and bequests
+- `collection_stats` with `dimension: "transferType"`, `hasProvenance: true` to see the overall prevalence of `by_descent` transfers (~10,600 events) relative to sales, gifts, and bequests
 - For individual cases, `search_provenance` with `objectNumber` retrieves the complete chain to trace the family lineage and the circumstances of eventual sale
 
 **Why it matters:** The history of art collecting is also a history of family wealth and its dispersal. Works that passed through multiple generations by inheritance before reaching the market represent long-lived private collections — their dispersal often marks historical inflection points (economic crises, wars, succession failures). The `by_descent` transfer type and duration-based sorting make these patterns systematically discoverable across the collection.
