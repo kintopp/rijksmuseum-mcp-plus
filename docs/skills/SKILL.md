@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.44"
-  last_updated: "2026-05-29"
+  version: "0.45"
+  last_updated: "2026-05-31"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -156,6 +156,8 @@ The three attribution-scoping filters (`attributionQualifier`, `productionRole`,
 ### `creator` vs `aboutActor` vs `depictedPerson`
 
 Three person-search axes, used for different questions: `creator` (who made it), `depictedPerson` (who is shown in it — strict, depicted only), `aboutActor` (broader cross-field — depicted *or* creator, tolerant of cross-language variants like "Louis XIV" → "Lodewijk XIV"). See each parameter's description for matching rules.
+
+**`creator` accepts a name string or a `vocabId` from `search_persons`.** When you have the `vocabId`, pass it: it resolves to exactly that one person, whereas a name string matches every artist sharing it — distinct artists often share a name (e.g. several "Frans van Mieris"), so a name can silently merge their œuvres while the `vocabId` returns only the person you selected.
 
 **Demographic gating is a two-step pattern.** To find works by women painters born after 1850: first `search_persons(gender="female", profession="painter", bornAfter=1850)` for vocab IDs, then `search_artwork(creator=[id1, id2, …], type="painting")`. Demographic filters (`gender`, `bornAfter`, `bornBefore`) need person enrichment present on the vocab DB — they return zero rows on a freshly harvested DB without enrichment.
 
@@ -478,9 +480,10 @@ Demographic gating is a **two-step pattern** via `search_persons`. There are no 
 ```
 # Step 1 — find the persons matching the demographic profile
 search_persons(gender="female", profession="painter", bornBefore=1800, bornAfter=1700)
-# → returns vocabIds (e.g. "https://id.rijksmuseum.nl/200001234")
+# → returns vocabIds (bare numeric strings, e.g. "210169673")
 
-# Step 2 — fetch their works (creator accepts vocab IDs as well as name strings)
+# Step 2 — fetch their works (creator accepts vocab IDs as well as name strings;
+#          the vocabId is the exact handle — a name can match several same-named artists)
 search_artwork(creator=[vocabId_1, vocabId_2, ...], type="painting", dateMatch="midpoint")
 
 # To compare structurally over time, repeat Step 1 with bornBefore/bornAfter shifted by century
@@ -516,6 +519,7 @@ The tool takes only `objectNumber` and `maxResults` (default 20, max 50, per cha
 | Collection-wide distributions                                          | Use `collection_stats` instead of `compact=true` counting loops. See workflow §1 for the full list of artwork + provenance dimensions and the gender-breakdown pattern.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `search_provenance` data model details                                 | Batch prices, unsold lots, historical currencies, gap flags, parse methods, party coverage, 0-year durations, and `sortBy: "eventCount"` unreliability — see `references/provenance-and-enrichment-patterns.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Canonical artist name forms                                            | Some artists use historical spellings (e.g. "Jheronimus Bosch"). If a known artist returns no results, check the canonical form via `get_artwork_details` on a known work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `creator: "Name"` returns more works than expected                     | A name string matches every artist sharing it (distinct artists often share a name). Resolve the person via `search_persons` and pass its `vocabId` to `creator` instead — it resolves to exactly that one person.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `search_persons` returns 0 rows for a demographic filter               | The `gender`, `bornAfter`, `bornBefore` filters require person enrichment to be present on the vocab DB. On a fresh harvest without enrichment they return zero rows — name-token matching and structural filters (`birthPlace`, `deathPlace`, `profession`) still work.                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `relatedObjects` field on `get_artwork_details`                        | See workflow §7 — scoped to 3 creator-invariant relationships; pairs/sets/recto-verso/reproductions live on `find_similar`'s Related Object column.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Multi-folio works dominate results (sketchbooks, albums, print series) | The Rijksmuseum catalogues sketchbooks/albums/print-series as a parent record plus child records per folio, so a single physical object can fill the first page of results. Use `groupBy: "parent"` on `search_artwork` to collapse children whose parent is also in the result set (the parent gains a `groupedChildCount`). When `groupBy` isn't set, the response's `warnings` field flags clustering (e.g. "8 results are folios/components of BI-1898-1748A"). Affects ~4.6% of artworks (object numbers with parenthetical suffixes).                                                                                                                                                        |
