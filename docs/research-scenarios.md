@@ -368,39 +368,38 @@ The links following each research question show you how the query was answered i
 
 ## Structured Text Search
 
-`search_artwork`'s basic text filters — `title`, `description`, `inscription`, `curatorialNarrative` — each search a single field, treat your words as one literal phrase, and, when you fill in more than one, require every field to match at once. That is enough for most lookups, but it cannot reach questions that turn on *how language is distributed* through a catalogue: the same idea phrased two ways, two words that must stand together, a term whose spelling varies from record to record. The optional `textQuery` parameter turns a small structured request into one ranked search across the four fields. You group conditions into those that must all match, those where any one may match, and those that must not appear; each condition can look for an exact phrase, any of several alternative words (`any`), words that fall close together (`near`), or a word-stem and everything that continues it (`prefix`). The three scenarios below each begin from a research question the basic filters cannot express, grounded in the actual language of the catalogue's three long-form text fields: the Dutch, denotative `description`; the mostly-English, interpretive `curatorialNarrative`; and the literal transcribed `inscription`. These have no worked share links yet — the parameter is newly shipped — but each query runs against the live catalogue today, and the result counts cited below are exact.
+The basic text filters of the `search_artwork` tool — `title`, `description`, `inscription`, `curatorialNarrative` — each search a single field at a time and treat search terms as one literal phrase. That is enough for most searches, but it cannot reach questions that turn on *how language differs* in a catalogue: the same idea phrased two ways, two words that must stand together, a term whose spelling varies from record to record. The three scenarios below each use the `textQuery` parameter to begin from a research question the basic filters cannot express, grounded in the actual language of the catalogue's three long-form text fields: the Dutch, denotative `description`; the mostly-English, interpretive `curatorialNarrative`; and the literal transcribed `inscription`. 
 
 ### 26. The Beeldenstorm in Two Languages
 
-*Where in the collection does the Beeldenstorm — the 1566 wave of iconoclasm — surface in the catalogue? A cataloguer will have recorded it in Dutch as "beeldenstorm" in the object description and in English as "iconoclasm" in the wall text. Exclude later history prints that merely depict the event as a subject.*
+*Where in the collection does the Beeldenstorm — the 1566 wave of iconoclasm — surface in the catalogue's own words? A Dutch cataloguer may have named it "beeldenstorm" in the object description, or an English curator may have framed it as "iconoclasm" in the wall text. Find every work the catalogue text ties to the event, in either language.*
 
 **How the tools enable it:**
 - A `textQuery` with cross-column *either/or* logic — match `"beeldenstorm"` in the Dutch `description` **OR** `"iconoclasm"`/`"iconoclastic"` in the English `curatorialNarrative`:
   ```jsonc
   textQuery: {
     should: [ { field: "description",        phrase: "beeldenstorm" },
-              { field: "curatorialNarrative", any: ["iconoclasm", "iconoclastic"] } ],
-    mustNot: [ { field: "title", phrase: "geschiedenis" } ]   // strip history-print series
+              { field: "curatorialNarrative", any: ["iconoclasm", "iconoclastic"] } ]
   }
   ```
-- Combine with structured filters (`type: "painting"`, `creationDate: "16*"`) to scope the period
+- Optionally add `type` or `creationDate` to see how the treatment splits — the bulk are later prints depicting the 1566 events, alongside a handful of paintings and drawings
 - `get_artwork_details` on the results to read the full description or narrative that triggered the match
 
-**Why it matters:** Because the Dutch descriptions and the English narratives record the event in different words, `description: beeldenstorm` and `curatorialNarrative: iconoclasm` label almost entirely different works — and a basic search can only return the few that match both at once, never the full set that matches either. Searching the two fields as alternatives recovers the whole: the 53 works the event touches across both, in one query that also sets aside the *geschiedenis* history-print series. Otherwise the choice of search language silently decides which half of the holding a researcher ever sees.
+**Why it matters:** Because the Dutch descriptions and the English narratives record the event in different words, `description: beeldenstorm` and `curatorialNarrative: iconoclasm` label almost entirely different works — and a basic search can only return the few that match both at once, never the full set that matches either. Searching the two fields as alternatives recovers the full set. Otherwise the choice of search language silently decides which half of the holding a researcher ever sees.
 
-### 27. Signed and Dated: A Cohort for Authentication Studies
+### 27. Reuniting Pendant Portraits
 
-*Which paintings does the Rijksmuseum describe as both signed and dated together — the cataloguer's strongest statement of autograph authenticity — and how does that cohort distribute across the 16th and 17th centuries?*
+*Dutch portraits were often painted as pendants — companion pieces made and hung as a pair, the husband on one panel and his wife on its mate — but such pairs were frequently split between heirs, dealers, and collections. Which works does the Rijksmuseum catalogue as pendant portraits, and do the descriptions name the other half?*
 
 **How the tools enable it:**
-- A `textQuery` proximity clause requiring the Dutch terms `gesigneerd` (signed) and `gedateerd` (dated) within a few words of each other in the `description`:
+- A `textQuery` proximity clause requiring the Dutch terms `pendant` and `portret` within a few words of each other in the `description`:
   ```jsonc
-  textQuery: { field: "description", near: { terms: ["gesigneerd", "gedateerd"], distance: 4 } }
+  textQuery: { field: "description", near: { terms: ["pendant", "portret"], distance: 5 } }
   ```
-- Compose with `type: "painting"` and `creationDate: "16*"` / `"17*"` to turn the linguistic pattern into a dated cohort
-- `get_artwork_details` on results to read the exact wording — e.g. *"Zelfbewust dateerde en signeerde Catharina van Hemessen dit portret… 'Catherina de Hemessen pinxit 1548'"*
+- `get_artwork_details` on the results to read the description — many name the companion outright (*"Pendant van SK-A-963"*) or identify the spouse (*"echtgenote van…"*)
+- Retrieve the cross-referenced object number to pull up the surviving other half and compare the pair
 
-**Why it matters:** A description noting a signature in one clause and a date in another is not the evidence that *gesigneerd en gedateerd* in a single breath provides — yet an ordinary keyword search cannot tell the two apart. Only a search for the two words *close together* can: requiring them within a few words of each other isolates the 268 paintings catalogued as signed-and-dated as one act, where neither the vocabulary filters (which do not search the descriptive text at all) nor `semantic_search` (which weighs meaning, not how close two words sit) can substitute. Adding `creationDate` then distributes that cohort across the 16th and 17th centuries.
+**Why it matters:** Companion portraits were conceived as a pair, yet pairs were routinely divided between heirs and sales, so reuniting them is a standard task of portrait scholarship — and the catalogue often records the link in prose, naming the partner panel or the spouse it depicts. The difficulty is that *pendant* is ambiguous: on its own it returns over 1,200 works, most of them hanging jewels, frames, and furniture. Only its nearness to *portret* pulls the companion-piece sense — isolating the 73 genuine pendant-portrait statements, most of them 16th- and 17th-century paintings and prints, from the 419 descriptions where the two words merely co-occur somewhere. An ordinary keyword search cannot draw that line; proximity can.
 
 ### 28. The Division of Labour on the Printed Plate
 
@@ -419,4 +418,4 @@ The links following each research question show you how the query was answered i
 - Drop the publisher clause to widen the net to any designer-plus-engraver pair
 - `get_artwork_details` on results to read the literal inscription — e.g. *"GvBreen sculptor et excudit"* (engraver and publisher in one), or *"Joan Blommendaal Inventor … Philib. Bouttats Sculpt. et Excudit Amstelo:"*
 
-**Why it matters:** The structured `productionRole` filter is only a simplified summary of the inscription: it reduces the inscribed Latin to a few English labels, is filled in only where a cataloguer matched a role to a named person, and — decisively — cannot capture two roles falling to one person on a single plate, the engraver who published his own work. Searching the inscription itself consults the source rather than that summary. Because each role is written many ways — abbreviated to fit the margin, or as verb or noun — an exact search for *sculpsit* finds a fraction of what the word-stem `sculp*` does, which also gathers *sculptor* and *Sculpt.*; requiring all three roles at once then holds the cohort to the 46 prints documenting the full chain. The cost is a wider net — `inven*` also catches stray *inventaris* notes — which is why the design role cannot define the set alone.
+**Why it matters:** The structured `productionRole` filter is only a simplified summary of the inscription: it reduces the inscribed Latin to a few English labels, is filled in only where a cataloguer matched a role to a named person, and cannot capture two roles falling to one person on a single plate (an engraver who published his own work). Searching the inscription itself consults the source rather than that summary. Because each role can be written many ways an exact search for *sculpsit* finds a fraction of what the word-stem `sculp*` does, which also gathers *sculptor* and *Sculpt.*; requiring all three roles binds the cohort to the 46 prints documenting the full chain. 

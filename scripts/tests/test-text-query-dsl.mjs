@@ -134,9 +134,8 @@ if (fs.existsSync(DB_PATH)) {
       { field: "description", phrase: "beeldenstorm" },
       { field: "curatorialNarrative", any: ["iconoclasm", "iconoclastic"] },
     ],
-    mustNot: [{ field: "title", phrase: "geschiedenis" }],
   });
-  assert.equal(count(m26), 53, "scenario 26 live count");
+  assert.equal(count(m26), 54, "scenario 26 live count");
 
   const m28 = ok({
     must: [
@@ -147,8 +146,8 @@ if (fs.existsSync(DB_PATH)) {
   });
   assert.equal(count(m28), 46, "scenario 28 live count");
 
-  const m27 = ok({ must: [{ field: "description", near: { terms: ["gesigneerd", "gedateerd"], distance: 4 } }] });
-  assert.equal(count(m27), 268, "scenario 27 live count");
+  const m27 = ok({ must: [{ field: "description", near: { terms: ["pendant", "portret"], distance: 5 } }] });
+  assert.equal(count(m27), 73, "scenario 27 live count");
 
   // Injection string must execute safely (no SQLITE_ERROR) and not over-match.
   assert.doesNotThrow(() => count(inj), "injection string executes safely");
