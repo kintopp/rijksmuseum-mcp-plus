@@ -73,7 +73,7 @@ Nearly all categories have corresponding search parameters in `search_artwork` �
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
 | 28 | **Web page** | `webPage` | URL of the artwork's page on the Rijksmuseum website (derived from the object number). |
-| 29 | **License** | `license` | Rights/license URI (e.g. CC0 1.0, Public Domain Mark) from the `rights_lookup` table. Also searchable via `search_artwork`'s `license` filter. |
+| 29 | **License** | `license` | Rights/license URI (e.g. CC0 1.0, Public Domain Mark) from the `rights_lookup` table. Not a standalone search filter; returned on each result, and available as the `rights` dimension via `search_artwork`'s `facets` parameter (e.g. `facets: ["rights"]`) for a license breakdown of a result set. |
 
 ## Related Works
 
@@ -88,7 +88,7 @@ Nearly all categories have corresponding search parameters in `search_artwork` �
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
 | 33 | **Record created** | `recordCreated` | ISO 8601 timestamp of catalogue record creation. |
-| 34 | **Record modified** | `recordModified` | ISO 8601 timestamp of the catalogue record's most recent modification. Also searchable via `search_artwork`'s `modifiedAfter` / `modifiedBefore` filters. |
+| 34 | **Record modified** | `recordModified` | ISO 8601 timestamp of the catalogue record's most recent modification. Not a range filter; order a result set by it with `search_artwork`'s `sort: 'recordModified:desc'`, or use `get_recent_changes` to list recently modified records. |
 
 ---
 #### Search-only filters
@@ -102,7 +102,6 @@ Note: The following `search_artwork` filters are searchable but have **no corres
 | `hasProvenance` | Boolean — restrict to artworks with provenance records |
 | `imageAvailable` | Boolean — restrict to artworks with a digital image |
 | `expandPlaceHierarchy` | Boolean — expand place filters to include sub-places |
-| `modifiedAfter` / `modifiedBefore` | Date-based change filters (corresponds to the `recordModified` field on the response) |
 
 Demographic person filters (gender, birth/death year, birth/death place, profession) live on the separate [`search_persons`](mcp-tool-parameters.md#search_persons) tool — feed the returned vocab IDs into `search_artwork({creator})`.
 

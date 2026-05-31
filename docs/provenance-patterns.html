@@ -265,9 +265,11 @@ search_provenance(layer="periods", ownerName="Six",
                   sortBy="duration", sortOrder="desc", maxResults=20)</code></pre>
 
 <h3>Acquisition channel analysis</h3>
-<pre><code># creditLine covers ~358K artworks — far more than parsed provenance (~48K)
-search_artwork(creditLine="Drucker-Fraser", compact=true)
-search_artwork(creditLine="Vereniging Rembrandt", type="painting", compact=true)</code></pre>
+<pre><code># creditLineQuery searches the credit-line field of artworks that have NO parsed provenance
+# Standalone fallback mode: all other filters (type, creator, …) are ignored
+search_provenance(creditLineQuery="Drucker-Fraser")
+search_provenance(creditLineQuery="Vereniging Rembrandt")
+# Matches return in creditLineResults (not results) — unstructured, lower-confidence source</code></pre>
 
 <h3>Wartime provenance</h3>
 <pre><code># Anti-join: confiscated but never restituted

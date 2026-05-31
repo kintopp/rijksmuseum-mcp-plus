@@ -115,12 +115,12 @@ The links following each research question show you how the query was answered i
 *How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, or state allocation, and when?* [Link](https://claude.ai/share/094cc47e-6381-49ab-a22a-a098254a3945)
 
 **How the tools enable it:**
-- `search_provenance` with `creditLineQuery: "purchase"` and `creator: "Rembrandt"` to search the credit-line text for an acquisition mode — repeat with `"bequest"`, `"gift"`, `"loan"` (or the Dutch `"aankoop"`, `"legaat"`, `"schenking"`, since credit lines are catalogued in Dutch)
-- `search_provenance` with `creator: "Rembrandt"` for the full parsed ownership chain of each work — filter by `transferType: "sale"` or `"bequest"` to trace specific acquisition modes, or sort by `sortBy: "price"` to rank by transaction value
+- `search_provenance` with `creator: "Rembrandt"` for the full parsed ownership chain of each work — filter by `transferType: "sale"` or `"bequest"` to trace specific acquisition modes, or sort by `sortBy: "price"` to rank by transaction value. This is where creator scoping holds, so make it the primary call
+- `search_provenance` with `creditLineQuery: "purchase"` (repeat with `"bequest"`, `"gift"`, `"loan"`, or the Dutch `"aankoop"`, `"legaat"`, `"schenking"`, since credit lines are catalogued in Dutch) as a fallback for works lacking parsed provenance. Note: `creditLineQuery` is a standalone mode — it ignores `creator` and every other filter and returns collection-wide credit-line matches in `creditLineResults`, so scope to Rembrandt in the separate structured call above and intersect client-side rather than passing `creator` here
 - `collection_stats` with `dimension: "transferType"` and `creator: "Rembrandt"` for a single-call distribution of how Rembrandt works changed hands
 - `get_artwork_details` on each for full provenance chain and credit line context
 
-**Why it matters:** The `creditLineQuery` and provenance filters enable full-text search across acquisition records (~360,000 credit lines, ~48,000 provenance entries). `search_provenance` goes further with parsed, structured provenance data — searchable by party, transfer type, date, location, and price — making collection history systematically researchable without examining each artwork individually.
+**Why it matters:** Acquisition history that would otherwise mean reading each catalogue entry by hand becomes a few searches. The parsed provenance records (~48,000 artworks) trace how works changed hands — by owner, transfer type, date, place, and price — while the credit-line text reaches a further ~360,000 works whose acquisition is noted only in the museum's acknowledgement line.
 
 ### 9. The Most Prolific Women Artists
 

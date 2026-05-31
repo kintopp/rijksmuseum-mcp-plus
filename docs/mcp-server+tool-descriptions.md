@@ -137,7 +137,9 @@ Every record carries provenance-of-provenance metadata: parseMethod shows how th
 
 IMPORTANT: When results contain LLM-enriched records, the response text ends with a REVIEW_URL or REVIEW_FILE line. You MUST copy this URL or file path verbatim into your response as a clickable link or openable path. Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). The user cannot see tool output — if you do not include the path, they have no way to find the review page.
 
-Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable. For the last link in the chain — how the Rijksmuseum acquired it (donor, fund, bequest) — also check search_artwork's creditLine parameter. CreditLine covers ~358K artworks (vs ~48K with provenance) and often names donors or funds absent from the provenance chain (e.g. 'Drucker-Fraser', 'Vereniging Rembrandt'). At least one filter is required.
+Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable. At least one filter is required.
+
+FALLBACK — creditLineQuery: only ~48K artworks have parsed provenance, but many more carry an unstructured credit-line field (acquisition/funding statements like 'Drucker-Fraser' or 'Vereniging Rembrandt'). Use creditLineQuery as a SECOND step: run a normal structured search first; if the relevant artworks turn out to have no parsed provenance, offer to extend the search with creditLineQuery. It runs a standalone free-text search over credit lines of artworks lacking parsed provenance, returns matches in creditLineResults (not results), and ignores all other filters. Credit-line data is a weaker, less reliable source (the museum's terminal acquisition channel, not prior ownership) — when you present these results you MUST tell the user the answer derives from unstructured credit-line text, not structured provenance.
 
 ### 13. `collection_stats`
 

@@ -10,4 +10,4 @@
 
 276 artworks have no license designation.
 
-**Usage:** `search_artwork` with `license: "publicdomain"`, `license: "zero"`, or `license: "InC"`. Matches against the rights URI substring.
+**Usage:** License is not a `search_artwork` filter. The value (`publicdomain`, `zero`, or `InC`) is returned as the `license` field on each `search_artwork` / `get_artwork_details` result. For a license breakdown of a result set, request the `rights` dimension via `search_artwork`'s `facets` parameter (e.g. `facets: ["rights"]`).
