@@ -28,24 +28,35 @@ from pathlib import Path
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 
+# Canonical display order only. Existence is derived from the data via
+# ordered_tools() so a tool added/renamed in registration.ts is never
+# silently dropped from the tables (see 132-vs-102 reconciliation).
 TOOL_ORDER = [
     "search_artwork",
+    "semantic_search",
     "search_provenance",
+    "search_persons",
+    "collection_stats",
+    "get_artwork_details",
+    "find_similar",
+    "browse_set",
+    "list_curated_sets",
+    "get_recent_changes",
     "inspect_artwork_image",
     "get_artwork_image",
     "navigate_viewer",
-    "list_curated_sets",
-    "get_artwork_details",
-    "lookup_iconclass",
-    "semantic_search",
-    "find_similar",
-    "get_artist_timeline",
-    "browse_set",
-    "get_recent_changes",
-    "get_artwork_bibliography",
-    "open_in_browser",
+    "remount_viewer",
     "poll_viewer_commands",
 ]
+
+
+def ordered_tools(calls):
+    """Tools to iterate for per-tool tables: TOOL_ORDER first (canonical
+    order), then any tool present in the data but missing from TOOL_ORDER,
+    sorted and appended. Guarantees the tables cover every logged tool even
+    if TOOL_ORDER drifts out of sync with the deployed tool set."""
+    extra = sorted({c["tool"] for c in calls} - set(TOOL_ORDER))
+    return list(TOOL_ORDER) + extra
 
 SESSION_GAP_MINUTES = 30
 PERIOD_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
@@ -263,6 +274,32 @@ def fmt_dur(td):
     return f"{s // 60}m {s % 60}s"
 
 
+def _fmt_text_query(tq):
+    """One-line summary of a search_artwork textQuery DSL object: the FTS
+    field(s) involved plus a few sample terms. The field list is the key
+    diagnostic — an FTS field combined with a broad vocab filter is the
+    pathology that drives multi-minute hangs."""
+    if not isinstance(tq, dict):
+        return f"textQuery:{json.dumps(tq)[:40]}"
+    fields, terms = [], []
+    for bucket in ("must", "should", "mustNot"):
+        for clause in tq.get(bucket) or []:
+            if not isinstance(clause, dict):
+                continue
+            fld = clause.get("field")
+            if fld and fld not in fields:
+                fields.append(fld)
+            for k in ("anyPrefix", "all", "any", "phrase"):
+                v = clause.get(k)
+                if isinstance(v, list):
+                    terms.extend(str(t) for t in v)
+                elif isinstance(v, str):
+                    terms.append(v)
+    head = "/".join(fields) if fields else "?"
+    sample = " ".join(terms[:4]) + (" …" if len(terms) > 4 else "")
+    return f"textQuery({head}: {sample})" if sample else f"textQuery({head})"
+
+
 def summarize_input(c):
     """Concise human-readable summary of a tool call's input."""
     inp, tool = c["input"], c["tool"]
@@ -280,6 +317,8 @@ def summarize_input(c):
         for key in SEARCH_KEYS:
             if key in inp:
                 parts.append(f'{key}:"{inp[key]}"')
+        if "textQuery" in inp:
+            parts.append(_fmt_text_query(inp["textQuery"]))
         if inp.get("compact"):
             parts.append("compact")
         if inp.get("maxResults", 25) != 25:
@@ -362,7 +401,7 @@ def section_1(calls, sessions):
     out.append("| Tool | Calls | Errors | Min ms | Median ms | Max ms |")
     out.append("|------|-------|--------|--------|-----------|--------|")
     total_calls = total_errors = 0
-    for tool in TOOL_ORDER:
+    for tool in ordered_tools(calls):
         tc = [c for c in calls if c["tool"] == tool]
         if not tc:
             continue
@@ -399,7 +438,7 @@ def section_2(calls, startup_events):
     out.append("### Latency Percentiles\n")
     out.append("| Tool | p50 | p90 | p99 | Max | Count |")
     out.append("|------|-----|-----|-----|-----|-------|")
-    for tool in TOOL_ORDER:
+    for tool in ordered_tools(calls):
         ms = [c["ms"] for c in calls if c["tool"] == tool]
         if not ms:
             continue
@@ -1017,7 +1056,7 @@ def section_appendix(calls, logs, sessions):
     out.append("")
     out.append("Tool call distribution:")
     tool_counts = Counter(c["tool"] for c in calls)
-    for tool in TOOL_ORDER:
+    for tool in ordered_tools(calls):
         if tool in tool_counts:
             p = 100 * tool_counts[tool] / len(calls)
             out.append(f"  {tool_counts[tool]:>5} {tool:<30s} ({p:.1f}%)")

@@ -84,13 +84,34 @@ if [[ "$SKIP_FETCH" == false ]]; then
   echo "Found $DEPLOY_COUNT deployments." >&2
 
   > "$LOGFILE"  # truncate
+  ERRTMP=$(mktemp)
+  FETCH_OK=0; FETCH_EMPTY=0; FETCH_FAILED=0
+  # railway logs is flaky/rate-limited; a transient "Failed to fetch" must not
+  # be swallowed as if the deployment had no logs (silent under-collection).
   for id in $DEPLOYMENTS; do
     echo "  Fetching $id..." >&2
-    railway logs "$id" --json -n "$LINES" 2>/dev/null >> "$LOGFILE" || true
+    BEFORE=$(wc -l < "$LOGFILE")
+    if railway logs "$id" --json -n "$LINES" 2>"$ERRTMP" >> "$LOGFILE"; then RC=0; else RC=$?; fi
+    AFTER=$(wc -l < "$LOGFILE")
+    if [[ $RC -ne 0 ]] || grep -qiE 'failed to fetch|error sending request|error in limit|rate.?limit|unauthorized|too many' "$ERRTMP"; then
+      FETCH_FAILED=$((FETCH_FAILED + 1))
+      MSG=$(grep -iE 'failed to fetch|error sending request|error in limit|rate.?limit|unauthorized|too many' "$ERRTMP" | head -1)
+      echo "    ⚠ fetch failed (rc=$RC)${MSG:+: ${MSG:0:90}}" >&2
+    elif [[ "$AFTER" -eq "$BEFORE" ]]; then
+      FETCH_EMPTY=$((FETCH_EMPTY + 1))
+    else
+      FETCH_OK=$((FETCH_OK + 1))
+    fi
   done
+  rm -f "$ERRTMP"
 
   TOTAL_LINES=$(wc -l < "$LOGFILE" | tr -d ' ')
-  echo "Collected $TOTAL_LINES log lines → $LOGFILE" >&2
+  echo "Collected $TOTAL_LINES log lines from $FETCH_OK deployment(s) → $LOGFILE" >&2
+  [[ "$FETCH_EMPTY" -gt 0 ]] && echo "  $FETCH_EMPTY deployment(s) returned no logs (short-lived/superseded — expected)." >&2
+  if [[ "$FETCH_FAILED" -gt 0 ]]; then
+    echo "  ⚠ $FETCH_FAILED deployment fetch(es) FAILED (transient/rate-limit/-n cap)." >&2
+    echo "    Coverage may be incomplete — re-run to fill gaps, and keep --lines below ~5000 (Railway rejects large -n)." >&2
+  fi
 else
   if [[ ! -f "$LOGFILE" ]]; then
     echo "Error: --skip-fetch but $LOGFILE not found." >&2
