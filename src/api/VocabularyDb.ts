@@ -4520,7 +4520,20 @@ export class VocabularyDb {
       return emptyResult(warnings);
     }
 
-    const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
+    // When an FTS MATCH claims the rank JOIN, it must drive the query: its match
+    // set is tiny next to a broad vocab filter (e.g. type:"print" spans ~422K
+    // artworks). With bound parameters the planner otherwise pivots to the vocab
+    // LIST SUBQUERY as the outer loop — searching `a` by idx_artworks_art_id and
+    // probing the FTS once per artwork — a multi-minute hang. A unary plus strips
+    // index-usability from the outer `a.art_id IN (…)` vocab/geo conditions so the
+    // planner can't drive from them, forcing FTS to lead (mirrors the +m.field_id
+    // idiom). Secondary `a.rowid IN (FTS …)` text filters are naturally selective
+    // and left alone. Only applied with an FTS join — for a plain vocab search the
+    // art_id index is the correct driver.
+    const effectiveConditions = ftsJoinClause
+      ? conditions.map((c) => (c.startsWith("a.art_id IN (") ? `+${c}` : c))
+      : conditions;
+    const where = effectiveConditions.length > 0 ? effectiveConditions.join(" AND ") : "1";
     const limit = Math.min(effective.maxResults ?? 25, INTERNAL_MAX_RESULTS_CAP);
     const userOffset = effective.offset ?? 0;
 
@@ -4657,7 +4670,7 @@ export class VocabularyDb {
         );
       }
       if (requested.size > 0) {
-        facets = this.computeFacets(conditions, bindings, ftsJoinClause, ftsJoinBinding, requested, effective.facetLimit);
+        facets = this.computeFacets(effectiveConditions, bindings, ftsJoinClause, ftsJoinBinding, requested, effective.facetLimit);
         if (Object.keys(facets).length === 0) facets = undefined;
       }
     }

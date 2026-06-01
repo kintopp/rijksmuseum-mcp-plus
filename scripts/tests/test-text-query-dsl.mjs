@@ -152,7 +152,32 @@ if (fs.existsSync(DB_PATH)) {
   // Injection string must execute safely (no SQLITE_ERROR) and not over-match.
   assert.doesNotThrow(() => count(inj), "injection string executes safely");
   db.close();
-  console.log("live-DB smoke: 4 checks passed");
+
+  // Regression: a textQuery combined with a broad vocab filter must let the FTS
+  // drive the join. type:"print" spans ~422K artworks; with bound parameters the
+  // planner otherwise pivots to that list as the outer loop and probes the FTS per
+  // row — a multi-minute hang. The +a.art_id guard in searchInternal forces FTS to
+  // lead. We run scenario 28's textQuery (the reported case) through the real
+  // search() path and assert it both returns and completes promptly.
+  const { VocabularyDb } = await import("../../dist/api/VocabularyDb.js");
+  const vdb = new VocabularyDb();
+  const t0 = Date.now();
+  const res = vdb.search({
+    maxResults: 50,
+    type: "print",
+    textQuery: {
+      must: [
+        { field: "inscription", anyPrefix: ["inven", "delineav"] },
+        { field: "inscription", anyPrefix: ["sculp", "incid"], any: ["fecit"] },
+        { field: "inscription", prefix: "excud" },
+      ],
+    },
+  });
+  const elapsed = Date.now() - t0;
+  assert.ok(res.results.length > 0, "textQuery + type:print returns results");
+  assert.ok(elapsed < 10000, `textQuery + type:print completes promptly (was ${elapsed}ms — planner pivoted to the vocab list?)`);
+
+  console.log(`live-DB smoke: 5 checks passed (search() with textQuery + type:print: ${elapsed}ms)`);
 } else {
   console.log(`live-DB smoke: SKIPPED (${DB_PATH} not present)`);
 }
