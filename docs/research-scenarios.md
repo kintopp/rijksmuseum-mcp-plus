@@ -368,16 +368,10 @@ The basic text filters of the `search_artwork` tool — `title`, `description`, 
 
 ### 26. The Beeldenstorm in Two Languages
 
-*Where in the collection does the Beeldenstorm — the 1566 wave of iconoclasm — surface in the catalogue's own words? A Dutch cataloguer may have named it "beeldenstorm" in the object description, or an English curator may have framed it as "iconoclasm" in the wall text. Find every work the catalogue text ties to the event, in either language.*
+*Where in the Rijksmuseum's collection does the Beeldenstorm surface in the catalogue's own words? A cataloguer may have named it "beeldenstorm" in the Dutch object description, or a curator may have framed it in English as "iconoclasm" in the wall text. Find every work the catalogue text ties to the event, in either language.*
 
 **How the tools enable it:**
-- A `textQuery` with cross-column *either/or* logic — match `"beeldenstorm"` in the Dutch `description` **OR** `"iconoclasm"`/`"iconoclastic"` in the English `curatorialNarrative`:
-  ```jsonc
-  textQuery: {
-    should: [ { field: "description",        phrase: "beeldenstorm" },
-              { field: "curatorialNarrative", any: ["iconoclasm", "iconoclastic"] } ]
-  }
-  ```
+- A `textQuery` with cross-column *either/or* logic — match `"beeldenstorm"` in the Dutch `description` **OR** `"iconoclasm"`/`"iconoclastic"` in the English `curatorialNarrative`
 - Optionally add `type` or `creationDate` to see how the treatment splits — the bulk are later prints depicting the 1566 events, alongside a handful of paintings and drawings
 - `get_artwork_details` on the results to read the full description or narrative that triggered the match
 
@@ -388,10 +382,7 @@ The basic text filters of the `search_artwork` tool — `title`, `description`, 
 *Dutch portraits were often painted as pendants — companion pieces made and hung as a pair, the husband on one panel and his wife on its mate — but such pairs were frequently split between heirs, dealers, and collections. Which works does the Rijksmuseum catalogue as pendant portraits, and do the descriptions name the other half?*
 
 **How the tools enable it:**
-- A `textQuery` proximity clause requiring the Dutch terms `pendant` and `portret` within a few words of each other in the `description`:
-  ```jsonc
-  textQuery: { field: "description", near: { terms: ["pendant", "portret"], distance: 5 } }
-  ```
+- A `textQuery` proximity clause requiring the Dutch terms `pendant` and `portret` within a few words of each other in the `description`
 - `get_artwork_details` on the results to read the description — many name the companion outright (*"Pendant van SK-A-963"*) or identify the spouse (*"echtgenote van…"*)
 - Retrieve the cross-referenced object number to pull up the surviving other half and compare the pair
 
@@ -402,15 +393,7 @@ The basic text filters of the `search_artwork` tool — `title`, `description`, 
 *Dutch and Flemish prints record their production chain directly on the plate, in Latin: who designed the composition (`invenit`/`inventor`), who engraved it (`sculpsit`/`fecit`/`incidit`), and who published it (`excudit`). Find prints whose inscription documents all three — and list those cases where one person did two jobs, such as the engraver who was also his own publisher.*
 
 **How the tools enable it:**
-- A `textQuery` over the `inscription` field combining prefix matching (to absorb the abbreviated and agent-noun variants) with within-field OR and a multi-clause AND:
-  ```jsonc
-  textQuery: {
-    field: "inscription",
-    must: [ { anyPrefix: ["inven", "delineav"] },            // designer: invenit / inventor / inven. / delineavit
-            { anyPrefix: ["sculp", "incid"], any: ["fecit"] }, // engraver: sculpsit / sculptor / Sculpt. / incidit / fecit
-            { prefix: "excud" } ]                             // publisher: excudit / excud. / exc.
-  }
-  ```
+- A `textQuery` over the `inscription` field combining prefix matching (to absorb the abbreviated and agent-noun variants) with within-field OR and a multi-clause AND
 - Drop the publisher clause to widen the net to any designer-plus-engraver pair
 - `get_artwork_details` on results to read the literal inscription — e.g. *"GvBreen sculptor et excudit"* (engraver and publisher in one), or *"Joan Blommendaal Inventor … Philib. Bouttats Sculpt. et Excudit Amstelo:"*
 
