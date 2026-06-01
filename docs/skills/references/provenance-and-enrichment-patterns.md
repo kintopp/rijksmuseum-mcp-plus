@@ -143,9 +143,9 @@ Dates use qualified single years with temporal bounds, similar to the **EDTF
 
 Prices are stored in their original historical currency — no inflation
 adjustment or cross-currency conversion is performed. Currency values observed
-in the data: `guilders`, `pounds`, `francs`, `livres`, `napoléons`, `guineas`,
-`belgian_francs`, `deutschmarks`, `reichsmarks`, `swiss_francs`, `euros`,
-`dollars`, `yen`, `marks`. Pre-decimal notations (£.s.d, fl. X:Y:-) are
+in the data: `guilders`, `pounds`, `francs`, `livres`, `napoléons`, `louis_d_or`,
+`guineas`, `belgian_francs`, `deutschmarks`, `reichsmarks`, `swiss_francs`,
+`euros`, `dollars`, `yen`, `marks`. Pre-decimal notations (£.s.d, fl. X:Y:-) are
 converted to decimal equivalents of the base currency unit.
 
 Note on batch prices: *en bloc* prices (a batch sold together, e.g. the

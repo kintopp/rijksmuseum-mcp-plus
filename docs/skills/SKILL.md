@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.46"
-  last_updated: "2026-05-31"
+  version: "0.47"
+  last_updated: "2026-06-01"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -88,7 +88,7 @@ distinguish objects *from* Asia versus European images *of* Asia.
 ### `subject` vs `iconclass`
 
 - `subject`: morphological stemming against the subject vocabulary (Iconclass-aligned classifications and depicted-subject labels — a six-figure pool of bilingual terms; English coverage is strongest); best first pass; try natural phrases ("winter landscape", "vanitas", "civic guard")
-- `iconclass`: the Iconclass classification system — a large notation set across 13 languages. A retrieval tool, not a descriptive language: a notation's meaning comes from its position in the hierarchy, not just its label. Use the **Iconclass server** (`search`, `browse`, `resolve`, `expand_keys`, `search_prefix`) to discover notation codes by keyword, concept, or hierarchy navigation — see its SKILL file for full workflows and query patterns. Each result includes collection counts signalling how many artworks carry that notation. Pass the code to `search_artwork`'s `iconclass` parameter for precise filtering.
+- `iconclass`: the Iconclass classification system — a large notation set across 13 languages. A retrieval tool, not a descriptive language: a notation's meaning comes from its position in the hierarchy, not just its label. Use the **Iconclass server** (`search`, `browse`, `resolve`, `expand_keys`, `search_prefix`, `find_artworks`) to discover notation codes by keyword, concept, or hierarchy navigation — see its SKILL file for full workflows and query patterns. Each `search` result's `collections` array lists which loaded collections hold artworks for that notation — a presence signal, not a count; for exact per-collection artwork counts, hand the notation to `find_artworks`. Pass the code to `search_artwork`'s `iconclass` parameter for precise filtering.
 
 **Decision rule:** start with `subject` — it's faster and handles most queries well. Switch to `iconclass` when:
 
@@ -116,7 +116,7 @@ The three attribution-scoping filters (`attributionQualifier`, `productionRole`,
 
 **Default attribution scope for named-artist queries.** For vague queries about a named artist's work ("show me Rembrandts", "Rembrandt's paintings"), narrow with `creator: "X"` + `productionRole: "<making-role>"` + `sameRowMatching: true` (plus `type` if known). Making-role values: `"painter"` for paintings, `"draughtsman"` for drawings, `"print maker"` for prints (the canonical label has a space — not `"printmaker"` or `"etcher"`). Without `sameRowMatching: true`, the role filter matches independently of the creator, and reproductive prints/photographs catalogued under the master's name surface alongside autograph works. Tell the user which production-role scope you applied so they can widen it explicitly.
 
-**`creator + attributionQualifier` enforces same-row matching automatically** for the 11 connoisseurship qualifiers (`after`, `attributed to`, `workshop of`, `circle of`, `manner of`, `follower of`, `copyist of`, `possibly`, `free-form`, `falsification`). A work matches only when the named creator's *own* production row carries the qualifier, so `creator: "Rembrandt van Rijn" + attributionQualifier: "follower of"` returns just the follower-of-Rembrandt subset (not all follower-of-anyone works). The three priority-level qualifiers (`primary`, `secondary`, `undetermined`) are an exception — they're row-level priority markers, not attributions, so the server emits a warning and falls back to artwork-level (independent) matching when combined with `creator`. For autograph queries, use `productionRole + sameRowMatching: true` (above) rather than `attributionQualifier: "primary"`. **For the user phrasing "after X", prefer the `productionRole` row in the table below**: `attributionQualifier: "after"` also catches works where X is both source and maker (e.g. autograph etchings after the artist's own design), which inflates "by someone else after X" counts.
+**`creator + attributionQualifier` enforces same-row matching automatically** for the 10 non-priority qualifiers (`after`, `attributed to`, `workshop of`, `circle of`, `manner of`, `follower of`, `copyist of`, `possibly`, `free-form`, `falsification`). A work matches only when the named creator's *own* production row carries the qualifier, so `creator: "Rembrandt van Rijn" + attributionQualifier: "follower of"` returns just the follower-of-Rembrandt subset (not all follower-of-anyone works). The three priority-level qualifiers (`primary`, `secondary`, `undetermined`) are an exception — they're row-level priority markers, not attributions, so the server emits a warning and falls back to artwork-level (independent) matching when combined with `creator`. For autograph queries, use `productionRole + sameRowMatching: true` (above) rather than `attributionQualifier: "primary"`. **For the user phrasing "after X", prefer the `productionRole` row in the table below**: `attributionQualifier: "after"` also catches works where X is both source and maker (e.g. autograph etchings after the artist's own design), which inflates "by someone else after X" counts.
 
 **Mapping user phrasings to filters.** Common English phrasings map to the catalogue's controlled vocabulary as follows. The working approach lives in the second column.
 
@@ -175,10 +175,10 @@ The Rijksmuseum has translated only **a small minority of artwork titles into En
 
 `search_provenance` has two data layers that answer fundamentally different questions.
 
-- `layer: "events"` (default): individual transactions — each with a date, location, price, parties (with roles and positions), and transfer type. Think of it as a ledger of *what happened*. Events-only parameters: `transferType`, `excludeTransferType`, `hasPrice`, `currency`, `hasGap`, `relatedTo`.
+- `layer: "events"` (default): individual transactions — each with a date, location, price, parties (with roles and positions), and transfer type. Think of it as a ledger of *what happened*. Events-only parameters: `transferType`, `excludeTransferType`, `hasPrice`, `currency`, `hasGap`, `relatedTo`, `categoryMethod`, `positionMethod`.
 - `layer: "periods"`: interpreted ownership spans — who held the work, how they acquired it, and for how long. Think of it as a timeline of *who owned what*. Periods-only parameters: `ownerName`, `acquisitionMethod`, `periodLocation`, `minDuration`, `maxDuration`, `sortBy: "duration"`. Use `periodLocation` (period-level, ~45% populated) in preference to event-level `location` when scoping a periods-layer query — they AND-combine when both are supplied.
 
-Shared parameters work on both layers: `party`, `location`, `creator`, `dateFrom`/`dateTo`, `objectNumber`, `categoryMethod`, `positionMethod`, `sortBy`, `offset`, `facets`.
+Shared parameters work on both layers: `party`, `location`, `creator`, `dateFrom`/`dateTo`, `objectNumber`, `sortBy`, `offset`, `facets`.
 
 **`dateFrom` / `dateTo` semantics differ by layer:**
 
@@ -262,7 +262,7 @@ collection_stats(dimension="type", creator="Rembrandt van Rijn",
                  attributionQualifier="workshop of")
 # → only works where 'workshop of' sits on Rembrandt's row, not on any
 # other creator's row of the same artwork. Same auto-same-row applies to
-# the 11 connoisseurship qualifiers (after, attributed to, circle of, etc.).
+# the 10 non-priority qualifiers (after, attributed to, circle of, etc.).
 
 # Cross-domain: what types of artworks have provenance events in Amsterdam?
 collection_stats(dimension="type", hasProvenance=true, provenanceLocation="Amsterdam")
@@ -309,8 +309,9 @@ it expects exact notation codes. Use the **Rijksmuseum Iconclass MCP server** to
 - `browse(notation=...)` — hierarchy navigation (children, cross-refs, path)
 - `resolve(notation=[...])` — batch lookup of known codes
 - `expand_keys` / `search_prefix` — key variants and subtree enumeration
+- `find_artworks(notation=...)` — exact per-collection artwork counts + link-outs (the count-check handoff)
 
-**Before handing off**, check `collectionCounts` — a code with 0 artworks returns nothing; a code with 2,000 vs 3 signals very different curatorial depth. **Never truncate Iconclass discovery queries** — use the default `maxResults` (25) or higher so you can evaluate all returned notations and their counts before deciding which codes to hand off.
+**Before handing off**, gauge curatorial depth: each `search` result's `collections` array tells you *which* loaded collections have artworks for a notation (presence only — an empty array means none). For the exact figure — whether a code is backed by 2,000 artworks or 3 — pass the notation to `find_artworks`. **Never truncate Iconclass discovery queries** — use the default `maxResults` (25) or higher so you can evaluate all returned notations before deciding which codes to hand off.
 
 **Searching with codes on this server:**
 
@@ -434,8 +435,9 @@ queryable input filters on `search_provenance`, not just output fields. When
 results contain LLM-enriched records, the response includes a review URL.
 **Always show this URL to the user.**
 
-**Pagination**: when `totalResults` exceeds 50, paginate with `offset`
-(increments of 50 until offset ≥ totalResults).
+**Pagination**: when `totalArtworks` exceeds the page size, paginate with
+`offset` — advance it by the `maxResults` you used each call (caller-selectable
+1–50, default 1), looping until `offset ≥ totalArtworks`.
 
 For the complete data model (AAM text format, transfer type vocabulary, party
 roles, date and currency representations), tested query patterns (collector
@@ -447,7 +449,7 @@ time series), and enrichment methodology, see `references/provenance-and-enrichm
 Three complementary paths connect a work to its peers, copies, sources, pendants, components, or derivatives:
 
 1. **Curator-declared edges via `find_similar`** — the most direct path. `find_similar(objectNumber)` returns one HTML page that includes a **Related Co-Production** column (creator-invariant edges: pendants, production stadia, different examples of one design) and a **Related Object** column (derivative + grouping edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights). Surface the link to the user; they read off the channel column relevant to their question.
-2. **Direct cross-references on the work itself** — `get_artwork_details` returns a `relatedObjects[]` field, scoped to the three creator-invariant relationships (`different example`, `production stadia`, `pendant`). Each entry carries the peer's `objectNumber` (canonical handle) plus a Linked Art `objectUri`; pass either back to `get_artwork_details({objectNumber: …})` or `get_artwork_details({uri: …})` to navigate. For pairs, sets, recto/verso, reproductions, and general related-object links, read off `find_similar`'s Related Object column instead — these are not exposed on `relatedObjects[]`.
+2. **Direct cross-references on the work itself** — `get_artwork_details` returns a `relatedObjects[]` field, scoped to the three creator-invariant relationships (`different example`, `production stadia`, `pendant`). Each entry always carries a Linked Art `objectUri` (the reliable handle) plus an `objectNumber` that is populated only when the peer URI resolves to a row in our DB — it is `null` for unresolved URIs. Pass the `objectUri` to `get_artwork_details({uri: …})` to navigate (or `objectNumber` to `get_artwork_details({objectNumber: …})` when it is present). For pairs, sets, recto/verso, reproductions, and general related-object links, read off `find_similar`'s Related Object column instead — these are not exposed on `relatedObjects[]`.
 3. **Reproductive-print keyword path** — when curator-declared edges are absent, `productionRole` traces reproductive prints to their painted sources:
 
 ```

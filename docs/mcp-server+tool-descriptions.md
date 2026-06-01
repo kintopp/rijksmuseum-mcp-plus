@@ -14,7 +14,7 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 >
 > Place searches support depictedPlace and productionPlace as vocabulary filters. For proximity, most place vocabulary entries lack coordinates — nearPlace only works for the subset that has been authority-geocoded, but nearLat/nearLon with explicit coordinates always works for searching artworks near any point. Multi-word place names like 'Oude Kerk Amsterdam' still resolve to a single vocabulary entry regardless of coordinate coverage.
 >
-> Iconclass covers 40,675 subject notations. Use the Iconclass server's search tool to find notation codes by concept, then pass them to search_artwork for precise iconographic filtering.
+> Iconclass covers ~39,800 base subject notations (1.3M+ including key-expanded variants). Use the Iconclass server's search tool to find notation codes by concept, then pass them to search_artwork for precise iconographic filtering.
 >
 > Two free-text corpora are searchable through search_artwork: descriptions (Dutch, cataloguer-written, ~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the relevant language, prefer semantic_search.
 >

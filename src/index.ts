@@ -224,7 +224,7 @@ function createServer(httpPort?: number): McpServer {
         "Multi-word place names like 'Oude Kerk Amsterdam' still resolve to a single vocabulary entry regardless of " +
         "coordinate coverage.\n\n" +
 
-        "Iconclass covers 40,675 subject notations. Use the Iconclass server's search tool to find notation codes by concept, " +
+        "Iconclass covers ~39,800 base subject notations (1.3M+ including key-expanded variants). Use the Iconclass server's search tool to find notation codes by concept, " +
         "then pass them to search_artwork for precise iconographic filtering.\n\n" +
 
         "Two free-text corpora are searchable through search_artwork: descriptions (Dutch, cataloguer-written, " +
