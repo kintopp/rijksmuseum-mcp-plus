@@ -491,7 +491,7 @@ function formatDetailSummary(d: DetailWithChain): string {
       .join(" | ");
     const cap = d.relatedObjectsTotalCount > d.relatedObjects.length
       ? ` (showing ${d.relatedObjects.length} of ${d.relatedObjectsTotalCount})` : "";
-    lines.push(`[Co-productions]${cap} ${groups}`);
+    lines.push(`[Related variants]${cap} ${groups}`);
   }
 
   lines.push(`URL: ${d.url}`);
@@ -881,8 +881,8 @@ const ArtworkDetailOutput = {
     title: z.string().nullable().describe("Peer artwork's title when resolved; null otherwise."),
     objectUri: z.string().describe("Original Linked Art URI from the harvest. Pass to get_artwork_details(uri=…) for full peer metadata."),
     iiifId: z.string().nullable().describe("Peer artwork's IIIF identifier when resolved and the peer carries an image; null otherwise. Powers in-viewer prev/next navigation."),
-  })).describe("Co-production peer relations — restricted to creator-invariant curator-declared edges ('different example' / 'production stadia' / 'pendant'). Other curator-declared relationships (pair, set, recto|verso, original|reproduction, related object) are exposed via find_similar's Related Object channel rather than here. Capped at 25 entries — see relatedObjectsTotalCount."),
-  relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total co-production-relation count before capping. Equals relatedObjects.length when ≤ 25."),
+  })).describe("Related-variant peer relations — creator-invariant curator-declared edges ('different example' / 'production stadia' / 'pendant'). Other curator-declared relationships (pair, set, recto|verso, original|reproduction, related object) are exposed via find_similar's Related Object channel rather than here. Capped at 25 entries — see relatedObjectsTotalCount."),
+  relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total related-variant peer-relation count before capping. Equals relatedObjects.length when ≤ 25."),
   parents: z.array(z.object({
     objectNumber: z.string(),
     title: z.string(),
@@ -3841,7 +3841,7 @@ function registerTools(
         description:
           "Use when the user has a SPECIFIC artwork (objectNumber) and wants others like it. " +
           "Generates an HTML comparison page with IIIF thumbnails across 9 independent similarity channels: " +
-          "Visual (image-embedding nearest neighbours), Related Co-Production (creator-invariant curator-declared edges: pendants, production stadia, different examples), " +
+          "Visual (image-embedding nearest neighbours), Related Variant (creator-invariant curator-declared edges: pendants, production stadia, different examples), " +
           "Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), " +
           "Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), " +
           "Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.\n\n" +
@@ -3975,7 +3975,7 @@ function registerTools(
           : null;
         const thCandidates = toDepictedCandidates(thResult);
 
-        // Related Co-Production (#293) — creator-invariant curator-declared edges
+        // Related Variant (#293) — creator-invariant curator-declared edges
         // ('different example' / 'production stadia' / 'pendant'), fixed score=10
         const cpResult = vocabDb!.findSimilarByCoProduction(args.objectNumber, maxResults);
         const cpCandidates = toDepictedCandidates(cpResult);
@@ -4062,8 +4062,8 @@ function registerTools(
         // Summary counts
         const counts = [
           ...(visualCandidates.length > 0 ? [`Visual: ${visualCandidates.length}`] : []),
-          `Co-Production: ${cpCandidates.length}`,
-          `Related: ${roCandidates.length}`,
+          `Related Variant: ${cpCandidates.length}`,
+          `Related Object: ${roCandidates.length}`,
           `Lineage: ${liCandidates.length}`,
           `Iconclass: ${icCandidates.length}`,
           `Description: ${descCandidates.length}`,

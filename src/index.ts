@@ -284,7 +284,7 @@ async function runHttp(): Promise<void> {
   // and closes both. A single shared McpServer cannot be used here: Protocol.connect()
   // requires _transport to be unset, so two overlapping requests would collide
   // ("Already connected to a transport") — and the ChatGPT app bridge fires
-  // concurrent call_mcp requests (in-viewer co-production nav + the poll loop).
+  // concurrent call_mcp requests (in-viewer related-variant nav + the poll loop).
   // No long-lived connections to time out (#41). createServer() is cheap — the DBs,
   // API clients, and embedding model are module-scope singletons; only tool/Zod
   // registration runs per request.

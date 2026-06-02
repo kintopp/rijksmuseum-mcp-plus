@@ -13,7 +13,7 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.47"
+  version: "0.48"
   last_updated: "2026-06-01"
 ---
 
@@ -44,7 +44,7 @@ metadata:
 | "Show this artwork to the user / open the zoomable viewer"                    | `get_artwork_image`                                                                                                  |
 | "Examine this image closely / read this inscription"                          | `inspect_artwork_image`                                                                                              |
 | "Find works similar to this one" — visual, thematic, lineage, shared subject  | `find_similar`                                                                                                       |
-| "Find pendants / production stadia / different examples of one design"        | `find_similar` — read the `Related Co-Production` column on the resulting HTML page                                  |
+| "Find pendants / production stadia / different examples of one design"        | `find_similar` — read the `Related Variant` column on the resulting HTML page                                  |
 | "Find pairs / sets / recto-verso / reproductions / derivatives"               | `find_similar` — read the `Related Object` column on the resulting HTML page                                         |
 | "Show me a curated group of works on X"                                       | `list_curated_sets` → `browse_set`                                                                                   |
 | "Who owned this work / trace its ownership chain"                             | `search_provenance` with `objectNumber`                                                                              |
@@ -448,7 +448,7 @@ time series), and enrichment methodology, see `references/provenance-and-enrichm
 
 Three complementary paths connect a work to its peers, copies, sources, pendants, components, or derivatives:
 
-1. **Curator-declared edges via `find_similar`** — the most direct path. `find_similar(objectNumber)` returns one HTML page that includes a **Related Co-Production** column (creator-invariant edges: pendants, production stadia, different examples of one design) and a **Related Object** column (derivative + grouping edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights). Surface the link to the user; they read off the channel column relevant to their question.
+1. **Curator-declared edges via `find_similar`** — the most direct path. `find_similar(objectNumber)` returns one HTML page that includes a **Related Variant** column (creator-invariant edges: pendants, production stadia, different examples of one design) and a **Related Object** column (derivative + grouping edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights). Surface the link to the user; they read off the channel column relevant to their question.
 2. **Direct cross-references on the work itself** — `get_artwork_details` returns a `relatedObjects[]` field, scoped to the three creator-invariant relationships (`different example`, `production stadia`, `pendant`). Each entry always carries a Linked Art `objectUri` (the reliable handle) plus an `objectNumber` that is populated only when the peer URI resolves to a row in our DB — it is `null` for unresolved URIs. Pass the `objectUri` to `get_artwork_details({uri: …})` to navigate (or `objectNumber` to `get_artwork_details({objectNumber: …})` when it is present). For pairs, sets, recto/verso, reproductions, and general related-object links, read off `find_similar`'s Related Object column instead — these are not exposed on `relatedObjects[]`.
 3. **Reproductive-print keyword path** — when curator-declared edges are absent, `productionRole` traces reproductive prints to their painted sources:
 
@@ -504,7 +504,7 @@ Most persons in the catalogue never appear as a creator on any artwork — the d
 
 ### 10. Similarity Research
 
-`find_similar(objectNumber)` renders an HTML comparison page across 9 independent similarity channels (Visual, Related Co-Production, Related Object, Lineage, Iconclass, Description, Theme, Depicted Person, Depicted Place) plus a Pooled column.
+`find_similar(objectNumber)` renders an HTML comparison page across 9 independent similarity channels (Visual, Related Variant, Related Object, Lineage, Iconclass, Description, Theme, Depicted Person, Depicted Place) plus a Pooled column.
 
 **Behavioural rule:** your job is to surface the URL/path to the user — don't fetch, summarise, or paraphrase the page.
 

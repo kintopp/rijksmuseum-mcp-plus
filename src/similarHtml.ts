@@ -2,9 +2,9 @@
  * Server-side HTML generator for find_similar comparison pages.
  *
  * Produces a self-contained HTML page showing similarity results across
- * up to 9 signal modes in horizontal scroll rows (Visual, Related Co-Production,
- * Related Object, Lineage, Iconclass, Description, Theme, Depicted Person,
- * Depicted Place) plus a pooled row for artworks appearing in ≥4 modes.
+ * up to 9 signal modes in horizontal scroll rows (Visual, Related Variant,
+ * Lineage, Iconclass, Description, Theme, Depicted Person, Depicted Place,
+ * Related Object) plus a pooled row for artworks appearing in ≥4 modes.
  */
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
     color: "#00838f",
     methodology:
       "The Rijksmuseum&rsquo;s own image-based visual similarity model. " +
-      "87% of all artworks have digital images.",
+      "Most artworks have digital images.",
   },
   description: {
     label: "Description",
@@ -150,13 +150,13 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
       "Three-way tie-breaks are resolved by curatorial importance.",
   },
   coProduction: {
-    label: "Related Co-Production",
-    badge: "CoP",
+    label: "Related Variant",
+    badge: "Var",
     color: "#7b1fa2",
     methodology:
-      "Curator-defined assertions of a co-production by the same creator: " +
+      "Curator-asserted links to other works by the same artist: " +
       "<em>different example</em> (e.g. impressions, casts, or copies), " +
-      "<em>production stadia</em> (e.g. a working sketch for a print), " +
+      "<em>production stadia</em> (e.g. a preparatory study for a print), " +
       "or <em>pendant</em> (companion pieces).",
   },
   relatedObject: {
@@ -177,7 +177,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
   },
 };
 
-/** Display order for signal rows. Co-Production sits next to Visual since both
+/** Display order for signal rows. Related Variant sits next to Visual since both
  *  describe direct relationships to the seed; the wider Related Object channel
  *  follows the deterministic similarity signals. */
 const MODE_ORDER = [
@@ -275,7 +275,7 @@ function renderRow(
   const count = candidates.length;
   if (count === 0 && !isPooled) return ""; // skip empty signal rows (except pooled which can be informative)
   const emptyMsg = count === 0
-    ? `<div class="empty-row">No results for this type of similarity.</div>`
+    ? `<div class="empty-row">No results for this form of similarity.</div>`
     : "";
 
   const countLabel = options?.seeAllCount
@@ -388,7 +388,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   if (query.depictedPersons && query.depictedPersons.length > 0) {
     const personsHtml = query.depictedPersons.map(p => renderOptionalLink(p.label, p.wikidataUri)).join(" &middot; ");
     metaSections += `<div class="meta-section">
-      <div class="meta-section-label depicted-person">Depicted Persons</div>
+      <div class="meta-section-label depicted-person">Depicted Person</div>
       <div class="meta-content">${personsHtml}</div>
     </div>`;
   }
@@ -396,7 +396,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   if (query.depictedPlaces && query.depictedPlaces.length > 0) {
     const placesHtml = query.depictedPlaces.map(p => renderOptionalLink(p.label, p.wikidataUri)).join(" &middot; ");
     metaSections += `<div class="meta-section">
-      <div class="meta-section-label depicted-place">Depicted Places</div>
+      <div class="meta-section-label depicted-place">Depicted Place</div>
       <div class="meta-content">${placesHtml}</div>
     </div>`;
   }
@@ -404,7 +404,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   if (query.themes && query.themes.length > 0) {
     const themesHtml = query.themes.map(escHtml).join(" &middot; ");
     metaSections += `<div class="meta-section">
-      <div class="meta-section-label theme">Themes</div>
+      <div class="meta-section-label theme">Theme</div>
       <div class="meta-content">${themesHtml}</div>
     </div>`;
   }
@@ -412,7 +412,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   if (query.coProductionLabels && query.coProductionLabels.length > 0) {
     const cpHtml = query.coProductionLabels.map(l => `<em>${escHtml(l)}</em>`).join(" &middot; ");
     metaSections += `<div class="meta-section">
-      <div class="meta-section-label related-object">Related Co-Production</div>
+      <div class="meta-section-label related-variant">Related Variant</div>
       <div class="meta-content">${cpHtml}</div>
     </div>`;
   }
@@ -429,7 +429,8 @@ export function generateSimilarHtml(data: SimilarPageData): string {
     ? `<div class="query-metadata">${metaSections}</div>`
     : "";
 
-  // Signal rows (ordered: Visual, Lineage, Iconclass, Description, Depicted Person, Depicted Place)
+  // Signal rows (ordered per MODE_ORDER: Visual, Related Variant, Lineage, Iconclass,
+  // Description, Theme, Depicted Person, Depicted Place, Related Object)
   const rows: string[] = [];
   for (const mode of MODE_ORDER) {
     const candidates = (modes as Record<string, SimilarCandidate[] | undefined>)[mode] ?? [];
@@ -489,7 +490,8 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   .meta-section-label.depicted-person { color: #2e7d32; }
   .meta-section-label.depicted-place { color: #4e342e; }
   .meta-section-label.theme { color: #5d4037; }
-  .meta-section-label.related-object { color: #7b1fa2; }
+  .meta-section-label.related-variant { color: #7b1fa2; }
+  .meta-section-label.related-object { color: #ad1457; }
   .meta-section .meta-content { color: #555; }
   .meta-section .meta-content a { text-decoration: none; }
   .meta-section .meta-content a:hover code { text-decoration: underline; }
@@ -578,7 +580,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
 <body>
 
 <h1>Find Similar: ${escHtml(query.title || query.objectNumber)}</h1>
-<p class="subtitle">${modeCounts} | ${totalUnique} unique | pooled: ${poolThreshold}+ types | ${escHtml(generatedAt)}</p>
+<p class="subtitle">${modeCounts} | ${totalUnique} unique | pooled: ${poolThreshold}+ forms | ${escHtml(generatedAt)}</p>
 
 <div class="query-header">
   ${queryThumb}

@@ -200,7 +200,7 @@ const r5 = await client.callTool({
 ok(!r5.isError, "no error for SK-A-1718");
 const text5 = r5.content?.[0]?.text ?? "";
 // Check that no signal exceeds maxResults
-const countMatches = text5.matchAll(/(?:Visual|Co-Production|Related|Lineage|Iconclass|Description|Theme|Person|Place): (\d+)/g);
+const countMatches = text5.matchAll(/(?:Visual|Related Variant|Related Object|Lineage|Iconclass|Description|Theme|Person|Place): (\d+)/g);
 for (const m of countMatches) {
   const count = parseInt(m[1]);
   ok(count <= 3, `${m[0]} respects maxResults (${count} ≤ 3)`);
@@ -221,9 +221,9 @@ if (pathMatch5) {
   ok(html5.includes("query-metadata"), "has query metadata section");
 
   // Row order (MODE_ORDER in src/similarHtml.ts):
-  // Visual → Related Co-Production → Lineage → Iconclass → Description → Theme → Depicted Person → Depicted Place → Related Object → Pooled
+  // Visual → Related Variant → Lineage → Iconclass → Description → Theme → Depicted Person → Depicted Place → Related Object → Pooled
   const visualPos = html5.indexOf('"Visual"');
-  const coProdPos = html5.indexOf('"Related Co-Production"');
+  const coProdPos = html5.indexOf('"Related Variant"');
   const linePos = html5.indexOf('"Lineage"');
   const iconPos = html5.indexOf('"Iconclass"');
   const descPos = html5.indexOf('"Description"');
@@ -234,10 +234,10 @@ if (pathMatch5) {
   const poolPos = html5.indexOf('"Pooled"');
 
   if (visualPos > -1 && coProdPos > -1) {
-    ok(visualPos < coProdPos, "Visual before Related Co-Production");
+    ok(visualPos < coProdPos, "Visual before Related Variant");
   }
   if (coProdPos > -1 && linePos > -1) {
-    ok(coProdPos < linePos, "Related Co-Production before Lineage");
+    ok(coProdPos < linePos, "Related Variant before Lineage");
   }
   if (linePos > -1 && iconPos > -1) {
     ok(linePos < iconPos, "Lineage before Iconclass");

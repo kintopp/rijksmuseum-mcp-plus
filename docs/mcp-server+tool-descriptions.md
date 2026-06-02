@@ -159,7 +159,7 @@ Filters from both domains combine freely. Artwork filters narrow the artwork set
 
 ### 14. `find_similar`
 
-Use when the user has a SPECIFIC artwork (objectNumber) and wants others like it. Generates an HTML comparison page with IIIF thumbnails across 9 independent similarity channels: Visual (image-embedding nearest neighbours), Related Co-Production (creator-invariant curator-declared edges: pendants, production stadia, different examples), Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.
+Use when the user has a SPECIFIC artwork (objectNumber) and wants others like it. Generates an HTML comparison page with IIIF thumbnails across 9 independent similarity channels: Visual (image-embedding nearest neighbours), Related Variant (creator-invariant curator-declared edges: pendants, production stadia, different examples), Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.
 
 Not for free-text concept queries — use semantic_search. Not for filter-based search — use search_artwork.
 

@@ -236,8 +236,8 @@ assert(folioText.includes("BI-1898-1748A"),
   "[Parent] line names the parent objectNumber");
 
 const rpText = textOf(r5);
-assert(rpText.includes("[Co-productions]"),
-  "[Co-productions] section rendered when relatedObjectsTotalCount > 0");
+assert(rpText.includes("[Related variants]"),
+  "[Related variants] section rendered when relatedObjectsTotalCount > 0");
 
 // ══════════════════════════════════════════════════════════════════
 section("9. Text-channel sentinels — search_artwork groupedChildCount (#277 High)");

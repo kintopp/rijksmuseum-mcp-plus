@@ -101,7 +101,7 @@ assert(fs.includes("semantic_search") && fs.includes("search_artwork"),
 
 section("find_similar: 9 channel names");
 
-const channels = ["Visual", "Related Co-Production", "Related Object", "Lineage", "Iconclass", "Description", "Theme", "Depicted Person", "Depicted Place"];
+const channels = ["Visual", "Related Variant", "Related Object", "Lineage", "Iconclass", "Description", "Theme", "Depicted Person", "Depicted Place"];
 for (const ch of channels) {
   assert(fs.includes(ch), `find_similar mentions "${ch}" channel`);
 }

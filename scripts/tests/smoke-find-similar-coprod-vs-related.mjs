@@ -43,7 +43,7 @@ if (loc.startsWith("/")) {
 }
 
 const checks = [
-  { needle: "Related Co-Production",  desc: "Co-Production row label rendered" },
+  { needle: "Related Variant",        desc: "Related Variant row label rendered" },
   { needle: "Related Object",         desc: "Related Object row label rendered" },
   { needle: "RP-T-1964-99",           desc: "Co-Production peer #1 (production stadia)" },
   { needle: "RP-T-1964-101A",         desc: "Co-Production peer #2 (production stadia)" },

@@ -9,7 +9,7 @@
 | Channel               | Matches on                                                                        | Use when the user wants…                                           |
 | --------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Visual                | Image embedding (composition, palette, format)                                    | Look-alikes regardless of attribution                              |
-| Related Co-Production | Creator-invariant curator edges (pendants, production stadia, different examples) | Pairs/companions/variants by the same hand                         |
+| Related Variant       | Creator-invariant curator edges (pendants, production stadia, different examples) | Pairs/companions/variants by the same hand                         |
 | Related Object        | Other curator edges (pairs, sets, recto/verso, reproductions — tiered)            | Components, derivatives, reproductive copies, sets/series          |
 | Lineage               | Shared creator + assignment-qualifier overlap                                     | Workshop / follower / pupil / copy neighbourhoods                  |
 | Iconclass             | Overlapping Iconclass notations                                                   | Same iconographic programme                                        |
