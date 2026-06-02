@@ -33,7 +33,7 @@ The downloaded skill file can be installed in Claude by following [these instruc
 
 ## Sample Queries
 
-After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language. For examples of the kinds of queries the systems can answer, please see the prompts below. For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md). 
+After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language. For examples of the kinds of queries the systems can answer, please see the prompts below. Note: The links following these prompts are to sample responses in Claude Desktop. They only reproduce the texts of these sessions (no inline images or visualisations).
 
 - _What German artworks at the Rijksmuseum evoke vanitas and mortality?_ [link](https://claude.ai/share/735c54c1-c4f4-4293-9c30-66d5ba8bd23b)
 - _Which artworks have a provenance linked to Emperor Bonaparte?_ [link](https://claude.ai/share/0f38737d-176b-4c46-bb3d-044404e0b334)
@@ -46,7 +46,7 @@ After you've connected the resource to your AI system, you can search, explore a
 - _Show me the Roermondse passie and highlight the Betrayal of Judas_ [link](https://claude.ai/share/ca56c81b-7422-477e-9839-f921c0423c03)
   (requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai))
 
-Note: The links following these prompts are to sample responses in Claude Desktop. They only reproduce the texts of these sessions – not the inline image viewer or custom visualisations.
+For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md). 
 
 ## Features
 
@@ -54,9 +54,9 @@ Rijksmuseum-mcp+ provides the following features and capabilities over and beyon
 
 ### More searchable metadata
 
-Additional searchable metadata categories, including full-texts (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all `title` variants for an artwork, multiple attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`), and [Iconclass](https://iconclass.org) notations. Full-text queries over the `title`, `description`, `inscription`, and `curatorialNarrative` fields can be structured. This lets you combine boolean clauses, field scoping, proximity, exact phrases, exclusions, and prefix matching, while simultaneously narrowing results with normal filters such as `creator`, `type`, `date`, `material`, or `technique`. [Iconclass](https://iconclass.org) notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. Proximity searches on [enriched geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). Physical dimension filters support queries about the size of an artwork (e.g. "paintings wider than 3 metres"). 
+Additional searchable metadata categories, including full-texts (`description`, `inscription`, `provenance`, `creditLine`, `curatorialNarrative`), `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all `title` variants for an artwork, multiple attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`). Full-text queries over the `title`, `description`, `inscription`, and `curatorialNarrative` fields can be structured. This lets you combine boolean clauses, field scoping, proximity, exact phrases, exclusions, and prefix matching, while simultaneously narrowing results with normal filters such as `creator`, `type`, `date`, `material`, or `technique`. Proximity searches on [enriched geocoded locations](https://kintopp.github.io/rijksmuseum-mcp-plus/place-geocoding-visualization.html) (`nearPlace`, `nearPlaceRadius`) let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). Physical dimension filters support queries about the size of an artwork (e.g. "paintings wider than 3 metres").
 
-rijksmuseum-mcp+ is able to produce aggregate statistics (e.g. counts, distributions, and cross-tabulations) across most metadata categories of the collection. These can be passed on to the AI assistant for visualisation and other forms of analysis. For more details, please see the reference documents for [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md). 
+[Iconclass](https://iconclass.org) notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. 
 
 ### Semantic search
 
@@ -66,15 +66,17 @@ Rijksmuseum-mcp+ adds support for multilingual, concept-based, exploratory searc
 
 Images from the Rijkmuseum's collections can be viewed inline in your chat conversation with an interactive, deep-zoom image viewer that supports pan, zoom, rotation, horizontal flip, and full-screen mode (click on the ? icon in the image viewer for details). The AI assistant can analyse what it sees in conjunction with the collection's metadata, and can independently zoom into and annotate regions of interest on request with labelled bounding boxes. Because the assistant can see these overlays, it can also verify its own annotation — re-inspect the rendered result, adjust the coordinates and retry. By switching the viewer into interactive mode (press "i" or click on the □ icon), a user can draw a rectangle around an area of interest. This copies its bounding-box coordinates into the prompt and direct the AI assistant's attention to it (e.g. "identify the species of butterfly I've highlighted in the image"). 
 
-Note: the use of the interactive image viewer feature requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai). Other chatbots and applications can still create links to the Rijksmuseum's own artwork detail page and deep-zoom viewer or ask the AI assistant to _describe_ what they see (e.g. "tell me about the different kinds of insects shown in this still life"). 
-
 ### Find similar artworks 
 
 A search for artworks 'similar to' other artworks (e.g. "find artworks similar to van Gogh's Zelfportret") creates a comparison webpage that places an artwork alongside the works most similar to it, evaluated across nine dimensions: visual appearance, related co-production (curator-declared pendants, production stadia, different examples), related object (other curator-declared edges such as pairs, sets, recto/verso, and reproductions), artistic lineage (shared creators, workshops, or attribution chains), Iconclass subject classification, semantic description, shared curatorial themes, depicted persons, and depicted places. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection. Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2860.html) of a `find_similar` analysis. Note: all generated comparison webpages are automatically deleted from the server after 30 minutes. Use your browser's 'Save As' (not bookmark) feature to save a copy.
 
-### Analyse provenance events (experimental)
+### Analyse provenance events
 
 The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the [AAM punctuation convention](https://www.museumprovenance.org/pages/standard_v1/). Rijksmuseum-mcp+ has [parsed](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-parser-visualization.html) and partially enriched these narratives into over 100,000 structured events with a [CMOA-aligned transfer vocabulary](https://www.museumprovenance.org/reference/acquisition_methods/), making them searchable by party name, transfer type (e.g. sale, gift, bequest, inheritance, confiscation or restitution), date range, location, and price in the original historical currency. This enables structured queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries. Every provenance record carries searchable provenance-of-provenance metadata tracking how it was enriched. For more details, please see the [provenance reference](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html) documentation.
+
+### Aggegate statistics
+
+Rijksmuseum-mcp+ is able to produce aggregate statistics (e.g. counts, distributions, and cross-tabulations) across most metadata categories of the collection. These can be passed on to the AI assistant for visualisation and other forms of analysis. For more details, please see the reference documents for [metadata categories](/docs/metadata-categories.md) and [search parameters](/docs/search-parameters.md). 
 
 ## Choosing an AI system
 
