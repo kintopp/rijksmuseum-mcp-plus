@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Similar to: The Battle of Waterloo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         margin: 0 auto; padding: 20px; background: #fafafa; color: #222; }
+  h1 { font-size: 1.4em; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 0.85em; margin-bottom: 20px; }
+
+  .query-header { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                  padding: 20px; margin-bottom: 24px;
+                  display: flex; align-items: flex-start; gap: 20px; }
+  .query-thumb { width: 300px; max-height: 420px; object-fit: contain; border-radius: 4px;
+                 flex-shrink: 0; background: #eee; }
+  .query-thumb.no-image { height: 200px; display: flex; align-items: center;
+                          justify-content: center; color: #bbb; font-size: 0.9em; }
+  .query-info { flex: 1; min-width: 0; }
+  .query-info h2 { font-size: 1.2em; margin-bottom: 4px; }
+  .query-info .obj-num { font-size: 0.85em; color: #0066cc; text-decoration: none; }
+  .query-info .obj-num:hover { text-decoration: underline; }
+  .query-info .creator { font-size: 0.9em; color: #555; margin-top: 2px; }
+  .type-badge { display: inline-block; font-size: 0.7em; background: #e8e8e8;
+                padding: 1px 6px; border-radius: 3px; margin-left: 6px; color: #555; }
+
+  .query-metadata { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .meta-section { font-size: 0.8em; line-height: 1.5; }
+  .meta-section-label { font-weight: 600; font-size: 0.75em; text-transform: uppercase;
+                        letter-spacing: 0.03em; margin-bottom: 3px; }
+  .meta-section-label.iconclass { color: #1565c0; }
+  .meta-section-label.lineage { color: #6a1b9a; }
+  .meta-section-label.description { color: #e65100; }
+  .meta-section-label.depicted-person { color: #2e7d32; }
+  .meta-section-label.depicted-place { color: #4e342e; }
+  .meta-section-label.theme { color: #5d4037; }
+  .meta-section-label.related-variant { color: #7b1fa2; }
+  .meta-section-label.related-object { color: #ad1457; }
+  .meta-section .meta-content { color: #555; }
+  .meta-section .meta-content a { text-decoration: none; }
+  .meta-section .meta-content a:hover code { text-decoration: underline; }
+  .meta-section .meta-content code { font-family: "SF Mono", "Menlo", monospace;
+                                      font-size: 0.88em; background: #f0f4f8;
+                                      padding: 1px 5px; border-radius: 3px; color: #1565c0; }
+  .meta-section .meta-content .qualifier { background: #f3e5f5; color: #6a1b9a; }
+  .meta-section .meta-content a:hover .qualifier { text-decoration: underline; }
+  .meta-desc { color: #555; font-size: 1em; line-height: 1.45; }
+
+  .signal-rows { display: flex; flex-direction: column; gap: 20px; }
+
+  .signal-row { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                padding: 16px; overflow: hidden; }
+  .row-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .row-label { font-size: 0.95em; font-weight: 600; }
+  .row-count { font-size: 0.75em; color: #888; }
+  .row-method { font-size: 0.72em; color: #888; line-height: 1.3; margin-bottom: 12px;
+                max-width: 80ch; }
+  .row-method a { color: #0066cc; }
+  .row-method strong { font-weight: 600; color: #666; }
+  .empty-row { font-size: 0.85em; color: #999; font-style: italic; padding: 12px 0; }
+
+  .strip-container { position: relative; }
+  .strip-container::after { content: ''; position: absolute; top: 0; right: 0;
+                            width: 40px; height: 100%; pointer-events: none;
+                            background: linear-gradient(to right, transparent, rgba(255,255,255,0.8)); }
+  .cards-strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px;
+                 scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .cards-strip::-webkit-scrollbar { height: 6px; }
+  .cards-strip::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 3px; }
+  .cards-strip::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  .cards-strip::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+  .result-card { flex: 0 0 200px; scroll-snap-align: start; display: flex;
+                 flex-direction: column; gap: 6px; padding: 10px;
+                 border-radius: 6px; border: 1px solid #f0f0f0; }
+  .result-card:hover { border-color: #ddd; background: #fafafa; }
+  .result-thumb { width: 100%; aspect-ratio: 3/4; object-fit: contain; border-radius: 4px;
+                  background: #f5f5f5; }
+  .result-thumb.no-image { display: flex; align-items: center; justify-content: center;
+                           background: #f0f0f0; color: #bbb; font-size: 0.8em; }
+  .result-thumb-link { display: block; }
+  .result-info { font-size: 0.78em; }
+  .result-info .rank-sim { font-weight: 600; color: #333; }
+  .result-info .title { margin-top: 2px; color: #444; display: -webkit-box;
+                        -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .result-info .creator { color: #666; margin-top: 1px; white-space: nowrap;
+                          overflow: hidden; text-overflow: ellipsis; }
+  .result-info .obj-link { font-size: 0.85em; color: #0066cc; text-decoration: none; }
+  .result-info .obj-link:hover { text-decoration: underline; }
+
+  .card-detail { font-size: 0.7em; margin-top: 4px; padding-top: 4px;
+                 border-top: 1px solid #f0f0f0; color: #888; line-height: 1.35; }
+  .card-detail a { text-decoration: none; }
+  .card-detail a:hover code { text-decoration: underline; }
+  .card-detail code { font-family: "SF Mono", "Menlo", monospace; font-size: 0.9em;
+                      background: #f0f4f8; padding: 0px 3px; border-radius: 2px; color: #1565c0; }
+  .card-detail .qualifier { background: #f3e5f5; color: #6a1b9a; }
+  .card-detail a:hover .qualifier { text-decoration: underline; }
+  .card-detail .desc-snippet { color: #777; display: -webkit-box;
+                               -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+                               overflow: hidden; font-style: italic; }
+
+  .see-all-card { flex: 0 0 160px; scroll-snap-align: start; display: flex;
+                  align-items: center; justify-content: center; padding: 20px;
+                  border-radius: 6px; border: 1px dashed #ccc; background: #f8f8f8;
+                  text-decoration: none; color: #0066cc; font-size: 0.85em;
+                  text-align: center; line-height: 1.4; min-height: 200px; }
+  .see-all-card:hover { background: #f0f0f0; border-color: #aaa; }
+
+  .mode-badge { display: inline-block; font-size: 0.55em; color: #fff; padding: 1px 4px;
+                border-radius: 3px; margin-left: 2px; vertical-align: middle; }
+
+  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0;
+            font-size: 0.75em; color: #999; }
+  .footer a { color: #999; text-decoration: underline; }
+  .footer a:hover { color: #666; }
+
+  @media (max-width: 700px) {
+    .query-header { flex-direction: column; }
+    .query-thumb { width: 100%; max-height: 300px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Find Similar: The Battle of Waterloo</h1>
+<p class="subtitle">Visual: 12 | Related Variant: 4 | Iconclass: 12 | Description: 12 | Theme: 12 | Depicted Person: 12 | Depicted Place: 12 | Related Object: 9 | 67 unique | pooled: 4+ forms | 2026-06-02 15:24</p>
+
+<div class="query-header">
+  <img class="query-thumb" src="https://iiif.micr.io/GebpD/full/300,/0/default.jpg" alt="" loading="lazy"
+           onerror="this.style.display='none'">
+  <div class="query-info">
+    <h2>The Battle of Waterloo<span class="type-badge">painting</span></h2>
+    <div class="creator">Jan Willem Pieneman (1824)</div>
+    <a class="obj-num" href="https://www.rijksmuseum.nl/en/collection/SK-A-1115" target="_blank">SK-A-1115</a>
+    <div class="query-metadata"><div class="meta-section">
+      <div class="meta-section-label description">Description</div>
+      <div class="meta-desc">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.</div>
+    </div><div class="meta-section">
+      <div class="meta-section-label iconclass">Iconclass</div>
+      <div class="meta-content"><a href="https://iconclass.org/45E4" target="_blank"><code>45E4</code></a> animals used in the army &middot; <a href="https://iconclass.org/45H3" target="_blank"><code>45H3</code></a> battle &middot; <a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a> putting out of action by wounding</div>
+    </div><div class="meta-section">
+      <div class="meta-section-label depicted-person">Depicted Person</div>
+      <div class="meta-content"><a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a> &middot; <a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a> &middot; <a href="http://www.wikidata.org/entity/Q370241" target="_blank">Hill, sir Rowland</a></div>
+    </div><div class="meta-section">
+      <div class="meta-section-label depicted-place">Depicted Place</div>
+      <div class="meta-content"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+    </div><div class="meta-section">
+      <div class="meta-section-label theme">Theme</div>
+      <div class="meta-content">history painting &middot; battlefield &middot; military history</div>
+    </div><div class="meta-section">
+      <div class="meta-section-label related-variant">Related Variant</div>
+      <div class="meta-content"><em>production stadia</em></div>
+    </div><div class="meta-section">
+      <div class="meta-section-label related-object">Related Object</div>
+      <div class="meta-content"><em>related object</em> &middot; <em>original | reproduction</em></div>
+    </div></div>
+  </div>
+</div>
+
+<div class="signal-rows">
+  <div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#00838f">Visual</span>
+      <span class="row-count">12 of 13+ results</span>
+    </div>
+    <div class="row-method">The Rijksmuseum&rsquo;s own image-based visual similarity model. Most artworks have digital images.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3753" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/KtNHn/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1</div>
+      <div class="title">Louis XIV Crossing into the Netherlands at Lobith</div>
+      <div class="creator">Adam Frans van der Meulen</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3753" target="_blank">SK-A-3753</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-605" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/cAqLF/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2</div>
+      <div class="title">The Battle of the Boyne, Ireland, between Kings James II and William III, 12 July 1690</div>
+      <div class="creator">Jan van Huchtenburg</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-605" target="_blank">SK-A-605</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-664" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SyWtO/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3</div>
+      <div class="title">Prince Maurice at the Battle of Nieuwpoort, 2 July 1600</div>
+      <div class="creator">Pauwels van Hillegaert (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-664" target="_blank">SK-A-664</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4023" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/JCaZT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4</div>
+      <div class="title">Inspection of a Cavalry Regiment</div>
+      <div class="creator">Cornelis Troost</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4023" target="_blank">SK-A-4023</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4061" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/cyCGV/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5</div>
+      <div class="title">The Battle of Ramillies between the French and the Allied Powers, 23 May 1706</div>
+      <div class="creator">Jan van Huchtenburg</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4061" target="_blank">SK-A-4061</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3879" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/UYzZk/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6</div>
+      <div class="title">The Dutch Ambassador on his Way to Isfahan</div>
+      <div class="creator">Jan Baptist Weenix (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3879" target="_blank">SK-A-3879</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-427" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/pzuTf/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7</div>
+      <div class="title">A Cavalry Skirmish</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-427" target="_blank">SK-C-427</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-482" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/STxsH/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8</div>
+      <div class="title">The Victory of the Peasants</div>
+      <div class="creator">Philips Wouwerman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-482" target="_blank">SK-A-482</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-252" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/wUGbD/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9</div>
+      <div class="title">The Departure of Charles II of England from Scheveningen, June 2, 1660</div>
+      <div class="creator">Hendrick de Meijer</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-252" target="_blank">SK-A-252</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1409" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/yCnsz/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10</div>
+      <div class="title">The Skirmish Between Cuirassiers, 5 February 1600, on the Vughterheide</div>
+      <div class="creator">after Sebastiaen Vrancx</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1409" target="_blank">SK-A-1409</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-83.385" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/DFxjK/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11</div>
+      <div class="title">Ruitergevecht in Noord-Italië, ca. 1702-1703</div>
+      <div class="creator">Jan van Huchtenburg (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-83.385" target="_blank">RP-P-OB-83.385</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-484" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/vNpHP/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12</div>
+      <div class="title">An Army Camp</div>
+      <div class="creator">Philips Wouwerman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-484" target="_blank">SK-A-484</a>
+    </div>
+    
+  </div>
+        <a class="see-all-card" href="https://www.rijksmuseum.nl/en/collection/visual/search?objectNodeId=9fc8b4d132695d9b276b9c92522386f3" target="_blank">
+         See all 13+<br>visual matches<br>on rijksmuseum.nl &rarr;
+       </a>
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#7b1fa2">Related Variant</span>
+      <span class="row-count">4 results</span>
+    </div>
+    <div class="row-method">Curator-asserted links to other works by the same artist: <em>different example</em> (e.g. impressions, casts, or copies), <em>production stadia</em> (e.g. a preparatory study for a print), or <em>pendant</em> (companion pieces).</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1964-102A" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/cOJsQ/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 10.00</div>
+      <div class="title">Study for The Battle of Waterloo</div>
+      <div class="creator">Jan Willem Pieneman</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1964-102A" target="_blank">RP-T-1964-102A</a>
+    </div>
+    <div class="card-detail">production stadia</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1964-101A" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/IFifs/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 10.00</div>
+      <div class="title">Study for The Battle of Waterloo</div>
+      <div class="creator">Jan Willem Pieneman</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1964-101A" target="_blank">RP-T-1964-101A</a>
+    </div>
+    <div class="card-detail">production stadia</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1964-103" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hkPWp/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 10.00</div>
+      <div class="title">Study for The Battle of Waterloo</div>
+      <div class="creator">Jan Willem Pieneman</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1964-103" target="_blank">RP-T-1964-103</a>
+    </div>
+    <div class="card-detail">production stadia</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1964-99" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/fXPEE/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 10.00</div>
+      <div class="title">Study for The Battle of Waterloo</div>
+      <div class="creator">Jan Willem Pieneman</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1964-99" target="_blank">RP-T-1964-99</a>
+    </div>
+    <div class="card-detail">production stadia</div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#1565c0">Iconclass</span>
+      <span class="row-count">12 results</span>
+    </div>
+    <div class="row-method">Artworks sharing the same <a href='https://iconclass.org' target='_blank'>Iconclass</a> subject codes. Deeper codes (more specific scenes) that appear on fewer artworks contribute more. Single shallow matches are pruned.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1904-1682" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/eApuB/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 76.00</div>
+      <div class="title">Slag bij Leuven</div>
+      <div class="creator">Johannes Steyn (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1904-1682" target="_blank">RP-P-1904-1682</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a> <a href="https://iconclass.org/45H3" target="_blank"><code>45H3</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-F25056-D" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 76.00</div>
+      <div class="title">Fotoreproductie van een schilderij van Napoleon Bonaparte bij de slag van Regensburg door Pierre Gautherot</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-F25056-D" target="_blank">RP-F-F25056-D</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a> <a href="https://iconclass.org/45H3" target="_blank"><code>45H3</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-2001-7-18-8" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ADECz/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 76.00</div>
+      <div class="title">Fotoreproductie van een prent van Horatio Nelson die gewond aankomt op Tenerife na de zeeslag bij Kaap Sint-Vincent in 1797</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-2001-7-18-8" target="_blank">RP-F-2001-7-18-8</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a> <a href="https://iconclass.org/45H3" target="_blank"><code>45H3</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-2001-7-17-8" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/aMFWt/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 76.00</div>
+      <div class="title">Fotoreproductie van een prent van Horatio Nelson die gewond aankomt op Tenerife na de zeeslag bij Kaap Sint-Vincent in 1797</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-2001-7-17-8" target="_blank">RP-F-2001-7-17-8</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a> <a href="https://iconclass.org/45H3" target="_blank"><code>45H3</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1958-164" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/tNSIu/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 69.40</div>
+      <div class="title">Soldaten met paarden en een olifant</div>
+      <div class="creator">Carle Vernet (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1958-164" target="_blank">RP-P-1958-164</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45E4" target="_blank"><code>45E4</code></a> <a href="https://iconclass.org/45H3" target="_blank"><code>45H3</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1970-559" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/Wjken/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 51.30</div>
+      <div class="title">Karikatuur van een lid van de Nationale Garde na een schietoefening</div>
+      <div class="creator">Frédéric Bouchot (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1970-559" target="_blank">RP-P-1970-559</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.456" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/CqHNH/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 51.30</div>
+      <div class="title">Huon de Bordeaux in gevecht met Charlot, achter hen ligt Girard gewond op de grond</div>
+      <div class="creator">Daniel Nikolaus Chodowiecki</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.456" target="_blank">RP-P-OB-14.456</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/yjXAz/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 51.30</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">RP-P-OB-27.938</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sPpFA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 51.30</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Jean Augustin Daiwaille</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">RP-P-OB-27.939</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1883-A-7619" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ygHNR/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 51.30</div>
+      <div class="title">Gewonde soldaat</div>
+      <div class="creator">Dirk Maas</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1883-A-7619" target="_blank">RP-P-1883-A-7619</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-48.056" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/CJDRI/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 51.30</div>
+      <div class="title">Gewonde soldaat</div>
+      <div class="creator">Dirk Maas</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-48.056" target="_blank">RP-P-OB-48.056</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-548" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/kqHFN/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 51.30</div>
+      <div class="title">Verwonding van de prins van Oranje tijdens de Slag bij Waterloo</div>
+      <div class="creator">Jacob Ernst Marcus (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-548" target="_blank">RP-P-1905-548</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45H52" target="_blank"><code>45H52</code></a></div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#e65100">Description</span>
+      <span class="row-count">12 results</span>
+    </div>
+    <div class="row-method">Artworks with semantically similar Dutch catalogue descriptions. Shared generic structural phrases, (&ldquo;Links een X, rechts een Y&rdquo;) can artificially inflate scores for visually dissimilar works.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-4151" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/dqScR/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 0.81</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Carel Christiaan Antony Last (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-4151" target="_blank">RP-P-1909-4151</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment waarop de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.204" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/mHcrh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 0.80</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Reinier Craeyvanger (possibly)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.204" target="_blank">RP-P-OB-87.204</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment waarop de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sPpFA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 0.80</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Jean Augustin Daiwaille</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">RP-P-OB-27.939</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/yjXAz/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 0.80</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">RP-P-OB-27.938</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.376" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/gpkjo/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 0.80</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.376" target="_blank">RP-P-OB-29.376</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.375" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sfFyh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 0.80</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.375" target="_blank">RP-P-OB-29.375</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.201" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/cSSfd/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 0.80</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.201" target="_blank">RP-P-OB-87.201</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment waarop de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.202" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/iuDfF/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 0.80</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.202" target="_blank">RP-P-OB-87.202</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment waarop de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.203" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/luJjF/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 0.79</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Adolf Carel Nunnink (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.203" target="_blank">RP-P-OB-87.203</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment waarop de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1882-A-6081" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/fhfZj/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 0.76</div>
+      <div class="title">Veldslag bij Waterloo, den 18 Juny 1815. Op het Oogenblik, waarin zyne Koninklyke Hoogheyd. de Prins van Oranje, Gewond is / Bataille de Waterloo, le 18 Juin 1915 (...)</div>
+      <div class="creator">Jan Anthonie Langendijk Dzn (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1882-A-6081" target="_blank">RP-P-1882-A-6081</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">De slag bij Waterloo, 18 juni 1815. Weids gezicht van het slagveld, met links van het midden het moment dat de prins van Oranje gewond raakt. Links van de prins […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.207" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/Sprmf/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 0.76</div>
+      <div class="title">Prins van Oranje raakt gewond tijdens de slag bij Waterloo, 1815</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.207" target="_blank">RP-P-OB-87.207</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Willem Frederik George, prins van Oranje, wordt tijdens de slag bij Waterloo op 18 juni 1815 in de linkerschouder getroffen door een Franse kogel. Links en op […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.209" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/AIFUA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 0.75</div>
+      <div class="title">Prins van Oranje raakt gewond tijdens de slag bij Waterloo, 1815</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.209" target="_blank">RP-P-OB-87.209</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Willem Frederik George, prins van Oranje, raakt tijdens de slag bij Waterloo op 18 juni 1815 gewond aan de linkerschouder. Op de achtergrond zware gevechten.</div></div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#5d4037">Theme</span>
+      <span class="row-count">12 results</span>
+    </div>
+    <div class="row-method">Artworks sharing curatorial thematic tags, e.g. &ldquo;economic history&rdquo;. Matching artworks need to have at least two themes and match at least one; rarer themes contribute more. Three-way tie-breaks are resolved by curatorial importance.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2823" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/FgJBY/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 7.74</div>
+      <div class="title">The Prince of Orange changing his Wounded Horse during the Engagement at Boutersem</div>
+      <div class="creator">Cornelis Kruseman</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2823" target="_blank">SK-A-2823</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-222" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/LQGwS/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 7.74</div>
+      <div class="title">Jan van Speyk steekt de lont in het kruit, 5 februari 1831</div>
+      <div class="creator">Jacobus Schoemaker Doyer</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-222" target="_blank">SK-C-222</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-226" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/xseWA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 7.74</div>
+      <div class="title">The Explosion of Gunboat nr 2, under Command of Jan van Speyk, off Antwerp, 5 February 1831</div>
+      <div class="creator">Martinus Schouman</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-226" target="_blank">SK-C-226</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-605" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/EsPBY/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 7.74</div>
+      <div class="title">The Battle of the Boyne, Ireland, between Kings James II and William III, 12 July 1690</div>
+      <div class="creator">Jan van Huchtenburg</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-605" target="_blank">SK-A-605</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3893" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/uhOqt/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 7.74</div>
+      <div class="title">The Siege of Schenkenschans in 1636</div>
+      <div class="creator">Gerrit van Santen</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3893" target="_blank">SK-A-3893</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-664" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SyWtO/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 7.74</div>
+      <div class="title">Prince Maurice at the Battle of Nieuwpoort, 2 July 1600</div>
+      <div class="creator">Pauwels van Hillegaert (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-664" target="_blank">SK-A-664</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2239" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/vaVtK/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 7.74</div>
+      <div class="title">De overmeestering van Palembang (Sumatra) door luitenant-generaal De Kock, 24 juni 1821</div>
+      <div class="creator">Louis Meijer (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2239" target="_blank">SK-A-2239</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2816" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/fyVfb/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 7.74</div>
+      <div class="title">The Engagement at Houthalen</div>
+      <div class="creator">Nicolaas Pieneman</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2816" target="_blank">SK-A-2816</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-1998-7-16" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/qLARs/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 7.74</div>
+      <div class="title">The President, Vice-President and other leaders being transported at Maguwo airport to be exiled to Sumatra</div>
+      <div class="creator">Mohammad Toha Adimidjojo</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-1998-7-16" target="_blank">NG-1998-7-16</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-1998-7-3" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SBpvX/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 7.74</div>
+      <div class="title">A Dutch bomber bombing the fort in the centre of the city of Yogyakarta</div>
+      <div class="creator">Mohammad Toha Adimidjojo</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-1998-7-3" target="_blank">NG-1998-7-3</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-1998-7-14" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/YZpfb/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 7.74</div>
+      <div class="title">Dutch forces occupying the Presidential Palace</div>
+      <div class="creator">Mohammad Toha Adimidjojo</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-1998-7-14" target="_blank">NG-1998-7-14</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-1998-7-24" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/KnGkT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 7.74</div>
+      <div class="title">Strict guarding of the Gondulayu bridge in the centre of Yogyakarta</div>
+      <div class="creator">Mohammad Toha Adimidjojo</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-1998-7-24" target="_blank">NG-1998-7-24</a>
+    </div>
+    <div class="card-detail">history painting, military history</div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#2e7d32">Depicted Person</span>
+      <span class="row-count">12 results</span>
+    </div>
+    <div class="row-method">Artworks depicting the same historical figures or named individuals. People appearing on fewer artworks contribute more.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1903-A-23874" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/svzxI/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 12.36</div>
+      <div class="title">Gedenkzuil voor de Slag bij Waterloo</div>
+      <div class="creator">Cornelis Bogerts (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1903-A-23874" target="_blank">RP-P-1903-A-23874</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/yjXAz/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 12.36</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">RP-P-OB-27.938</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sPpFA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 12.36</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Jean Augustin Daiwaille</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">RP-P-OB-27.939</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1903-A-23351" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/pdyre/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 12.36</div>
+      <div class="title">Portret van kroonprins Willem Frederik George Lodewijk ter nagedachtenis van de Slag bij Waterloo</div>
+      <div class="creator">Pieter van der Meulen (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1903-A-23351" target="_blank">RP-P-1903-A-23351</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.375" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sfFyh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 12.36</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.375" target="_blank">RP-P-OB-29.375</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.376" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/gpkjo/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 12.36</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.376" target="_blank">RP-P-OB-29.376</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-4151" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/dqScR/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 12.36</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Carel Christiaan Antony Last (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-4151" target="_blank">RP-P-1909-4151</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-VG-1-4211" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/WtCQO/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 12.36</div>
+      <div class="title">Vijftigjarige herdenking van de slag bij Waterloo, ter ere van Wellington, Willem II en Blucher</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-VG-1-4211" target="_blank">NG-VG-1-4211</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-VG-1-4212-A" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/XnfFX/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 12.36</div>
+      <div class="title">Vijftigjarige herdenking van de slag bij Waterloo, ter ere van Wellington, Willem II en Blucher</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-VG-1-4212-A" target="_blank">NG-VG-1-4212-A</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.343" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/OSvYS/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 12.36</div>
+      <div class="title">Allegorie op de terugkeer van de ontvoerde voorwerpen van kunst en wetenschap te Antwerpen, 1815</div>
+      <div class="creator">Adriaan Gerrit van Prooijen (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.343" target="_blank">RP-P-OB-87.343</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.201" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/cSSfd/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 12.36</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.201" target="_blank">RP-P-OB-87.201</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.202" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/iuDfF/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 12.36</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.202" target="_blank">RP-P-OB-87.202</a>
+    </div>
+    <div class="card-detail"><a href="http://www.wikidata.org/entity/Q131691" target="_blank">Wellington, Arthur Wellesley of</a>, <a href="http://www.wikidata.org/entity/Q154287" target="_blank">William II of the Netherlands</a></div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#4e342e">Depicted Place</span>
+      <span class="row-count">12 results</span>
+    </div>
+    <div class="row-method">Artworks depicting the same specific sites &mdash; streets, buildings, monuments, waterways. Rarer places contribute more. Broader administrative regions (countries, provinces and cities) are excluded.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1929-22" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/pUhZL/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 6.49</div>
+      <div class="title">Thuiskomst van een oude soldaat, na de slag bij Waterloo</div>
+      <div class="creator">Eugène François de Block</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1929-22" target="_blank">RP-T-1929-22</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2165" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 6.49</div>
+      <div class="title">The Chassé Division at the Battle of Waterloo</div>
+      <div class="creator">Jan Hoynck van Papendrecht (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2165" target="_blank">SK-A-2165</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3856" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 6.49</div>
+      <div class="title">Een oud-strijder van de Slag bij Waterloo, geportretteerd ter gelegenheid van de 60-jarige herdenking van de slag</div>
+      <div class="creator">Piet Slager (I)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3856" target="_blank">SK-A-3856</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1907-5487" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/dHGdl/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 6.49</div>
+      <div class="title">Vlakte van Waterloo</div>
+      <div class="creator">attributed to Henri Borremans</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1907-5487" target="_blank">RP-P-1907-5487</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/yjXAz/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 6.49</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">RP-P-OB-27.938</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sPpFA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 6.49</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Jean Augustin Daiwaille</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">RP-P-OB-27.939</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1886-A-10961" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/fiTbD/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 6.49</div>
+      <div class="title">Gezicht op huizen en een kerk</div>
+      <div class="creator">Frédéric Théodore Faber</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1886-A-10961" target="_blank">RP-P-1886-A-10961</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-40.101" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/VDHxt/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 6.49</div>
+      <div class="title">Gezicht op de Leeuw van Waterloo bij Mont-Saint-Jean</div>
+      <div class="creator">J. Van Genk (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-40.101" target="_blank">RP-P-OB-40.101</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1910-3412" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/iRttC/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 6.49</div>
+      <div class="title">Landschap met stormachtige wolkenlucht</div>
+      <div class="creator">Jules Marie Armand Goethals (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1910-3412" target="_blank">RP-P-1910-3412</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1904-2573" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/xsXsh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 6.49</div>
+      <div class="title">Gezicht op de kerk van Waterloo</div>
+      <div class="creator">Paulus Lauters (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1904-2573" target="_blank">RP-P-1904-2573</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.375" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sfFyh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 6.49</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.375" target="_blank">RP-P-OB-29.375</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.376" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/gpkjo/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 6.49</div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.376" target="_blank">RP-P-OB-29.376</a>
+    </div>
+    <div class="card-detail"><a href="http://vocab.getty.edu/tgn/7008022" target="_blank">Waterloo</a></div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#ad1457">Related Object</span>
+      <span class="row-count">9 results</span>
+    </div>
+    <div class="row-method">Curator-defined assertions linking other related works, weighted by the specificity of the relationship: <em>pair</em> / <em>set</em> / <em>recto | verso</em> / <em>product line</em> (named, well-defined groupings) carry the most weight; <em>original | reproduction</em> (a defined derivative relationship) less; the catch-all <em>related object</em> the least.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-1171-B" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/KdqhZ/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 2.00</div>
+      <div class="title">Beschrijving van het schilderij voorstellende den veldslag bij Waterloo</div>
+      <div class="creator">Met &amp; Meylink</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-1171-B" target="_blank">NG-1171-B</a>
+    </div>
+    <div class="card-detail">related object</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-1171-A" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/HuSXY/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 2.00</div>
+      <div class="title">Tekening van het schilderij voorstellende den veldslag bij Waterloo</div>
+      <div class="creator">Met &amp; Meylink</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-1171-A" target="_blank">NG-1171-A</a>
+    </div>
+    <div class="card-detail">related object</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-4151" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/dqScR/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 4.00</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Carel Christiaan Antony Last (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-4151" target="_blank">RP-P-1909-4151</a>
+    </div>
+    <div class="card-detail">original | reproduction</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-NM-12989-A" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/CTwvC/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 4.00</div>
+      <div class="title">Slag bij Waterloo naar Pieneman</div>
+      <div class="creator">Albertus Willem Sijthoff</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-NM-12989-A" target="_blank">NG-NM-12989-A</a>
+    </div>
+    <div class="card-detail">original | reproduction</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/NG-408" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/XllCD/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 2.00</div>
+      <div class="title">Plaquette van de Slag bij Waterloo</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/NG-408" target="_blank">NG-408</a>
+    </div>
+    <div class="card-detail">related object</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.203" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/luJjF/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 4.00</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Adolf Carel Nunnink (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.203" target="_blank">RP-P-OB-87.203</a>
+    </div>
+    <div class="card-detail">original | reproduction</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.204" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/mHcrh/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 4.00</div>
+      <div class="title">Slag bij Waterloo, 1815</div>
+      <div class="creator">Reinier Craeyvanger (possibly)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-87.204" target="_blank">RP-P-OB-87.204</a>
+    </div>
+    <div class="card-detail">original | reproduction</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-R-1903-AA-1303" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/kUqBZ/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 4.00</div>
+      <div class="title">Sleutel bij het schilderij van de Slag bij Waterloo</div>
+      <div class="creator">François de Bas (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-R-1903-AA-1303" target="_blank">RP-R-1903-AA-1303</a>
+    </div>
+    <div class="card-detail">original | reproduction</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-L-3820-C" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 2.00</div>
+      <div class="title">Lijstdeel</div>
+      <div class="creator">Sala, Firma</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-L-3820-C" target="_blank">SK-L-3820-C</a>
+    </div>
+    <div class="card-detail">related object</div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#37474f">Pooled</span>
+      <span class="row-count">2 results</span>
+    </div>
+    <div class="row-method">Artworks appearing in <strong>4+</strong> of the 8 forms of similarity above. The scores and icons show which and how many forms agree.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/yjXAz/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 4.00 <span class="mode-badge" style="background:#1565c0">IC</span><span class="mode-badge" style="background:#e65100">Desc</span><span class="mode-badge" style="background:#2e7d32">Per</span><span class="mode-badge" style="background:#4e342e">Pl</span></div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938" target="_blank">RP-P-OB-27.938</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sPpFA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 4.00 <span class="mode-badge" style="background:#1565c0">IC</span><span class="mode-badge" style="background:#e65100">Desc</span><span class="mode-badge" style="background:#2e7d32">Per</span><span class="mode-badge" style="background:#4e342e">Pl</span></div>
+      <div class="title">Slag bij Waterloo</div>
+      <div class="creator">Jean Augustin Daiwaille</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939" target="_blank">RP-P-OB-27.939</a>
+    </div>
+    
+  </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Generated by <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" target="_blank">rijksmuseum-mcp+</a> find_similar | 2026-06-02 15:24
+</div>
+
+</body>
+</html>
