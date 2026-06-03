@@ -1,6 +1,6 @@
 # Search Parameters
 
-`search_artwork` accepts 31 search filters and 7 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
+`search_artwork` accepts 32 search filters and 7 output controls. At least one filter is required (parameters marked *modifier* narrow results but cannot be the sole filter). All filters combine freely with each other — results are the intersection (AND) of all active filters.
 
 Parameters that accept arrays (marked **[]**) AND-combine their values: `subject: ["landscape", "seascape"]` returns artworks tagged with *both* subjects.
 
@@ -9,7 +9,7 @@ All searches are backed by a vocabulary database of ~418,000 controlled terms ma
 - [Ranking](#ranking)
 - [Result limits and pagination](#result-limits-and-pagination)
 - [1. Vocabulary label filters](#1-vocabulary-label-filters) (15 parameters)
-- [2. Full-text search filters](#2-full-text-search-filters) (4 parameters)
+- [2. Full-text search filters](#2-full-text-search-filters) (5 parameters)
 - [3. Column and metadata filters](#3-column-and-metadata-filters) (12 parameters)
 - [4. Output controls](#4-output-controls) (7 parameters)
 - [Semantic search](#semantic-search)
@@ -19,7 +19,7 @@ All searches are backed by a vocabulary database of ~418,000 controlled terms ma
 
 Results are ranked differently depending on which filters are active:
 
-- **BM25** — when any full-text filter is active (`query`, `description`, `inscription`, `curatorialNarrative`), results are ranked by text relevance.
+- **BM25** — when any full-text filter is active (`query`, `description`, `inscription`, `curatorialNarrative`, `textQuery`), results are ranked by text relevance.
 - **Geographic proximity** — when `nearPlace` or `nearLat`/`nearLon` is active (without text filters), results are ranked by distance from the search point.
 - **Importance** — when only vocabulary, column, or modifier filters are active, results are ordered by a composite importance score reflecting image availability, curatorial attention, and metadata richness.
 - **Column sort** — `sort` overrides all of the above when set (see [Output controls](#4-output-controls)).
@@ -101,6 +101,37 @@ BM25-ranked search on FTS5 indexes. Exact word matching, no stemming (except `su
 | `curatorialNarrative` | string | Curatorial wall text (~14K artworks). Art-historical interpretation written by museum curators — distinct from `description`. | `"civic guard"` |
 
 Ownership-history text is no longer searched from `search_artwork` — use the dedicated [`search_provenance`](mcp-tool-parameters.md#search_provenance) tool, which queries the parsed event/period structures with party-, transfer-type-, date-, location-, and price-based filters.
+
+### Structured text query (`textQuery`)
+
+The four flat filters above each match a single field, AND-combine, and treat their input as one literal phrase. When that is not enough — boolean either/or, either/or *across* fields, words near each other, or a word-stem wildcard — use the opt-in `textQuery` object instead. It compiles server-side into one BM25-ranked FTS5 query over the same four text fields (`title`, `description`, `inscription`, `curatorialNarrative`). Use it sparingly; for the common case the flat filters are simpler and more discoverable.
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `textQuery` | object | `{ must?: Clause[], should?: Clause[], mustNot?: Clause[] }` — `must`=AND, `should`=OR-group, `mustNot`=excluded. At least one `must`/`should` is required (a `mustNot`-only query is rejected). Each `Clause` targets one `field` (omit for all four) and OR-combines its terms. Combines freely with the structured filters (`type`, `creator`, `creationDate`, …). A malformed query is dropped with a `warnings` note rather than failing the search. | see below |
+
+Clause keys (a clause carries one or more):
+
+| Key | Meaning |
+|-----|---------|
+| `field` | One of `title`, `description`, `inscription`, `curatorialNarrative`. Omit to match all four. |
+| `phrase` | Exact words in order. |
+| `any` | List of tokens, matched as OR. |
+| `prefix` | A stem; matches the stem plus any continuation (`sculp` also matches `sculptor`, `sculpsit`). |
+| `anyPrefix` | List of stems, matched as OR. |
+| `near` | `{ terms: [...], distance }` — terms within `distance` words of each other; a nested list inside `terms` offers alternatives at that position. |
+
+Example — a theme written up differently per field, excluding history prints:
+
+```json
+{
+  "should": [
+    { "field": "description",        "phrase": "beeldenstorm" },
+    { "field": "curatorialNarrative", "any": ["iconoclasm", "iconoclastic"] }
+  ],
+  "mustNot": [ { "field": "title", "phrase": "geschiedenis" } ]
+}
+```
 
 ---
 

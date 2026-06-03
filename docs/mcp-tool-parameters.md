@@ -25,6 +25,7 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 | `description` | Full-text search on cataloguer descriptions (~510K artworks) |
 | `curatorialNarrative` | Full-text search on museum wall text (~14K artworks) |
 | `inscription` | Full-text search on inscription texts (signatures, mottoes, dates on objects) |
+| `textQuery` | Advanced structured boolean/phrase/proximity/prefix search over the four text fields. Opt-in object `{ must?, should?, mustNot? }`; use only when the flat text filters can't express the query (cross-field OR, NOT, NEAR, word-stem prefix). See [search-parameters.md](search-parameters.md#structured-text-query-textquery). |
 | `depictedPerson` | Artworks depicting a named person |
 | `depictedPlace` | Artworks depicting a named place |
 | `productionPlace` | Place where the work was made |
