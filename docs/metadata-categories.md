@@ -72,7 +72,7 @@ Nearly all categories have corresponding search parameters in `search_artwork` â
 
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
-| 28 | **Web page** | `webPage` | URL of the artwork's page on the Rijksmuseum website (derived from the object number). |
+| 28 | **Web page** | `url` | URL of the artwork's page on the Rijksmuseum website (derived from the object number). |
 | 29 | **License** | `license` | Rights/license URI (e.g. CC0 1.0, Public Domain Mark) from the `rights_lookup` table. Not a standalone search filter; returned on each result, and available as the `rights` dimension via `search_artwork`'s `facets` parameter (e.g. `facets: ["rights"]`) for a license breakdown of a result set. |
 
 ## Related Works
