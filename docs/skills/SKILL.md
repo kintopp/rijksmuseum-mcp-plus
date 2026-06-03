@@ -13,8 +13,8 @@ description: >
   historical artefacts, ownership history, museum acquisitions — even when
   the user doesn't name the collection.
 metadata:
-  version: "0.48"
-  last_updated: "2026-06-01"
+  version: "0.50"
+  last_updated: "2026-06-03"
 ---
 
 # Rijksmuseum MCP+ Research Skill

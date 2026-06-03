@@ -13,6 +13,6 @@ const pkg = JSON.parse(
  * Identifying User-Agent for outbound requests to Rijksmuseum / micr.io.
  * Replaces the default `axios/<ver>` so the museum can attribute MCP traffic
  * and reach the maintainer via the linked repo if something goes wrong.
- * e.g. "rijksmuseum-mcp-plus/0.40.0 (+https://github.com/kintopp/rijksmuseum-mcp-plus)"
+ * e.g. "rijksmuseum-mcp-plus/0.50.0 (+https://github.com/kintopp/rijksmuseum-mcp-plus)"
  */
 export const USER_AGENT = `${pkg.name}/${pkg.version} (+https://github.com/kintopp/rijksmuseum-mcp-plus)`;
