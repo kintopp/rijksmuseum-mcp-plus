@@ -20,10 +20,10 @@ search_artwork	{"subject": "winter landscape", "creationDate": "17*"}
 search_artwork	{"productionPlace": "Haarlem", "technique": "mezzotint"}
 search_artwork	{"inscription": "fecit"}
 search_artwork	{"productionRole": "after painting by"}
-search_artwork	{"creditLine": "bequest"}
+search_provenance	{"creditLineQuery": "bequest"}
 search_artwork	{"nearPlace": "Oude Kerk Amsterdam", "nearPlaceRadius": 0.1}
 search_artwork	{"inscription": "luctor et emergo"}
-search_artwork	{"type": "painting", "minWidth": 300}
+search_artwork	{"type": "painting", "widthRange": "300-"}
 get_artwork_details	{"objectNumber": "SK-A-1718"}
 search_artwork	{"attributionQualifier": "circle of", "creator": "Hieronymus Bosch"}
 list_curated_sets	{}
@@ -67,12 +67,12 @@ search_artwork	{"subject": "vanitas", "type": "painting"}
 search_artwork	{"subject": "vanitas", "type": "print"}
 
 # 7. Dimensions as Evidence for Workshop Practice
-search_artwork	{"type": "painting", "material": "panel", "minHeight": 40, "maxHeight": 50, "minWidth": 30, "maxWidth": 40}
+search_artwork	{"type": "painting", "material": "panel", "heightRange": "40-50", "widthRange": "30-40"}
 search_artwork	{"inscription": "Saenredam"}
 
-# 8. Credit Lines and Acquisition Context
-search_artwork	{"creditLine": "purchase", "creator": "Rembrandt"}
-search_artwork	{"creditLine": "bequest", "creator": "Rembrandt"}
+# 8. Credit Lines and Acquisition Context (creditLine moved to search_provenance in v0.50)
+search_provenance	{"creator": "Rembrandt", "transferType": "sale"}
+search_provenance	{"creator": "Rembrandt", "transferType": "bequest"}
 
 # 9. Women Artists Across Centuries and Media (demographic filters now via search_persons → search_artwork)
 
@@ -141,3 +141,22 @@ semantic_search	{"query": "vanitas symbolism and mortality"}
 semantic_search	{"query": "winter landscape with ice skating"}
 semantic_search	{"query": "loneliness and isolation"}
 semantic_search	{"query": "naval battle at sea", "type": "painting"}
+
+# ===================================================================
+# v0.50 tool/path coverage — warm heavy code paths not exercised above
+# ===================================================================
+
+# 28. find_similar — warms the 9-channel IDF/cosine similarity caches
+find_similar	{"objectNumber": "SK-C-5"}
+
+# 29. collection_stats — warms the aggregation ladder (vocab dim, filtered date-bin, provenance dim)
+collection_stats	{"dimension": "type"}
+collection_stats	{"dimension": "century", "type": "painting"}
+collection_stats	{"dimension": "transferType"}
+
+# 30. search_provenance — warms the structured events path + party/date-range indexes
+search_provenance	{"party": "Six"}
+search_provenance	{"transferType": "confiscation", "dateFrom": 1940, "dateTo": 1945}
+
+# 31. textQuery FTS5 DSL (#363) — warms the structured cross-field text-search path
+search_artwork	{"textQuery": {"should": [{"field": "description", "phrase": "stormy sea"}, {"field": "curatorialNarrative", "any": ["shipwreck", "storm"]}]}}
