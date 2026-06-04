@@ -85,7 +85,7 @@ Match against ~417,000 controlled terms. Labels are bilingual (English and Dutch
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `collectionSet` | string **[]** | Curated collection set by name. [192 sets](vocabulary-collection-sets.md). Use `list_curated_sets` to discover sets. | `"Rembrandt"` |
+| `collectionSet` | string **[]** | Curated collection set by name. [193 sets](vocabulary-collection-sets.md). Use `list_curated_sets` to discover sets. | `"Rembrandt"` |
 
 ---
 

@@ -183,11 +183,12 @@ Search ownership and provenance history across ~48K artworks with parsed provena
 | `objectNumber` | Full provenance chain for a specific artwork (fast local lookup) |
 | `party` | Owner, collector, or dealer name (partial match, e.g. `Six`, `Rothschild`) |
 | `creator` | Artist name (partial match, e.g. `Rembrandt`) |
-| `transferType` | Type of ownership transfer (single value or array). Values: `collection`, `sale`, `by_descent`, `gift`, `transfer`, `loan`, `bequest`, `widowhood`, `recuperation`, `commission`, `deposit`, `restitution`, `confiscation`, `exchange`, `inventory`, `theft`, `looting`, `inheritance` |
+| `transferType` | Type of ownership transfer (single value or array). Values: `collection`, `sale`, `by_descent`, `gift`, `transfer`, `loan`, `bequest`, `widowhood`, `recuperation`, `commission`, `deposit`, `restitution`, `confiscation`, `exchange`, `inventory`, `theft`, `looting`, `inheritance`, `unknown` |
 | `excludeTransferType` | Exclude artworks that have any event of this type (artwork-level negation) |
 | `location` | City or place name (partial match) |
 | `dateFrom` | Earliest year (inclusive) |
 | `dateTo` | Latest year (inclusive) |
+| `creditLineQuery` | FALLBACK — standalone free-text search over the unstructured credit-line field of artworks *lacking* parsed provenance. Ignores all other filters; returns matches in `creditLineResults` (not `results`). Use as a second step when structured search finds no parsed provenance. |
 
 ### Event-layer filters
 | Parameter | Description |

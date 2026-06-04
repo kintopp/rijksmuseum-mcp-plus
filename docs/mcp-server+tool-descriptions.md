@@ -44,7 +44,7 @@ Use when the user has a demographic or structural query about persons (artists, 
 
 Not for free-text concept queries — use semantic_search. Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.
 
-By default restricts to persons with ≥1 artwork in the collection (~60K of ~290K). Coverage note: demographic filters (gender, bornAfter, bornBefore) require person-enrichment to be present on the vocabulary DB; on a freshly harvested DB without person enrichment they return zero rows. Name search and structural filters (birthPlace / deathPlace / profession) work on any harvest.
+By default restricts to persons with ≥1 artwork in the collection (~60K of ~290K). Coverage note: demographic filters (gender, bornAfter, bornBefore) require person-enrichment on the vocabulary DB — they return zero rows on a freshly harvested DB without it, and undercount where enrichment is sparse. The structural filters (birthPlace / deathPlace / profession) work on any harvest but resolve by pivoting through creator-mapped artworks, so on multi-creator works the artwork-level attribute leaks to co-creators — expect false positives (incl. 'anonymous'/'unknown' placeholders ranked high by output volume). Treat all of these filtered lists as approximate, not authoritative cohorts. Name search is exact and unaffected.
 
 ### 3. `get_artwork_details`
 
@@ -66,7 +66,7 @@ Internal: switch the viewer to a different artwork while preserving the viewUUID
 
 Use when YOU (the LLM) need to look at an artwork image or region for visual analysis — identifying details, reading inscriptions, comparing compositions, planning overlays. Returns image bytes (base64) in the tool response — the LLM can see and reason about the image immediately. Not for the user to view — use get_artwork_image for the interactive viewer. Not for listing or summarising artworks — use search_artwork.
 
-Use with region 'full' (default) to inspect the complete artwork, or specify a region to zoom into details, read inscriptions, or examine specific areas.
+Use with region 'full' (default) to inspect the complete artwork, or specify a region to zoom into details, read inscriptions, or examine specific areas. The response includes cropPixelWidth/cropPixelHeight: the actual pixel dimensions of the returned image. Use those with navigate_viewer's relativeToSize when placing crop-local crop_pixels overlays.
 
 Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), 'crop_pixels:x,y,w,h' (pixel coordinates of the full image — use with nativeWidth/nativeHeight from a prior response), or 'x,y,w,h' (legacy IIIF pixels, equivalent to crop_pixels). Quick reference:
 - Top-left quarter: pct:0,0,50,50
@@ -75,7 +75,7 @@ Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), 'crop
 - Full image: full (default)
 - For multi-panel works: use physical dimensions from get_artwork_details to estimate panel percentages, then inspect individual panels with close-up crops.
 
-Best practice for overlay placement: ALWAYS inspect before overlaying. Start with region 'full' to understand the layout, then use close-up crops (600–800px) to pinpoint specific features before calling navigate_viewer with add_overlay. Use navigate_viewer's 'relativeTo' parameter to place overlays using crop-local coordinates — the server handles the projection to full-image space, avoiding manual coordinate math.
+Best practice for overlay placement: ALWAYS inspect before overlaying. Start with region 'full' to understand the layout, then use close-up crops (600–800px) to pinpoint specific features before calling navigate_viewer with add_overlay. Use navigate_viewer's 'relativeTo' parameter to place overlays using crop-local coordinates — the server handles the projection to full-image space, avoiding manual coordinate math. After placing, verify each overlay with show_overlays:true and a tight pct: crop around it (the navigate_viewer response includes a ready-to-paste verificationRegion per overlay). To reposition an overlay, issue clear_overlays then re-add ALL overlays with corrected coordinates — there is no move/delete-one operation.
 
 Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms to the inspected region (navigateViewer defaults to true, no effect when region is 'full'). This keeps the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom. Use navigate_viewer separately only when you need overlays, labels, or clear_overlays.
 
@@ -85,21 +85,21 @@ The response includes the active viewUUID (if any) for follow-up navigate_viewer
 
 Use after inspect_artwork_image when you want to draw the user's attention to a specific region of the open viewer (zoom there, add a labelled overlay, or clear overlays). Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image. Commands execute in order: typically clear_overlays → navigate → add_overlay.
 
-All region coordinates are in full-image space (percentages or pixels of the original image), not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image will target the identical area in the viewer.
+By default, region coordinates are in full-image space (percentages or pixels of the original image), not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image will target the identical area in the viewer. Exception: when a command includes relativeTo, region is interpreted in that inspected crop's local coordinate space.
 
 For accurate overlay placement: inspect the target area with inspect_artwork_image first, verify the region contains what you expect, then use the same or refined coordinates here. Do not estimate overlay positions from memory — always inspect first.
 
 Region formats:
 - 'pct:x,y,w,h' — percentage of full image.
-- 'crop_pixels:x,y,w,h' — pixel coordinates of the full image. Use the nativeWidth/nativeHeight returned by inspect_artwork_image to bound values.
+- 'crop_pixels:x,y,w,h' — pixel coordinates of the full image. Use nativeWidth/nativeHeight returned by inspect_artwork_image to bound values. When used with relativeTo + relativeToSize, crop_pixels is instead interpreted as pixels within that inspected crop.
 - 'x,y,w,h' — equivalent to crop_pixels: (legacy IIIF form, kept for compatibility).
 - 'full' | 'square' — whole image shortcuts.
 
 Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — correct the coordinates and retry.
 
-Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set. Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.
+Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set (overlays are append-only; there is no move/delete-one operation, so repositioning requires clear_overlays then re-adding ALL overlays you want to keep). When placing more than one overlay, prefer distinct 'color' values so the rectangles are distinguishable in inspect_artwork_image(show_overlays:true). Each add_overlay response includes a per-overlay verificationRegion (pct: crop) for the verify-after step. Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.
 
-Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, use 'relativeTo' with the crop's region string. Specify 'region' as coordinates within the crop's local space (pct: format) and the server projects to full-image space deterministically — eliminates manual coordinate conversion math.
+Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, use 'relativeTo' with the crop's region string. Specify 'region' as coordinates within the crop's local space and the server projects to full-image space deterministically. Use pct:x,y,w,h for crop-local percentages, or crop_pixels:x,y,w,h plus relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from inspect_artwork_image for crop-local rendered pixels. Crop-local pixels are preferred for tight detail boxes.
 
 Response field deliveryState reports whether the iframe drained the commands immediately (`delivered_recently`), the iframe exists but hasn't polled recently and the commands are queued (`queued_waiting_for_viewer` — typical when scrolled out of view), or no iframe has connected yet (`no_live_viewer_seen`). In the queued case, overlay state is preserved server-side and will apply automatically when the viewer resumes polling — do not narrate this as a delivery failure to the user.
 
@@ -113,7 +113,7 @@ Use when you want to discover curated collection sets (193 total) ranging from s
 
 ### 10. `browse_set`
 
-Use when you have a setSpec (from list_curated_sets) and want to enumerate its member artworks. DB-backed (~600× faster than the legacy OAI-PMH path; warm calls in tens of ms). Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. Supports pagination via a stateless base64 resumptionToken. Not for set discovery — use list_curated_sets first.
+Use when you have a setSpec (from list_curated_sets) and want to enumerate its member artworks. DB-backed (warm calls in tens of ms). Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. Supports pagination via resumptionToken (stateless base64; not portable across server upgrades). Not for set discovery — use list_curated_sets first.
 
 ### 11. `get_recent_changes`
 
@@ -139,11 +139,13 @@ IMPORTANT: When results contain LLM-enriched records, the response text ends wit
 
 Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable. At least one filter is required.
 
-FALLBACK — creditLineQuery: only ~48K artworks have parsed provenance, but many more carry an unstructured credit-line field (acquisition/funding statements like 'Drucker-Fraser' or 'Vereniging Rembrandt'). Use creditLineQuery as a SECOND step: run a normal structured search first; if the relevant artworks turn out to have no parsed provenance, offer to extend the search with creditLineQuery. It runs a standalone free-text search over credit lines of artworks lacking parsed provenance, returns matches in creditLineResults (not results), and ignores all other filters. Credit-line data is a weaker, less reliable source (the museum's terminal acquisition channel, not prior ownership) — when you present these results you MUST tell the user the answer derives from unstructured credit-line text, not structured provenance.
+FALLBACK — creditLineQuery: only ~48K artworks have parsed provenance, but many more carry an unstructured credit-line field (acquisition/funding statements). Use creditLineQuery as a SECOND step: run a normal structured search first; if the relevant artworks turn out to have no parsed provenance, offer to extend the search with creditLineQuery. It runs a standalone free-text search over credit lines of artworks lacking parsed provenance, returns matches in creditLineResults (not results), and ignores all other filters. Credit-line data is a weaker, less reliable source (the museum's terminal acquisition channel, not prior ownership) — when you present these results you MUST tell the user the answer derives from unstructured credit-line text, not structured provenance.
 
 ### 13. `collection_stats`
 
-Use when the user wants aggregate counts, percentages, or distributions across the collection (one call instead of search_artwork(compact=true) loops). Returns formatted text tables plus a structured payload that mirrors the same data (denominator/grouping/coverage semantics disclosed in the schema). Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.
+Aggregate counts, percentages, distributions, histograms, totals, summaries, and group-by / count-by / distribution-of breakdowns across the Rijksmuseum collection. Statistics / stats over any structured dimension.
+
+Use when the user wants aggregate counts, percentages, or distributions across the collection (one call instead of search_artwork(compact=true) loops). Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.
 
 Examples:
 - "What types of artworks have provenance?" → dimension='type', hasProvenance=true
@@ -151,6 +153,8 @@ Examples:
 - "Top 20 depicted persons" → dimension='depictedPerson', topN=20
 - "Sales by decade 1600–1900" → dimension='provenanceDecade', transferType='sale', provenanceDateFrom=1600, provenanceDateTo=1900
 - "How many artworks have LLM-mediated interpretations?" → dimension='categoryMethod'
+- "Type breakdown of Rembrandt's autograph paintings" → dimension='type', creator='Rembrandt van Rijn', productionRole='painter', sameRowMatching=true
+- "Workshop-of-Rembrandt works by type" → dimension='type', creator='Rembrandt van Rijn', attributionQualifier='workshop of'
 
 Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width, theme (thematic vocab — labels in NL until #300 backfill), sourceType (cataloguing-channel taxonomy — 6 values), exhibition (top exhibitions by member count), decadeModified (record_modified bucketed by decade, clamped to 1990–2030).
 Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, currency, categoryMethod, positionMethod, parseMethod.
@@ -161,7 +165,7 @@ Filters from both domains combine freely. Artwork filters narrow the artwork set
 
 Use when the user has a SPECIFIC artwork (objectNumber) and wants others like it. Generates an HTML comparison page with IIIF thumbnails across 9 independent similarity channels: Visual (image-embedding nearest neighbours), Related Variant (creator-invariant curator-declared edges: pendants, production stadia, different examples), Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.
 
-Not for free-text concept queries — use semantic_search. Not for filter-based search — use search_artwork.
+Not for free-text concept queries — use semantic_search. Not for filter-based search — use search_artwork. Not for aggregate counts or distributions — use collection_stats.
 
 IMPORTANT: The result is a file path or URL to an HTML page. Your ONLY job is to show the user the path/URL so they can open it in a browser. Do NOT attempt to open, read, fetch, summarise, or characterise the page contents. Do NOT make additional tool calls to look up the same artworks. Simply present the link and explain that it contains a visual comparison page.
 
@@ -169,7 +173,7 @@ IMPORTANT: The result is a file path or URL to an HTML page. Your ONLY job is to
 
 Use when the user has a free-text concept ('solitude', 'industrial revolution', 'maritime trade', 'vanitas symbolism') and no specific filter criteria. Returns artworks ranked by Dutch-description embedding similarity to the query, with source text for grounding — use that text to explain why results are relevant or to flag false positives.
 
-Not for queries expressible as structured metadata (specific artists, dates, places, materials) — use search_artwork for those. Not for artwork-to-artwork similarity — use find_similar with an objectNumber.
+Not for queries expressible as structured metadata (specific artists, dates, places, materials) — use search_artwork for those. Not for artwork-to-artwork similarity — use find_similar with an objectNumber. Not for aggregate counts or distributions — use collection_stats.
 
 Best for concepts that resist structured metadata: atmospheric qualities ('sense of loneliness'), compositional descriptions ('artist gazing directly at the viewer'), art-historical concepts ('cultural exchange under VOC trade'), or cross-language queries. Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly; purely emotional or stylistic concepts (e.g. chiaroscuro, desolation) may yield lower precision because catalogue descriptions often do not use that language.
 
