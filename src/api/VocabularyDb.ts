@@ -4274,7 +4274,18 @@ export class VocabularyDb {
         conditions.push(`EXISTS (SELECT 1 FROM provenance_events pe WHERE pe.artwork_id = a.art_id AND ${evConds.join(" AND ")})`);
         bindings.push(...evBindings);
       } else if (params.hasProvenance) {
-        conditions.push("EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
+        // When hasProvenance is the SOLE artwork-restricting filter (no vocab / image /
+        // date / same-row condition precedes it), drive from the ~48K-artwork provenance
+        // set instead of a correlated EXISTS that scans all 834K artworks probing the PK
+        // per row (measured ~691ms → ~35ms, ~20×; this path has no LIMIT, so unlike
+        // search's importance-walk there's no early termination to save the scan). With
+        // any other (possibly rarer) filter present we keep the correlated EXISTS so that
+        // filter drives and the EXISTS is a cheap PK probe — a driving IN would instead
+        // eagerly materialise the 48K set and regress the rare case (~84× slower).
+        // See scripts/tests/diagnose-stats-provenance-plan.mjs.
+        conditions.push(conditions.length === 0
+          ? "a.art_id IN (SELECT artwork_id FROM provenance_events)"
+          : "EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
       }
 
       // Party filters must compose on the same pp row — separate EXISTS clauses let party and
