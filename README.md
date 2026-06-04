@@ -165,24 +165,24 @@ For local setup (stdio or HTTP), deployment, architecture, data sources, and con
 
 ## Roadmap
 
-Soon:
+Ongoing:
 
 - fix bugs and fine-tune queries and tool descriptions
 - update README and other documentation
-- add support for more MCP clients (e.g. ChatGPT)
 
 Later:
 
 - paper/presentation
+- add CLI tool to access MCP server
+- investigate DINOv3 image retrieval
 
 Maybe:
 
-- investigate new bibliographic SRU MCP server (rijksmuseum-biblio-mcp)
-- investigate incorporating historical exhibition data
-- investigate integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
-- add support for inferred geolocation data
+- new bibliographic SRU MCP server (rijksmuseum-biblio-mcp)
+- incorporating historical exhibition data
+- integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
+- supporting inferred geolocation data
 - improve the `description` signal for find_similar (e.g. via LLM re-ranker)
-- investigate image histogram or index colour signals for find_similar
 
 ## Authors
 
