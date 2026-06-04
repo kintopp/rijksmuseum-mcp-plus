@@ -22,7 +22,7 @@
     "test:viewer-build": "node scripts/tests/test-viewer-build.mjs",
     "test:viewer-app": "node scripts/tests/test-app-conformance.mjs",
     "test:all": "node scripts/tests/test-pure-functions.mjs && node scripts/tests/test-provenance-parser.mjs && node scripts/tests/test-provenance-peg.mjs && node scripts/tests/test-overlay-scoring.mjs && node scripts/tests/test-lru-cache.mjs && node scripts/tests/test-origin-validation.mjs && node scripts/tests/test-text-query-dsl.mjs && ~/miniconda3/envs/embeddings/bin/python scripts/tests/test-harvest-run-provenance.py",
-    "test:track2": "node scripts/tests/test-title-variants.mjs && node scripts/tests/test-parent-grouping.mjs && node scripts/tests/test-related-objects.mjs && node scripts/tests/test-track2-mcp.mjs && node scripts/tests/test-creator-vocabid.mjs && node scripts/tests/test-attribution-same-row.mjs"
+    "test:track2": "node scripts/tests/test-title-variants.mjs && node scripts/tests/test-parent-grouping.mjs && node scripts/tests/test-related-objects.mjs && node scripts/tests/test-track2-mcp.mjs && node scripts/tests/test-creator-vocabid.mjs && node scripts/tests/test-attribution-same-row.mjs && node scripts/tests/test-attribution-qualifiers.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
