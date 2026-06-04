@@ -210,6 +210,10 @@ export const PRIORITY_LEVEL_QUALIFIER_URIS: readonly string[] = [
   "http://vocab.getty.edu/aat/300379012", // undetermined
 ];
 
+/** Label fallback for priority-level qualifier detection on DBs that predate
+ *  assignment_pairs (where priorityLevelQualifierIds can't be resolved by URI). */
+const PRIORITY_QUALIFIER_LABELS: ReadonlySet<string> = new Set(["primary", "secondary", "undetermined"]);
+
 /** Resolve a Wikidata URI from external_id (harvest) or wikidata_id (enrichment). */
 function toWikidataUri(row: { external_id: string | null; wikidata_id: string | null }): string | undefined {
   return row.external_id ?? (row.wikidata_id ? `http://www.wikidata.org/entity/${row.wikidata_id}` : undefined);
@@ -1780,9 +1784,28 @@ export class VocabularyDb {
     const spatials = byField.get("spatial") ?? [];
 
     const safeRoles = roles.length === creators.length ? roles : [];
-    const safeQualifiers = qualifiers.length === creators.length ? qualifiers : [];
     const safeSpatials = spatials.length === creators.length ? spatials : [];
     const safeBirthPlaces = birthPlaces.length === creators.length ? birthPlaces : [];
+
+    // attribution_qualifier carries both priority-level markers (primary/secondary/
+    // undetermined) and connoisseurship qualifiers, so a single-creator work often
+    // has >1 qualifier mapping (e.g. [primary, attributed to]) — which broke the
+    // positional zip below and nulled every qualifier. When there's exactly one
+    // creator each qualifier maps to it unambiguously, so surface the connoisseurship
+    // qualifier in preference to a co-mapped priority marker (mirrors assignment_pairs,
+    // which excludes priority-level qualifiers from same-row matching, #349).
+    const isPriorityQualifier = (q: typeof mappings[0]) =>
+      this.priorityLevelQualifierIds
+        ? this.priorityLevelQualifierIds.has(q.vocab_id)
+        : PRIORITY_QUALIFIER_LABELS.has(label(q).toLowerCase());
+    let safeQualifiers: typeof mappings;
+    if (qualifiers.length === creators.length) {
+      safeQualifiers = qualifiers;
+    } else if (creators.length === 1 && qualifiers.length > 0) {
+      safeQualifiers = [qualifiers.find(q => !isPriorityQualifier(q)) ?? qualifiers[0]];
+    } else {
+      safeQualifiers = [];
+    }
 
     const production = creators.map((c, i) => {
       const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.wikidata_id)
