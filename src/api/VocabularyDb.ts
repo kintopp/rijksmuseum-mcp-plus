@@ -4242,9 +4242,9 @@ export class VocabularyDb {
         bindings.push(...filter.bindings);
       }
     }
-    // Image availability
-    if (params.imageAvailable === true && this.hasImageColumn) {
-      conditions.push("a.has_image = 1");
+    // Image availability — true = digitised, false = lacking a digital image.
+    if (params.imageAvailable != null && this.hasImageColumn) {
+      conditions.push(params.imageAvailable ? "a.has_image = 1" : "a.has_image = 0");
     }
     if (params.creationDateFrom != null) {
       conditions.push("a.date_earliest >= ?");
@@ -4274,16 +4274,18 @@ export class VocabularyDb {
         conditions.push(`EXISTS (SELECT 1 FROM provenance_events pe WHERE pe.artwork_id = a.art_id AND ${evConds.join(" AND ")})`);
         bindings.push(...evBindings);
       } else if (params.hasProvenance) {
-        // When hasProvenance is the SOLE artwork-restricting filter (no vocab / image /
-        // date / same-row condition precedes it), drive from the ~48K-artwork provenance
-        // set instead of a correlated EXISTS that scans all 834K artworks probing the PK
-        // per row (measured ~691ms → ~35ms, ~20×; this path has no LIMIT, so unlike
-        // search's importance-walk there's no early termination to save the scan). With
-        // any other (possibly rarer) filter present we keep the correlated EXISTS so that
+        // When hasProvenance is the sole *restricting* filter, drive from the ~48K-artwork
+        // provenance set instead of a correlated EXISTS that scans all 834K artworks probing
+        // the PK per row (measured ~691ms → ~35ms, ~20×; this path has no LIMIT, so unlike
+        // search's importance-walk there's no early termination to save the scan). With any
+        // other restricting filter present we keep the correlated EXISTS so that (rarer)
         // filter drives and the EXISTS is a cheap PK probe — a driving IN would instead
         // eagerly materialise the 48K set and regress the rare case (~84× slower).
-        // See scripts/tests/diagnose-stats-provenance-plan.mjs.
-        conditions.push(conditions.length === 0
+        // The imageAvailable filter (a.has_image = 1/0) covers ~87.5%/~12.5% of the
+        // collection — never selective — so it must NOT disqualify the fast path the way a
+        // genuine restricting filter does. See scripts/tests/diagnose-stats-provenance-plan.mjs.
+        const restricting = conditions.filter(c => c !== "a.has_image = 1" && c !== "a.has_image = 0");
+        conditions.push(restricting.length === 0
           ? "a.art_id IN (SELECT artwork_id FROM provenance_events)"
           : "EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
       }
@@ -4894,10 +4896,11 @@ export class VocabularyDb {
       }
     }
 
-    // Image availability filter (requires has_image column from v0.19+ DB)
-    if (effective.imageAvailable === true) {
+    // Image availability filter (requires has_image column from v0.19+ DB).
+    // true → only digitised works; false → only works lacking a digital image.
+    if (effective.imageAvailable != null) {
       if (this.hasImageColumn) {
-        conditions.push("a.has_image = 1");
+        conditions.push(effective.imageAvailable ? "a.has_image = 1" : "a.has_image = 0");
       } else {
         warnings?.push("imageAvailable requires vocabulary DB v0.19+. This filter was ignored.");
       }

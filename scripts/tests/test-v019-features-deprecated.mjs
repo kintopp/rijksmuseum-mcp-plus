@@ -130,10 +130,13 @@ const allCount = allPortraitsR?.totalResults ?? allPortraitsR?.ids?.length ?? 0;
 check("All portraits >= with-image portraits", allCount >= withImageCount);
 console.log(`    -> With image: ${withImageCount} IDs, All: ${allCount}`);
 
-console.log("\n--- 3c: imageAvailable=false is a no-op (not routed as filter) ---");
+console.log("\n--- 3c: imageAvailable=false filters to works WITHOUT a digital image ---");
 const falseImageR = await call("search_artwork", { subject: "portrait", imageAvailable: false, compact: true });
-// imageAvailable=false should behave identically to omitting it
-check("imageAvailable=false same count as no filter", (falseImageR?.totalResults ?? falseImageR?.ids?.length) === allCount);
+const falseImageCount = falseImageR?.totalResults ?? falseImageR?.ids?.length ?? 0;
+// false now narrows to un-digitised works (was a no-op previously)
+check("imageAvailable=false returns results", falseImageCount > 0);
+check("imageAvailable=false differs from no-filter", falseImageCount !== allCount);
+console.log(`    -> Without image: ${falseImageCount}, All: ${allCount}`);
 
 console.log("\n--- 3d: imageAvailable with other filters ---");
 r = await call("search_artwork", { type: "painting", creator: "Rembrandt", imageAvailable: true, maxResults: 3 });

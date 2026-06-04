@@ -1474,7 +1474,8 @@ function registerTools(
           ),
         imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional())
           .describe(
-            "If true, only return artworks that have a digital image available. " +
+            "Filter by digitisation: true = only artworks with a digital image, " +
+            "false = only artworks lacking one (e.g. un-photographed works on paper). " +
             "Cannot be used alone — combine with at least one other filter."
           ),
         hasProvenance: z.preprocess(stripNullCoerceBool, z.boolean().optional())
@@ -3699,7 +3700,7 @@ function registerTools(
               "The creator+attributionQualifier same-row fix is always on and doesn't require this flag."
             ),
           imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional())
-            .describe("If true, restrict to artworks with a digital image."),
+            .describe("Filter by digitisation: true = only artworks with a digital image, false = only those without."),
           creationDateFrom: z.preprocess(stripNull, z.number().int().optional())
             .describe("Earliest artwork creation year (inclusive). For century buckets, the label is the start year (label=1600 means the 17th century)."),
           creationDateTo: z.preprocess(stripNull, z.number().int().optional())
@@ -3775,7 +3776,7 @@ function registerTools(
         if (params.attributionQualifier) filterParts.push(`attributionQualifier=${params.attributionQualifier}`);
         if (params.productionRole) filterParts.push(`productionRole=${params.productionRole}`);
         if (params.sameRowMatching) filterParts.push("sameRowMatching");
-        if (params.imageAvailable) filterParts.push("imageAvailable");
+        if (params.imageAvailable != null) filterParts.push(`imageAvailable=${params.imageAvailable}`);
         if (params.creationDateFrom != null || params.creationDateTo != null) {
           filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);
         }
@@ -4140,7 +4141,7 @@ function registerTools(
           productionPlace: stringOrArray().optional().describe("Pre-filter by production place before semantic ranking."),
           collectionSet: stringOrArray().optional().describe("Pre-filter by collection set before semantic ranking."),
           aboutActor: optStr().optional().describe("Pre-filter by person (depicted or creator) before semantic ranking"),
-          imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Pre-filter to artworks with images"),
+          imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Pre-filter by digitisation: true = only artworks with images, false = only those without"),
           maxResults: z.number().int().min(1).max(TOOL_LIMITS.semantic_search.max).default(TOOL_LIMITS.semantic_search.default).optional()
             .describe("Number of results to return (default 15). Similarity scores plateau after ~15 results; request more only if needed."),
           offset: z.number().int().min(0).default(0).optional()
