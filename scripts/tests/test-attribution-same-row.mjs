@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { captureSql, explainPlan } from "./query-plan-utils.mjs";
 
 const require = createRequire(import.meta.url);
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -173,23 +174,12 @@ for (const c of CASES) {
 // and does drive from assignment_pairs.
 console.log("\n── Phase 2: query-plan regression (importance-index-walk guard) ──");
 
-const captured = new Set();
-const origPrepare = Database.prototype.prepare;
-Database.prototype.prepare = function (sql) { captured.add(sql); return origPrepare.call(this, sql); };
-db.searchCompact({ creator: REMBRANDT, attributionQualifier: "workshop of", maxResults: 25 });
-Database.prototype.prepare = origPrepare;
-
-const sameRowSql = [...captured].find(
-  (s) => /FROM artworks a/.test(s) && /assignment_pairs/.test(s) && /ORDER BY/.test(s),
-);
+const sameRowSql = captureSql(() =>
+  db.searchCompact({ creator: REMBRANDT, attributionQualifier: "workshop of", maxResults: 25 }),
+).find((s) => /FROM artworks a/.test(s) && /assignment_pairs/.test(s) && /ORDER BY/.test(s));
 assert(sameRowSql, "could not capture the same-row search SQL (did the query shape change?)");
 
-const explainDb = new Database(VOCAB_DB_PATH, { readonly: true });
-explainDb.function("haversine_km", () => 0);
-const planRows = explainDb
-  .prepare("EXPLAIN QUERY PLAN " + sameRowSql.replace(/\?/g, "1"))
-  .all();
-explainDb.close();
+const planRows = explainPlan(VOCAB_DB_PATH, sameRowSql);
 const planText = planRows.map((r) => r.detail).join("\n");
 
 const usesImportanceIndex = /idx_artworks_importance/.test(planText);
