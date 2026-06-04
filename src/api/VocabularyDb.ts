@@ -805,10 +805,20 @@ const CREATOR_FILTER = VOCAB_FILTERS.find(f => f.param === "creator")!;
 const QUALIFIER_FILTER = VOCAB_FILTERS.find(f => f.param === "attributionQualifier")!;
 const ROLE_FILTER = VOCAB_FILTERS.find(f => f.param === "productionRole")!;
 
-/** Emit one EXISTS clause per (creator-element × secondary-element) pair against
- *  a row-aware table — shared shape for assignment_pairs (#349) and
- *  production_role_pairs (#357). Each EXISTS encodes "the creator's own row
- *  carries one of these secondary IDs", AND-combined across array elements. */
+/** Emit one same-row membership clause per (creator-element × secondary-element)
+ *  pair against a row-aware table — shared shape for assignment_pairs (#349) and
+ *  production_role_pairs (#357). Each clause encodes "the creator's own row carries
+ *  one of these secondary IDs", AND-combined across array elements.
+ *
+ *  Uses a driving (non-correlated) `a.art_id IN (SELECT …)` subquery rather than a
+ *  correlated EXISTS. The subquery materialises the tiny matching art_id set first
+ *  via the covering index idx_assignment_pairs_qualifier (secondaryColumn leftmost),
+ *  then the outer query PK-looks-up and sorts. A correlated EXISTS instead lets the
+ *  default `ORDER BY a.importance DESC … LIMIT N` walk idx_artworks_importance and
+ *  probe per artwork — up to ~834K probes when the predicate is rare (the
+ *  connoisseurship-qualifier case, e.g. "workshop of" + a named creator → ~15s on
+ *  prod). Starting the clause with `a.art_id IN (` also lets the #372 unary-plus
+ *  guard apply when a text-FTS filter is present, so FTS still drives in that case. */
 function emitSameRowExists(
   table: string,
   alias: string,
@@ -823,11 +833,11 @@ function emitSameRowExists(
     for (const sIds of secondaryIdsPerElement) {
       const sPlaceholders = sIds.map(() => "?").join(", ");
       conditions.push(
-        `EXISTS (SELECT 1 FROM ${table} ${alias} WHERE ${alias}.artwork_id = a.art_id ` +
-        `AND ${alias}.creator_id IN (${cPlaceholders}) ` +
-        `AND ${alias}.${secondaryColumn} IN (${sPlaceholders}))`
+        `a.art_id IN (SELECT ${alias}.artwork_id FROM ${table} ${alias} ` +
+        `WHERE ${alias}.${secondaryColumn} IN (${sPlaceholders}) ` +
+        `AND ${alias}.creator_id IN (${cPlaceholders}))`
       );
-      bindings.push(...cIds, ...sIds);
+      bindings.push(...sIds, ...cIds);
     }
   }
 }
