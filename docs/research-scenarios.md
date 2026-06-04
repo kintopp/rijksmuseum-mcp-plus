@@ -33,7 +33,7 @@ The links following each research question show you how the query was answered i
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `productionPlace: "Japan"` returns the full media distribution for Japanese-produced works in a single call — repeat for `"China"`, `"Java"`, `"India"`
 - Use `depictedPlace` to find works that *represent* these places, regardless of where they were made — separating objects produced in Asia from European depictions of Asia
-- Use `imageAvailable: true` to assess digitisation coverage
+- Use `imageAvailable: true` to assess digitisation coverage, or `imageAvailable: false` to surface the un-digitised backlog
 - `search_artwork` to browse specific subsets (e.g. Japanese ceramics, Indian textiles)
 
 **Why it matters:** The Rijksmuseum positions itself as a museum of Dutch art *and* history, which includes centuries of global trade. The combination of `productionPlace` and `depictedPlace` enables a crucial distinction: objects *from* Asia versus European images *of* Asia.

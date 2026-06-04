@@ -51,7 +51,7 @@ At query time, the user's query is embedded with the same model, and the nearest
 | `productionPlace` | No | Pre-filter by production place. String or array |
 | `collectionSet` | No | Pre-filter by curated set name (e.g. `"Rembrandt"`). String or array |
 | `aboutActor` | No | Pre-filter by person (depicted or creator) |
-| `imageAvailable` | No | Restrict to artworks with a digital image |
+| `imageAvailable` | No | `true` = only artworks with a digital image; `false` = only those without one |
 | `maxResults` | No | Number of results (1–50, default 15) |
 | `offset` | No | Skip this many results (for pagination) |
 

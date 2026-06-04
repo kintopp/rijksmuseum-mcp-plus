@@ -59,7 +59,7 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 | Parameter | Description |
 |---|---|
 | `aboutActor` | Artworks about a person — broader recall than `depictedPerson`, searches both subject and creator vocabulary |
-| `imageAvailable` | `true` to return only works with a digital image |
+| `imageAvailable` | `true` = only works with a digital image; `false` = only those without one |
 | `hasProvenance` | `true` to return only works with parsed provenance records (~48.5K of 834K) |
 | `sameRowMatching` | Constrain `creator` + `productionRole` to the *same* production row (autograph detection). For "making" roles only — leave default off for "after X by" relational roles. Requires both `creator` and `productionRole`. |
 

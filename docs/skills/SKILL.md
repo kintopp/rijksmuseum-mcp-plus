@@ -230,7 +230,7 @@ These narrow results but **require at least one other content filter**:
 
 | Modifier                           | Notes                                                                                                                                      |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `imageAvailable: true`             | Always pair with a content filter                                                                                                          |
+| `imageAvailable`                   | `true` = only digitised works (with a IIIF image); `false` = only works *without* one (un-photographed works on paper, digitisation backlog). Always pair with a content filter. |
 | `hasProvenance: true`              | Restricts to the subset of artworks with parsed provenance. Pair with `type`, `creator`, etc. for cross-domain queries.                    |
 | `expandPlaceHierarchy: true`       | Expands place filters 3 levels deep; pair with `productionPlace` etc.                                                                      |
 

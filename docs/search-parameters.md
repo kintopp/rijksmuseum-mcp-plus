@@ -145,7 +145,7 @@ Direct filters on artwork table columns, JOIN-based demographic filters, and spa
 |-----------|------|-------------|---------|
 | `creationDate` | string | Creation date. ~628K artworks with dates (3000 BCE–2025). Exact year or wildcard. | `"1642"`, `"16*"`, `"164*"` |
 | `dateMatch` | string | How `creationDate` matches artwork date ranges. `"overlaps"` (default): artwork range overlaps query range — inclusive, but broadly-dated objects appear in multiple bins. `"within"`: artwork range falls entirely within query range — exclusive bins, but drops ~43% of collection with ranges >1 decade. `"midpoint"`: assigns each artwork to one bin by midpoint — every object counted exactly once. Best for statistical comparisons. | `"midpoint"` |
-| `imageAvailable` | boolean | When `true`, only artworks with a digital image (~728K artworks). *Modifier.* | `true` |
+| `imageAvailable` | boolean | `true` = only artworks with a digital image (~730K); `false` = only those without one (~104K, e.g. un-photographed works on paper). *Modifier.* | `true` |
 | `hasProvenance` | boolean | When `true`, only artworks with parsed provenance records (~48.5K of 834K). *Modifier.* | `true` |
 
 ### Dimensions
