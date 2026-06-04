@@ -809,6 +809,12 @@ const CREATOR_FILTER = VOCAB_FILTERS.find(f => f.param === "creator")!;
 const QUALIFIER_FILTER = VOCAB_FILTERS.find(f => f.param === "attributionQualifier")!;
 const ROLE_FILTER = VOCAB_FILTERS.find(f => f.param === "productionRole")!;
 
+/** Image-availability WHERE fragments. Shared so the collection_stats hasProvenance
+ *  driver decision — which excludes them when checking whether a *restricting* filter
+ *  precedes hasProvenance — can't drift from the emit sites and silently lose the fast path. */
+const HAS_IMAGE_COND = "a.has_image = 1";
+const NO_IMAGE_COND = "a.has_image = 0";
+
 /** Emit one same-row membership clause per (creator-element × secondary-element)
  *  pair against a row-aware table — shared shape for assignment_pairs (#349) and
  *  production_role_pairs (#357). Each clause encodes "the creator's own row carries
@@ -4244,7 +4250,7 @@ export class VocabularyDb {
     }
     // Image availability — true = digitised, false = lacking a digital image.
     if (params.imageAvailable != null && this.hasImageColumn) {
-      conditions.push(params.imageAvailable ? "a.has_image = 1" : "a.has_image = 0");
+      conditions.push(params.imageAvailable ? HAS_IMAGE_COND : NO_IMAGE_COND);
     }
     if (params.creationDateFrom != null) {
       conditions.push("a.date_earliest >= ?");
@@ -4284,7 +4290,7 @@ export class VocabularyDb {
         // The imageAvailable filter (a.has_image = 1/0) covers ~87.5%/~12.5% of the
         // collection — never selective — so it must NOT disqualify the fast path the way a
         // genuine restricting filter does. See scripts/tests/diagnose-stats-provenance-plan.mjs.
-        const restricting = conditions.filter(c => c !== "a.has_image = 1" && c !== "a.has_image = 0");
+        const restricting = conditions.filter(c => c !== HAS_IMAGE_COND && c !== NO_IMAGE_COND);
         conditions.push(restricting.length === 0
           ? "a.art_id IN (SELECT artwork_id FROM provenance_events)"
           : "EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
@@ -4900,7 +4906,7 @@ export class VocabularyDb {
     // true → only digitised works; false → only works lacking a digital image.
     if (effective.imageAvailable != null) {
       if (this.hasImageColumn) {
-        conditions.push(effective.imageAvailable ? "a.has_image = 1" : "a.has_image = 0");
+        conditions.push(effective.imageAvailable ? HAS_IMAGE_COND : NO_IMAGE_COND);
       } else {
         warnings?.push("imageAvailable requires vocabulary DB v0.19+. This filter was ignored.");
       }
