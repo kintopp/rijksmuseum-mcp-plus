@@ -422,6 +422,13 @@ async function runHttp(): Promise<void> {
     res.json(captureMemorySnapshot(buildMemoryDbHandles()));
   });
 
+  // /debug/slow-queries surfaces per-input p50/p90/max + repeat counts and the
+  // search/semantic phase splits (#378 instrumentation). In-memory only — resets
+  // on redeploy. Same unauthenticated operational-signal rationale as /debug/memory.
+  app.get("/debug/slow-queries", (_req: express.Request, res: express.Response) => {
+    res.json(usageStats?.slowQueries() ?? { perInput: {}, phases: {} });
+  });
+
   // ── Start ───────────────────────────────────────────────────────
 
   httpServer = app.listen(port, () => {

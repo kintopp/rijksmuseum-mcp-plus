@@ -1,5 +1,6 @@
 import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
 import { escapeFts5, escapeFts5Token, expandFtsQuery, compileTextQuery, TEXT_QUERY_FIELD_COLUMNS, resolveDbPath } from "../utils/db.js";
+import { lruGetOrCreate } from "../utils/lru.js";
 import type { TextQueryDsl } from "../utils/db.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -302,6 +303,12 @@ export interface VocabSearchParams {
   offset?: number;
   facets?: string[];
   facetLimit?: number;
+}
+
+/** Optional out-param for search(): phase timings the caller can forward to instrumentation.
+ *  Kept off VocabSearchResult so it can't leak into strict structuredContent. */
+export interface SearchTimings {
+  facetMs?: number;
 }
 
 export interface VocabSearchResult {
@@ -897,31 +904,10 @@ export const FILTER_ART_IDS_KEYS: ReadonlySet<string> = new Set([
   "dateMatch",
 ]);
 
-/**
- * Get-or-create with insertion-order LRU eviction. Re-inserts an existing entry
- * to bump it to most-recent; evicts the least-recently-used (first) entry once
- * size exceeds `cap`. Used by `filterArtIds` (#79) — exported for tests.
- */
-export function lruGetOrCreate<K, V>(
-  map: Map<K, V>,
-  key: K,
-  factory: () => V,
-  cap: number,
-): V {
-  const existing = map.get(key);
-  if (existing !== undefined) {
-    map.delete(key);
-    map.set(key, existing);
-    return existing;
-  }
-  const value = factory();
-  map.set(key, value);
-  if (map.size > cap) {
-    const oldest = map.keys().next().value;
-    if (oldest !== undefined) map.delete(oldest);
-  }
-  return value;
-}
+// lruGetOrCreate moved to ../utils/lru.js (shared with UsageStats, #378); imported
+// at the top for internal use and re-exported here for backward compat
+// (filterArtIds usage + test-lru-cache.mjs import).
+export { lruGetOrCreate };
 
 /** Row shape returned by place-candidate queries (findPlaceCandidates, resolveMultiWordPlace). */
 type PlaceCandidateRow = {
@@ -3418,10 +3404,10 @@ export class VocabularyDb {
 
   /** Compact search: returns only object numbers and total count, no enrichment.
    *  Uses the same filter logic as search() but skips lookupTypes/distance enrichment. */
-  searchCompact(params: VocabSearchParams): { totalResults?: number; ids: string[]; source: "vocabulary"; warnings?: string[]; facets?: Record<string, Array<{ label: string; count: number }>> } {
+  searchCompact(params: VocabSearchParams, timings?: SearchTimings): { totalResults?: number; ids: string[]; source: "vocabulary"; warnings?: string[]; facets?: Record<string, Array<{ label: string; count: number }>> } {
     if (!this.db) return { ids: [], source: "vocabulary" };
     // Delegate to search with compact flag — the internal implementation checks this
-    const result = this.searchInternal(params, true);
+    const result = this.searchInternal(params, true, timings);
     return {
       ...(result.totalResults != null && { totalResults: result.totalResults }),
       ids: result.results.map((r) => r.objectNumber),
@@ -3432,8 +3418,8 @@ export class VocabularyDb {
   }
 
   /** Search artworks by vocabulary criteria. Multiple params are intersected (AND). */
-  search(params: VocabSearchParams): VocabSearchResult {
-    return this.searchInternal(params, false);
+  search(params: VocabSearchParams, timings?: SearchTimings): VocabSearchResult {
+    return this.searchInternal(params, false, timings);
   }
 
   /**
@@ -3974,6 +3960,7 @@ export class VocabularyDb {
     ordering: "count_desc" | "label_asc",
     eventConditions?: { conds: string[]; bindings: unknown[] },
     partyConditions?: { conds: string[]; bindings: unknown[] },
+    filtered = true,
   ): { sql: string; extraBindings: unknown[] } | null {
     if (!this.hasProvenanceTables_) return null;
     const orderBy = ordering === "count_desc" ? "cnt DESC" : "label";
@@ -3990,13 +3977,18 @@ export class VocabularyDb {
       : "";
     const ppBindings = partyConditions?.bindings ?? [];
 
+    // Unfiltered (_stats_artworks == all artworks): drop the no-op membership so SQLite
+    // scans the small provenance table directly instead of probing it per artwork (#378 REC #2).
+    const membership = filtered
+      ? "pe.artwork_id IN (SELECT art_id FROM _stats_artworks) AND "
+      : "";
+
     // Special case: provenanceDecade uses arithmetic binning
     if (dim === "provenanceDecade") {
       return {
         sql: `SELECT (pe.date_year / ?) * ? AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
           FROM provenance_events pe
-          WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-            AND pe.date_year IS NOT NULL${evExtra}
+          WHERE ${membership}pe.date_year IS NOT NULL${evExtra}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, ...evBindings, topN, offset],
       };
@@ -4012,11 +4004,16 @@ export class VocabularyDb {
     const notNull = def.notNull ? `AND ${alias}.${def.col} IS NOT NULL` : "";
     const rowFilter = def.table === "events" ? evExtra : ppExtra;
     const rowBindings = def.table === "events" ? evBindings : ppBindings;
+    // Unfiltered: "1" sentinel (matches computeFacets/computeCollectionStats style) so the
+    // small provenance table scans directly instead of a per-artwork PK probe (#378 REC #2).
+    const membershipAlias = filtered
+      ? `${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)`
+      : "1";
 
     return {
       sql: `SELECT ${alias}.${def.col} AS label, COUNT(DISTINCT ${alias}.artwork_id) AS cnt
         FROM ${tbl} ${alias}
-        WHERE ${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)
+        WHERE ${membershipAlias}
           ${notNull}${rowFilter}
         GROUP BY ${alias}.${def.col} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
       extraBindings: [...rowBindings, topN, offset],
@@ -4030,6 +4027,7 @@ export class VocabularyDb {
     dim: string,
     eventConditions?: { conds: string[]; bindings: unknown[] },
     partyConditions?: { conds: string[]; bindings: unknown[] },
+    filtered = true,
   ): number {
     if (!this.db) return 0;
     const evExtra = eventConditions?.conds.length ? " AND " + eventConditions.conds.join(" AND ") : "";
@@ -4104,11 +4102,15 @@ export class VocabularyDb {
 
     if (!this.hasProvenanceTables_) return 0;
 
+    // Unfiltered: drop the no-op all-artworks membership so the provenance table scans
+    // directly instead of a per-artwork PK probe (#378 REC #2). Mirrors provenanceDimensionSql.
     if (dim === "provenanceDecade") {
+      const membership = filtered
+        ? "pe.artwork_id IN (SELECT art_id FROM _stats_artworks) AND "
+        : "";
       const row = this.db.prepare(
         `SELECT COUNT(DISTINCT pe.artwork_id) AS cnt FROM provenance_events pe
-         WHERE pe.artwork_id IN (SELECT art_id FROM _stats_artworks)
-           AND pe.date_year IS NOT NULL${evExtra}`,
+         WHERE ${membership}pe.date_year IS NOT NULL${evExtra}`,
       ).get(...evBindings) as { cnt: number };
       return row.cnt;
     }
@@ -4122,9 +4124,12 @@ export class VocabularyDb {
     const notNull = def.notNull ? `AND ${alias}.${def.col} IS NOT NULL` : "";
     const rowFilter = def.table === "events" ? evExtra : ppExtra;
     const rowBindings = def.table === "events" ? evBindings : ppBindings;
+    const membershipAlias = filtered
+      ? `${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)`
+      : "1";
     const row = this.db.prepare(
       `SELECT COUNT(DISTINCT ${alias}.artwork_id) AS cnt FROM ${tbl} ${alias}
-       WHERE ${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)
+       WHERE ${membershipAlias}
          ${notNull}${rowFilter}`,
     ).get(...rowBindings) as { cnt: number };
     return row.cnt;
@@ -4345,7 +4350,7 @@ export class VocabularyDb {
       : `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM artworks`);
     try {
       const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth, ordering)
-        || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth, ordering, provEventConds, provPartyConds);
+        || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth, ordering, provEventConds, provPartyConds, filtered);
 
       if (!dimQuery) {
         return {
@@ -4381,7 +4386,7 @@ export class VocabularyDb {
       // Coverage: artworks in the filtered pool that have ≥1 row in this dimension's source.
       // Lets a consumer reconstruct the gap to 100% on single-valued dims without per-dim
       // NULL/clamp knowledge.
-      const withBucket = this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds);
+      const withBucket = this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds, filtered);
       const withoutBucket = Math.max(0, total - withBucket);
 
       // Fixed width from meta, else binWidth for binned dims, else undefined.
@@ -4403,7 +4408,7 @@ export class VocabularyDb {
     }
   }
 
-  private searchInternal(params: VocabSearchParams, compact: boolean): VocabSearchResult {
+  private searchInternal(params: VocabSearchParams, compact: boolean, timings?: SearchTimings): VocabSearchResult {
     if (!this.db) {
       return emptyResult();
     }
@@ -4722,7 +4727,9 @@ export class VocabularyDb {
         );
       }
       if (requested.size > 0) {
+        const tFacet = performance.now();
         facets = this.computeFacets(effectiveConditions, bindings, ftsJoinClause, ftsJoinBinding, requested, effective.facetLimit);
+        if (timings) timings.facetMs = performance.now() - tFacet;
         if (Object.keys(facets).length === 0) facets = undefined;
       }
     }

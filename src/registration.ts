@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -582,6 +582,18 @@ function formatRecordLine(r: Record<string, unknown>, i: number): string {
   return line;
 }
 
+/** Stable, length-capped summary of a tool's input for per-input latency keying. */
+function canonicalInputKey(input: unknown): string {
+  if (input == null || typeof input !== "object") return String(input);
+  const obj = input as Record<string, unknown>;
+  const parts = Object.keys(obj)
+    .filter(k => obj[k] !== undefined)
+    .sort()
+    .map(k => `${k}=${JSON.stringify(obj[k])}`);
+  const s = parts.join("&");
+  return s.length > 300 ? s.slice(0, 300) : s;
+}
+
 /** Create a logging wrapper that records timing to stderr and optional UsageStats. */
 function createLogger(stats?: UsageStats) {
   return function withLogging<A extends unknown[], R>(
@@ -598,12 +610,14 @@ function createLogger(stats?: UsageStats) {
         const ok = !(result && typeof result === "object" && "isError" in result && (result as Record<string, unknown>).isError);
         console.error(JSON.stringify({ tool: toolName, ms, ok, ...(input && { input }) }));
         stats?.record(toolName, ms, ok);
+        stats?.recordInput(toolName, canonicalInputKey(input), ms);
         return result;
       } catch (err) {
         const ms = Math.round(performance.now() - start);
         const error = err instanceof Error ? err.message : String(err);
         console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
         stats?.record(toolName, ms, false);
+        stats?.recordInput(toolName, canonicalInputKey(input), ms);
         // Do NOT emit structuredContent here — a bare { error } fails SDK
         // validation against any outputSchema with required fields (-32602).
         // Tools that need schema-conformant errors handle them internally.
@@ -766,7 +780,7 @@ export function registerAll(
   httpPort?: number,
   stats?: UsageStats
 ): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats));
+  registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats), stats);
   registerResources(server);
   registerAppViewerResource(server);
   registerPrompts(server);
@@ -1358,7 +1372,8 @@ function registerTools(
   embeddingsDb: EmbeddingsDb | null,
   embeddingModel: EmbeddingModel | null,
   httpPort: number | undefined,
-  withLogging: ReturnType<typeof createLogger>
+  withLogging: ReturnType<typeof createLogger>,
+  stats?: UsageStats
 ): void {
   const publicBaseUrl = resolvePublicUrl(httpPort);
 
@@ -1773,9 +1788,19 @@ function registerTools(
         );
       }
 
+      // Split a search's wall-clock into facet-aggregation vs the rest ("main"), for #378.
+      const recordSearchPhases = (timings: SearchTimings, tSearch: number) => {
+        if (timings.facetMs === undefined) return;
+        stats?.recordPhase("search_artwork", "facets", timings.facetMs);
+        stats?.recordPhase("search_artwork", "main", Math.max(0, performance.now() - tSearch - timings.facetMs));
+      };
+
       // Compact mode: return only IDs without enrichment
       if (args.compact) {
-        const compactResult = vocabDb.searchCompact(vocabArgs as any);
+        const cTimings: SearchTimings = {};
+        const tSearch = performance.now();
+        const compactResult = vocabDb.searchCompact(vocabArgs as any, cTimings);
+        recordSearchPhases(cTimings, tSearch);
 
         const header = (compactResult.totalResults != null
           ? `${compactResult.totalResults} results`
@@ -1791,7 +1816,10 @@ function registerTools(
         return structuredResponse(data, textParts.join("\n"));
       }
 
-      const result = vocabDb.search(vocabArgs as any);
+      const timings: SearchTimings = {};
+      const tSearch = performance.now();
+      const result = vocabDb.search(vocabArgs as any, timings);
+      recordSearchPhases(timings, tSearch);
 
       // Suggest aboutActor when depictedPerson returns 0 results
       if (result.results.length === 0 && argsRecord.depictedPerson) {
@@ -4155,9 +4183,12 @@ function registerTools(
         const fetchLimit = maxResults + userOffset;
 
         // 1. Embed query text
+        const tEmbed = performance.now();
         const queryVec = await embeddingModel!.embed(args.query);
+        stats?.recordPhase("semantic_search", "embed", performance.now() - tEmbed);
 
         // 2. Choose search path based on filters
+        const tScan = performance.now();
         const filterParams: Record<string, unknown> = {};
         for (const [key, val] of Object.entries(args)) {
           if (val !== undefined && FILTER_ART_IDS_KEYS.has(key)) {
@@ -4198,6 +4229,7 @@ function registerTools(
             warnings.push("Metadata filters ignored: vocabulary DB is not available. Results ranked by semantic similarity only.");
           }
         }
+        stats?.recordPhase("semantic_search", "scan", performance.now() - tScan);
 
         // Apply offset + truncate to user's requested page
         if (userOffset > 0) candidates.splice(0, userOffset);
