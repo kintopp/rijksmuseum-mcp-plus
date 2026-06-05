@@ -13,10 +13,12 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings, type CollectionStatsResult } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
+import { ResponseCache } from "./utils/ResponseCache.js";
+import { getOrComputeWithInflight } from "./utils/inflightCache.js";
 import axios from "axios";
 import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
@@ -582,8 +584,11 @@ function formatRecordLine(r: Record<string, unknown>, i: number): string {
   return line;
 }
 
-/** Stable, length-capped summary of a tool's input for per-input latency keying. */
-function canonicalInputKey(input: unknown): string {
+/** Stable canonical key for a tool's input (sorted keys). Full-length by default so it's a
+ *  collision-free cache key; pass `maxLen` to cap it for the per-input latency map (where a
+ *  rare long-input collision only merges latency buckets, but a cache collision would serve a
+ *  wrong result). */
+function canonicalInputKey(input: unknown, maxLen?: number): string {
   if (input == null || typeof input !== "object") return String(input);
   const obj = input as Record<string, unknown>;
   const parts = Object.keys(obj)
@@ -591,7 +596,7 @@ function canonicalInputKey(input: unknown): string {
     .sort()
     .map(k => `${k}=${JSON.stringify(obj[k])}`);
   const s = parts.join("&");
-  return s.length > 300 ? s.slice(0, 300) : s;
+  return maxLen != null && s.length > maxLen ? s.slice(0, maxLen) : s;
 }
 
 /** Create a logging wrapper that records timing to stderr and optional UsageStats. */
@@ -610,14 +615,14 @@ function createLogger(stats?: UsageStats) {
         const ok = !(result && typeof result === "object" && "isError" in result && (result as Record<string, unknown>).isError);
         console.error(JSON.stringify({ tool: toolName, ms, ok, ...(input && { input }) }));
         stats?.record(toolName, ms, ok);
-        stats?.recordInput(toolName, canonicalInputKey(input), ms);
+        stats?.recordInput(toolName, canonicalInputKey(input, 300), ms);
         return result;
       } catch (err) {
         const ms = Math.round(performance.now() - start);
         const error = err instanceof Error ? err.message : String(err);
         console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
         stats?.record(toolName, ms, false);
-        stats?.recordInput(toolName, canonicalInputKey(input), ms);
+        stats?.recordInput(toolName, canonicalInputKey(input, 300), ms);
         // Do NOT emit structuredContent here — a bare { error } fails SDK
         // validation against any outputSchema with required fields (-32602).
         // Tools that need schema-conformant errors handle them internally.
@@ -1122,6 +1127,17 @@ sweepTtlMap(similarPages);
 
 export const enrichmentReviewPages = new Map<string, { html: string; lastAccess: number }>();
 sweepTtlMap(enrichmentReviewPages);
+
+// #378 Step 4: module-scope result caches (must survive the per-request server rebuild in
+// HTTP mode, like viewerQueues). Keyed on DB build-id so a deploy/DB-swap can't serve stale
+// aggregates. collection_stats is synchronous (better-sqlite3 blocks the loop) so a plain
+// cache already coalesces identical concurrent calls; semantic_search awaits embed() before
+// its sync vec0 scan, so it also needs in-flight de-dup to stop two identical queries each
+// paying the ~1s scan.
+const CACHE_TTL_MS = 1_800_000; // 30 min
+const collectionStatsCache = new ResponseCache<CollectionStatsResult>(300, CACHE_TTL_MS);
+const semanticSearchCache = new ResponseCache<ToolResponse | StructuredToolResponse>(500, CACHE_TTL_MS);
+const semanticInflight = new Map<string, Promise<ToolResponse | StructuredToolResponse>>();
 
 /** Stdio-mode temp files for find_similar. Swept on same 30-min TTL. */
 const similarTempFiles = new Map<string, number>(); // path → createdAt
@@ -3784,7 +3800,15 @@ function registerTools(
         if (args.categoryMethod) params.categoryMethod = args.categoryMethod as string;
         if (args.positionMethod) params.positionMethod = args.positionMethod as string;
 
-        const result = vocabDb!.computeCollectionStats(params);
+        // #378 Step 4: cache the (synchronous) stats result keyed on DB build-id + params.
+        // No in-flight de-dup needed — computeCollectionStats blocks the event loop, so two
+        // identical concurrent calls can't interleave (the first populates the cache).
+        const cacheKey = `${vocabDb!.buildId}|${canonicalInputKey(params)}`;
+        let result = collectionStatsCache.get(cacheKey);
+        if (result === undefined) {
+          result = vocabDb!.computeCollectionStats(params);
+          collectionStatsCache.set(cacheKey, result);
+        }
 
         // Format as text table
         const lines: string[] = [];
@@ -4178,6 +4202,11 @@ function registerTools(
         ...withOutputSchema(SemanticSearchOutput),
       },
       withLogging("semantic_search", async (args) => {
+        // #378 Step 4: cache + in-flight de-dup keyed on DB build-id + model + canonical args.
+        // semantic_search awaits embed() before its sync vec0 scan, so two identical concurrent
+        // queries would each pay the ~1s scan; cache hits skip the body entirely.
+        const cacheKey = `${embeddingsDb!.buildId}|${embeddingsDb!.modelId}|${canonicalInputKey(args)}`;
+        return getOrComputeWithInflight(semanticSearchCache, semanticInflight, cacheKey, async () => {
         const maxResults = args.maxResults ?? TOOL_LIMITS.semantic_search.default;
         const userOffset = args.offset ?? 0;
         const fetchLimit = maxResults + userOffset;
@@ -4298,6 +4327,7 @@ function registerTools(
         };
         if (warnings.length) textParts.push("\n" + warnings.map(w => `⚠ ${w}`).join("\n"));
         return structuredResponse(data, textParts.join("\n"));
+        });
       })
     );
   }

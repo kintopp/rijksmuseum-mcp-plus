@@ -662,6 +662,13 @@ export interface BrowseSetRecord {
   url: string;
 }
 
+/** #378 Step 3: candidate-artwork count at/above which collection_stats + facets scan the
+ *  mappings field via `INDEXED BY idx_mappings_field_vocab` instead of the `+m.field_id`
+ *  PK-probe. Below it, the PK-probe (driven from the small filtered set) wins by up to ~250×.
+ *  ~50–80K is the measured crossover (M4 + Railway prod traffic, #378); 50K errs to the low
+ *  end because Railway's slower vCPU degrades the per-row PK-probe faster than the index scan. */
+const STATS_INDEX_THRESHOLD = 50_000;
+
 /** Vocab dimension → DB field + optional type filter. Shared by computeFacets and artworkDimensionSql. */
 const VOCAB_DIMENSION_DEFS: ReadonlyArray<{ label: string; field: string; vocabType?: string }> = [
   { label: "type",           field: "type" },
@@ -1061,6 +1068,7 @@ export class VocabularyDb {
   }
 
   private db: DatabaseType | null = null;
+  private buildId_: string | undefined = undefined;  // memoised version_info.built_at (#378)
   private dbPath_: string | null = null;
   private hasFts5 = false;
   private hasTextFts = false;
@@ -1543,6 +1551,20 @@ export class VocabularyDb {
   /** Resolved on-disk path of the vocabulary DB (or null if unavailable). */
   get dbPath(): string | null {
     return this.dbPath_;
+  }
+
+  /** version_info.built_at — cache-key component so a DB swap invalidates results (#378).
+   *  Lazily read + memoised; "unknown" if version_info is absent. */
+  get buildId(): string {
+    if (this.buildId_ === undefined) {
+      try {
+        const row = this.db?.prepare("SELECT value FROM version_info WHERE key = 'built_at'").get() as { value?: string } | undefined;
+        this.buildId_ = row?.value ?? "unknown";
+      } catch {
+        this.buildId_ = "unknown";
+      }
+    }
+    return this.buildId_;
   }
 
   /** Underlying better-sqlite3 handle for pragma queries (memory observability). */
@@ -3686,6 +3708,10 @@ export class VocabularyDb {
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
     const allBindings = ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : [...bindings];
 
+    // NOTE: facets intentionally keep `+fm.field_id` (PK-probe driven from the search result /
+    // FTS match set) — do NOT apply the #378 Step 3 indexed-field conditional here. Facets always
+    // run inside a filtered/FTS-led search, and forcing the field index would regress the #372
+    // FTS-drive fix; a safe indexed facet path needs a subquery rewrite (REC #6, deferred).
     for (const facetDef of VOCAB_DIMENSION_DEFS) {
       if (!requestedFields.has(facetDef.label)) continue;
       const fieldId = this.fieldIdMap.get(facetDef.field);
@@ -3844,13 +3870,29 @@ export class VocabularyDb {
 
   // ── Collection-wide stats ─────────────────────────────────────────
 
+  /** #378 Step 3 — mappings-field access shape shared by artworkDimensionSql + dimensionCoverageCount:
+   *  broad/unfiltered drives the field's covering index (explicit INDEXED BY survives a future
+   *  ANALYZE/STAT4, per reviewer); narrow keeps the +m.field_id PK-probe from the small filtered
+   *  set. The _stats_artworks membership is present only when filtered (unfiltered drops the no-op,
+   *  like Step 1 did for provenance). */
+  private statsFieldShape(filtered: boolean, useIndexedField: boolean): { fieldFrom: string; fieldPred: string; statsMembership: string } {
+    return {
+      fieldFrom: useIndexedField ? "mappings m INDEXED BY idx_mappings_field_vocab" : "mappings m",
+      fieldPred: useIndexedField ? "m.field_id = ?" : "+m.field_id = ?",
+      statsMembership: filtered ? "\n            AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)" : "",
+    };
+  }
+
   /** Artwork-domain dimensions: count artworks grouped by a vocab field or date.
    *  `ordering` selects ORDER BY: "count_desc" → cnt DESC, "label_asc" → label. */
   private artworkDimensionSql(
     dim: string, topN: number, offset: number, binWidth: number,
     ordering: "count_desc" | "label_asc",
+    filtered = true,
+    useIndexedField = false,
   ): { sql: string; extraBindings: unknown[] } | null {
     const orderBy = ordering === "count_desc" ? "cnt DESC" : "label";
+    const { fieldFrom, fieldPred, statsMembership } = this.statsFieldShape(filtered, useIndexedField);
     const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
     if (vocabDef) {
       const fieldId = this.fieldIdMap.get(vocabDef.field);
@@ -3861,10 +3903,9 @@ export class VocabularyDb {
       const arealFilter = vocabDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
       return {
         sql: `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT m.artwork_id) AS cnt
-          FROM mappings m
+          FROM ${fieldFrom}
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE +m.field_id = ? AND v.label_en IS NOT NULL${typeFilter}${arealFilter}
-          AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)
+          WHERE ${fieldPred} AND v.label_en IS NOT NULL${typeFilter}${arealFilter}${statsMembership}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
       };
@@ -3911,10 +3952,9 @@ export class VocabularyDb {
       if (fieldId === undefined) return null;
       return {
         sql: `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT m.artwork_id) AS cnt
-          FROM mappings m
+          FROM ${fieldFrom}
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE +m.field_id = ? AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
-            AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)
+          WHERE ${fieldPred} AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)${statsMembership}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
       };
@@ -4028,12 +4068,14 @@ export class VocabularyDb {
     eventConditions?: { conds: string[]; bindings: unknown[] },
     partyConditions?: { conds: string[]; bindings: unknown[] },
     filtered = true,
+    useIndexedField = false,
   ): number {
     if (!this.db) return 0;
     const evExtra = eventConditions?.conds.length ? " AND " + eventConditions.conds.join(" AND ") : "";
     const evBindings = eventConditions?.bindings ?? [];
     const ppExtra = partyConditions?.conds.length ? " AND " + partyConditions.conds.join(" AND ") : "";
     const ppBindings = partyConditions?.bindings ?? [];
+    const { fieldFrom, fieldPred, statsMembership } = this.statsFieldShape(filtered, useIndexedField);
 
     // Vocab-backed dim: count artworks with ≥1 mapping for this field.
     const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
@@ -4043,10 +4085,9 @@ export class VocabularyDb {
       const typeFilter = vocabDef.vocabType ? ` AND v.type = '${vocabDef.vocabType}'` : "";
       const arealFilter = vocabDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
       const row = this.db.prepare(
-        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM mappings m
+        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM ${fieldFrom}
          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-         WHERE +m.field_id = ? AND v.label_en IS NOT NULL${typeFilter}${arealFilter}
-           AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)`,
+         WHERE ${fieldPred} AND v.label_en IS NOT NULL${typeFilter}${arealFilter}${statsMembership}`,
       ).get(fieldId) as { cnt: number };
       return row.cnt;
     }
@@ -4072,10 +4113,9 @@ export class VocabularyDb {
       const fieldId = this.fieldIdMap.get("theme");
       if (fieldId === undefined) return 0;
       const row = this.db.prepare(
-        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM mappings m
+        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM ${fieldFrom}
          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-         WHERE +m.field_id = ? AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)
-           AND m.artwork_id IN (SELECT art_id FROM _stats_artworks)`,
+         WHERE ${fieldPred} AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)${statsMembership}`,
       ).get(fieldId) as { cnt: number };
       return row.cnt;
     }
@@ -4341,6 +4381,11 @@ export class VocabularyDb {
         ...(warnings.length > 0 && { warnings }) };
     }
 
+    // #378 Step 3: broad/unfiltered candidate sets scan the vocab field's covering index;
+    // narrow filtered sets keep the +field_id PK-probe (cheaper for small sets). Only affects
+    // the vocab + theme branches of artworkDimensionSql/dimensionCoverageCount.
+    const useIndexedField = !filtered || total >= STATS_INDEX_THRESHOLD;
+
     // _stats_artworks is referenced inside dimension SQL fragments.
     // For unfiltered queries, alias artworks directly (no temp table needed).
     // Wrap in try/finally so temp table + view are always cleaned up, even on SQL errors.
@@ -4349,7 +4394,7 @@ export class VocabularyDb {
       ? `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM "${tableId}"`
       : `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM artworks`);
     try {
-      const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth, ordering)
+      const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth, ordering, filtered, useIndexedField)
         || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth, ordering, provEventConds, provPartyConds, filtered);
 
       if (!dimQuery) {
@@ -4386,7 +4431,7 @@ export class VocabularyDb {
       // Coverage: artworks in the filtered pool that have ≥1 row in this dimension's source.
       // Lets a consumer reconstruct the gap to 100% on single-valued dims without per-dim
       // NULL/clamp knowledge.
-      const withBucket = this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds, filtered);
+      const withBucket = this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds, filtered, useIndexedField);
       const withoutBucket = Math.max(0, total - withBucket);
 
       // Fixed width from meta, else binWidth for binned dims, else undefined.

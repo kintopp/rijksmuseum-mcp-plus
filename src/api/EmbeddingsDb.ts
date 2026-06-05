@@ -52,6 +52,8 @@ export class EmbeddingsDb {
   private descAvailable_ = false;
   private descDimensions = 0;
   private descArtworkCount = 0;
+  private buildId_ = "unknown";
+  private modelId_ = "";
 
   constructor() {
     const dbPath = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db");
@@ -74,6 +76,8 @@ export class EmbeddingsDb {
       const metaMap = Object.fromEntries(meta.map(r => [r.key, r.value]));
       this.dimensions = parseInt(metaMap.dimensions ?? "384", 10);
       this.artworkCount = parseInt(metaMap.artwork_count ?? "0", 10);
+      this.buildId_ = metaMap.built_at ?? "unknown";  // #378 cache-key component
+      this.modelId_ = metaMap.model ?? "";
 
       // Cache prepared statements
       this.stmtQuantize = this.db.prepare(
@@ -123,6 +127,10 @@ export class EmbeddingsDb {
   }
 
   get available(): boolean { return this.db !== null && this.stmtQuantize !== null; }
+  /** version_info.built_at — cache-key component so a DB swap invalidates results (#378). */
+  get buildId(): string { return this.buildId_; }
+  /** version_info.model — the embedding model the vectors were generated with. */
+  get modelId(): string { return this.modelId_; }
   get vectorDimensions(): number { return this.dimensions; }
   get dbPath(): string | null { return this.dbPath_; }
   get rawDb(): DatabaseType | null { return this.db; }
