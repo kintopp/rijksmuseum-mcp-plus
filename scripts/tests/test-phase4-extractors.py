@@ -193,11 +193,73 @@ def test_run_phase4_bootstraps_art_id() -> None:
     print("PASS: Layer B — run_phase4 bootstraps art_id and is idempotent")
 
 
+# ─── Layer C: examination report-type label (issue #278) ────────────
+
+def test_examination_report_type_label() -> None:
+    """Layer C: extract_attributed_by must populate examinations[].report_type_en.
+
+    Guards against issue #278: the report-type label lives in the concept
+    stub's notation[] array (JSON-LD expanded form, {"@language", "@value"}),
+    NOT in identified_by[].content. The original extractor only read
+    identified_by, so report_type_en was NULL for 100% of rows. This fixture
+    mirrors the real shape confirmed from SK-A-4878 (HMO 200106086): an
+    examination entry (has carried_out_by) whose classified_as[] carries the
+    label only in notation[], English preferred over Dutch.
+    """
+    data = {
+        "attributed_by": [
+            {
+                "type": "AttributeAssignment",
+                "carried_out_by": [
+                    {"type": "Actor", "identified_by": [
+                        {"type": "Name", "content": "G. Tauber"}]}
+                ],
+                "classified_as": [
+                    {
+                        "id": "https://id.rijksmuseum.nl/22015553",
+                        "type": "Type",
+                        "notation": [
+                            {"@language": "en", "@value": "infrared photography"},
+                            {"@language": "nl", "@value": "infraroodfotografie"},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    _related, exams = harvest.extract_attributed_by(data)
+    errors = []
+    if len(exams) != 1:
+        errors.append(f"expected 1 examination, got {len(exams)}")
+    else:
+        exam = exams[0]
+        if exam.get("report_type_id") != "https://id.rijksmuseum.nl/22015553":
+            errors.append(f"report_type_id wrong: {exam.get('report_type_id')!r}")
+        # The regression: this was NULL before the notation[] fix.
+        if exam.get("report_type_en") != "infrared photography":
+            errors.append(
+                f"report_type_en should be 'infrared photography' (English "
+                f"preferred), got {exam.get('report_type_en')!r}"
+            )
+        if exam.get("examiner_name") != "G. Tauber":
+            errors.append(f"examiner_name wrong: {exam.get('examiner_name')!r}")
+
+    if errors:
+        print("FAIL: Layer C (examination report-type label, #278)", file=sys.stderr)
+        for e in errors:
+            print(f"  - {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print("PASS: Layer C — examination report_type_en populated from notation[] (#278)")
+
+
 # ─── Main ────────────────────────────────────────────────────────────
 
 def main() -> None:
     test_extractors_against_fixture()
     test_run_phase4_bootstraps_art_id()
+    test_examination_report_type_label()
     print()
     print("All Phase 4 extractor tests passed.")
 

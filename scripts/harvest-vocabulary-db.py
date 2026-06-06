@@ -2515,11 +2515,32 @@ def extract_attributed_by(data: dict) -> tuple[list[dict], list[dict]]:
             for cls in entry.get("classified_as", []):
                 if isinstance(cls, dict) and cls.get("id"):
                     report_type_id = cls["id"]
-                    # Try to extract label
-                    for ident in cls.get("identified_by", []):
-                        if isinstance(ident, dict):
-                            report_type_en = ident.get("content")
-                            break
+                    # The label lives in notation[] (JSON-LD expanded form:
+                    # {"@language": "en"/"nl", "@value": "..."}), English
+                    # preferred, Dutch fallback, then any. (The older
+                    # identified_by[].content shape — used by the dereferenced
+                    # concept record — is kept as a last resort.)
+                    report_type_nl = None
+                    report_type_any = None
+                    for note in cls.get("notation", []):
+                        if not isinstance(note, dict):
+                            continue
+                        value = note.get("@value")
+                        if not value:
+                            continue
+                        lang = note.get("@language")
+                        if lang == "en":
+                            report_type_en = value
+                        elif lang == "nl":
+                            report_type_nl = value
+                        elif report_type_any is None:
+                            report_type_any = value
+                    if not report_type_en:
+                        for ident in cls.get("identified_by", []):
+                            if isinstance(ident, dict) and ident.get("content"):
+                                report_type_en = ident.get("content")
+                                break
+                    report_type_en = report_type_en or report_type_nl or report_type_any
                     break
 
             date_display, date_begin, date_end = _extract_timespan(entry)
