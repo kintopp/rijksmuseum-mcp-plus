@@ -1322,6 +1322,7 @@ export class VocabularyDb {
       }
       if (this.hasProductionRolePairs) {
         this.warnIfIndexMissing("idx_production_role_pairs_role", "creator+productionRole same-row matching will be slower. Re-run scripts/backfill-production-role-pairs.py with --rebuild-indexes.");
+        this.warnIfProductionRolePairsStale();
       }
 
       // Cache frequently-used prepared statements
@@ -1605,6 +1606,30 @@ export class VocabularyDb {
         "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?"
       ).get(indexName);
       if (!exists) console.error(`Warning: ${indexName} index missing — ${context}`);
+    } catch { /* ignore */ }
+  }
+
+  /** #376: production_role_pairs is a decoupled backfill (scripts/backfill-production-role-pairs.py),
+   *  not built during harvest — its artwork_id is the harvest-assigned art_id, so a later harvest
+   *  silently misaligns it (the same drift the embeddings DB guards against). The backfill stamps the
+   *  vocab build it ran against; warn if a subsequent harvest swapped that out. Stays quiet on
+   *  unstamped (pre-stamp) tables — provenance unknown, not necessarily stale. */
+  private warnIfProductionRolePairsStale(): void {
+    if (!this.db) return;
+    try {
+      const row = this.db.prepare(
+        "SELECT value FROM version_info WHERE key='production_role_pairs_vocab_built_at'"
+      ).get() as { value?: string } | undefined;
+      const stampedBuild = row?.value;
+      if (!stampedBuild) return; // unstamped backfill — can't verify, don't cry wolf
+      const currentBuild = this.buildId;
+      if (currentBuild !== "unknown" && stampedBuild !== currentBuild) {
+        console.error(
+          `Warning: production_role_pairs was backfilled against vocab build "${stampedBuild}" ` +
+          `but this DB is build "${currentBuild}" — art_ids may be misaligned (creator+productionRole ` +
+          `sameRowMatching unreliable). Re-run scripts/backfill-production-role-pairs.py.`
+        );
+      }
     } catch { /* ignore */ }
   }
 

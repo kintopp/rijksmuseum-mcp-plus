@@ -43,6 +43,7 @@ import sqlite3
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -196,6 +197,30 @@ def commit_batch(conn: sqlite3.Connection, batch: list[tuple[int, str, list]]) -
     conn.commit()
 
 
+def stamp_version_info(conn: sqlite3.Connection) -> None:
+    """Record backfill provenance so the server can detect art_id drift.
+
+    production_role_pairs.artwork_id is the harvest-assigned art_id, so the table is
+    only valid against the harvest it was built from. We stamp the vocab build we ran
+    against (version_info.built_at) so VocabularyDb.warnIfProductionRolePairsStale()
+    can warn if a later harvest swaps that out from under the table. Mirrors the
+    embeddings-DB convention (vocab_db_built_at / vocab_db_version).
+    """
+    conn.execute("CREATE TABLE IF NOT EXISTS version_info (key TEXT PRIMARY KEY, value TEXT)")
+    row = conn.execute("SELECT value FROM version_info WHERE key='built_at'").fetchone()
+    vocab_built_at = row[0] if row else "unknown"
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    conn.execute(
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)",
+        ("production_role_pairs_built_at", now),
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)",
+        ("production_role_pairs_vocab_built_at", vocab_built_at),
+    )
+    print(f"Stamped version_info: production_role_pairs_vocab_built_at={vocab_built_at}, built_at={now}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Backfill production_role_pairs for #357.",
@@ -223,6 +248,7 @@ def main() -> None:
     print(f"Pending artworks: {total:,}")
     if total == 0:
         print("Nothing to do.")
+        stamp_version_info(conn)
         return
 
     session = make_session()
@@ -279,6 +305,7 @@ def main() -> None:
         f"ok={ok:,}, 404={notfound:,}, err={err:,}. "
         f"production_role_pairs (after): {after:,} (+{after - existing_pairs:,})."
     )
+    stamp_version_info(conn)
     if err > 0:
         print(f"WARNING: {err:,} fetch errors — rerun to retry only those.")
         sys.exit(2)
