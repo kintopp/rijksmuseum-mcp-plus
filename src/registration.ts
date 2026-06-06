@@ -844,7 +844,8 @@ const ArtworkDetailOutput = {
   title: z.string(),
   creator: z.string(),
   date: z.string(),
-  type: z.string().optional(),
+  type: z.string().optional()
+    .describe("Primary object type — convenience sugar equal to objectTypes[0]?.label when present. objectTypes[] is the authoritative structured form (label + vocabulary id)."),
   url: z.string(),
   // ArtworkDetail fields
   description: z.string().nullable(),

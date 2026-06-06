@@ -35,7 +35,7 @@ Nearly all categories have corresponding search parameters in `search_artwork` â
 
 | # | Category | Field | Description |
 |---|----------|-------|-------------|
-| 11 | **Object types** | `objectTypes` | What the object is (e.g. "painting", "print", "drawing"). Each entry includes an English `label` and the vocabulary `id`. |
+| 11 | **Object types** | `objectTypes` | What the object is (e.g. "painting", "print", "drawing"). Each entry includes an English `label` and the vocabulary `id`. The top-level `type` field is convenience sugar equal to `objectTypes[0]?.label`; `objectTypes[]` is authoritative. |
 | 12 | **Materials** | `materials` | What the object is made of (e.g. "oil paint", "canvas"). Same format as object types. |
 | 13 | **Technique statement** | `techniqueStatement` | Comma-separated list of technique labels from the vocabulary database (e.g. "oil paint (paint), canvas"). |
 | 14 | **Dimension statement** | `dimensionStatement` | Human-readable dimensions text reconstructed from stored numeric values (e.g. "h 363 cm Ã— w 437 cm"). |
