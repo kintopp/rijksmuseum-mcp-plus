@@ -1097,6 +1097,7 @@ export class VocabularyDb {
   private stmtImageMetadata: Statement | null = null;
   private stmtArtworkRow: Statement | null = null;
   private stmtArtworkMappings: Statement | null = null;
+  private stmtArtworkAssignmentPairs: Statement | null = null; // #376: row-aware qualifier↔creator pairing for the detail view
   private stmtArtworkTitleVariants: Statement | null = null;
   private stmtArtworkParents: Statement | null = null;
   private stmtArtworkChildCount: Statement | null = null;
@@ -1421,6 +1422,22 @@ export class VocabularyDb {
         JOIN field_lookup f ON m.field_id = f.id
         WHERE m.artwork_id = ?
       `);
+
+      // #376/#349: row-aware connoisseurship-qualifier↔creator pairing for the detail
+      // view. assignment_pairs carries (artwork_id, qualifier_id, creator_id, part_index)
+      // with row linkage intact, so multi-creator works pair correctly without the
+      // positional zip's count-equality requirement. Priority-level markers (primary/
+      // secondary/undetermined) are absent from assignment_pairs by construction (#349) —
+      // exactly the values the detail view drops anyway.
+      if (this.hasAssignmentPairs) {
+        this.stmtArtworkAssignmentPairs = this.db.prepare(`
+          SELECT ap.creator_id, v.label_en, v.label_nl
+          FROM assignment_pairs ap
+          JOIN vocabulary v ON v.id = ap.qualifier_id
+          WHERE ap.artwork_id = ?
+          ORDER BY ap.creator_id, ap.part_index, ap.qualifier_id
+        `);
+      }
 
       // title_variants harvested in v0.24+; gracefully absent on older DBs.
       if (this.hasTitleVariants_) {
@@ -1821,6 +1838,26 @@ export class VocabularyDb {
       safeQualifiers = [];
     }
 
+    // #376: when assignment_pairs carries rows for this artwork, pair connoisseurship
+    // qualifiers to creators by vocab id (row-aware) instead of positionally — this
+    // resolves multi-creator works the positional zip above leaves null, and fixes
+    // latent mispairing in equal-count works. Creators absent from the map (e.g.
+    // priority-only) correctly get null. Falls back to the positional safeguard only
+    // when the artwork has no assignment_pairs rows (pre-v0.24 DBs / no connoisseurship).
+    let qualifierByCreator: Map<string, string> | null = null;
+    if (this.stmtArtworkAssignmentPairs && creators.length > 0) {
+      const pairRows = this.stmtArtworkAssignmentPairs.all(row.art_id) as
+        { creator_id: string; label_en: string | null; label_nl: string | null }[];
+      if (pairRows.length > 0) {
+        qualifierByCreator = new Map();
+        for (const p of pairRows) {
+          if (!qualifierByCreator.has(p.creator_id)) {
+            qualifierByCreator.set(p.creator_id, p.label_en || p.label_nl || "");
+          }
+        }
+      }
+    }
+
     const production = creators.map((c, i) => {
       const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.wikidata_id)
         ? { birthYear: c.birth_year, deathYear: c.death_year, gender: c.gender, wikidataId: c.wikidata_id }
@@ -1828,7 +1865,9 @@ export class VocabularyDb {
       return {
         name: label(c),
         role: safeRoles[i] ? label(safeRoles[i]) : null,
-        attributionQualifier: safeQualifiers[i] ? label(safeQualifiers[i]) : null,
+        attributionQualifier: qualifierByCreator
+          ? (qualifierByCreator.get(c.vocab_id) ?? null)
+          : (safeQualifiers[i] ? label(safeQualifiers[i]) : null),
         place: safeSpatials[i] ? label(safeSpatials[i]) : (safeBirthPlaces[i] ? label(safeBirthPlaces[i]) : null),
         actorUri: c.vocab_id,
         personInfo,

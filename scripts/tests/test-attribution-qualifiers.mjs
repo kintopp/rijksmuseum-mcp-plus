@@ -96,6 +96,21 @@ const allNullableString = schemaData.production.every(p =>
 );
 ok("all attributionQualifier values are string|null", allNullableString);
 
+// ── 7. Multi-creator row-aware pairing (#376) ────────────────────────
+// RP-F-1994-16-20 has 2 creators but 3 qualifier mappings ([undetermined,
+// attributed to, primary]) — the count mismatch nulled ALL qualifiers under the
+// positional zip. assignment_pairs pairs "attributed to" → "Muller, Julius" by
+// vocab id, leaving the other creator (priority-only) correctly null.
+console.log("\n7. RP-F-1994-16-20 — multi-creator, mismatched qualifier count (#376)");
+const mc = await getDetail("RP-F-1994-16-20");
+const mcProd = mc.structured.production;
+ok("has 2 production entries", mcProd.length === 2);
+const muller = mcProd.find(p => p.actorUri === "21036016");      // Muller, Julius
+const heide = mcProd.find(p => p.actorUri === "21030806");       // A.E. v.d. Heide
+console.log(`  pairing: ${JSON.stringify(mcProd.map(p => [p.name, p.attributionQualifier]))}`);
+ok("Muller, Julius paired with 'attributed to'", muller?.attributionQualifier === "attributed to");
+ok("priority-only creator stays null (no fabrication, no 'primary' leak)", heide?.attributionQualifier === null);
+
 console.log(`\n${"═".repeat(50)}`);
 console.log(`  Passed: ${passed}  Failed: ${failed}`);
 console.log(`${"═".repeat(50)}\n`);
