@@ -944,7 +944,8 @@ def make_iconclass_resolver(db_path: str | None = None):
     return resolve
 
 
-def parse_nt_file(filepath: str, default_type: str, iconclass_resolver=None) -> dict | None:
+def parse_nt_file(filepath: str, default_type: str, iconclass_resolver=None,
+                  parse_stats: Counter | None = None) -> dict | None:
     """Parse a single N-Triples entity file into a vocabulary record.
 
     Handles two coexisting shapes in the dumps:
@@ -993,6 +994,17 @@ def parse_nt_file(filepath: str, default_type: str, iconclass_resolver=None) -> 
 
     try:
         with open(filepath, "r", encoding="utf-8") as f:
+            # #317: upstream dump-build occasionally saves an HTML error page (e.g.
+            # a 404) under a .nt filename. It is not RDF — count it as a distinct
+            # failure category instead of letting it pass as a silent zero-triple
+            # drop. Real N-Triples lines start with <http...> or _:bnode (never
+            # <!doctype / <html), so this cannot false-positive on valid content.
+            head = f.read(64).lstrip().lower()
+            if head.startswith(("<!doctype", "<html")):
+                if parse_stats is not None:
+                    parse_stats["html_error"] += 1
+                return None
+            f.seek(0)
             lines = f.readlines()
     except Exception:
         return None
@@ -1282,12 +1294,21 @@ def parse_dump_dir(dump_dir: Path, default_type: str, iconclass_resolver=None) -
     files = [f for f in os.listdir(dump_dir) if os.path.isfile(dump_dir / f) and not f.startswith(".")]
     total = len(files)
     records = []
+    parse_stats: Counter = Counter()
     for i, fname in enumerate(files):
         if i % 5000 == 0 and i > 0:
             print(f"    Parsing: {i}/{total}...", flush=True)
-        rec = parse_nt_file(str(dump_dir / fname), default_type, iconclass_resolver=iconclass_resolver)
+        rec = parse_nt_file(str(dump_dir / fname), default_type,
+                            iconclass_resolver=iconclass_resolver, parse_stats=parse_stats)
         if rec:
             records.append(rec)
+    if parse_stats["html_error"]:
+        # #317: surface upstream HTML-instead-of-RDF as a counted category rather
+        # than a silent zero-triple drop. Re-run scripts/probe_317_html_dumps.py
+        # after a dump refresh to confirm which IDs are affected.
+        print(f"    WARNING: {parse_stats['html_error']} file(s) in {dump_dir.name} were "
+              f"HTML error pages, not RDF (#317) — upstream dump-build saved error "
+              f"responses under .nt filenames; skipped.", flush=True)
     return records
 
 

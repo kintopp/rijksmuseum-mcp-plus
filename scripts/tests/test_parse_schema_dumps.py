@@ -12,6 +12,8 @@ or just `python3 scripts/tests/test_parse_schema_dumps.py` (stdlib only).
 
 import os
 import sys
+import tempfile
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -23,6 +25,19 @@ classify_authority = harvest_mod.classify_authority
 
 recorder = CheckRecorder()
 check = recorder.check
+
+
+def finish() -> None:
+    """Print the summary and exit with the recorder's status code. Used by both
+    the normal end-of-file path and the early fixture-skip path so that the
+    fixture-free tests (and their failures) always count."""
+    print()
+    print("=" * 60)
+    print(recorder.summary())
+    for f in recorder.failures:
+        print(f"  ✗ {f}")
+    print("=" * 60)
+    sys.exit(recorder.exit_code())
 
 
 def find_fixture(root: str, matcher) -> Path | None:
@@ -80,7 +95,53 @@ for uri, exp_auth, exp_id in AUTHORITY_CASES:
     )
 
 
-# ─── 2. Fixture-based parse tests ─────────────────────────────────────
+# ─── 2. HTML-error dump guard (#317) ──────────────────────────────────
+# Fixture-free (runs even without the /tmp dumps below). Upstream dump-build
+# sometimes saves a 404 HTML page under a .nt filename (e.g. concept/120512,
+# /120363). parse_nt_file must drop it (return None) AND count it as a distinct
+# failure category so it is not a silent zero-triple miss.
+
+print()
+print("=" * 60)
+print("HTML-error dump guard (#317)")
+print("=" * 60)
+
+with tempfile.TemporaryDirectory() as _td:
+    stats: Counter = Counter()
+
+    html_path = Path(_td) / "120512"
+    html_path.write_text('<!doctype html>\n<html lang="en">\n<head></head>\n', encoding="utf-8")
+    rec = parse_nt_file(str(html_path), default_type="concept", parse_stats=stats)
+    check("HTML 404 page parses to None", rec is None, f"got {rec!r}")
+    check("html_error counter incremented", stats["html_error"] == 1,
+          f"got {stats['html_error']}")
+
+    # Leading-whitespace + uppercase <HTML> variant still trips the guard.
+    html_path2 = Path(_td) / "120363"
+    html_path2.write_text('  \n<HTML>\n<body>404</body>\n</HTML>\n', encoding="utf-8")
+    rec2 = parse_nt_file(str(html_path2), default_type="concept", parse_stats=stats)
+    check("whitespace/upper <HTML> also dropped", rec2 is None, f"got {rec2!r}")
+    check("counter accumulates to 2", stats["html_error"] == 2, f"got {stats['html_error']}")
+
+    # A real N-Triples line must NOT trip the guard (no false positive on <http...>).
+    nt_path = Path(_td) / "999999"
+    nt_path.write_text(
+        '<https://id.rijksmuseum.nl/999999> '
+        '<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> '
+        '<http://schema.org/DefinedTerm> .\n',
+        encoding="utf-8",
+    )
+    stats_clean: Counter = Counter()
+    parse_nt_file(str(nt_path), default_type="concept", parse_stats=stats_clean)
+    check("valid N-Triples not flagged as HTML", stats_clean["html_error"] == 0,
+          f"got {stats_clean['html_error']}")
+
+    # Counter param is optional — omitting it keeps the legacy signature working.
+    rec3 = parse_nt_file(str(html_path), default_type="concept")
+    check("HTML guard works without a counter", rec3 is None, f"got {rec3!r}")
+
+
+# ─── 3. Fixture-based parse tests ─────────────────────────────────────
 
 print()
 print("=" * 60)
@@ -95,8 +156,8 @@ CLASS_DUMP = "/tmp/rm-dump-classification"
 EVENT_DUMP = "/tmp/rm-dump-event"
 
 if not os.path.isdir(PERSON_DUMP):
-    print(f"SKIP: {PERSON_DUMP} not found; cannot run fixture tests")
-    sys.exit(0)
+    print(f"SKIP: {PERSON_DUMP} not found; skipping fixture tests")
+    finish()
 
 # ── Test 2a: person with schema:name + schema:alternateName + schema:sameAs ──
 # Pick one with at least 2 sameAs URIs so we exercise multi-authority classification.
@@ -299,11 +360,4 @@ if os.path.isdir(EVENT_DUMP):
 
 # ─── Summary ──────────────────────────────────────────────────────────
 
-print()
-print("=" * 60)
-print(recorder.summary())
-for f in recorder.failures:
-    print(f"  ✗ {f}")
-print("=" * 60)
-
-sys.exit(recorder.exit_code())
+finish()
