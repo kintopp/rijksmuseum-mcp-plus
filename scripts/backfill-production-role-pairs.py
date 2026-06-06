@@ -210,13 +210,12 @@ def stamp_version_info(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT value FROM version_info WHERE key='built_at'").fetchone()
     vocab_built_at = row[0] if row else "unknown"
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    conn.execute(
+    conn.executemany(
         "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)",
-        ("production_role_pairs_built_at", now),
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO version_info (key, value) VALUES (?, ?)",
-        ("production_role_pairs_vocab_built_at", vocab_built_at),
+        [
+            ("production_role_pairs_built_at", now),
+            ("production_role_pairs_vocab_built_at", vocab_built_at),
+        ],
     )
     print(f"Stamped version_info: production_role_pairs_vocab_built_at={vocab_built_at}, built_at={now}")
 

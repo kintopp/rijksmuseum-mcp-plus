@@ -1571,16 +1571,21 @@ export class VocabularyDb {
     return this.dbPath_;
   }
 
+  /** Read a single version_info value by key. Returns undefined if absent or on error. */
+  private readVersionInfo(key: string): string | undefined {
+    try {
+      const row = this.db?.prepare("SELECT value FROM version_info WHERE key = ?").get(key) as { value?: string } | undefined;
+      return row?.value;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** version_info.built_at — cache-key component so a DB swap invalidates results (#378).
    *  Lazily read + memoised; "unknown" if version_info is absent. */
   get buildId(): string {
     if (this.buildId_ === undefined) {
-      try {
-        const row = this.db?.prepare("SELECT value FROM version_info WHERE key = 'built_at'").get() as { value?: string } | undefined;
-        this.buildId_ = row?.value ?? "unknown";
-      } catch {
-        this.buildId_ = "unknown";
-      }
+      this.buildId_ = this.readVersionInfo("built_at") ?? "unknown";
     }
     return this.buildId_;
   }
@@ -1611,26 +1616,20 @@ export class VocabularyDb {
 
   /** #376: production_role_pairs is a decoupled backfill (scripts/backfill-production-role-pairs.py),
    *  not built during harvest — its artwork_id is the harvest-assigned art_id, so a later harvest
-   *  silently misaligns it (the same drift the embeddings DB guards against). The backfill stamps the
-   *  vocab build it ran against; warn if a subsequent harvest swapped that out. Stays quiet on
-   *  unstamped (pre-stamp) tables — provenance unknown, not necessarily stale. */
+   *  silently misaligns it. The backfill stamps the vocab build it ran against; warn if a subsequent
+   *  harvest swapped that out. Stays quiet on unstamped (pre-stamp) tables — provenance unknown, not
+   *  necessarily stale. */
   private warnIfProductionRolePairsStale(): void {
-    if (!this.db) return;
-    try {
-      const row = this.db.prepare(
-        "SELECT value FROM version_info WHERE key='production_role_pairs_vocab_built_at'"
-      ).get() as { value?: string } | undefined;
-      const stampedBuild = row?.value;
-      if (!stampedBuild) return; // unstamped backfill — can't verify, don't cry wolf
-      const currentBuild = this.buildId;
-      if (currentBuild !== "unknown" && stampedBuild !== currentBuild) {
-        console.error(
-          `Warning: production_role_pairs was backfilled against vocab build "${stampedBuild}" ` +
-          `but this DB is build "${currentBuild}" — art_ids may be misaligned (creator+productionRole ` +
-          `sameRowMatching unreliable). Re-run scripts/backfill-production-role-pairs.py.`
-        );
-      }
-    } catch { /* ignore */ }
+    const stampedBuild = this.readVersionInfo("production_role_pairs_vocab_built_at");
+    if (!stampedBuild) return; // unstamped backfill — can't verify, don't cry wolf
+    const currentBuild = this.buildId;
+    if (currentBuild !== "unknown" && stampedBuild !== currentBuild) {
+      console.error(
+        `Warning: production_role_pairs was backfilled against vocab build "${stampedBuild}" ` +
+        `but this DB is build "${currentBuild}" — art_ids may be misaligned (creator+productionRole ` +
+        `sameRowMatching unreliable). Re-run scripts/backfill-production-role-pairs.py.`
+      );
+    }
   }
 
   /** Batch-lookup object types from the mappings table. Returns objectNumber → label map.
@@ -1869,6 +1868,8 @@ export class VocabularyDb {
     // latent mispairing in equal-count works. Creators absent from the map (e.g.
     // priority-only) correctly get null. Falls back to the positional safeguard only
     // when the artwork has no assignment_pairs rows (pre-v0.24 DBs / no connoisseurship).
+    // (role/place stay positional; role could be paired the same way via the sibling
+    // production_role_pairs table should a future issue need it.)
     let qualifierByCreator: Map<string, string> | null = null;
     if (this.stmtArtworkAssignmentPairs && creators.length > 0) {
       const pairRows = this.stmtArtworkAssignmentPairs.all(row.art_id) as
