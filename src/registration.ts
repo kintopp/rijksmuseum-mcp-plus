@@ -379,8 +379,8 @@ function formatDetailSummary(d: DetailWithChain): string {
   const lines: string[] = [];
   lines.push(`${d.objectNumber} — ${d.title}`);
   lines.push(`${d.creator}${d.date ? `, ${d.date}` : ""}`);
-  if (d.techniqueStatement || d.dimensionStatement) {
-    lines.push([d.techniqueStatement, d.dimensionStatement].filter(Boolean).join(", "));
+  if (d.techniqueStatement || d.physicalDimensions) {
+    lines.push([d.techniqueStatement, d.physicalDimensions].filter(Boolean).join(", "));
   }
   if (d.location) {
     const parts = [d.location.floor, d.location.roomName, `room ${d.location.roomId}`].filter(Boolean);
@@ -850,7 +850,7 @@ const ArtworkDetailOutput = {
   // ArtworkDetail fields
   description: z.string().nullable(),
   techniqueStatement: z.string().nullable(),
-  dimensionStatement: z.string().nullable(),
+  physicalDimensions: z.string().nullable().describe("Short reconstructed dimensions string (e.g. \"h 379.5 cm × w 453.5 cm\") from formatDimensions(height, width). Same value and key the viewer tools (get_artwork_image / remount_viewer) emit. For the full structured measurements use dimensions[]; for verbose cataloguer prose use extentText."),
   provenance: z.string().nullable(),
   provenanceChain: z.array(z.object({
     sequence: z.number().int(),
@@ -1018,7 +1018,8 @@ const BrowseSetOutput = {
     creator: z.string(),
     date: z.string(),
     description: z.string().optional(),
-    dimensions: z.string().optional(),
+    extentText: z.string().optional()
+      .describe("Verbose free-text extent/dimensions string (dcterms:extent) — the same shape as get_artwork_details.extentText. (Renamed from `dimensions` in v0.60; that key collided with get_artwork_details.dimensions[], which is a structured array.)"),
     datestamp: z.string().optional(),
     hasImage: z.boolean(),
     imageUrl: z.string().optional(),

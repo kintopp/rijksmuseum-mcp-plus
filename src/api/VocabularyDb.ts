@@ -45,7 +45,7 @@ export interface ArtworkDetailFromDb {
   url: string;
   description: string | null;
   techniqueStatement: string | null;
-  dimensionStatement: string | null;
+  physicalDimensions: string | null;
   provenance: string | null;
   creditLine: string | null;
   inscriptions: string[];
@@ -652,7 +652,7 @@ export interface BrowseSetRecord {
   creator: string;
   date: string;
   description?: string;
-  dimensions?: string;
+  extentText?: string;
   datestamp?: string;
   hasImage: boolean;
   imageUrl?: string;
@@ -1903,7 +1903,7 @@ export class VocabularyDb {
     // Assemble date string
     const date = formatDateRange(row.date_earliest, row.date_latest) ?? "";
 
-    const dimensionStatement = formatDimensions(row.height_cm, row.width_cm);
+    const physicalDimensions = formatDimensions(row.height_cm, row.width_cm);
 
     // Dimensions structured
     const dimensions: { type: DimensionType; value: number; unit: string; note: string | null }[] = [];
@@ -1933,7 +1933,7 @@ export class VocabularyDb {
       url: `https://www.rijksmuseum.nl/en/collection/${row.object_number}`,
       description: row.description_text,
       techniqueStatement,
-      dimensionStatement,
+      physicalDimensions,
       provenance: row.provenance_text,
       creditLine: row.credit_line,
       inscriptions: row.inscription_text ? row.inscription_text.split(" | ") : [],
@@ -3450,7 +3450,7 @@ export class VocabularyDb {
         creator: r.creator_label ?? "",
         date: r.date_display ?? formatDateRange(r.date_earliest, r.date_latest) ?? "",
         ...(r.description_text && { description: r.description_text }),
-        ...(r.extent_text && { dimensions: r.extent_text }),
+        ...(r.extent_text && { extentText: r.extent_text }),
         ...(r.record_modified && { datestamp: r.record_modified }),
         hasImage,
         ...(iiifId && {
