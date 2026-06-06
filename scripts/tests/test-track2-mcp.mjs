@@ -91,13 +91,13 @@ assert(Array.isArray(nw.parents) && nw.parents.length === 0,
 assert(typeof nw.childCount === "number" && nw.childCount === 0,
   "Night Watch has no children (childCount=0)");
 
-// Task C: relatedObjects (post-cluster-E: co-production-only — Night Watch has none)
+// Task C: relatedObjects (post-cluster-E: related-variant-only — Night Watch has none)
 assert(Array.isArray(nw.relatedObjects),
   "relatedObjects[] returned as array");
 assert(typeof nw.relatedObjectsTotalCount === "number",
   "relatedObjectsTotalCount is a number");
 assert(nw.relatedObjectsTotalCount === 0,
-  `Night Watch has 0 co-production peers (got ${nw.relatedObjectsTotalCount})`);
+  `Night Watch has 0 related-variant peers (got ${nw.relatedObjectsTotalCount})`);
 
 // ══════════════════════════════════════════════════════════════════
 section("3. get_artwork_details(BI-1898-1748A) — sketchbook parent (#28)");
@@ -136,9 +136,9 @@ assert(typeof folio.parents[0].title === "string" && folio.parents[0].title.leng
 assert(folio.childCount === 0, "folio is a leaf (no children)");
 
 // ══════════════════════════════════════════════════════════════════
-section("5. get_artwork_details(RP-P-1997-361) — co-production peers");
+section("5. get_artwork_details(RP-P-1997-361) — related-variant peers");
 // ══════════════════════════════════════════════════════════════════
-// Cluster E narrowed relatedObjects[] to the 3 co-production labels
+// Cluster E narrowed relatedObjects[] to the 3 related-variant labels
 // ('different example' / 'production stadia' / 'pendant'). RP-P-1997-361
 // carries 7 such entries across 2 distinct labels.
 
@@ -149,7 +149,7 @@ const r5 = await client.callTool({
 const rp = unwrap(r5);
 
 assert(rp.relatedObjectsTotalCount === 7,
-  `RP-P-1997-361 carries 7 co-production entries (got ${rp.relatedObjectsTotalCount})`);
+  `RP-P-1997-361 carries 7 related-variant entries (got ${rp.relatedObjectsTotalCount})`);
 assert(rp.relatedObjects.length === 7,
   `relatedObjects[] returns all 7 (got ${rp.relatedObjects.length})`);
 const rpDistinct = new Set(rp.relatedObjects.map(r => r.relationship));

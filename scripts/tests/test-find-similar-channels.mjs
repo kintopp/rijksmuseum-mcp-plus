@@ -85,43 +85,43 @@ console.log("\n=== Theme: unknown artwork ===");
 const themeMissing = db.findSimilarByTheme("DOES-NOT-EXIST-9999", 10);
 check("returns null", themeMissing, null);
 
-// ── Related Co-Production channel (creator-invariant 3-type filter) ──
-console.log("\n=== Related Co-Production: pendant happy path (KOG-ZG-1-19-90) ===");
+// ── Related Variant channel (creator-invariant 3-type filter) ──
+console.log("\n=== Related Variant: pendant happy path (KOG-ZG-1-19-90) ===");
 const rQ = Date.now();
-const cpRes = db.findSimilarByCoProduction("KOG-ZG-1-19-90", 10);
+const rvRes = db.findSimilarByRelatedVariant("KOG-ZG-1-19-90", 10);
 const rMs = Date.now() - rQ;
 console.log(`  query latency: ${rMs}ms`);
-if (!cpRes) { console.error("findSimilarByCoProduction returned null"); process.exit(1); }
-check("queryObjectNumber", cpRes.queryObjectNumber, "KOG-ZG-1-19-90");
-checkPredicate("results length ≥ 1", () => cpRes.results.length >= 1, "expected ≥1 peer");
+if (!rvRes) { console.error("findSimilarByRelatedVariant returned null"); process.exit(1); }
+check("queryObjectNumber", rvRes.queryObjectNumber, "KOG-ZG-1-19-90");
+checkPredicate("results length ≥ 1", () => rvRes.results.length >= 1, "expected ≥1 peer");
 checkPredicate("KOG-ZG-1-19-87 is one of the peers",
-  () => cpRes.results.some(r => r.objectNumber === "KOG-ZG-1-19-87"),
+  () => rvRes.results.some(r => r.objectNumber === "KOG-ZG-1-19-87"),
   "expected pendant peer in results");
 checkPredicate("every result has score = 10",
-  () => cpRes.results.every(r => r.score === 10),
+  () => rvRes.results.every(r => r.score === 10),
   "fixed-score model");
 checkPredicate("every result has at least 1 sharedTerm",
-  () => cpRes.results.every(r => r.sharedTerms.length >= 1),
+  () => rvRes.results.every(r => r.sharedTerms.length >= 1),
   "labels should always be present");
 checkPredicate("first result label is 'pendant'",
-  () => cpRes.results[0].sharedTerms.some(t => t.label === "pendant"),
+  () => rvRes.results[0].sharedTerms.some(t => t.label === "pendant"),
   "expected the pendant label");
 checkPredicate("no NULL-peer results leaked",
-  () => cpRes.results.every(r => r.objectNumber && !r.objectNumber.startsWith("art_id:")),
+  () => rvRes.results.every(r => r.objectNumber && !r.objectNumber.startsWith("art_id:")),
   "all peers should resolve to real object_numbers");
 checkPredicate("query latency < 50ms warm", () => rMs < 50, `actual: ${rMs}ms`);
 
-console.log("\n=== Related Co-Production: artwork without co-production edges ===");
-const cpEmpty = db.findSimilarByCoProduction("NG-VG-3-242", 10);
-if (!cpEmpty) { console.error("findSimilarByCoProduction returned null"); process.exit(1); }
-check("results empty", cpEmpty.results.length, 0);
-checkPredicate("warning mentions co-production edges",
-  () => Array.isArray(cpEmpty.warnings) && cpEmpty.warnings.some(w => /co-production/.test(w)),
-  `got warnings: ${JSON.stringify(cpEmpty.warnings)}`);
+console.log("\n=== Related Variant: artwork without related-variant edges ===");
+const rvEmpty = db.findSimilarByRelatedVariant("NG-VG-3-242", 10);
+if (!rvEmpty) { console.error("findSimilarByRelatedVariant returned null"); process.exit(1); }
+check("results empty", rvEmpty.results.length, 0);
+checkPredicate("warning mentions related-variant edges",
+  () => Array.isArray(rvEmpty.warnings) && rvEmpty.warnings.some(w => /related-variant/.test(w)),
+  `got warnings: ${JSON.stringify(rvEmpty.warnings)}`);
 
-console.log("\n=== Related Co-Production: unknown artwork ===");
-const cpMissing = db.findSimilarByCoProduction("DOES-NOT-EXIST-9999", 10);
-check("returns null", cpMissing, null);
+console.log("\n=== Related Variant: unknown artwork ===");
+const rvMissing = db.findSimilarByRelatedVariant("DOES-NOT-EXIST-9999", 10);
+check("returns null", rvMissing, null);
 
 // ── Related Object channel (tiered B1+B3 — pair / set / recto|verso /
 //    reproduction / catch-all). SK-A-1115 has 'original | reproduction'

@@ -4,7 +4,7 @@
  * The current find_similar tool accepts only { objectNumber, maxResults } (strict
  * Zod schema). The per-mode calls below (mode: "iconclass" / "lineage" /
  * "depicted_person") are rejected. find_similar now produces a 9-channel HTML
- * comparison page in a single call (visual, related-co-production, lineage,
+ * comparison page in a single call (visual, related variant, lineage,
  * iconclass, description, theme, depicted person, depicted place,
  * related object, plus pooled), making the multi-call intersection workflow
  * here largely redundant with the production page at /similar/:uuid.

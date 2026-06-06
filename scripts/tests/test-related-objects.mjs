@@ -2,16 +2,16 @@
 // Task C smoke test: get_artwork_details surfaces peer-artwork relations.
 //
 // As of v0.27 cluster E (#296), relatedObjects[] is restricted to the 3
-// co-production labels ('different example', 'production stadia', 'pendant')
+// related-variant labels ('different example', 'production stadia', 'pendant')
 // — the creator-invariant peers used by the viewer's prev/next-related
 // navigation. Other relationship types (recto/verso, frame, reproduction,
 // related object, etc.) surface through find_similar's Related Object channel.
 //
 // Fixtures (live DB, harvest-baseline 2026-05-02):
 //   KOG-ZG-1-19-90    — single 'pendant' relation, resolvable peer KOG-ZG-1-19-87
-//   SK-A-1115         — 4 'production stadia' (single co-production type)
+//   SK-A-1115         — 4 'production stadia' (single related-variant type)
 //   RP-P-1997-361     — 7 entries, 2 distinct types ('different example' + 'production stadia')
-//   SK-A-5088         — has 'object | current frame' but 0 co-production → negative test
+//   SK-A-5088         — has 'object | current frame' but 0 related-variant → negative test
 //   RP-P-2010-222-3315 — no related_objects nor artwork_parent rows at all
 
 import path from "node:path";
@@ -59,7 +59,7 @@ checkPredicate(
   () => single.relatedObjects.every(r => r.relationship === "production stadia"),
   "expected all rows to share the same relationship_en");
 
-console.log("\n=== Multi-type co-production (RP-P-1997-361) ===");
+console.log("\n=== Multi-type related-variant (RP-P-1997-361) ===");
 const multi = db.getArtworkDetail("RP-P-1997-361");
 if (!multi) { console.error("RP-P-1997-361 not found"); process.exit(1); }
 check("relatedObjectsTotalCount", multi.relatedObjectsTotalCount, 7);
@@ -73,7 +73,7 @@ checkPredicate(
 const sortedRels = multi.relatedObjects.map(r => r.relationship);
 check("rows ordered by relationship label", sortedRels, [...sortedRels].sort());
 
-console.log("\n=== Negative: only non-co-production relations (SK-A-5088) ===");
+console.log("\n=== Negative: only non-related-variant relations (SK-A-5088) ===");
 const framed = db.getArtworkDetail("SK-A-5088");
 if (!framed) { console.error("SK-A-5088 not found"); process.exit(1); }
 check("relatedObjectsTotalCount", framed.relatedObjectsTotalCount, 0);

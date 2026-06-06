@@ -4032,8 +4032,8 @@ function registerTools(
 
         // Related Variant (#293) — creator-invariant curator-declared edges
         // ('different example' / 'production stadia' / 'pendant'), fixed score=10
-        const cpResult = vocabDb!.findSimilarByCoProduction(args.objectNumber, maxResults);
-        const cpCandidates = toDepictedCandidates(cpResult);
+        const rvResult = vocabDb!.findSimilarByRelatedVariant(args.objectNumber, maxResults);
+        const rvCandidates = toDepictedCandidates(rvResult);
 
         // Related Object — other curator-declared edges (pair / set / recto|verso /
         // reproduction / catch-all related object), tiered scores 2-6.
@@ -4077,7 +4077,7 @@ function registerTools(
             depictedPersons: dpResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
             depictedPlaces: dplResult?.queryTerms.map(t => ({ label: t.label, ...(t.wikidataUri && { wikidataUri: t.wikidataUri }) })),
             themes: thResult?.queryTerms.map(t => t.label),
-            coProductionLabels: cpResult?.queryTerms.map(t => t.label),
+            relatedVariantLabels: rvResult?.queryTerms.map(t => t.label),
             relatedObjectLabels: roResult?.queryTerms.map(t => t.label),
           },
           modes: {
@@ -4086,7 +4086,7 @@ function registerTools(
             description: descCandidates,
             ...(visualCandidates.length > 0 && { visual: visualCandidates }),
             ...(thCandidates.length > 0 && { theme: thCandidates }),
-            ...(cpCandidates.length > 0 && { coProduction: cpCandidates }),
+            ...(rvCandidates.length > 0 && { relatedVariant: rvCandidates }),
             ...(roCandidates.length > 0 && { relatedObject: roCandidates }),
             ...(dpCandidates.length > 0 && { depictedPerson: dpCandidates }),
             ...(dplCandidates.length > 0 && { depictedPlace: dplCandidates }),
@@ -4117,7 +4117,7 @@ function registerTools(
         // Summary counts
         const counts = [
           ...(visualCandidates.length > 0 ? [`Visual: ${visualCandidates.length}`] : []),
-          `Related Variant: ${cpCandidates.length}`,
+          `Related Variant: ${rvCandidates.length}`,
           `Related Object: ${roCandidates.length}`,
           `Lineage: ${liCandidates.length}`,
           `Iconclass: ${icCandidates.length}`,
@@ -4129,7 +4129,7 @@ function registerTools(
         const poolThreshold = pageData.poolThreshold;
         // Count pooled entries
         const allObjNums = new Map<string, number>();
-        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates, thCandidates, cpCandidates, roCandidates, dpCandidates, dplCandidates]) {
+        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates, thCandidates, rvCandidates, roCandidates, dpCandidates, dplCandidates]) {
           for (const c of mode) {
             allObjNums.set(c.objectNumber, (allObjNums.get(c.objectNumber) ?? 0) + 1);
           }

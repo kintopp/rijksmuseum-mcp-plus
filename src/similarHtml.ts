@@ -52,8 +52,8 @@ export interface SimilarQueryInfo {
   depictedPlaces?: { label: string; wikidataUri?: string }[];
   /** Themes attached to the query artwork (#294) */
   themes?: string[];
-  /** Distinct creator-invariant co-production relationship labels on the query artwork (#293) */
-  coProductionLabels?: string[];
+  /** Distinct creator-invariant related-variant relationship labels on the query artwork (#293) */
+  relatedVariantLabels?: string[];
   /** Distinct other-curator-declared relationship labels on the query artwork (Related Object channel) */
   relatedObjectLabels?: string[];
 }
@@ -66,7 +66,7 @@ export interface SimilarPageData {
     description: SimilarCandidate[];
     visual?: SimilarCandidate[];
     theme?: SimilarCandidate[];
-    coProduction?: SimilarCandidate[];
+    relatedVariant?: SimilarCandidate[];
     relatedObject?: SimilarCandidate[];
     depictedPerson?: SimilarCandidate[];
     depictedPlace?: SimilarCandidate[];
@@ -149,7 +149,7 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
       "rarer themes contribute more. " +
       "Three-way tie-breaks are resolved by curatorial importance.",
   },
-  coProduction: {
+  relatedVariant: {
     label: "Related Variant",
     badge: "Var",
     color: "#7b1fa2",
@@ -181,13 +181,13 @@ const MODE_INFO: Record<string, { label: string; badge: string; color: string; m
  *  describe direct relationships to the seed; the wider Related Object channel
  *  follows the deterministic similarity signals. */
 const MODE_ORDER = [
-  "visual", "coProduction", "lineage", "iconclass", "description",
+  "visual", "relatedVariant", "lineage", "iconclass", "description",
   "theme", "depictedPerson", "depictedPlace", "relatedObject",
 ] as const;
 
 /** Modes whose card detail is a comma-separated list of sharedTerms labels. */
 const SHARED_TERM_MODES = new Set<string>([
-  "depictedPerson", "depictedPlace", "theme", "coProduction", "relatedObject",
+  "depictedPerson", "depictedPlace", "theme", "relatedVariant", "relatedObject",
 ]);
 
 function escHtml(s: string): string {
@@ -409,11 +409,11 @@ export function generateSimilarHtml(data: SimilarPageData): string {
     </div>`;
   }
 
-  if (query.coProductionLabels && query.coProductionLabels.length > 0) {
-    const cpHtml = query.coProductionLabels.map(l => `<em>${escHtml(l)}</em>`).join(" &middot; ");
+  if (query.relatedVariantLabels && query.relatedVariantLabels.length > 0) {
+    const rvHtml = query.relatedVariantLabels.map(l => `<em>${escHtml(l)}</em>`).join(" &middot; ");
     metaSections += `<div class="meta-section">
       <div class="meta-section-label related-variant">Related Variant</div>
-      <div class="meta-content">${cpHtml}</div>
+      <div class="meta-content">${rvHtml}</div>
     </div>`;
   }
 

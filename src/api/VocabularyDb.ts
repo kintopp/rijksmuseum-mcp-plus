@@ -1165,13 +1165,13 @@ export class VocabularyDb {
   // Theme cache (#294)
   private themeDf: Map<number, number> | null = null; // theme vocab_rowid → document frequency
   private themeN = 0; // total artworks with at least one theme
-  // Related Co-Production cache (#293) — curator-declared peer edges where
+  // Related Variant cache (#293) — curator-declared peer edges where
   // the creator is invariant (~94-97% empirically) and the link describes
   // another instantiation, stage, or deliberate companion of the same
   // artistic conception. Score is fixed (each edge is a curatorial assertion,
   // not a probabilistic match).
-  private coProductionByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
-  private static readonly CO_PRODUCTION_LABELS = [
+  private relatedVariantByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
+  private static readonly RELATED_VARIANT_LABELS = [
     "different example", "production stadia", "pendant",
   ] as const;
 
@@ -1452,23 +1452,23 @@ export class VocabularyDb {
 
       // related_objects harvested in v0.24+; peer artwork relations (recto/verso, frame/painting, pendant…).
       if (this.hasRelatedObjects_) {
-        const coProductionPlaceholdersForCount = VocabularyDb.CO_PRODUCTION_LABELS.map(() => "?").join(", ");
+        const relatedVariantPlaceholdersForCount = VocabularyDb.RELATED_VARIANT_LABELS.map(() => "?").join(", ");
         this.stmtArtworkRelatedCount = this.db.prepare(
           `SELECT COUNT(*) AS n FROM related_objects
-             WHERE art_id = ? AND relationship_en IN (${coProductionPlaceholdersForCount})`
+             WHERE art_id = ? AND relationship_en IN (${relatedVariantPlaceholdersForCount})`
         );
         // Viewer-side relatedObjects[] is restricted to the same 3 creator-
-        // invariant types used by find_similar's Related Co-Production
+        // invariant types used by find_similar's Related Variant
         // channel ('different example' / 'production stadia' / 'pendant').
         // Other relationship types are surfaced through find_similar's
         // Related Object channel rather than the viewer.
-        const coProductionPlaceholders = VocabularyDb.CO_PRODUCTION_LABELS.map(() => "?").join(", ");
+        const relatedVariantPlaceholders = VocabularyDb.RELATED_VARIANT_LABELS.map(() => "?").join(", ");
         this.stmtArtworkRelatedPreview = this.db.prepare(`
           SELECT ro.relationship_en, ro.related_la_uri, a.object_number, a.title, a.title_all_text, a.iiif_id
           FROM related_objects ro
           LEFT JOIN artworks a ON a.art_id = ro.related_art_id
           WHERE ro.art_id = ?
-            AND ro.relationship_en IN (${coProductionPlaceholders})
+            AND ro.relationship_en IN (${relatedVariantPlaceholders})
           ORDER BY ro.relationship_en, a.object_number
           LIMIT ?
         `);
@@ -2022,9 +2022,9 @@ export class VocabularyDb {
     if (!this.stmtArtworkRelatedCount || !this.stmtArtworkRelatedPreview) {
       return { relatedObjects: [], relatedObjectsTotalCount: 0 };
     }
-    // Both prepared statements bind the 3 CO_PRODUCTION_LABELS as label
+    // Both prepared statements bind the 3 RELATED_VARIANT_LABELS as label
     // filters in addition to artId / limit.
-    const labels = VocabularyDb.CO_PRODUCTION_LABELS;
+    const labels = VocabularyDb.RELATED_VARIANT_LABELS;
     const total = (this.stmtArtworkRelatedCount.get(artId, ...labels) as { n: number }).n;
     if (total === 0) return { relatedObjects: [], relatedObjectsTotalCount: 0 };
 
@@ -2895,7 +2895,7 @@ export class VocabularyDb {
     };
   }
 
-  // ── find_similar: Related Co-Production curator-declared edges (#293) ───────
+  // ── find_similar: Related Variant curator-declared edges (#293) ───────
 
   /**
    * Build a Map<art_id, [{peerArtId, label}]> by scanning related_objects for
@@ -2904,7 +2904,7 @@ export class VocabularyDb {
    * zero such rows in either label scope, so an "external peer" placeholder
    * isn't rendered.
    *
-   * Shared by ensureCoProductionCache (3 creator-invariant types) and
+   * Shared by ensureRelatedVariantCache (3 creator-invariant types) and
    * ensureRelatedObjectCache (7 derivative + grouping types).
    */
   private buildRelationshipCache(
@@ -2932,10 +2932,10 @@ export class VocabularyDb {
     return cache;
   }
 
-  private ensureCoProductionCache(): void {
-    if (this.coProductionByArtId || !this.db) return;
-    this.coProductionByArtId = this.buildRelationshipCache(
-      VocabularyDb.CO_PRODUCTION_LABELS, "Co-Production",
+  private ensureRelatedVariantCache(): void {
+    if (this.relatedVariantByArtId || !this.db) return;
+    this.relatedVariantByArtId = this.buildRelationshipCache(
+      VocabularyDb.RELATED_VARIANT_LABELS, "Related Variant",
     );
   }
 
@@ -2947,29 +2947,29 @@ export class VocabularyDb {
   }
 
   /**
-   * Find artworks declared as co-productions of the seed via curator-asserted
+   * Find artworks declared as related-variants of the seed via curator-asserted
    * edges ('different example' / 'production stadia' / 'pendant'). Score is
    * fixed at 10 — these are explicit assertions, not probabilistic matches.
    * Multi-label collisions on the same peer collapse into one result whose
    * sharedTerms[] carries every label.
    */
-  findSimilarByCoProduction(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
+  findSimilarByRelatedVariant(objectNumber: string, maxResults: number): DepictedSimilarResult | null {
     if (!this.db) return null;
-    this.ensureCoProductionCache();
-    if (!this.coProductionByArtId) return null;
+    this.ensureRelatedVariantCache();
+    if (!this.relatedVariantByArtId) return null;
 
     const artRow = this.stmtLookupArtId!.get(objectNumber) as
       { art_id: number; title: string; creator_label: string } | undefined;
     if (!artRow) return null;
 
-    const edges = this.coProductionByArtId.get(artRow.art_id) ?? [];
+    const edges = this.relatedVariantByArtId.get(artRow.art_id) ?? [];
     if (edges.length === 0) {
       return {
         queryObjectNumber: objectNumber,
         queryTitle: artRow.title || "",
         queryTerms: [],
         results: [],
-        warnings: ["No declared co-production edges (different example / production stadia / pendant) on this artwork."],
+        warnings: ["No declared related-variant edges (different example / production stadia / pendant) on this artwork."],
       };
     }
 
@@ -3010,7 +3010,7 @@ export class VocabularyDb {
     );
   }
 
-  /** Shared assembly path for both Co-Production and Related Object channels.
+  /** Shared assembly path for both Related Variant and Related Object channels.
    *  scoreFn receives the distinct labels for a peer and returns the score. */
   private assembleRelatedResults(
     objectNumber: string,
@@ -3206,7 +3206,7 @@ export class VocabularyDb {
     this.ensurePersonCache();
     this.ensurePlaceCache();
     this.ensureThemeCache();
-    this.ensureCoProductionCache();
+    this.ensureRelatedVariantCache();
     this.ensureRelatedObjectCache();
   }
 

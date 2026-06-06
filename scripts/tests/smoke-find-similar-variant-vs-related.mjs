@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * Smoke test: find_similar against SK-A-1115 (Battle of Waterloo) confirms
- *  - Co-Production channel surfaces the 4 production-stadia peers
+ *  - Related Variant channel surfaces the 4 production-stadia peers
  *  - new Related Object channel surfaces NG-NM-12989-A, NG-1171-A, NG-408
  *    (the works that were invisible under the old hard 3-type filter)
  *  - pool threshold is 4
  *
  * Reads the HTML output of find_similar, looks for the expected object
- * numbers in the Co-Production and Related Object rows.
+ * numbers in the Related Variant and Related Object rows.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -18,7 +18,7 @@ const transport = new StdioClientTransport({
   command: "node",
   args: ["dist/index.js"],
 });
-const client = new Client({ name: "smoke-coprod-vs-related", version: "1.0.0" }, {});
+const client = new Client({ name: "smoke-variant-vs-related", version: "1.0.0" }, {});
 await client.connect(transport);
 
 const result = await client.callTool({
@@ -45,10 +45,10 @@ if (loc.startsWith("/")) {
 const checks = [
   { needle: "Related Variant",        desc: "Related Variant row label rendered" },
   { needle: "Related Object",         desc: "Related Object row label rendered" },
-  { needle: "RP-T-1964-99",           desc: "Co-Production peer #1 (production stadia)" },
-  { needle: "RP-T-1964-101A",         desc: "Co-Production peer #2 (production stadia)" },
-  { needle: "RP-T-1964-102A",         desc: "Co-Production peer #3 (production stadia)" },
-  { needle: "RP-T-1964-103",          desc: "Co-Production peer #4 (production stadia)" },
+  { needle: "RP-T-1964-99",           desc: "Related Variant peer #1 (production stadia)" },
+  { needle: "RP-T-1964-101A",         desc: "Related Variant peer #2 (production stadia)" },
+  { needle: "RP-T-1964-102A",         desc: "Related Variant peer #3 (production stadia)" },
+  { needle: "RP-T-1964-103",          desc: "Related Variant peer #4 (production stadia)" },
   { needle: "NG-NM-12989-A",          desc: "Related Object: original|reproduction (Sijthoff)" },
   { needle: "NG-1171-A",              desc: "Related Object: related object (Met & Meylink drawing)" },
   { needle: "NG-408",                 desc: "Related Object: related object (anonymous plaquette)" },
