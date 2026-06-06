@@ -1868,8 +1868,7 @@ export class VocabularyDb {
     // latent mispairing in equal-count works. Creators absent from the map (e.g.
     // priority-only) correctly get null. Falls back to the positional safeguard only
     // when the artwork has no assignment_pairs rows (pre-v0.24 DBs / no connoisseurship).
-    // (role/place stay positional; role could be paired the same way via the sibling
-    // production_role_pairs table should a future issue need it.)
+    // (role/place stay positional.)
     let qualifierByCreator: Map<string, string> | null = null;
     if (this.stmtArtworkAssignmentPairs && creators.length > 0) {
       const pairRows = this.stmtArtworkAssignmentPairs.all(row.art_id) as
