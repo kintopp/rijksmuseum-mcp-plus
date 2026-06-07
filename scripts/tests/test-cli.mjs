@@ -1,0 +1,129 @@
+/**
+ * Smoke test for the headless CLI (scripts/cli.mjs, issue #368).
+ *
+ * Spawns `node scripts/cli.mjs <args>` as a child process over the cold-stdio
+ * transport (self-contained — no running server needed), and asserts the
+ * JSON-first output contract + exit codes (0 ok / 1 tool error / 2 usage error).
+ *
+ * Requires:  npm run build  (the CLI's stdio path spawns dist/index.js) + the DBs in data/.
+ * Run:       node scripts/tests/test-cli.mjs   (or `npm run test:cli`)
+ *
+ * Excluded from `npm test` / `test:all` — it needs dist/ + DBs and hits live IIIF,
+ * mirroring test-http-viewer-queues.mjs / test-inspect-navigate.mjs.
+ */
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { existsSync, statSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const CLI = path.join(PROJECT_ROOT, "scripts", "cli.mjs");
+
+let passed = 0;
+let failed = 0;
+const failures = [];
+function assert(cond, msg) {
+  if (cond) { passed++; console.log(`  ✓ ${msg}`); }
+  else { failed++; failures.push(msg); console.log(`  ✗ ${msg}`); }
+}
+function section(name) {
+  console.log(`\n${"═".repeat(60)}\n  ${name}\n${"═".repeat(60)}`);
+}
+
+/** Run the CLI; resolve with {code, stdout, stderr} (never rejects). */
+function runCli(args, timeout = 90000) {
+  return new Promise((resolve) => {
+    execFile("node", [CLI, ...args], { cwd: PROJECT_ROOT, timeout, maxBuffer: 64 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        resolve({ code: err?.code ?? 0, killed: !!err?.killed, stdout: stdout ?? "", stderr: stderr ?? "" });
+      });
+  });
+}
+
+const jsonlRows = (s) => s.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+
+// ── 1. tools --json (capabilities dump; excludes viewer tools) ──────────────────
+section("1. tools --json");
+{
+  const r = await runCli(["tools", "--json"]);
+  assert(r.code === 0, "exit 0");
+  let tools = [];
+  try { tools = JSON.parse(r.stdout); } catch { /* fail below */ }
+  assert(Array.isArray(tools) && tools.length === 11, `11 in-scope tools (got ${tools.length})`);
+  const names = new Set(tools.map((t) => t.name));
+  assert(names.has("search_artwork") && names.has("find_similar"), "includes search_artwork + find_similar");
+  const viewer = ["get_artwork_image", "navigate_viewer", "remount_viewer", "poll_viewer_commands"];
+  assert(viewer.every((v) => !names.has(v)), "excludes all 4 viewer/stateful tools");
+  assert(tools.every((t) => t.inputSchema && typeof t.inputSchema === "object"), "each entry carries an inputSchema");
+}
+
+// ── 2. details happy path + --fields projection (single-object JSON) ────────────
+section("2. details SK-C-5 --fields objectNumber,title");
+{
+  const r = await runCli(["details", "SK-C-5", "--fields", "objectNumber,title"]);
+  assert(r.code === 0, "exit 0");
+  let obj = null;
+  try { obj = JSON.parse(r.stdout.trim()); } catch { /* fail below */ }
+  assert(obj && obj.objectNumber === "SK-C-5", `objectNumber === SK-C-5 (got ${obj?.objectNumber})`);
+  assert(obj && typeof obj.title === "string" && obj.title.length > 0, "title present");
+  assert(obj && Object.keys(obj).every((k) => k === "objectNumber" || k === "title"), "projection kept only requested fields");
+}
+
+// ── 3. list tool → JSONL + stderr count line ────────────────────────────────────
+section("3. search --query tulip --max 3 --fields objectNumber,title");
+{
+  const r = await runCli(["search", "--query", "tulip", "--max", "3", "--fields", "objectNumber,title"]);
+  assert(r.code === 0, "exit 0");
+  let rows = [];
+  try { rows = jsonlRows(r.stdout); } catch { /* fail below */ }
+  assert(rows.length >= 1 && rows.length <= 3, `1–3 JSONL rows (got ${rows.length})`);
+  assert(rows.every((row) => "objectNumber" in row), "each row is valid JSON with objectNumber");
+  assert(/\bshown\b/.test(r.stderr), "stderr carries a count/pagination summary");
+}
+
+// ── 4. --show-call dry-run (resolves args, makes no tool call) ──────────────────
+section("4. --show-call search --query tulip");
+{
+  const r = await runCli(["--show-call", "search", "--query", "tulip"]);
+  assert(r.code === 0, "exit 0");
+  let call = null;
+  try { call = JSON.parse(r.stdout.trim()); } catch { /* fail below */ }
+  assert(call && call.tool === "search_artwork", `resolved tool name (got ${call?.tool})`);
+  assert(call && call.arguments && call.arguments.query === "tulip", "resolved positional/flag → query=tulip");
+  assert(!/objectNumber/.test(r.stdout.replace(/"query"[^\n]*/g, "")), "no result rows emitted (dry-run)");
+}
+
+// ── 5. usage error → exit 2 ─────────────────────────────────────────────────────
+section("5. unknown command → exit 2");
+{
+  const r = await runCli(["frobnicate"]);
+  assert(r.code === 2, `exit 2 (got ${r.code})`);
+  assert(r.stderr.length > 0, "stderr explains the error");
+}
+
+// ── 6. tool/validation error → exit 1 ───────────────────────────────────────────
+section("6. invalid enum (stats --dimension bogus) → exit 1");
+{
+  const r = await runCli(["stats", "--dimension", "not_a_real_dimension"]);
+  assert(r.code === 1, `exit 1 (got ${r.code})`);
+  assert(r.stderr.length > 0, "stderr carries the error message");
+}
+
+// ── 7. inspect --out writes image bytes ─────────────────────────────────────────
+section("7. inspect SK-C-5 --region ... --out <tmp>");
+{
+  const out = path.join(os.tmpdir(), `rijks-cli-smoke-${process.pid}.jpg`);
+  rmSync(out, { force: true });
+  const r = await runCli(["inspect", "SK-C-5", "--region", "pct:40,40,20,20", "--out", out], 120000);
+  assert(r.code === 0, `exit 0 (got ${r.code}${r.killed ? ", timed out" : ""})`);
+  assert(existsSync(out) && statSync(out).size > 0, "image file written with non-zero size");
+  rmSync(out, { force: true });
+}
+
+// ── Summary ─────────────────────────────────────────────────────────────────────
+console.log(`\n${"═".repeat(60)}`);
+console.log(`  ${passed} passed, ${failed} failed`);
+if (failed) { console.log("  Failures:\n" + failures.map((f) => `   - ${f}`).join("\n")); }
+console.log("═".repeat(60));
+process.exit(failed ? 1 : 0);

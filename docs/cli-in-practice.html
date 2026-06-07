@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The CLI in Practice &mdash; rijksmuseum-mcp+</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #f6f7f9; color: #15212e; line-height: 1.6;
+  }
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .container { max-width: 980px; margin: 0 auto; padding: 0 2rem; }
+  section { padding: 3.5rem 0 2.5rem; }
+  section + section { border-top: 1px solid #e3e6ea; }
+  section.tint-1 { background: linear-gradient(180deg, #f0fdfa 0%, #f6f7f9 60%); }
+  section.tint-2 { background: linear-gradient(180deg, #eff6ff 0%, #f6f7f9 60%); }
+
+  /* ── Typography ───────────────────────────────────────────── */
+  h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; letter-spacing: -0.01em; color: #0f172a; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+  p, li { font-size: 0.95rem; color: #2b3744; }
+  .lead { font-size: 1.04rem; color: #334155; max-width: 720px; }
+  .muted { color: #5b6775; font-size: 0.85rem; }
+  ul { margin: 0.5rem 0 0.5rem 1.2rem; }
+  li { margin-bottom: 0.35rem; }
+
+  /* coloured section kicker */
+  .kicker {
+    font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.12em; margin-bottom: 0.45rem; display: flex; align-items: center; gap: 0.5rem;
+  }
+  .kicker::before { content: ""; width: 22px; height: 3px; border-radius: 2px; background: currentColor; }
+  .k-teal { color: #0d9488; } .k-blue { color: #2563eb; } .k-amber { color: #b45309; }
+  .k-violet { color: #7c3aed; } .k-indigo { color: #4338ca; } .k-rose { color: #be185d; }
+
+  /* ── Hero ──────────────────────────────────────────────────── */
+  .hero {
+    padding: 4rem 0 3rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff; position: relative; overflow: hidden;
+  }
+  .hero::after {
+    content: ""; position: absolute; right: -120px; top: -80px; width: 420px; height: 420px;
+    background: radial-gradient(circle, rgba(45,212,191,0.18) 0%, rgba(45,212,191,0) 70%);
+  }
+  .hero .container { position: relative; z-index: 1; }
+  .hero h1 { font-size: 2.3rem; margin-bottom: 0.5rem; color: #fff; }
+  .hero .subtitle { font-size: 1.12rem; color: #5eead4; font-weight: 500; margin-bottom: 1.5rem; }
+  .hero p { color: #cbd5e1; font-size: 0.93rem; max-width: 720px; }
+  .hero code { color: #5eead4; font-size: 0.9em; }
+  .hero .stats-row { display: flex; gap: 2.5rem; margin-top: 1.9rem; flex-wrap: wrap; }
+  .hero .stat { text-align: left; border-left: 3px solid #2dd4bf; padding-left: 0.85rem; }
+  .hero .stat .num { font-size: 1.8rem; font-weight: 700; color: #f0fdfa; line-height: 1.2; }
+  .hero .stat .desc { font-size: 0.78rem; color: #94a3b8; margin-top: 0.15rem; }
+
+  /* ── Terminal blocks ───────────────────────────────────────── */
+  .term {
+    background: #0b1220; border: 1px solid #233047; border-radius: 9px;
+    padding: 1.1rem 1.3rem; margin: 1.1rem 0;
+    font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.82rem; line-height: 1.7; color: #e6edf6;
+    overflow-x: auto; white-space: pre;
+    box-shadow: 0 8px 22px -12px rgba(15,23,42,0.45);
+  }
+  .term .pr   { color: #2dd4bf; font-weight: 700; }   /* prompt $ */
+  .term .cmd  { color: #f8fafc; font-weight: 600; }   /* command name / keyword */
+  .term .flag { color: #fbbf24; }                     /* --flags */
+  .term .str  { color: #86efac; }                     /* string literals */
+  .term .pipe { color: #38bdf8; font-weight: 700; }   /* | > pipes */
+  .term .cm   { color: #7c8aa0; font-style: italic; } /* comments */
+  .term .out  { color: #9fb0c3; }                     /* program output */
+
+  /* ── Pipeline / architecture diagram ───────────────────────── */
+  .pipeline {
+    display: flex; align-items: stretch; gap: 0;
+    margin: 1.5rem 0; flex-wrap: nowrap; overflow-x: auto;
+  }
+  .pipe-step {
+    flex: 1; min-width: 150px; padding: 1.1rem 1rem;
+    background: #fff; border: 1px solid #dfe3e8; border-top: 3px solid #94a3b8;
+    position: relative;
+  }
+  .pipe-step:first-child { border-radius: 8px 0 0 8px; }
+  .pipe-step:last-child  { border-radius: 0 8px 8px 0; }
+  .pipe-step + .pipe-step { border-left: none; }
+  .pipe-step .step-num {
+    font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 0.3rem; color: #64748b;
+  }
+  .pipe-step h3 { font-size: 0.9rem; margin-bottom: 0.35rem; color: #0f172a; }
+  .pipe-step p  { font-size: 0.78rem; color: #56657a; line-height: 1.5; }
+  .pipe-step code { color: #334155; }
+  .pipe-arrow {
+    display: flex; align-items: center; font-size: 1.25rem; color: #0d9488; font-weight: 700;
+    padding: 0 0.18rem; flex-shrink: 0;
+  }
+  .pipe-step.s-teal   { border-top-color: #14b8a6; } .pipe-step.s-teal   .step-num { color: #0d9488; }
+  .pipe-step.s-blue   { border-top-color: #3b82f6; } .pipe-step.s-blue   .step-num { color: #2563eb; }
+  .pipe-step.s-amber  { border-top-color: #f59e0b; } .pipe-step.s-amber  .step-num { color: #b45309; }
+  .pipe-step.s-violet { border-top-color: #8b5cf6; } .pipe-step.s-violet .step-num { color: #7c3aed; }
+  .pipe-step.accent { background: #ecfdf8; }
+
+  /* ── Cards ─────────────────────────────────────────────────── */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+  .cards.three { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 720px) { .cards, .cards.three { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff; border: 1px solid #e1e4e9; border-top: 3px solid #94a3b8;
+    border-radius: 9px; padding: 1.15rem 1.25rem; position: relative;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.05); transition: box-shadow 0.2s, transform 0.2s;
+  }
+  .card:hover { box-shadow: 0 10px 24px -14px rgba(15,23,42,0.35); transform: translateY(-2px); }
+  .card h3 { font-size: 0.96rem; color: #0f172a; }
+  .card p  { font-size: 0.84rem; color: #475569; margin-top: 0.3rem; }
+  .card.a-teal   { border-top-color: #14b8a6; }
+  .card.a-blue   { border-top-color: #3b82f6; }
+  .card.a-amber  { border-top-color: #f59e0b; }
+  .card.a-violet { border-top-color: #8b5cf6; }
+  .card.a-indigo { border-top-color: #6366f1; }
+  .card.a-rose   { border-top-color: #ec4899; }
+
+  /* icon badge (inline SVG, no emoji) */
+  .ic {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 10px; margin-bottom: 0.7rem;
+  }
+  .ic svg { width: 21px; height: 21px; }
+  .ic.teal   { background: #ccfbf1; color: #0d9488; }
+  .ic.blue   { background: #dbeafe; color: #2563eb; }
+  .ic.amber  { background: #fef3c7; color: #b45309; }
+  .ic.violet { background: #f3e8ff; color: #7c3aed; }
+  .ic.indigo { background: #e0e7ff; color: #4338ca; }
+  .ic.rose   { background: #fce7f3; color: #be185d; }
+
+  /* ── Comparison (two-column) ───────────────────────────────── */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.25rem 0; }
+  @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+  .compare .col { border: 1px solid #e1e4e9; border-radius: 9px; padding: 1.15rem 1.25rem; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,0.05); }
+  .compare .col.cli { border: 1px solid #99f6e4; background: #f0fdfa; border-top: 3px solid #14b8a6; }
+  .compare .col.std { border-top: 3px solid #64748b; }
+  .compare h3 { font-size: 0.92rem; color: #0f172a; }
+  .compare ul { font-size: 0.84rem; color: #475569; }
+
+  /* ── Bar chart (token lever) ───────────────────────────────── */
+  .bars { margin: 1.5rem 0; }
+  .bar-group { margin-bottom: 1.5rem; }
+  .bar-group .bg-title { font-size: 0.83rem; font-weight: 700; color: #1e293b; margin-bottom: 0.55rem; }
+  .bar-row { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.45rem; }
+  .bar-row .bl { width: 135px; flex-shrink: 0; font-size: 0.77rem; color: #475569; }
+  .bar-track { flex: 1; background: #e7eaee; border-radius: 5px; height: 28px; position: relative; overflow: hidden; }
+  .bar-fill {
+    height: 100%; border-radius: 5px; display: flex; align-items: center;
+    padding-left: 10px; font-size: 0.74rem; font-weight: 700; color: #fff;
+    white-space: nowrap; min-width: 44px; transition: width 0.6s ease;
+  }
+  .bar-fill.full { background: linear-gradient(90deg, #475569, #64748b); }
+  .bar-fill.proj { background: linear-gradient(90deg, #0d9488, #2dd4bf); }
+  .bar-row .savings { width: 96px; flex-shrink: 0; font-size: 0.82rem; color: #0d9488; font-weight: 800; text-align: right; }
+
+  /* ── Recipe block ──────────────────────────────────────────── */
+  .recipe { margin: 1.75rem 0; }
+  .recipe .rtitle { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.1rem; }
+  .recipe .rtitle h3 { margin-bottom: 0; color: #0f172a; }
+  .recipe .rtitle .tag {
+    font-size: 0.64rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 8px; border-radius: 10px;
+  }
+  .tag.t-indigo { color: #4338ca; background: #e0e7ff; }
+  .tag.t-teal   { color: #0d9488; background: #ccfbf1; }
+  .tag.t-amber  { color: #b45309; background: #fef3c7; }
+  .tag.t-violet { color: #7c3aed; background: #f3e8ff; }
+  .tag.t-blue   { color: #2563eb; background: #dbeafe; }
+  .recipe > p { font-size: 0.87rem; color: #475569; margin-bottom: 0.2rem; }
+
+  /* ── Callout (neutral, not green) ──────────────────────────── */
+  .note {
+    background: #fff; border: 1px solid #e1e4e9; border-left: 4px solid #0d9488; border-radius: 6px;
+    padding: 0.85rem 1.15rem; margin: 1.1rem 0; font-size: 0.88rem; color: #334155;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.05);
+  }
+  .note strong { color: #0f172a; }
+
+  /* ── Footer ────────────────────────────────────────────────── */
+  footer {
+    padding: 2rem 0; border-top: 1px solid #e3e6ea;
+    text-align: center; color: #64748b; font-size: 0.78rem;
+  }
+  footer a { color: #0d9488; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  HERO                                                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="container">
+    <h1>The CLI in Practice</h1>
+    <div class="subtitle">Turning a museum collection into a Unix-composable data source</div>
+    <p>
+      <code>rijks-cli</code> is a thin command-line client over the
+      <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" style="color:#93c5fd;">rijksmuseum-mcp+</a>
+      server. It speaks the same tools an AI assistant uses &mdash; so a shell command returns
+      <em>identical</em> results to a model &mdash; but emits clean JSON to <code>stdout</code>, which means
+      the whole 834,000-object collection drops straight into pipes, scripts, cron jobs, and bash-driven
+      agents. No API key, no glue code, no second copy of the query logic.
+    </p>
+    <div class="stats-row">
+      <div class="stat"><div class="num">11</div><div class="desc">tools at the prompt</div></div>
+      <div class="stat"><div class="num">1 file &middot; 0 deps</div><div class="desc">reuses the existing server</div></div>
+      <div class="stat"><div class="num">~1 s</div><div class="desc">cold vocab query</div></div>
+      <div class="stat"><div class="num">98%</div><div class="desc">smaller output with <code style="color:#5eead4;">--fields</code></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  WHY A CLI                                                  -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="tint-1">
+  <div class="container">
+    <div class="kicker k-teal">The niche</div>
+    <h2>Why a CLI when there's already an MCP server?</h2>
+    <p class="lead">For an AI assistant wired directly to the server, MCP is the better interface &mdash;
+      typed schemas, native discovery, no shell-quoting. The CLI earns its place precisely where MCP
+      <em>can't</em> reach: the shell.</p>
+
+    <div class="cards three">
+      <div class="card a-blue">
+        <span class="ic blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+        <h3>Bash-only agents</h3>
+        <p>A generic coding agent (or a Claude&nbsp;Code session) with shell access but no MCP wiring to
+          this server can still query the collection &mdash; one command, structured JSON back.</p>
+      </div>
+      <div class="card a-teal">
+        <span class="ic teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></span>
+        <h3>Pipelines &amp; data work</h3>
+        <p>When <code>&hellip; | jq | sort | uniq -c</code> beats a sequence of discrete tool calls,
+          JSONL on <code>stdout</code> composes with every tool you already use.</p>
+      </div>
+      <div class="card a-amber">
+        <span class="ic amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        <h3>CI, cron &amp; scripts</h3>
+        <p>Reproducible, replayable invocations with documented exit codes &mdash; the building block of
+          scheduled exports, smoke tests, and incremental sync.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>A free side benefit:</strong> because the CLI drives the real tool handlers, every command
+      is also a faithful regression harness &mdash; if the CLI returns it, the model gets the same thing.
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  HOW IT CONNECTS                                            -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <div class="kicker k-blue">Architecture</div>
+    <h2>How it connects</h2>
+    <p>The CLI is a <strong>client</strong>, not a second implementation. It carries no domain logic: it
+      resolves a short verb to a tool, forwards typed arguments, and prints the result. One
+      <code>invoke()</code> seam, two transports.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step s-teal accent">
+        <div class="step-num">You</div>
+        <h3>shell / script / agent</h3>
+        <p><code>rijks-cli search &hellip;</code></p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step s-teal accent">
+        <div class="step-num">Client</div>
+        <h3>rijks-cli</h3>
+        <p>verb&rarr;tool, arg coercion from the live schema, JSON&nbsp;out</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step s-blue">
+        <div class="step-num">Transport</div>
+        <h3>HTTP&nbsp;or&nbsp;stdio</h3>
+        <p><code>--http</code> to a warm server, or spawn <code>dist/index.js</code></p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step s-violet">
+        <div class="step-num">Server</div>
+        <h3>MCP&nbsp;handlers</h3>
+        <p>the exact same code paths the LLM hits</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step s-amber">
+        <div class="step-num">Data</div>
+        <h3>SQLite</h3>
+        <p>vocab + embeddings, locally</p>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="col cli">
+        <h3><code>--http</code> &mdash; warm server (the default for repeated use)</h3>
+        <ul>
+          <li>Points at a running <code>npm run serve</code> or the Railway deployment.</li>
+          <li>Already warm &rarr; every call is instant.</li>
+          <li>Ideal for agents and tight loops.</li>
+        </ul>
+      </div>
+      <div class="col std">
+        <h3>stdio &mdash; zero-config fallback</h3>
+        <ul>
+          <li>No server needed; spawns the build as a subprocess.</li>
+          <li>Skips the ~13&nbsp;s eager warm-up (caches build lazily): vocab queries land in ~1&nbsp;s.</li>
+          <li>Perfect for a one-off on a fresh checkout.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  COMPOSABILITY                                              -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="tint-2">
+  <div class="container">
+    <div class="kicker k-amber">Pipelines</div>
+    <h2>Composable with the Unix toolbox</h2>
+    <p>Lists print as <strong>JSONL</strong> &mdash; one JSON object per line &mdash; on <code>stdout</code>.
+      Counts, pagination hints and warnings go to <code>stderr</code>. That split is deliberate: the data
+      channel stays clean for <code>jq</code>, while progress never corrupts a pipe.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step s-teal">
+        <div class="step-num">Produce</div>
+        <h3>rijks-cli</h3>
+        <p>JSONL rows on <code>stdout</code></p>
+      </div>
+      <div class="pipe-arrow">&#124;</div>
+      <div class="pipe-step s-blue">
+        <div class="step-num">Reshape</div>
+        <h3>jq / sed</h3>
+        <p>pluck &amp; transform fields</p>
+      </div>
+      <div class="pipe-arrow">&#124;</div>
+      <div class="pipe-step s-amber">
+        <div class="step-num">Aggregate</div>
+        <h3>sort / uniq</h3>
+        <p>group &amp; count</p>
+      </div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-step s-teal accent">
+        <div class="step-num">Result</div>
+        <h3>a table, a CSV, a count</h3>
+        <p>no bespoke code</p>
+      </div>
+    </div>
+
+    <p style="margin-top:1.25rem;">A real one-liner &mdash; how Rembrandt's dated works in the collection
+      distribute by year (his authority <code>vocabId</code> is <code>2103429</code>):</p>
+    <div class="term"><span class="pr">$</span> <span class="cmd">rijks-cli</span> search <span class="flag">--creator</span> 2103429 <span class="flag">--max</span> 50 <span class="flag">--fields</span> date <span class="pipe">\</span>
+    <span class="pipe">|</span> jq <span class="flag">-r</span> <span class="str">'.date'</span> <span class="pipe">|</span> sed <span class="str">'s/[^0-9].*//'</span> <span class="pipe">|</span> sort <span class="pipe">|</span> uniq <span class="flag">-c</span>
+<span class="out">   1 1628
+   2 1633
+   1 1639
+   1 1642
+   3 1656
+   1 1658
+   &hellip;</span></div>
+    <p class="muted">Swap <code>uniq -c</code> for <code>jq -s</code>, pipe into <code>gnuplot</code>, or
+      redirect to a file &mdash; the producer never changes.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  TOKEN LEVER                                                -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <div class="kicker k-violet">Efficiency</div>
+    <h2>The token lever: <code>--fields</code> projection</h2>
+    <p class="lead">For a human, output size is cosmetic. For an LLM agent reading the result back, every
+      byte is a token. <code>--fields a,b,c</code> keeps only the keys you asked for &mdash; on each row of
+      a list, so the saving compounds across hundreds of results.</p>
+
+    <div class="bars">
+      <div class="bar-group">
+        <div class="bg-title">One <code>get_artwork_details</code> record (The Night Watch, <code>SK-C-5</code>)</div>
+        <div class="bar-row">
+          <div class="bl">full payload</div>
+          <div class="bar-track"><div class="bar-fill full" style="width:100%;">12,224 B</div></div>
+          <div class="savings">&nbsp;</div>
+        </div>
+        <div class="bar-row">
+          <div class="bl"><code>--fields</code> &times;4</div>
+          <div class="bar-track"><div class="bar-fill proj" style="width:1.4%; min-width:64px;">177 B</div></div>
+          <div class="savings">&minus;98.5%</div>
+        </div>
+      </div>
+
+      <div class="bar-group">
+        <div class="bg-title">One <code>search_artwork</code> result row</div>
+        <div class="bar-row">
+          <div class="bl">full row</div>
+          <div class="bar-track"><div class="bar-fill full" style="width:100%;">173 B</div></div>
+          <div class="savings">&nbsp;</div>
+        </div>
+        <div class="bar-row">
+          <div class="bl"><code>objectNumber,title</code></div>
+          <div class="bar-track"><div class="bar-fill proj" style="width:27.7%;">48 B</div></div>
+          <div class="savings">&minus;72%</div>
+        </div>
+      </div>
+    </div>
+    <p class="muted">Measured against the live database. A 50-row search projected to two fields is
+      roughly <code>50 &times; 48 B</code> instead of <code>50 &times; 173 B</code> &mdash; before any
+      <code>jq</code> even runs. Need everything? <code>--json</code> prints the full payload verbatim.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  BATCH WORKFLOWS                                            -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section class="tint-1">
+  <div class="container">
+    <div class="kicker k-indigo">Automation</div>
+    <h2>Batch workflows</h2>
+    <p>Because each invocation is a plain command with a clean exit code, ordinary shell constructs
+      &mdash; variables, loops, redirects &mdash; turn the collection into a scriptable resource.</p>
+
+    <div class="recipe">
+      <div class="rtitle"><h3>Resolve a name, then fetch the works</h3><span class="tag t-indigo">chain</span></div>
+      <p>Look up an artist's authority ID, then query by it &mdash; spelling- and language-proof.</p>
+      <div class="term"><span class="cm"># name &rarr; vocabId &rarr; works, saved as JSONL</span>
+<span class="pr">$</span> <span class="cmd">VID</span>=$(rijks-cli persons <span class="str">"Vermeer"</span> <span class="flag">--max</span> 1 <span class="flag">--fields</span> vocabId <span class="pipe">|</span> jq <span class="flag">-r</span> .vocabId)
+<span class="pr">$</span> <span class="cmd">rijks-cli</span> search <span class="flag">--creator</span> <span class="str">"$VID"</span> <span class="flag">--max</span> 50 <span class="flag">--fields</span> objectNumber,title <span class="pipe">&gt;</span> vermeer.jsonl</div>
+    </div>
+
+    <div class="recipe">
+      <div class="rtitle"><h3>Fan out: detail every search hit</h3><span class="tag t-teal">loop</span></div>
+      <p>Stream object numbers into a loop that pulls a projected detail record for each.</p>
+      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-cli</span> search <span class="flag">--query</span> <span class="str">"self-portrait"</span> <span class="flag">--max</span> 20 <span class="flag">--fields</span> objectNumber <span class="pipe">\</span>
+    <span class="pipe">|</span> jq <span class="flag">-r</span> .objectNumber <span class="pipe">\</span>
+    <span class="pipe">|</span> <span class="cmd">while</span> read on; <span class="cmd">do</span> rijks-cli details <span class="str">"$on"</span> <span class="flag">--fields</span> objectNumber,title,date; <span class="cmd">done</span> <span class="pipe">&gt;</span> portraits.jsonl</div>
+    </div>
+
+    <div class="recipe">
+      <div class="rtitle"><h3>Export an aggregate as CSV</h3><span class="tag t-amber">report</span></div>
+      <p><code>stats</code> emits JSONL entries; <code>jq</code> turns them into a spreadsheet column.</p>
+      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-cli</span> stats type <span class="flag">--topN</span> 20 <span class="flag">--fields</span> label,count <span class="pipe">\</span>
+    <span class="pipe">|</span> jq <span class="flag">-r</span> <span class="str">'[.label, .count] | @csv'</span> <span class="pipe">&gt;</span> object-types.csv</div>
+    </div>
+
+    <div class="recipe">
+      <div class="rtitle"><h3>Incremental sync with token pagination</h3><span class="tag t-violet">cron</span></div>
+      <p>Walk a change feed page by page. <code>--json</code> surfaces the <code>resumptionToken</code>
+        alongside the records, so the loop is self-contained.</p>
+      <div class="term"><span class="pr">$</span> <span class="cmd">TOKEN</span>=<span class="str">""</span>
+<span class="pr">$</span> <span class="cmd">while</span> :; <span class="cmd">do</span>
+    PAGE=$(rijks-cli changes <span class="flag">--from</span> 2024-01-01 <span class="flag">--identifiersOnly</span> <span class="flag">--max</span> 1000 \
+             ${TOKEN:+<span class="flag">--resumption-token</span> <span class="str">"$TOKEN"</span>} <span class="flag">--json</span>)
+    <span class="cmd">echo</span> <span class="str">"$PAGE"</span> <span class="pipe">|</span> jq <span class="flag">-c</span> <span class="str">'.records[]'</span> <span class="pipe">&gt;&gt;</span> changes.jsonl
+    TOKEN=$(<span class="cmd">echo</span> <span class="str">"$PAGE"</span> <span class="pipe">|</span> jq <span class="flag">-r</span> <span class="str">'.resumptionToken // empty'</span>)
+    [ <span class="flag">-z</span> <span class="str">"$TOKEN"</span> ] <span class="pipe">&amp;&amp;</span> <span class="cmd">break</span>
+  <span class="cmd">done</span></div>
+    </div>
+
+    <div class="recipe">
+      <div class="rtitle"><h3>Guard a CI step with an exit code</h3><span class="tag t-blue">CI</span></div>
+      <p>Exit <code>0</code> ok &middot; <code>1</code> tool/connection error &middot; <code>2</code> usage error
+        &mdash; branchable like any Unix tool.</p>
+      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-cli</span> details SK-C-5 <span class="flag">--fields</span> objectNumber <span class="pipe">&gt;</span>/dev/null <span class="pipe">\</span>
+    <span class="pipe">||</span> { <span class="cmd">echo</span> <span class="str">"collection API unreachable"</span> <span class="pipe">&gt;&amp;2</span>; <span class="cmd">exit</span> 1; }</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  BENEFITS                                                   -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <div class="kicker k-rose">Why it pays off</div>
+    <h2>Benefits at a glance</h2>
+    <div class="cards">
+      <div class="card a-teal">
+        <span class="ic teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3h6"/><path d="M15 12l3 3-3 3"/></svg></span>
+        <h3>Composable by default</h3>
+        <p>JSONL out, diagnostics on <code>stderr</code>, exit codes in &mdash; a well-behaved Unix
+          citizen that drops into any pipeline.</p>
+      </div>
+      <div class="card a-blue">
+        <span class="ic blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="5"/></svg></span>
+        <h3>Token-frugal</h3>
+        <p><code>--fields</code> projection and JSONL keep payloads small &mdash; up to 98% smaller &mdash;
+          which is real money for an LLM consumer.</p>
+      </div>
+      <div class="card a-violet">
+        <span class="ic violet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg></span>
+        <h3>Agent-ready</h3>
+        <p><code>tools --json</code> bootstraps capabilities; <code>--show-call</code> dry-runs the
+          argument mapping; help is generated from the live schema, so it never drifts.</p>
+      </div>
+      <div class="card a-indigo">
+        <span class="ic indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></span>
+        <h3>Zero second source of truth</h3>
+        <p>No reimplemented query logic: one server, two front doors. The CLI can't disagree with the
+          model, and it doubles as a regression harness.</p>
+      </div>
+      <div class="card a-amber">
+        <span class="ic amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg></span>
+        <h3>Fast where it counts</h3>
+        <p>Point it at a warm server for instant calls, or run cold in ~1&nbsp;s for a vocab one-off &mdash;
+          no 13&nbsp;s warm-up tax on a throwaway query.</p>
+      </div>
+      <div class="card a-rose">
+        <span class="ic rose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+        <h3>Nothing new to install</h3>
+        <p>A single script reusing the dependencies the server already ships. <code>npm run cli</code>,
+          the <code>rijks-cli</code> bin, or <code>node scripts/cli.mjs</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  FOOTER                                                     -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="container">
+    <a href="https://github.com/kintopp/rijksmuseum-mcp-plus">rijksmuseum-mcp+</a>
+    &nbsp;&middot;&nbsp;
+    <a href="cli-guide.md">CLI guide</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://rise.unibas.ch/en/">RISE, University of Basel</a>
+    &nbsp;&middot;&nbsp;
+    Data: <a href="https://data.rijksmuseum.nl">Rijksmuseum, Amsterdam</a>
+  </div>
+</footer>
+
+</body>
+</html>

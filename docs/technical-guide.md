@@ -52,6 +52,28 @@ HTTP mode activates automatically when `PORT` is set or `--http` is passed.
 
 The included `railway.json` supports one-click deployment on [Railway](https://railway.app/). Railway sets `PORT` automatically.
 
+#### CLI
+
+A headless CLI (`scripts/cli.mjs`, exposed as `npm run cli` or the `rijks-cli` bin) drives the server's stateless tools as an MCP *client* — so a CLI query returns exactly what an LLM would get, and it doubles as a debug/regression harness. It is JSON-first, aimed at agents and shell pipelines. The four viewer/stateful tools (`get_artwork_image`, `navigate_viewer`, `remount_viewer`, `poll_viewer_commands`) are out of scope.
+
+```bash
+npm run cli -- search --query "tulip" --max 5 --fields objectNumber,title
+npm run cli -- details SK-C-5 --json
+npm run cli -- semantic "ships in a storm" --max 10
+npm run cli -- inspect SK-C-5 --region pct:40,40,20,20 --out crop.jpg
+npm run cli -- tools --json          # capabilities dump (the agent bootstrap)
+npm run cli -- search --help         # flags for one command, generated from the live schema
+```
+
+- **Transport:** `--http <url>` (or `RIJKS_MCP_HTTP`) talks to a running `npm run serve` / Railway server — warm, so calls are instant. With no `--http`, it falls back to spawning `node dist/index.js` over stdio (zero-config; needs `npm run build` + the DBs in `data/`).
+- **Commands** are short verbs aliased to tools (`search`, `semantic`, `persons`, `provenance`, `details`, `stats`, `similar`, `browse-set`, `list-sets`, `changes`, `inspect`). The first positional maps to the tool's primary parameter; everything else is a `--flag`. Help and flag coercion are derived from the live `inputSchema`, so they never drift.
+- **Output:** list tools emit JSONL on stdout (one object per line, `jq -c`-friendly); single-object tools emit one compact JSON object. `--json` prints the whole payload pretty; `--table` is a terse human view; `--fields a,b,c` projects keys (the main token lever). Counts, pagination hints (`--offset` / `--resumption-token`), and warnings go to stderr to keep stdout clean. `--show-call` prints the resolved `{tool, arguments}` without executing.
+- **Exit codes:** `0` ok · `1` tool/connection error · `2` usage error. Tool errors preserve the server's prose routing hints (on stderr).
+
+Smoke test: `npm run test:cli` (needs a built `dist/` + the DBs; hits live IIIF, so it is excluded from `npm test`/`test:all`).
+
+See the [CLI guide](cli-guide.md) for the full command reference, output model, and pipeline recipes.
+
 #### Tools
 
 See [mcp-tool-parameters.md](mcp-tool-parameters.md) for the full parameter reference.
@@ -67,14 +89,14 @@ See [mcp-tool-parameters.md](mcp-tool-parameters.md) for the full parameter refe
 | `inspect_artwork_image` | Retrieve an artwork image or region as base64 for direct visual analysis by the LLM. Regions: `full`, `square`, `pct:x,y,w,h`, or `crop_pixels:x,y,w,h`. Size 200–2016 px, rotation (0/90/180/270), quality (default or grayscale). Optionally composites SVG overlays onto the returned region; out-of-bounds regions rejected with a structured warning. Auto-navigates the open viewer to the inspected region. |
 | `navigate_viewer` | Navigate the artwork viewer to a specific region and/or add labeled visual overlays. Requires a `viewUUID` from a prior `get_artwork_image` call. Commands: `navigate`, `add_overlay` (with `relativeTo` for crop-local coordinates), `clear_overlays`. |
 | `search_provenance` | Search ownership and provenance history across ~48K artworks with parsed provenance records. Filter by party, transfer type, date range, location, price/currency, provenance gaps, and cross-references. Two layers: raw events and interpreted ownership periods. Sorting by price, date, event count, or duration. Includes provenance-of-provenance metadata (parse method, LLM enrichment reasoning). |
-| `find_similar` | Find artworks similar to a given artwork across nine independent signals (Visual, Description, Iconclass, Lineage, Theme, Related Variant, Related Object, Depicted Person, Depicted Place) plus a Pooled column blending all nine. Returns a URL/path to an HTML comparison page. Feature-gated via `ENABLE_FIND_SIMILAR`; the Theme channel is separately gated via `ENABLE_THEME_SIMILAR`. |
+| `find_similar` | Find artworks similar to a given artwork across nine independent signals (Visual, Description, Iconclass, Lineage, Theme, Related Variant, Related Object, Depicted Person, Depicted Place) plus a Pooled column blending all nine. Returns structured per-signal rankings and a Pooled consensus, plus a `pageUrl` to a rendered HTML comparison page. Feature-gated via `ENABLE_FIND_SIMILAR`; the Theme channel is separately gated via `ENABLE_THEME_SIMILAR`. |
 | `list_curated_sets` | List 193 curated collection sets (exhibitions, scholarly groupings, thematic collections). Optional name filter. DB-backed. |
 | `browse_set` | Browse artworks in a curated set. DB-backed: returns DB-direct records with object numbers, titles, creators, dates, descriptions, extent text, image/IIIF URLs, and a stable lodUri. Pagination via resumption token. |
 | `get_recent_changes` | Track additions and modifications by date range. Full EDM records or lightweight headers (`identifiersOnly`). Pagination via resumption token. |
 | `remount_viewer` | App-only: switch the open viewer to a different artwork while preserving the `viewUUID`. Called by the viewer iframe during in-viewer related-artwork navigation; not invoked directly by agents. |
 | `poll_viewer_commands` | App-only: poll for pending viewer navigation commands. Used by the artwork viewer; not called directly by agents. |
 
-**Structured output:** 14 of 15 tools return typed structured data (`structuredContent`) alongside the text summary. Only `find_similar` is text-only (it returns a URL/path to an HTML comparison page, not structured data). MCP clients that support `outputSchema` ([spec](https://modelcontextprotocol.io/specification/2025-11-25)) receive machine-readable results for richer UI rendering. Set `STRUCTURED_CONTENT=false` to disable if your client has compatibility issues.
+**Structured output:** all 15 tools return typed structured data (`structuredContent`) alongside the text summary. MCP clients that support `outputSchema` ([spec](https://modelcontextprotocol.io/specification/2025-11-25)) receive machine-readable results for richer UI rendering. Set `STRUCTURED_CONTENT=false` to disable if your client has compatibility issues.
 
 #### Prompts and Resources
 
@@ -157,3 +179,4 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 | `ENABLE_THEME_SIMILAR` | Set to `"false"` to disable just the Theme channel inside `find_similar` (other channels keep working) | `true` |
 | `STRUCTURED_CONTENT` | Set to `"false"` to disable structured output (workaround for clients with `outputSchema` bugs) | *(enabled)* |
 | `USAGE_STATS_PATH` | Path to usage stats JSON file | `data/usage-stats.json` |
+| `MCP_SKIP_STARTUP_WARM` | Set to `"1"` to skip the eager stdio warm-up so a one-shot starts in ~0.5s instead of ~13s (caches build lazily on first use); set automatically by the CLI's stdio transport | *(eager warm-up)* |

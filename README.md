@@ -174,7 +174,6 @@ Later:
 
 - paper/presentation
 - make tool logic reusable beyond MCP (for CLI, scripts etc.)
-- add CLI for accessing MCP server
 - investigate DINOv3 image retrieval
 
 Maybe:
