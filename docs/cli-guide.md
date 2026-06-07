@@ -2,10 +2,11 @@
 
 A headless command-line interface over the Rijksmuseum MCP server's stateless tools.
 
-The CLI (`scripts/cli.mjs`) is an MCP **client** — it drives the existing server rather than
-reimplementing any search logic. A CLI query therefore returns *exactly* what an LLM would get
-from the same tool, which makes it both a power-user/pipeline tool and a debugging / protocol
-regression harness. It is JSON-first, designed for shell pipelines and bash-capable agents.
+The CLI ships as `scripts/cli.mjs`, runnable directly, via `npm run cli`, or as the installed
+`rijks-cli` bin (see [Invocation](#invocation)). It is an MCP **client** — it drives the existing
+server rather than reimplementing any search logic. A CLI query therefore returns *exactly* what an
+LLM would get from the same tool, which makes it both a power-user/pipeline tool and a debugging /
+protocol regression harness. It is JSON-first, designed for shell pipelines and bash-capable agents.
 
 All examples below are real and were run against the production vocabulary database
 (~834K artworks). Counts and IDs are from a v0.40 harvest snapshot and may shift after a re-harvest.
@@ -37,7 +38,9 @@ rijks-cli <command> [args] [flags]                # via the installed bin (after
 ```
 
 The `npm run cli` form needs `--` before tool flags so npm doesn't swallow them. The bare
-`node scripts/cli.mjs` form is simplest and is what the rest of this guide uses.
+`node scripts/cli.mjs` form is simplest and is what the rest of this guide uses. To enable the
+`rijks-cli` form, link the bin onto your `PATH` once with `npm link` (or `npm install -g .`) from
+the repo root; all three forms are otherwise identical.
 
 **Scope.** The CLI exposes the 11 stateless tools. The four viewer/stateful tools
 (`get_artwork_image`, `navigate_viewer`, `remount_viewer`, `poll_viewer_commands`) depend on the

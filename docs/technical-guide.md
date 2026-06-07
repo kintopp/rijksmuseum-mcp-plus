@@ -54,7 +54,7 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 #### CLI
 
-A headless CLI (`scripts/cli.mjs`, exposed as `npm run cli` or the `rijks-cli` bin) drives the server's stateless tools as an MCP *client* — so a CLI query returns exactly what an LLM would get, and it doubles as a debug/regression harness. It is JSON-first, aimed at agents and shell pipelines. The four viewer/stateful tools (`get_artwork_image`, `navigate_viewer`, `remount_viewer`, `poll_viewer_commands`) are out of scope.
+A headless CLI (`scripts/cli.mjs`, exposed as `npm run cli` or the `rijks-cli` bin — run `npm link` once to put it on your `PATH`) drives the server's stateless tools as an MCP *client* — so a CLI query returns exactly what an LLM would get, and it doubles as a debug/regression harness. It is JSON-first, aimed at agents and shell pipelines. The four viewer/stateful tools (`get_artwork_image`, `navigate_viewer`, `remount_viewer`, `poll_viewer_commands`) are out of scope.
 
 ```bash
 npm run cli -- search --query "tulip" --max 5 --fields objectNumber,title

@@ -305,6 +305,15 @@
       </div>
     </div>
 
+    <p style="margin-top:1.25rem;">Every example on this page calls <code>rijks-cli</code> &mdash; the
+      bin declared in <code>package.json</code>. Link it onto your <code>PATH</code> once and it runs from
+      any directory; <code>npm run cli&nbsp;--&nbsp;&hellip;</code> and <code>node scripts/cli.mjs&nbsp;&hellip;</code>
+      drive the exact same client if you'd rather not install anything.</p>
+    <div class="term"><span class="cm"># one-time: put rijks-cli on your PATH (or: npm install -g .)</span>
+<span class="pr">$</span> <span class="cmd">npm</span> link
+<span class="cm"># now callable from anywhere &mdash; identical to npm run cli / node scripts/cli.mjs</span>
+<span class="pr">$</span> <span class="cmd">rijks-cli</span> search <span class="flag">--query</span> <span class="str">"tulip"</span> <span class="flag">--max</span> 5 <span class="flag">--fields</span> objectNumber,title</div>
+
     <div class="compare">
       <div class="col cli">
         <h3><code>--http</code> &mdash; warm server (the default for repeated use)</h3>
