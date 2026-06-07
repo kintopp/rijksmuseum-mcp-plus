@@ -59,7 +59,7 @@ const IN_SCOPE_TOOLS = new Set(Object.values(VERBS).map((c) => c.tool));
 const VIEWER_TOOLS = new Set(["get_artwork_image", "navigate_viewer", "remount_viewer", "poll_viewer_commands"]);
 
 // Global flags (consumed by the CLI, never forwarded as tool args).
-const GLOBAL_BOOL = new Set(["json", "table", "quiet", "show-call", "help", "h"]);
+const GLOBAL_BOOL = new Set(["json", "table", "quiet", "show-call", "help"]);
 const GLOBAL_VALUE = new Set(["http", "fields", "out"]);
 // Short/friendly flag aliases → canonical name.
 const FLAG_ALIASES = { max: "maxResults", n: "maxResults", o: "out", h: "help" };
@@ -109,6 +109,8 @@ function propType(prop) {
   if (prop.type === "boolean") return "boolean";
   // unions (e.g. transferType: string | string[]) → allow repeatable
   if (Array.isArray(prop.anyOf) && prop.anyOf.some((b) => b?.type === "array")) return "array";
+  // Nested object params (e.g. search_artwork.textQuery DSL) fall through to string —
+  // they aren't expressible as a single CLI flag; use --query / structured tools instead.
   return "string";
 }
 
@@ -222,6 +224,11 @@ function renderResult(res, verbCfg, flags) {
   const fields = flags.fields ? String(flags.fields).split(",").map((s) => s.trim()).filter(Boolean) : null;
   const data = res.structuredContent ?? safeParseJson(textOf(res));
   const quiet = flags.quiet === true;
+  const emitWarnings = () => {
+    if (!quiet && Array.isArray(data?.warnings) && data.warnings.length) {
+      process.stderr.write("warnings: " + data.warnings.join(" | ") + "\n");
+    }
+  };
 
   // Image tool — write bytes to --out, never dump base64 to stdout.
   if (verbCfg.image) {
@@ -247,9 +254,7 @@ function renderResult(res, verbCfg, flags) {
   // --json: full structuredContent verbatim (pretty), no list-splitting/projection.
   if (flags.json === true) {
     process.stdout.write(JSON.stringify(data, null, 2) + "\n");
-    if (!quiet && Array.isArray(data.warnings) && data.warnings.length) {
-      process.stderr.write("warnings: " + data.warnings.join(" | ") + "\n");
-    }
+    emitWarnings();
     return;
   }
 
@@ -257,9 +262,7 @@ function renderResult(res, verbCfg, flags) {
   if (verbCfg.single) {
     if (flags.table === true) process.stdout.write(renderTable([flatten(data)], fields) + "\n");
     else process.stdout.write(JSON.stringify(project(data, fields)) + "\n");
-    if (!quiet && Array.isArray(data.warnings) && data.warnings.length) {
-      process.stderr.write("warnings: " + data.warnings.join(" | ") + "\n");
-    }
+    emitWarnings();
     return;
   }
 
@@ -271,12 +274,8 @@ function renderResult(res, verbCfg, flags) {
   } else {
     for (const row of list) process.stdout.write(JSON.stringify(project(row, fields)) + "\n");
   }
-  if (!quiet) {
-    process.stderr.write(paginationSummary(verbCfg, data, list, flags) + "\n");
-    if (Array.isArray(data.warnings) && data.warnings.length) {
-      process.stderr.write("warnings: " + data.warnings.join(" | ") + "\n");
-    }
-  }
+  if (!quiet) process.stderr.write(paginationSummary(verbCfg, data, list, flags) + "\n");
+  emitWarnings();
 }
 
 // Shallow-flatten an object for table display (drops nested objects/arrays).
@@ -413,8 +412,8 @@ async function main() {
     // Re-tokenize using the tool's schema, dropping the verb itself from positionals.
     const boolSet = boolSetFor(tool.inputSchema);
     const { flags, positionals } = tokenize(argv, boolSet);
-    const vIdx = positionals.indexOf(verb); // drop the verb itself (first occurrence only)
-    const restPositionals = vIdx === -1 ? positionals : positionals.filter((_, i) => i !== vIdx);
+    // The verb is always the first bare token; drop it so the rest map to tool params.
+    const restPositionals = positionals[0] === verb ? positionals.slice(1) : positionals;
     const toolArgs = buildToolArgs(cfg, tool.inputSchema, flags, restPositionals);
 
     if (flags["show-call"] === true) {
