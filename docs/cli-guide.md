@@ -169,9 +169,10 @@ live schema, so it never drifts).
 ## Discovery & introspection
 
 ```bash
-node scripts/cli.mjs                       # top-level usage + command list
+node scripts/cli.mjs                       # top-level usage (curated; renders offline, never connects)
 node scripts/cli.mjs help                  # same
-node scripts/cli.mjs <command> --help      # one command's flags, from the live inputSchema
+node scripts/cli.mjs <command> --help      # one command's flags + example, from the live schema
+                                           #   (degrades to a static summary + hint when no server)
 node scripts/cli.mjs tools                 # verb → tool name table
 node scripts/cli.mjs tools --compact       # compact capability manifest — the agent bootstrap
 node scripts/cli.mjs tools --json          # full input/output schema dump — deep introspection only

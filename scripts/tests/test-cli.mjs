@@ -167,6 +167,43 @@ section("9. tools --compact");
   assert(call?.arguments?.compact === true, "search --compact forwards compact:true (not eaten as a CLI global)");
 }
 
+// ── 10. top-level help is connection-free (never touches the server) ────────────
+section("10. --help is offline-safe + curated");
+{
+  // A dead --http URL would surface as "Connection failed" IF help connected at all.
+  // Top-level help must render purely from the static table — no connect, no error.
+  const r = await runCli(["--http", "http://127.0.0.1:1/mcp", "--help"]);
+  assert(r.code === 0, `exit 0 (got ${r.code})`);
+  assert(!/Connection failed/.test(r.stderr), "no connection attempt (stderr clean)");
+  assert(/Usage: rijks-cli/.test(r.stdout) && /Commands:/.test(r.stdout), "static usage frame printed");
+  assert(/Common flags:/.test(r.stdout) && /Transports:/.test(r.stdout), "Common flags + Transports blocks present");
+  assert(/RIJKS_MCP_HTTP/.test(r.stdout), "mentions the RIJKS_MCP_HTTP env var");
+  // Curated one-liners, not truncated tool-description fragments.
+  assert(/Cap with --topN/.test(r.stdout), "stats line is the curated summary (not a clipped tool desc)");
+}
+
+// ── 11. per-command --help: schema-derived flags + enrichments (live server) ────
+section("11. <command> --help enrichments");
+{
+  const r = await runCli(["stats", "--help"]);
+  assert(r.code === 0, "exit 0");
+  assert(/--dimension <string> \(required\)/.test(r.stdout), "required flag marked");
+  assert(/see `tools --json`|\{[^}]*\}/.test(r.stdout), "enum values shown inline or punted to `tools --json`");
+  assert(/^Example:/m.test(r.stdout) && /rijks-cli stats/.test(r.stdout), "worked example present");
+  // search has maxResults → the --max/-n alias must be documented.
+  const s = await runCli(["search", "--help"]);
+  assert(/Aliases:\s*--max, -n\s*→\s*maxResults/.test(s.stdout), "search --help documents the --max/-n alias");
+}
+
+// ── 12. per-command --help degrades without a server (static verb info + hint) ──
+section("12. <command> --help with no reachable server");
+{
+  const r = await runCli(["--http", "http://127.0.0.1:1/mcp", "search", "--help"]);
+  assert(r.code === 0, `exit 0 (got ${r.code})`);
+  assert(/search → search_artwork/.test(r.stdout), "static verb header rendered");
+  assert(/Example:/.test(r.stdout) && /schema-derived and needs a server/.test(r.stdout), "example + schema-needs-server hint");
+}
+
 // ── Summary ─────────────────────────────────────────────────────────────────────
 console.log(`\n${"═".repeat(60)}`);
 console.log(`  ${passed} passed, ${failed} failed`);

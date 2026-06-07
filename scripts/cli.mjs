@@ -61,7 +61,37 @@ const IN_SCOPE_TOOLS = new Set(Object.values(VERBS).map((c) => c.tool));
 // Viewer/stateful tools depend on the iframe + viewerQueues — not usable over the CLI.
 const VIEWER_TOOLS = new Set(["get_artwork_image", "navigate_viewer", "remount_viewer", "poll_viewer_commands"]);
 
-// Global flags (consumed by the CLI, never forwarded as tool args).
+// Curated help copy (authored one-liners + a worked example per verb). Kept here, not derived
+// from tool descriptions — those clip mid-word and read as fragments. The per-command *flag* list
+// stays schema-derived (always current); only this prose framing is hand-written.
+const VERB_HELP = {
+  search:       { summary: "Structured metadata search — filter by creator, type, subject, place, date (all combine, AND).",
+                  example: `rijks-cli search --creator "Rembrandt van Rijn" --type painting --max 5 --fields objectNumber,title` },
+  semantic:     { summary: "Meaning/concept search over reconstructed text; natural-language queries, ranked by similarity.",
+                  example: `rijks-cli semantic "ships in a stormy sea" --max 5 --fields objectNumber,title,similarityScore` },
+  persons:      { summary: "Look up people/groups; returns vocabIds to feed search --creator (by) or --aboutActor (depicting).",
+                  example: `rijks-cli persons "Vermeer" --max 3 --fields vocabId,label,artworkCount` },
+  provenance:   { summary: "Search parsed ownership history — party, transfer type, location, date/price range, gaps.",
+                  example: `rijks-cli provenance --party "Six" --max 5 --fields objectNumber,title` },
+  details:      { summary: "Full metadata for one artwork by object number (single-object output).",
+                  example: `rijks-cli details SK-C-5 --fields objectNumber,title,creator,date` },
+  stats:        { summary: "Aggregate counts across a dimension (type, decade, creator, place…). Cap with --topN, not --max.",
+                  example: `rijks-cli stats type --topN 10 --fields label,count --table` },
+  similar:      { summary: "Artwork-to-artwork similarity across 9 signal channels plus a pooled consensus.",
+                  example: `rijks-cli similar SK-C-5 --max 10 --json | jq '.modes.visual'` },
+  "browse-set": { summary: "Enumerate the members of one curated set (token pagination).",
+                  example: `rijks-cli browse-set 2619 --max 5 --fields objectNumber,title` },
+  "list-sets":  { summary: "Discover curated sets; filter by --query/--minMembers/--maxMembers (no --max).",
+                  example: `rijks-cli list-sets --query Rembrandt --fields setSpec,name,memberCount` },
+  changes:      { summary: "Recent additions/modifications by date range; --identifiersOnly for light headers (token paging).",
+                  example: `rijks-cli changes --from 2024-01-01 --identifiersOnly --max 5` },
+  inspect:      { summary: "Fetch an image region as bytes for visual analysis; --out <file> saves them to disk.",
+                  example: `rijks-cli inspect SK-C-5 --region "pct:40,40,15,15" --out crop.jpg` },
+};
+
+// Global flags (consumed by the CLI, never forwarded as tool args). NB: `--compact` is NOT here
+// on purpose — it's only meaningful on the `tools` verb (handled by argv inspection before
+// tokenize), and search_artwork has its own `compact` param we must forward, not shadow.
 const GLOBAL_BOOL = new Set(["json", "table", "quiet", "show-call", "help"]);
 const GLOBAL_VALUE = new Set(["http", "fields", "out"]);
 // Short/friendly flag aliases → canonical name.
@@ -301,43 +331,94 @@ function safeParseJson(text) {
 }
 
 // ── Help / discovery ─────────────────────────────────────────────────────────
-function topUsage(toolMap) {
+// Fully static — no toolMap, no connection. Curated command summaries + flag/transport blocks.
+function topUsage() {
   const lines = [
     "rijks-cli — headless CLI over the Rijksmuseum MCP tools",
     "",
     "Usage: rijks-cli [--http <url>] <command> [args] [flags]",
     "       rijks-cli tools [--compact|--json]   list tool capabilities (compact = agent bootstrap)",
-    "       rijks-cli <command> --help           flags for one command",
+    "       rijks-cli <command> --help           flags + an example for one command",
     "",
     "Commands:",
   ];
-  for (const [verb, cfg] of Object.entries(VERBS)) {
-    const desc = (toolMap.get(cfg.tool)?.description ?? "").split("\n")[0].slice(0, 80);
-    lines.push(`  ${verb.padEnd(12)} ${cfg.tool.padEnd(22)} ${desc}`);
+  for (const verb of Object.keys(VERBS)) {
+    lines.push(`  ${verb.padEnd(11)} ${VERB_HELP[verb]?.summary ?? ""}`);
   }
   lines.push(
     "",
-    "Output:  default JSONL (lists) / compact JSON (single) on stdout; counts+paging on stderr.",
-    "Flags:   --json (full payload) · --table · --fields a,b,c · --out <file> (inspect) · --quiet · --show-call",
+    "Common flags:",
+    "  --http <url>     target a running server (else stdio-spawns dist/index.js); env: RIJKS_MCP_HTTP",
+    "  --fields a,b,c   project to these top-level keys on every row (biggest token saver)",
+    "  --max N  (-n)    result cap → maxResults  (stats caps with --topN; list-sets has none)",
+    "  --json           full structuredContent payload, pretty-printed",
+    "  --table          terse human-readable table",
+    "  --quiet          suppress the stderr count/summary line",
+    "  --show-call      print the resolved {tool, arguments} WITHOUT executing (cheap dry-run)",
+    "",
+    "Transports:",
+    "  HTTP (recommended): --http <url> or RIJKS_MCP_HTTP — a warm server; every call is instant.",
+    "  stdio (default):    no --http; spawns `node dist/index.js` — needs `npm run build` + DBs in data/.",
+    "",
+    "Output:  list tools → JSONL · single-object tools → one compact JSON · counts+paging → stderr.",
     "Exit:    0 ok · 1 tool/connection error · 2 usage error",
   );
   return lines.join("\n");
 }
 
+// First line of a description, truncated on a word boundary (no mid-word cuts) with an ellipsis.
+function clip(text, n) {
+  const s = (text ?? "").split("\n")[0];
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n);
+  const sp = cut.lastIndexOf(" ");
+  return (sp > n * 0.6 ? cut.slice(0, sp) : cut) + "…";
+}
+
+// Surface a flag's allowed values (string enum or array-of-enum); inline if short, else punt.
+function enumValues(prop) {
+  const vals = Array.isArray(prop?.enum) ? prop.enum
+    : Array.isArray(prop?.items?.enum) ? prop.items.enum
+    : null;
+  if (!vals || !vals.length) return null;
+  const joined = vals.map(String).join("|");
+  return joined.length <= 60 ? `{${joined}}` : `{${vals.length} values — see \`tools --json\`}`;
+}
+
+// Schema-derived per-command help: curated summary + live flag list (with enums), the --max
+// alias note, and a worked example. Needs the live inputSchema (a server connection).
 function verbHelp(verb, cfg, tool) {
   const props = tool?.inputSchema?.properties ?? {};
   const required = new Set(tool?.inputSchema?.required ?? []);
+  const meta = VERB_HELP[verb] ?? {};
   const lines = [`${verb} → ${cfg.tool}`, ""];
-  if (tool?.description) lines.push(tool.description.split("\n")[0], "");
+  lines.push(meta.summary ?? (tool?.description ?? "").split("\n")[0], "");
   if (cfg.pos) lines.push(`Positional: <${cfg.pos}>  (first positional maps to --${cfg.pos})`, "");
   lines.push("Flags:");
   for (const [name, prop] of Object.entries(props)) {
-    const t = propType(prop);
     const req = required.has(name) ? " (required)" : "";
-    const desc = (prop?.description ?? "").split("\n")[0].slice(0, 80);
-    lines.push(`  --${name} <${t}>${req}  ${desc}`);
+    const desc = clip(prop?.description, 90);
+    const enums = enumValues(prop);
+    lines.push(`  --${name} <${propType(prop)}>${req}  ${desc}${enums ? "  " + enums : ""}`);
   }
   if (cfg.image) lines.push("  --out <file>  write the image bytes to disk");
+  if ("maxResults" in props) lines.push("", "Aliases:  --max, -n  → maxResults");
+  if (meta.example) lines.push("", "Example:", "  " + meta.example);
+  return lines.join("\n");
+}
+
+// No-server fallback for `<command> --help`: curated summary + positional + example + a hint
+// that the full (schema-derived) flag list needs a built dist/+DBs or a --http server.
+function verbHelpStatic(verb, cfg) {
+  const meta = VERB_HELP[verb] ?? {};
+  const lines = [`${verb} → ${cfg.tool}`, ""];
+  if (meta.summary) lines.push(meta.summary, "");
+  if (cfg.pos) lines.push(`Positional: <${cfg.pos}>  (first positional maps to --${cfg.pos})`, "");
+  if (meta.example) lines.push("Example:", "  " + meta.example, "");
+  lines.push(
+    "(The full flag list is schema-derived and needs a server. Start one with `npm run serve` and",
+    " pass `--http <url>`, or build locally — `npm run build` + DBs in data/ — then re-run this.)",
+  );
   return lines.join("\n");
 }
 
@@ -390,13 +471,36 @@ async function main() {
     if (verb === undefined) verb = a;
   }
 
-  // Bare help (no server needed for the static frame; we still enrich from listTools when possible).
   const wantsHelp = argv.includes("--help") || argv.includes("-h") || verb === "help" || argv.length === 0;
+  const isTopHelp = wantsHelp && (verb === "help" || verb === undefined);
+
+  // Top-level help is fully static — render it WITHOUT connecting (offline-safe + instant, even
+  // with a stale RIJKS_MCP_HTTP or no built dist/+DBs). Only schema-derived per-command help and
+  // real tool calls touch the server.
+  if (isTopHelp) {
+    process.stdout.write(topUsage() + "\n");
+    return;
+  }
+
+  const cfg = VERBS[verb];
+  // Unknown command (and not the built-in `tools`) is a static usage error — no server needed.
+  if (!cfg && verb !== "tools") {
+    const hint = VIEWER_TOOLS.has(verb) ? " (viewer/stateful tool — not available over the CLI)" : "";
+    process.stderr.write(`Unknown command: ${verb ?? "(none)"}${hint}\n\n${topUsage()}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  const isVerbHelp = wantsHelp && !!cfg; // `<command> --help`
 
   let client;
   try {
     client = await connect(httpUrl);
   } catch (err) {
+    // Per-command help degrades to static verb info + a hint when no server is reachable.
+    if (isVerbHelp) {
+      process.stdout.write(verbHelpStatic(verb, cfg) + "\n");
+      return;
+    }
     process.stderr.write(`Connection failed: ${err?.message ?? err}\n`);
     if (!httpUrl) process.stderr.write("Hint: run `npm run build` and ensure data/ DBs exist, or use --http <url>.\n");
     process.exitCode = 1;
@@ -407,24 +511,12 @@ async function main() {
     const listed = await client.listTools();
     const toolMap = new Map(listed.tools.map((t) => [t.name, t]));
 
-    if (wantsHelp && (verb === "help" || verb === undefined)) {
-      process.stdout.write(topUsage(toolMap) + "\n");
-      return;
-    }
     if (verb === "tools") {
       if (argv.includes("--compact")) {
         process.stdout.write(JSON.stringify(toolsCompact(toolMap), null, 2) + "\n");
       } else {
         process.stdout.write(toolsDump(toolMap, argv.includes("--json")) + "\n");
       }
-      return;
-    }
-
-    const cfg = VERBS[verb];
-    if (!cfg) {
-      const hint = VIEWER_TOOLS.has(verb) ? " (viewer/stateful tool — not available over the CLI)" : "";
-      process.stderr.write(`Unknown command: ${verb ?? "(none)"}${hint}\n\n${topUsage(toolMap)}\n`);
-      process.exitCode = 2;
       return;
     }
 
@@ -435,7 +527,7 @@ async function main() {
       return;
     }
 
-    if (argv.includes("--help") || argv.includes("-h")) {
+    if (isVerbHelp) {
       process.stdout.write(verbHelp(verb, cfg, tool) + "\n");
       return;
     }
