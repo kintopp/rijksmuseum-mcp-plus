@@ -145,6 +145,9 @@ carte-de-visite        17979
 - **Booleans.** Presence = true: `--identifiersOnly`. Explicit `--imageAvailable=false` also works.
 - **Coercion.** Numeric and boolean flags are coerced per the live schema, so `--max 20` (a string
   on the command line) is accepted where the tool wants a number.
+- **Objects (JSON).** A few params are structured objects (currently the `search` `textQuery` DSL).
+  Pass them as a single JSON literal — `--textQuery '{"must":[…]}'` — which the CLI parses before
+  sending. `--help` shows these as `<json>`; malformed JSON is a usage error (exit 2) naming the flag.
 
 ### The `--max` alias caveat
 
@@ -231,10 +234,16 @@ node scripts/cli.mjs search --query "tulip" --type print --max 10 --offset 10
 
 # Feed a person vocabId (from `persons`) as the creator for precise, name-spelling-proof matching
 node scripts/cli.mjs search --creator 2103429 --type painting --max 5 --fields objectNumber,title
+
+# Advanced structured text search — textQuery is an object, so pass a JSON literal
+node scripts/cli.mjs search \
+  --textQuery '{"must":[{"field":"title","phrase":"tulip"},{"field":"description","prefix":"land"}]}' \
+  --max 5 --fields objectNumber,title
 ```
 
 Output keys: `totalResults`, `results`, `source`. Each result: `objectNumber`, `title`, `creator`,
-`date`, `type`, `url`.
+`date`, `type`, `url`. The `textQuery` DSL (multi-field boolean: `must`/`should`, `phrase`, `any`,
+`prefix`, `near`, …) is an object — see its full shape via `search --help`.
 
 ---
 

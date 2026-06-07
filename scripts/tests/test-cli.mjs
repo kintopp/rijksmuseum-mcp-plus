@@ -121,6 +121,24 @@ section("7. inspect SK-C-5 --region ... --out <tmp>");
   rmSync(out, { force: true });
 }
 
+// ── 8. object param (textQuery) accepts a JSON literal ──────────────────────────
+section("8. textQuery JSON literal");
+{
+  const tq = '{"must":[{"field":"title","phrase":"tulip"}]}';
+  // 8a: --show-call parses the JSON into an object (not a passthrough string)
+  const r = await runCli(["--show-call", "search", "--textQuery", tq]);
+  assert(r.code === 0, "exit 0 (valid JSON)");
+  let call = null;
+  try { call = JSON.parse(r.stdout.trim()); } catch { /* fail below */ }
+  const tqArg = call?.arguments?.textQuery;
+  assert(tqArg && typeof tqArg === "object" && !Array.isArray(tqArg), "textQuery resolved to an object (parsed, not a string)");
+  assert(Array.isArray(tqArg?.must) && tqArg.must[0]?.field === "title", "nested DSL preserved (must[0].field === title)");
+  // 8b: malformed JSON → usage error (exit 2), naming the flag
+  const bad = await runCli(["search", "--textQuery", "not-json"]);
+  assert(bad.code === 2, `exit 2 on malformed JSON (got ${bad.code})`);
+  assert(/textQuery/.test(bad.stderr), "stderr names the offending flag");
+}
+
 // ── Summary ─────────────────────────────────────────────────────────────────────
 console.log(`\n${"═".repeat(60)}`);
 console.log(`  ${passed} passed, ${failed} failed`);

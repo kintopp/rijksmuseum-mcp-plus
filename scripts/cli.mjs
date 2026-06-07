@@ -35,6 +35,9 @@ import path from "node:path";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// Bad input the user can fix (e.g. malformed --textQuery JSON) → exit 2, not 1.
+class UsageError extends Error {}
+
 // ── Verb → tool table (presentation metadata only; schemas come from listTools) ──
 // `pos`  = which input param the first positional maps to.
 // `list` = key in structuredContent holding the result array (list tools).
@@ -109,12 +112,13 @@ function propType(prop) {
   if (prop.type === "boolean") return "boolean";
   // unions (e.g. transferType: string | string[]) → allow repeatable
   if (Array.isArray(prop.anyOf) && prop.anyOf.some((b) => b?.type === "array")) return "array";
-  // Nested object params (e.g. search_artwork.textQuery DSL) fall through to string —
-  // they aren't expressible as a single CLI flag; use --query / structured tools instead.
+  // Nested object params (e.g. the search_artwork.textQuery DSL) take a JSON literal:
+  // --textQuery '{"must":[…]}' — parsed in coerce() before it goes on the wire.
+  if (prop.type === "object") return "json";
   return "string";
 }
 
-function coerce(value, type) {
+function coerce(value, type, name) {
   if (type === "number") {
     const arr = [].concat(value).map(Number);
     return arr.length === 1 ? arr[0] : arr;
@@ -125,6 +129,11 @@ function coerce(value, type) {
     return arr.length === 1 ? arr[0] : arr;
   }
   if (type === "array") return [].concat(value);
+  if (type === "json") {
+    if (typeof value !== "string") throw new UsageError(`--${name} expects a single JSON object (pass it once)`);
+    try { return JSON.parse(value); }
+    catch (e) { throw new UsageError(`--${name} expects a JSON object (e.g. '{"must":[{"field":"title","phrase":"tulip"}]}') — ${e.message}`); }
+  }
   return value;
 }
 
@@ -144,11 +153,11 @@ function buildToolArgs(verbCfg, schema, flags, positionals) {
   const args = {};
   for (const [key, raw] of Object.entries(flags)) {
     if (GLOBAL_BOOL.has(key) || GLOBAL_VALUE.has(key)) continue;
-    args[key] = coerce(raw, propType(props[key]));
+    args[key] = coerce(raw, propType(props[key]), key);
   }
   // First positional → the verb's primary param (if the flag wasn't already set).
   if (positionals.length && verbCfg.pos && args[verbCfg.pos] === undefined) {
-    args[verbCfg.pos] = coerce(positionals[0], propType(props[verbCfg.pos]));
+    args[verbCfg.pos] = coerce(positionals[0], propType(props[verbCfg.pos]), verbCfg.pos);
   }
   return args;
 }
@@ -430,7 +439,7 @@ async function main() {
     renderResult(res, cfg, flags);
   } catch (err) {
     process.stderr.write(`Error: ${err?.message ?? err}\n`);
-    process.exitCode = 1;
+    process.exitCode = err instanceof UsageError ? 2 : 1;
   } finally {
     await client.close().catch(() => {});
   }
