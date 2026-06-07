@@ -252,8 +252,13 @@ async function runStdio(): Promise<void> {
   initSharedClients();
   initUsageStats();
   const server = createServer();
-  if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); vocabDb.ensureCuratedSetsCache(); }
-  if (embeddingsDb?.available) embeddingsDb.warmCorePages();
+  // Eager warm-up (~13s) is load-bearing for Claude Desktop's first-query latency but
+  // pure waste for a short-lived CLI one-shot (caches build lazily on first use anyway).
+  // The CLI's stdio transport sets MCP_SKIP_STARTUP_WARM=1; default stays eager.
+  if (process.env.MCP_SKIP_STARTUP_WARM !== "1") {
+    if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); vocabDb.ensureCuratedSetsCache(); }
+    if (embeddingsDb?.available) embeddingsDb.warmCorePages();
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Rijksmuseum MCP server running on stdio");
