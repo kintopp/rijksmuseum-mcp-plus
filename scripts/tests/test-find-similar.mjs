@@ -53,6 +53,12 @@ ok(findSimilar.inputSchema.properties.objectNumber, "objectNumber param exists")
 ok(findSimilar.inputSchema.properties.maxResults, "maxResults param exists");
 ok(!findSimilar.inputSchema.properties.mode, "old mode param removed");
 
+// #379 — find_similar now declares an outputSchema (structured output enabled by default)
+ok(findSimilar.outputSchema, "find_similar declares an outputSchema (#379)");
+ok(!JSON.stringify(findSimilar.outputSchema ?? {}).includes('"$ref"'), "outputSchema is $ref-free");
+ok(findSimilar.outputSchema?.properties?.pooled, "outputSchema exposes the pooled channel");
+ok(findSimilar.outputSchema?.properties?.modes, "outputSchema exposes the modes channels");
+
 // ── Section 2: The Milkmaid — rich artwork with multiple signals ──
 console.log("\n════════════════════════════════════════════════════════════");
 console.log("  Section 2: The Milkmaid (SK-A-2344) — multi-signal");
@@ -347,6 +353,48 @@ if (pathMatch9) {
   ok(html9.includes("attributed to") && html9.includes("1.5"), "methodology mentions 'attributed to' at 1.5×");
   ok(html9.includes("copyist"), "methodology mentions copyist");
   ok(html9.includes("follower"), "methodology mentions follower");
+}
+
+// ── Section 12: Structured output (#379) ─────────────────────────
+console.log("\n════════════════════════════════════════════════════════════");
+console.log("  Section 12: Structured output (#379)");
+console.log("════════════════════════════════════════════════════════════");
+
+// Reuse the Milkmaid call from Section 2 (r1 / text1).
+const sc = r1.structuredContent;
+ok(sc, "find_similar returns structuredContent");
+if (sc) {
+  ok(sc.query?.objectNumber === "SK-A-2344", "structured query.objectNumber matches query");
+  ok(typeof sc.query?.title === "string", "structured query carries title");
+  ok(sc.modes && Array.isArray(sc.modes.iconclass), "modes.iconclass is an array (required channel)");
+  ok(Array.isArray(sc.modes.lineage), "modes.lineage is an array (required channel)");
+  ok(Array.isArray(sc.modes.description), "modes.description is an array (required channel)");
+  ok(sc.poolThreshold === 4, "poolThreshold === 4");
+  ok(Array.isArray(sc.pooled), "pooled is an array");
+
+  // pageUrl mirrors the text channel's path/URL — same source of truth.
+  ok(typeof sc.pageUrl === "string" && sc.pageUrl.length > 0, "pageUrl present");
+  ok(text1.includes(sc.pageUrl), "pageUrl matches the text channel location");
+
+  // Text-channel pooled count must equal the structured pooled length (computePooled is the one source).
+  ok(text1.includes(`Pooled (4+): ${sc.pooled.length}`), "text Pooled count matches structured pooled length");
+
+  // Pooled candidates expose the #379 lift: sources[] + matchCount.
+  let pooledShapeOk = true;
+  for (const p of sc.pooled) {
+    if (!Array.isArray(p.sources) || p.sources.length < sc.poolThreshold) pooledShapeOk = false;
+    if (p.matchCount !== p.sources?.length) pooledShapeOk = false;
+  }
+  ok(pooledShapeOk, "every pooled candidate has matchCount === sources.length >= poolThreshold");
+
+  // A description candidate (if present) should carry channel-native fields.
+  const descSample = sc.modes.description?.[0];
+  if (descSample) {
+    ok(typeof descSample.objectNumber === "string" && typeof descSample.score === "number",
+       "description candidate has objectNumber + numeric score");
+  } else {
+    ok(true, "no description candidates for this query (acceptable)");
+  }
 }
 
 // ── Summary ──────────────────────────────────────────────────────

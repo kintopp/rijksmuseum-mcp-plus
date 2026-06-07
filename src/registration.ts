@@ -20,7 +20,7 @@ import { UsageStats } from "./utils/UsageStats.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { getOrComputeWithInflight } from "./utils/inflightCache.js";
 import axios from "axios";
-import { generateSimilarHtml, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
+import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
 import { parseProvenance } from "./provenance.js";
 import { compositeOverlays, computeCropRect, readImageDimensions } from "./overlay-compositor.js";
@@ -834,6 +834,83 @@ const SearchResultOutput = {
     percentage: z.number().optional(),
   }))).optional().describe("Counts per dimension (configurable via facetLimit, default top-5). Computed when results are truncated and facets is set."),
   warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+};
+
+// ── find_similar output schema (#379) ──
+// SimilarCandidate is reused across 9+ channels, so it MUST be a factory:
+// each call mints a fresh Zod instance, preventing zod-to-json-schema from
+// deduplicating into $ref pointers claude.ai cannot resolve.
+
+const LabeledTermShape = () => z.object({
+  label: z.string(),
+  wikidataUri: z.string().optional(),
+});
+
+/** Factory — one fresh instance per channel to avoid $ref dedup. */
+const SimilarCandidateShape = () => z.object({
+  objectNumber: z.string(),
+  title: z.string(),
+  creator: z.string(),
+  date: z.string().optional(),
+  type: z.string().optional(),
+  iiifId: z.string().optional(),
+  score: z.number().describe("Channel-native similarity score. Visual has no score (0); not comparable across channels."),
+  url: z.string(),
+  detail: z.string().optional().describe("Human-readable 'why' line (shared motifs, lineage pairs, etc.)."),
+  // Channel-specific extras (present only on the relevant channel):
+  sharedNotations: z.array(z.string()).optional().describe("Iconclass: shared notation codes."),
+  qualifierLabel: z.string().optional().describe("Lineage: primary assignment-qualifier label."),
+  qualifierUri: z.string().optional().describe("Lineage: Getty AAT URI for the qualifier."),
+  qualifierCreator: z.string().optional().describe("Lineage: creator referenced by the qualifier."),
+  descSnippet: z.string().optional().describe("Description: truncated matching description text."),
+  sharedTerms: z.array(LabeledTermShape()).optional().describe("Depicted Person/Place, Theme, Related*: shared terms."),
+});
+
+const PooledCandidateShape = () => SimilarCandidateShape().extend({
+  sources: z.array(z.string()).describe("Channels this artwork appeared in."),
+  matchCount: z.number().int().describe("Number of channels that matched (= sources.length)."),
+});
+
+const FindSimilarOutput = {
+  query: z.object({
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    date: z.string().optional(),
+    type: z.string().optional(),
+    iiifId: z.string().optional(),
+    description: z.string().optional(),
+    iconclassCodes: z.array(z.object({ notation: z.string(), label: z.string() })).optional(),
+    lineageQualifiers: z.array(z.object({ label: z.string(), aatUri: z.string(), creator: z.string() })).optional(),
+    depictedPersons: z.array(LabeledTermShape()).optional(),
+    depictedPlaces: z.array(LabeledTermShape()).optional(),
+    themes: z.array(z.string()).optional(),
+    relatedVariantLabels: z.array(z.string()).optional(),
+    relatedObjectLabels: z.array(z.string()).optional(),
+  }).describe("Query artwork metadata plus the per-channel terms that explain why each channel matched."),
+
+  // Required channels always present; best-effort/optional channels mirror SimilarPageData.modes optionality.
+  modes: z.object({
+    iconclass: z.array(SimilarCandidateShape()),
+    lineage: z.array(SimilarCandidateShape()),
+    description: z.array(SimilarCandidateShape()),
+    visual: z.array(SimilarCandidateShape()).optional().describe("Best-effort (Rijksmuseum website API); absent on failure or no image."),
+    theme: z.array(SimilarCandidateShape()).optional(),
+    relatedVariant: z.array(SimilarCandidateShape()).optional(),
+    relatedObject: z.array(SimilarCandidateShape()).optional(),
+    depictedPerson: z.array(SimilarCandidateShape()).optional(),
+    depictedPlace: z.array(SimilarCandidateShape()).optional(),
+  }).describe("Up to 9 independent similarity channels. Each channel is independently ranked; scores are not cross-comparable."),
+
+  pooled: z.array(PooledCandidateShape())
+    .describe("Artworks appearing in >= poolThreshold channels, sorted by matchCount desc. The cross-channel consensus signal."),
+  poolThreshold: z.number().int().describe("Minimum channel count for the pooled list (currently 4)."),
+
+  pageUrl: z.string().describe("URL (HTTP mode) or file path (stdio mode) of the rendered HTML comparison page. Same value as the text channel."),
+  generatedAt: z.string(),
+  visualSearchUrl: z.string().optional().describe("Link to full visual-search results on rijksmuseum.nl."),
+  visualTotalResults: z.number().int().optional(),
   error: z.string().optional(),
 };
 
@@ -3907,13 +3984,16 @@ function registerTools(
           "Your ONLY job is to show the user the path/URL so they can open it in a browser. " +
           "Do NOT attempt to open, read, fetch, summarise, or characterise the page contents. " +
           "Do NOT make additional tool calls to look up the same artworks. " +
-          "Simply present the link and explain that it contains a visual comparison page.",
+          "Simply present the link and explain that it contains a visual comparison page. " +
+          "(The full per-channel results are also returned as structuredContent for programmatic/CLI clients; " +
+          "chat hosts should ignore that payload and present only the link.)",
         inputSchema: z.object({
           objectNumber: z.string().describe("Object number of the artwork to find similar works for (e.g. 'SK-A-1718')."),
           maxResults: z.preprocess(stripNull, z.number().int().min(1).max(TOOL_LIMITS.find_similar.max).default(TOOL_LIMITS.find_similar.default).optional())
             .describe("Number of results per signal mode (default 20, max 50)."),
         }).strict(),
-        // No outputSchema — returns a URL/path to an HTML comparison page, not structured data.
+        // structuredContent carries the full per-channel payload (#379); text channel stays URL + counts.
+        ...withOutputSchema(FindSimilarOutput),
       },
       withLogging("find_similar", async (args) => {
         const maxResults = args.maxResults ?? 20;
@@ -4127,14 +4207,10 @@ function registerTools(
           `Place: ${dplCandidates.length}`,
         ];
         const poolThreshold = pageData.poolThreshold;
-        // Count pooled entries
-        const allObjNums = new Map<string, number>();
-        for (const mode of [visualCandidates, icCandidates, liCandidates, descCandidates, thCandidates, rvCandidates, roCandidates, dpCandidates, dplCandidates]) {
-          for (const c of mode) {
-            allObjNums.set(c.objectNumber, (allObjNums.get(c.objectNumber) ?? 0) + 1);
-          }
-        }
-        const pooledN = [...allObjNums.values()].filter(n => n >= poolThreshold).length;
+        // Pooled list — shared with the HTML renderer via computePooled (#379),
+        // replacing the previous standalone pooled-count loop.
+        const { pooled } = computePooled(pageData.modes, poolThreshold);
+        const pooledN = pooled.length;
 
         const textLines = [
           `Similar to "${artRow.title}" (${args.objectNumber})`,
@@ -4143,7 +4219,21 @@ function registerTools(
           pageLocation,
         ];
 
-        return { content: [{ type: "text" as const, text: textLines.join("\n") }] };
+        // Structured output (#379): the full per-channel data a programmatic/CLI
+        // client needs. Gated by STRUCTURED_CONTENT; text channel is unchanged
+        // (URL + counts) so chat hosts keep "just the link".
+        const structured: InferOutput<typeof FindSimilarOutput> = {
+          query: pageData.query,
+          modes: pageData.modes,
+          pooled,
+          poolThreshold,
+          pageUrl: pageLocation,
+          generatedAt: pageData.generatedAt,
+          ...(pageData.visualSearchUrl && { visualSearchUrl: pageData.visualSearchUrl }),
+          ...(pageData.visualTotalResults && { visualTotalResults: pageData.visualTotalResults }),
+        };
+
+        return structuredResponse(structured, textLines.join("\n"));
       })
     );
   }

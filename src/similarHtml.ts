@@ -32,6 +32,10 @@ export interface SimilarCandidate {
   descSnippet?: string;
   /** Shared depicted person/place terms for per-card display */
   sharedTerms?: { label: string; wikidataUri?: string }[];
+  /** Pooled-only: channels this artwork appeared in (set by computePooled). */
+  sources?: string[];
+  /** Pooled-only: number of channels that matched (= sources.length). */
+  matchCount?: number;
 }
 
 export interface SimilarQueryInfo {
@@ -78,6 +82,21 @@ export interface SimilarPageData {
   visualSearchUrl?: string;
   /** Total visual results available (for "See all N+" link) */
   visualTotalResults?: number;
+}
+
+export interface PooledCandidate extends SimilarCandidate {
+  /** Channel names this artwork appeared in (subset of MODE_ORDER). */
+  sources: string[];
+  /** Number of channels that matched (= sources.length). */
+  matchCount: number;
+}
+
+export interface PooledResult {
+  pooled: PooledCandidate[];
+  /** Distinct artworks across all non-empty channels. */
+  totalUnique: number;
+  /** Non-empty channel names, in MODE_ORDER. */
+  modeNames: string[];
 }
 
 // ─── HTML generation ────────────────────────────────────────────────
@@ -241,7 +260,10 @@ function renderCard(c: SimilarCandidate, rank: number, mode: string, modeSources
 
   const scoreStr = mode === "visual"
     ? "" // Visual has no scores from the Rijksmuseum API
-    : ` &mdash; ${c.score.toFixed(2)}`;
+    : mode === "pooled"
+      // Pooled cards preserve the real similarity in `score`; show the agreement count.
+      ? ` &mdash; ${c.matchCount} forms`
+      : ` &mdash; ${c.score.toFixed(2)}`;
   const sourcesBadges = modeSources
     ? modeSources.map(m => {
         const info = MODE_INFO[m] || { label: m, badge: m.charAt(0), color: "#888" };
@@ -269,7 +291,7 @@ function renderRow(
   color: string,
   methodology: string,
   candidates: SimilarCandidate[],
-  options?: { seeAllUrl?: string; seeAllCount?: number; pooledSources?: Map<string, string[]> },
+  options?: { seeAllUrl?: string; seeAllCount?: number },
 ): string {
   const isPooled = mode === "pooled";
   const count = candidates.length;
@@ -287,7 +309,8 @@ function renderRow(
     : "";
 
   const cards = candidates.map((c, i) => {
-    const sources = isPooled ? options?.pooledSources?.get(c.objectNumber) : undefined;
+    // Pooled cards show source-channel badges; sources live directly on the candidate.
+    const sources = isPooled ? c.sources : undefined;
     return renderCard(c, i + 1, mode, sources);
   }).join("\n");
 
@@ -313,11 +336,19 @@ function renderRow(
   </div>`;
 }
 
-export function generateSimilarHtml(data: SimilarPageData): string {
-  const { query, modes, poolThreshold, generatedAt } = data;
-
-  // Compute pooled: artworks appearing in ≥ poolThreshold modes
-  const modeNames = MODE_ORDER.filter(m => m in modes && (modes as Record<string, SimilarCandidate[]>)[m]?.length > 0);
+/**
+ * Pooling logic, shared by the HTML renderer and the tool handler's structured
+ * output so both compute the cross-channel consensus identically. Artworks
+ * appearing in ≥ poolThreshold channels are pooled; `score` keeps the original
+ * similarity (best across channels) and `matchCount` exposes the agreement count.
+ */
+export function computePooled(
+  modes: SimilarPageData["modes"],
+  poolThreshold: number,
+): PooledResult {
+  const modeNames = MODE_ORDER.filter(
+    m => m in modes && (modes as Record<string, SimilarCandidate[]>)[m]?.length > 0,
+  );
   const objectModes = new Map<string, { candidate: SimilarCandidate; sources: string[]; bestScore: number }>();
 
   for (const mode of modeNames) {
@@ -336,15 +367,23 @@ export function generateSimilarHtml(data: SimilarPageData): string {
     }
   }
 
-  const pooled: SimilarCandidate[] = [];
-  const pooledSources = new Map<string, string[]>();
-  for (const [objNum, entry] of objectModes) {
+  const pooled: PooledCandidate[] = [];
+  for (const entry of objectModes.values()) {
     if (entry.sources.length >= poolThreshold) {
-      pooled.push({ ...entry.candidate, score: entry.sources.length });
-      pooledSources.set(objNum, entry.sources);
+      // NB: keep original similarity in `score`; expose agreement count as `matchCount`.
+      pooled.push({ ...entry.candidate, sources: entry.sources, matchCount: entry.sources.length });
     }
   }
-  pooled.sort((a, b) => b.score - a.score || a.objectNumber.localeCompare(b.objectNumber));
+  pooled.sort((a, b) => b.matchCount - a.matchCount || a.objectNumber.localeCompare(b.objectNumber));
+
+  return { pooled, totalUnique: objectModes.size, modeNames };
+}
+
+export function generateSimilarHtml(data: SimilarPageData): string {
+  const { query, modes, poolThreshold, generatedAt } = data;
+
+  // Compute pooled: artworks appearing in ≥ poolThreshold modes
+  const { pooled, totalUnique, modeNames } = computePooled(modes, poolThreshold);
 
   // Query artwork header
   const queryThumb = query.iiifId
@@ -446,10 +485,9 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   const pooledInfo = MODE_INFO.pooled;
   const pooledMethodology = `Artworks appearing in <strong>${poolThreshold}+</strong> of the ${modeNames.length} forms of similarity above. ` +
     `The scores and icons show which and how many forms agree.`;
-  rows.push(renderRow("pooled", pooledInfo.label, pooledInfo.color, pooledMethodology, pooled, { pooledSources }));
+  rows.push(renderRow("pooled", pooledInfo.label, pooledInfo.color, pooledMethodology, pooled));
 
-  // Count totals
-  const totalUnique = objectModes.size;
+  // Count totals (totalUnique + modeNames computed by computePooled above)
   const modeCounts = modeNames.map(m => `${MODE_INFO[m].label}: ${(modes as Record<string, SimilarCandidate[]>)[m]?.length ?? 0}`).join(" | ");
 
   return `<!DOCTYPE html>
