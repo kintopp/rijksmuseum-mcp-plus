@@ -24,7 +24,7 @@
  *   node scripts/cli.mjs details SK-C-5 --json
  *   node scripts/cli.mjs inspect SK-C-5 --region "pct:40,40,20,20" --out /tmp/crop.jpg
  *   node scripts/cli.mjs --http http://localhost:3000/mcp semantic "ships in a storm"
- *   node scripts/cli.mjs tools --json
+ *   node scripts/cli.mjs tools --compact          # compact capability manifest (agent bootstrap)
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -306,8 +306,8 @@ function topUsage(toolMap) {
     "rijks-cli — headless CLI over the Rijksmuseum MCP tools",
     "",
     "Usage: rijks-cli [--http <url>] <command> [args] [flags]",
-    "       rijks-cli tools [--json]        list tool capabilities",
-    "       rijks-cli <command> --help      flags for one command",
+    "       rijks-cli tools [--compact|--json]   list tool capabilities (compact = agent bootstrap)",
+    "       rijks-cli <command> --help           flags for one command",
     "",
     "Commands:",
   ];
@@ -348,6 +348,25 @@ function toolsDump(toolMap, asJson) {
   });
   if (asJson) return JSON.stringify(tools, null, 2);
   return tools.map((t) => `${t.verb.padEnd(12)} ${t.name}`).join("\n");
+}
+
+// Compact capability manifest for agent bootstrap — verb, tool, positional, result
+// shape, paging, and arg names→types only (no descriptions or full JSON Schemas). A
+// trailing "!" marks a required arg. Orders of magnitude cheaper than `tools --json`.
+function toolsCompact(toolMap) {
+  return [...IN_SCOPE_TOOLS].map((name) => {
+    const cfg = VERBS[TOOL_TO_VERB[name]];
+    const schema = toolMap.get(name)?.inputSchema;
+    const required = new Set(schema?.required ?? []);
+    const args = {};
+    for (const [k, prop] of Object.entries(schema?.properties ?? {})) {
+      args[k] = propType(prop) + (required.has(k) ? "!" : "");
+    }
+    const result = cfg.single ? "single" : cfg.image ? "image" : (cfg.list ?? null);
+    const entry = { verb: TOOL_TO_VERB[name], tool: name, positional: cfg.pos ?? null, result, args };
+    if (cfg.page) entry.page = cfg.page;
+    return entry;
+  });
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -393,8 +412,11 @@ async function main() {
       return;
     }
     if (verb === "tools") {
-      const asJson = argv.includes("--json");
-      process.stdout.write(toolsDump(toolMap, asJson) + "\n");
+      if (argv.includes("--compact")) {
+        process.stdout.write(JSON.stringify(toolsCompact(toolMap), null, 2) + "\n");
+      } else {
+        process.stdout.write(toolsDump(toolMap, argv.includes("--json")) + "\n");
+      }
       return;
     }
 

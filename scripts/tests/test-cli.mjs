@@ -139,6 +139,34 @@ section("8. textQuery JSON literal");
   assert(/textQuery/.test(bad.stderr), "stderr names the offending flag");
 }
 
+// ── 9. tools --compact (compact capability manifest for agent bootstrap) ────────
+section("9. tools --compact");
+{
+  const r = await runCli(["tools", "--compact"]);
+  assert(r.code === 0, "exit 0");
+  let manifest = [];
+  try { manifest = JSON.parse(r.stdout); } catch { /* fail below */ }
+  assert(Array.isArray(manifest) && manifest.length === 11, `11 in-scope tools (got ${manifest.length})`);
+  const search = manifest.find((m) => m.tool === "search_artwork");
+  assert(search && search.verb === "search" && search.positional === "query", "search entry: verb + positional");
+  assert(search && search.result === "results" && search.page === "offset", "search entry: result/list key + paging");
+  assert(search && search.args && search.args.query === "string", "args carry name→type (query: string), no schema");
+  const details = manifest.find((m) => m.tool === "get_artwork_details");
+  assert(details && details.result === "single", "single-object tool reports result:single");
+  // Required args are marked with a trailing "!" — find_similar requires objectNumber.
+  const similar = manifest.find((m) => m.tool === "find_similar");
+  assert(similar && /!$/.test(similar.args.objectNumber ?? ""), "required arg marked with trailing '!'");
+  // No descriptions or full JSON Schemas → far smaller than `tools --json`.
+  const full = await runCli(["tools", "--json"]);
+  assert(r.stdout.length * 3 < full.stdout.length, `compact is much smaller than --json (${r.stdout.length} vs ${full.stdout.length} bytes)`);
+  // Collision guard: the `tools` verb's --compact flag must NOT shadow search_artwork's own
+  // `compact` tool param — `search --compact` has to forward compact:true to the tool.
+  const sc = await runCli(["search", "--query", "tulip", "--compact", "--show-call"]);
+  let call = null;
+  try { call = JSON.parse(sc.stdout.trim()); } catch { /* fail below */ }
+  assert(call?.arguments?.compact === true, "search --compact forwards compact:true (not eaten as a CLI global)");
+}
+
 // ── Summary ─────────────────────────────────────────────────────────────────────
 console.log(`\n${"═".repeat(60)}`);
 console.log(`  ${passed} passed, ${failed} failed`);

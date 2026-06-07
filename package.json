@@ -11,6 +11,10 @@
     "rijksmuseum-mcp-plus": "./dist/index.js",
     "rijks-cli": "./scripts/cli.mjs"
   },
+  "files": [
+    "dist",
+    "scripts/cli.mjs"
+  ],
   "scripts": {
     "build:peggy": "peggy --format es -o src/provenance-parser.generated.js src/provenance-grammar.peggy",
     "build": "npm run build:peggy && npm run build:ui && tsc && cp src/provenance-parser.generated.js dist/ && git rev-parse --short HEAD > dist/commit.txt 2>/dev/null || true",

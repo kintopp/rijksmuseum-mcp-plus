@@ -173,12 +173,29 @@ node scripts/cli.mjs                       # top-level usage + command list
 node scripts/cli.mjs help                  # same
 node scripts/cli.mjs <command> --help      # one command's flags, from the live inputSchema
 node scripts/cli.mjs tools                 # verb → tool name table
-node scripts/cli.mjs tools --json          # full capabilities dump (names + input/output schemas)
+node scripts/cli.mjs tools --compact       # compact capability manifest — the agent bootstrap
+node scripts/cli.mjs tools --json          # full input/output schema dump — deep introspection only
 node scripts/cli.mjs <command> --show-call # print the resolved {tool, arguments} WITHOUT executing
 ```
 
-`tools --json` is the agent bootstrap — the CLI equivalent of MCP `tools/list`. `--show-call` lets
-an agent verify its argument mapping cheaply before spending a real call:
+`tools --compact` is the agent bootstrap — a small JSON manifest (one entry per tool: `verb`, `tool`,
+`positional`, `result` shape, optional `page` mode, and `args` as name→type, with a trailing `!`
+marking required args). It's the CLI equivalent of MCP `tools/list` but ~30× smaller than
+`tools --json`, which dumps every tool's full input *and* output JSON Schema — reserve that for deep
+introspection. Both derive from the live schema, so neither drifts from the server.
+
+```bash
+$ node scripts/cli.mjs tools --compact | jq '.[] | select(.tool=="find_similar")'
+{
+  "verb": "similar",
+  "tool": "find_similar",
+  "positional": "objectNumber",
+  "result": "single",
+  "args": { "objectNumber": "string!", "maxResults": "number", ... }
+}
+```
+
+`--show-call` lets an agent verify its argument mapping cheaply before spending a real call:
 
 ```bash
 $ node scripts/cli.mjs --show-call search --query "tulip" --type print --max 10
@@ -487,7 +504,8 @@ count summary entirely.
 
 - **Prefer `--http` against a warm server.** It removes the per-call cold-start cost; the stdio
   fallback is for zero-config one-offs.
-- **Bootstrap with `tools --json`**, then `<verb> --help` for the exact flags — both come from the
+- **Bootstrap with `tools --compact`** (the compact manifest; fall back to `tools --json` only when
+  you need full input/output schemas), then `<verb> --help` for the exact flags — all come from the
   live schema, so they never drift from the server.
 - **Project aggressively with `--fields`.** Repeated JSON keys across many rows are pure token
   waste; ask for only what you need.
