@@ -88,6 +88,11 @@ const VERB_HELP = {
   inspect:      { summary: "Fetch an image region as bytes for visual analysis; --out <file> saves them to disk.",
                   example: `rijks-cli inspect SK-C-5 --region "pct:40,40,15,15" --out crop.jpg` },
 };
+// Invariant: every verb has curated help. Catches a verb added to VERBS but not VERB_HELP at load,
+// instead of as a silent blank summary in --help. (Lets the help renderers drop defensive fallbacks.)
+for (const v of Object.keys(VERBS)) {
+  if (!VERB_HELP[v]?.summary) throw new Error(`VERB_HELP is missing a summary for verb "${v}"`);
+}
 
 // Global flags (consumed by the CLI, never forwarded as tool args). NB: `--compact` is NOT here
 // on purpose — it's only meaningful on the `tools` verb (handled by argv inspection before
@@ -343,7 +348,7 @@ function topUsage() {
     "Commands:",
   ];
   for (const verb of Object.keys(VERBS)) {
-    lines.push(`  ${verb.padEnd(11)} ${VERB_HELP[verb]?.summary ?? ""}`);
+    lines.push(`  ${verb.padEnd(11)} ${VERB_HELP[verb].summary}`);
   }
   lines.push(
     "",
@@ -372,7 +377,7 @@ function clip(text, n) {
   if (s.length <= n) return s;
   const cut = s.slice(0, n);
   const sp = cut.lastIndexOf(" ");
-  return (sp > n * 0.6 ? cut.slice(0, sp) : cut) + "…";
+  return (sp > 0 ? cut.slice(0, sp) : cut) + "…";
 }
 
 // Surface a flag's allowed values (string enum or array-of-enum); inline if short, else punt.
@@ -385,37 +390,29 @@ function enumValues(prop) {
   return joined.length <= 60 ? `{${joined}}` : `{${vals.length} values — see \`tools --json\`}`;
 }
 
-// Schema-derived per-command help: curated summary + live flag list (with enums), the --max
-// alias note, and a worked example. Needs the live inputSchema (a server connection).
+// Per-command help. With a live `tool` (server reachable): curated summary + schema-derived flag
+// list (enums + the --max alias) + a worked example. Without one (`tool` null, no server): the
+// curated summary + positional + example, plus a hint for getting the full flag list.
 function verbHelp(verb, cfg, tool) {
-  const props = tool?.inputSchema?.properties ?? {};
-  const required = new Set(tool?.inputSchema?.required ?? []);
-  const meta = VERB_HELP[verb] ?? {};
-  const lines = [`${verb} → ${cfg.tool}`, ""];
-  lines.push(meta.summary ?? (tool?.description ?? "").split("\n")[0], "");
+  const meta = VERB_HELP[verb];
+  const lines = [`${verb} → ${cfg.tool}`, "", meta.summary, ""];
   if (cfg.pos) lines.push(`Positional: <${cfg.pos}>  (first positional maps to --${cfg.pos})`, "");
-  lines.push("Flags:");
-  for (const [name, prop] of Object.entries(props)) {
-    const req = required.has(name) ? " (required)" : "";
-    const desc = clip(prop?.description, 90);
-    const enums = enumValues(prop);
-    lines.push(`  --${name} <${propType(prop)}>${req}  ${desc}${enums ? "  " + enums : ""}`);
+  if (tool) {
+    const props = tool.inputSchema?.properties ?? {};
+    const required = new Set(tool.inputSchema?.required ?? []);
+    lines.push("Flags:");
+    for (const [name, prop] of Object.entries(props)) {
+      const req = required.has(name) ? " (required)" : "";
+      const desc = clip(prop?.description, 90);
+      const enums = enumValues(prop);
+      lines.push(`  --${name} <${propType(prop)}>${req}  ${desc}${enums ? "  " + enums : ""}`);
+    }
+    if (cfg.image) lines.push("  --out <file>  write the image bytes to disk");
+    if ("maxResults" in props) lines.push("", "Aliases:  --max, -n  → maxResults");
   }
-  if (cfg.image) lines.push("  --out <file>  write the image bytes to disk");
-  if ("maxResults" in props) lines.push("", "Aliases:  --max, -n  → maxResults");
   if (meta.example) lines.push("", "Example:", "  " + meta.example);
-  return lines.join("\n");
-}
-
-// No-server fallback for `<command> --help`: curated summary + positional + example + a hint
-// that the full (schema-derived) flag list needs a built dist/+DBs or a --http server.
-function verbHelpStatic(verb, cfg) {
-  const meta = VERB_HELP[verb] ?? {};
-  const lines = [`${verb} → ${cfg.tool}`, ""];
-  if (meta.summary) lines.push(meta.summary, "");
-  if (cfg.pos) lines.push(`Positional: <${cfg.pos}>  (first positional maps to --${cfg.pos})`, "");
-  if (meta.example) lines.push("Example:", "  " + meta.example, "");
-  lines.push(
+  if (!tool) lines.push(
+    "",
     "(The full flag list is schema-derived and needs a server. Start one with `npm run serve` and",
     " pass `--http <url>`, or build locally — `npm run build` + DBs in data/ — then re-run this.)",
   );
@@ -436,7 +433,8 @@ function toolsDump(toolMap, asJson) {
 // trailing "!" marks a required arg. Orders of magnitude cheaper than `tools --json`.
 function toolsCompact(toolMap) {
   return [...IN_SCOPE_TOOLS].map((name) => {
-    const cfg = VERBS[TOOL_TO_VERB[name]];
+    const verb = TOOL_TO_VERB[name];
+    const cfg = VERBS[verb];
     const schema = toolMap.get(name)?.inputSchema;
     const required = new Set(schema?.required ?? []);
     const args = {};
@@ -444,7 +442,7 @@ function toolsCompact(toolMap) {
       args[k] = propType(prop) + (required.has(k) ? "!" : "");
     }
     const result = cfg.single ? "single" : cfg.image ? "image" : (cfg.list ?? null);
-    const entry = { verb: TOOL_TO_VERB[name], tool: name, positional: cfg.pos ?? null, result, args };
+    const entry = { verb, tool: name, positional: cfg.pos ?? null, result, args };
     if (cfg.page) entry.page = cfg.page;
     return entry;
   });
@@ -498,7 +496,7 @@ async function main() {
   } catch (err) {
     // Per-command help degrades to static verb info + a hint when no server is reachable.
     if (isVerbHelp) {
-      process.stdout.write(verbHelpStatic(verb, cfg) + "\n");
+      process.stdout.write(verbHelp(verb, cfg, null) + "\n");
       return;
     }
     process.stderr.write(`Connection failed: ${err?.message ?? err}\n`);
