@@ -33,8 +33,12 @@ function section(name) {
 
 /** Run the CLI; resolve with {code, stdout, stderr} (never rejects). */
 function runCli(args, timeout = 90000) {
+  // These are stdio smoke tests. Strip RIJKS_MCP_HTTP (the docs recommend exporting it, so it's
+  // commonly set in dev shells / agents) so an exported Railway URL can't hijack the stdio path.
+  // Tests that need HTTP pass --http explicitly, which overrides the env var inside the CLI.
+  const { RIJKS_MCP_HTTP, ...env } = process.env;
   return new Promise((resolve) => {
-    execFile("node", [CLI, ...args], { cwd: PROJECT_ROOT, timeout, maxBuffer: 64 * 1024 * 1024 },
+    execFile("node", [CLI, ...args], { cwd: PROJECT_ROOT, timeout, maxBuffer: 64 * 1024 * 1024, env },
       (err, stdout, stderr) => {
         resolve({ code: err?.code ?? 0, killed: !!err?.killed, stdout: stdout ?? "", stderr: stderr ?? "" });
       });
@@ -202,6 +206,18 @@ section("12. <command> --help with no reachable server");
   assert(r.code === 0, `exit 0 (got ${r.code})`);
   assert(/search → search_artwork/.test(r.stdout), "static verb header rendered");
   assert(/Example:/.test(r.stdout) && /schema-derived and needs a server/.test(r.stdout), "example + schema-needs-server hint");
+}
+
+// ── 13. `tools --help` is offline-safe (built-in command, static help) ──────────
+section("13. tools --help is offline-safe");
+{
+  // `tools` isn't in VERBS, but it's advertised in the usage — its --help must render
+  // statically, not connect (a dead --http must not surface as "Connection failed").
+  const r = await runCli(["--http", "http://127.0.0.1:1/mcp", "tools", "--help"]);
+  assert(r.code === 0, `exit 0 (got ${r.code})`);
+  assert(!/Connection failed/.test(r.stderr), "no connection attempt (stderr clean)");
+  assert(/Usage: rijks-cli tools \[--compact\|--json\]/.test(r.stdout), "static tools usage printed");
+  assert(/--compact/.test(r.stdout) && /--json/.test(r.stdout), "documents both output modes");
 }
 
 // ── Summary ─────────────────────────────────────────────────────────────────────

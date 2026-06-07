@@ -419,6 +419,23 @@ function verbHelp(verb, cfg, tool) {
   return lines.join("\n");
 }
 
+// Static help for the built-in `tools` command (advertised in topUsage). Describes the three
+// output modes; like the other help paths it renders without connecting to a server.
+function toolsHelp() {
+  return [
+    "tools — list the in-scope tool capabilities (introspection; not a real tool call)",
+    "",
+    "Usage: rijks-cli tools [--compact|--json]",
+    "",
+    "  (default)   verb → tool-name table",
+    "  --compact   compact capability manifest (agent bootstrap): one entry per tool —",
+    "              verb, tool, positional, result shape, paging, args as name→type (`!` = required)",
+    "  --json      full input + output JSON Schema per tool (deep introspection)",
+    "",
+    "All three read the live schema, so they need a server: --http <url>, or a built dist/ + DBs in data/.",
+  ].join("\n");
+}
+
 function toolsDump(toolMap, asJson) {
   const tools = [...IN_SCOPE_TOOLS].map((name) => {
     const t = toolMap.get(name);
@@ -477,6 +494,12 @@ async function main() {
   // real tool calls touch the server.
   if (isTopHelp) {
     process.stdout.write(topUsage() + "\n");
+    return;
+  }
+
+  // `tools` is a built-in (not in VERBS) but advertised in the usage — its --help is static too.
+  if (wantsHelp && verb === "tools") {
+    process.stdout.write(toolsHelp() + "\n");
     return;
   }
 
