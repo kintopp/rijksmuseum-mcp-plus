@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings, type CollectionStatsResult } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings, type CollectionStatsResult, type InscriptionSearchParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -23,6 +23,7 @@ import axios from "axios";
 import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
 import { parseProvenance } from "./provenance.js";
+import { parseInscriptions, summarizeInscriptions, type ParsedInscription, type InscriptionSummary } from "./inscriptions.js";
 import { compositeOverlays, computeCropRect, readImageDimensions } from "./overlay-compositor.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,6 +58,7 @@ const TOOL_LIMITS = {
   search_persons:      { max: 100, default: 25 },
   semantic_search:     { max: 50,  default: 15 },
   search_provenance:   { max: 50,  default: 1 },
+  search_inscriptions: { max: 100, default: 20 },
   browse_set:          { max: 50,  default: 10 },
   get_recent_changes:  { max: 50,  default: 10 },
   find_similar:        { max: 50,  default: 20 },
@@ -372,7 +374,11 @@ interface ProvenanceChainEvent {
   date: { year: number | null; text: string } | null;
   price: { currency: string; amount: number | null; text: string } | null;
 }
-type DetailWithChain = (InferOutput<typeof ArtworkDetailOutput> | ArtworkDetailFromDb) & { provenanceChain?: ProvenanceChainEvent[] | null };
+type DetailWithChain = (InferOutput<typeof ArtworkDetailOutput> | ArtworkDetailFromDb) & {
+  provenanceChain?: ProvenanceChainEvent[] | null;
+  parsedInscriptions?: ParsedInscription[];
+  inscriptionSummary?: InscriptionSummary;
+};
 
 /** Format artwork detail as a compact key-value summary for LLM content (Tier 3). */
 function formatDetailSummary(d: DetailWithChain): string {
@@ -417,6 +423,16 @@ function formatDetailSummary(d: DetailWithChain): string {
   if (d.curatorialNarrative.en) lines.push(`[Narrative] ${d.curatorialNarrative.en}`);
   else if (d.curatorialNarrative.nl) lines.push(`[Narrative] ${d.curatorialNarrative.nl}`);
   if (d.inscriptions.length) lines.push(`[Inscriptions] ${d.inscriptions.join("; ")}`);
+  // Inscription notes — separate artwork-borne text from ownership-stamp boilerplate
+  // for clients that read the text channel rather than structuredContent.
+  if (d.inscriptionSummary) {
+    const isum = d.inscriptionSummary;
+    const bits: string[] = [];
+    if (isum.hasTranscribedText) bits.push("bears transcribed text");
+    else if (isum.hasCollectorMarkOnly) bits.push("collector's marks only — no transcribed text");
+    if (isum.collectorMarks.length) bits.push(`marks: ${isum.collectorMarks.join(", ")}`);
+    if (bits.length) lines.push(`[Inscription notes] ${bits.join("; ")}`);
+  }
   if (d.provenance) lines.push(`[Provenance] ${d.provenance}`);
   if (d.provenanceChain?.length) {
     const evts = d.provenanceChain;
@@ -951,6 +967,31 @@ const ArtworkDetailOutput = {
     .describe("Parsed provenance events derived from the raw `provenance` string via the project's PEG parser. Null when no provenance text is available. Clients can re-derive counts, gaps, year spans, transfer-type histograms, and earliest-known-owner from this array; the text channel renders a summary built from the same data."),
   creditLine: z.string().nullable(),
   inscriptions: z.array(z.string()),
+  parsedInscriptions: z.array(z.object({
+    sequence: z.number().int(),
+    raw: z.string(),
+    language: z.enum(["nl", "en", "unknown"]).describe("Inferred only from which vocabulary the type/qualifier tokens came from; value-only and collector-mark-only segments are legitimately 'unknown'."),
+    type: z.string().nullable().describe("Raw type token as catalogued (first comma-field of the header)."),
+    normalizedType: z.string().nullable().describe("Canonical type bucket (e.g. \"collector's mark\", \"signature\", \"inscription\", \"number\"), or null when the raw token is outside the documented set. Open string, not a closed enum — preserve raw `type` alongside."),
+    placement: z.string().nullable().describe("Raw placement qualifier text (e.g. \"verso linksonder\")."),
+    normalizedPlacement: z.string().nullable().describe("Coarse surface bucket: \"recto\" | \"verso\" | null. Finer positions stay in raw `placement`."),
+    technique: z.string().nullable().describe("Raw technique qualifier text (e.g. \"gestempeld\")."),
+    normalizedTechnique: z.string().nullable().describe("Canonical technique bucket (e.g. \"stamped\", \"handwritten\", \"printed\"), or null."),
+    value: z.string().nullable().describe("Raw post-colon text; null when the segment is a bare type label."),
+    transcribedText: z.array(z.string()).describe("Quoted strings only — text actually transcribed *on* the work (signatures, captions, dates). Empty does NOT mean the object bears no text: coverage is uneven by object type (high for prints, low for coins/medals/posters)."),
+    collectorMarks: z.array(z.object({ catalogue: z.string(), number: z.string() })).describe("Collector-mark catalogue references (Lugt N) found in the value."),
+    unknownQualifiers: z.array(z.string()).describe("Header comma-fields that matched no known placement/technique vocabulary."),
+    isCollectorMark: z.boolean(),
+    isPlaceholder: z.boolean().describe("Type-label-only row with no value/quote/mark (e.g. `datum | date`) — a data-entry placeholder, not artwork-borne text."),
+  })).describe("Structured parse of the raw `inscriptions` blob (each physical mark is recorded twice — a detailed Dutch form and an English gloss; both are preserved here losslessly, one entry per segment). This is catalogue-entered inscription/mark data — NOT OCR and NOT an exhaustive transcription of visible text. The field is dominated by verso collector's-mark stamps; the artist-/image-applied text is a real but minority component. Use transcribedText to find what is actually written on the work; use isCollectorMark/isPlaceholder to filter ownership-stamp boilerplate."),
+  inscriptionSummary: z.object({
+    hasTranscribedText: z.boolean().describe("At least one segment carries a quoted transcription."),
+    hasCollectorMarkOnly: z.boolean().describe("Has collector marks and no transcribed text — pure ownership-stamp boilerplate."),
+    collectorMarks: z.array(z.string()).describe("Deduped collector marks (e.g. \"Lugt 2228\")."),
+    types: z.array(z.string()).describe("Distinct normalized types present."),
+    placements: z.array(z.string()).describe("Distinct normalized placements present (recto/verso)."),
+    techniques: z.array(z.string()).describe("Distinct normalized techniques present."),
+  }).describe("Per-artwork rollup over parsedInscriptions — lets a client distinguish 'object bears text' from 'verso collector stamp boilerplate' at a glance."),
   location: z.object({
     roomId: z.string(),
     floor: z.string().nullable(),
@@ -2159,8 +2200,15 @@ function registerTools(
           }))
         : null;
 
-      const text = formatDetailSummary({ ...detail, provenanceChain });
-      return structuredResponse({ ...detail, provenanceChain }, text);
+      // Runtime inscription parse (issue #383) — lossless per-segment structure
+      // plus a rollup. Same hybrid shape as provenanceChain: parsed here from the
+      // already-split `inscriptions` segments, no harvest dependency.
+      const parsedInscriptions = parseInscriptions(detail.inscriptions);
+      const inscriptionSummary = summarizeInscriptions(parsedInscriptions);
+
+      const enriched = { ...detail, provenanceChain, parsedInscriptions, inscriptionSummary };
+      const text = formatDetailSummary(enriched);
+      return structuredResponse(enriched, text);
     })
   );
 
@@ -3694,6 +3742,136 @@ function registerTools(
         const data: InferOutput<typeof ProvenanceSearchOutput> = result;
         return structuredResponse(data, lines.join("\n"));
       })
+    );
+  }
+
+  // ── search_inscriptions (structured inscription search — issue #383) ──
+
+  const InscriptionSearchOutput = {
+    totalCandidates: z.number().int()
+      .describe("FTS candidates before parse-confirm — the Stage-A narrow count. A large value with few confirmed results means the facet combo was broad; add a narrowing term."),
+    candidatesCapped: z.boolean()
+      .describe("True when candidates exceeded the internal parse cap, so results are PARTIAL. Narrow the query (add transcribedText, collectorMark, or another facet) for complete results."),
+    totalConfirmed: z.number().int()
+      .describe("Artworks confirmed after parsing the candidate window. Page through with offset/maxResults."),
+    results: z.array(z.object({
+      objectNumber: z.string(),
+      title: z.string(),
+      creator: z.string(),
+      date: z.string().optional(),
+      url: z.string(),
+      matchedInscriptions: z.array(z.object({
+        normalizedType: z.string().nullable()
+          .describe("Canonical type bucket (open string, not a closed enum), or null when outside the documented set."),
+        value: z.string().nullable()
+          .describe("Normalized transcribed value; null for value-less marks (collector marks, placeholders)."),
+        collectorMark: z.object({ catalogue: z.string(), number: z.string() }).optional(),
+        occurrences: z.array(z.object({
+          placement: z.string().nullable().describe("recto | verso | null."),
+          technique: z.string().nullable(),
+          language: z.string().describe("nl | en | unknown."),
+        })).describe("One entry per distinct physical mark. The NL detail and EN gloss of a single mark are merged; a mark stamped on both recto and verso yields two occurrences."),
+        raw: z.array(z.string()).describe("Underlying raw segments — honest provenance of the match."),
+      })).describe("The inscription segments that matched, gloss-deduped — shows exactly why this artwork matched."),
+    })),
+    warnings: z.array(z.string()).optional(),
+  };
+
+  if (vocabAvailable && vocabDb!.hasTextSearch) {
+    server.registerTool(
+      "search_inscriptions",
+      {
+        title: "Search Inscriptions (Marks, Signatures, Transcribed Text)",
+        annotations: ANN_READ_CLOSED,
+        description:
+          "Structured search over artwork inscriptions — collector's marks, signatures, dates, numbers, and transcribed text — " +
+          "parsed at query time from the catalogue's `inscription_text` field.\n\n" +
+          "IMPORTANT — what this field is: catalogue-entered inscription/mark data, NOT OCR and NOT an exhaustive transcription of " +
+          "visible text. It is dominated by VERSO collector's-mark stamps (the Rijksprentenkabinet's own mark and former-owner stamps " +
+          "account for a large share of all records); genuine artist-/image-applied text (signatures, captions, addresses) is a real but " +
+          "MINORITY component. Coverage is uneven by object type: high for prints and drawings, low for coins, medals, and posters that are " +
+          "covered in legend text never entered here. An empty transcribedText does NOT mean the object bears no text.\n\n" +
+          "Use transcribedText to find what is actually written ON the work (matched against the quoted strings only). " +
+          "Use collectorMark to find works bearing a given Lugt number (e.g. 'Lugt 240' or '240'). " +
+          "Combine inscriptionType / placement / technique for facet queries (e.g. a handwritten signature on the recto). " +
+          "Use excludeCollectorMarkOnly or hasTranscribedText:true to strip ownership-stamp boilerplate. " +
+          "Use text for a blunt full-text match over the whole inscription blob.\n\n" +
+          "Each result carries matchedInscriptions — the segments that matched, with the NL/EN gloss merged — so you can see exactly why " +
+          "it matched. Facets combine within a single segment (a signature AND recto AND handwritten must be the same mark).\n\n" +
+          "Runtime parse with no derived index: a query must include at least one narrowing filter, and a broad single facet " +
+          "(e.g. inscriptionType:\"collector's mark\", roughly half the corpus) will trip the candidate cap and return PARTIAL results " +
+          "(candidatesCapped:true) — add a narrowing term. For free-text keyword search across the whole catalogue use search_artwork; " +
+          "search_artwork({inscription}) is a raw FTS over the same field, whereas this tool adds the structured facets and gloss-deduped matches.",
+        inputSchema: z.object({
+          text: optMinStr().describe("Blunt full-text match over the entire inscription_text blob (all segments, marks included). Use transcribedText for on-object text only."),
+          transcribedText: optMinStr().describe("Find works whose transcribed (quoted) text contains this string — signatures, captions, dates actually written on the work. Substring match, case-insensitive."),
+          inscriptionType: z.preprocess(
+            normalizeStringOrArray,
+            z.union([z.string(), z.array(z.string())]).optional(),
+          ).describe("Normalized inscription type (single or array, OR-combined). Documented values include: collector's mark, signature, signature and date, inscription, annotation, number, date, title, name, monogram, watermark, stamp, maker's mark, seal, circumscription. Open set — values outside this list (including Dutch surface forms like 'signatuur') are matched against the raw catalogued type token and used as a literal FTS narrowing term."),
+          placement: z.preprocess(
+            normalizeStringOrArray,
+            z.union([z.string(), z.array(z.string())]).optional(),
+          ).describe("Surface placement: 'recto' or 'verso' (single or array). ~⅔ of inscriptions are on the verso (stamps & annotations)."),
+          technique: z.preprocess(
+            normalizeStringOrArray,
+            z.union([z.string(), z.array(z.string())]).optional(),
+          ).describe("Normalized technique (single or array, OR-combined). Documented values include: stamped, handwritten, printed, engraved, etched, pencil, pen, chalk, embossed, struck, typed."),
+          collectorMark: optMinStr().describe("Lugt collector-mark catalogue reference — 'Lugt 240', 'Lugt 2228', or just the number '240'. Matches works bearing that mark."),
+          hasTranscribedText: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+            .describe("If true, only works with at least one transcribed (quoted) string. If false, only works without."),
+          excludeCollectorMarkOnly: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+            .describe("If true, drop works whose inscriptions are pure collector-mark boilerplate (marks but no transcribed text)."),
+          isPlaceholder: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+            .describe("Filter on type-label-only placeholder rows (e.g. `datum | date` with no value). true = only matches that are placeholders; false = exclude placeholder-only matches."),
+          offset: z.preprocess(stripNull, z.number().int().min(0).default(0).optional())
+            .describe("Skip this many confirmed artworks (pagination)."),
+          maxResults: z.preprocess(stripNull,
+            z.number().int().min(1).max(TOOL_LIMITS.search_inscriptions.max).default(TOOL_LIMITS.search_inscriptions.default).optional(),
+          ).describe(`Maximum artworks to return (1–${TOOL_LIMITS.search_inscriptions.max}, default ${TOOL_LIMITS.search_inscriptions.default}).`),
+        }).strict(),
+        ...withOutputSchema(InscriptionSearchOutput),
+      },
+      withLogging("search_inscriptions", async (args: Record<string, unknown>) => {
+        const params: InscriptionSearchParams = {
+          maxResults: (args.maxResults as number | undefined) ?? TOOL_LIMITS.search_inscriptions.default,
+        };
+        if (args.text) params.text = args.text as string;
+        if (args.transcribedText) params.transcribedText = args.transcribedText as string;
+        if (args.inscriptionType) params.inscriptionType = args.inscriptionType as string | string[];
+        if (args.placement) params.placement = args.placement as string | string[];
+        if (args.technique) params.technique = args.technique as string | string[];
+        if (args.collectorMark) params.collectorMark = args.collectorMark as string;
+        if (args.hasTranscribedText != null) params.hasTranscribedText = args.hasTranscribedText as boolean;
+        if (args.excludeCollectorMarkOnly != null) params.excludeCollectorMarkOnly = args.excludeCollectorMarkOnly as boolean;
+        if (args.isPlaceholder != null) params.isPlaceholder = args.isPlaceholder as boolean;
+        if (args.offset != null) params.offset = args.offset as number;
+
+        const result = vocabDb!.searchInscriptions(params);
+
+        const lines: string[] = [];
+        if (result.candidatesCapped) {
+          lines.push(`${result.totalCandidates.toLocaleString()} candidates matched (partial — only the first window was parsed); ${result.totalConfirmed.toLocaleString()} confirmed so far.`);
+        } else {
+          lines.push(`${pluralize(result.totalConfirmed, "artwork")} with matching inscriptions (from ${result.totalCandidates.toLocaleString()} text candidates).`);
+        }
+        for (const r of result.results) {
+          lines.push("");
+          lines.push(`${r.objectNumber} | "${r.title}" — ${r.creator}${r.date ? ` (${r.date})` : ""}`);
+          lines.push(`  ${r.url}`);
+          for (const m of r.matchedInscriptions) {
+            const where = m.occurrences
+              .map(o => [o.placement, o.technique].filter(Boolean).join(" "))
+              .filter(Boolean);
+            const label = m.collectorMark ? `${m.collectorMark.catalogue} ${m.collectorMark.number}` : (m.value ?? "(no value)");
+            const typ = m.normalizedType ? `${m.normalizedType}: ` : "";
+            lines.push(`  • ${typ}${label}${where.length ? ` [${[...new Set(where)].join("; ")}]` : ""}`);
+          }
+        }
+
+        const data: InferOutput<typeof InscriptionSearchOutput> = result;
+        return structuredResponse(data, lines.join("\n"));
+      }),
     );
   }
 

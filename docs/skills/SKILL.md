@@ -51,6 +51,8 @@ metadata:
 | "Which works passed through collector X?"                                     | `search_provenance` with `party`                                                                                     |
 | "Find confiscations / sales / transfers in city Y"                            | `search_provenance` with `transferType`, `location`                                                                  |
 | "How long did family X hold their collection?"                                | `search_provenance` with `layer: "periods"`, `ownerName`                                                             |
+| "Works bearing collector mark / Lugt N, or a handwritten signature on the recto" | `search_inscriptions` with `collectorMark` / facet combo (`inscriptionType`, `placement`, `technique`)           |
+| "What is actually written/signed on this work?"                               | `get_artwork_details` → `parsedInscriptions` / `inscriptionSummary`, or `search_inscriptions` with `transcribedText` |
 
 
 **Choosing between `search_artwork` (provenance-aware filters) and `search_provenance`:**
@@ -220,6 +222,17 @@ search_artwork(textQuery={
 ```
 
 If a `textQuery` is malformed (e.g. `mustNot` with no positive clause), it is dropped with a `warnings` note rather than failing the search.
+
+### Inscriptions: `search_inscriptions` vs `search_artwork({inscription})`
+
+The inscription field is best understood as a conservator's **mark-and-annotation log**, not a transcription of everything visible on the work. It is dominated by **verso collector's-mark stamps** (the print room's own mark and former-owner stamps make up a large share of all records); genuine artist-/image-applied text — signatures, captions, printers' addresses, dates — is a real but **minority** component. Each physical mark is usually recorded **twice**: a detailed Dutch form carrying placement and technique, and an English gloss. Coverage is **uneven by object type** — high for prints and drawings, low for coins, medals, and posters that are *covered in* legend text never entered here. **An empty `transcribedText` does not mean the object bears no text.**
+
+Two tools touch this field:
+
+- `search_artwork({inscription})` is a raw BM25 full-text match over the whole inscription blob (marks included) — good for a quick keyword sweep.
+- `search_inscriptions` parses the field at query time and adds structure: filter by `inscriptionType` (collector's mark / signature / inscription / number / …), `placement` (recto/verso), `technique` (stamped / handwritten / printed / …), or `collectorMark` (a Lugt number); match `transcribedText` against the quoted on-object strings only; strip ownership-stamp boilerplate with `excludeCollectorMarkOnly` or `hasTranscribedText`. Results carry `matchedInscriptions` (the matching segments, with the Dutch/English gloss merged) so you can see exactly why a work matched. Facets combine **within a single mark** (a handwritten signature on the recto must be one segment, not three coincidental ones).
+
+`search_inscriptions` parses candidates at runtime, so it needs **at least one narrowing filter**, and a single broad facet (e.g. `inscriptionType: "collector's mark"`, roughly half the corpus) returns a **partial** result (`candidatesCapped: true`) — add a narrowing term. For a single work, `get_artwork_details` already returns `parsedInscriptions` (lossless, per-segment) and an `inscriptionSummary` rollup (`hasTranscribedText`, `hasCollectorMarkOnly`, collector marks, types) — use these to tell "object bears text" from "verso collector stamp" at a glance.
 
 ---
 

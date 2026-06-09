@@ -1148,6 +1148,7 @@ section("8. Schema surface — no $ref");
     semantic_search:       ANN_READ_CLOSED,
     find_similar:          ANN_READ_CLOSED,
     search_provenance:     ANN_READ_CLOSED,
+    search_inscriptions:   ANN_READ_CLOSED,
     get_recent_changes:    ANN_READ_CLOSED,
     list_curated_sets:     ANN_READ_CLOSED,
     browse_set:            ANN_READ_CLOSED,

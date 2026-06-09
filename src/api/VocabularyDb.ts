@@ -2,6 +2,15 @@ import Database, { type Database as DatabaseType, type Statement } from "better-
 import { escapeFts5, escapeFts5Token, expandFtsQuery, compileTextQuery, TEXT_QUERY_FIELD_COLUMNS, resolveDbPath } from "../utils/db.js";
 import { lruGetOrCreate } from "../utils/lru.js";
 import type { TextQueryDsl } from "../utils/db.js";
+import {
+  parseInscriptions,
+  groupInscriptionMatches,
+  inscriptionMatchesFacets,
+  INSCRIPTION_TYPE_TOKENS,
+  INSCRIPTION_TECHNIQUE_TOKENS,
+  INSCRIPTION_PLACEMENT_TOKENS,
+  type InscriptionMatch,
+} from "../inscriptions.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -538,6 +547,43 @@ export interface CreditLineFallbackResult {
   totalArtworks: number;
   totalArtworksCapped?: boolean;
   results: CreditLineFallbackRow[];
+}
+
+// ─── Inscription search types (issue #383, Stage A) ─────────────────
+
+export interface InscriptionSearchParams {
+  text?: string;
+  transcribedText?: string;
+  inscriptionType?: StringOrArray;
+  placement?: StringOrArray;
+  technique?: StringOrArray;
+  collectorMark?: string;
+  hasTranscribedText?: boolean;
+  excludeCollectorMarkOnly?: boolean;
+  isPlaceholder?: boolean;
+  maxResults?: number;
+  offset?: number;
+}
+
+export interface InscriptionArtworkResult {
+  objectNumber: string;
+  title: string;
+  creator: string;
+  date?: string;
+  url: string;
+  matchedInscriptions: InscriptionMatch[];
+}
+
+export interface InscriptionSearchResult {
+  /** FTS candidates before parse-confirm (the Stage-A narrow count). */
+  totalCandidates: number;
+  /** True when candidates exceeded the parse cap — results are partial (R1). */
+  candidatesCapped: boolean;
+  /** Confirmed artworks after parsing (post-offset/maxResults page). */
+  results: InscriptionArtworkResult[];
+  /** Total confirmed artworks across the parsed candidate window (for paging). */
+  totalConfirmed: number;
+  warnings?: string[];
 }
 
 // ─── Collection stats types ─────────────────────────────────────────
@@ -1601,6 +1647,11 @@ export class VocabularyDb {
 
   get hasProvenancePeriods(): boolean {
     return this.hasProvenancePeriods_;
+  }
+
+  /** True when the text FTS index exists — gates search_inscriptions (issue #383). */
+  get hasTextSearch(): boolean {
+    return this.hasTextFts;
   }
 
   /** Check if an index exists and warn if missing. */
@@ -6431,6 +6482,145 @@ export class VocabularyDb {
 
     const capped = totalArtworks >= PROVENANCE_COUNT_CAP;
     return { totalArtworks, totalArtworksCapped: capped || undefined, results };
+  }
+
+  /**
+   * Stage-A runtime inscription search (issue #383). FTS-narrows on inscription_text
+   * using inverse-expanded facet tokens + free text, then parses ONLY the candidate
+   * rows and confirms the structured facets per-segment. No derived table — gated by
+   * hasTextFts so it degrades to "not supported" rather than throwing.
+   *
+   * R1: governed by candidate-set SIZE, not by whether free text was supplied. A
+   * selective facet combo works even with no free text; a broad single facet
+   * (e.g. type:"collector's mark" ≈ half the corpus) trips the parse cap and returns
+   * a partial result with a warning — that same count is the empirical Stage-B trigger.
+   */
+  searchInscriptions(params: InscriptionSearchParams): InscriptionSearchResult {
+    const empty = (warnings?: string[]): InscriptionSearchResult =>
+      ({ totalCandidates: 0, candidatesCapped: false, results: [], totalConfirmed: 0, ...(warnings && { warnings }) });
+    if (!this.db) return empty();
+    if (!this.hasTextFts) {
+      return empty(["search_inscriptions requires the text FTS index (vocabulary DB v1.0+). Not supported on this server."]);
+    }
+
+    const warnings: string[] = [];
+    const maxResults = Math.min(params.maxResults ?? 20, 100);
+    const offset = Math.max(params.offset ?? 0, 0);
+    // Latency guard on the runtime parse. Sized so realistic multi-facet combos
+    // (e.g. signature + recto + handwritten ≈ 16K FTS candidates) complete fully
+    // (~0.7s), while a broad single facet (collector's mark ≈ half the corpus)
+    // still trips it and returns a partial result with a warning (R1). Sustained
+    // hits on this cap are the empirical signal that Stage B (a derived index) is
+    // earned.
+    const PARSE_CAP = 20000;
+
+    const asArray = (v?: StringOrArray): string[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+    const types = asArray(params.inscriptionType);
+    const placements = asArray(params.placement);
+    const techniques = asArray(params.technique);
+
+    // ── Build the FTS narrow (R2: inverse-expand normalised facets to surface tokens) ──
+    const ftsGroups: string[] = [];
+    const facetGroup = (values: string[], inverse: Map<string, string[]>): string | null => {
+      const phrases: string[] = [];
+      for (const v of values) {
+        const tokens = inverse.get(v) ?? [v]; // unknown facet value → literal passthrough
+        for (const tok of tokens) {
+          const p = escapeFts5(tok);
+          if (p) phrases.push(p);
+        }
+      }
+      return phrases.length ? `(${[...new Set(phrases)].join(" OR ")})` : null;
+    };
+
+    const typeG = facetGroup(types, INSCRIPTION_TYPE_TOKENS);
+    const placeG = facetGroup(placements, INSCRIPTION_PLACEMENT_TOKENS);
+    const techG = facetGroup(techniques, INSCRIPTION_TECHNIQUE_TOKENS);
+    if (typeG) ftsGroups.push(typeG);
+    if (placeG) ftsGroups.push(placeG);
+    if (techG) ftsGroups.push(techG);
+
+    if (params.collectorMark) {
+      // "Lugt 2228" / "2228" → phrase "Lugt 2228" when numeric, else literal.
+      const num = params.collectorMark.match(/(\d+[a-z]?)/i)?.[1];
+      const cm = escapeFts5(num ? `Lugt ${num}` : params.collectorMark);
+      if (cm) ftsGroups.push(cm);
+    }
+    if (params.text) {
+      const p = escapeFts5(params.text);
+      if (p) ftsGroups.push(p);
+    }
+    if (params.transcribedText) {
+      const p = escapeFts5(params.transcribedText);
+      if (p) ftsGroups.push(p);
+    }
+
+    if (ftsGroups.length === 0) {
+      return empty(["Provide at least one narrowing filter: text, transcribedText, collectorMark, inscriptionType, placement, or technique."]);
+    }
+    const ftsQuery = ftsGroups.join(" AND ");
+
+    // ── Candidate count (Stage-A narrow; the empirical Stage-B trigger signal) ──
+    const totalCandidates = (this.db.prepare(
+      "SELECT COUNT(*) AS n FROM artwork_texts_fts WHERE inscription_text MATCH ?",
+    ).get(ftsQuery) as { n: number }).n;
+    if (totalCandidates === 0) return { totalCandidates: 0, candidatesCapped: false, results: [], totalConfirmed: 0 };
+
+    const candidatesCapped = totalCandidates > PARSE_CAP;
+    if (candidatesCapped) {
+      warnings.push(
+        `Matched ${totalCandidates.toLocaleString()} candidates; only the first ${PARSE_CAP.toLocaleString()} were parsed. ` +
+        "Add a narrowing term (transcribedText, collectorMark, or an extra facet) for complete results.",
+      );
+    }
+
+    // ── Fetch bounded candidate rows and parse-confirm (FTS drives; no hang risk) ──
+    const rows = this.db.prepare(`
+      SELECT a.art_id, a.object_number, a.title, a.title_all_text, a.creator_label,
+             a.date_earliest, a.date_latest, a.date_display, a.inscription_text
+      FROM artwork_texts_fts fts
+      JOIN artworks a ON a.rowid = fts.rowid
+      WHERE fts.inscription_text MATCH ?
+      LIMIT ?
+    `).all(ftsQuery, PARSE_CAP) as {
+      art_id: number; object_number: string; title: string | null; title_all_text: string | null;
+      creator_label: string | null; date_earliest: number | null; date_latest: number | null;
+      date_display: string | null; inscription_text: string | null;
+    }[];
+
+    const facets = { types, placements, techniques, collectorMark: params.collectorMark, transcribedText: params.transcribedText };
+    const confirmed: InscriptionArtworkResult[] = [];
+    for (const r of rows) {
+      const parsed = parseInscriptions(r.inscription_text);
+      const matching = parsed.filter((seg) => inscriptionMatchesFacets(seg, facets));
+      if (matching.length === 0) continue;
+
+      // Artwork-level rollup predicates.
+      const anyTranscribed = parsed.some((s) => s.transcribedText.length > 0);
+      const anyMark = parsed.some((s) => s.isCollectorMark);
+      if (params.hasTranscribedText === true && !anyTranscribed) continue;
+      if (params.hasTranscribedText === false && anyTranscribed) continue;
+      if (params.excludeCollectorMarkOnly === true && anyMark && !anyTranscribed) continue;
+      if (params.isPlaceholder === true && !matching.some((s) => s.isPlaceholder)) continue;
+      if (params.isPlaceholder === false && matching.every((s) => s.isPlaceholder)) continue;
+
+      confirmed.push({
+        objectNumber: r.object_number,
+        title: VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled"),
+        creator: r.creator_label ?? "",
+        date: r.date_display ?? formatDateRange(r.date_earliest, r.date_latest) ?? undefined,
+        url: `https://www.rijksmuseum.nl/en/collection/${r.object_number}`,
+        matchedInscriptions: groupInscriptionMatches(matching),
+      });
+    }
+
+    return {
+      totalCandidates,
+      candidatesCapped,
+      totalConfirmed: confirmed.length,
+      results: confirmed.slice(offset, offset + maxResults),
+      ...(warnings.length > 0 && { warnings }),
+    };
   }
 
 }
