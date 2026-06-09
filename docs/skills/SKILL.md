@@ -1,20 +1,10 @@
 ---
 name: rijksmuseum-mcp-plus
 description: >
-  Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts,
-  crafts, and history across the museum's full holdings. Capabilities include keyword and
-  semantic search, geospatial queries, deep-zoom inspection, collection
-  statistics, AI-driven image analysis, Iconclass-driven iconographic
-  discovery, AAM/CMOA-aligned provenance, demographic analysis of creators
-  and depicted persons, and image similarity research. Trigger on any
-  question that could plausibly be answered from the Rijksmuseum's
-  holdings — Golden Age Dutch and Flemish painting, prints and drawings,
-  Asian export art, decorative arts and craft objects, photography,
-  historical artefacts, ownership history, museum acquisitions — even when
-  the user doesn't name the collection.
+  Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings even when the user doesn't name the collection.
 metadata:
   version: "0.60"
-  last_updated: "2026-09-03"
+  last_updated: "2026-06-09"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -75,17 +65,6 @@ These rules govern how to present results regardless of which tool produced them
 ---
 
 ## Critical Parameter Distinctions
-
-### `productionPlace` vs `depictedPlace`
-
-These are semantically opposite and getting them wrong produces systematically
-wrong results.
-
-- `productionPlace`: where the object was **made** — "Amsterdam", "Delft"
-- `depictedPlace`: what place the object **shows** — "Batavia", "Nagasaki"
-
-A Dutch painting *of* Batavia was made in Amsterdam. Use both together to
-distinguish objects *from* Asia versus European images *of* Asia.
 
 ### `subject` vs `iconclass`
 
