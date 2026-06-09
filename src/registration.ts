@@ -42,8 +42,8 @@ const ANN_VIEWER = { readOnlyHint: false, destructiveHint: false, idempotentHint
  * Per-tool result limits. Defaults reflect payload weight:
  * - 25: lightweight per-result data (title, creator, date, score)
  * -  1: very heavy per-result data (full provenance chains with events, parties, prices)
- * - 10: heavy per-result data (full OAI-PMH records)
- * - 15: medium (semantic scores plateau ~15)
+ * - 10: heavy records — full OAI-PMH/EDM records (get_recent_changes), or DB-backed records carrying a per-record description (browse_set)
+ * - 15: medium — semantic scores plateau ~15, plus a reconstructed sourceText block per result
  * - 20: enriched comparisons (similarity signals)
  *
  * collection_stats returns compact text tables — high default + max for comprehensive distributions.
