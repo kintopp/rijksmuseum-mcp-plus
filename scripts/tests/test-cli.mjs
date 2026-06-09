@@ -54,9 +54,9 @@ section("1. tools --json");
   assert(r.code === 0, "exit 0");
   let tools = [];
   try { tools = JSON.parse(r.stdout); } catch { /* fail below */ }
-  assert(Array.isArray(tools) && tools.length === 11, `11 in-scope tools (got ${tools.length})`);
+  assert(Array.isArray(tools) && tools.length === 12, `12 in-scope tools (got ${tools.length})`);
   const names = new Set(tools.map((t) => t.name));
-  assert(names.has("search_artwork") && names.has("find_similar"), "includes search_artwork + find_similar");
+  assert(names.has("search_artwork") && names.has("find_similar") && names.has("search_inscriptions"), "includes search_artwork + find_similar + search_inscriptions");
   const viewer = ["get_artwork_image", "navigate_viewer", "remount_viewer", "poll_viewer_commands"];
   assert(viewer.every((v) => !names.has(v)), "excludes all 4 viewer/stateful tools");
   assert(tools.every((t) => t.inputSchema && typeof t.inputSchema === "object"), "each entry carries an inputSchema");
@@ -150,7 +150,7 @@ section("9. tools --compact");
   assert(r.code === 0, "exit 0");
   let manifest = [];
   try { manifest = JSON.parse(r.stdout); } catch { /* fail below */ }
-  assert(Array.isArray(manifest) && manifest.length === 11, `11 in-scope tools (got ${manifest.length})`);
+  assert(Array.isArray(manifest) && manifest.length === 12, `12 in-scope tools (got ${manifest.length})`);
   const search = manifest.find((m) => m.tool === "search_artwork");
   assert(search && search.verb === "search" && search.positional === "query", "search entry: verb + positional");
   assert(search && search.result === "results" && search.page === "offset", "search entry: result/list key + paging");
@@ -218,6 +218,27 @@ section("13. tools --help is offline-safe");
   assert(!/Connection failed/.test(r.stderr), "no connection attempt (stderr clean)");
   assert(/Usage: rijks-mcp tools \[--compact\|--json\]/.test(r.stdout), "static tools usage printed");
   assert(/--compact/.test(r.stdout) && /--json/.test(r.stdout), "documents both output modes");
+}
+
+// ── 14. inscriptions verb: positional → text, JSONL rows, pagination summary ────
+section("14. inscriptions --transcribedText Rembrandt");
+{
+  // --show-call: the first positional must map to the verb's `text` param.
+  const dry = await runCli(["--show-call", "inscriptions", "Rembrandt"]);
+  assert(dry.code === 0, "exit 0 (show-call)");
+  let call = null;
+  try { call = JSON.parse(dry.stdout.trim()); } catch { /* fail below */ }
+  assert(call && call.tool === "search_inscriptions", `resolved tool name (got ${call?.tool})`);
+  assert(call && call.arguments && call.arguments.text === "Rembrandt", "positional → text=Rembrandt");
+
+  // Live query: list-tool JSONL + stderr pagination summary (guards list/total/page wiring).
+  const r = await runCli(["inscriptions", "--transcribedText", "Rembrandt", "--max", "3", "--fields", "objectNumber,title"]);
+  assert(r.code === 0, "exit 0 (live)");
+  let rows = [];
+  try { rows = jsonlRows(r.stdout); } catch { /* fail below */ }
+  assert(rows.length >= 1 && rows.length <= 3, `1–3 JSONL rows (got ${rows.length})`);
+  assert(rows.every((row) => "objectNumber" in row), "each row is valid JSON with objectNumber");
+  assert(/\bshown\b/.test(r.stderr), "stderr carries a count/pagination summary");
 }
 
 // ── Summary ─────────────────────────────────────────────────────────────────────
