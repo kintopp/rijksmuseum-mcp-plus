@@ -10,6 +10,7 @@
 - [Semantic Search](#semantic-search)
 - [Provenance Research](#provenance-research)
 - [Structured Text Search](#structured-text-search)
+- [Inscriptions and Marks](#inscriptions-and-marks)
 
 The links following each research question show you how the query was answered in Claude Desktop. However, they only reproduce the text of the response (no image viewer or visualisations). For some queries, 'extended thinking' had been enabled in Claude to allow you to trace (to some degree) the model's step-by-step 'reasoning' during a task.
 
@@ -398,3 +399,49 @@ The basic text filters of the `search_artwork` tool — `title`, `description`, 
 - `get_artwork_details` on results to read the literal inscription — e.g. *"GvBreen sculptor et excudit"* (engraver and publisher in one), or *"Joan Blommendaal Inventor … Philib. Bouttats Sculpt. et Excudit Amstelo:"*
 
 **Why it matters:** The structured `productionRole` filter is only a simplified summary of the inscription: it reduces the inscribed Latin to a few English labels, is filled in only where a cataloguer matched a role to a named person, and cannot capture two roles falling to one person on a single plate (an engraver who published his own work). Searching the inscription itself consults the source rather than that summary. Because each role can be written many ways an exact search for *sculpsit* finds a fraction of what the word-stem `sculp*` does, which also gathers *sculptor* and *Sculpt.*; requiring all three roles binds the cohort to the 46 prints documenting the full chain. 
+
+---
+
+## Inscriptions and Marks
+
+The `search_inscriptions` tool parses the catalogue's inscription field into typed segments *at query time* — collector's marks (keyed to the standard Lugt catalogue numbers), signatures, monograms, dates, hallmarks, numbers, and transcribed text — and returns, with each result, the `matchedInscriptions` that triggered it: the normalised type, the surface (`recto`/`verso`), the technique (`stamped`, `handwritten`, `engraved`, …), and the underlying raw Dutch/English segment pair, gloss-deduped. It is a different instrument from `search_artwork({inscription})`, which is a blunt full-text match over the same field, and from the `textQuery` patterns above: here the facets combine *within a single mark* — a handwritten signature on the recto must be one inscription, not three words that merely co-occur somewhere in the blob — and a Lugt number or a transcribed phrase is searched *as such* rather than as a keyword adrift in the text. That same-segment rule is what makes the counts trustworthy: a verso-signature query that a loose substring search would inflate to roughly 8,100 records resolves to about 1,475 sheets that actually bear a single mark answering all three facets.
+
+One caveat governs every query below. The inscription field is best understood as the print room's mark-and-annotation log, not a transcription of everything written on a work: it is dominated by **verso collector's-mark stamps** — the museum's own and former owners' — while genuine artist- or image-applied text (signatures, captions, imprints) is a real but minority share, and coverage is high for prints and drawings yet thin for coins, medals, and posters whose legends were never keyed in. An empty result is not proof that an object bears no text. The flags `excludeCollectorMarkOnly` and `hasTranscribedText` exist precisely to clear the ownership-stamp boilerplate when what you want is the writing on the work itself.
+
+### 29. Provenance Written on the Sheet: Collectors' Marks as Physical Evidence
+
+*The collector François Gérard Waller (1867–1934) bequeathed his prints to the Rijksprentenkabinet and endowed a fund that still buys for it today. His own sheets bear his collector's mark — Lugt 2760 — stamped on the verso. Reconstruct what survives of Waller's personal collection from that mark, and check whether the museum's documentary provenance actually records his ownership or whether the stamp is the only trace.*
+
+**How the tools enable it:**
+- `search_inscriptions` with `collectorMark: "Lugt 2760"` (or just `"2760"`) returns the sheets bearing Waller's stamp — on the order of 33,000 of them — each `matchedInscriptions` entry confirming the mark sits on the `verso`, `stamped`: physical evidence located on the object, not inferred from a catalogue note
+- The number is known to be Waller's because it resolves through the published Lugt catalogue — *Les marques de collections de dessins & d'estampes*, freely searchable via the Fondation Custodia (marquesdecollections.fr), the standard authority for collectors' marks on prints and drawings; any unfamiliar Lugt number can be identified the same way
+- First clear the institution's own stamps: the field's three commonest marks — `Lugt 2228`, `Lugt 240`, and `Lugt 2233` — are all the Rijksprentenkabinet marking *its own* acquisitions, not prior owners, and between them they blanket most of the corpus, so they must be set aside before a genuine former-owner mark like Waller's resolves
+- Cross-check against `search_provenance`: a `party: "Waller"` search surfaces largely the **F. G. Waller Fund's** posthumous purchases — prints his endowment bought after 1934, which he never personally owned — so the collection defined by the *mark* and the fund's acquisitions recorded in the *credit lines* are two distinct legacies that share one name. For an individual stamped sheet the parsed ownership chain is often empty: print provenance is seldom written out, and the stamp itself is the record
+- `get_artwork_image` opens the deep-zoom viewer to inspect the actual stamp on the verso, where the sheet has been digitised
+
+**Why it matters:** A collector's mark is primary physical evidence of ownership, and across works on paper it is frequently the *only* record of where a sheet was before the museum — the parsed provenance corpus covers a small fraction of the collection and skews toward more fully documented paintings. The complication the tool exists to resolve is that the field's commonest marks are the Rijksprentenkabinet's own stamps; only by filtering those out does a genuine prior collection like Waller's come into view. Searching his Lugt number then turns the stamp into a finding aid — recovering the dispersed shape of one collection and, set against a provenance search for his *fund*, separating what the man personally owned from what his money later bought. One limit follows from the runtime parse: so common a mark trips the candidate cap (`candidatesCapped: true`) and returns a large *partial* window, so the tool characterises and samples a holding of this size rather than enumerating every sheet.
+
+### 30. Dating and Attributing Silver by Its Hallmarks
+
+*Wrought silver seldom carries a signature, but it is punched with a system of marks — a town mark, a date letter, a maker's mark, an assay mark for the alloy — that together fix where, when, and by whom it was made. Which objects in the Rijksmuseum carry these hallmarks, and can the maker's marks be tied to named silversmiths and cities?*
+
+**How the tools enable it:**
+- `search_inscriptions` with `inscriptionType: ["maker's mark", "town mark", "date letter"]` (OR-combined) gathers the hallmarked objects — on the order of 1,600 of them — each result listing the marks it bears: a `town mark` reading `"Leiden"`, a `maker's mark` such as `"VR in rechthoek"`, *struck* or *cast* rather than written
+- Add `inscriptionType: "alloy mark"` (Dutch *gehalteteken* — the lion that guarantees the silver standard) or `"duty mark"` to surface pieces assayed for content or taxed — the punches that certify the metal and pay the duty
+- These results are decorative-arts objects — silver, pewter, bronze (`BK-` and `KOG-` numbers) — an entirely different stratum of the inscription field from the print room's collector stamps, with its own specialist vocabulary
+- Tie a maker's mark to a person: `search_persons` for a silversmith of the right city and period, then `search_artwork` with `productionPlace: "Amsterdam"` (the dominant Dutch silver centre) or `"Leiden"` and a `type` filter to assemble that workshop's surviving output
+- `get_artwork_details` for the full mark description and assay date, and `get_artwork_image` to examine the punches at high magnification
+
+**Why it matters:** Hallmarks are the silver historian's dating and localising tool, and the structured `inscriptionType` facets draw a line a raw text search over the inscription field cannot — distinguishing a *town mark* from a *date letter* from a *maker's mark*, where an FTS sees only three indistinguishable strings. That turns the catalogue's mark descriptions into a queryable index of assay evidence. The caveat is honest: marks are often *described* ("standing figure") or only part-legible — but where a cataloguer has identified one, the transcribed value frequently cites the standard reference outright (e.g. *"P.B. (Citroen 1975, nr. 725)"*), a direct bridge from the punch to the named silversmith, so the facets point straight into the specialist hallmark literature rather than stopping short of it.
+
+### 31. The Artist's Mark Beneath the Owners' Stamps
+
+*Across the Rijksmuseum's prints and drawings, how many works did the artist sign by hand on the front with a full signature, and how many carry only a monogram of initials? Show a sample of each — and be sure these are the artist's own marks, not the ownership stamps that make up most of the inscription field.*
+
+**How the tools enable it:**
+- `search_inscriptions` with `inscriptionType: "signature"`, `placement: "recto"`, `technique: "handwritten"`, and `excludeCollectorMarkOnly: true` isolates works the artist signed by hand on the front — roughly 8,800 of them — stripping away the verso ownership boilerplate that makes up most of the field's bulk
+- Switch `inscriptionType` to `"monogram"` to find the works marked only with initials on the recto — some 3,500 of them, from a printed *M.R.* to Jacques-Louis David's chalk *D* to Leprince's pen-and-ink *L.P.* — the connoisseur's hardest case, where the mark names the maker only if you can decode it
+- Narrow to a single hand with `transcribedText`: e.g. `transcribedText: "Vincent"` alongside the signature facets returns the handful of photographs signed *Vincent Mentzel* — matched against the quoted text actually written on the work, not against the catalogue's creator field
+- Confirm and extend with `search_artwork({creator})`, or read a single object's `parsedInscriptions` and `inscriptionSummary` via `get_artwork_details`; `get_artwork_image` then zooms in to read the mark on the sheet itself
+
+**Why it matters:** The inscription field's value for the study of signing practice is buried under the ownership stamps that dominate it, and `search_artwork({inscription})` — a raw text match — cannot tell a `signature` segment from a `collector's mark`, or a recto inscription from a verso one. The structured facets and the `excludeCollectorMarkOnly` flag do exactly that, so a researcher can ask how an artist signed — full name versus monogram, pen versus chalk, and where on the sheet — and whether the convention shifts by period, status, or medium. The monogram view in particular converts an attribution problem into a searchable set: every work the catalogue records as bearing initials alone, ready to be matched against candidate hands.
