@@ -207,7 +207,7 @@
     <h1>The CLI in Practice</h1>
     <div class="subtitle">Turning a museum collection into a Unix-composable data source</div>
     <p>
-      <code>rijks-cli</code> is a thin command-line client over the
+      <code>rijks-mcp</code> is a thin command-line client over the
       <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" style="color:#93c5fd;">rijksmuseum-mcp+</a>
       server. It speaks the same tools an AI assistant uses &mdash; so a shell command returns
       <em>identical</em> results to a model &mdash; but emits clean JSON to <code>stdout</code>, which means
@@ -277,12 +277,12 @@
       <div class="pipe-step s-teal accent">
         <div class="step-num">You</div>
         <h3>shell / script / agent</h3>
-        <p><code>rijks-cli search &hellip;</code></p>
+        <p><code>rijks-mcp search &hellip;</code></p>
       </div>
       <div class="pipe-arrow">&rarr;</div>
       <div class="pipe-step s-teal accent">
         <div class="step-num">Client</div>
-        <h3>rijks-cli</h3>
+        <h3>rijks-mcp</h3>
         <p>verb&rarr;tool, arg coercion from the live schema, JSON&nbsp;out</p>
       </div>
       <div class="pipe-arrow">&rarr;</div>
@@ -305,14 +305,14 @@
       </div>
     </div>
 
-    <p style="margin-top:1.25rem;">Every example on this page calls <code>rijks-cli</code> &mdash; the
+    <p style="margin-top:1.25rem;">Every example on this page calls <code>rijks-mcp</code> &mdash; the
       bin declared in <code>package.json</code>. Link it onto your <code>PATH</code> once and it runs from
       any directory; <code>npm run cli&nbsp;--&nbsp;&hellip;</code> and <code>node scripts/cli.mjs&nbsp;&hellip;</code>
       drive the exact same client if you'd rather not install anything.</p>
-    <div class="term"><span class="cm"># one-time: put rijks-cli on your PATH (or: npm install -g .)</span>
+    <div class="term"><span class="cm"># one-time: put rijks-mcp on your PATH (or: npm install -g .)</span>
 <span class="pr">$</span> <span class="cmd">npm</span> link
 <span class="cm"># now callable from anywhere &mdash; identical to npm run cli / node scripts/cli.mjs</span>
-<span class="pr">$</span> <span class="cmd">rijks-cli</span> search <span class="flag">--query</span> <span class="str">"tulip"</span> <span class="flag">--max</span> 5 <span class="flag">--fields</span> objectNumber,title</div>
+<span class="pr">$</span> <span class="cmd">rijks-mcp</span> search <span class="flag">--query</span> <span class="str">"tulip"</span> <span class="flag">--max</span> 5 <span class="flag">--fields</span> objectNumber,title</div>
 
     <div class="compare">
       <div class="col cli">
@@ -349,7 +349,7 @@
     <div class="pipeline">
       <div class="pipe-step s-teal">
         <div class="step-num">Produce</div>
-        <h3>rijks-cli</h3>
+        <h3>rijks-mcp</h3>
         <p>JSONL rows on <code>stdout</code></p>
       </div>
       <div class="pipe-arrow">&#124;</div>
@@ -374,7 +374,7 @@
 
     <p style="margin-top:1.25rem;">A real one-liner &mdash; how Rembrandt's dated works in the collection
       distribute by year (his authority <code>vocabId</code> is <code>2103429</code>):</p>
-    <div class="term"><span class="pr">$</span> <span class="cmd">rijks-cli</span> search <span class="flag">--creator</span> 2103429 <span class="flag">--max</span> 50 <span class="flag">--fields</span> date <span class="pipe">\</span>
+    <div class="term"><span class="pr">$</span> <span class="cmd">rijks-mcp</span> search <span class="flag">--creator</span> 2103429 <span class="flag">--max</span> 50 <span class="flag">--fields</span> date <span class="pipe">\</span>
     <span class="pipe">|</span> jq <span class="flag">-r</span> <span class="str">'.date'</span> <span class="pipe">|</span> sed <span class="str">'s/[^0-9].*//'</span> <span class="pipe">|</span> sort <span class="pipe">|</span> uniq <span class="flag">-c</span>
 <span class="out">   1 1628
    2 1633
@@ -448,22 +448,22 @@
       <div class="rtitle"><h3>Resolve a name, then fetch the works</h3><span class="tag t-indigo">chain</span></div>
       <p>Look up an artist's authority ID, then query by it &mdash; spelling- and language-proof.</p>
       <div class="term"><span class="cm"># name &rarr; vocabId &rarr; works, saved as JSONL</span>
-<span class="pr">$</span> <span class="cmd">VID</span>=$(rijks-cli persons <span class="str">"Vermeer"</span> <span class="flag">--max</span> 1 <span class="flag">--fields</span> vocabId <span class="pipe">|</span> jq <span class="flag">-r</span> .vocabId)
-<span class="pr">$</span> <span class="cmd">rijks-cli</span> search <span class="flag">--creator</span> <span class="str">"$VID"</span> <span class="flag">--max</span> 50 <span class="flag">--fields</span> objectNumber,title <span class="pipe">&gt;</span> vermeer.jsonl</div>
+<span class="pr">$</span> <span class="cmd">VID</span>=$(rijks-mcp persons <span class="str">"Vermeer"</span> <span class="flag">--max</span> 1 <span class="flag">--fields</span> vocabId <span class="pipe">|</span> jq <span class="flag">-r</span> .vocabId)
+<span class="pr">$</span> <span class="cmd">rijks-mcp</span> search <span class="flag">--creator</span> <span class="str">"$VID"</span> <span class="flag">--max</span> 50 <span class="flag">--fields</span> objectNumber,title <span class="pipe">&gt;</span> vermeer.jsonl</div>
     </div>
 
     <div class="recipe">
       <div class="rtitle"><h3>Fan out: detail every search hit</h3><span class="tag t-teal">loop</span></div>
       <p>Stream object numbers into a loop that pulls a projected detail record for each.</p>
-      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-cli</span> search <span class="flag">--query</span> <span class="str">"self-portrait"</span> <span class="flag">--max</span> 20 <span class="flag">--fields</span> objectNumber <span class="pipe">\</span>
+      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-mcp</span> search <span class="flag">--query</span> <span class="str">"self-portrait"</span> <span class="flag">--max</span> 20 <span class="flag">--fields</span> objectNumber <span class="pipe">\</span>
     <span class="pipe">|</span> jq <span class="flag">-r</span> .objectNumber <span class="pipe">\</span>
-    <span class="pipe">|</span> <span class="cmd">while</span> read on; <span class="cmd">do</span> rijks-cli details <span class="str">"$on"</span> <span class="flag">--fields</span> objectNumber,title,date; <span class="cmd">done</span> <span class="pipe">&gt;</span> portraits.jsonl</div>
+    <span class="pipe">|</span> <span class="cmd">while</span> read on; <span class="cmd">do</span> rijks-mcp details <span class="str">"$on"</span> <span class="flag">--fields</span> objectNumber,title,date; <span class="cmd">done</span> <span class="pipe">&gt;</span> portraits.jsonl</div>
     </div>
 
     <div class="recipe">
       <div class="rtitle"><h3>Export an aggregate as CSV</h3><span class="tag t-amber">report</span></div>
       <p><code>stats</code> emits JSONL entries; <code>jq</code> turns them into a spreadsheet column.</p>
-      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-cli</span> stats type <span class="flag">--topN</span> 20 <span class="flag">--fields</span> label,count <span class="pipe">\</span>
+      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-mcp</span> stats type <span class="flag">--topN</span> 20 <span class="flag">--fields</span> label,count <span class="pipe">\</span>
     <span class="pipe">|</span> jq <span class="flag">-r</span> <span class="str">'[.label, .count] | @csv'</span> <span class="pipe">&gt;</span> object-types.csv</div>
     </div>
 
@@ -473,7 +473,7 @@
         alongside the records, so the loop is self-contained.</p>
       <div class="term"><span class="pr">$</span> <span class="cmd">TOKEN</span>=<span class="str">""</span>
 <span class="pr">$</span> <span class="cmd">while</span> :; <span class="cmd">do</span>
-    PAGE=$(rijks-cli changes <span class="flag">--from</span> 2024-01-01 <span class="flag">--identifiersOnly</span> <span class="flag">--max</span> 1000 \
+    PAGE=$(rijks-mcp changes <span class="flag">--from</span> 2024-01-01 <span class="flag">--identifiersOnly</span> <span class="flag">--max</span> 1000 \
              ${TOKEN:+<span class="flag">--resumption-token</span> <span class="str">"$TOKEN"</span>} <span class="flag">--json</span>)
     <span class="cmd">echo</span> <span class="str">"$PAGE"</span> <span class="pipe">|</span> jq <span class="flag">-c</span> <span class="str">'.records[]'</span> <span class="pipe">&gt;&gt;</span> changes.jsonl
     TOKEN=$(<span class="cmd">echo</span> <span class="str">"$PAGE"</span> <span class="pipe">|</span> jq <span class="flag">-r</span> <span class="str">'.resumptionToken // empty'</span>)
@@ -485,7 +485,7 @@
       <div class="rtitle"><h3>Guard a CI step with an exit code</h3><span class="tag t-blue">CI</span></div>
       <p>Exit <code>0</code> ok &middot; <code>1</code> tool/connection error &middot; <code>2</code> usage error
         &mdash; branchable like any Unix tool.</p>
-      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-cli</span> details SK-C-5 <span class="flag">--fields</span> objectNumber <span class="pipe">&gt;</span>/dev/null <span class="pipe">\</span>
+      <div class="term"><span class="pr">$</span> <span class="cmd">rijks-mcp</span> details SK-C-5 <span class="flag">--fields</span> objectNumber <span class="pipe">&gt;</span>/dev/null <span class="pipe">\</span>
     <span class="pipe">||</span> { <span class="cmd">echo</span> <span class="str">"collection API unreachable"</span> <span class="pipe">&gt;&amp;2</span>; <span class="cmd">exit</span> 1; }</div>
     </div>
   </div>
@@ -533,7 +533,7 @@
         <span class="ic rose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
         <h3>Nothing new to install</h3>
         <p>A single script reusing the dependencies the server already ships. <code>npm run cli</code>,
-          the <code>rijks-cli</code> bin, or <code>node scripts/cli.mjs</code>.</p>
+          the <code>rijks-mcp</code> bin, or <code>node scripts/cli.mjs</code>.</p>
       </div>
     </div>
   </div>

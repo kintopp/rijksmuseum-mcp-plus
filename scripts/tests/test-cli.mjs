@@ -117,7 +117,7 @@ section("6. invalid enum (stats --dimension bogus) → exit 1");
 // ── 7. inspect --out writes image bytes ─────────────────────────────────────────
 section("7. inspect SK-C-5 --region ... --out <tmp>");
 {
-  const out = path.join(os.tmpdir(), `rijks-cli-smoke-${process.pid}.jpg`);
+  const out = path.join(os.tmpdir(), `rijks-mcp-smoke-${process.pid}.jpg`);
   rmSync(out, { force: true });
   const r = await runCli(["inspect", "SK-C-5", "--region", "pct:40,40,20,20", "--out", out], 120000);
   assert(r.code === 0, `exit 0 (got ${r.code}${r.killed ? ", timed out" : ""})`);
@@ -179,7 +179,7 @@ section("10. --help is offline-safe + curated");
   const r = await runCli(["--http", "http://127.0.0.1:1/mcp", "--help"]);
   assert(r.code === 0, `exit 0 (got ${r.code})`);
   assert(!/Connection failed/.test(r.stderr), "no connection attempt (stderr clean)");
-  assert(/Usage: rijks-cli/.test(r.stdout) && /Commands:/.test(r.stdout), "static usage frame printed");
+  assert(/Usage: rijks-mcp/.test(r.stdout) && /Commands:/.test(r.stdout), "static usage frame printed");
   assert(/Common flags:/.test(r.stdout) && /Transports:/.test(r.stdout), "Common flags + Transports blocks present");
   assert(/RIJKS_MCP_HTTP/.test(r.stdout), "mentions the RIJKS_MCP_HTTP env var");
   // Curated one-liners, not truncated tool-description fragments.
@@ -193,7 +193,7 @@ section("11. <command> --help enrichments");
   assert(r.code === 0, "exit 0");
   assert(/--dimension <string> \(required\)/.test(r.stdout), "required flag marked");
   assert(/see `tools --json`|\{[^}]*\}/.test(r.stdout), "enum values shown inline or punted to `tools --json`");
-  assert(/^Example:/m.test(r.stdout) && /rijks-cli stats/.test(r.stdout), "worked example present");
+  assert(/^Example:/m.test(r.stdout) && /rijks-mcp stats/.test(r.stdout), "worked example present");
   // search has maxResults → the --max/-n alias must be documented.
   const s = await runCli(["search", "--help"]);
   assert(/Aliases:\s*--max, -n\s*→\s*maxResults/.test(s.stdout), "search --help documents the --max/-n alias");
@@ -216,7 +216,7 @@ section("13. tools --help is offline-safe");
   const r = await runCli(["--http", "http://127.0.0.1:1/mcp", "tools", "--help"]);
   assert(r.code === 0, `exit 0 (got ${r.code})`);
   assert(!/Connection failed/.test(r.stderr), "no connection attempt (stderr clean)");
-  assert(/Usage: rijks-cli tools \[--compact\|--json\]/.test(r.stdout), "static tools usage printed");
+  assert(/Usage: rijks-mcp tools \[--compact\|--json\]/.test(r.stdout), "static tools usage printed");
   assert(/--compact/.test(r.stdout) && /--json/.test(r.stdout), "documents both output modes");
 }
 

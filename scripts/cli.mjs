@@ -66,27 +66,27 @@ const VIEWER_TOOLS = new Set(["get_artwork_image", "navigate_viewer", "remount_v
 // stays schema-derived (always current); only this prose framing is hand-written.
 const VERB_HELP = {
   search:       { summary: "Structured metadata search — filter by creator, type, subject, place, date (all combine, AND).",
-                  example: `rijks-cli search --creator "Rembrandt van Rijn" --type painting --max 5 --fields objectNumber,title` },
+                  example: `rijks-mcp search --creator "Rembrandt van Rijn" --type painting --max 5 --fields objectNumber,title` },
   semantic:     { summary: "Meaning/concept search over reconstructed text; natural-language queries, ranked by similarity.",
-                  example: `rijks-cli semantic "ships in a stormy sea" --max 5 --fields objectNumber,title,similarityScore` },
+                  example: `rijks-mcp semantic "ships in a stormy sea" --max 5 --fields objectNumber,title,similarityScore` },
   persons:      { summary: "Look up people/groups; returns vocabIds to feed search --creator (by) or --aboutActor (depicting).",
-                  example: `rijks-cli persons "Vermeer" --max 3 --fields vocabId,label,artworkCount` },
+                  example: `rijks-mcp persons "Vermeer" --max 3 --fields vocabId,label,artworkCount` },
   provenance:   { summary: "Search parsed ownership history — party, transfer type, location, date/price range, gaps.",
-                  example: `rijks-cli provenance --party "Six" --max 5 --fields objectNumber,title` },
+                  example: `rijks-mcp provenance --party "Six" --max 5 --fields objectNumber,title` },
   details:      { summary: "Full metadata for one artwork by object number (single-object output).",
-                  example: `rijks-cli details SK-C-5 --fields objectNumber,title,creator,date` },
+                  example: `rijks-mcp details SK-C-5 --fields objectNumber,title,creator,date` },
   stats:        { summary: "Aggregate counts across a dimension (type, decade, creator, place…). Cap with --topN, not --max.",
-                  example: `rijks-cli stats type --topN 10 --fields label,count --table` },
+                  example: `rijks-mcp stats type --topN 10 --fields label,count --table` },
   similar:      { summary: "Artwork-to-artwork similarity across 9 signal channels plus a pooled consensus.",
-                  example: `rijks-cli similar SK-C-5 --max 10 --json | jq '.modes.visual'` },
+                  example: `rijks-mcp similar SK-C-5 --max 10 --json | jq '.modes.visual'` },
   "browse-set": { summary: "Enumerate the members of one curated set (token pagination).",
-                  example: `rijks-cli browse-set 2619 --max 5 --fields objectNumber,title` },
+                  example: `rijks-mcp browse-set 2619 --max 5 --fields objectNumber,title` },
   "list-sets":  { summary: "Discover curated sets; filter by --query/--minMembers/--maxMembers (no --max).",
-                  example: `rijks-cli list-sets --query Rembrandt --fields setSpec,name,memberCount` },
+                  example: `rijks-mcp list-sets --query Rembrandt --fields setSpec,name,memberCount` },
   changes:      { summary: "Recent additions/modifications by date range; --identifiersOnly for light headers (token paging).",
-                  example: `rijks-cli changes --from 2024-01-01 --identifiersOnly --max 5` },
+                  example: `rijks-mcp changes --from 2024-01-01 --identifiersOnly --max 5` },
   inspect:      { summary: "Fetch an image region as bytes for visual analysis; --out <file> saves them to disk.",
-                  example: `rijks-cli inspect SK-C-5 --region "pct:40,40,15,15" --out crop.jpg` },
+                  example: `rijks-mcp inspect SK-C-5 --region "pct:40,40,15,15" --out crop.jpg` },
 };
 // Invariant: every verb has curated help. Catches a verb added to VERBS but not VERB_HELP at load,
 // instead of as a silent blank summary in --help. (Lets the help renderers drop defensive fallbacks.)
@@ -208,7 +208,7 @@ async function connect(httpUrl) {
         // Force structured output on, and skip the ~13s eager warm-up (lazy on first use).
         env: { ...process.env, STRUCTURED_CONTENT: "true", MCP_SKIP_STARTUP_WARM: "1" },
       });
-  const client = new Client({ name: "rijks-cli", version: "0.1" });
+  const client = new Client({ name: "rijks-mcp", version: "0.1" });
   await client.connect(transport);
   return client;
 }
@@ -339,11 +339,11 @@ function safeParseJson(text) {
 // Fully static — no toolMap, no connection. Curated command summaries + flag/transport blocks.
 function topUsage() {
   const lines = [
-    "rijks-cli — headless CLI over the Rijksmuseum MCP tools",
+    "rijks-mcp — headless CLI over the Rijksmuseum MCP tools",
     "",
-    "Usage: rijks-cli [--http <url>] <command> [args] [flags]",
-    "       rijks-cli tools [--compact|--json]   list tool capabilities (compact = agent bootstrap)",
-    "       rijks-cli <command> --help           flags + an example for one command",
+    "Usage: rijks-mcp [--http <url>] <command> [args] [flags]",
+    "       rijks-mcp tools [--compact|--json]   list tool capabilities (compact = agent bootstrap)",
+    "       rijks-mcp <command> --help           flags + an example for one command",
     "",
     "Commands:",
   ];
@@ -425,7 +425,7 @@ function toolsHelp() {
   return [
     "tools — list the in-scope tool capabilities (introspection; not a real tool call)",
     "",
-    "Usage: rijks-cli tools [--compact|--json]",
+    "Usage: rijks-mcp tools [--compact|--json]",
     "",
     "  (default)   verb → tool-name table",
     "  --compact   compact capability manifest (agent bootstrap): one entry per tool —",

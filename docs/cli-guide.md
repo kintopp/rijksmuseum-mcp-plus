@@ -3,7 +3,7 @@
 A headless command-line interface over the Rijksmuseum MCP server's stateless tools.
 
 The CLI ships as `scripts/cli.mjs`, runnable directly, via `npm run cli`, or as the installed
-`rijks-cli` bin (see [Invocation](#invocation)). It is an MCP **client** — it drives the existing
+`rijks-mcp` bin (see [Invocation](#invocation)). It is an MCP **client** — it drives the existing
 server rather than reimplementing any search logic. A CLI query therefore returns *exactly* what an
 LLM would get from the same tool, which makes it both a power-user/pipeline tool and a debugging /
 protocol regression harness. It is JSON-first, designed for shell pipelines and bash-capable agents.
@@ -34,12 +34,12 @@ Three equivalent entry points:
 ```bash
 node scripts/cli.mjs <command> [args] [flags]     # direct (used throughout this guide)
 npm run cli -- <command> [args] [flags]           # via package script (note the `--`)
-rijks-cli <command> [args] [flags]                # via the installed bin (after `npm link` / global install)
+rijks-mcp <command> [args] [flags]                # via the installed bin (after `npm link` / global install)
 ```
 
 The `npm run cli` form needs `--` before tool flags so npm doesn't swallow them. The bare
 `node scripts/cli.mjs` form is simplest and is what the rest of this guide uses. To enable the
-`rijks-cli` form, link the bin onto your `PATH` once with `npm link` (or `npm install -g .`) from
+`rijks-mcp` form, link the bin onto your `PATH` once with `npm link` (or `npm install -g .`) from
 the repo root; all three forms are otherwise identical.
 
 **Scope.** The CLI exposes the 11 stateless tools. The four viewer/stateful tools

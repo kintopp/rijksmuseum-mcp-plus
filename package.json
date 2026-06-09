@@ -9,7 +9,7 @@
   "main": "dist/index.js",
   "bin": {
     "rijksmuseum-mcp-plus": "./dist/index.js",
-    "rijks-cli": "./scripts/cli.mjs"
+    "rijks-mcp": "./scripts/cli.mjs"
   },
   "files": [
     "dist",
