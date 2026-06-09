@@ -74,7 +74,7 @@ const VERB_HELP = {
                   example: `rijks-mcp persons "Vermeer" --max 3 --fields vocabId,label,artworkCount` },
   provenance:   { summary: "Search parsed ownership history — party, transfer type, location, date/price range, gaps.",
                   example: `rijks-mcp provenance --party "Six" --max 5 --fields objectNumber,title` },
-  inscriptions: { summary: "Structured inscription search — collector's marks, signatures, transcribed on-object text; facet by type/placement/technique.",
+  inscriptions: { summary: "Structured search — collector's marks, signatures, transcribed on-object text; facet by type/placement/technique.",
                   example: `rijks-mcp inscriptions --transcribedText "Rembrandt" --max 5 --fields objectNumber,title` },
   details:      { summary: "Full metadata for one artwork by object number (single-object output).",
                   example: `rijks-mcp details SK-C-5 --fields objectNumber,title,creator,date` },
