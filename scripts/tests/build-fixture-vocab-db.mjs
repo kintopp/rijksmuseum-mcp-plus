@@ -89,7 +89,7 @@ const VOCAB = [
 // object_number, art_id, title, creator_label, description_text, inscription_text,
 // narrative_text, height_cm, width_cm, date_earliest, date_latest, has_image, rights_id, iiif_id
 const ARTWORKS = [
-  ["FX-1", 1, "The Night Watch Study", "Rembrandt van Rijn", "An oil study of a militia company.", "Rembrandt f 1642", "Curatorial note on the militia study.", 100, 80, 1640, 1642, 1, 2, "iiif-fx-1"],
+  ["FX-1", 1, "The Night Watch Study", "Rembrandt van Rijn", "An oil study of a militia company.", "signatuur, rechtsonder: ‘Rembrandt f 1642’ | signature, lower right: ‘Rembrandt f 1642’", "Curatorial note on the militia study.", 100, 80, 1640, 1642, 1, 2, "iiif-fx-1"],
   ["FX-2", 2, "Winter Landscape with Skaters", "Hendrick Avercamp", "Villagers skating on a frozen river.", null, null, 50, 40, 1608, 1610, 0, 1, null],
   ["FX-3", 3, "Etching of a Windmill", "Anonymous", "A windmill beside a canal.", null, null, 20, 15, 1800, 1850, 1, 3, "iiif-fx-3"],
   ["FX-4", 4, "Untitled Portrait", "Unknown", null, null, null, null, null, null, null, 1, 1, "iiif-fx-4"],

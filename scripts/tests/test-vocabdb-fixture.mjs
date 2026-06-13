@@ -98,7 +98,11 @@ check("getArtworkDetail round-trips fields + grouped mappings", () => {
   assert.deepEqual(d.objectTypes.map((t) => t.label), ["painting"]);
   assert.deepEqual(d.materials.map((m) => m.label), ["canvas"]);
   assert.equal(d.production[0].name, "Rembrandt van Rijn");
-  assert.deepEqual(d.inscriptions, ["Rembrandt f 1642"]);
+  // Raw `| `-split segments (NL form + EN gloss), as get_artwork_details returns them.
+  assert.deepEqual(d.inscriptions, [
+    "signatuur, rechtsonder: ‘Rembrandt f 1642’",
+    "signature, lower right: ‘Rembrandt f 1642’",
+  ]);
   const dims = Object.fromEntries(d.dimensions.map((x) => [x.type, x.value]));
   assert.equal(dims.height, 100);
   assert.equal(dims.width, 80);

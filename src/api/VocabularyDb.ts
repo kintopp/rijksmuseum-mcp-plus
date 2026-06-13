@@ -6,6 +6,7 @@ import {
   parseInscriptions,
   groupInscriptionMatches,
   inscriptionMatchesFacets,
+  formatInscriptionsForEmbedding,
   INSCRIPTION_TYPE_TOKENS,
   INSCRIPTION_TECHNIQUE_TOKENS,
   INSCRIPTION_PLACEMENT_TOKENS,
@@ -2247,11 +2248,14 @@ export class VocabularyDb {
         description_text: string | null;
       }[];
 
-      // Assemble composite text in same format as embedding generation (no-subjects strategy)
+      // Assemble composite text in same format as embedding generation (no-subjects
+      // strategy). Inscriptions are boilerplate-stripped (collector marks / placeholders
+      // dropped) to mirror the generator's source text (#383 Proposal 2) — an empty result
+      // contributes nothing, matching the "" → falsy filter below.
       for (const row of artRows) {
         const fields: [string, string | null | undefined][] = [
           ["Title", row.title],
-          ["Inscriptions", row.inscription_text],
+          ["Inscriptions", formatInscriptionsForEmbedding(row.inscription_text) || null],
           ["Description", row.description_text],
           ["Narrative", row.narrative_text],
         ];
