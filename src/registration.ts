@@ -1265,7 +1265,13 @@ setInterval(() => {
   const now = Date.now();
   for (const [filePath, createdAt] of similarTempFiles) {
     if (now - createdAt > 1_800_000) {
-      try { fs.unlinkSync(filePath); } catch { /* already gone */ }
+      try {
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
+          console.warn(`[similar-sweeper] failed to unlink ${filePath}:`, err);
+        }
+      }
       similarTempFiles.delete(filePath);
     }
   }
