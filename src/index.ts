@@ -436,35 +436,37 @@ async function runHttp(): Promise<void> {
 
   // ── Start ───────────────────────────────────────────────────────
 
+  // Warm the ONNX first-inference + filtered-KNN page faults BEFORE accepting
+  // traffic, so /mcp never serves a request that pays the cold-model cost and
+  // /ready is already true when we start listening (#325). warmCorePages() above
+  // only pages in the vec0 index; the model's first inference and the
+  // filtered-KNN path are separately cold and were previously warmed after listen().
+  {
+    const t0 = Date.now();
+    try {
+      let warmVec: Float32Array | undefined;
+      if (embeddingModel?.available) {
+        warmVec = await embeddingModel.embed("warmup");
+        console.error(`  Embedding model first-inference warmed in ${Date.now() - t0}ms`);
+      }
+      if (embeddingsDb?.available) {
+        const vec = warmVec ?? new Float32Array(embeddingsDb.vectorDimensions);
+        embeddingsDb.warmFilteredPath(vec);
+      }
+      ready = true;
+      console.error(`  Pre-listen warmup complete in ${Date.now() - t0}ms — /ready now true`);
+      console.error(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));
+    } catch (err) {
+      console.error(`  Pre-listen warmup failed: ${err instanceof Error ? err.message : err}`);
+      ready = true; // don't leave /ready stuck — failure is logged
+    }
+  }
+
   httpServer = app.listen(port, () => {
     console.error(`Rijksmuseum MCP server listening on http://localhost:${port}`);
     console.error(`  MCP endpoint: POST /mcp`);
     console.error(`  Health:       GET  /health`);
     console.error(`  Ready:        GET  /ready`);
-
-    // Post-listen warm-up — healthcheck already passes, so this doesn't delay
-    // deployment. Covers the ONNX first-inference cost + filtered-KNN page
-    // faults that warmCorePages() doesn't touch.
-    void (async () => {
-      const t0 = Date.now();
-      try {
-        let warmVec: Float32Array | undefined;
-        if (embeddingModel?.available) {
-          warmVec = await embeddingModel.embed("warmup");
-          console.error(`  Embedding model first-inference warmed in ${Date.now() - t0}ms`);
-        }
-        if (embeddingsDb?.available) {
-          const vec = warmVec ?? new Float32Array(embeddingsDb.vectorDimensions);
-          embeddingsDb.warmFilteredPath(vec);
-        }
-        ready = true;
-        console.error(`  Post-listen warmup complete in ${Date.now() - t0}ms — /ready now true`);
-        console.error(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));
-      } catch (err) {
-        console.error(`  Post-listen warmup failed: ${err instanceof Error ? err.message : err}`);
-        ready = true; // don't leave /ready stuck — failure is logged
-      }
-    })();
   });
 }
 

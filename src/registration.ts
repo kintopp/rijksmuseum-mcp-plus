@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings, type CollectionStatsResult, type InscriptionSearchParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type ProvenanceArtworkResult, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings, type CollectionStatsResult, type InscriptionSearchParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -66,7 +66,7 @@ const TOOL_LIMITS = {
 } as const;
 
 /** Params that narrow results but are too broad to stand alone as the only filter. */
-const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "expandPlaceHierarchy", "sameRowMatching"]);
+const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "expandPlaceHierarchy", "sameRowMatching", "compact"]);
 
 /** Public compound params on search_artwork that get parsed into internal fields
  *  before forwarding to VocabularyDb — never passed through as-is. */
@@ -529,6 +529,40 @@ function compactMethodTag(method: string | null | undefined, defaultMethod?: str
   if (method.startsWith("llm_structural:")) return method.slice("llm_structural:".length);
   if (method.startsWith("llm_")) return "llm:" + method.slice("llm_".length);
   return method;
+}
+
+/** #386 compact-mode rollup of a provenance chain — fixed-size summary derived from the
+ *  full event list (events are sequence-ordered). Used by both the structured and text
+ *  channels so they stay in sync. */
+function provenanceCompactSummary(art: ProvenanceArtworkResult) {
+  const years = art.events.map(e => e.dateYear).filter((y): y is number => y != null);
+  const names = art.events.flatMap(e => e.parties.map(p => p.name)).filter(Boolean);
+  const transferTypes = [...new Set(
+    art.events.map(e => e.transferType).filter(t => t !== "unknown" && t !== "non_provenance"),
+  )];
+  return {
+    eventCount: art.eventCount,
+    matchedEventCount: art.matchedEventCount,
+    yearSpan: [years.length ? Math.min(...years) : null, years.length ? Math.max(...years) : null] as (number | null)[],
+    transferTypes,
+    firstOwner: names[0] ?? null,
+    lastOwner: names.length ? names[names.length - 1] : null,
+    hasGap: art.events.some(e => e.gap === true),
+    hasPrice: art.events.some(e => e.price != null),
+  };
+}
+
+/** #386 lean matched-event one-liners for compact mode (names only, trimmed rawText). */
+function provenanceMatchedEvents(art: ProvenanceArtworkResult) {
+  return art.events.filter(e => e.matched).map(e => ({
+    sequence: e.sequence,
+    transferType: e.transferType,
+    parties: e.parties.map(p => p.name),
+    dateExpression: e.dateExpression,
+    location: e.location,
+    price: e.price,
+    rawText: e.rawText.trim(),
+  }));
 }
 
 /** Format a curated set as a compact one-liner (Tier 2). */
@@ -3332,7 +3366,27 @@ function registerTools(
         enrichmentReasoning: z.string().nullable().optional()
           .describe("LLM reasoning for type/category classification or structural correction."),
         matched: z.boolean().describe("True if this event matched the search criteria."),
-      })),
+      })).optional().describe("Full event chain. Present in full mode; omitted when compact=true."),
+      summary: z.object({
+        eventCount: z.number().int(),
+        matchedEventCount: z.number().int(),
+        yearSpan: z.array(z.number().int().nullable())
+          .describe("[earliest, latest] event year across the chain; either element may be null."),
+        transferTypes: z.array(z.string()).describe("Distinct transfer types in the chain, excluding unknown/non_provenance."),
+        firstOwner: z.string().nullable(),
+        lastOwner: z.string().nullable(),
+        hasGap: z.boolean(),
+        hasPrice: z.boolean(),
+      }).optional().describe("Compact-mode fixed-size rollup of the full chain (present only when compact=true)."),
+      matchedEvents: z.array(z.object({
+        sequence: z.number().int(),
+        transferType: z.string(),
+        parties: z.array(z.string()).describe("Party names only."),
+        dateExpression: z.string().nullable(),
+        location: z.string().nullable(),
+        price: z.object({ amount: z.number(), currency: z.string() }).nullable(),
+        rawText: z.string().describe("Trimmed 'why it matched' phrase for this event."),
+      })).optional().describe("Compact-mode matched-event one-liners (present only when compact=true)."),
       periods: z.array(z.object({
         sequence: z.number().int(),
         ownerName: z.string().nullable(),
@@ -3499,11 +3553,14 @@ function registerTools(
           ).describe(`Maximum artworks to return (1–${TOOL_LIMITS.search_provenance.max}, default ${TOOL_LIMITS.search_provenance.default}). Each artwork includes its full chain.`),
           facets: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, compute provenance facets: transferType, decade, location, transferCategory, partyPosition."),
+          compact: z.preprocess(stripNullCoerceBool, z.boolean().default(false))
+            .describe("Compact per-artwork comparison mode: omit the full event/period arrays; return a fixed-size summary rollup plus matched-event one-liners per artwork. Use to compare a collector/dealer across many works in one call (full mode overflows the result cap past ~1 artwork). Raises the default maxResults to 12."),
         }).strict(),
         ...withOutputSchema(ProvenanceSearchOutput),
       },
       withLogging("search_provenance", async (args: Record<string, unknown>) => {
         const layer = (args.layer as string | undefined) ?? "events";
+        const compact = args.compact === true;
 
         // ── Credit-line fallback (standalone unstructured mode) ──
         // When creditLineQuery is set we ignore all structured provenance filters and
@@ -3559,7 +3616,10 @@ function registerTools(
         }
 
         const params: ProvenanceSearchParams = {
-          maxResults: (args.maxResults as number | undefined) ?? TOOL_LIMITS.search_provenance.default,
+          // #386: compact mode defaults higher (per-artwork payload is tiny) so a single
+          // call can compare many works; still clamped to the tool max.
+          maxResults: (args.maxResults as number | undefined)
+            ?? (compact ? Math.min(12, TOOL_LIMITS.search_provenance.max) : TOOL_LIMITS.search_provenance.default),
           layer: layer as "events" | "periods",
         };
         if (args.party) params.party = args.party as string;
@@ -3614,6 +3674,23 @@ function registerTools(
           ? vocabDb!.searchProvenancePeriods(params)
           : vocabDb!.searchProvenance(params);
 
+        // #386: in compact mode, project each artwork to header + fixed-size summary +
+        // matched-event one-liners (omit the full event/period arrays). Computed once and
+        // shared by the structured and text channels.
+        const compactResults = compact
+          ? result.results.map(art => ({
+              objectNumber: art.objectNumber,
+              title: art.title,
+              creator: art.creator,
+              ...(art.date != null ? { date: art.date } : {}),
+              url: art.url,
+              eventCount: art.eventCount,
+              matchedEventCount: art.matchedEventCount,
+              summary: provenanceCompactSummary(art),
+              matchedEvents: provenanceMatchedEvents(art),
+            }))
+          : null;
+
         // Text channel
         const lines: string[] = [];
         if (result.totalArtworksCapped) {
@@ -3621,12 +3698,31 @@ function registerTools(
         } else {
           lines.push(`${pluralize(result.totalArtworks, "artwork")} with matching provenance`);
         }
-        for (const artwork of result.results) {
+        for (const [i, artwork] of result.results.entries()) {
           lines.push("");
           lines.push(`${artwork.objectNumber} | "${artwork.title}" — ${artwork.creator}${artwork.date ? ` (${artwork.date})` : ""}`);
           lines.push(`  ${artwork.url}`);
 
-          if (layer === "periods" && artwork.periods) {
+          if (compact) {
+            // Reuse the projection already built for the structured channel.
+            const { summary: s, matchedEvents } = compactResults![i];
+            const rollup: string[] = [`${s.matchedEventCount}/${s.eventCount} events matched`];
+            if (s.yearSpan[0] != null || s.yearSpan[1] != null) rollup.push(`${s.yearSpan[0] ?? "?"}–${s.yearSpan[1] ?? "?"}`);
+            if (s.transferTypes.length) rollup.push(s.transferTypes.join(", "));
+            if (s.firstOwner) rollup.push(`owners: ${s.firstOwner}${s.lastOwner && s.lastOwner !== s.firstOwner ? ` … ${s.lastOwner}` : ""}`);
+            if (s.hasGap) rollup.push("has gap");
+            if (s.hasPrice) rollup.push("has price");
+            lines.push(`  ${rollup.join(" | ")}`);
+            for (const e of matchedEvents) {
+              const parts: string[] = [];
+              if (e.transferType !== "unknown") parts.push(e.transferType);
+              if (e.parties.length) parts.push(e.parties.join(", "));
+              if (e.dateExpression) parts.push(e.dateExpression);
+              if (e.location) parts.push(e.location);
+              if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}`);
+              lines.push(`  >>> ${e.sequence}. ${parts.length ? parts.join(" | ") : e.rawText}`);
+            }
+          } else if (layer === "periods" && artwork.periods) {
             // Format periods
             for (const p of artwork.periods) {
               const marker = p.matched ? ">>>" : "   ";
@@ -3757,7 +3853,15 @@ function registerTools(
           lines.push(formatFacets(result.facets));
         }
 
-        const data: InferOutput<typeof ProvenanceSearchOutput> = result;
+        const data: InferOutput<typeof ProvenanceSearchOutput> = compact
+          ? {
+              totalArtworks: result.totalArtworks,
+              totalArtworksCapped: result.totalArtworksCapped,
+              results: compactResults!,
+              ...(result.facets && { facets: result.facets }),
+              ...(result.warnings && { warnings: result.warnings }),
+            }
+          : result;
         return structuredResponse(data, lines.join("\n"));
       })
     );

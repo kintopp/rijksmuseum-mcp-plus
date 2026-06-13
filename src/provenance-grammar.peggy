@@ -442,6 +442,8 @@ SaleEvent
       const role = prep.toLowerCase() === "to" ? "buyer" : prep.toLowerCase() === "by" ? "seller" : null;
       return { type: "sale", parties: nd && nd.name ? [{ ...nd, role }] : [], ...rest };
     }
+  / "sold"i ![A-Za-z] tail:Tail
+    { const rest = parseRest(tail); return { type: "sale", parties: [], ...rest }; }
   / "through"i _ ("the"i _)? "mediation"i _ "of"i _ nameRaw:NameChars tail:Tail
     { return buildResult("sale", extractNameAndDates(nameRaw), "intermediary", parseRest(tail)); }
   / "sale"i _ "[" section:[^\]]* "]" tail:Tail

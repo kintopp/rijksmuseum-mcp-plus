@@ -814,6 +814,16 @@ const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
   positionMethod:    { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
 };
 
+/** Dimensions where each artwork falls in exactly one bucket. For these,
+ *  coverage.withBucket == Σ(bucket counts) when all buckets are present, so the
+ *  dimensionCoverageCount re-scan can be skipped (#348 Layer 1). Derived from the
+ *  `multiValued` flag above — single-valued (≤1 bucket/artwork) is exactly the
+ *  property that makes the sum identity hold, so the metadata is the single source
+ *  of truth (a new single-valued dim gets the fast path automatically). */
+const SINGLE_VALUED_STATS_DIMS = new Set(
+  Object.entries(STATS_DIMENSION_META).filter(([, meta]) => !meta.multiValued).map(([dim]) => dim),
+);
+
 // ─── Filter definitions ─────────────────────────────────────────────
 // Each entry maps a VocabSearchParams key to the SQL constraints used
 // in a mapping subquery.  `fields` restricts m.field, `vocabType`
@@ -4554,7 +4564,11 @@ export class VocabularyDb {
       // Coverage: artworks in the filtered pool that have ≥1 row in this dimension's source.
       // Lets a consumer reconstruct the gap to 100% on single-valued dims without per-dim
       // NULL/clamp knowledge.
-      const withBucket = this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds, filtered, useIndexedField);
+      // #348 Layer 1: for single-valued dims with all buckets present, coverage is an
+      // algebraic identity (Σ bucket counts) — skip the second mappings-scale scan.
+      const withBucket = (SINGLE_VALUED_STATS_DIMS.has(params.dimension) && offset === 0 && entries.length < topN)
+        ? entries.reduce((sum, e) => sum + e.count, 0)
+        : this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds, filtered, useIndexedField);
       const withoutBucket = Math.max(0, total - withBucket);
 
       // Fixed width from meta, else binWidth for binned dims, else undefined.
