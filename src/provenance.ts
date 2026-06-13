@@ -369,7 +369,7 @@ const TRANSFER_RULES: [RegExp, TransferType][] = [
   [/\bfrom which on loan\b|on loan/i, "loan"],
   [/\btransfer(?:red)?\b|\bsent to\b|\bremoved\b/i, "transfer"],
   [/bequest|bequeathed|testament/i, "bequest"],
-  [/\bsold[, ]+(?:by|to|with|for)\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
+  [/\bsold\b|\bthrough the mediation\b|\bfrom the artist\b/i, "sale"],
   [/(?:his|her|their) (?:posthumous |deceased )?sale|sale [A-Z]|sale\b.*\d{4}|\bsale\s*\[|\bby whom sold\b/i, "sale"],
   [/\bpurchased\b|from whom purchased|from whose heirs.*to the museum|\bbought by\b/i, "sale"],
   [/\bacquired\s+(?:by|from|for|in|with)\b|\bverwerving\b/i, "sale"],

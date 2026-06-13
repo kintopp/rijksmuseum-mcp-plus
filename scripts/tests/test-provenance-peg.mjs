@@ -286,6 +286,19 @@ section("Phase C: Layer 2 — interpretation");
   const t6 = parseTemporalBounds(null, null, null);
   assertEq(t6.earliest, null, "no date: earliest=null");
   assertEq(t6.latest, null, "no date: latest=null");
+
+  const r1 = parseTemporalBounds("1983-2005", 1994, null);
+  assertEq(r1.earliest, 1983, "range 1983-2005: earliest=1983 (#384)");
+  assertEq(r1.latest, 2005, "range 1983-2005: latest=2005 (#384)");
+  assertEq(r1.rule, "year_range", "range rule (#384)");
+
+  const r2 = parseTemporalBounds("1713-24", 1719, null);
+  assertEq(r2.earliest, 1713, "range 1713-24: earliest=1713 (#384)");
+  assertEq(r2.latest, 1724, "range 1713-24: 2-digit tail expanded to 1724 (#384)");
+
+  const r3 = parseTemporalBounds("1792/93", 1793, null);
+  assertEq(r3.earliest, 1792, "range 1792/93: earliest=1792 (#384)");
+  assertEq(r3.latest, 1793, "range 1792/93: latest=1793 (#384)");
 }
 
 {
@@ -884,6 +897,13 @@ section("Date patterns (2026-03-21)");
 {
   const r = parseProvenanceRaw("sold, 1792/93");
   assertEq(r.events[0].dateYear, 1793, "date range 1792/93 → 1793 (midpoint)");
+  assertEq(r.events[0].transferType, "sale", "bare 'sold' → transferType sale (#385)");
+  assertEq(r.events[0].parties.length, 0, "bare 'sold' → no spurious party (#385)");
+}
+{
+  const r = parseProvenanceRaw("soldier's estate, 1801");
+  assertEq(r.events[0].parties[0]?.name !== "soldier", true,
+    "'soldier' is not swallowed by the bare-sold branch (#385 guard)");
 }
 {
   const r = parseProvenanceRaw("on loan to museum, 1983-2005");

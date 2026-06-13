@@ -42,6 +42,11 @@ export interface ProvenancePeriod {
 
 const BY_YEAR_RE = /\bby\s+(\d{4})\b/i;
 
+// #384: a range expression ("1983-2005", "1713-24", "1792/93") must expand to
+// [start, end] bounds, not Layer-1's collapsed midpoint. Mirrors the grammar's
+// DATE_RANGE_RE (src/provenance-grammar.peggy) incl. the 2-digit-tail expansion.
+const RANGE_BOUNDS_RE = /^\s*(\d{4})\s*[-–/]\s*(\d{2,4})\b/;
+
 // ─── Temporal bound parsing ─────────────────────────────────────────
 
 /**
@@ -78,6 +83,14 @@ export function parseTemporalBounds(
     const byMatch = expr.match(BY_YEAR_RE);
     if (byMatch) {
       return { earliest: null, latest: parseInt(byMatch[1], 10), rule: "by_year" };
+    }
+
+    const rangeMatch = expr.match(RANGE_BOUNDS_RE);
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1], 10);
+      let endPart = rangeMatch[2];
+      if (endPart.length === 2) endPart = rangeMatch[1].slice(0, 2) + endPart; // "1713-24" → 1724
+      return { earliest: start, latest: parseInt(endPart, 10), rule: "year_range" };
     }
   }
 
