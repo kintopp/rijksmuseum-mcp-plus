@@ -128,7 +128,7 @@ export function buildFixture() {
   }
   fs.mkdirSync(GENERATED_DIR, { recursive: true });
   for (const f of [FIXTURE_DB, `${FIXTURE_DB}-wal`, `${FIXTURE_DB}-shm`]) {
-    if (fs.existsSync(f)) fs.rmSync(f);
+    fs.rmSync(f, { force: true });
   }
 
   const raw = fs.readFileSync(SCHEMA_SQL, "utf8");
@@ -173,8 +173,8 @@ export function buildFixture() {
         inscription_text, narrative_text, height_cm, width_cm, date_earliest, date_latest,
         has_image, rights_id, iiif_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    // title_all_text = title for every row; splice it in as the 4th column.
-    ARTWORKS.map((a) => [a[0], a[1], a[2], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13]])
+    // title_all_text = title for every row; duplicate it after the title column.
+    ARTWORKS.map(([objectNumber, artId, title, ...rest]) => [objectNumber, artId, title, title, ...rest])
   );
   insertMany("INSERT INTO mappings (artwork_id, vocab_rowid, field_id) VALUES (?, ?, ?)", MAPPINGS);
   insertMany("INSERT INTO version_info (key, value) VALUES (?, ?)", VERSION_INFO);
@@ -188,8 +188,6 @@ export function buildFixture() {
   console.log(`[build] wrote ${path.relative(PROJECT_ROOT, FIXTURE_DB)} — ${n} artworks, ${VOCAB.length} vocab terms, ${MAPPINGS.length} mappings`);
   return FIXTURE_DB;
 }
-
-export { FIXTURE_DB, SCHEMA_SQL };
 
 // CLI entry
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
