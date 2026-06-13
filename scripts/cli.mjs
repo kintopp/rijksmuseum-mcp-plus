@@ -15,6 +15,7 @@
  *   --json    print the entire structuredContent as one pretty JSON object (verbatim).
  *   --table   terse human table (opt-in).
  *   --fields  a,b,c   top-level key projection (the biggest token lever).
+ *   --stdin   batch: read the primary positional from stdin, one invocation per line.
  *   counts + pagination hints + warnings go to STDERR (keeps stdout pure JSONL).
  *
  * Exit codes:  0 ok · 1 tool/connection error · 2 usage error.
@@ -100,7 +101,7 @@ for (const v of Object.keys(VERBS)) {
 // Global flags (consumed by the CLI, never forwarded as tool args). NB: `--compact` is NOT here
 // on purpose — it's only meaningful on the `tools` verb (handled by argv inspection before
 // tokenize), and search_artwork has its own `compact` param we must forward, not shadow.
-const GLOBAL_BOOL = new Set(["json", "table", "quiet", "show-call", "help"]);
+const GLOBAL_BOOL = new Set(["json", "table", "quiet", "show-call", "help", "stdin"]);
 const GLOBAL_VALUE = new Set(["http", "fields", "out"]);
 // Short/friendly flag aliases → canonical name.
 const FLAG_ALIASES = { max: "maxResults", n: "maxResults", o: "out", h: "help" };
@@ -338,6 +339,18 @@ function safeParseJson(text) {
   try { return JSON.parse(text); } catch { return null; }
 }
 
+// Read stdin to EOF and return the meaningful lines: trimmed, with blanks and
+// `#`-comment lines dropped. Used by --stdin batch mode (one invocation per line).
+async function readStdinLines() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks)
+    .toString("utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+}
+
 // ── Help / discovery ─────────────────────────────────────────────────────────
 // Fully static — no toolMap, no connection. Curated command summaries + flag/transport blocks.
 function topUsage() {
@@ -363,6 +376,7 @@ function topUsage() {
     "  --table          terse human-readable table",
     "  --quiet          suppress the stderr count/summary line",
     "  --show-call      print the resolved {tool, arguments} WITHOUT executing (cheap dry-run)",
+    "  --stdin          batch: read the positional from stdin, one invocation per line (one connection)",
     "",
     "Transports:",
     "  HTTP (recommended): --http <url> or RIJKS_MCP_HTTP — a warm server; every call is instant.",
@@ -559,6 +573,36 @@ async function main() {
     // Re-tokenize using the tool's schema, dropping the verb itself from positionals.
     const boolSet = boolSetFor(tool.inputSchema);
     const { flags, positionals } = tokenize(argv, boolSet);
+
+    // Batch mode: read the primary positional from stdin, one invocation per line
+    // over this single connection. Other flags (--fields/--json/--max/…) apply per line.
+    if (flags.stdin === true) {
+      if (!cfg.pos) throw new UsageError(`--stdin needs a verb with a positional argument; ${verb} has none`);
+      if (process.stdin.isTTY) throw new UsageError("--stdin set but stdin is a TTY — pipe input (e.g. `printf 'SK-C-5\\n' | rijks-mcp details --stdin`)");
+      const lines = await readStdinLines();
+      let failures = 0;
+      for (const line of lines) {
+        const toolArgs = buildToolArgs(cfg, tool.inputSchema, flags, [line]);
+        if (flags["show-call"] === true) {
+          process.stdout.write(JSON.stringify({ tool: cfg.tool, arguments: toolArgs }) + "\n");
+          continue;
+        }
+        try {
+          const res = await client.callTool({ name: cfg.tool, arguments: toolArgs });
+          if (res.isError) { process.stderr.write(`[${line}] ${textOf(res)}\n`); failures++; continue; }
+          renderResult(res, cfg, flags);
+        } catch (err) {
+          process.stderr.write(`[${line}] Error: ${err?.message ?? err}\n`);
+          failures++;
+        }
+      }
+      if (failures) {
+        process.stderr.write(`${failures} of ${lines.length} input(s) failed\n`);
+        process.exitCode = 1;
+      }
+      return;
+    }
+
     // The verb is always the first bare token; drop it so the rest map to tool params.
     const restPositionals = positionals[0] === verb ? positionals.slice(1) : positionals;
     const toolArgs = buildToolArgs(cfg, tool.inputSchema, flags, restPositionals);
