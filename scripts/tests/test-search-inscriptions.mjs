@@ -86,6 +86,23 @@ console.log("\ninscriptionType: \"signatuur\" (Dutch surface form, not a bucket 
   assert(sc.totalConfirmed > 0, "unknown/surface-form type confirms via the raw type token");
 }
 
+// 4b. Dutch-surface-form technique / placement confirm via the raw catalogued
+//     token (issue #388 — parity with the inscriptionType fix in 4a). The literal
+//     FTS narrow finds candidates; the per-segment confirm used to require the
+//     normalized bucket only, dropping every Dutch-form candidate → 0 confirmed.
+console.log("\ntechnique: \"gestempeld\" (Dutch surface form of bucket \"stamped\")");
+{
+  const { sc } = await call({ technique: "gestempeld", maxResults: 5 });
+  assert(sc.totalCandidates > 0, "Dutch technique surface form narrows the FTS");
+  assert(sc.totalConfirmed > 0, "surface-form technique confirms via the raw technique token");
+}
+console.log("\nplacement: \"achterzijde\" (Dutch surface form of bucket \"verso\")");
+{
+  const { sc } = await call({ placement: "achterzijde", maxResults: 5 });
+  assert(sc.totalCandidates > 0, "Dutch placement surface form narrows the FTS");
+  assert(sc.totalConfirmed > 0, "surface-form placement confirms via the raw placement token");
+}
+
 // 5. excludeCollectorMarkOnly strips boilerplate
 console.log("\ntext + excludeCollectorMarkOnly");
 {

@@ -542,8 +542,29 @@ export function inscriptionMatchesFacets(seg: ParsedInscription, f: InscriptionF
       (seg.type != null && wanted.includes(seg.type.toLowerCase()));
     if (!matched) return false;
   }
-  if (f.placements.length && !(seg.normalizedPlacement && f.placements.includes(seg.normalizedPlacement))) return false;
-  if (f.techniques.length && !(seg.normalizedTechnique && f.techniques.includes(seg.normalizedTechnique))) return false;
+  if (f.placements.length) {
+    // Match the normalised surface bucket OR a raw catalogued placement token, so an
+    // unmapped value or a Dutch surface form (e.g. "achterzijde", whose bucket is
+    // "verso") still confirms against the literal FTS narrow instead of being dropped.
+    // The raw `placement` is a comma-joined token string ("verso, linksonder"), so
+    // split it and compare token-by-token rather than whole-string.
+    const wanted = f.placements.map((p) => p.toLowerCase());
+    const rawTokens = seg.placement ? seg.placement.toLowerCase().split(/,\s*/) : [];
+    const matched =
+      (seg.normalizedPlacement != null && wanted.includes(seg.normalizedPlacement.toLowerCase())) ||
+      rawTokens.some((t) => wanted.includes(t));
+    if (!matched) return false;
+  }
+  if (f.techniques.length) {
+    // Same as placement: match the normalised bucket OR a raw token (comma-joined,
+    // e.g. "gestempeld, gedrukt"), so a Dutch surface form like "gestempeld" confirms.
+    const wanted = f.techniques.map((t) => t.toLowerCase());
+    const rawTokens = seg.technique ? seg.technique.toLowerCase().split(/,\s*/) : [];
+    const matched =
+      (seg.normalizedTechnique != null && wanted.includes(seg.normalizedTechnique.toLowerCase())) ||
+      rawTokens.some((t) => wanted.includes(t));
+    if (!matched) return false;
+  }
   if (f.collectorMark) {
     const num = f.collectorMark.match(/(\d+[a-z]?)/i)?.[1]?.toUpperCase();
     const q = f.collectorMark.toLowerCase();
