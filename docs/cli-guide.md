@@ -42,7 +42,7 @@ The `npm run cli` form needs `--` before tool flags so npm doesn't swallow them.
 `rijks-mcp` form, link the bin onto your `PATH` once with `npm link` (or `npm install -g .`) from
 the repo root; all three forms are otherwise identical.
 
-**Scope.** The CLI exposes the 11 stateless tools. The four viewer/stateful tools
+**Scope.** The CLI exposes the 12 stateless tools. The four viewer/stateful tools
 (`get_artwork_image`, `navigate_viewer`, `remount_viewer`, `poll_viewer_commands`) depend on the
 live viewer iframe and are intentionally excluded — invoking one is a usage error (exit 2).
 
@@ -240,6 +240,7 @@ $ node scripts/cli.mjs --show-call search --query "tulip" --type print --max 10
 | `semantic` | `semantic_search` | `query` | `--max` | `results` | offset |
 | `persons` | `search_persons` | `name` | `--max` | `persons` | offset |
 | `provenance` | `search_provenance` | `party` | `--max` | `results` | offset |
+| `inscriptions` | `search_inscriptions` | `text` | `--max` | `results` | offset |
 | `details` | `get_artwork_details` | `objectNumber` | — (single) | — | — |
 | `stats` | `collection_stats` | `dimension` | `--topN` | `entries` | offset |
 | `similar` | `find_similar` | `objectNumber` | `--max` | — (single) | — |
@@ -256,7 +257,7 @@ Token paging: pass `--resumption-token <tok>` (likewise surfaced on stderr).
 ### `search` → `search_artwork`
 
 Structured filters; all combine (array values AND-combined). Returns up to 25 (max 50). Full filter
-list via `search --help` (32 filters: title, creator, subject, type, material, technique, dates,
+list via `search --help` (30+ filters: title, creator, subject, type, material, technique, dates,
 place hierarchy, geo proximity, themes, …).
 
 ```bash
@@ -342,6 +343,35 @@ node scripts/cli.mjs provenance --transferType gift --layer periods --max 5
 Output keys: `totalArtworks`, `results`, plus `periods`/`facets`/`warnings` depending on layer.
 Each result: `objectNumber`, `title`, `creator`, `date`, `url`, `eventCount`, `matchedEventCount`,
 `events`.
+
+---
+
+### `inscriptions` → `search_inscriptions`
+
+Structured search over on-object text — collector's marks, signatures, and transcribed inscriptions.
+The positional maps to `--text` (a blunt full-text match over the whole inscription blob); narrower
+flags target the parsed structure: `--transcribedText` (quoted text only — signatures, captions),
+`--collectorMark` (Lugt catalogue reference, e.g. `Lugt 240` or just the number), `--inscriptionType`,
+`--placement` (`recto`/`verso`), `--technique`, plus `--hasTranscribedText` /
+`--excludeCollectorMarkOnly` / `--isPlaceholder` boolean refiners. Offset paging.
+
+```bash
+# Works whose transcribed text mentions Rembrandt (signatures, captions)
+$ node scripts/cli.mjs inscriptions --transcribedText "Rembrandt" --max 3 --fields objectNumber,title
+{"objectNumber":"KOG-AA-2-2-16A","title":"Gezicht op Volewijk"}
+{"objectNumber":"SK-C-5","title":"The Night Watch ..."}
+{"objectNumber":"SK-C-6","title":"The Sampling Officials ..."}
+
+# By Lugt collector-mark reference
+node scripts/cli.mjs inscriptions --collectorMark "Lugt 240" --max 5 --fields objectNumber,title
+
+# Drop pure collector-mark boilerplate, keep only works with real transcribed text
+node scripts/cli.mjs inscriptions --hasTranscribedText --excludeCollectorMarkOnly --max 10
+```
+
+Output keys: `totalConfirmed`, `totalCandidates`, `candidatesCapped`, `results`. Each result:
+`objectNumber`, `title`, `creator`, `date`, `url`, `matchedInscriptions`. Cap with `--max` (1–100,
+default 20); page with `--offset`.
 
 ---
 

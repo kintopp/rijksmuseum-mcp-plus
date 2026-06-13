@@ -66,7 +66,7 @@ npm run cli -- search --help         # flags for one command, generated from the
 ```
 
 - **Transport:** `--http <url>` (or `RIJKS_MCP_HTTP`) talks to a running `npm run serve` / Railway server — warm, so calls are instant. With no `--http`, it falls back to spawning `node dist/index.js` over stdio (zero-config; needs `npm run build` + the DBs in `data/`).
-- **Commands** are short verbs aliased to tools (`search`, `semantic`, `persons`, `provenance`, `details`, `stats`, `similar`, `browse-set`, `list-sets`, `changes`, `inspect`). The first positional maps to the tool's primary parameter; everything else is a `--flag`. Help and flag coercion are derived from the live `inputSchema`, so they never drift.
+- **Commands** are short verbs aliased to tools (`search`, `semantic`, `persons`, `provenance`, `inscriptions`, `details`, `stats`, `similar`, `browse-set`, `list-sets`, `changes`, `inspect`). The first positional maps to the tool's primary parameter; everything else is a `--flag`. Help and flag coercion are derived from the live `inputSchema`, so they never drift.
 - **Output:** list tools emit JSONL on stdout (one object per line, `jq -c`-friendly); single-object tools emit one compact JSON object. `--json` prints the whole payload pretty; `--table` is a terse human view; `--fields a,b,c` projects keys (the main token lever). Counts, pagination hints (`--offset` / `--resumption-token`), and warnings go to stderr to keep stdout clean. `--show-call` prints the resolved `{tool, arguments}` without executing.
 - **Exit codes:** `0` ok · `1` tool/connection error · `2` usage error. Tool errors preserve the server's prose routing hints (on stderr).
 
