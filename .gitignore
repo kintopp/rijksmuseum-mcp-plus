@@ -63,3 +63,6 @@ data/audit/*
 data/backfills/*
 !data/backfills/curated-*.csv
 __pycache__/
+
+# Generated test fixture DB (rebuilt at test time from fixtures/vocab-schema.sql; plans/003)
+scripts/tests/fixtures/.generated/
