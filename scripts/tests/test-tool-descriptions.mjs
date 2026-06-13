@@ -1,8 +1,11 @@
 /**
- * Tool-description regression test (cluster E / #297).
+ * Tool-description regression test (cluster E / #297; front-loading / #392).
  *
  * Boots the server in stdio mode, lists tools, and asserts each description:
- *   - Carries the discriminator-first "Use when…" lead-in (or close variant).
+ *   - Front-loads a self-contained summary (no "Use …" boilerplate prefix,
+ *     and the clipped ~70-char catalogue prefix doesn't restate the title) —
+ *     so deferred-loading clients that show only name + clipped prefix can
+ *     still discriminate the tool. See #392.
  *   - Cross-links to the alternative tools by name.
  *   - Doesn't reference filters that were dropped in clusters A or B.
  *   - For find_similar: mentions all 9 channel names.
@@ -63,22 +66,39 @@ function descOf(name) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  Discriminator-first lead-ins (the three core retrieval tools)
+//  Front-loaded, title-independent leads for every model-visible tool (#392)
+//
+//  Deferred-loading clients present only the tool name + a clipped prefix
+//  (~70–90 chars) of the description. Guard the two robust invariants:
+//    (a) no "Use …" boilerplate consuming the leading budget;
+//    (b) the clipped prefix doesn't merely restate the title the client
+//        already shows.
+//  (The "char 70 falls inside a word" heuristic from the issue is left out:
+//   clients clip anywhere in a range, every summary completes before the cut,
+//   and a fixed-offset boundary check rejects good descriptions.)
 // ══════════════════════════════════════════════════════════════════
 
-section("Discriminator-first lead-ins");
+section("Front-loaded, title-independent leads (#392)");
+
+// App-only internal tools (visibility ["app"]) are hidden from the model and
+// intentionally terse ("Internal: …") — out of scope per #392.
+const MODEL_VISIBLE = tools
+  .map((t) => t.name)
+  .filter((n) => n !== "remount_viewer" && n !== "poll_viewer_commands");
+
+for (const name of MODEL_VISIBLE) {
+  const tool = expect(name);
+  const desc = tool.description ?? "";
+  const clip = desc.slice(0, 70);
+  assert(!desc.startsWith("Use "),
+    `${name}: description does not open with "Use …" boilerplate`);
+  assert(!(tool.title && clip.includes(tool.title)),
+    `${name}: clipped 70-char prefix does not restate the title verbatim`);
+}
 
 const sa = descOf("search_artwork");
-assert(/^Use when you have specific filter criteria/.test(sa),
-  "search_artwork: 'Use when you have specific filter criteria' lead-in");
-
 const ss = descOf("semantic_search");
-assert(/^Use when the user has a free-text concept/.test(ss),
-  "semantic_search: 'Use when the user has a free-text concept' lead-in");
-
 const fs = descOf("find_similar");
-assert(/^Use when the user has a SPECIFIC artwork/.test(fs),
-  "find_similar: 'Use when the user has a SPECIFIC artwork' lead-in");
 
 // ══════════════════════════════════════════════════════════════════
 //  Cross-links between the three core retrieval tools
@@ -134,8 +154,8 @@ assert(/DB-backed|DB-direct/.test(bs), "browse_set mentions DB-backed/DB-direct"
 section("search_persons");
 
 const sp = descOf("search_persons");
-assert(/^Use when the user has a demographic/.test(sp),
-  "search_persons: 'Use when the user has a demographic' lead-in");
+assert(/^Demographic\/structural lookup of persons/.test(sp),
+  "search_persons: front-loaded 'Demographic/structural lookup of persons' lead");
 assert(sp.includes("search_artwork") && sp.includes("vocabId"),
   "search_persons cross-links to search_artwork({creator: vocabId})");
 

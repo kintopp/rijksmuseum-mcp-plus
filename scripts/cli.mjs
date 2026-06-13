@@ -63,33 +63,34 @@ const IN_SCOPE_TOOLS = new Set(Object.values(VERBS).map((c) => c.tool));
 // Viewer/stateful tools depend on the iframe + viewerQueues — not usable over the CLI.
 const VIEWER_TOOLS = new Set(["get_artwork_image", "navigate_viewer", "remount_viewer", "poll_viewer_commands"]);
 
-// Curated help copy (authored one-liners + a worked example per verb). Kept here, not derived
-// from tool descriptions — those clip mid-word and read as fragments. The per-command *flag* list
-// stays schema-derived (always current); only this prose framing is hand-written.
+// Curated help copy (authored one-liners + a worked example per verb), kept CLI-tailored: each
+// summary echoes the tool's front-loaded description lead (#392) but adds terminal-specific flag
+// and pagination hints the MCP descriptions don't carry. The per-command *flag* list stays
+// schema-derived (always current); only this prose framing is hand-written.
 const VERB_HELP = {
-  search:       { summary: "Structured metadata search — filter by creator, type, subject, place, date (all combine, AND).",
+  search:       { summary: "Structured filter search — artworks matching ALL given filters (creator, type, subject, place, date; combine, AND).",
                   example: `rijks-mcp search --creator "Rembrandt van Rijn" --type painting --max 5 --fields objectNumber,title` },
-  semantic:     { summary: "Meaning/concept search over reconstructed text; natural-language queries, ranked by similarity.",
+  semantic:     { summary: "Free-text concept search by embedding similarity; natural-language queries ranked over reconstructed text.",
                   example: `rijks-mcp semantic "ships in a stormy sea" --max 5 --fields objectNumber,title,similarityScore` },
-  persons:      { summary: "Look up people/groups; returns vocabIds to feed search --creator (by) or --aboutActor (depicting).",
+  persons:      { summary: "Demographic/structural lookup of people/groups; returns vocabIds to feed search --creator (by) or --aboutActor (depicting).",
                   example: `rijks-mcp persons "Vermeer" --max 3 --fields vocabId,label,artworkCount` },
-  provenance:   { summary: "Search parsed ownership history — party, transfer type, location, date/price range, gaps.",
+  provenance:   { summary: "Ownership-history search across parsed provenance — party, transfer type, location, date/price range, gaps.",
                   example: `rijks-mcp provenance --party "Six" --max 5 --fields objectNumber,title` },
-  inscriptions: { summary: "Structured search — collector's marks, signatures, transcribed on-object text; facet by type/placement/technique.",
+  inscriptions: { summary: "Structured search over inscriptions — collector's marks, signatures, transcribed on-object text; facet by type/placement/technique.",
                   example: `rijks-mcp inscriptions --transcribedText "Rembrandt" --max 5 --fields objectNumber,title` },
-  details:      { summary: "Full metadata for one artwork by object number (single-object output).",
+  details:      { summary: "Full metadata for ONE artwork by object number — creator, dates, materials, provenance, inscriptions, related objects.",
                   example: `rijks-mcp details SK-C-5 --fields objectNumber,title,creator,date` },
-  stats:        { summary: "Aggregate counts across a dimension (type, decade, creator, place…). Cap with --topN, not --max.",
+  stats:        { summary: "Group-by breakdown over one dimension (type, decade, creator, place…) — counts/percentages. Cap with --topN, not --max.",
                   example: `rijks-mcp stats type --topN 10 --fields label,count --table` },
-  similar:      { summary: "Artwork-to-artwork similarity across 9 signal channels plus a pooled consensus.",
+  similar:      { summary: "Given one object number, finds others like it across 9 signal channels plus a pooled consensus.",
                   example: `rijks-mcp similar SK-C-5 --max 10 --json | jq '.modes.visual'` },
-  "browse-set": { summary: "Enumerate the members of one curated set (token pagination).",
+  "browse-set": { summary: "Enumerate the member artworks of one curated set by setSpec (token pagination).",
                   example: `rijks-mcp browse-set 2619 --max 5 --fields objectNumber,title` },
-  "list-sets":  { summary: "Discover curated sets; filter by --query/--minMembers/--maxMembers (no --max).",
+  "list-sets":  { summary: "Browse curated sets — thematic/sub-collection groupings; filter by --query/--minMembers/--maxMembers (no --max).",
                   example: `rijks-mcp list-sets --query Rembrandt --fields setSpec,name,memberCount` },
-  changes:      { summary: "Recent additions/modifications by date range; --identifiersOnly for light headers (token paging).",
+  changes:      { summary: "OAI-PMH delta feed — records changed in a date range; --identifiersOnly for light headers (token paging).",
                   example: `rijks-mcp changes --from 2024-01-01 --identifiersOnly --max 5` },
-  inspect:      { summary: "Fetch an image region as bytes for visual analysis; --out <file> saves them to disk.",
+  inspect:      { summary: "Image region as bytes for visual analysis; --out <file> saves them to disk.",
                   example: `rijks-mcp inspect SK-C-5 --region "pct:40,40,15,15" --out crop.jpg` },
 };
 // Invariant: every verb has curated help. Catches a verb added to VERBS but not VERB_HELP at load,
