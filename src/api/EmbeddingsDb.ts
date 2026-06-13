@@ -45,6 +45,7 @@ export class EmbeddingsDb {
   private stmtKnn: Statement | null = null;
   private stmtArtwork: Statement | null = null;
   private stmtFilteredKnn = new Map<number, Statement>(); // keyed by chunk size
+  private stmtDescObjLookup = new Map<number, Statement>(); // keyed by placeholder count
 
   // Description embedding statements (null if desc tables not present)
   private stmtDescLookup: Statement | null = null;
@@ -280,12 +281,17 @@ export class EmbeddingsDb {
     const filtered = knnRows.filter(r => r.artwork_id !== queryArtId).slice(0, k);
     if (filtered.length === 0) return [];
 
-    // Batch-resolve object_numbers in a single query
-    const placeholders = filtered.map(() => "?").join(", ");
+    // Batch-resolve object_numbers in a single query (statement cached by size)
     const artIds = filtered.map(r => r.artwork_id);
-    const objRows = this.db.prepare(
-      `SELECT art_id, object_number FROM desc_embeddings WHERE art_id IN (${placeholders})`
-    ).all(...artIds) as { art_id: number; object_number: string }[];
+    let objStmt = this.stmtDescObjLookup.get(artIds.length);
+    if (!objStmt) {
+      const placeholders = artIds.map(() => "?").join(", ");
+      objStmt = this.db.prepare(
+        `SELECT art_id, object_number FROM desc_embeddings WHERE art_id IN (${placeholders})`
+      );
+      this.stmtDescObjLookup.set(artIds.length, objStmt);
+    }
+    const objRows = objStmt.all(...artIds) as { art_id: number; object_number: string }[];
     const objMap = new Map(objRows.map(r => [r.art_id, r.object_number]));
 
     return filtered

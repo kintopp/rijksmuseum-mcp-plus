@@ -1180,6 +1180,7 @@ export class VocabularyDb {
   private stmtBatchTypesByArtIdCache = new Map<number, Statement>();
   private stmtBatchDescByArtIdCache = new Map<number, Statement>();
   private stmtBatchImportanceByArtIdCache = new Map<number, Statement>();
+  private stmtParentGroupingsCache = new Map<number, Statement>();
   /** Column list for batchLookupByArtId — resolved once at construction so the
    *  chunk-size-keyed statement cache doesn't need hasIiif in its key. */
   private batchByArtIdCols = "";
@@ -2106,15 +2107,20 @@ export class VocabularyDb {
   findParentGroupings(objectNumbers: string[]): Map<string, string> {
     const out = new Map<string, string>();
     if (!this.db || !this.hasArtworkParent_ || objectNumbers.length === 0) return out;
-    const placeholders = objectNumbers.map(() => "?").join(", ");
-    const rows = this.db.prepare(`
-      SELECT child.object_number AS child_obj, parent.object_number AS parent_obj
-      FROM artwork_parent ap
-      JOIN artworks child  ON child.art_id  = ap.art_id
-      JOIN artworks parent ON parent.art_id = ap.parent_art_id
-      WHERE child.object_number IN (${placeholders})
-        AND parent.object_number IN (${placeholders})
-    `).all(...objectNumbers, ...objectNumbers) as { child_obj: string; parent_obj: string }[];
+    let stmt = this.stmtParentGroupingsCache.get(objectNumbers.length);
+    if (!stmt) {
+      const placeholders = objectNumbers.map(() => "?").join(", ");
+      stmt = this.db.prepare(`
+        SELECT child.object_number AS child_obj, parent.object_number AS parent_obj
+        FROM artwork_parent ap
+        JOIN artworks child  ON child.art_id  = ap.art_id
+        JOIN artworks parent ON parent.art_id = ap.parent_art_id
+        WHERE child.object_number IN (${placeholders})
+          AND parent.object_number IN (${placeholders})
+      `);
+      this.stmtParentGroupingsCache.set(objectNumbers.length, stmt);
+    }
+    const rows = stmt.all(...objectNumbers, ...objectNumbers) as { child_obj: string; parent_obj: string }[];
     for (const r of rows) out.set(r.child_obj, r.parent_obj);
     return out;
   }
