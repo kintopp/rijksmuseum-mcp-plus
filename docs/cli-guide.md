@@ -132,6 +132,26 @@ carte-de-visite        17979
 | `1` | Tool error or connection failure (the server's prose error — e.g. "no results; try the Dutch term" — is written to stderr) |
 | `2` | Usage error (unknown command, an out-of-scope viewer tool, bad flags) |
 
+### Batch mode (`--stdin`)
+
+`--stdin` reads lines from stdin and runs **one invocation per line over a single
+connection** — each line becomes the command's primary positional. This amortizes the stdio
+cold-start (one warm child instead of one process per input) and is the natural way for an agent
+or pipeline to fan a verb over many inputs. Blank lines and `#`-comment lines are skipped; every
+other flag (`--fields`, `--json`, `--max`, …) applies to each line. Output stays JSONL on stdout,
+in input order; per-line errors go to stderr prefixed with the offending token.
+
+```bash
+$ printf 'SK-C-5\nSK-A-1115\n' | node scripts/cli.mjs details --stdin --fields objectNumber,title
+{"objectNumber":"SK-C-5","title":"The Night Watch …"}
+{"objectNumber":"SK-A-1115","title":"The Battle of Waterloo"}
+```
+
+The batch exit code is `0` only if every line succeeded, `1` if any line errored (the other lines
+still emit; a `N of M input(s) failed` summary goes to stderr), and `2` for a usage error — e.g.
+`--stdin` on a command with no positional, or with no piped input (a bare TTY exits `2` rather than
+hanging on the keyboard).
+
 ---
 
 ## Flags & argument conventions
@@ -490,10 +510,15 @@ node scripts/cli.mjs search --creator "$VID" --max 50 --fields objectNumber,titl
 node scripts/cli.mjs semantic "winter landscape with skaters" --max 50 \
   | jq -c 'select(.similarityScore > 0.85) | {objectNumber, title}'
 
-# Fan out: pull details for each search hit
+# Fan out: pull details for each search hit (one CLI process per object number)
 node scripts/cli.mjs search --query "self-portrait" --max 5 --fields objectNumber \
   | jq -r '.objectNumber' \
   | while read on; do node scripts/cli.mjs details "$on" --fields objectNumber,title,date; done
+
+# Same fan-out, one connection: pipe the object numbers straight into --stdin batch mode
+node scripts/cli.mjs search --creator 2103429 --type painting --max 50 --fields objectNumber \
+  | jq -r '.objectNumber' \
+  | node scripts/cli.mjs details --stdin --fields objectNumber,title,date
 ```
 
 Errors and counts go to stderr, so they never corrupt a `| jq` pipe. Add `--quiet` to silence the
