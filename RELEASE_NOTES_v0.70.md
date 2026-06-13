@@ -1,21 +1,11 @@
-<!--
-Provisional release notes for the next decade-step release (likely v0.70).
-Not committed to main — at release time, rename to RELEASE_NOTES_v0.70.md and pass to
-`gh release create --notes-file`, then drop it in post-release housekeeping (see the
-v0.24 precedent).
-
-This is a running stub: it captures the user-facing changes that landed AFTER the
-v0.60 tag (2026-06-09). Add to it as further work lands.
--->
-
-## v0.70 (draft)
+## v0.70
 
 Structured search and parsing for the inscriptions on a work — collector's marks,
 signatures, and the text written on the object itself, both as a new search and within a
 work's full details — together with the ability to look up works by their object number
-(whole series at once) and to run many command-line searches in a single batch.
-
-<!-- TODO at release time: confirm harvest status and fold into the Databases section. -->
+(whole series at once) and to run many command-line searches in a single batch. This
+release also rebuilds the meaning-based search index; the underlying catalogue is unchanged
+from v0.60.
 
 ### Inscriptions
 
@@ -45,9 +35,6 @@ work's full details — together with the ability to look up works by their obje
 
 ### Meaning-based search
 
-<!-- TODO at release time: this only takes effect once the rebuilt embeddings database
-     ships with the release. If that swap is deferred, drop this section. -->
-
 - **Cleaner results when searching by theme or description.** Searching by meaning rather
   than exact words now sets aside the collection's ownership stamps — the repeated
   collector's marks and catalogue placeholders that sit on the back of most prints and
@@ -56,11 +43,6 @@ work's full details — together with the ability to look up works by their obje
   out genuinely related works.
 
 ### Provenance
-
-<!-- TODO at release time: the provenance *parsing* improvements that landed (treating a
-     bare "sold" as a sale, expanding dated ranges to full period bounds, and a quote-splitter
-     fix for possessive apostrophes) only reach results after a provenance re-parse. Add a
-     bullet here for them only if that re-parse ships with the release. -->
 
 - **Compare ownership history across many works at once.** Provenance search gains a compact
   mode that returns a tighter, easier-to-scan summary of each work's chain of ownership —
@@ -96,7 +78,3 @@ work's full details — together with the ability to look up works by their obje
   time over the catalogue text and identifiers already present, so they need no new data.
 - The meaning-based search index was rebuilt to leave out the ownership-stamp boilerplate
   described above. The underlying catalogue is otherwise unchanged.
-
-<!-- TODO at release time: confirm the rebuilt embeddings database actually shipped (the
-     bullet above and the "Meaning-based search" section both depend on it); if not, remove
-     both. -->

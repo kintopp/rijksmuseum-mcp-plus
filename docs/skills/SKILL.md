@@ -3,8 +3,8 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings even when the user doesn't name the collection.
 metadata:
-  version: "0.60"
-  last_updated: "2026-06-09"
+  version: "0.70"
+  last_updated: "2026-06-13"
 ---
 
 # Rijksmuseum MCP+ Research Skill
