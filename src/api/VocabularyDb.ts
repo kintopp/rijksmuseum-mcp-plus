@@ -288,6 +288,8 @@ export interface VocabSearchParams {
   creationDate?: string;
   dateMatch?: "overlaps" | "within" | "midpoint";
   title?: string;
+  // #395: object-number filter. Exact match by default; `*`/`?` wildcards → GLOB.
+  objectNumber?: string;
   // Geo proximity search (require geocoded vocabulary DB)
   nearPlace?: string;
   nearLat?: number;
@@ -5115,6 +5117,35 @@ export class VocabularyDb {
         }
       } else {
         warnings?.push("Date filtering requires a vocabulary DB with date columns (re-run harvest Phase 4). This filter was ignored.");
+      }
+    }
+
+    // Object-number filter (#395). Exact match (= ?) is the default fast path —
+    // it resolves via the PRIMARY KEY index. When the input carries `*` (multi-char)
+    // or `?` (single-char) wildcards it switches to GLOB on object_number, which the
+    // autoindex serves as a range scan for prefix patterns (e.g. SK-C-5*) and a
+    // covering-index scan for leading wildcards (acceptable at this row count).
+    // GLOB is case-sensitive — patterns must match the stored casing (object numbers
+    // are predominantly uppercase, but a few carry lowercase suffixes like "bis").
+    if (typeof effective.objectNumber === "string") {
+      const pattern = (effective.objectNumber as string).trim();
+      if (pattern) {
+        if (/[*?]/.test(pattern)) {
+          // Guard against degenerate patterns (e.g. bare "*") that match most of the
+          // collection: require at least 2 literal (non-wildcard) characters.
+          const literalCount = pattern.replace(/[*?]/g, "").length;
+          if (literalCount < 2) {
+            warnings?.push(
+              `objectNumber pattern "${pattern}" is too broad — include at least 2 literal characters alongside the wildcard (e.g. "SK-C-5*").`
+            );
+            return null;
+          }
+          conditions.push("a.object_number GLOB ?");
+          bindings.push(pattern);
+        } else {
+          conditions.push("a.object_number = ?");
+          bindings.push(pattern);
+        }
       }
     }
 

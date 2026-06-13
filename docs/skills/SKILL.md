@@ -213,6 +213,10 @@ Two tools touch this field:
 
 `search_inscriptions` parses candidates at runtime, so it needs **at least one narrowing filter**, and a single broad facet (e.g. `inscriptionType: "collector's mark"`, roughly half the corpus) returns a **partial** result (`candidatesCapped: true`) — add a narrowing term. For a single work, `get_artwork_details` already returns `parsedInscriptions` (lossless, per-segment) and an `inscriptionSummary` rollup (`hasTranscribedText`, `hasCollectorMarkOnly`, collector marks, types) — use these to tell "object bears text" from "verso collector stamp" at a glance.
 
+### Object-number filtering and series exploration
+
+`search_artwork({objectNumber})` matches the stable identifier exactly by default (`"SK-C-5"` → The Night Watch). Wildcards turn it into a series browser: `*` matches any run of characters, `?` matches a single one — `"SK-C-5*"` for the Night Watch group, `"RP-P-1906-*"` for one year's print acquisitions, `"BK-NM-*"`. Matching is **case-sensitive** (object numbers are predominantly uppercase, with a few lowercase suffixes like `bis`), and a wildcard pattern needs at least two literal characters (a near-bare `"*"` is rejected with a warning). Combine it freely with content filters — e.g. `objectNumber="RP-P-1906-*"` with `type="print"`.
+
 ---
 
 ## Modifier Parameters (cannot stand alone)

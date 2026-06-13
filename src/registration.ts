@@ -1534,6 +1534,7 @@ function registerTools(
     "nearPlace", "nearLat", "nearLon",
     "material", "technique", "type", "creator",
     "creationDate",
+    "objectNumber",
     "imageAvailable",
     "hasProvenance",
     "aboutActor",
@@ -1621,6 +1622,15 @@ function registerTools(
             "\"overlaps\" (default): artwork range overlaps query range — inclusive, but objects with broad ranges appear in multiple bins. " +
             "\"within\": artwork range falls entirely within query range — exclusive bins, but drops broadly-dated objects (~43% of collection spans >1 decade). " +
             "\"midpoint\": assigns each artwork to one bin by midpoint of its date range — every object counted exactly once with no data loss. Best for statistical comparisons and charts."
+          ),
+        objectNumber: optStr()
+          .optional()
+          .describe(
+            "Filter by object number. Exact match by default (e.g. 'SK-C-5' for The Night Watch). " +
+            "Supports wildcards: '*' matches any run of characters, '?' matches a single character — " +
+            "e.g. 'SK-C-5*' for the Night Watch group, 'RP-P-1906-*' for a print-acquisition series, 'BK-NM-*'. " +
+            "Case-sensitive (object numbers are predominantly uppercase). " +
+            "A wildcard pattern needs at least 2 literal characters."
           ),
         description: optStr()
           .optional()
