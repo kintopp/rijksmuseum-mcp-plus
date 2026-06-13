@@ -41,6 +41,8 @@ A release combines code changes, DB updates, and a GitHub release tag. The full 
 
 ### Shell quoting: `railway ssh` + zsh
 
+**Prerequisite — load the SSH key into the agent first.** A non-interactive shell starts with an empty ssh-agent, so `railway ssh` fails with `Permission denied (publickey)` (+ an `ssh_askpass` error) even though the key is registered (`railway ssh keys list` shows it). Run `ssh-add --apple-load-keychain` (macOS) to populate the agent from the Keychain, then retry. Confirm with `ssh-add -l`.
+
 `railway ssh --service <name> -- <cmd>` runs `<cmd>` inside the container, but zsh expands globs on the **local** shell first. Unmatched globs abort the whole command line with `no matches found` — and with `&&` chaining, the error may come from the second command while the first silently succeeded. Two safe patterns:
 
 ```bash
@@ -161,8 +163,34 @@ python3 scripts/geocoding/strip_non_authority_coords.py
 
 Each script is idempotent — re-running on an already-backfilled DB updates 0 rows.
 
+**Embeddings only — assemble MAIN + DESC first (do NOT deploy the regen output directly).**
+`generate-vocabulary-embeddings-modal.py` produces a **main-only** DB (`artwork_embeddings` +
+`vec_artworks`). The deployed `embeddings.db` ALSO carries `desc_embeddings` + `vec_desc_artworks`
+(find_similar's Description channel), built separately and unchanged by a main regen. Deploying the
+main-only DB silently breaks that channel. Combine with the currently-deployed DB's desc index:
 ```bash
-# 3. Compress (locally) and record SHA-256
+python3 scripts/assemble-embeddings-release.py \
+  --main data/embeddings-no-subjects.db \
+  --desc-source data/embeddings.db \   # the CURRENTLY-DEPLOYED DB (its desc index is authoritative)
+  --out data/embeddings-<rel>.db
+```
+
+**Completeness gate (BLOCKS deploy — run before compressing any DB).** A regenerated DB must match
+the *shape* of the one it replaces, not just look internally valid:
+- **Size sanity.** Compare `ls -lh` of the new DB to the deployed asset. An unexplained delta (the
+  v0.70 main-only DB was 383 MB gz vs ~595 historical) is a **STOP** — diff the table inventory, do
+  not rationalize it.
+- **Table inventory + row counts.** `sqlite_master` table list and per-table `COUNT(*)` must match the
+  deployed DB (embeddings: `artwork_embeddings`==`vec_artworks`, `desc_embeddings`==`vec_desc_artworks`).
+- **`version_info` keys.** Must carry every key the deployed DB has (embeddings: both the artwork keys
+  AND the `desc_*` block — a missing `desc_*` block means the desc half is absent).
+- **Provenance alignment.** `vocab_db_built_at` must equal the deployed `vocabulary.db` `version_info.built_at`
+  (else art_ids mismatch).
+- **Sample KNN on BOTH indexes.** A self-KNN on `vec_artworks` AND `vec_desc_artworks` returns the query
+  row at distance ~0.
+
+```bash
+# 3. Compress (locally) and record SHA-256 — only AFTER the completeness gate passes
 gzip -k -f data/<db-file>.db
 shasum -a 256 data/<db-file>.db.gz
 
@@ -210,7 +238,7 @@ curl -sS -X POST https://rijksmuseum-mcp-plus-production.up.railway.app/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   | grep -oE '"name":"[a-z_]+"' | sort -u | wc -l
 ```
-- Expected: **15** (12 standard + 3 app tools). Anything less means a vocab-DB-dependent tool failed to register — almost always a sign the DB handle didn't open. Check `railway logs --service rijksmuseum-mcp-plus --since 5m | grep -i "malformed\|vocab"` for the cause before doing anything else.
+- Expected: **16** (13 standard + 3 app tools, as of v0.70 — `search_inscriptions` brought it to 16; re-confirm against the previous deploy's count each release, the number grows). Anything *fewer* than the prior deploy means a vocab-DB-dependent tool failed to register — almost always a sign the DB handle didn't open. Check `railway logs --service rijksmuseum-mcp-plus --since 5m | grep -i "malformed\|vocab"` for the cause before doing anything else.
 
 **Vocab DB swap verification:**
 ```
@@ -219,12 +247,19 @@ collection_stats(dimension: "type")
 - Confirm `Total artworks: <N>` matches the release-notes count exactly (e.g. 833,432 for v0.24; 834,435 for v0.30 and v0.40).
 - For v0.24+ specifically: `collection_stats(dimension: "categoryMethod")` returns the enrichment-audit-trail dimension. A pre-v0.24 DB rejects the dimension entirely, so this is a definitive v0.24-or-later check.
 
-**Embeddings DB swap verification:**
-```
-semantic_search(query: "moonlit harbor with ships")
-```
-- Rank 1 should be `RP-T-1948-397` "Moonlit River Landscape with Fishermen" (Hendrick Avercamp, 1625), similarity ≈ 0.849.
-- If rank 1 is topically unrelated (e.g. "Griekse klederdracht"), the art_ids are still mismatched — the new embeddings DB hasn't landed. Re-check `/data/embeddings.db` size and timestamp via `railway ssh`.
+**Embeddings DB swap verification.** Verify by **ranking + a feature discriminator, NOT an absolute
+similarity value** — a full regen re-encodes every vector, so absolute scores drift globally (~0.004 in
+v0.70) and the score also depends on the query-encoder version. A stale absolute value caused a false
+"old DB still serving" alarm in the v0.70 swap.
+1. **Main index — ranking.** `semantic_search(query: "moonlit harbor with ships")` → rank 1 = `RP-T-1948-397`
+   "Moonlit River Landscape with Fishermen". If rank 1 is topically unrelated (e.g. "Griekse klederdracht"),
+   the art_ids are mismatched — the new DB hasn't landed; re-check `/data/embeddings.db` size + timestamp via `railway ssh`.
+2. **Main index — change discriminator** (only if the regen changed the source text, e.g. the #383 strip):
+   pick a query that exercises the change and confirm prod matches the NEW local DB, not the old. v0.70 strip:
+   `semantic_search("verzamelaarsmerk collector mark stamp Lugt verso")` tops at **~0.83** (stripped) vs **~0.91**
+   (old, boilerplate baked in).
+3. **Description channel** (catches a missing `desc_embeddings` half — the v0.70 near-miss): `find_similar(objectNumber: "SK-C-5")`
+   must show **`Description: N`** with N > 0 in its channel summary. `Description: 0` means the desc index didn't load.
 - Note: MCP schemas are `.strict()` — do **not** pass `limit`/`topK` args; semantic_search returns 15 by default.
 
 **Health polling during cutover:** expect a ~60–90s window of `/health` timeouts while the new container fetches and decompresses the gz (embeddings is ~1.1 GB gz → ~2 GB uncompressed). After that window, `/health` + `/ready` should return steadily.
@@ -289,3 +324,7 @@ gh release upload counts-latest data/iconclass-counts.db --clobber \
     - `MEMORY.md` Current Versions → add as current, demote prior
     - `completed-work.md` Version History → append new entry
     - Delete any `v0XX_release_state.md` project memo (its state is now history)
+
+13. **Refresh the local DB to match prod.** After a DB swap, the local `data/<db-file>.db` is still the
+    *previous* version, so local dev/tests diverge from production. Replace it with the deployed artifact
+    (e.g. `cp data/embeddings-<rel>.db data/embeddings.db`) so later local runs match what's live.
