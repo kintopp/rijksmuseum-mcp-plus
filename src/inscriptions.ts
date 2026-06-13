@@ -525,6 +525,20 @@ export interface InscriptionFacets {
 }
 
 /**
+ * Confirm a comma-joined-raw facet (placement/technique): match the normalised
+ * bucket OR any raw catalogued token. So an unmapped value or a Dutch surface form
+ * (e.g. "achterzijde"→verso, "gestempeld"→stamped) still confirms against the
+ * literal FTS narrow instead of being dropped. The raw field is a comma-joined
+ * token string ("verso, linksonder"), so it is split and compared token-by-token.
+ */
+function matchesBucketOrRawTokens(wanted: string[], normalized: string | null, raw: string | null): boolean {
+  const w = wanted.map((x) => x.toLowerCase());
+  if (normalized != null && w.includes(normalized.toLowerCase())) return true;
+  const rawTokens = raw ? raw.toLowerCase().split(/,\s*/) : [];
+  return rawTokens.some((t) => w.includes(t));
+}
+
+/**
  * Does this segment satisfy every provided per-segment inscription facet?
  * Each facet must hold for THIS segment, so "handwritten signature on the recto"
  * requires one segment that is signature AND recto AND handwritten, not three
@@ -542,29 +556,8 @@ export function inscriptionMatchesFacets(seg: ParsedInscription, f: InscriptionF
       (seg.type != null && wanted.includes(seg.type.toLowerCase()));
     if (!matched) return false;
   }
-  if (f.placements.length) {
-    // Match the normalised surface bucket OR a raw catalogued placement token, so an
-    // unmapped value or a Dutch surface form (e.g. "achterzijde", whose bucket is
-    // "verso") still confirms against the literal FTS narrow instead of being dropped.
-    // The raw `placement` is a comma-joined token string ("verso, linksonder"), so
-    // split it and compare token-by-token rather than whole-string.
-    const wanted = f.placements.map((p) => p.toLowerCase());
-    const rawTokens = seg.placement ? seg.placement.toLowerCase().split(/,\s*/) : [];
-    const matched =
-      (seg.normalizedPlacement != null && wanted.includes(seg.normalizedPlacement.toLowerCase())) ||
-      rawTokens.some((t) => wanted.includes(t));
-    if (!matched) return false;
-  }
-  if (f.techniques.length) {
-    // Same as placement: match the normalised bucket OR a raw token (comma-joined,
-    // e.g. "gestempeld, gedrukt"), so a Dutch surface form like "gestempeld" confirms.
-    const wanted = f.techniques.map((t) => t.toLowerCase());
-    const rawTokens = seg.technique ? seg.technique.toLowerCase().split(/,\s*/) : [];
-    const matched =
-      (seg.normalizedTechnique != null && wanted.includes(seg.normalizedTechnique.toLowerCase())) ||
-      rawTokens.some((t) => wanted.includes(t));
-    if (!matched) return false;
-  }
+  if (f.placements.length && !matchesBucketOrRawTokens(f.placements, seg.normalizedPlacement, seg.placement)) return false;
+  if (f.techniques.length && !matchesBucketOrRawTokens(f.techniques, seg.normalizedTechnique, seg.technique)) return false;
   if (f.collectorMark) {
     const num = f.collectorMark.match(/(\d+[a-z]?)/i)?.[1]?.toUpperCase();
     const q = f.collectorMark.toLowerCase();

@@ -5128,7 +5128,7 @@ export class VocabularyDb {
     // GLOB is case-sensitive — patterns must match the stored casing (object numbers
     // are predominantly uppercase, but a few carry lowercase suffixes like "bis").
     if (typeof effective.objectNumber === "string") {
-      const pattern = (effective.objectNumber as string).trim();
+      const pattern = effective.objectNumber.trim();
       if (pattern) {
         if (/[*?]/.test(pattern)) {
           // Guard against degenerate patterns (e.g. bare "*") that match most of the
