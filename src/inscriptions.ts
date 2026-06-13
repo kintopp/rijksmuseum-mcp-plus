@@ -640,15 +640,16 @@ export function groupInscriptionMatches(parsed: ParsedInscription[]): Inscriptio
   return out;
 }
 
-// ─── Embedding source cleanup (R4 — built now, wired at regen time only) ──
+// ─── Embedding source cleanup (R4 — #383 Proposal 2) ──
 
 /**
  * Build a cleaned inscription string for embedding generation: drop collector-mark
  * and placeholder boilerplate, keep transcribed text and described non-mark
- * inscriptions. Exported for the (deferred, regen-gated) embedding-source eval —
- * deliberately NOT wired into VocabularyDb.reconstructSourceText(), which runs
- * post-KNN and would gain no retrieval benefit while weakening its "reconstructs
- * the embedded format" invariant (R4).
+ * inscriptions. Single source of truth for the strip, with two consumers (R5):
+ * the offline pre-pass `scripts/build-inscription-embed-text.mjs` (which materializes
+ * the cleaned text the Modal generator embeds), and VocabularyDb.reconstructSourceText()
+ * (which mirrors that format for the post-KNN grounding text shown in semantic_search).
+ * Both must apply this so the displayed source text reconstructs the embedded format.
  */
 export function formatInscriptionsForEmbedding(
   input: string | string[] | null | undefined,
@@ -664,5 +665,8 @@ export function formatInscriptionsForEmbedding(
       kept.push(p.value);
     }
   }
-  return kept.join(" ");
+  // De-dup exact repeats — each mark is recorded twice (NL form + EN gloss) with
+  // identical quoted text, so without this every signature embeds twice (R4).
+  const seen = new Set<string>();
+  return kept.filter((s) => (seen.has(s) ? false : (seen.add(s), true))).join(" ");
 }

@@ -55,6 +55,10 @@ def _find_project_root() -> Path:
 
 PROJECT_DIR = _find_project_root()
 DEFAULT_VOCAB_DB = PROJECT_DIR / "data" / "vocabulary.db"
+# #383 Proposal 2: boilerplate-stripped inscription text, materialized by
+# scripts/build-inscription-embed-text.mjs (the real TS parser). Read locally in
+# Phase 1 to replace raw inscription_text in the embedding source.
+DEFAULT_INSCRIPTION_EMBED_DB = PROJECT_DIR / "data" / "inscription-embed-text.db"
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
 DIMENSIONS = 384
@@ -216,6 +220,26 @@ def load_artworks(
 
     conn.close()
 
+    # #383 Proposal 2: load boilerplate-stripped inscription text (materialized by
+    # scripts/build-inscription-embed-text.mjs). art_id → cleaned text (possibly "").
+    # Absent sidecar → embed raw inscription_text (loud warning).
+    inscription_embed: dict[int, str] = {}
+    if DEFAULT_INSCRIPTION_EMBED_DB.exists():
+        iconn = sqlite3.connect(f"file:{DEFAULT_INSCRIPTION_EMBED_DB}?mode=ro", uri=True)
+        inscription_embed = {
+            aid: txt for aid, txt in iconn.execute(
+                "SELECT art_id, embed_text FROM inscription_embed_text"
+            )
+        }
+        iconn.close()
+        n_empty = sum(1 for t in inscription_embed.values() if t == "")
+        print(f"  Inscription strip ACTIVE: {len(inscription_embed):,} entries "
+              f"({n_empty:,} stripped to empty)")
+    else:
+        print(f"  WARNING: {DEFAULT_INSCRIPTION_EMBED_DB.name} not found — embedding RAW "
+              f"inscription_text (collector-mark boilerplate included). Run "
+              f"scripts/build-inscription-embed-text.mjs first to strip it (#383).")
+
     # Build composite texts
     print(f"  Building composite texts (strategy: {strategy})...")
     artworks = []
@@ -223,6 +247,9 @@ def load_artworks(
         art_id = row["art_id"]
         obj_num = row["object_number"]
         subjects = subject_map.get(art_id, [])
+        # Cleaned inscription text when materialized; else raw. "" → drops out of the
+        # field list below (falsy), matching reconstructSourceText's mirror.
+        inscription_val = inscription_embed.get(art_id, row["inscription_text"])
 
         if filter_labels:
             subjects = [s for s in subjects if s not in filter_labels]
@@ -235,13 +262,13 @@ def load_artworks(
                 ("Creator", row["creator_label"]),
                 ("Subjects", subject_text),
                 ("Narrative", row["narrative_text"]),
-                ("Inscriptions", row["inscription_text"]),
+                ("Inscriptions", inscription_val),
                 ("Description", row["description_text"]),
             ]
         elif strategy == "no-subjects":
             fields = [
                 ("Title", row["title"]),
-                ("Inscriptions", row["inscription_text"]),
+                ("Inscriptions", inscription_val),
                 ("Description", row["description_text"]),
                 ("Narrative", row["narrative_text"]),
             ]
@@ -250,7 +277,7 @@ def load_artworks(
                 ("Title", row["title_all_text"]),
                 ("Creator", row["creator_label"]),
                 ("Narrative", row["narrative_text"]),
-                ("Inscriptions", row["inscription_text"]),
+                ("Inscriptions", inscription_val),
                 ("Description", row["description_text"]),
                 ("Subjects", subject_text),
             ]
