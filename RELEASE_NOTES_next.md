@@ -43,6 +43,29 @@ work's full details — together with the ability to look up works by their obje
   print acquisitions. This makes it easy to pull together a related group without knowing
   each individual number.
 
+### Meaning-based search
+
+<!-- TODO at release time: this only takes effect once the rebuilt embeddings database
+     ships with the release. If that swap is deferred, drop this section. -->
+
+- **Cleaner results when searching by theme or description.** Searching by meaning rather
+  than exact words now sets aside the collection's ownership stamps — the repeated
+  collector's marks and catalogue placeholders that sit on the back of most prints and
+  drawings. With that boilerplate no longer mixed into how works are compared, results lean
+  on what a work actually depicts and describes, so near-identical stamps no longer crowd
+  out genuinely related works.
+
+### Provenance
+
+<!-- TODO at release time: the provenance *parsing* improvements that landed (treating a
+     bare "sold" as a sale, expanding dated ranges to full period bounds, and a quote-splitter
+     fix for possessive apostrophes) only reach results after a provenance re-parse. Add a
+     bullet here for them only if that re-parse ships with the release. -->
+
+- **Compare ownership history across many works at once.** Provenance search gains a compact
+  mode that returns a tighter, easier-to-scan summary of each work's chain of ownership —
+  suited to surveying a group of works side by side rather than reading any one in full.
+
 ### Command line
 
 - **Inscription search from the command line.** The new inscription search is available in
@@ -52,6 +75,12 @@ work's full details — together with the ability to look up works by their obje
   queries — one per line — and run them all in a single pass, returning the results in
   order. This suits feeding a column of names, object numbers, or search terms through the
   same search and collecting everything for a spreadsheet or data pipeline.
+
+### Performance and reliability
+
+- **Quicker collection statistics and a steadier startup.** Common collection-overview
+  breakdowns return faster, and the server now finishes warming up before it accepts
+  requests — so the first search after a restart is far less likely to stall.
 
 ### Documentation
 
@@ -64,5 +93,10 @@ work's full details — together with the ability to look up works by their obje
 ### Databases
 
 - The new inscription search and parsing — and the new object-number search — run at query
-  time over the catalogue text and identifiers already present, so no new data or index is
-  required for them.
+  time over the catalogue text and identifiers already present, so they need no new data.
+- The meaning-based search index was rebuilt to leave out the ownership-stamp boilerplate
+  described above. The underlying catalogue is otherwise unchanged.
+
+<!-- TODO at release time: confirm the rebuilt embeddings database actually shipped (the
+     bullet above and the "Meaning-based search" section both depend on it); if not, remove
+     both. -->
