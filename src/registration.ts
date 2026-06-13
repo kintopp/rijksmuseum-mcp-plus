@@ -4621,13 +4621,17 @@ const VIEWER_FALLBACK_HTML = `<!DOCTYPE html>
 <h1>Viewer Not Built</h1><p>Run <code>npm run build:ui</code> to build the viewer.</p>
 </div></body></html>`;
 
+let viewerHtmlCache: string | null = null;
+
 function loadViewerHtml(): string {
+  if (viewerHtmlCache !== null) return viewerHtmlCache;
   const htmlPath = path.join(__dirname, "..", "dist", "apps", "index.html");
   try {
-    return fs.readFileSync(htmlPath, "utf-8");
+    viewerHtmlCache = fs.readFileSync(htmlPath, "utf-8");
   } catch {
-    return VIEWER_FALLBACK_HTML;
+    viewerHtmlCache = VIEWER_FALLBACK_HTML;
   }
+  return viewerHtmlCache;
 }
 
 // Single source of truth for the viewer's UI resource metadata. Declared both
