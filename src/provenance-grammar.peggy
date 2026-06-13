@@ -75,7 +75,15 @@ function parsePrice(raw) {
   return parseFloat(raw.replace(/,/g, ""));
 }
 
-function splitCommaRespectingParens(str) {
+// #390: a straight apostrophe only delimits a quoted phrase when it is NOT a
+// possessive/contraction. A genuine '…' delimiter has a non-letter on at least
+// one side (opening preceded by (/[/space; closing followed by punct/space),
+// whereas Christie's / Sotheby's / d'Arc carry a letter on BOTH sides. Toggling
+// on a possessive leaks the quote state (it never flips back), so depth never
+// unwinds and every later top-level comma is swallowed — under-splitting the event.
+const LETTER_RE = /\p{L}/u;
+
+export function splitCommaRespectingParens(str) {
   // Split on commas, but not inside matched parentheses or single-quoted strings.
   // Handles ('...'), ('[...]'), (YYYY-YYYY, City), and nested parens.
   const result = [];
@@ -84,7 +92,7 @@ function splitCommaRespectingParens(str) {
   let start = 0;
   for (let i = 0; i < str.length; i++) {
     const ch = str[i];
-    if (ch === "'" && depth > 0) {
+    if (ch === "'" && depth > 0 && !(LETTER_RE.test(str[i - 1] ?? "") && LETTER_RE.test(str[i + 1] ?? ""))) {
       inSingleQuote = !inSingleQuote;
     } else if (!inSingleQuote) {
       if (ch === "(" || ch === "[") depth++;

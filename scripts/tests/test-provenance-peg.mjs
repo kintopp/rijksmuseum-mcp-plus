@@ -8,6 +8,7 @@
 import { parseProvenanceRaw } from "../../dist/provenance-peg.js";
 import { interpretPeriods, parseTemporalBounds } from "../../dist/provenance-interpret.js";
 import { parseProvenance } from "../../dist/provenance.js";
+import { splitCommaRespectingParens } from "../../dist/provenance-parser.generated.js";
 
 // ── Test helpers ─────────────────────────────────────────────────
 
@@ -1360,6 +1361,33 @@ section("#88: Layer 2 creation date leak suppression");
     creationDateLatest: 1560,
   });
   assertEq(periods[0].endYear, 1550, "#88: strong transfer type not suppressed");
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  #390: comma-splitter — possessive apostrophe must not leak quote state
+// ══════════════════════════════════════════════════════════════════
+section("#390: comma-splitter apostrophe handling");
+{
+  // Possessive inside parens (Sotheby's) previously toggled the quote state ON
+  // with no partner to flip it back → the closing ) was never processed and every
+  // later top-level comma was swallowed into one part. Must now split cleanly.
+  const parts = splitCommaRespectingParens("London (Sotheby's), 24 June 1938, no. 76, to the dealer Rosenberg");
+  assertEq(parts.length, 4, "#390: Sotheby's possessive does not leak — splits into 4 parts");
+  assertEq(parts[0], "London (Sotheby's)", "#390: parenthesised possessive stays one part");
+  assertEq(parts[3], "to the dealer Rosenberg", "#390: trailing buyer is its own part");
+
+  // d'Arc — apostrophe with a letter on both sides inside parens.
+  const parts2 = splitCommaRespectingParens("Paris (coll. d'Arc), 1885, fl. 500");
+  assertEq(parts2.length, 3, "#390: d'Arc possessive does not leak — splits into 3 parts");
+
+  // Genuine quoted section phrase with an internal comma must NOT split at that comma.
+  const parts3 = splitCommaRespectingParens("X ('A Musical Party, painted with effect'), 1850");
+  assertEq(parts3.length, 2, "#390: quoted phrase with internal comma stays intact (2 parts)");
+  assertEq(parts3[0], "X ('A Musical Party, painted with effect')", "#390: quoted phrase preserved");
+
+  // Top-level possessive (depth 0) is unaffected — every top-level comma splits.
+  const parts4 = splitCommaRespectingParens("sale, Christie's, London, 1885");
+  assertEq(parts4.length, 4, "#390: top-level possessive unaffected — 4 parts");
 }
 
 // ══════════════════════════════════════════════════════════════════
