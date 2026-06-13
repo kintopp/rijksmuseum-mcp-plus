@@ -281,7 +281,7 @@ async function runHttp(): Promise<void> {
     })
   );
   app.use(compression({ threshold: 1024 })); // gzip responses ≥ 1 KB (skips small payloads + base64 images)
-  app.use(express.json());
+  app.use(express.json({ limit: "1mb" })); // explicit cap; /mcp bodies are small JSON-RPC requests
 
   // ── MCP endpoint (stateless — no sessions, no SSE streams) ─────
   //
