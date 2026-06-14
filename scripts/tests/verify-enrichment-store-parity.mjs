@@ -140,4 +140,26 @@ check("no GUARD-EVADING missing-receiver party in any snapshot (cutover double-i
 check("relabel effective in data (parseRest still tagged llm_enrichment == 0)",
   contamInTrigger === 0, `${contamInTrigger} still mislabelled`);
 
+// Structural store self-consistency — the migrate extractor MUST mirror the
+// writebacks' gates (writeback-event-{splitting,reclassification},-field-corrections
+// all default --min-confidence 0.7; splitting also requires replacement_events>=2).
+// A store row violating either is the over-capture regression
+// (plans/provenance-enrichment-structural-confidence-leak.md). Splits legitimately
+// keep an undefined→NULL confidence (the writeback's `< N` guard does too), so the
+// confidence check excludes NULLs; the length check catches degenerate splits.
+const lowConfStructural = one(
+  `SELECT COUNT(*) c FROM provenance_enrichments
+   WHERE op_kind='structural' AND confidence IS NOT NULL AND confidence < 0.7`
+).c;
+const degenerateSplits = all(
+  `SELECT payload FROM provenance_enrichments WHERE field='event.split'`
+).filter((r) => {
+  try { const p = JSON.parse(r.payload); return !p.replacement_events || p.replacement_events.length < 2; }
+  catch { return false; }
+}).length;
+check("no sub-0.7-confidence structural store row (writeback min-confidence gate mirrored)",
+  lowConfStructural === 0, `${lowConfStructural} low-conf structural rows`);
+check("no degenerate (<2-replacement) split store row",
+  degenerateSplits === 0, `${degenerateSplits} degenerate split rows`);
+
 db.close();
