@@ -1,0 +1,5 @@
+table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning
+provenance_events,101,1,,date_year,1346,,Lot number parsed as year — clear
+provenance_events,101,1,,date_expression,1346,,Same lot number not a date
+provenance_periods,102,1,,begin_year,1346,,Derived from incorrect date_year
+provenance_parties,103,2,*,DELETE,,,Delete unwanted party
