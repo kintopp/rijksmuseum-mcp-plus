@@ -457,7 +457,10 @@ export function reapply(db, { dryRun = false } = {}) {
       // renumber once at the end.
       const structRows = enrichments.filter((r) => r.op_kind === "structural");
 
-      // Pass 3: field corrections
+      // Pass 3: field corrections. Payload is {corrections:[…]} (Finding A —
+      // grouped per event; an event may carry 2, e.g. location+parties). Locate
+      // the parent once, then apply EACH correction. Count PER correction applied
+      // so the total reflects corrections, not store rows.
       for (const row of structRows.filter((r) => r.field === "event.fieldcorrection")) {
         const located = locateSeq(groups, row, "structural_");
         if (located.unmatched) {
@@ -466,28 +469,31 @@ export function reapply(db, { dryRun = false } = {}) {
           continue;
         }
         const seq = located.seq;
-        const c = JSON.parse(row.payload);
-        const method = FIELD_ISSUE_TO_METHOD[c.issue_type] ?? `${M.LLM_STRUCTURAL_PREFIX}${c.issue_type}`;
-        if (c.field === "location") {
-          applied.event_fieldcorrection++;
-          if (!dryRun) {
-            updateLocation.run(c.corrected_value, method, row.reasoning ?? null, artworkId, seq, c.current_value);
-          }
-        } else if (c.field === "parties" && c.new_party) {
-          applied.event_fieldcorrection++;
-          if (!dryRun) {
-            const { max_idx } = getMaxPartyIdx.get(artworkId, seq);
-            insertFieldParty.run(
-              artworkId, seq, max_idx + 1,
-              c.new_party.name, c.new_party.role ?? null, c.new_party.position,
-              M.LLM_STRUCTURAL, row.reasoning ?? null
-            );
-            const evtRow = getPartiesJson.get(artworkId, seq);
-            if (evtRow) {
-              let parties;
-              try { parties = JSON.parse(evtRow.parties || "[]"); } catch { parties = []; }
-              parties.push({ name: c.new_party.name, role: c.new_party.role ?? null, position: c.new_party.position });
-              updatePartiesJsonCorr.run(JSON.stringify(parties), method, row.reasoning ?? null, artworkId, seq);
+        const payload = JSON.parse(row.payload);
+        for (const c of payload.corrections) {
+          // Method derived PER correction from its own issue_type.
+          const method = FIELD_ISSUE_TO_METHOD[c.issue_type] ?? `${M.LLM_STRUCTURAL_PREFIX}${c.issue_type}`;
+          if (c.field === "location") {
+            applied.event_fieldcorrection++;
+            if (!dryRun) {
+              updateLocation.run(c.corrected_value, method, row.reasoning ?? null, artworkId, seq, c.current_value);
+            }
+          } else if (c.field === "parties" && c.new_party) {
+            applied.event_fieldcorrection++;
+            if (!dryRun) {
+              const { max_idx } = getMaxPartyIdx.get(artworkId, seq);
+              insertFieldParty.run(
+                artworkId, seq, max_idx + 1,
+                c.new_party.name, c.new_party.role ?? null, c.new_party.position,
+                M.LLM_STRUCTURAL, row.reasoning ?? null
+              );
+              const evtRow = getPartiesJson.get(artworkId, seq);
+              if (evtRow) {
+                let parties;
+                try { parties = JSON.parse(evtRow.parties || "[]"); } catch { parties = []; }
+                parties.push({ name: c.new_party.name, role: c.new_party.role ?? null, position: c.new_party.position });
+                updatePartiesJsonCorr.run(JSON.stringify(parties), method, row.reasoning ?? null, artworkId, seq);
+              }
             }
           }
         }

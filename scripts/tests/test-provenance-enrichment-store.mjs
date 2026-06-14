@@ -895,11 +895,13 @@ function writeTmpJson(content) {
 
   // ── Case 12: Malformed double-encoded reclassification string ──────────────
   // Regression for the 2026-06-14 real-data finding: 3 of 200 reclassification
-  // values are double-encoded STRINGS that aren't valid JSON (a leading array
-  // followed by trailing sibling-key / comma garbage from a lost wrapping brace).
-  // A bare JSON.parse throws on all three and — because migrate() runs in one
-  // transaction — rolls back the WHOLE migration. The extractor must recover or
-  // count them, never throw out of the transaction.
+  // values are double-encoded STRINGS that are a valid leading JSON array followed
+  // by literal trailing garbage — `<parameter name="no_reclassification_needed">…`
+  // markup (BK-NM-1214, BK-NM-12006-8) or a bare trailing comma (NG-1990-1-2). A
+  // bare JSON.parse throws on all three and — because migrate() runs in one
+  // transaction — rolls back the WHOLE migration. The balanced-array-prefix
+  // recovery (Finding B) must RECOVER these real shapes; a genuinely-unrecoverable
+  // string lands in structural_unparseable WITHOUT throwing.
   section("Case 12: Malformed double-encoded reclassification string");
   {
     const db = makeDb();
@@ -907,19 +909,26 @@ function writeTmpJson(content) {
       meta: { batchId: "audit:case12" },
       results: [
         {
-          // Malformed shape #1: array + sibling-key garbage (BK-NM-1214 shape).
+          // Real shape #1: array + `<parameter …>` markup (BK-NM-1214 shape).
           data: {
             object_number: "SK-A-9001",
             reclassifications:
-              '[{"event_sequence":2,"issue_type":"phantom_event","action":"mark_non_provenance","reasoning":"x","confidence":0.9}],\n"no_reclassification_needed":[]',
+              '[{"event_sequence":2,"issue_type":"phantom_event","action":"mark_non_provenance","reasoning":"x","confidence":0.9}],\n<parameter name="no_reclassification_needed">[]',
           },
         },
         {
-          // Malformed shape #2: array + trailing comma only (NG-1990-1-2 shape).
+          // Real shape #2: array + trailing comma only (NG-1990-1-2 shape).
           data: {
             object_number: "SK-A-9002",
             reclassifications:
               '[{"event_sequence":2,"issue_type":"phantom_event","action":"mark_non_provenance","reasoning":"y","confidence":0.9}],\n',
+          },
+        },
+        {
+          // Deliberately UNrecoverable: no JSON array at all.
+          data: {
+            object_number: "SK-A-9004",
+            reclassifications: "totally not json",
           },
         },
         {
@@ -937,7 +946,7 @@ function writeTmpJson(content) {
     // Synthetic oracle resolving each object's sequence-2 parent event.
     const byObjSeq = new Map();
     const groupsByObj = new Map();
-    for (const obj of ["SK-A-9001", "SK-A-9002", "SK-A-9003"]) {
+    for (const obj of ["SK-A-9001", "SK-A-9002", "SK-A-9003", "SK-A-9004"]) {
       const rawText = `Parent event text for ${obj} seq 2`;
       byObjSeq.set(`${obj}|2`, rawText);
       groupsByObj.set(obj, buildDupOrdinals([{ sequence: 2, raw_text: rawText }]));
@@ -966,22 +975,150 @@ function writeTmpJson(content) {
 
     assert(!threw, "case12: runStructuralExtractor does NOT throw on malformed strings");
     if (counts) {
-      // 2 malformed strings: recovered (event_reclassify) or counted (structural_unparseable), never lost.
+      // 4 results: 2 recoverable-malformed + 1 normal array all RECOVER (3 rows),
+      // 1 genuinely-unrecoverable counts as structural_unparseable.
       assertEq(
         counts.event_reclassify + counts.structural_unparseable,
+        4,
+        "case12: all 4 results accounted for (recovered or counted, never silently lost)"
+      );
+      assertEq(
+        counts.event_reclassify,
         3,
-        "case12: all 3 results accounted for (recovered or counted, never silently lost)"
+        "case12: both real markup/comma shapes recovered + the normal array (3 rows)"
       );
-      assert(
-        counts.event_reclassify >= 1,
-        "case12: at least the normal array result produced an event.reclassify row"
+      assertEq(
+        counts.structural_unparseable,
+        1,
+        "case12: exactly the unrecoverable 'totally not json' string counted unparseable"
       );
-      // The normal-array result (SK-A-9003) is unambiguously recoverable → a store row exists.
-      const normalRow = db.prepare(
+      // Each recoverable object got exactly one event.reclassify store row.
+      for (const obj of ["SK-A-9001", "SK-A-9002", "SK-A-9003"]) {
+        const n = db.prepare(
+          "SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number = ? AND field = 'event.reclassify'"
+        ).get(obj).n;
+        assertEq(n, 1, `case12: ${obj} recovered → exactly 1 store row`);
+      }
+      // The unrecoverable object produced NO store row.
+      const badRow = db.prepare(
         "SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number = ? AND field = 'event.reclassify'"
-      ).get("SK-A-9003").n;
-      assertEq(normalRow, 1, "case12: normal array result emitted exactly 1 store row");
+      ).get("SK-A-9004").n;
+      assertEq(badRow, 0, "case12: unrecoverable result emitted no store row");
     }
+  }
+
+  // ── Case 13: Multiple field-corrections on one event don't collide ─────────
+  // Regression for the 2026-06-14 PK-collision finding (Finding A): an event with
+  // TWO field-corrections (a location fix AND a missing_receiver party insert)
+  // resolves both to the SAME parent → the SAME store PK. The extractor must GROUP
+  // them into ONE event.fieldcorrection row with a 2-element corrections payload
+  // (no seenPK throw); re-apply must iterate and apply BOTH.
+  section("Case 13: Multiple field-corrections on one event don't collide");
+  {
+    const db = makeDb();
+    const parentText = "by whom bequeathed to the City in 1880 at the Old Hall";
+    // Seed the event with an existing party (so maxPartyIdx works) and the
+    // location current_value the location-correction guards on.
+    db.exec(`
+      INSERT INTO artworks VALUES (13, 'RP-T-1980-52');
+      INSERT INTO provenance_events VALUES
+        (13,3,'${parentText}',0,'bequest',0,0,NULL,NULL,0,
+         '[{"name":"Original Owner","role":"seller","position":"Amsterdam"}]',
+         NULL,NULL,NULL,'Old Hal',NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_parties VALUES
+        (13,3,0,'Original Owner',NULL,'seller','Amsterdam','peg',0,NULL);
+    `);
+
+    // Synthetic field-correction audit: ONE result, TWO corrections on event 3.
+    const fieldPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case13" },
+      results: [
+        {
+          data: {
+            object_number: "RP-T-1980-52",
+            corrections: [
+              {
+                event_sequence: 3,
+                issue_type: "truncated_location",
+                field: "location",
+                current_value: "Old Hal",
+                corrected_value: "Old Hall",
+                reasoning: "location truncated",
+                confidence: 0.95,
+              },
+              {
+                event_sequence: 3,
+                issue_type: "missing_receiver",
+                field: "parties",
+                new_party: { name: "City of Amsterdam", role: "buyer", position: "Amsterdam" },
+                reasoning: "receiver omitted by parser",
+                confidence: 0.92,
+              },
+            ],
+          },
+        },
+      ],
+    }), "utf-8");
+
+    // Oracle resolves event 3's parent to the seeded raw_text.
+    const byObjSeq = new Map([["RP-T-1980-52|3", parentText]]);
+    const groupsByObj = new Map([
+      ["RP-T-1980-52", buildDupOrdinals([{ sequence: 3, raw_text: parentText }])],
+    ]);
+    const oracle = { byObjSeq, groupsByObj };
+
+    let threw = false;
+    let counts;
+    try {
+      counts = runStructuralExtractor(db, {
+        dryRun: false,
+        seenPK: new Set(),
+        auditFiles: {
+          split: "/nonexistent/split.json",
+          reclassify: "/nonexistent/reclassify.json",
+          fieldcorrection: fieldPath,
+        },
+        oracle,
+      });
+    } catch (e) {
+      threw = true;
+      failures.push(`case13: runStructuralExtractor threw: ${e.message}`);
+    } finally {
+      cleanTmp(fieldPath);
+    }
+
+    assert(!threw, "case13: runStructuralExtractor does NOT throw (no seenPK collision)");
+
+    // Exactly ONE event.fieldcorrection store row, with a 2-element payload.
+    const fcRows = db.prepare(
+      "SELECT * FROM provenance_enrichments WHERE object_number = ? AND field = 'event.fieldcorrection'"
+    ).all("RP-T-1980-52");
+    assertEq(fcRows.length, 1, "case13: exactly ONE event.fieldcorrection store row");
+    if (counts) assertEq(counts.event_fieldcorrection, 1, "case13: extractor counts 1 fieldcorrection row");
+    if (fcRows.length === 1) {
+      const payload = JSON.parse(fcRows[0].payload);
+      assertEq(payload.corrections.length, 2, "case13: payload.corrections has length 2");
+    }
+
+    // Re-apply (event still at seq 3, content-matched).
+    const result = reapply(db);
+    assert(result.applied.event_fieldcorrection >= 2, "case13: both corrections applied (count ≥ 2)");
+
+    // Effect 1: location column updated to corrected value.
+    const evt = getEvent(db, 13, 3);
+    assertEq(evt.location, "Old Hall", "case13: location updated to corrected value");
+
+    // Effect 2: new party present in provenance_parties.
+    const parties = getParties(db, 13, 3);
+    const newParty = parties.find((p) => p.party_name === "City of Amsterdam");
+    assert(newParty != null, "case13: new missing_receiver party inserted into provenance_parties");
+    assertEq(newParty?.party_position, "Amsterdam", "case13: new party position set");
+
+    // Effect 3: new party present in the event's parties JSON mirror (§H).
+    let jsonParties;
+    try { jsonParties = JSON.parse(evt.parties || "[]"); } catch { jsonParties = []; }
+    const jsonNew = jsonParties.find((p) => p.name === "City of Amsterdam");
+    assert(jsonNew != null, "case13: new party mirrored into event.parties JSON");
   }
 
   // ─── Summary ───────────────────────────────────────────────────────────────

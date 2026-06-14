@@ -477,6 +477,48 @@ function resolveParent(oracle, objectNumber, sequence) {
 }
 
 /**
+ * Extract the leading top-level JSON array from a string that begins with a valid
+ * array but carries trailing garbage (Finding B). Scans from the first `[`,
+ * tracking bracket depth while RESPECTING string literals — `[`/`]` inside a
+ * "…" string (honouring `\"` escapes) are ignored, because the inner
+ * raw_text_quote can contain `{`,`}`, and brackets. Returns the substring from
+ * the first `[` through the matching `]` that returns depth to 0. Throws if no
+ * balanced array prefix exists (caller catches → structural_unparseable).
+ *
+ * @param {string} str
+ * @returns {string} the balanced leading `[…]` substring
+ */
+function extractLeadingJsonArray(str) {
+  const start = str.indexOf("[");
+  if (start < 0) throw new Error("extractLeadingJsonArray: no '[' found");
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < str.length; i++) {
+    const ch = str[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "[") {
+      depth++;
+    } else if (ch === "]") {
+      depth--;
+      if (depth === 0) return str.slice(start, i + 1);
+    }
+  }
+  throw new Error("extractLeadingJsonArray: unbalanced array — no matching ']'");
+}
+
+/**
  * Scan the structural audit JSONs and emit op_kind='structural' store rows,
  * keyed on the deterministic parent event's raw_text (via the oracle).
  *
@@ -579,13 +621,15 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
         recs = rc; // 197 normal cases
       } else if (typeof rc === "string") {
         try {
-          recs = JSON.parse(rc);
+          recs = JSON.parse(rc); // clean strings parse directly
         } catch {
           try {
-            // Recover the leading array: wrap to restore the lost braces, strip a
-            // trailing comma. The no_reclassification_needed sibling rides along
-            // harmlessly under key "r" and is ignored.
-            recs = JSON.parse('{"r":' + rc.replace(/,\s*$/, "") + "}").r;
+            // The 3 malformed strings are a valid leading JSON array followed by
+            // literal trailing garbage (`<parameter …>` markup, a sibling key, or
+            // a bare comma — real bytes verified 2026-06-14). A bare JSON.parse
+            // fails with "Extra data" AFTER the array, proving the leading [...] is
+            // valid on its own. Extract that balanced array prefix (string-aware).
+            recs = JSON.parse(extractLeadingJsonArray(rc));
           } catch {
             counts.structural_unparseable++;
             console.warn(`runStructuralExtractor: unparseable reclassifications for ${objectNumber}`);
@@ -619,21 +663,38 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
   }
 
   // ── C. field correction ─────────────────────────────────────────────────────
+  // GROUP per event (Finding A, real-data 2026-06-14): 17 events carry TWO
+  // corrections[] entries (14× location+parties, 3× location+location). Both
+  // resolve to the SAME parent → the SAME store PK, so one row PER correction
+  // trips the seenPK STOP and aborts the whole transaction. Emit ONE
+  // event.fieldcorrection row per (object, event) whose payload is
+  // {corrections:[…]} (the full verbatim list); re-apply iterates and applies each.
   const fieldData = loadAuditJson(auditFiles.fieldcorrection);
   if (fieldData) {
     const batchId = fieldData.meta?.batchId ?? "audit";
     for (const result of fieldData.results ?? []) {
       if (result.error || !result.data?.corrections) continue;
       const objectNumber = result.data.object_number;
+      // Group this result's corrections by event_sequence (an event = one parent).
+      const byEvent = new Map();
       for (const c of result.data.corrections) {
+        const seq = c.event_sequence;
+        if (!byEvent.has(seq)) byEvent.set(seq, []);
+        byEvent.get(seq).push(c);
+      }
+      for (const [sequence, corrections] of byEvent) {
+        const first = corrections[0];
         emitStructural({
           objectNumber,
-          sequence: c.event_sequence,
+          sequence,
           field: "event.fieldcorrection",
-          payload: c, // verbatim corrections[] entry (may carry new_party)
-          issueType: c.issue_type,
-          reasoning: c.reasoning ?? null,
-          confidence: c.confidence ?? null,
+          payload: { corrections }, // full verbatim list for this event
+          // method/reasoning/confidence ride the FIRST correction; re-apply
+          // derives the per-correction method from each entry's issue_type, so
+          // the store row's single method column is not load-bearing.
+          issueType: first.issue_type,
+          reasoning: first.reasoning ?? null,
+          confidence: first.confidence ?? null,
           batchId,
           countKey: "event_fieldcorrection",
         });
