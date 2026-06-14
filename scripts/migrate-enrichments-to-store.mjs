@@ -482,10 +482,10 @@ function resolveParent(oracle, objectNumber, sequence) {
  *
  * @param {import("better-sqlite3").Database} db
  * @param {{ dryRun: boolean, seenPK?: Set<string>, auditFiles?: object, oracle?: object }} opts
- * @returns {{ event_split: number, event_reclassify: number, event_fieldcorrection: number, unresolved: number }}
+ * @returns {{ event_split: number, event_reclassify: number, event_fieldcorrection: number, unresolved: number, structural_unparseable: number }}
  */
 export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFiles = STRUCTURAL_AUDIT_FILES, oracle } = {}) {
-  const counts = { event_split: 0, event_reclassify: 0, event_fieldcorrection: 0, unresolved: 0 };
+  const counts = { event_split: 0, event_reclassify: 0, event_fieldcorrection: 0, unresolved: 0, structural_unparseable: 0 };
 
   // Build the parent-text oracle from a clean deterministic re-parse, unless one
   // was supplied (tests pass a synthetic oracle).
@@ -565,12 +565,43 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
     const batchId = reclassData.meta?.batchId ?? "audit";
     for (const result of reclassData.results ?? []) {
       if (result.error) continue;
-      let rc = result.data?.reclassifications;
+      const rc = result.data?.reclassifications;
       if (rc == null) continue;
-      // JSON-shape gotcha (Step 2.2): usually a real array, occasionally a
-      // double-encoded JSON string — guard on typeof before iterating.
-      const recs = typeof rc === "string" ? JSON.parse(rc) : rc;
-      const objectNumber = result.data.object_number;
+      const objectNumber = result.data?.object_number;
+      // JSON-shape gotcha (Step 2.2): usually a real array (197/200), occasionally a
+      // *malformed* double-encoded string (3/200) — a JSON array followed by trailing
+      // sibling-key / comma garbage (the LLM object lost its wrapping braces). A bare
+      // JSON.parse THROWS on all three, and since migrate() runs in ONE transaction,
+      // that single throw rolls back the WHOLE migration. Parse robustly, and guard
+      // the whole per-result parse so one bad record never aborts the transaction.
+      let recs;
+      if (Array.isArray(rc)) {
+        recs = rc; // 197 normal cases
+      } else if (typeof rc === "string") {
+        try {
+          recs = JSON.parse(rc);
+        } catch {
+          try {
+            // Recover the leading array: wrap to restore the lost braces, strip a
+            // trailing comma. The no_reclassification_needed sibling rides along
+            // harmlessly under key "r" and is ignored.
+            recs = JSON.parse('{"r":' + rc.replace(/,\s*$/, "") + "}").r;
+          } catch {
+            counts.structural_unparseable++;
+            console.warn(`runStructuralExtractor: unparseable reclassifications for ${objectNumber}`);
+            continue;
+          }
+        }
+      } else {
+        counts.structural_unparseable++;
+        console.warn(`runStructuralExtractor: unparseable reclassifications for ${objectNumber}`);
+        continue;
+      }
+      if (!Array.isArray(recs)) {
+        counts.structural_unparseable++;
+        console.warn(`runStructuralExtractor: unparseable reclassifications for ${objectNumber}`);
+        continue;
+      }
       for (const r of recs) {
         emitStructural({
           objectNumber,
@@ -675,6 +706,7 @@ export function migrate(db, { value = false, manual = false, structural = false,
       allCounts.event_reclassify = (allCounts.event_reclassify ?? 0) + c.event_reclassify;
       allCounts.event_fieldcorrection = (allCounts.event_fieldcorrection ?? 0) + c.event_fieldcorrection;
       allCounts.structural_unresolved = (allCounts.structural_unresolved ?? 0) + c.unresolved;
+      allCounts.structural_unparseable = (allCounts.structural_unparseable ?? 0) + c.structural_unparseable;
     }
 
     return allCounts;

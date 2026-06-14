@@ -17,9 +17,10 @@ import { fileURLToPath } from "node:url";
 import {
   applyEnrichmentsSchema,
   migrate,
+  runStructuralExtractor,
 } from "../migrate-enrichments-to-store.mjs";
 import { reapply } from "../reapply-enrichments-from-store.mjs";
-import { rawTextHash } from "../lib/raw-text-hash.mjs";
+import { rawTextHash, buildDupOrdinals } from "../lib/raw-text-hash.mjs";
 import * as M from "../lib/provenance-enrichment-methods.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -214,6 +215,12 @@ function writeTmpCsv(content) {
 
 function cleanTmp(p) {
   try { fs.unlinkSync(p); } catch (_) {}
+}
+
+function writeTmpJson(content) {
+  const p = path.join(os.tmpdir(), `prov-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  fs.writeFileSync(p, content, "utf-8");
+  return p;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -884,6 +891,97 @@ function cleanTmp(p) {
     assertEq(after.length, 1, "case11: still exactly 1 event (no children created)");
     assertEq(after[0].raw_text, before[0].raw_text, "case11: event raw_text unchanged");
     assertEq(after[0].correction_method, null, "case11: no correction_method stamped");
+  }
+
+  // ── Case 12: Malformed double-encoded reclassification string ──────────────
+  // Regression for the 2026-06-14 real-data finding: 3 of 200 reclassification
+  // values are double-encoded STRINGS that aren't valid JSON (a leading array
+  // followed by trailing sibling-key / comma garbage from a lost wrapping brace).
+  // A bare JSON.parse throws on all three and — because migrate() runs in one
+  // transaction — rolls back the WHOLE migration. The extractor must recover or
+  // count them, never throw out of the transaction.
+  section("Case 12: Malformed double-encoded reclassification string");
+  {
+    const db = makeDb();
+    const reclassPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case12" },
+      results: [
+        {
+          // Malformed shape #1: array + sibling-key garbage (BK-NM-1214 shape).
+          data: {
+            object_number: "SK-A-9001",
+            reclassifications:
+              '[{"event_sequence":2,"issue_type":"phantom_event","action":"mark_non_provenance","reasoning":"x","confidence":0.9}],\n"no_reclassification_needed":[]',
+          },
+        },
+        {
+          // Malformed shape #2: array + trailing comma only (NG-1990-1-2 shape).
+          data: {
+            object_number: "SK-A-9002",
+            reclassifications:
+              '[{"event_sequence":2,"issue_type":"phantom_event","action":"mark_non_provenance","reasoning":"y","confidence":0.9}],\n',
+          },
+        },
+        {
+          // Normal shape: a real array (sanity — must still emit a row).
+          data: {
+            object_number: "SK-A-9003",
+            reclassifications: [
+              { event_sequence: 2, issue_type: "phantom_event", action: "mark_non_provenance", reasoning: "z", confidence: 0.9 },
+            ],
+          },
+        },
+      ],
+    }), "utf-8");
+
+    // Synthetic oracle resolving each object's sequence-2 parent event.
+    const byObjSeq = new Map();
+    const groupsByObj = new Map();
+    for (const obj of ["SK-A-9001", "SK-A-9002", "SK-A-9003"]) {
+      const rawText = `Parent event text for ${obj} seq 2`;
+      byObjSeq.set(`${obj}|2`, rawText);
+      groupsByObj.set(obj, buildDupOrdinals([{ sequence: 2, raw_text: rawText }]));
+    }
+    const oracle = { byObjSeq, groupsByObj };
+
+    let threw = false;
+    let counts;
+    try {
+      counts = runStructuralExtractor(db, {
+        dryRun: false,
+        seenPK: new Set(),
+        auditFiles: {
+          split: "/nonexistent/split.json",
+          reclassify: reclassPath,
+          fieldcorrection: "/nonexistent/fieldcorrection.json",
+        },
+        oracle,
+      });
+    } catch (e) {
+      threw = true;
+      failures.push(`case12: runStructuralExtractor threw: ${e.message}`);
+    } finally {
+      cleanTmp(reclassPath);
+    }
+
+    assert(!threw, "case12: runStructuralExtractor does NOT throw on malformed strings");
+    if (counts) {
+      // 2 malformed strings: recovered (event_reclassify) or counted (structural_unparseable), never lost.
+      assertEq(
+        counts.event_reclassify + counts.structural_unparseable,
+        3,
+        "case12: all 3 results accounted for (recovered or counted, never silently lost)"
+      );
+      assert(
+        counts.event_reclassify >= 1,
+        "case12: at least the normal array result produced an event.reclassify row"
+      );
+      // The normal-array result (SK-A-9003) is unambiguously recoverable → a store row exists.
+      const normalRow = db.prepare(
+        "SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number = ? AND field = 'event.reclassify'"
+      ).get("SK-A-9003").n;
+      assertEq(normalRow, 1, "case12: normal array result emitted exactly 1 store row");
+    }
   }
 
   // ─── Summary ───────────────────────────────────────────────────────────────
