@@ -350,8 +350,74 @@ SELECT 'parties', COUNT(*) FROM provenance_parties UNION ALL
 SELECT 'periods', COUNT(*) FROM provenance_periods;
 ```
 
+### Property-based invariant scanners (run before AND after; after must not regress)
+
+The SQL checks above are aggregate counts. Three stdlib Python 3 scanners in the
+`offline/` submodule assert *correctness properties* over every record and catch
+regressions the aggregates miss — a chronology contradiction introduced by a mis-split
+event won't move a ±5% band, but `timetravel` flags it:
+
+- `offline/provenance/scan-provenance-compliance.py` — structural / AAM-notation
+  violations (bracket balance, HTML leakage, orphan cross-refs).
+- `offline/provenance/scan-provenance-timetravel.py` — chronology contradictions
+  (event dates vs biographical / artwork-creation dates).
+- `offline/provenance/scan-provenance-typemismatch.py` — transfer-type mismatches.
+
+Each takes **no args** (hardcodes `data/vocabulary.db`) and writes
+`provenance-<name>-findings.csv` + `-report.md` **next to itself**, overwriting each run.
+So capture the baseline **before** the re-parse, then re-run **after**; the after-counts
+must not exceed the baseline (drift *down* is a fix). Investigate any new violation class
+before sign-off.
+
+```bash
+# BEFORE the re-parse — baseline (from repo root):
+mkdir -p data/reparse-baseline
+for s in compliance timetravel typemismatch; do
+  python3 offline/provenance/scan-provenance-$s.py
+  cp offline/provenance/provenance-$s-findings.csv data/reparse-baseline/$s.csv
+done
+# ... run the re-parse + writebacks / plan-015 re-apply, then AFTER — re-run + compare:
+for s in compliance timetravel typemismatch; do
+  python3 offline/provenance/scan-provenance-$s.py
+  echo "$s: baseline=$(($(wc -l <data/reparse-baseline/$s.csv)-1)) after=$(($(wc -l <offline/provenance/provenance-$s-findings.csv)-1))"
+done
+```
+
+### Parse-regression snapshot diff (which records changed — intended vs collateral)
+
+The scanners + SQL bands are corpus-wide; neither says *which* records' parse changed or
+whether a change was intended. `scripts/provenance-parse-snapshot.mjs` diffs the per-record
+parse before vs after and buckets every artwork (`identical` / `resegmented` / `field_drift` /
+`source_changed` / `added` / `removed`). Use the **parser-isolating (deterministic) workflow**
+so `field_drift` = true grammar regressions, not enrichment:
+
+```bash
+git checkout <pre-reparse grammar> && npm run build
+node scripts/provenance-parse-snapshot.mjs snapshot --out data/parse-snapshots/before.jsonl
+git checkout <new grammar> && npm run build
+node scripts/provenance-parse-snapshot.mjs snapshot --out data/parse-snapshots/after.jsonl
+node scripts/provenance-parse-snapshot.mjs diff \
+  --before data/parse-snapshots/before.jsonl --after data/parse-snapshots/after.jsonl \
+  --out data/parse-snapshots/report.md
+```
+
+Gate: triage the **review queue = `field_drift` + `removed`** before sign-off. `resegmented`
+is the *intended* re-segmentation class (e.g. #390 — spot-check a sample); `source_changed`
+is upstream text edits, not the parser. Do NOT mix a `--from-db` snapshot with a parse
+snapshot here — the stored DB's enrichment layer inflates `field_drift` (see the script
+header). To validate the **end-to-end** pipeline (parse + writebacks / plan-015 re-apply)
+rather than just the grammar, snapshot `--from-db` on both the old and re-parsed DBs instead.
+Self-test the diff logic anytime: `node scripts/provenance-parse-snapshot.mjs diff --selftest`.
+
 ## Revision history
 
+- **2026-06-14**: added two verification tiers beyond the SQL counts — (1) the
+  property-based invariant scanners (`offline/provenance/scan-provenance-{compliance,
+  timetravel,typemismatch}.py`), run before+after with an after-≤-baseline gate; and
+  (2) the per-record parse-regression snapshot diff
+  (`scripts/provenance-parse-snapshot.mjs`), with a `field_drift`+`removed` review-queue
+  gate. Both close the gap that the aggregate bands can't distinguish an intended #390
+  re-segmentation from a collateral regression.
 - **2026-04-30** (v0.26 dress-rehearsal harvest reparse): added `--id-remap`
   guidance, flagged Step 3 SQL as redundant after Step 0 (the parser sets
   `batch_price` directly), corrected 7a/7b/7c to point at the v0.24-2026-04-19
