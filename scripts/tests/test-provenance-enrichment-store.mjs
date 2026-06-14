@@ -513,8 +513,8 @@ function writeTmpJson(content) {
     `);
 
     const csvText = [
-      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,91,1,,begin_year,1346,,Lot number parsed as year",
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_periods,91,SK-A-0091,1,,begin_year,1346,,Lot number parsed as year",
     ].join("\n");
     const tmpPath = writeTmpCsv(csvText);
     try {
@@ -540,8 +540,8 @@ function writeTmpJson(content) {
         (92,1,'Another period event',0,'sale',0,0,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
     `);
     const csvText2 = [
-      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,92,1,,begin_year,1346,,",
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_periods,92,SK-A-0092,1,,begin_year,1346,,",
     ].join("\n");
     const tmpPath2 = writeTmpCsv(csvText2);
     try {
@@ -613,8 +613,8 @@ function writeTmpJson(content) {
     `);
 
     const badCsv = [
-      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
-      "bad_table,200,1,,some_col,old,new,reason",
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "bad_table,200,SK-A-0200,1,,some_col,old,new,reason",
     ].join("\n");
     const tmpPath = writeTmpCsv(badCsv);
     let threw = false;
@@ -638,8 +638,8 @@ function writeTmpJson(content) {
     // No artworks seeded
 
     const csv = [
-      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_events,9999,1,,transfer_type,unknown,sale,",
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_events,9999,SK-A-9999,1,,transfer_type,unknown,sale,",
     ].join("\n");
     const tmpPath = writeTmpCsv(csv);
     let threw = false;
@@ -653,7 +653,7 @@ function writeTmpJson(content) {
       cleanTmp(tmpPath);
     }
     assert(threw, "D3: unresolvable artwork_id causes migrate to throw");
-    assert(throwMsg.includes("9999"), `D3: error mentions artwork_id 9999 — got: ${throwMsg}`);
+    assert(throwMsg.includes("9999"), `D3: error mentions object_number 9999 — got: ${throwMsg}`);
   }
 
   // ── Addendum E1: overlap event (LLM party + CSV DELETE) deduped via shared seenPK ──
@@ -669,8 +669,8 @@ function writeTmpJson(content) {
     `);
     // CSV: a provenance_parties DELETE row targeting the SAME (artwork,seq) → manual snapshot
     const csv = [
-      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_parties,300,1,*,DELETE,,,Charter-room cleanup",
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_parties,300,SK-A-0300,1,*,DELETE,,,Charter-room cleanup",
     ].join("\n");
     const tmp = writeTmpCsv(csv);
     let threw = false;
@@ -697,8 +697,8 @@ function writeTmpJson(content) {
         (301,1,'Periodless event text',0,'sale',0,0,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
     `);
     const csv = [
-      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,301,1,,begin_year,1346,,",
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_periods,301,SK-A-0301,1,,begin_year,1346,,",
     ].join("\n");
     const tmp = writeTmpCsv(csv);
     try {
@@ -720,8 +720,8 @@ function writeTmpJson(content) {
         (302,1,'Owner',NULL,NULL,NULL,NULL,1346,NULL,NULL,NULL,0,NULL,'[1]');
     `);
     const csv2 = [
-      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,302,1,,begin_year,1346,,",
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_periods,302,SK-A-0302,1,,begin_year,1346,,",
     ].join("\n");
     const tmp2 = writeTmpCsv(csv2);
     try {

@@ -69,7 +69,7 @@ export function applyEnrichmentsSchema(db) {
  * Pure CSV text parser for manual corrections format.
  * Returns array of row objects with string values.
  * @param {string} text
- * @returns {Array<{table:string,artwork_id:string,sequence:string,party_idx:string,field:string,old_value:string,new_value:string,reasoning:string}>}
+ * @returns {Array<{table:string,artwork_id:string,object_number:string,sequence:string,party_idx:string,field:string,old_value:string,new_value:string,reasoning:string}>}
  */
 export function parseManualCsvText(text) {
   const lines = text.split(/\r?\n/);
@@ -296,7 +296,7 @@ export function runManualExtractor(db, { dryRun, csvPath, seenPK = new Set() }) 
   const rows = parseManualCsv(csvPath);
   if (rows.length === 0) return counts;
 
-  const getObjectNumber = db.prepare("SELECT object_number FROM artworks WHERE art_id = ?");
+  const getArtId = db.prepare("SELECT art_id FROM artworks WHERE object_number = ?");
   const getEvent = db.prepare(
     "SELECT sequence, raw_text FROM provenance_events WHERE artwork_id = ? AND sequence = ?"
   );
@@ -319,19 +319,19 @@ export function runManualExtractor(db, { dryRun, csvPath, seenPK = new Set() }) 
        @op_kind, @payload, @method, @reasoning, @confidence, @source)
   `);
 
-  // Group rows by (table, artwork_id, sequence)
+  // Group rows by (table, object_number, sequence)
   const groups = new Map();
   for (const row of rows) {
     const table = row.table;
-    const artworkId = parseInt(row.artwork_id, 10);
+    const objectNumber = row.object_number;
     const sequence = parseInt(row.sequence, 10);
-    const key = `${table}|${artworkId}|${sequence}`;
-    if (!groups.has(key)) groups.set(key, { table, artworkId, sequence, csvRows: [] });
+    const key = `${table}|${objectNumber}|${sequence}`;
+    if (!groups.has(key)) groups.set(key, { table, objectNumber, sequence, csvRows: [] });
     groups.get(key).csvRows.push(row);
   }
 
   for (const [, group] of groups) {
-    const { table, artworkId, sequence, csvRows } = group;
+    const { table, objectNumber, sequence, csvRows } = group;
 
     // Validate table
     const validTables = new Set(["provenance_events", "provenance_parties", "provenance_periods"]);
@@ -339,17 +339,17 @@ export function runManualExtractor(db, { dryRun, csvPath, seenPK = new Set() }) 
       throw new Error(`runManualExtractor: unknown table "${table}" in CSV — expected one of: ${[...validTables].join(", ")}`);
     }
 
-    // Resolve artwork_id → object_number
-    const objRow = getObjectNumber.get(artworkId);
-    if (!objRow) {
-      throw new Error(`runManualExtractor: artwork_id ${artworkId} not found in artworks table`);
+    // Resolve object_number → art_id
+    const aidRow = getArtId.get(objectNumber);
+    if (!aidRow) {
+      throw new Error(`runManualExtractor: object_number ${objectNumber} not found in artworks table`);
     }
-    const objectNumber = objRow.object_number;
+    const artworkId = aidRow.art_id;
 
     // Resolve event
     const evtRow = getEvent.get(artworkId, sequence);
     if (!evtRow) {
-      throw new Error(`runManualExtractor: no provenance_event for artwork_id=${artworkId} sequence=${sequence}`);
+      throw new Error(`runManualExtractor: no provenance_event for object_number=${objectNumber} sequence=${sequence}`);
     }
 
     // Build dup ordinals for this artwork
