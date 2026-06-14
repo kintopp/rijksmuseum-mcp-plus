@@ -17,7 +17,6 @@ import { fileURLToPath } from "node:url";
 import {
   applyEnrichmentsSchema,
   migrate,
-  parseManualCsvText,
 } from "../migrate-enrichments-to-store.mjs";
 import { reapply } from "../reapply-enrichments-from-store.mjs";
 import * as M from "../lib/provenance-enrichment-methods.mjs";
@@ -598,6 +597,85 @@ function cleanTmp(p) {
     }
     assert(threw, "D3: unresolvable artwork_id causes migrate to throw");
     assert(throwMsg.includes("9999"), `D3: error mentions artwork_id 9999 — got: ${throwMsg}`);
+  }
+
+  // ── Addendum E1: overlap event (LLM party + CSV DELETE) deduped via shared seenPK ──
+  section("Addendum E1: value+manual overlap on one event → single snapshot, no PK throw");
+  {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO artworks VALUES (300, 'SK-A-0300');
+      INSERT INTO provenance_events VALUES
+        (300,1,'Overlap event raw text',0,'sale',0,0,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_parties VALUES
+        (300,1,0,'Real Buyer',NULL,'buyer','London','${M.LLM_ENRICHMENT}',0,'enriched');
+    `);
+    // CSV: a provenance_parties DELETE row targeting the SAME (artwork,seq) → manual snapshot
+    const csv = [
+      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_parties,300,1,*,DELETE,,,Charter-room cleanup",
+    ].join("\n");
+    const tmp = writeTmpCsv(csv);
+    let threw = false;
+    try {
+      migrate(db, { value: true, manual: true, csvPath: tmp });
+    } catch (e) {
+      threw = true;
+    } finally {
+      cleanTmp(tmp);
+    }
+    assert(!threw, "E1: value+manual on the same event does NOT throw (shared seenPK dedupes)");
+    const snaps = getStore(db, "event.parties");
+    assertEq(snaps.length, 1, "E1: exactly one event.parties row (deduped, not double-inserted)");
+  }
+
+  // ── Addendum E2: period.manual dry-run is accurate (reads, no writes) ──
+  section("Addendum E2: period.manual dry-run surfaces period_not_found and writes nothing");
+  {
+    // B1: missing period → dry-run must report period_not_found (was hidden before)
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO artworks VALUES (301, 'SK-A-0301');
+      INSERT INTO provenance_events VALUES
+        (301,1,'Periodless event text',0,'sale',0,0,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+    `);
+    const csv = [
+      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_periods,301,1,,begin_year,1346,,",
+    ].join("\n");
+    const tmp = writeTmpCsv(csv);
+    try {
+      migrate(db, { manual: true, csvPath: tmp });
+      const dry = reapply(db, { dryRun: true });
+      assertEq(dry.unmatched.period_not_found, 1, "E2: dry-run reports period_not_found=1");
+      assertEq(dry.applied.period_manual, 0, "E2: dry-run applied.period_manual=0 when period missing");
+    } finally {
+      cleanTmp(tmp);
+    }
+
+    // B2: present period → dry-run counts applied but does NOT mutate the row
+    const db2 = makeDb();
+    db2.exec(`
+      INSERT INTO artworks VALUES (302, 'SK-A-0302');
+      INSERT INTO provenance_events VALUES
+        (302,1,'Period present event',0,'sale',0,0,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_periods VALUES
+        (302,1,'Owner',NULL,NULL,NULL,NULL,1346,NULL,NULL,NULL,0,NULL,'[1]');
+    `);
+    const csv2 = [
+      "table,artwork_id,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_periods,302,1,,begin_year,1346,,",
+    ].join("\n");
+    const tmp2 = writeTmpCsv(csv2);
+    try {
+      migrate(db2, { manual: true, csvPath: tmp2 });
+      const dry = reapply(db2, { dryRun: true });
+      assertEq(dry.applied.period_manual, 1, "E2: dry-run counts applied.period_manual=1 when period present");
+      const row = db2.prepare("SELECT begin_year FROM provenance_periods WHERE artwork_id=302 AND sequence=1").get();
+      assertEq(row.begin_year, 1346, "E2: dry-run did NOT write (begin_year still 1346)");
+    } finally {
+      cleanTmp(tmp2);
+    }
   }
 
   // ─── Summary ───────────────────────────────────────────────────────────────

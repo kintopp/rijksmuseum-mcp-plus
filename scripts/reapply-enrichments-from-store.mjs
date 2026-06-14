@@ -15,7 +15,7 @@
 import Database from "better-sqlite3";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildDupOrdinals, rawTextHash } from "./lib/raw-text-hash.mjs";
+import { buildDupOrdinals } from "./lib/raw-text-hash.mjs";
 import * as M from "./lib/provenance-enrichment-methods.mjs";
 
 // ─── Core reapply function ─────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ export function reapply(db, { dryRun = false } = {}) {
     WHERE artwork_id = ? AND sequence = ?
   `);
 
-  const getPeriodBySourceEvent = dryRun ? null : db.prepare(`
+  const getPeriodBySourceEvent = db.prepare(`
     SELECT sequence FROM provenance_periods
     WHERE artwork_id = ? AND source_events LIKE ?
   `);
@@ -155,22 +155,21 @@ export function reapply(db, { dryRun = false } = {}) {
               }
             }
           } else if (row.field === "period.manual") {
-            if (!dryRun) {
-              // Resolve period via source_events LIKE match
-              const eventSeq = payload.period_sequence;
-              const periodRow = getPeriodBySourceEvent.get(artworkId, `%${eventSeq}%`);
-              if (!periodRow) {
-                unmatched.period_not_found++;
-                unmatchedObjectNumbers.add(objectNumber);
-                applied.period_manual--; // will be incremented below, pre-decrement to cancel
-              } else {
+            // Resolve period via source_events (read happens in dry-run too)
+            const eventSeq = payload.period_sequence;
+            const periodRow = getPeriodBySourceEvent.get(artworkId, `%${eventSeq}%`);
+            if (!periodRow) {
+              unmatched.period_not_found++;
+              unmatchedObjectNumbers.add(objectNumber);
+            } else {
+              applied.period_manual++;
+              if (!dryRun) {
                 for (const [col, val] of Object.entries(payload)) {
                   if (col === "period_sequence") continue;
                   updatePeriodManual(col, dryRun).run(val, artworkId, periodRow.sequence);
                 }
               }
             }
-            applied.period_manual++;
           }
         } else if (row.op_kind === "parties") {
           // §G + §H: delete + reinsert + rebuild JSON mirror

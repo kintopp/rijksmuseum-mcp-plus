@@ -100,7 +100,6 @@ export function parseManualCsv(csvPath) {
 
 /**
  * Build and insert (or dedupe) a party snapshot enrichment row.
- * @param {import("better-sqlite3").Database} db
  * @param {import("better-sqlite3").Statement} insertStmt
  * @param {Set<string>} seenPK
  * @param {object} opts
@@ -113,7 +112,7 @@ export function parseManualCsv(csvPath) {
  * @param {object[]} opts.parties  full relational party rows for this event (sorted asc by party_idx)
  * @returns {boolean} true if row emitted (not deduped)
  */
-function emitPartySnapshotRow(db, insertStmt, seenPK, { objectNumber, sequence, rawText, groups, source, parties }) {
+function emitPartySnapshotRow(insertStmt, seenPK, { objectNumber, sequence, rawText, groups, source, parties }) {
   const h = rawTextHash(rawText);
   const { dup_ordinal, dup_count } = dupKey(groups, h, sequence);
   const field = "event.parties";
@@ -161,7 +160,7 @@ function emitPartySnapshotRow(db, insertStmt, seenPK, { objectNumber, sequence, 
  * @param {{ dryRun: boolean }} opts
  * @returns {{ event_type: number, party_snapshot: number }}
  */
-export function runValueExtractor(db, { dryRun }) {
+export function runValueExtractor(db, { dryRun, seenPK = new Set() }) {
   const counts = { event_type: 0, party_snapshot: 0 };
 
   // Collect all distinct artwork_ids that have enriched events or LLM parties
@@ -197,8 +196,6 @@ export function runValueExtractor(db, { dryRun }) {
       (@object_number, @raw_text_hash, @dup_ordinal, @dup_count, @field, @party_idx,
        @op_kind, @payload, @method, @reasoning, @confidence, @source)
   `);
-
-  const seenPK = new Set();
 
   for (const artworkId of artworkIds) {
     const objRow = getObjectNumber.get(artworkId);
@@ -257,7 +254,7 @@ export function runValueExtractor(db, { dryRun }) {
         if (hasLlmParty) {
           const emitted = dryRun
             ? !seenPK.has(`${objectNumber}|${rawTextHash(evt.raw_text)}|${dupKey(groups, rawTextHash(evt.raw_text), evt.sequence).dup_ordinal}|event.parties|-1`)
-            : emitPartySnapshotRow(db, insertStmt, seenPK, {
+            : emitPartySnapshotRow(insertStmt, seenPK, {
                 objectNumber,
                 artworkId,
                 sequence: evt.sequence,
@@ -290,7 +287,7 @@ export function runValueExtractor(db, { dryRun }) {
  * @param {{ dryRun: boolean, csvPath: string }} opts
  * @returns {{ event_manual: number, period_manual: number, party_snapshot: number }}
  */
-export function runManualExtractor(db, { dryRun, csvPath }) {
+export function runManualExtractor(db, { dryRun, csvPath, seenPK = new Set() }) {
   const counts = { event_manual: 0, period_manual: 0, party_snapshot: 0 };
 
   const rows = parseManualCsv(csvPath);
@@ -318,8 +315,6 @@ export function runManualExtractor(db, { dryRun, csvPath }) {
       (@object_number, @raw_text_hash, @dup_ordinal, @dup_count, @field, @party_idx,
        @op_kind, @payload, @method, @reasoning, @confidence, @source)
   `);
-
-  const seenPK = new Set();
 
   // Group rows by (table, artwork_id, sequence)
   const groups = new Map();
@@ -366,7 +361,7 @@ export function runManualExtractor(db, { dryRun, csvPath }) {
       const parties = getParties.all(artworkId, sequence);
       const emitted = dryRun
         ? !seenPK.has(`${objectNumber}|${h}|${dup_ordinal}|event.parties|-1`)
-        : emitPartySnapshotRow(db, insertStmt, seenPK, {
+        : emitPartySnapshotRow(insertStmt, seenPK, {
             objectNumber,
             artworkId,
             sequence,
@@ -460,6 +455,7 @@ export function migrate(db, { value = false, manual = false, dryRun = false, csv
   applyEnrichmentsSchema(db);
 
   const allCounts = { party_snapshot: 0 };
+  const seenPK = new Set();
 
   const run = db.transaction(() => {
     if (!dryRun) {
@@ -470,14 +466,14 @@ export function migrate(db, { value = false, manual = false, dryRun = false, csv
     }
 
     if (value) {
-      const c = runValueExtractor(db, { dryRun });
+      const c = runValueExtractor(db, { dryRun, seenPK });
       allCounts.event_type = (allCounts.event_type ?? 0) + c.event_type;
       allCounts.party_snapshot += c.party_snapshot;
     }
 
     if (manual) {
       if (!csvPath) throw new Error("migrate: --manual requires a csvPath");
-      const c = runManualExtractor(db, { dryRun, csvPath });
+      const c = runManualExtractor(db, { dryRun, csvPath, seenPK });
       allCounts.event_manual = (allCounts.event_manual ?? 0) + c.event_manual;
       allCounts.period_manual = (allCounts.period_manual ?? 0) + c.period_manual;
       allCounts.party_snapshot += c.party_snapshot;
