@@ -195,6 +195,7 @@ gzip -k -f data/<db-file>.db
 shasum -a 256 data/<db-file>.db.gz
 
 # 4. Create GitHub pre-release with the asset (provides download URL)
+# Notes: `git mv` the rolling RELEASE_NOTES_next.md → RELEASE_NOTES_v0.XX.md (and strip its maintainer "Source trail" comment) before this step — see that file's header.
 gh release create v0.XX --prerelease data/<db-file>.db.gz \
   --title "v0.XX" --notes-file RELEASE_NOTES_v0.XX.md
 
