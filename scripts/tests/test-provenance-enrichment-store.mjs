@@ -1199,6 +1199,68 @@ function writeTmpJson(content) {
     }
   }
 
+  // ── Case 15: 1a type-classification audit recovery (option A) ──────────────
+  // Regression for finding #2 (provenance-enrichment-value-recategorize-leak.md):
+  // the value extractor's category_method='llm_enrichment' DB scan misses 1a LLM
+  // type-classifications whose marker was overwritten by rule writeback 1b
+  // (transfer-category → 'rule:transfer_is_ownership'). The 1a-audit recovery must
+  // ADD those (content-addressed by the audit's raw_text), dedup against the DB scan,
+  // and skip sub-0.7-confidence entries.
+  section("Case 15: 1a type-classification audit recovery (option A)");
+  {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO artworks VALUES (15,'SK-A-9201'),(16,'SK-A-9202'),(18,'SK-A-9204');
+      -- recategorized: 1a set 'transfer', 1b overwrote category_method → MISSED by DB scan
+      INSERT INTO provenance_events VALUES
+        (15,1,'Recat event text 1850',0,'transfer',0,0,'ownership','rule:transfer_is_ownership',0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,'1b reasoning');
+      -- still llm_enrichment: captured by the DB scan → audit must NOT double it
+      INSERT INTO provenance_events VALUES
+        (16,1,'Still llm event 1860',0,'gift',0,0,'ownership','llm_enrichment',0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,'orig reasoning');
+      -- base unknown; audit entry is sub-0.7 → must be skipped
+      INSERT INTO provenance_events VALUES
+        (18,1,'Lowconf event text 1870',0,'unknown',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+    `);
+    const typeAuditPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case15", model: "test" },
+      results: [
+        { data: { object_number: "SK-A-9201", classifications: [
+          { event_sequence: 1, raw_text: "Recat event text 1850", transfer_type: "transfer", transfer_category: "ambiguous", confidence: 0.9, reasoning: "recovered: 1a classified, 1b recategorized" } ] } },
+        { data: { object_number: "SK-A-9202", classifications: [
+          { event_sequence: 1, raw_text: "Still llm event 1860", transfer_type: "gift", confidence: 0.9, reasoning: "orig" } ] } },
+        { data: { object_number: "SK-A-9204", classifications: [
+          { event_sequence: 1, raw_text: "Lowconf event text 1870", transfer_type: "sale", confidence: 0.5, reasoning: "below threshold" } ] } },
+      ],
+    }), "utf-8");
+
+    let counts, threw = false;
+    try {
+      counts = migrate(db, { value: true, dryRun: false, typeAuditFile: typeAuditPath });
+    } catch (e) {
+      threw = true; failures.push(`case15: migrate threw: ${e.message}`);
+    } finally {
+      cleanTmp(typeAuditPath);
+    }
+    assert(!threw, "case15: migrate does NOT throw");
+    if (counts) {
+      assertEq(counts.event_type, 2, "case15: event_type = 2 (9202 via DB scan + 9201 recovered)");
+      assertEq(counts.event_type_recovered, 1, "case15: exactly 1 recovered (only the recategorized 9201)");
+      const r9201 = db.prepare("SELECT * FROM provenance_enrichments WHERE object_number='SK-A-9201' AND field='event.type'").all();
+      assertEq(r9201.length, 1, "case15: SK-A-9201 recovered → 1 event.type row");
+      if (r9201[0]) {
+        const p = JSON.parse(r9201[0].payload);
+        assertEq(p.transfer_type, "transfer", "case15: recovered payload transfer_type=transfer");
+        assertEq(p.transfer_category, "ambiguous", "case15: category derived (TRANSFER_TYPE_TO_CATEGORY['transfer']='ambiguous')");
+        assertEq(r9201[0].source, "audit:type-classification", "case15: recovered row source tagged");
+        assertEq(r9201[0].method, M.LLM_ENRICHMENT, "case15: recovered row method=llm_enrichment");
+      }
+      const n9202 = db.prepare("SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number='SK-A-9202' AND field='event.type'").get().n;
+      assertEq(n9202, 1, "case15: SK-A-9202 not doubled (DB scan only, audit deduped)");
+      const n9204 = db.prepare("SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number='SK-A-9204'").get().n;
+      assertEq(n9204, 0, "case15: sub-0.7 audit entry skipped (no store row)");
+    }
+  }
+
   // ─── Summary ───────────────────────────────────────────────────────────────
   process.stdout.write(`\n${"═".repeat(60)}\n`);
   process.stdout.write(`  Results: ${passed} passed, ${failed} failed\n`);

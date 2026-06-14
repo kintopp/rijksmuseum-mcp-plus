@@ -28,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import { rawTextHash, buildDupOrdinals, dupKey } from "./lib/raw-text-hash.mjs";
 import * as M from "./lib/provenance-enrichment-methods.mjs";
 import { buildOracle } from "./emit-deterministic-parents.mjs";
+import { TRANSFER_TYPE_TO_CATEGORY } from "../dist/provenance.js";
 
 // Structural audit ops are gated at this confidence in the original writeback
 // scripts (writeback-event-splitting / -event-reclassification / -field-corrections
@@ -37,6 +38,27 @@ import { buildOracle } from "./emit-deterministic-parents.mjs";
 // degenerate audit entries they discard. (See
 // plans/provenance-enrichment-structural-confidence-leak.md.)
 export const MIN_STRUCTURAL_CONFIDENCE = 0.7;
+
+// The 1a LLM type-classification audit. The value extractor reads it to capture
+// event.type enrichments whose category_method='llm_enrichment' marker was later
+// overwritten by the rule writeback 1b (transfer-category) → otherwise invisible to
+// a category_method-only DB scan. Mirror 1a's gate: confidence>=0.7, skip the
+// no-op types. (plans/provenance-enrichment-value-recategorize-leak.md)
+export const TYPE_CLASSIFICATION_AUDIT = "data/audit/audit-type-classification-2026-03-22.json";
+const MIN_TYPE_CONFIDENCE = 0.7;
+const TYPE_SKIP = new Set(["non_provenance", "unknown"]);
+
+/**
+ * Normalize typographic quotes/apostrophes to ASCII. The v0.24 type-classification
+ * audit captured raw_text with straight quotes; later harvests render the same events
+ * with curly quotes (U+2018/2019/201C/201D…). Same event, different bytes — used only
+ * as a content-match FALLBACK in the 1a recovery, never for store keys.
+ */
+function normalizeQuotes(s) {
+  return String(s)
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/[“”„‟]/g, '"');
+}
 
 // ─── Exported schema ──────────────────────────────────────────────────────────
 
@@ -172,8 +194,8 @@ function emitPartySnapshotRow(insertStmt, seenPK, { objectNumber, sequence, rawT
  * @param {{ dryRun: boolean }} opts
  * @returns {{ event_type: number, party_snapshot: number }}
  */
-export function runValueExtractor(db, { dryRun, seenPK = new Set() }) {
-  const counts = { event_type: 0, party_snapshot: 0 };
+export function runValueExtractor(db, { dryRun, seenPK = new Set(), typeAuditFile = TYPE_CLASSIFICATION_AUDIT }) {
+  const counts = { event_type: 0, party_snapshot: 0, event_type_recovered: 0, type_unresolved: 0 };
 
   // Collect all distinct artwork_ids that have enriched events or LLM parties
   const artworkIds = db.prepare(`
@@ -183,8 +205,6 @@ export function runValueExtractor(db, { dryRun, seenPK = new Set() }) {
     SELECT DISTINCT artwork_id FROM provenance_parties
     WHERE position_method IN (?, ?)
   `).all(M.LLM_ENRICHMENT, M.LLM_ENRICHMENT, M.LLM_DISAMBIGUATION).map((r) => r.artwork_id);
-
-  if (artworkIds.length === 0) return counts;
 
   const getObjectNumber = db.prepare("SELECT object_number FROM artworks WHERE art_id = ?");
   const getEvents = db.prepare(`
@@ -282,6 +302,77 @@ export function runValueExtractor(db, { dryRun, seenPK = new Set() }) {
             const { dup_ordinal } = dupKey(groups, h, evt.sequence);
             seenPK.add(`${objectNumber}|${h}|${dup_ordinal}|event.parties|-1`);
           }
+        }
+      }
+    }
+  }
+
+  // ── 1a type-classification audit recovery (option A; finding #2) ──────────────
+  // The DB-scan above keys event.type on category_method='llm_enrichment'. But the
+  // rule writeback 1b (transfer-category) overwrites that marker to
+  // 'rule:transfer_is_ownership' on events 1a (LLM) classified, hiding them from a
+  // category_method-only scan. The 1a audit is authoritative: capture every
+  // classification it applied (mirroring 1a's confidence>=0.7 + skip non_provenance/
+  // unknown), content-addressed by the audit's OWN raw_text (no oracle needed — the
+  // type audit carries raw_text inline). Dedup via seenPK keeps the DB-scan's row for
+  // events still tagged llm_enrichment, so this only ADDS the recategorized ones.
+  // Derive transfer_category exactly as 1a does (TRANSFER_TYPE_TO_CATEGORY), so the
+  // store row + reapply + a re-run of 1b reproduce the original final state.
+  const typeAudit = typeAuditFile ? loadAuditJson(typeAuditFile) : null;
+  if (typeAudit) {
+    const getArtByObj = db.prepare("SELECT art_id FROM artworks WHERE object_number = ?");
+    for (const result of typeAudit.results ?? []) {
+      const objectNumber = result.data?.object_number;
+      if (!objectNumber) continue;
+      const art = getArtByObj.get(objectNumber);
+      if (!art) continue;
+      const evts = getEvents.all(art.art_id);
+      const groups = buildDupOrdinals(evts);
+      for (const cls of result.data?.classifications ?? []) {
+        if ((cls.confidence ?? 0) < MIN_TYPE_CONFIDENCE) continue;
+        if (TYPE_SKIP.has(cls.transfer_type)) continue;
+        if (cls.raw_text == null) continue;
+        // Resolve the CURRENT event this 1a classification applies to. Prefer an exact
+        // content match; fall back to a quote-normalized UNIQUE match (audit straight
+        // quotes vs current curly). Key the store row on the CURRENT event's raw_text
+        // hash either way, so the content-addressed re-apply finds it.
+        let curRaw = null, curSeq = null;
+        const seqs = groups.get(rawTextHash(cls.raw_text));
+        if (seqs && seqs.length > 0) {
+          curSeq = seqs.includes(cls.event_sequence) ? cls.event_sequence : seqs[0];
+          curRaw = evts.find((e) => e.sequence === curSeq)?.raw_text ?? null;
+        } else {
+          const target = normalizeQuotes(cls.raw_text);
+          const cands = evts.filter((e) => normalizeQuotes(e.raw_text) === target);
+          if (cands.length === 1) { curRaw = cands[0].raw_text; curSeq = cands[0].sequence; }
+        }
+        if (curRaw == null) { counts.type_unresolved++; continue; } // re-segmented / genuinely changed
+        const h = rawTextHash(curRaw);
+        const { dup_ordinal, dup_count } = dupKey(groups, h, curSeq);
+        const field = "event.type";
+        const pk = `${objectNumber}|${h}|${dup_ordinal}|${field}|-1`;
+        if (seenPK.has(pk)) continue; // already captured by the DB-scan
+        seenPK.add(pk);
+        counts.event_type++;
+        counts.event_type_recovered++;
+        if (!dryRun) {
+          insertStmt.run({
+            object_number: objectNumber,
+            raw_text_hash: h,
+            dup_ordinal,
+            dup_count,
+            field,
+            party_idx: -1,
+            op_kind: "value",
+            payload: JSON.stringify({
+              transfer_type: cls.transfer_type,
+              transfer_category: TRANSFER_TYPE_TO_CATEGORY[cls.transfer_type] ?? null,
+            }),
+            method: M.LLM_ENRICHMENT,
+            reasoning: cls.reasoning ?? null,
+            confidence: null,
+            source: "audit:type-classification",
+          });
         }
       }
     }
@@ -748,7 +839,7 @@ function loadAuditJson(filePath) {
  * @param {{ value?: boolean, manual?: boolean, structural?: boolean, dryRun?: boolean, csvPath?: string, auditFiles?: object, oracle?: object }} opts
  * @returns {{ event_type?: number, party_snapshot: number, event_manual?: number, period_manual?: number, event_split?: number, event_reclassify?: number, event_fieldcorrection?: number, structural_unresolved?: number }}
  */
-export function migrate(db, { value = false, manual = false, structural = false, dryRun = false, csvPath, auditFiles, oracle } = {}) {
+export function migrate(db, { value = false, manual = false, structural = false, dryRun = false, csvPath, auditFiles, oracle, typeAuditFile } = {}) {
   applyEnrichmentsSchema(db);
 
   const allCounts = { party_snapshot: 0 };
@@ -757,8 +848,10 @@ export function migrate(db, { value = false, manual = false, structural = false,
   const run = db.transaction(() => {
     if (!dryRun) {
       // Idempotent: clear previous value/manual migration rows before re-inserting.
+      // 'audit:type-classification' is the 1a-recovery source (option A) — must be
+      // cleared too, else a re-run collides on its PKs.
       db.prepare(
-        "DELETE FROM provenance_enrichments WHERE source IN ('migration:db', 'manual-csv')"
+        "DELETE FROM provenance_enrichments WHERE source IN ('migration:db', 'manual-csv', 'audit:type-classification')"
       ).run();
       // Structural rows carry the audit batchId as source, so clear them by op_kind.
       if (structural) {
@@ -769,9 +862,11 @@ export function migrate(db, { value = false, manual = false, structural = false,
     }
 
     if (value) {
-      const c = runValueExtractor(db, { dryRun, seenPK });
+      const c = runValueExtractor(db, { dryRun, seenPK, ...(typeAuditFile !== undefined ? { typeAuditFile } : {}) });
       allCounts.event_type = (allCounts.event_type ?? 0) + c.event_type;
       allCounts.party_snapshot += c.party_snapshot;
+      allCounts.event_type_recovered = (allCounts.event_type_recovered ?? 0) + c.event_type_recovered;
+      allCounts.type_unresolved = (allCounts.type_unresolved ?? 0) + c.type_unresolved;
     }
 
     if (manual) {

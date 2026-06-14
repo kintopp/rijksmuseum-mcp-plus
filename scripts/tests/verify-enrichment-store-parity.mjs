@@ -96,6 +96,16 @@ console.log(`  ${"TOTAL".padEnd(35)} ${total}`);
 const storeEventType = one(
   `SELECT COUNT(*) c FROM provenance_enrichments WHERE field='event.type'`
 ).c;
+// Option A splits event.type into two sources: the category_method='llm_enrichment'
+// DB scan ('migration:db') and the 1a-audit recovery ('audit:type-classification',
+// for events whose marker rule writeback 1b overwrote). Only the DB-scan rows should
+// equal the DB's current llm_enrichment count; the recovered rows are extra by design.
+const storeEventTypeDbScan = one(
+  `SELECT COUNT(*) c FROM provenance_enrichments WHERE field='event.type' AND source='migration:db'`
+).c;
+const storeEventTypeRecovered = one(
+  `SELECT COUNT(*) c FROM provenance_enrichments WHERE field='event.type' AND source='audit:type-classification'`
+).c;
 const storeSnapshots = one(
   `SELECT COUNT(*) c FROM provenance_enrichments WHERE field='event.parties'`
 ).c;
@@ -130,8 +140,9 @@ console.log(`\nparity checks:`);
 const check = (label, ok, detail) =>
   console.log(`  [${ok ? "PASS" : "FAIL"}] ${label}${detail ? " — " + detail : ""}`);
 
-check("event.type store == DB candidates", storeEventType === eventType,
-  `store ${storeEventType} vs db ${eventType}`);
+check("event.type DB-scan rows == DB llm_enrichment candidates (recovered rows are extra by design)",
+  storeEventTypeDbScan === eventType,
+  `db-scan ${storeEventTypeDbScan} vs db ${eventType}; +${storeEventTypeRecovered} recovered from 1a audit (store total ${storeEventType})`);
 check("snapshot store >= value-path triggers (>= because manual-csv adds some)",
   storeSnapshots >= snapTrigger, `store ${storeSnapshots} vs value-triggers ${snapTrigger}`);
 check("no GUARD-EVADING missing-receiver party in any snapshot (cutover double-insert hazard)",
