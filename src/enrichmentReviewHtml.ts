@@ -88,6 +88,38 @@ function cleanReasoning(raw: string): string {
     .trim();
 }
 
+const NO_REASONING = "(no reasoning recorded)";
+
+/**
+ * Detect captured model chain-of-thought that leaked into the structured `reasoning`
+ * field (e.g. "Wait —", "Re-examining:", "I will mark this as…"). A few audit batches
+ * recorded the model's full deliberation instead of a one-line justification; those
+ * traces are noisy and occasionally self-contradictory, so we suppress them in the review
+ * page rather than show them verbatim. Markers are kept deliberately specific so clean
+ * reasoning is never flagged (e.g. "It actually contains six distinct events" must pass).
+ */
+const COT_MARKERS: RegExp[] = [
+  /\bWait\b\s*[—–-]/i,
+  /\bRe-?examining\b/i,
+  /\bRe-?evaluating\b/i,
+  /\bon closer (?:review|inspection)\b/i,
+  /\bUpon closer\b/i,
+  /\bI will mark\b/i,
+  /\bNevertheless,\s+because\b/i,
+  /\bLet me reconsider\b/i,
+];
+
+export function looksLikeChainOfThought(text: string): boolean {
+  return COT_MARKERS.some(re => re.test(text));
+}
+
+/** Replace leaked chain-of-thought reasoning with a neutral note; pass clean reasoning through. */
+function guardChainOfThought(reasoning: string): string {
+  return looksLikeChainOfThought(reasoning)
+    ? "(Automated correction — verbose model reasoning omitted from this view.)"
+    : reasoning;
+}
+
 /** Any non-default enrichment (LLM, rule-based, or structural correction) — used for page content. */
 export function isEnrichedEvent(e: { categoryMethod?: string | null; correctionMethod?: string | null }): boolean {
   return (!!e.categoryMethod && e.categoryMethod !== "type_mapping") || !!e.correctionMethod;
@@ -155,7 +187,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
           seq: e.sequence,
           type: e.transferType,
           method: e.correctionMethod ?? e.categoryMethod ?? "(unknown)",
-          reasoning: cleanReasoning(e.enrichmentReasoning || "(no reasoning recorded)"),
+          reasoning: cleanReasoning(e.enrichmentReasoning || NO_REASONING),
         });
       }
       for (const p of e.parties) {
@@ -165,7 +197,7 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
             name: p.name,
             position: p.position || "unknown",
             method: p.positionMethod!,
-            reasoning: cleanReasoning(p.enrichmentReasoning || "(no reasoning recorded)"),
+            reasoning: cleanReasoning(p.enrichmentReasoning || NO_REASONING),
           });
         }
       }
@@ -199,30 +231,65 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
       return `<li class="${cls}"><span class="seq">${e.sequence}.</span>${typeTag}${year} ${esc(e.rawText)}</li>`;
     }).join("\n");
 
-    // Enrichment details (right panel)
-    const enrichmentDetails: string[] = [];
-
+    // Enrichment details (right panel).
+    // Structural corrections (event splits, merges, bequest chains) stamp ONE explanation
+    // onto every resulting child event AND each of its parties, so the same reasoning text
+    // can repeat ~20× per artwork. Collapse entries that share identical reasoning into a
+    // single block: list every target once, show the explanation only once.
+    const enrichEntries: { method: string; reasoning: string; targetHtml: string }[] = [];
     for (const ee of eventEnrichments) {
-      enrichmentDetails.push(`
-        <div class="enrichment-item">
-          <div class="enrichment-header">
-            <span class="badge" style="${methodBadgeStyle(ee.method)}">${methodLabel(ee.method)}</span>
-            <span class="enrichment-target">Event ${ee.seq} → <code>${esc(ee.type)}</code></span>
-          </div>
-          <div class="reasoning">${esc(ee.reasoning)}</div>
-        </div>`);
+      enrichEntries.push({
+        method: ee.method,
+        reasoning: ee.reasoning,
+        targetHtml: `Event ${ee.seq} → <code>${esc(ee.type)}</code>`,
+      });
+    }
+    for (const pe of partyEnrichments) {
+      enrichEntries.push({
+        method: pe.method,
+        reasoning: pe.reasoning,
+        targetHtml: `Event ${pe.seq}, "${esc(pe.name)}" → <code>${esc(pe.position)}</code>`,
+      });
     }
 
-    for (const pe of partyEnrichments) {
-      enrichmentDetails.push(`
+    const enrichGroups: { method: string; reasoning: string; targets: string[] }[] = [];
+    const enrichGroupByKey = new Map<string, { method: string; reasoning: string; targets: string[] }>();
+    let enrichUid = 0;
+    for (const en of enrichEntries) {
+      // Merge entries that share identical reasoning text: a structural correction stamps the
+      // same explanation onto its event AND every party. Key on reasoning alone, not method,
+      // because child events keep the namespaced method (llm_structural:#125) while their
+      // parties carry a bare 'llm_structural' — keying on method would needlessly split one
+      // correction into two blocks. Placeholder/empty reasoning stays unique so unrelated
+      // enrichments without recorded reasoning never collapse together.
+      const groupable = en.reasoning && en.reasoning !== NO_REASONING;
+      const key = groupable ? `r:${en.reasoning}` : `uniq:${enrichUid++}`;
+      let g = enrichGroupByKey.get(key);
+      if (!g) {
+        g = { method: en.method, reasoning: en.reasoning, targets: [] };
+        enrichGroupByKey.set(key, g);
+        enrichGroups.push(g);
+      } else if (en.method.includes(":") && !g.method.includes(":")) {
+        // Prefer the namespaced (labelled) method for the group badge.
+        g.method = en.method;
+      }
+      g.targets.push(en.targetHtml);
+    }
+
+    const enrichmentDetails = enrichGroups.map(g => {
+      const targetBlock = g.targets.length === 1
+        ? `<span class="enrichment-target">${g.targets[0]}</span>`
+        : `<span class="enrichment-target">${g.targets.length} enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets">${g.targets.map(t => `<li>${t}</li>`).join("")}</ul>`;
+      return `
         <div class="enrichment-item">
           <div class="enrichment-header">
-            <span class="badge" style="${methodBadgeStyle(pe.method)}">${methodLabel(pe.method)}</span>
-            <span class="enrichment-target">Event ${pe.seq}, "${esc(pe.name)}" → <code>${esc(pe.position)}</code></span>
+            <span class="badge" style="${methodBadgeStyle(g.method)}">${methodLabel(g.method)}</span>
+            ${targetBlock}
           </div>
-          <div class="reasoning">${esc(pe.reasoning)}</div>
-        </div>`);
-    }
+          <div class="reasoning">${esc(guardChainOfThought(g.reasoning))}</div>
+        </div>`;
+    });
 
     cards.push(`
 <div class="card" id="card-${cardIdx}">
@@ -314,6 +381,9 @@ export function generateEnrichmentReviewHtml(data: EnrichmentReviewData): string
   .enrichment-item { margin-bottom: 1rem; }
   .enrichment-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
   .enrichment-target { font-size: 0.82rem; font-family: var(--mono); }
+  .enrichment-targets { list-style: none; margin: 0.25rem 0; font-size: 0.8rem; font-family: var(--mono); color: var(--text-muted); }
+  .enrichment-targets li { padding: 1px 0 1px 0.6rem; border-left: 2px solid var(--border); margin-bottom: 1px; }
+  .enrichment-targets code { color: var(--accent); }
   .reasoning { font-family: var(--sans); font-style: italic; color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem; background: #faf8f2; border-radius: 4px; border-left: 3px solid var(--accent); }
 
   .back-to-top { position: fixed; bottom: 1rem; right: 1rem; background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; opacity: 0.8; }
