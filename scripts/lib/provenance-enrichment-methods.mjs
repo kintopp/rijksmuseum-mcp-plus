@@ -22,6 +22,7 @@ export const RULE_TRANSFER_IS_OWNERSHIP = "rule:transfer_is_ownership";
 // position_method
 export const ROLE_MAPPING = "role_mapping";
 export const LLM_DISAMBIGUATION = "llm_disambiguation";
+export const RULE_MISSING_RECEIVER = "rule:missing_receiver";
 
 // correction_method prefix (full value is e.g. "llm_structural:#214")
 export const LLM_STRUCTURAL_PREFIX = "llm_structural:";
@@ -37,6 +38,7 @@ export const METHOD_TO_TIER = Object.freeze({
   [RULE_TRANSFER_IS_OWNERSHIP]: DETERMINISTIC,
   [ROLE_MAPPING]: DETERMINISTIC,
   [LLM_DISAMBIGUATION]: INFERRED,
+  [RULE_MISSING_RECEIVER]: DETERMINISTIC,
 });
 
 export function tierFor(method) {

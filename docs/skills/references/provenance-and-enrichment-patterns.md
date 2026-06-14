@@ -162,7 +162,7 @@ determined:
 
 - `parseMethod`: how the event was parsed (`peg`, `regex_fallback`, `cross_ref`, `credit_line`, `llm_structural`)
 - `categoryMethod`: how the transfer type/category was determined (`type_mapping` = parser, `rule:transfer_is_ownership` = validated rule, `llm_enrichment` = LLM)
-- `positionMethod` (on parties): how the party position was determined (`role_mapping` = parser from party role, `type_mapping` = parser from event type, `llm_enrichment` = LLM, `llm_disambiguation` = LLM-decomposed merged text)
+- `positionMethod` (on parties): how the party position was determined (`role_mapping` = parser from party role, `type_mapping` = parser from event type, `llm_enrichment` = LLM, `llm_disambiguation` = LLM-decomposed merged text, `rule:missing_receiver` = deterministic tail-party backfill)
 - `enrichmentReasoning`: the LLM's reasoning for any non-deterministic decision
 
 When results contain LLM-enriched records, `search_provenance` provides a URL

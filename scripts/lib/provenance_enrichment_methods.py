@@ -30,6 +30,7 @@ RULE_TRANSFER_IS_OWNERSHIP = "rule:transfer_is_ownership"
 # ── position_method literals ────────────────────────────────────────────
 ROLE_MAPPING = "role_mapping"
 LLM_DISAMBIGUATION = "llm_disambiguation"
+RULE_MISSING_RECEIVER = "rule:missing_receiver"
 # LLM_ENRICHMENT and LLM_STRUCTURAL also appear as position_method values.
 
 # ── correction_method literals ──────────────────────────────────────────
@@ -48,6 +49,7 @@ METHOD_TO_TIER: dict[str, str] = {
     RULE_TRANSFER_IS_OWNERSHIP: DETERMINISTIC,
     ROLE_MAPPING: DETERMINISTIC,
     LLM_DISAMBIGUATION: INFERRED,
+    RULE_MISSING_RECEIVER: DETERMINISTIC,
 }
 
 

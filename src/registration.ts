@@ -3530,7 +3530,7 @@ function registerTools(
           ),
           positionMethod: optStr().describe(
             "Filter by how party positions (sender/receiver/agent) were determined. Values: role_mapping (parser), " +
-            "type_mapping (from transfer type), llm_enrichment (LLM-classified), llm_disambiguation (LLM-decomposed from merged text). " +
+            "type_mapping (from transfer type), llm_enrichment (LLM-classified), llm_disambiguation (LLM-decomposed from merged text), rule:missing_receiver (deterministic tail-party backfill). " +
             "Use positionMethod='llm_enrichment' to find artworks with LLM-mediated party positions. " +
             "When combined with `party`, both filters must hold on the same party row of the same event — " +
             "useful for auditing whether a specific party's classification was deterministic vs LLM-mediated.",

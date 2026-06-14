@@ -197,7 +197,7 @@ const insertParty = db.prepare(`
   INSERT INTO provenance_parties (
     artwork_id, sequence, party_idx, party_name, party_dates, party_role,
     party_position, position_method, uncertain, enrichment_reasoning
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, '${M.LLM_ENRICHMENT}', 0, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, '${M.RULE_MISSING_RECEIVER}', 0, ?)
 `);
 
 const updatePartiesJson = db.prepare(`
@@ -215,7 +215,7 @@ const writeBatch = db.transaction((rows) => {
     const newIdx = maxIdx + 1;
 
     // Insert party
-    const reasoning = `Extracted from event text: receiver "${receiver.name}" found in "to the/to [Name]" pattern. Parser's parseRest() missed this tail party.`;
+    const reasoning = `Recovered ${receiver.role} "${receiver.name}" from a trailing "to [Name]" clause the rule-based parser did not capture.`;
     insertParty.run(artwork_id, sequence, newIdx, receiver.name, null, receiver.role, receiver.position, reasoning);
 
     // Update parties JSON
