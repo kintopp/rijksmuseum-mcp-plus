@@ -19,6 +19,7 @@ import {
   migrate,
 } from "../migrate-enrichments-to-store.mjs";
 import { reapply } from "../reapply-enrichments-from-store.mjs";
+import { rawTextHash } from "../lib/raw-text-hash.mjs";
 import * as M from "../lib/provenance-enrichment-methods.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -152,6 +153,55 @@ function getParties(db, artworkId, sequence) {
   return db.prepare(
     "SELECT * FROM provenance_parties WHERE artwork_id = ? AND sequence = ? ORDER BY party_idx"
   ).all(artworkId, sequence);
+}
+
+function getAllEvents(db, artworkId) {
+  return db.prepare(
+    "SELECT * FROM provenance_events WHERE artwork_id = ? ORDER BY sequence"
+  ).all(artworkId);
+}
+
+/**
+ * Insert a synthetic op_kind='structural' store row directly (re-apply consumes
+ * it). Cases 10–11 test re-apply, not the audit-reading extractor, so the split
+ * payload is hand-crafted to match the splits[] shape applySplits expects.
+ */
+function insertStructuralRow(db, { objectNumber, parentRawText, dupOrdinal = 0, dupCount = 1, field, payload, method }) {
+  const hash = rawTextHash(parentRawText);
+  db.prepare(`
+    INSERT INTO provenance_enrichments
+      (object_number, raw_text_hash, dup_ordinal, dup_count, field, party_idx,
+       op_kind, payload, method, reasoning, confidence, source)
+    VALUES (?, ?, ?, ?, ?, -1, 'structural', ?, ?, ?, NULL, 'audit:test')
+  `).run(
+    objectNumber, hash, dupOrdinal, dupCount, field,
+    JSON.stringify(payload), method, payload.reasoning ?? null
+  );
+}
+
+/** The three hard POST-REPARSE-STEPS invariants for one artwork. */
+function assertHardInvariants(db, artworkId, label) {
+  const orphanParties = db.prepare(`
+    SELECT COUNT(*) AS n FROM provenance_parties p
+    WHERE p.artwork_id = ? AND NOT EXISTS (
+      SELECT 1 FROM provenance_events e
+      WHERE e.artwork_id = p.artwork_id AND e.sequence = p.sequence)
+  `).get(artworkId).n;
+  assertEq(orphanParties, 0, `${label}: 0 orphan parties`);
+
+  const dupSeq = db.prepare(`
+    SELECT COUNT(*) AS n FROM (
+      SELECT sequence FROM provenance_events WHERE artwork_id = ?
+      GROUP BY sequence HAVING COUNT(*) > 1)
+  `).get(artworkId).n;
+  assertEq(dupSeq, 0, `${label}: 0 duplicate (artwork_id, sequence)`);
+
+  const correctedNoReasoning = db.prepare(`
+    SELECT COUNT(*) AS n FROM provenance_events
+    WHERE artwork_id = ? AND correction_method IS NOT NULL
+      AND (enrichment_reasoning IS NULL OR TRIM(enrichment_reasoning) = '')
+  `).get(artworkId).n;
+  assertEq(correctedNoReasoning, 0, `${label}: 0 corrected events without enrichment_reasoning`);
 }
 
 // ─── Temp CSV helper ──────────────────────────────────────────────────────────
@@ -676,6 +726,164 @@ function cleanTmp(p) {
     } finally {
       cleanTmp(tmp2);
     }
+  }
+
+  // ── Case 10: Split survives renumber (structural) ──────────────────────────
+  section("Case 10: Split survives renumber (structural)");
+  {
+    const db = makeDb();
+    const parentText = "Sold at auction 1900 then bequeathed 1910";
+    // Migrate-time state: parent split target sits at sequence 2.
+    db.exec(`
+      INSERT INTO artworks VALUES (10, 'SK-A-0010');
+      INSERT INTO provenance_events VALUES
+        (10,1,'Preamble event text',0,'unknown',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_events VALUES
+        (10,2,'${parentText}',0,'sale',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_periods VALUES
+        (10,1,'Owner',NULL,NULL,NULL,NULL,1900,NULL,NULL,NULL,0,NULL,'[2]');
+    `);
+
+    // Synthetic split payload (splits[] entry shape applySplits consumes).
+    const splitPayload = {
+      original_sequence: 2, // audit value — re-apply overrides with the located seq
+      issue_type: "multi_transfer",
+      confidence: 0.95,
+      reasoning: "Two distinct transfers in one segment",
+      replacement_events: [
+        {
+          raw_text_segment: "Sold at auction 1900",
+          transfer_type: "sale",
+          transfer_category: "auction",
+          date_year: 1900,
+          date_qualifier: null,
+          location: "London",
+          gap: false,
+          parties: [{ name: "Auction House", role: "seller", position: "London" }],
+        },
+        {
+          raw_text_segment: "bequeathed 1910",
+          transfer_type: "bequest",
+          transfer_category: "inheritance",
+          date_year: 1910,
+          date_qualifier: null,
+          location: null,
+          gap: false,
+          parties: [{ name: "Heir Family", role: "buyer", position: "Amsterdam" }],
+        },
+      ],
+    };
+    insertStructuralRow(db, {
+      objectNumber: "SK-A-0010",
+      parentRawText: parentText,
+      field: "event.split",
+      payload: splitPayload,
+      method: `${M.LLM_STRUCTURAL_PREFIX}#125`,
+    });
+
+    // Simulate re-parse: a new event inserted before the parent → parent 2→3.
+    // A fresh re-parse re-derives periods, so the period's source_events now
+    // references the parent's CURRENT sequence (3), not the stale 2.
+    db.exec(`
+      DELETE FROM provenance_events;
+      DELETE FROM provenance_parties;
+      DELETE FROM provenance_periods;
+      INSERT INTO provenance_events VALUES
+        (10,1,'Preamble event text',0,'unknown',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_events VALUES
+        (10,2,'New middle event',0,'unknown',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_events VALUES
+        (10,3,'${parentText}',0,'sale',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_periods VALUES
+        (10,1,'Owner',NULL,NULL,NULL,NULL,1900,NULL,NULL,NULL,0,NULL,'[3]');
+    `);
+
+    const result = reapply(db);
+    assertEq(result.applied.event_split, 1, "case10: 1 split applied");
+    assertEq(result.unmatched.structural_text_changed, 0, "case10: no structural_text_changed");
+
+    // Whole artwork was rebuilt: 1 preamble + 1 middle + 2 children = 4 events.
+    const events = getAllEvents(db, 10);
+    assertEq(events.length, 4, "case10: 4 events after split (2 kept + 2 children)");
+
+    // Sequences contiguous 0..3
+    const seqs = events.map((e) => e.sequence);
+    assertDeepEq(seqs, [0, 1, 2, 3], "case10: sequences contiguous 0..3");
+
+    // The two children carry the right transfer_type
+    const child0 = events.find((e) => e.raw_text === "Sold at auction 1900");
+    const child1 = events.find((e) => e.raw_text === "bequeathed 1910");
+    assert(child0 != null, "case10: child 0 present");
+    assert(child1 != null, "case10: child 1 present");
+    assertEq(child0.transfer_type, "sale", "case10: child 0 transfer_type=sale");
+    assertEq(child1.transfer_type, "bequest", "case10: child 1 transfer_type=bequest");
+
+    // Children parties
+    const p0 = getParties(db, 10, child0.sequence);
+    const p1 = getParties(db, 10, child1.sequence);
+    assertEq(p0.length, 1, "case10: child 0 has 1 party");
+    assertEq(p0[0].party_name, "Auction House", "case10: child 0 party name");
+    assertEq(p1.length, 1, "case10: child 1 has 1 party");
+    assertEq(p1[0].party_name, "Heir Family", "case10: child 1 party name");
+
+    // period source_events remapped: old [2] (the parent) → children's new seqs.
+    const period = db.prepare("SELECT source_events FROM provenance_periods WHERE artwork_id=10 AND sequence=1").get();
+    const srcEvents = JSON.parse(period.source_events);
+    assertDeepEq(srcEvents, [child0.sequence, child1.sequence], "case10: period source_events remapped to child seqs");
+
+    // The three hard POST-REPARSE-STEPS invariants
+    assertHardInvariants(db, 10, "case10");
+  }
+
+  // ── Case 11: Split parent text changed → unmatched, no change ──────────────
+  section("Case 11: Split parent text changed → unmatched");
+  {
+    const db = makeDb();
+    const parentText = "Original parent segment text 1850";
+    db.exec(`
+      INSERT INTO artworks VALUES (11, 'SK-A-0011');
+      INSERT INTO provenance_events VALUES
+        (11,1,'${parentText}',0,'sale',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+    `);
+
+    insertStructuralRow(db, {
+      objectNumber: "SK-A-0011",
+      parentRawText: parentText,
+      field: "event.split",
+      payload: {
+        original_sequence: 1,
+        issue_type: "multi_transfer",
+        reasoning: "should not apply — text changed",
+        replacement_events: [
+          { raw_text_segment: "frag A", transfer_type: "sale", transfer_category: null, parties: [] },
+          { raw_text_segment: "frag B", transfer_type: "gift", transfer_category: null, parties: [] },
+        ],
+      },
+      method: `${M.LLM_STRUCTURAL_PREFIX}#125`,
+    });
+
+    // Re-parse changed the parent's text → its hash no longer matches.
+    db.exec(`
+      DELETE FROM provenance_events;
+      INSERT INTO provenance_events VALUES
+        (11,1,'Completely re-segmented different text',0,'sale',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+    `);
+
+    const before = getAllEvents(db, 11);
+    const result = reapply(db);
+
+    assertEq(result.applied.event_split, 0, "case11: 0 splits applied");
+    assertEq(result.unmatched.structural_text_changed, 1, "case11: structural_text_changed=1");
+    assert(
+      result.unmatched_object_numbers.includes("SK-A-0011"),
+      "case11: SK-A-0011 reported unmatched"
+    );
+
+    // The single event is byte-unchanged (no split, no renumber).
+    const after = getAllEvents(db, 11);
+    assertEq(after.length, 1, "case11: still exactly 1 event (no children created)");
+    assertEq(after[0].raw_text, before[0].raw_text, "case11: event raw_text unchanged");
+    assertEq(after[0].correction_method, null, "case11: no correction_method stamped");
   }
 
   // ─── Summary ───────────────────────────────────────────────────────────────

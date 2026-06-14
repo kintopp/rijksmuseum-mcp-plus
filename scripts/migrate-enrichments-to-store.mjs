@@ -9,9 +9,11 @@
  *     [--db PATH] [--csv PATH]
  *
  * Modes (additive, run together in one transaction):
- *   --value     Migrate DB-resident LLM enrichments (event.type + event.parties)
- *   --manual    Migrate manual CSV corrections
- *   --structural  → error: not implemented in Phase 1
+ *   --value       Migrate DB-resident LLM enrichments (event.type + event.parties)
+ *   --manual      Migrate manual CSV corrections
+ *   --structural  Migrate event-count structural ops (splits / reclassify /
+ *                 field-correction) from the audit JSONs, keyed on the parent
+ *                 event's raw_text via the deterministic-parent oracle (Phase 2).
  *
  * Options:
  *   --dry-run   Read + print summary, write nothing
@@ -25,6 +27,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { rawTextHash, buildDupOrdinals, dupKey } from "./lib/raw-text-hash.mjs";
 import * as M from "./lib/provenance-enrichment-methods.mjs";
+import { buildOracle } from "./emit-deterministic-parents.mjs";
 
 // ─── Exported schema ──────────────────────────────────────────────────────────
 
@@ -442,16 +445,197 @@ export function runManualExtractor(db, { dryRun, csvPath, seenPK = new Set() }) 
   return counts;
 }
 
+// ─── Structural extractor (--structural mode) ────────────────────────────────
+
+/**
+ * Default audit JSON paths (resolved relative to data/audit/).
+ * These files are gitignored and absent from a fresh worktree — the extractor
+ * reads them only at real-DB migrate time (Phase 3, maintainer).
+ */
+export const STRUCTURAL_AUDIT_FILES = {
+  split: "data/audit/audit-event-splitting-v0.24-2026-04-19.json",
+  reclassify: "data/audit/audit-event-reclassification-v0.24-2026-04-19.json",
+  fieldcorrection: "data/audit/audit-field-correction-v0.24-2026-04-19.json",
+};
+
+/**
+ * Resolve a parent event's (raw_text, dup_ordinal, dup_count) from the oracle.
+ * Returns null when the object/sequence has no parent in the clean re-parse.
+ *
+ * @param {{byObjSeq: Map<string,string>, groupsByObj: Map<string,Map<string,number[]>>}} oracle
+ * @param {string} objectNumber
+ * @param {number} sequence
+ */
+function resolveParent(oracle, objectNumber, sequence) {
+  const rawText = oracle.byObjSeq.get(`${objectNumber}|${sequence}`);
+  if (rawText == null || String(rawText).trim() === "") return null;
+  const groups = oracle.groupsByObj.get(objectNumber);
+  if (!groups) return null;
+  const h = rawTextHash(rawText);
+  const { dup_ordinal, dup_count } = dupKey(groups, h, sequence);
+  return { rawText, hash: h, dup_ordinal, dup_count };
+}
+
+/**
+ * Scan the structural audit JSONs and emit op_kind='structural' store rows,
+ * keyed on the deterministic parent event's raw_text (via the oracle).
+ *
+ * @param {import("better-sqlite3").Database} db
+ * @param {{ dryRun: boolean, seenPK?: Set<string>, auditFiles?: object, oracle?: object }} opts
+ * @returns {{ event_split: number, event_reclassify: number, event_fieldcorrection: number, unresolved: number }}
+ */
+export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFiles = STRUCTURAL_AUDIT_FILES, oracle } = {}) {
+  const counts = { event_split: 0, event_reclassify: 0, event_fieldcorrection: 0, unresolved: 0 };
+
+  // Build the parent-text oracle from a clean deterministic re-parse, unless one
+  // was supplied (tests pass a synthetic oracle).
+  const orc = oracle ?? buildOracle(db);
+
+  const insertStmt = dryRun ? null : db.prepare(`
+    INSERT INTO provenance_enrichments
+      (object_number, raw_text_hash, dup_ordinal, dup_count, field, party_idx,
+       op_kind, payload, method, reasoning, confidence, source)
+    VALUES
+      (@object_number, @raw_text_hash, @dup_ordinal, @dup_count, @field, @party_idx,
+       @op_kind, @payload, @method, @reasoning, @confidence, @source)
+  `);
+
+  /** Emit one structural row. Returns true if emitted (not deduped). */
+  function emitStructural({ objectNumber, sequence, field, payload, issueType, reasoning, confidence, batchId, countKey }) {
+    const parent = resolveParent(orc, objectNumber, sequence);
+    if (!parent) {
+      counts.unresolved++;
+      return false;
+    }
+    const pk = `${objectNumber}|${parent.hash}|${parent.dup_ordinal}|${field}|-1`;
+    if (seenPK.has(pk)) {
+      throw new Error(
+        `runStructuralExtractor: duplicate PK for ${objectNumber} seq=${sequence} field=${field} — parent raw_text hash collision not separated by dup_ordinal`
+      );
+    }
+    seenPK.add(pk);
+    // method literal from the centralised set — never hardcode the prefix string.
+    const method = issueType ? `${M.LLM_STRUCTURAL_PREFIX}${issueType}` : M.LLM_STRUCTURAL;
+    if (!dryRun) {
+      insertStmt.run({
+        object_number: objectNumber,
+        raw_text_hash: parent.hash,
+        dup_ordinal: parent.dup_ordinal,
+        dup_count: parent.dup_count,
+        field,
+        party_idx: -1,
+        op_kind: "structural",
+        payload: JSON.stringify(payload),
+        method,
+        reasoning: reasoning ?? null,
+        confidence: confidence ?? null,
+        source: batchId ?? "audit",
+      });
+    }
+    counts[countKey]++;
+    return true;
+  }
+
+  // ── A. event splitting ──────────────────────────────────────────────────────
+  const splitData = loadAuditJson(auditFiles.split);
+  if (splitData) {
+    const batchId = splitData.meta?.batchId ?? "audit";
+    for (const result of splitData.results ?? []) {
+      if (result.error || !result.data?.splits) continue;
+      const objectNumber = result.data.object_number;
+      for (const s of result.data.splits) {
+        emitStructural({
+          objectNumber,
+          sequence: s.original_sequence,
+          field: "event.split",
+          payload: s, // verbatim splits[] entry
+          issueType: s.issue_type,
+          reasoning: s.reasoning ?? null,
+          confidence: s.confidence ?? null,
+          batchId,
+          countKey: "event_split",
+        });
+      }
+    }
+  }
+
+  // ── B. event reclassification ───────────────────────────────────────────────
+  const reclassData = loadAuditJson(auditFiles.reclassify);
+  if (reclassData) {
+    const batchId = reclassData.meta?.batchId ?? "audit";
+    for (const result of reclassData.results ?? []) {
+      if (result.error) continue;
+      let rc = result.data?.reclassifications;
+      if (rc == null) continue;
+      // JSON-shape gotcha (Step 2.2): usually a real array, occasionally a
+      // double-encoded JSON string — guard on typeof before iterating.
+      const recs = typeof rc === "string" ? JSON.parse(rc) : rc;
+      const objectNumber = result.data.object_number;
+      for (const r of recs) {
+        emitStructural({
+          objectNumber,
+          sequence: r.event_sequence,
+          field: "event.reclassify",
+          payload: r, // verbatim reclassifications[] entry
+          issueType: r.issue_type,
+          reasoning: r.reasoning ?? null,
+          confidence: r.confidence ?? null,
+          batchId,
+          countKey: "event_reclassify",
+        });
+      }
+    }
+  }
+
+  // ── C. field correction ─────────────────────────────────────────────────────
+  const fieldData = loadAuditJson(auditFiles.fieldcorrection);
+  if (fieldData) {
+    const batchId = fieldData.meta?.batchId ?? "audit";
+    for (const result of fieldData.results ?? []) {
+      if (result.error || !result.data?.corrections) continue;
+      const objectNumber = result.data.object_number;
+      for (const c of result.data.corrections) {
+        emitStructural({
+          objectNumber,
+          sequence: c.event_sequence,
+          field: "event.fieldcorrection",
+          payload: c, // verbatim corrections[] entry (may carry new_party)
+          issueType: c.issue_type,
+          reasoning: c.reasoning ?? null,
+          confidence: c.confidence ?? null,
+          batchId,
+          countKey: "event_fieldcorrection",
+        });
+      }
+    }
+  }
+
+  return counts;
+}
+
+/** Read + parse an audit JSON; returns null if the file is absent. */
+function loadAuditJson(filePath) {
+  if (!filePath) return null;
+  let text;
+  try {
+    text = readFileSync(filePath, "utf-8");
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw e;
+  }
+  return JSON.parse(text);
+}
+
 // ─── Top-level migrate (wraps extractors in one transaction) ──────────────────
 
 /**
  * Run the migration in a single transaction.
  *
  * @param {import("better-sqlite3").Database} db
- * @param {{ value?: boolean, manual?: boolean, dryRun?: boolean, csvPath?: string }} opts
- * @returns {{ event_type?: number, party_snapshot: number, event_manual?: number, period_manual?: number }}
+ * @param {{ value?: boolean, manual?: boolean, structural?: boolean, dryRun?: boolean, csvPath?: string, auditFiles?: object, oracle?: object }} opts
+ * @returns {{ event_type?: number, party_snapshot: number, event_manual?: number, period_manual?: number, event_split?: number, event_reclassify?: number, event_fieldcorrection?: number, structural_unresolved?: number }}
  */
-export function migrate(db, { value = false, manual = false, dryRun = false, csvPath } = {}) {
+export function migrate(db, { value = false, manual = false, structural = false, dryRun = false, csvPath, auditFiles, oracle } = {}) {
   applyEnrichmentsSchema(db);
 
   const allCounts = { party_snapshot: 0 };
@@ -459,10 +643,16 @@ export function migrate(db, { value = false, manual = false, dryRun = false, csv
 
   const run = db.transaction(() => {
     if (!dryRun) {
-      // Idempotent: clear previous migration rows before re-inserting
+      // Idempotent: clear previous value/manual migration rows before re-inserting.
       db.prepare(
         "DELETE FROM provenance_enrichments WHERE source IN ('migration:db', 'manual-csv')"
       ).run();
+      // Structural rows carry the audit batchId as source, so clear them by op_kind.
+      if (structural) {
+        db.prepare(
+          "DELETE FROM provenance_enrichments WHERE op_kind = 'structural'"
+        ).run();
+      }
     }
 
     if (value) {
@@ -477,6 +667,14 @@ export function migrate(db, { value = false, manual = false, dryRun = false, csv
       allCounts.event_manual = (allCounts.event_manual ?? 0) + c.event_manual;
       allCounts.period_manual = (allCounts.period_manual ?? 0) + c.period_manual;
       allCounts.party_snapshot += c.party_snapshot;
+    }
+
+    if (structural) {
+      const c = runStructuralExtractor(db, { dryRun, seenPK, auditFiles, oracle });
+      allCounts.event_split = (allCounts.event_split ?? 0) + c.event_split;
+      allCounts.event_reclassify = (allCounts.event_reclassify ?? 0) + c.event_reclassify;
+      allCounts.event_fieldcorrection = (allCounts.event_fieldcorrection ?? 0) + c.event_fieldcorrection;
+      allCounts.structural_unresolved = (allCounts.structural_unresolved ?? 0) + c.unresolved;
     }
 
     return allCounts;
@@ -494,15 +692,11 @@ const isMain =
 if (isMain) {
   const args = process.argv.slice(2);
 
-  if (args.includes("--structural")) {
-    console.error("--structural: not implemented in Phase 1");
-    process.exit(1);
-  }
-
   const wantValue = args.includes("--value");
   const wantManual = args.includes("--manual");
-  if (!wantValue && !wantManual) {
-    console.error("Usage: migrate-enrichments-to-store.mjs [--value] [--manual] [--dry-run] [--db PATH] [--csv PATH]");
+  const wantStructural = args.includes("--structural");
+  if (!wantValue && !wantManual && !wantStructural) {
+    console.error("Usage: migrate-enrichments-to-store.mjs [--value] [--manual] [--structural] [--dry-run] [--db PATH] [--csv PATH]");
     process.exit(1);
   }
 
@@ -525,7 +719,7 @@ if (isMain) {
   let db;
   try {
     db = new Database(dbPath);
-    const counts = migrate(db, { value: wantValue, manual: wantManual, dryRun, csvPath });
+    const counts = migrate(db, { value: wantValue, manual: wantManual, structural: wantStructural, dryRun, csvPath });
     console.log("Results:");
     for (const [k, v] of Object.entries(counts)) {
       console.log(`  ${k}: ${v}`);
