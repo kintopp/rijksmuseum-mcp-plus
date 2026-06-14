@@ -35,7 +35,15 @@ export class EmbeddingModel {
     }
 
     try {
-      const { pipeline } = await import("@huggingface/transformers");
+      const { pipeline, env } = await import("@huggingface/transformers");
+      // Persist the model on disk (e.g. the Railway /data volume via HF_HOME) so it
+      // survives redeploys instead of re-fetching from HuggingFace on every boot.
+      // transformers.js ignores HF_HOME itself — its on-disk cache is env.cacheDir,
+      // which otherwise defaults to an ephemeral node_modules/.cache (or null).
+      if (process.env.HF_HOME) {
+        env.cacheDir = process.env.HF_HOME;
+        env.useFSCache = true;
+      }
       this.pipe = await pipeline("feature-extraction", modelId, {
         dtype: "q8",   // int8 quantized ONNX
       });
