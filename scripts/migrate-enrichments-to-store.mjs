@@ -29,6 +29,15 @@ import { rawTextHash, buildDupOrdinals, dupKey } from "./lib/raw-text-hash.mjs";
 import * as M from "./lib/provenance-enrichment-methods.mjs";
 import { buildOracle } from "./emit-deterministic-parents.mjs";
 
+// Structural audit ops are gated at this confidence in the original writeback
+// scripts (writeback-event-splitting / -event-reclassification / -field-corrections
+// all default --min-confidence 0.7, and POST-REPARSE-STEPS 7a/7b/7c invoke them with
+// no override). The store MUST mirror that gate so the content-addressed re-apply
+// reproduces exactly what the writebacks applied — not the sub-threshold /
+// degenerate audit entries they discard. (See
+// plans/provenance-enrichment-structural-confidence-leak.md.)
+export const MIN_STRUCTURAL_CONFIDENCE = 0.7;
+
 // ─── Exported schema ──────────────────────────────────────────────────────────
 
 export const ENRICHMENTS_SCHEMA = `
@@ -586,6 +595,12 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
       if (result.error || !result.data?.splits) continue;
       const objectNumber = result.data.object_number;
       for (const s of result.data.splits) {
+        // Mirror writeback-event-splitting's two filters exactly: sub-threshold
+        // confidence (undefined kept, since `undefined < N` is false — matches the
+        // writeback's `if (s.confidence < minConfidence) continue`) and degenerate
+        // splits (< 2 replacement events are not real splits).
+        if (s.confidence < MIN_STRUCTURAL_CONFIDENCE) continue;
+        if (!s.replacement_events || s.replacement_events.length < 2) continue;
         emitStructural({
           objectNumber,
           sequence: s.original_sequence,
@@ -647,6 +662,9 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
         continue;
       }
       for (const r of recs) {
+        // Mirror writeback-event-reclassification: keep only confidence >= 0.7
+        // (its `.filter(rc => rc.confidence >= minConfidence)` drops undefined).
+        if (!(r.confidence >= MIN_STRUCTURAL_CONFIDENCE)) continue;
         emitStructural({
           objectNumber,
           sequence: r.event_sequence,
@@ -678,6 +696,9 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
       // Group this result's corrections by event_sequence (an event = one parent).
       const byEvent = new Map();
       for (const c of result.data.corrections) {
+        // Mirror writeback-field-corrections: keep only confidence >= 0.7
+        // (its `.filter(c => c.confidence >= minConfidence)` drops undefined).
+        if (!(c.confidence >= MIN_STRUCTURAL_CONFIDENCE)) continue;
         const seq = c.event_sequence;
         if (!byEvent.has(seq)) byEvent.set(seq, []);
         byEvent.get(seq).push(c);

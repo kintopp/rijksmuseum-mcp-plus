@@ -1121,6 +1121,84 @@ function writeTmpJson(content) {
     assert(jsonNew != null, "case13: new party mirrored into event.parties JSON");
   }
 
+  // ── Case 14: Structural confidence/length filter ──────────────────────────
+  // Regression for the 2026-06-14 Phase-3.2 dress-rehearsal finding: the migrate
+  // extractor MUST mirror the writebacks' gate (writeback-event-splitting:
+  // confidence >= 0.7 AND replacement_events.length >= 2; -reclassification and
+  // -field-corrections: confidence >= 0.7). Without it the store over-captures
+  // sub-threshold / degenerate audit ops the deployed data never applied, and the
+  // cutover silently changes the data. See
+  // plans/provenance-enrichment-structural-confidence-leak.md.
+  section("Case 14: structural confidence/length filter mirrors the writebacks");
+  {
+    const db = makeDb();
+    const re2 = [
+      { raw_text_segment: "frag A", transfer_type: "sale", transfer_category: null, parties: [] },
+      { raw_text_segment: "frag B", transfer_type: "gift", transfer_category: null, parties: [] },
+    ];
+    const splitPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case14-split" },
+      results: [{ data: { object_number: "SK-A-9101", splits: [
+        { original_sequence: 1, issue_type: "multi_transfer", confidence: 0.9, reasoning: "keep", replacement_events: re2 },
+        { original_sequence: 2, issue_type: "multi_transfer", confidence: 0.5, reasoning: "skip: low conf", replacement_events: re2 },
+        { original_sequence: 3, issue_type: "bequest_chain", confidence: 0.95, reasoning: "skip: degenerate", replacement_events: [re2[0]] },
+      ] } }],
+    }), "utf-8");
+    const reclassPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case14-reclass" },
+      results: [{ data: { object_number: "SK-A-9102", reclassifications: [
+        { event_sequence: 1, issue_type: "phantom_event", action: "mark_non_provenance", confidence: 0.9, reasoning: "keep" },
+        { event_sequence: 2, issue_type: "phantom_event", action: "mark_non_provenance", confidence: 0.5, reasoning: "skip: low conf" },
+        { event_sequence: 3, issue_type: "phantom_event", action: "mark_non_provenance", reasoning: "skip: undefined conf" },
+      ] } }],
+    }), "utf-8");
+    const fieldPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case14-field" },
+      results: [
+        { data: { object_number: "SK-A-9103", corrections: [
+          { event_sequence: 1, field: "location", current_value: "X", corrected_value: "Y", confidence: 0.9, issue_type: "truncated_location", reasoning: "keep" },
+          { event_sequence: 1, field: "location", current_value: "Y", corrected_value: "Z", confidence: 0.4, issue_type: "wrong_location", reasoning: "skip: low conf" },
+        ] } },
+        { data: { object_number: "SK-A-9104", corrections: [
+          { event_sequence: 1, field: "location", current_value: "P", corrected_value: "Q", confidence: 0.5, issue_type: "truncated_location", reasoning: "skip: low conf" },
+        ] } },
+      ],
+    }), "utf-8");
+
+    const byObjSeq = new Map();
+    const groupsByObj = new Map();
+    for (const [obj, seq] of [["SK-A-9101", 1], ["SK-A-9102", 1], ["SK-A-9103", 1]]) {
+      const rawText = `Parent event text for ${obj} seq ${seq}`;
+      byObjSeq.set(`${obj}|${seq}`, rawText);
+      groupsByObj.set(obj, buildDupOrdinals([{ sequence: seq, raw_text: rawText }]));
+    }
+    const oracle = { byObjSeq, groupsByObj };
+
+    let counts, threw = false;
+    try {
+      counts = runStructuralExtractor(db, {
+        dryRun: false, seenPK: new Set(),
+        auditFiles: { split: splitPath, reclassify: reclassPath, fieldcorrection: fieldPath },
+        oracle,
+      });
+    } catch (e) {
+      threw = true; failures.push(`case14: runStructuralExtractor threw: ${e.message}`);
+    } finally {
+      cleanTmp(splitPath); cleanTmp(reclassPath); cleanTmp(fieldPath);
+    }
+    assert(!threw, "case14: runStructuralExtractor does NOT throw");
+    if (counts) {
+      assertEq(counts.event_split, 1, "case14: only the >=0.7 + >=2-replacement split captured (low-conf + degenerate skipped)");
+      assertEq(counts.event_reclassify, 1, "case14: only the >=0.7 reclassification captured (low-conf + undefined skipped)");
+      assertEq(counts.event_fieldcorrection, 1, "case14: only the event with a >=0.7 correction captured (all-low-conf event skipped)");
+      const fcRow = db.prepare("SELECT payload FROM provenance_enrichments WHERE object_number='SK-A-9103' AND field='event.fieldcorrection'").get();
+      assert(fcRow != null, "case14: SK-A-9103 fieldcorrection row present");
+      if (fcRow) assertEq(JSON.parse(fcRow.payload).corrections.length, 1, "case14: sub-threshold sibling correction filtered from payload");
+      const n9104 = db.prepare("SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number='SK-A-9104'").get().n;
+      assertEq(n9104, 0, "case14: SK-A-9104 (all sub-threshold) produced no store row");
+    }
+  }
+
   // ─── Summary ───────────────────────────────────────────────────────────────
   process.stdout.write(`\n${"═".repeat(60)}\n`);
   process.stdout.write(`  Results: ${passed} passed, ${failed} failed\n`);
