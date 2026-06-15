@@ -4640,15 +4640,21 @@ export class VocabularyDb {
         ? "(a.height_cm IS NOT NULL OR a.width_cm IS NOT NULL)"
         : "(a.height_cm IS NULL AND a.width_cm IS NULL)");
     }
-    if (params.hasExhibitions != null) {
-      conditions.push(params.hasExhibitions
-        ? "EXISTS (SELECT 1 FROM artwork_exhibitions ae WHERE ae.art_id = a.art_id)"
-        : "NOT EXISTS (SELECT 1 FROM artwork_exhibitions ae WHERE ae.art_id = a.art_id)");
-    }
-    if (params.hasExternalIds != null) {
-      conditions.push(params.hasExternalIds
-        ? "EXISTS (SELECT 1 FROM artwork_external_ids ax WHERE ax.art_id = a.art_id)"
-        : "NOT EXISTS (SELECT 1 FROM artwork_external_ids ax WHERE ax.art_id = a.art_id)");
+    // has* presence predicates backed by an art_id-keyed child table — all share
+    // the same EXISTS shape, so drive them from one table. (The column-null checks
+    // above and the mappings-join variants below stay explicit — different shapes.)
+    const HAS_EXISTS_TABLES = [
+      ["hasExhibitions", "artwork_exhibitions"],
+      ["hasExternalIds", "artwork_external_ids"],
+      ["hasParent", "artwork_parent"],
+      ["hasExaminations", "examinations"],
+      ["hasModifications", "modifications"],
+    ] as const;
+    for (const [key, table] of HAS_EXISTS_TABLES) {
+      const want = params[key];
+      if (want == null) continue;
+      const exists = `EXISTS (SELECT 1 FROM ${table} t WHERE t.art_id = a.art_id)`;
+      conditions.push(want ? exists : `NOT ${exists}`);
     }
     if (params.hasAltNames != null) {
       // entity_alt_names keyed on entity_id (TEXT) = vocabulary.id; join via mappings.
@@ -4657,21 +4663,6 @@ export class VocabularyDb {
       conditions.push(params.hasAltNames
         ? `a.art_id IN (SELECT m2.artwork_id FROM mappings m2 JOIN vocabulary v2 ON v2.vocab_int_id = m2.vocab_rowid JOIN entity_alt_names an ON an.entity_id = v2.id)`
         : `a.art_id NOT IN (SELECT m2.artwork_id FROM mappings m2 JOIN vocabulary v2 ON v2.vocab_int_id = m2.vocab_rowid JOIN entity_alt_names an ON an.entity_id = v2.id)`);
-    }
-    if (params.hasParent != null) {
-      conditions.push(params.hasParent
-        ? "EXISTS (SELECT 1 FROM artwork_parent ap WHERE ap.art_id = a.art_id)"
-        : "NOT EXISTS (SELECT 1 FROM artwork_parent ap WHERE ap.art_id = a.art_id)");
-    }
-    if (params.hasExaminations != null) {
-      conditions.push(params.hasExaminations
-        ? "EXISTS (SELECT 1 FROM examinations ex WHERE ex.art_id = a.art_id)"
-        : "NOT EXISTS (SELECT 1 FROM examinations ex WHERE ex.art_id = a.art_id)");
-    }
-    if (params.hasModifications != null) {
-      conditions.push(params.hasModifications
-        ? "EXISTS (SELECT 1 FROM modifications mo WHERE mo.art_id = a.art_id)"
-        : "NOT EXISTS (SELECT 1 FROM modifications mo WHERE mo.art_id = a.art_id)");
     }
     if (params.hasWikidataCreator != null) {
       const creatorFieldId2 = this.fieldIdMap.get("creator");
