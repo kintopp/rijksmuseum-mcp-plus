@@ -186,8 +186,8 @@ section("10. --help is offline-safe + curated");
   assert(/Cap with --topN/.test(r.stdout), "stats line is the curated summary (not a clipped tool desc)");
 }
 
-// ── 11. per-command --help: schema-derived flags + enrichments (live server) ────
-section("11. <command> --help enrichments");
+// ── 11. per-command --help: schema-derived flags + curated example (live server) ─
+section("11. <command> --help (schema-derived flags + example)");
 {
   const r = await runCli(["stats", "--help"]);
   assert(r.code === 0, "exit 0");
