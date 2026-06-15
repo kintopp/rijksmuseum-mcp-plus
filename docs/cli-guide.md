@@ -485,9 +485,9 @@ faster). Token pagination.
 
 ```bash
 $ node scripts/cli.mjs changes --from 2024-01-01 --identifiersOnly --max 3 --fields identifier,datestamp
-{"identifier":"https://id.rijksmuseum.nl/2001","datestamp":"2026-01-28T07:15:24Z"}
+{"identifier":"https://id.rijksmuseum.nl/2001","datestamp":"2026-06-09T10:19:51Z"}
 ...
-# stderr: 3 shown of 841520; pass --resumption-token <uuid> for more
+# stderr: 3 shown of 842048; pass --resumption-token <uuid> for more
 
 node scripts/cli.mjs changes --resumption-token <uuid> --identifiersOnly --max 3
 ```
