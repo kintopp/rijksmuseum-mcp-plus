@@ -1724,6 +1724,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Search for artworks produced in a specific place (e.g. 'Delft'). " +
+                  "Spans both the Linked Art production-place field and the OAI-PMH spatial field for maximum recall. " +
                   "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Paleis van Justitie Den Haag')."
                 ),
               collectionSet: stringOrArray()
@@ -4104,7 +4105,7 @@ function registerTools(
           material: optStr().describe("Filter to artworks with this material."),
           technique: optStr().describe("Filter to artworks with this technique."),
           creator: optStr().describe("Filter to artworks by this creator (partial match)."),
-          productionPlace: optStr().describe("Filter to artworks produced in this place (partial match). Areal places (continents/oceans/empires) are excluded from depictedPlace/productionPlace rollups to avoid centroid domination."),
+          productionPlace: optStr().describe("Filter to artworks produced in this place (partial match). Spans both the Linked Art production-place field and the OAI-PMH spatial field. Areal places (continents/oceans/empires) are excluded from depictedPlace/productionPlace rollups to avoid centroid domination."),
           depictedPerson: optStr().describe("Filter to artworks depicting this person (partial match)."),
           depictedPlace: optStr().describe("Filter to artworks depicting this place (partial match). Areal places (continents/oceans/empires) are excluded from depictedPlace/productionPlace rollups."),
           subject: optStr().describe("Filter to artworks with this subject (partial match on Iconclass labels)."),

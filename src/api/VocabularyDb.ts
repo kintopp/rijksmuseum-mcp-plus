@@ -727,7 +727,7 @@ const VOCAB_DIMENSION_DEFS: ReadonlyArray<{ label: string; field: string; vocabT
   { label: "creator",        field: "creator" },
   { label: "depictedPerson", field: "subject", vocabType: "person" },
   { label: "depictedPlace",  field: "subject", vocabType: "place" },
-  { label: "productionPlace",field: "spatial" },
+  { label: "productionPlace",field: "production_place" },
   { label: "sourceType",     field: "source_type" },
 ];
 
@@ -836,6 +836,7 @@ const ALLOWED_FIELDS = new Set([
   "collection_set",
   "production_role", "attribution_qualifier",
   "theme", "source_type",
+  "production_place",
 ]);
 const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
@@ -864,7 +865,7 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "subject",        fields: ["subject"],               matchMode: "like-word",  ftsUpgrade: true },
   { param: "depictedPerson", fields: ["subject"],               matchMode: "like", vocabType: "person",         ftsUpgrade: true },
   { param: "depictedPlace",  fields: ["subject", "spatial"],    matchMode: "like", vocabType: "place",          ftsUpgrade: true },
-  { param: "productionPlace",fields: ["spatial"],               matchMode: "like", vocabType: "place",          ftsUpgrade: true },
+  { param: "productionPlace",fields: ["production_place", "spatial"], matchMode: "like", vocabType: "place", ftsUpgrade: true },
   { param: "material",       fields: ["material"],              matchMode: "like",                               ftsUpgrade: true },
   { param: "technique",      fields: ["technique"],             matchMode: "like",                               ftsUpgrade: true },
   { param: "type",           fields: ["type"],                  matchMode: "like",                               ftsUpgrade: true },
@@ -941,7 +942,7 @@ const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
   { key: "material",             fields: ["material"] },
   { key: "technique",            fields: ["technique"] },
   { key: "creator",              fields: ["creator"] },
-  { key: "productionPlace",      fields: ["spatial"],            vocabType: "place" },
+  { key: "productionPlace",      fields: ["production_place", "spatial"], vocabType: "place" },
   { key: "depictedPerson",       fields: ["subject"],            vocabType: "person" },
   { key: "depictedPlace",        fields: ["subject", "spatial"], vocabType: "place" },
   { key: "subject",              fields: ["subject"] },
