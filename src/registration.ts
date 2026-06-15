@@ -19,6 +19,7 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { getOrComputeWithInflight } from "./utils/inflightCache.js";
+import { buildContentBlocks, type JsonTextOptions, type TextBlock } from "./utils/responseShape.js";
 import axios from "axios";
 import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
@@ -150,7 +151,7 @@ const textQuerySchema = () =>
     mustNot: z.array(textQueryClauseSchema()).min(1).optional(),
   }).strict();
 
-type ToolResponse = { content: [{ type: "text"; text: string }] };
+type ToolResponse = { content: TextBlock[] };
 type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
 
 /** Infer a TypeScript type from a Zod shape (plain object of ZodTypes used for outputSchema). */
@@ -167,15 +168,24 @@ function errorResponse(message: string) {
  *  Set STRUCTURED_CONTENT=false to omit structuredContent (workaround for client bugs). */
 const EMIT_STRUCTURED = process.env.STRUCTURED_CONTENT !== "false";
 
-function structuredResponse(data: object, textContent?: string): ToolResponse | StructuredToolResponse {
-  const text = textContent ?? JSON.stringify(data, null, 2);
+/** When true, every human-summary response also carries a serialized-JSON
+ *  text block (size-guarded). Off by default — opt in per deployment. */
+const JSON_TEXT_COMPAT = process.env.MCP_TEXT_JSON_COMPAT === "true";
+
+function structuredResponse(
+  data: object,
+  textContent?: string,
+  opts?: JsonTextOptions,
+): ToolResponse | StructuredToolResponse {
+  const content = buildContentBlocks(data, textContent, {
+    jsonText: opts?.jsonText ?? JSON_TEXT_COMPAT,
+    maxJsonTextBytes: opts?.maxJsonTextBytes,
+    structuredContentEmitted: EMIT_STRUCTURED,
+  });
   if (!EMIT_STRUCTURED) {
-    return { content: [{ type: "text", text }] };
+    return { content };
   }
-  return {
-    content: [{ type: "text", text }],
-    structuredContent: data as Record<string, unknown>,
-  };
+  return { content, structuredContent: data as Record<string, unknown> };
 }
 
 /** Conditionally attach an outputSchema when structured content is enabled. */
