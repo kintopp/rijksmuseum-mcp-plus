@@ -379,5 +379,20 @@ for (const [type, count] of sorted) {
   console.log(`    ${type.padEnd(15)} ${String(count).padStart(7)} (${(100 * count / totalEvents).toFixed(1)}%)`);
 }
 
+if (!dryRun) {
+  db.exec(`CREATE TABLE IF NOT EXISTS provenance_parse_state (
+    object_number TEXT PRIMARY KEY,
+    provenance_text_hash TEXT,
+    parsed_at TEXT
+  ) WITHOUT ROWID`);
+  db.exec("DELETE FROM provenance_parse_state");
+  const stamp = db.prepare(
+    "INSERT INTO provenance_parse_state (object_number, provenance_text_hash, parsed_at) " +
+    "SELECT object_number, provenance_text_hash, ? FROM artworks WHERE provenance_text IS NOT NULL"
+  );
+  const n = stamp.run(new Date().toISOString()).changes;
+  console.log(`  parse-state:   ${n} stamped`);
+}
+
 db.close();
 console.log(`\nDone.${dryRun ? " (dry run — no changes written)" : ""}`);
