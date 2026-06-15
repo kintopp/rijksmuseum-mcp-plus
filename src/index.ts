@@ -475,11 +475,30 @@ async function runHttp(): Promise<void> {
 
 let httpServer: import("node:http").Server | undefined;
 
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
 function shutdown() {
   console.error("Shutting down...");
   usageStats?.flush();
-  httpServer?.close();
-  process.exit(0);
+
+  if (!httpServer) {
+    process.exit(0);
+  }
+
+  // Backstop: force exit before SIGKILL if a connection never closes.
+  const forceExit = setTimeout(() => {
+    console.error("Drain timed out; forcing exit.");
+    process.exit(0);
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceExit.unref();
+
+  httpServer.closeIdleConnections(); // release idle keep-alive sockets
+  httpServer.close(() => {
+    // wait only on in-flight requests
+    clearTimeout(forceExit);
+    console.error("All connections closed.");
+    process.exit(0);
+  });
 }
 
 process.on("SIGTERM", shutdown);
