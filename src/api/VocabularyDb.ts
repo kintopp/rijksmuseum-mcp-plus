@@ -620,6 +620,25 @@ export interface CollectionStatsParams {
   imageAvailable?: boolean;
   creationDateFrom?: number;
   creationDateTo?: number;
+  // Tier 1 additions (#320): creator-demographic vocab filters
+  profession?: string;
+  birthPlace?: string;
+  deathPlace?: string;
+  // Tier 2 additions (#320): gender + creator birth cohort filters
+  gender?: string;
+  // Tier 3 addition (#320): production place type filter
+  placeType?: string;
+  // Tier 4 (has* boolean predicates, #320)
+  hasInscription?: boolean;
+  hasNarrative?: boolean;
+  hasDimensions?: boolean;
+  hasExhibitions?: boolean;
+  hasExternalIds?: boolean;
+  hasAltNames?: boolean;
+  hasParent?: boolean;
+  hasExaminations?: boolean;
+  hasModifications?: boolean;
+  hasWikidataCreator?: boolean;
   // Provenance filters — names mirror their dimension counterparts (provenanceDecade, provenanceLocation).
   transferType?: string;
   provenanceLocation?: string;
@@ -629,6 +648,16 @@ export interface CollectionStatsParams {
   hasProvenance?: boolean;
   categoryMethod?: string;
   positionMethod?: string;
+  // Tier 2.5 additions (#320): parseMethod + event booleans
+  parseMethod?: string;
+  unsold?: boolean;
+  uncertain?: boolean;
+  gap?: boolean;
+  crossRef?: boolean;
+  // Tier 2.6 addition (#320): party role filter
+  partyRole?: string;
+  // Tier 4: exhibition filter (exhibition dim was already present)
+  exhibition?: string;
 }
 
 export interface StatsEntry {
@@ -728,6 +757,11 @@ const VOCAB_DIMENSION_DEFS: ReadonlyArray<{ label: string; field: string; vocabT
   { label: "depictedPlace",  field: "subject", vocabType: "place" },
   { label: "productionPlace",field: "spatial" },
   { label: "sourceType",     field: "source_type" },
+  // Tier 1 additions — columns already in vocabulary.db since v0.40
+  { label: "productionRole", field: "production_role" },
+  { label: "profession",     field: "profession" },
+  { label: "birthPlace",     field: "birth_place",   vocabType: "place" },
+  { label: "deathPlace",     field: "death_place",   vocabType: "place" },
 ];
 
 /** Provenance dimension → table/column. Shared by provenanceDimensionSql and computeProvenanceFacets. */
@@ -746,6 +780,8 @@ const PROV_DIMENSION_DEFS: ReadonlyArray<{
   { label: "party",             table: "parties", col: "party_name" },
   { label: "partyPosition",     table: "parties", col: "party_position",     notNull: true },
   { label: "positionMethod",    table: "parties", col: "position_method",    notNull: true },
+  // Tier 2.6 addition (#320): party_role is distinct from party_position
+  { label: "partyRole",         table: "parties", col: "party_role",         notNull: true },
 ];
 
 /** All valid dimension names for collection_stats. Derived from the data-driven defs above + special cases. */
@@ -757,6 +793,12 @@ export const STATS_DIMENSION_NAMES = [
   "theme",                                // thematic vocab (NL labels until #300 backfill)
   "exhibition",                           // top exhibitions by member count
   "decadeModified",                       // record_modified bucketed by decade (1990s–2020s)
+  // Tier 2 special-case dims (#320)
+  "gender",             // creator gender (vocabulary.gender of person vocab via creator mappings)
+  "creatorBirthDecade", // creator birth year bucketed by decade (vocabulary.birth_year)
+  "creatorBirthCentury",// creator birth year bucketed by century
+  // Tier 3 special-case dim (#320)
+  "placeType",          // production place placetype (vocabulary.placetype via spatial mappings)
   ...PROV_DIMENSION_DEFS.map(d => d.label),
 ] as const;
 
@@ -801,6 +843,17 @@ const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
   sourceType:      { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
   theme:           { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
   exhibition:      { multiValued: true,  groupingKey: "entity",          defaultOrdering: "count_desc" },
+  // Tier 1 additions (#320)
+  productionRole:      { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  profession:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  birthPlace:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  deathPlace:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  // Tier 2 special-case dims (#320)
+  gender:              { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  creatorBirthDecade:  { multiValued: true,  groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year" },
+  creatorBirthCentury: { multiValued: true,  groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year", bucketWidth: 100 },
+  // Tier 3 special-case dim (#320)
+  placeType:           { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
   // Provenance dimensions — count = distinct artworks with ≥1 event/party matching this bucket.
   // Multi-valued because one artwork can have multiple events/parties (so it can hit multiple buckets).
   provenanceDecade:  { multiValued: true, groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year" },
@@ -813,6 +866,8 @@ const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
   party:             { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
   partyPosition:     { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
   positionMethod:    { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
+  // Tier 2.6 addition (#320)
+  partyRole:         { multiValued: true, groupingKey: "label",           defaultOrdering: "count_desc" },
 };
 
 /** Dimensions where each artwork falls in exactly one bucket. For these,
@@ -835,6 +890,8 @@ const ALLOWED_FIELDS = new Set([
   "collection_set",
   "production_role", "attribution_qualifier",
   "theme", "source_type",
+  // Tier 1 additions (#320)
+  "profession", "birth_place", "death_place",
 ]);
 const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
@@ -950,6 +1007,10 @@ const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
   { key: "sourceType",           fields: ["source_type"] },
   { key: "productionRole",       fields: ["production_role"] },
   { key: "attributionQualifier", fields: ["attribution_qualifier"] },
+  // Tier 1 additions (#320)
+  { key: "profession",           fields: ["profession"] },
+  { key: "birthPlace",           fields: ["birth_place"],  vocabType: "place" },
+  { key: "deathPlace",           fields: ["death_place"],  vocabType: "place" },
 ];
 
 /**
@@ -4125,6 +4186,67 @@ export class VocabularyDb {
       };
     }
 
+    // Tier 2 (#320): gender — group artworks by gender of their creator(s).
+    // Joins through creator mappings → vocabulary.gender.
+    if (dim === "gender") {
+      const fieldId = this.fieldIdMap.get("creator");
+      if (fieldId === undefined) return null;
+      return {
+        sql: `SELECT v.gender AS label, COUNT(DISTINCT m.artwork_id) AS cnt
+          FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.type = 'person' AND v.gender IS NOT NULL${statsMembership}
+          GROUP BY v.gender ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+        extraBindings: [fieldId, topN, offset],
+      };
+    }
+
+    // Tier 2 (#320): creatorBirthDecade — group artworks by creator birth year bucket.
+    // NOTE: binWidth appears in the SELECT clause before fieldPred's ? in WHERE — extraBindings
+    // must order by SQL position: binWidth, binWidth, fieldId, topN, offset.
+    if (dim === "creatorBirthDecade") {
+      const fieldId = this.fieldIdMap.get("creator");
+      if (fieldId === undefined) return null;
+      return {
+        sql: `SELECT (v.birth_year / ?) * ? AS label, COUNT(DISTINCT m.artwork_id) AS cnt
+          FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+        extraBindings: [binWidth, binWidth, fieldId, topN, offset],
+      };
+    }
+
+    // Tier 2 (#320): creatorBirthCentury — group artworks by creator birth century.
+    if (dim === "creatorBirthCentury") {
+      const fieldId = this.fieldIdMap.get("creator");
+      if (fieldId === undefined) return null;
+      return {
+        sql: `SELECT (CASE WHEN v.birth_year >= 0 THEN (v.birth_year / 100 + 1) * 100 - 100
+                ELSE -((-v.birth_year - 1) / 100 + 1) * 100 END) AS label,
+              COUNT(DISTINCT m.artwork_id) AS cnt
+          FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}
+          GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+        extraBindings: [fieldId, topN, offset],
+      };
+    }
+
+    // Tier 3 (#320): placeType — group artworks by the placetype of their production place.
+    if (dim === "placeType") {
+      const fieldId = this.fieldIdMap.get("spatial");
+      if (fieldId === undefined) return null;
+      return {
+        sql: `SELECT v.placetype AS label, COUNT(DISTINCT m.artwork_id) AS cnt
+          FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.placetype IS NOT NULL${statsMembership}
+          GROUP BY v.placetype ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+        extraBindings: [fieldId, topN, offset],
+      };
+    }
+
     return null;
   }
 
@@ -4277,6 +4399,33 @@ export class VocabularyDb {
       return row.cnt;
     }
 
+    // Tier 2 (#320): coverage for gender/creatorBirthDecade/creatorBirthCentury
+    if (dim === "gender" || dim === "creatorBirthDecade" || dim === "creatorBirthCentury") {
+      const fieldId = this.fieldIdMap.get("creator");
+      if (fieldId === undefined) return 0;
+      const colFilter = dim === "gender"
+        ? "AND v.type = 'person' AND v.gender IS NOT NULL"
+        : "AND v.type = 'person' AND v.birth_year IS NOT NULL";
+      const row = this.db.prepare(
+        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM ${fieldFrom}
+         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+         WHERE ${fieldPred} ${colFilter}${statsMembership}`,
+      ).get(fieldId) as { cnt: number };
+      return row.cnt;
+    }
+
+    // Tier 3 (#320): coverage for placeType
+    if (dim === "placeType") {
+      const fieldId = this.fieldIdMap.get("spatial");
+      if (fieldId === undefined) return 0;
+      const row = this.db.prepare(
+        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM ${fieldFrom}
+         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+         WHERE ${fieldPred} AND v.placetype IS NOT NULL${statsMembership}`,
+      ).get(fieldId) as { cnt: number };
+      return row.cnt;
+    }
+
     if (!this.hasProvenanceTables_) return 0;
 
     // Unfiltered: drop the no-op all-artworks membership so the provenance table scans
@@ -4321,8 +4470,25 @@ export class VocabularyDb {
       "collectionSet", "theme", "sourceType",
       "attributionQualifier", "productionRole", "sameRowMatching",
       "imageAvailable", "creationDateFrom", "creationDateTo",
+      // Tier 1 (#320)
+      "profession", "birthPlace", "deathPlace",
+      // Tier 2 (#320)
+      "gender",
+      // Tier 3 (#320)
+      "placeType",
+      // has* (#320)
+      "hasInscription", "hasNarrative", "hasDimensions", "hasExhibitions",
+      "hasExternalIds", "hasAltNames", "hasParent", "hasExaminations",
+      "hasModifications", "hasWikidataCreator",
+      // Provenance
       "hasProvenance", "transferType", "provenanceLocation", "party",
       "provenanceDateFrom", "provenanceDateTo", "categoryMethod", "positionMethod",
+      // Tier 2.5 (#320)
+      "parseMethod", "unsold", "uncertain", "gap", "crossRef",
+      // Tier 2.6 (#320)
+      "partyRole",
+      // Step 4 (#320)
+      "exhibition",
     ];
     for (const k of keys) {
       const v = params[k];
@@ -4442,6 +4608,90 @@ export class VocabularyDb {
       conditions.push("a.date_latest <= ?");
       bindings.push(params.creationDateTo);
     }
+    // Tier 2 (#320): gender — restrict to artworks with ≥1 creator-mapped person of that gender.
+    if (params.gender) {
+      const creatorFieldId = this.fieldIdMap.get("creator");
+      if (creatorFieldId !== undefined) {
+        conditions.push(
+          `a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid WHERE m.field_id = ? AND v.gender = ?)`,
+        );
+        bindings.push(creatorFieldId, params.gender);
+      }
+    }
+    // Tier 3 (#320): placeType — restrict to artworks whose production place has this placetype.
+    if (params.placeType) {
+      const spatialFieldId = this.fieldIdMap.get("spatial");
+      if (spatialFieldId !== undefined) {
+        conditions.push(
+          `a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid WHERE m.field_id = ? AND v.placetype = ?)`,
+        );
+        bindings.push(spatialFieldId, params.placeType);
+      }
+    }
+    // has* boolean predicates (#320)
+    if (params.hasInscription != null) {
+      conditions.push(params.hasInscription ? "a.inscription_text IS NOT NULL" : "a.inscription_text IS NULL");
+    }
+    if (params.hasNarrative != null) {
+      conditions.push(params.hasNarrative ? "a.narrative_text IS NOT NULL" : "a.narrative_text IS NULL");
+    }
+    if (params.hasDimensions != null) {
+      conditions.push(params.hasDimensions
+        ? "(a.height_cm IS NOT NULL OR a.width_cm IS NOT NULL)"
+        : "(a.height_cm IS NULL AND a.width_cm IS NULL)");
+    }
+    if (params.hasExhibitions != null) {
+      conditions.push(params.hasExhibitions
+        ? "EXISTS (SELECT 1 FROM artwork_exhibitions ae WHERE ae.art_id = a.art_id)"
+        : "NOT EXISTS (SELECT 1 FROM artwork_exhibitions ae WHERE ae.art_id = a.art_id)");
+    }
+    if (params.hasExternalIds != null) {
+      conditions.push(params.hasExternalIds
+        ? "EXISTS (SELECT 1 FROM artwork_external_ids ax WHERE ax.art_id = a.art_id)"
+        : "NOT EXISTS (SELECT 1 FROM artwork_external_ids ax WHERE ax.art_id = a.art_id)");
+    }
+    if (params.hasAltNames != null) {
+      // entity_alt_names keyed on entity_id (TEXT) = vocabulary.id; join via mappings.
+      // Use IN subquery so SQLite materialises once (bloom filter) rather than doing
+      // a correlated EXISTS that rescans mappings per artwork.
+      conditions.push(params.hasAltNames
+        ? `a.art_id IN (SELECT m2.artwork_id FROM mappings m2 JOIN vocabulary v2 ON v2.vocab_int_id = m2.vocab_rowid JOIN entity_alt_names an ON an.entity_id = v2.id)`
+        : `a.art_id NOT IN (SELECT m2.artwork_id FROM mappings m2 JOIN vocabulary v2 ON v2.vocab_int_id = m2.vocab_rowid JOIN entity_alt_names an ON an.entity_id = v2.id)`);
+    }
+    if (params.hasParent != null) {
+      conditions.push(params.hasParent
+        ? "EXISTS (SELECT 1 FROM artwork_parent ap WHERE ap.art_id = a.art_id)"
+        : "NOT EXISTS (SELECT 1 FROM artwork_parent ap WHERE ap.art_id = a.art_id)");
+    }
+    if (params.hasExaminations != null) {
+      conditions.push(params.hasExaminations
+        ? "EXISTS (SELECT 1 FROM examinations ex WHERE ex.art_id = a.art_id)"
+        : "NOT EXISTS (SELECT 1 FROM examinations ex WHERE ex.art_id = a.art_id)");
+    }
+    if (params.hasModifications != null) {
+      conditions.push(params.hasModifications
+        ? "EXISTS (SELECT 1 FROM modifications mo WHERE mo.art_id = a.art_id)"
+        : "NOT EXISTS (SELECT 1 FROM modifications mo WHERE mo.art_id = a.art_id)");
+    }
+    if (params.hasWikidataCreator != null) {
+      const creatorFieldId2 = this.fieldIdMap.get("creator");
+      if (creatorFieldId2 !== undefined) {
+        // Use IN subquery so SQLite can materialise the creator-with-wikidata set once
+        // (bloom filter) instead of a correlated EXISTS that probes idx_mappings_field_vocab
+        // per artwork (scans all creator mappings for each artwork — very slow at 450K rows).
+        conditions.push(params.hasWikidataCreator
+          ? `a.art_id IN (SELECT m3.artwork_id FROM mappings m3 JOIN vocabulary v3 ON v3.vocab_int_id = m3.vocab_rowid WHERE m3.field_id = ? AND v3.wikidata_id IS NOT NULL)`
+          : `a.art_id NOT IN (SELECT m3.artwork_id FROM mappings m3 JOIN vocabulary v3 ON v3.vocab_int_id = m3.vocab_rowid WHERE m3.field_id = ? AND v3.wikidata_id IS NOT NULL)`);
+        bindings.push(creatorFieldId2);
+      }
+    }
+    // Step 4 (#320): exhibition filter
+    if (params.exhibition) {
+      conditions.push(
+        `a.art_id IN (SELECT ae2.art_id FROM artwork_exhibitions ae2 JOIN exhibitions e2 ON e2.exhibition_id = ae2.exhibition_id WHERE COALESCE(e2.title_en, e2.title_nl) LIKE '%' || ? || '%')`,
+      );
+      bindings.push(params.exhibition);
+    }
 
     // Provenance-domain filters — merge event conditions into a single EXISTS to avoid N separate scans.
     // Event/party conditions are also saved for provenanceDimensionSql so dimension queries
@@ -4456,6 +4706,12 @@ export class VocabularyDb {
       if (params.provenanceDateFrom != null) { evConds.push("pe.date_year >= ?"); evBindings.push(params.provenanceDateFrom); }
       if (params.provenanceDateTo != null) { evConds.push("pe.date_year <= ?"); evBindings.push(params.provenanceDateTo); }
       if (params.categoryMethod) { evConds.push("pe.category_method = ?"); evBindings.push(params.categoryMethod); }
+      // Tier 2.5 additions (#320)
+      if (params.parseMethod)       { evConds.push("pe.parse_method = ?");  evBindings.push(params.parseMethod); }
+      if (params.unsold    != null) { evConds.push("pe.unsold = ?");        evBindings.push(params.unsold    ? 1 : 0); }
+      if (params.uncertain != null) { evConds.push("pe.uncertain = ?");     evBindings.push(params.uncertain ? 1 : 0); }
+      if (params.gap       != null) { evConds.push("pe.gap = ?");           evBindings.push(params.gap       ? 1 : 0); }
+      if (params.crossRef  != null) { evConds.push("pe.is_cross_ref = ?");  evBindings.push(params.crossRef  ? 1 : 0); }
 
       if (evConds.length > 0) {
         provEventConds = { conds: evConds, bindings: evBindings };
@@ -4489,6 +4745,11 @@ export class VocabularyDb {
       if (params.positionMethod && this.hasPartyTable_) {
         ppConds.push("pp.position_method = ?");
         ppBindings.push(params.positionMethod);
+      }
+      // Tier 2.6 addition (#320): partyRole filter
+      if (params.partyRole && this.hasPartyTable_) {
+        ppConds.push("pp.party_role = ?");
+        ppBindings.push(params.partyRole);
       }
       if (ppConds.length > 0) {
         provPartyConds = { conds: ppConds, bindings: ppBindings };
