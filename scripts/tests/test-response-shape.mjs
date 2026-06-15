@@ -12,7 +12,6 @@ import { deepStrictEqual } from "node:assert";
 import {
   buildContentBlocks,
   DEFAULT_JSON_TEXT_BUDGET,
-  SAFE_RESULT_BUDGET,
 } from "../../dist/utils/responseShape.js";
 
 // ── Pass/fail counters ────────────────────────────────────────────────────────

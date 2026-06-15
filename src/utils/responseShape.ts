@@ -41,11 +41,13 @@ export interface JsonTextOptions {
 export const PLATFORM_RESULT_CHAR_CEILING = 150_000;
 
 /**
- * Keep the whole result this far under the platform ceiling. Headroom covers
- * JSON-RPC framing and the unknown — the docs don't say whether the ceiling
- * counts structuredContent, so we assume it does and stay well below.
+ * Keep the whole result this far under the platform ceiling (20% headroom).
+ * Headroom covers JSON-RPC framing and the unknown — the docs don't say whether
+ * the ceiling counts structuredContent, so we assume it does and stay well below.
+ * Derived from PLATFORM_RESULT_CHAR_CEILING so the two move together if the
+ * platform limit changes (and so the ceiling constant is not a dead export).
  */
-export const SAFE_RESULT_BUDGET = 120_000;
+export const SAFE_RESULT_BUDGET = Math.round(PLATFORM_RESULT_CHAR_CEILING * 0.8);
 
 /** Conservative per-copy default: ~20 KB of serialized JSON in the text block. */
 export const DEFAULT_JSON_TEXT_BUDGET = 20_000;
