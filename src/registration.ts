@@ -1724,6 +1724,7 @@ function registerTools(
                 .optional()
                 .describe(
                   "Search for artworks produced in a specific place (e.g. 'Delft'). " +
+                  "Spans both the Linked Art production-place field and the OAI-PMH spatial field for maximum recall. " +
                   "Supports multi-word and ambiguous place names with geo-disambiguation (e.g. 'Paleis van Justitie Den Haag')."
                 ),
               collectionSet: stringOrArray()
@@ -2123,6 +2124,8 @@ function registerTools(
               "Expect false positives — treat the returned list as approximate, not authoritative."),
           hasArtworks: z.preprocess(stripNullCoerceBool, z.boolean().optional().default(true))
             .describe("Restrict to persons appearing as creator on ≥1 artwork. Default true."),
+          unused: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+            .describe("Restrict to persons who are NOT a creator on any artwork in the published LOD — the inverse of hasArtworks, for finding orphaned maker names. Overrides hasArtworks when both are set. Caveat: 'unused' means no creator link in the public LOD harvest; a name unused here may still be linked internally, so treat results as cleanup candidates, not confirmed orphans."),
           maxResults: z.number().int().min(1).max(TOOL_LIMITS.search_persons.max).default(TOOL_LIMITS.search_persons.default)
             .describe(`Maximum persons to return (1-${TOOL_LIMITS.search_persons.max}, default ${TOOL_LIMITS.search_persons.default}).`),
           offset: z.preprocess(stripNull, z.number().int().min(0).default(0).optional())
@@ -2144,6 +2147,7 @@ function registerTools(
         if (a.deathPlace) params.deathPlace = a.deathPlace as string | string[];
         if (a.profession) params.profession = a.profession as string | string[];
         if (a.hasArtworks != null) params.hasArtworks = a.hasArtworks as boolean;
+        if (a.unused != null) params.unused = a.unused as boolean;
         params.maxResults = a.maxResults as number ?? 25;
         if (a.offset != null) params.offset = a.offset as number;
 
@@ -2204,6 +2208,8 @@ function registerTools(
           .describe(
             "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
           ),
+        verboseExtent: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+          .describe("Include the verbose free-text extentText (dcterms:extent). Default false; the structured dimensions[] and physicalDimensions cover the headline measurements."),
       }).strict(),
       ...withOutputSchema(ArtworkDetailOutput),
     },
@@ -2257,7 +2263,13 @@ function registerTools(
       const parsedInscriptions = parseInscriptions(detail.inscriptions);
       const inscriptionSummary = summarizeInscriptions(parsedInscriptions);
 
-      const enriched = { ...detail, provenanceChain, parsedInscriptions, inscriptionSummary };
+      const enriched = {
+        ...detail,
+        extentText: args.verboseExtent === true ? detail.extentText : null,
+        provenanceChain,
+        parsedInscriptions,
+        inscriptionSummary,
+      };
       const text = formatDetailSummary(enriched);
       return structuredResponse(enriched, text);
     })
@@ -3169,6 +3181,8 @@ function registerTools(
           .describe(
             "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
           ),
+        includeExtentText: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+          .describe("Include the verbose extentText (dcterms:extent) per record. Default false — it is large and not rendered in the text channel."),
       }).strict(),
       ...withOutputSchema(BrowseSetOutput),
     },
@@ -3194,7 +3208,7 @@ function registerTools(
         offset = 0;
       }
 
-      const result = vocabDb!.browseSet(setSpec, args.maxResults, offset);
+      const result = vocabDb!.browseSet(setSpec, args.maxResults, offset, args.includeExtentText === true);
       const nextOffset = offset + result.records.length;
       const hasMore = nextOffset < result.totalInSet;
       const resumptionToken = hasMore ? encodeBrowseSetToken(setSpec, nextOffset) : undefined;
@@ -4096,7 +4110,7 @@ function registerTools(
           material: optStr().describe("Filter to artworks with this material."),
           technique: optStr().describe("Filter to artworks with this technique."),
           creator: optStr().describe("Filter to artworks by this creator (partial match)."),
-          productionPlace: optStr().describe("Filter to artworks produced in this place (partial match). Areal places (continents/oceans/empires) are excluded from depictedPlace/productionPlace rollups to avoid centroid domination."),
+          productionPlace: optStr().describe("Filter to artworks produced in this place (partial match). Spans both the Linked Art production-place field and the OAI-PMH spatial field. Areal places (continents/oceans/empires) are excluded from depictedPlace/productionPlace rollups to avoid centroid domination."),
           depictedPerson: optStr().describe("Filter to artworks depicting this person (partial match)."),
           depictedPlace: optStr().describe("Filter to artworks depicting this place (partial match). Areal places (continents/oceans/empires) are excluded from depictedPlace/productionPlace rollups."),
           subject: optStr().describe("Filter to artworks with this subject (partial match on Iconclass labels)."),

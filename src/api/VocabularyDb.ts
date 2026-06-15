@@ -354,6 +354,7 @@ export interface PersonSearchParams {
   deathPlace?: StringOrArray;
   profession?: StringOrArray;
   hasArtworks?: boolean;
+  unused?: boolean;
   maxResults?: number;
   offset?: number;
 }
@@ -755,7 +756,7 @@ const VOCAB_DIMENSION_DEFS: ReadonlyArray<{ label: string; field: string; vocabT
   { label: "creator",        field: "creator" },
   { label: "depictedPerson", field: "subject", vocabType: "person" },
   { label: "depictedPlace",  field: "subject", vocabType: "place" },
-  { label: "productionPlace",field: "spatial" },
+  { label: "productionPlace",field: "production_place" },
   { label: "sourceType",     field: "source_type" },
   // Tier 1 additions — columns already in vocabulary.db since v0.40
   { label: "productionRole", field: "production_role" },
@@ -892,6 +893,8 @@ const ALLOWED_FIELDS = new Set([
   "theme", "source_type",
   // Tier 1 additions (#320)
   "profession", "birth_place", "death_place",
+  // #356 productionPlace recall: resolve the Linked-Art production_place field too
+  "production_place",
 ]);
 const ALLOWED_VOCAB_TYPES = new Set(["person", "place", "classification", "set"]);
 
@@ -920,7 +923,7 @@ const VOCAB_FILTERS: VocabFilter[] = [
   { param: "subject",        fields: ["subject"],               matchMode: "like-word",  ftsUpgrade: true },
   { param: "depictedPerson", fields: ["subject"],               matchMode: "like", vocabType: "person",         ftsUpgrade: true },
   { param: "depictedPlace",  fields: ["subject", "spatial"],    matchMode: "like", vocabType: "place",          ftsUpgrade: true },
-  { param: "productionPlace",fields: ["spatial"],               matchMode: "like", vocabType: "place",          ftsUpgrade: true },
+  { param: "productionPlace",fields: ["production_place", "spatial"], matchMode: "like", vocabType: "place", ftsUpgrade: true },
   { param: "material",       fields: ["material"],              matchMode: "like",                               ftsUpgrade: true },
   { param: "technique",      fields: ["technique"],             matchMode: "like",                               ftsUpgrade: true },
   { param: "type",           fields: ["type"],                  matchMode: "like",                               ftsUpgrade: true },
@@ -997,7 +1000,7 @@ const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
   { key: "material",             fields: ["material"] },
   { key: "technique",            fields: ["technique"] },
   { key: "creator",              fields: ["creator"] },
-  { key: "productionPlace",      fields: ["spatial"],            vocabType: "place" },
+  { key: "productionPlace",      fields: ["production_place", "spatial"], vocabType: "place" },
   { key: "depictedPerson",       fields: ["subject"],            vocabType: "person" },
   { key: "depictedPlace",        fields: ["subject", "spatial"], vocabType: "place" },
   { key: "subject",              fields: ["subject"] },
@@ -3525,7 +3528,7 @@ export class VocabularyDb {
    *  Reuses `memberCount` from the curated-sets cache, avoiding a per-page
    *  COUNT(DISTINCT) scan over all collection_set mappings. */
   browseSet(
-    setSpec: string, maxResults: number, offset: number,
+    setSpec: string, maxResults: number, offset: number, includeExtentText = false,
   ): { records: BrowseSetRecord[]; totalInSet: number } {
     if (!this.db) return { records: [], totalInSet: 0 };
     const collectionSetFieldId = this.requireFieldId("collection_set");
@@ -3583,7 +3586,7 @@ export class VocabularyDb {
         creator: r.creator_label ?? "",
         date: r.date_display ?? formatDateRange(r.date_earliest, r.date_latest) ?? "",
         ...(r.description_text && { description: r.description_text }),
-        ...(r.extent_text && { extentText: r.extent_text }),
+        ...(includeExtentText && r.extent_text && { extentText: r.extent_text }),
         ...(r.record_modified && { datestamp: r.record_modified }),
         hasImage,
         ...(iiifId && {
@@ -3673,7 +3676,8 @@ export class VocabularyDb {
     const warnings: string[] = [];
     const limit = Math.min(params.maxResults ?? 25, 100);
     const offset = params.offset ?? 0;
-    const hasArtworks = params.hasArtworks !== false; // default true
+    const unused = params.unused === true;
+    const hasArtworks = unused ? false : (params.hasArtworks !== false); // default true; unused overrides
 
     const creatorFieldId = this.fieldIdMap.get("creator");
     const birthPlaceFieldId = this.fieldIdMap.get("birth_place");
@@ -3796,6 +3800,13 @@ export class VocabularyDb {
     if (hasArtworks && creatorFieldId !== undefined) {
       conditions.push(
         `EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)`
+      );
+      bindings.push(creatorFieldId);
+    }
+
+    if (unused && creatorFieldId !== undefined) {
+      conditions.push(
+        `NOT EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)`
       );
       bindings.push(creatorFieldId);
     }
