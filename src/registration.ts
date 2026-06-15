@@ -4062,16 +4062,21 @@ function registerTools(
           "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n" +
           "- \"Type breakdown of Rembrandt's autograph paintings\" → dimension='type', creator='Rembrandt van Rijn', productionRole='painter', sameRowMatching=true\n" +
           "- \"Workshop-of-Rembrandt works by type\" → dimension='type', creator='Rembrandt van Rijn', attributionQualifier='workshop of'\n\n" +
-          "Artwork dimensions: type, material, technique, creator, depictedPerson, depictedPlace, productionPlace, century, decade, height, width, " +
-          "theme (thematic vocab — labels in NL until #300 backfill), sourceType (cataloguing-channel taxonomy — 6 values), " +
+          "Artwork dimensions: type, material, technique, creator, productionRole (making/reproductive role), profession, depictedPerson, depictedPlace, " +
+          "productionPlace, birthPlace (creator birth place), deathPlace (creator death place), century, decade, height, width, " +
+          "gender (creator gender: female/male/unknown — groups artworks by creator gender via creator-mapping join), " +
+          "creatorBirthDecade / creatorBirthCentury (cohort dims bucketed by creator birth year), " +
+          "placeType (production place type — country/city/region/etc.), " +
+          "theme (thematic vocab — labels in NL until backfill), sourceType (cataloguing-channel taxonomy — 6 values), " +
           "exhibition (top exhibitions by member count), decadeModified (record_modified bucketed by decade, clamped to 1990–2030).\n" +
-          "Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, " +
+          "Provenance dimensions: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyPosition, partyRole " +
+          "(verb-derived role: collector/buyer/recipient/heir/donor vs the normalised owner/non-owner partyPosition), " +
           "currency, categoryMethod, positionMethod, parseMethod.\n\n" +
           "Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters " +
           "further restrict to artworks matching those provenance criteria. Provenance event-level filters " +
-          "(transferType + provenanceLocation + provenanceDateFrom/To + categoryMethod) compose on the same event row; " +
-          "party-level filters (party + positionMethod) compose on the same party row. " +
-          "For demographic-filtered counts (e.g. female artists by century), first run search_persons to get vocab IDs, then pass them as creator here.",
+          "(transferType + provenanceLocation + provenanceDateFrom/To + categoryMethod + parseMethod + unsold/uncertain/gap/crossRef) " +
+          "compose on the same event row; party-level filters (party + positionMethod + partyRole) compose on the same party row. " +
+          "For demographic-filtered counts (e.g. female artists by century), use gender='female' directly or run search_persons to get vocab IDs, then pass them as creator.",
         inputSchema: z.object({
           dimension: z.enum(STATS_DIMENSIONS as unknown as [string, ...string[]])
             .describe("What to count/group by."),
@@ -4141,6 +4146,35 @@ function registerTools(
             .describe("[events] Latest provenance event year (inclusive)."),
           categoryMethod: optStr().describe("[events] Filter by category method (e.g. 'llm_enrichment')."),
           positionMethod: optStr().describe("[parties] Filter by position method (e.g. 'llm_enrichment')."),
+          // Tier 1 (#320): creator-demographic vocab filters
+          profession: optStr().describe("Filter to artworks by a creator with this profession (partial match on vocab label)."),
+          birthPlace: optStr().describe("Filter to artworks by a creator born in this place (partial match)."),
+          deathPlace: optStr().describe("Filter to artworks by a creator who died in this place (partial match)."),
+          // Tier 2 (#320): gender + cohort
+          gender: optStr().describe("Filter by creator gender (e.g. 'female', 'male', 'unknown'). Restricts to artworks with ≥1 creator-mapped person of that gender."),
+          // Tier 3 (#320): production place type
+          placeType: optStr().describe("Filter to artworks whose production place has this placetype (e.g. 'country', 'city', 'region')."),
+          // has* boolean predicates (#320)
+          hasInscription: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of inscription text."),
+          hasNarrative: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of curatorial narrative text."),
+          hasDimensions: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of physical dimensions (height or width)."),
+          hasExhibitions: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by participation in any recorded exhibition."),
+          hasExternalIds: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of external authority identifiers (e.g. Wikidata, RKD)."),
+          hasAltNames: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of alternative names on any linked vocabulary entity."),
+          hasParent: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by membership in a parent work (series/album/portfolio)."),
+          hasExaminations: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of technical examination records."),
+          hasModifications: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of recorded modifications/restorations."),
+          hasWikidataCreator: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of a Wikidata-linked creator."),
+          // Step 4 (#320): exhibition filter
+          exhibition: optStr().describe("Filter to artworks in a specific exhibition (partial match on exhibition title)."),
+          // Tier 2.5 (#320): parseMethod + event boolean flags
+          parseMethod: optStr().describe("[events] Filter by provenance parse method (e.g. 'peg', 'regex_fallback', 'llm_structural')."),
+          unsold: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("[events] Filter to events flagged as unsold (lot passed/withdrawn)."),
+          uncertain: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("[events] Filter to events with uncertain dating or attribution."),
+          gap: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("[events] Filter to events that represent a provenance gap."),
+          crossRef: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("[events] Filter to cross-reference events (is_cross_ref=true)."),
+          // Tier 2.6 (#320): party role filter
+          partyRole: optStr().describe("[parties] Filter by party role — verb-derived role label (e.g. 'collector', 'buyer', 'recipient', 'heir', 'donor'). Distinct from partyPosition (normalised owner/non-owner)."),
         }).strict(),
         ...withOutputSchema(CollectionStatsOutput),
       },
@@ -4178,6 +4212,35 @@ function registerTools(
         if (args.provenanceDateTo != null) params.provenanceDateTo = args.provenanceDateTo as number;
         if (args.categoryMethod) params.categoryMethod = args.categoryMethod as string;
         if (args.positionMethod) params.positionMethod = args.positionMethod as string;
+        // Tier 1 (#320)
+        if (args.profession) params.profession = args.profession as string;
+        if (args.birthPlace) params.birthPlace = args.birthPlace as string;
+        if (args.deathPlace) params.deathPlace = args.deathPlace as string;
+        // Tier 2 (#320)
+        if (args.gender) params.gender = args.gender as string;
+        // Tier 3 (#320)
+        if (args.placeType) params.placeType = args.placeType as string;
+        // has* (#320)
+        if (args.hasInscription  != null) params.hasInscription  = args.hasInscription  as boolean;
+        if (args.hasNarrative    != null) params.hasNarrative    = args.hasNarrative    as boolean;
+        if (args.hasDimensions   != null) params.hasDimensions   = args.hasDimensions   as boolean;
+        if (args.hasExhibitions  != null) params.hasExhibitions  = args.hasExhibitions  as boolean;
+        if (args.hasExternalIds  != null) params.hasExternalIds  = args.hasExternalIds  as boolean;
+        if (args.hasAltNames     != null) params.hasAltNames     = args.hasAltNames     as boolean;
+        if (args.hasParent       != null) params.hasParent       = args.hasParent       as boolean;
+        if (args.hasExaminations != null) params.hasExaminations = args.hasExaminations as boolean;
+        if (args.hasModifications!= null) params.hasModifications= args.hasModifications as boolean;
+        if (args.hasWikidataCreator != null) params.hasWikidataCreator = args.hasWikidataCreator as boolean;
+        // Step 4 (#320)
+        if (args.exhibition) params.exhibition = args.exhibition as string;
+        // Tier 2.5 (#320)
+        if (args.parseMethod) params.parseMethod = args.parseMethod as string;
+        if (args.unsold    != null) params.unsold    = args.unsold    as boolean;
+        if (args.uncertain != null) params.uncertain = args.uncertain as boolean;
+        if (args.gap       != null) params.gap       = args.gap       as boolean;
+        if (args.crossRef  != null) params.crossRef  = args.crossRef  as boolean;
+        // Tier 2.6 (#320)
+        if (args.partyRole) params.partyRole = args.partyRole as string;
 
         // #378 Step 4: cache the (synchronous) stats result keyed on DB build-id + params.
         // No in-flight de-dup needed — computeCollectionStats blocks the event loop, so two
@@ -4220,6 +4283,28 @@ function registerTools(
         }
         if (params.categoryMethod) filterParts.push(`categoryMethod=${params.categoryMethod}`);
         if (params.positionMethod) filterParts.push(`positionMethod=${params.positionMethod}`);
+        if (params.profession) filterParts.push(`profession=${params.profession}`);
+        if (params.birthPlace) filterParts.push(`birthPlace=${params.birthPlace}`);
+        if (params.deathPlace) filterParts.push(`deathPlace=${params.deathPlace}`);
+        if (params.gender) filterParts.push(`gender=${params.gender}`);
+        if (params.placeType) filterParts.push(`placeType=${params.placeType}`);
+        if (params.hasInscription != null) filterParts.push(`hasInscription=${params.hasInscription}`);
+        if (params.hasNarrative != null) filterParts.push(`hasNarrative=${params.hasNarrative}`);
+        if (params.hasDimensions != null) filterParts.push(`hasDimensions=${params.hasDimensions}`);
+        if (params.hasExhibitions != null) filterParts.push(`hasExhibitions=${params.hasExhibitions}`);
+        if (params.hasExternalIds != null) filterParts.push(`hasExternalIds=${params.hasExternalIds}`);
+        if (params.hasAltNames != null) filterParts.push(`hasAltNames=${params.hasAltNames}`);
+        if (params.hasParent != null) filterParts.push(`hasParent=${params.hasParent}`);
+        if (params.hasExaminations != null) filterParts.push(`hasExaminations=${params.hasExaminations}`);
+        if (params.hasModifications != null) filterParts.push(`hasModifications=${params.hasModifications}`);
+        if (params.hasWikidataCreator != null) filterParts.push(`hasWikidataCreator=${params.hasWikidataCreator}`);
+        if (params.exhibition) filterParts.push(`exhibition=${params.exhibition}`);
+        if (params.parseMethod) filterParts.push(`parseMethod=${params.parseMethod}`);
+        if (params.unsold != null) filterParts.push(`unsold=${params.unsold}`);
+        if (params.uncertain != null) filterParts.push(`uncertain=${params.uncertain}`);
+        if (params.gap != null) filterParts.push(`gap=${params.gap}`);
+        if (params.crossRef != null) filterParts.push(`crossRef=${params.crossRef}`);
+        if (params.partyRole) filterParts.push(`partyRole=${params.partyRole}`);
 
         const filterStr = filterParts.length > 0 ? ` (${filterParts.join(", ")})` : "";
         lines.push(`${result.dimension} distribution${filterStr}:`);

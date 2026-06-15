@@ -34,7 +34,7 @@
     "test:viewer-build": "node scripts/tests/test-viewer-build.mjs",
     "test:viewer-app": "node scripts/tests/test-app-conformance.mjs",
     "test:all": "npm run test:base && ~/miniconda3/envs/embeddings/bin/python scripts/tests/test-harvest-run-provenance.py",
-    "test:track2": "node scripts/tests/test-title-variants.mjs && node scripts/tests/test-parent-grouping.mjs && node scripts/tests/test-related-objects.mjs && node scripts/tests/test-track2-mcp.mjs && node scripts/tests/test-creator-vocabid.mjs && node scripts/tests/test-attribution-same-row.mjs && node scripts/tests/test-attribution-qualifiers.mjs && node scripts/tests/test-stats-provenance-plan.mjs && node scripts/tests/test-stats-unfiltered-provenance-plan.mjs && node scripts/tests/test-stats-field-shape-plan.mjs"
+    "test:track2": "node scripts/tests/test-title-variants.mjs && node scripts/tests/test-parent-grouping.mjs && node scripts/tests/test-related-objects.mjs && node scripts/tests/test-track2-mcp.mjs && node scripts/tests/test-creator-vocabid.mjs && node scripts/tests/test-attribution-same-row.mjs && node scripts/tests/test-attribution-qualifiers.mjs && node scripts/tests/test-stats-provenance-plan.mjs && node scripts/tests/test-stats-unfiltered-provenance-plan.mjs && node scripts/tests/test-stats-field-shape-plan.mjs && node scripts/tests/test-collection-stats-tier1.mjs && node scripts/tests/test-collection-stats-tier2.mjs && node scripts/tests/test-collection-stats-tier3.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.2.0",
