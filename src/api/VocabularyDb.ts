@@ -354,6 +354,7 @@ export interface PersonSearchParams {
   deathPlace?: StringOrArray;
   profession?: StringOrArray;
   hasArtworks?: boolean;
+  unused?: boolean;
   maxResults?: number;
   offset?: number;
 }
@@ -3612,7 +3613,8 @@ export class VocabularyDb {
     const warnings: string[] = [];
     const limit = Math.min(params.maxResults ?? 25, 100);
     const offset = params.offset ?? 0;
-    const hasArtworks = params.hasArtworks !== false; // default true
+    const unused = params.unused === true;
+    const hasArtworks = unused ? false : (params.hasArtworks !== false); // default true; unused overrides
 
     const creatorFieldId = this.fieldIdMap.get("creator");
     const birthPlaceFieldId = this.fieldIdMap.get("birth_place");
@@ -3735,6 +3737,13 @@ export class VocabularyDb {
     if (hasArtworks && creatorFieldId !== undefined) {
       conditions.push(
         `EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)`
+      );
+      bindings.push(creatorFieldId);
+    }
+
+    if (unused && creatorFieldId !== undefined) {
+      conditions.push(
+        `NOT EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)`
       );
       bindings.push(creatorFieldId);
     }

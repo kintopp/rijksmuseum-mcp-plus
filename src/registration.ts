@@ -2123,6 +2123,8 @@ function registerTools(
               "Expect false positives — treat the returned list as approximate, not authoritative."),
           hasArtworks: z.preprocess(stripNullCoerceBool, z.boolean().optional().default(true))
             .describe("Restrict to persons appearing as creator on ≥1 artwork. Default true."),
+          unused: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+            .describe("Restrict to persons who are NOT a creator on any artwork in the published LOD — the inverse of hasArtworks, for finding orphaned maker names. Overrides hasArtworks when both are set. Caveat: 'unused' means no creator link in the public LOD harvest; a name unused here may still be linked internally, so treat results as cleanup candidates, not confirmed orphans."),
           maxResults: z.number().int().min(1).max(TOOL_LIMITS.search_persons.max).default(TOOL_LIMITS.search_persons.default)
             .describe(`Maximum persons to return (1-${TOOL_LIMITS.search_persons.max}, default ${TOOL_LIMITS.search_persons.default}).`),
           offset: z.preprocess(stripNull, z.number().int().min(0).default(0).optional())
@@ -2144,6 +2146,7 @@ function registerTools(
         if (a.deathPlace) params.deathPlace = a.deathPlace as string | string[];
         if (a.profession) params.profession = a.profession as string | string[];
         if (a.hasArtworks != null) params.hasArtworks = a.hasArtworks as boolean;
+        if (a.unused != null) params.unused = a.unused as boolean;
         params.maxResults = a.maxResults as number ?? 25;
         if (a.offset != null) params.offset = a.offset as number;
 
