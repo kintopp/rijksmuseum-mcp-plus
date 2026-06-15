@@ -177,10 +177,17 @@ function structuredResponse(
   textContent?: string,
   opts?: JsonTextOptions,
 ): ToolResponse | StructuredToolResponse {
-  const content = buildContentBlocks(data, textContent, {
+  // When jsonTextData is supplied, the text-channel JSON copy carries that
+  // (trimmed) object while structuredContent keeps the full `data`; the guard
+  // then needs the full payload's size, not the trimmed copy's.
+  const textPayload = opts?.jsonTextData ?? data;
+  const content = buildContentBlocks(textPayload, textContent, {
     jsonText: opts?.jsonText ?? JSON_TEXT_COMPAT,
     maxJsonTextBytes: opts?.maxJsonTextBytes,
     structuredContentEmitted: EMIT_STRUCTURED,
+    ...(opts?.jsonTextData && EMIT_STRUCTURED
+      ? { structuredPayloadBytes: Buffer.byteLength(JSON.stringify(data), "utf8") }
+      : {}),
   });
   if (!EMIT_STRUCTURED) {
     return { content };
@@ -398,6 +405,11 @@ function formatDetailSummary(d: DetailWithChain): string {
   if (d.techniqueStatement || d.physicalDimensions) {
     lines.push([d.techniqueStatement, d.physicalDimensions].filter(Boolean).join(", "));
   }
+  // Surface weight/depth from dimensions[] — invisible in the h×w physicalDimensions string.
+  const extraDims = d.dimensions
+    .filter((dim) => dim.type === "weight" || dim.type === "depth")
+    .map((dim) => `${dim.type} ${dim.value} ${dim.unit}`);
+  if (extraDims.length) lines.push(extraDims.join(", "));
   if (d.location) {
     const parts = [d.location.floor, d.location.roomName, `room ${d.location.roomId}`].filter(Boolean);
     lines.push(parts.join(", "));
@@ -411,6 +423,7 @@ function formatDetailSummary(d: DetailWithChain): string {
 
   if (d.objectTypes.length) lines.push(`Types: ${termLabels(d.objectTypes)}`);
   if (d.materials.length) lines.push(`Materials: ${termLabels(d.materials)}`);
+  if (d.collectionSetLabels.length) lines.push(`Collections: ${termLabels(d.collectionSetLabels)}`);
   if (d.subjects.iconclass.length) lines.push(`Iconclass: ${d.subjects.iconclass.map((t) => t.id).join(" | ")}`);
   if (d.subjects.depictedPersons.length) lines.push(`Depicted persons: ${termLabels(d.subjects.depictedPersons)}`);
   if (d.subjects.depictedPlaces.length) lines.push(`Depicted places: ${termLabels(d.subjects.depictedPlaces)}`);
@@ -767,7 +780,9 @@ function paginatedResponse(
     const lines = records.map((r, i) => formatLine(r as Record<string, unknown>, i));
     const parts = [header, ...lines];
     if (serverToken) parts.push("[resumptionToken available for next page]");
-    return structuredResponse(data, parts.join("\n"));
+    // jsonText only for full records — they drop materials/dates/authority links
+    // from the one-liner. The lean identifiersOnly listing stays prose-only.
+    return structuredResponse(data, parts.join("\n"), { jsonText: !identifiersOnly });
   }
   return structuredResponse(data);
 }
@@ -973,6 +988,84 @@ const FindSimilarOutput = {
   visualTotalResults: z.number().int().optional(),
   error: z.string().optional(),
 };
+
+// ── find_similar text-channel trim (plan json-text-compat-rollout §E) ──
+// The Claude model on claude.ai/Desktop reads content[].text (not
+// structuredContent) and can't fetch the HTML page, so it gets a trimmed,
+// answer-shaped summary in the text block while structuredContent keeps the full
+// per-channel depth (maxResults) for the CLI. No client reads both into the model.
+const SIMILAR_TEXT_OVERALL_CAP = 72;   // total candidates across ALL channels
+const SIMILAR_TEXT_POOLED_CAP = 16;    // pooled consensus list, capped separately
+
+type TrimCandidate = z.infer<ReturnType<typeof SimilarCandidateShape>>;
+type TrimPooled = z.infer<ReturnType<typeof PooledCandidateShape>>;
+
+/** Keep schema-required fields + the per-candidate "why"; drop viewer/URI plumbing. */
+function leanSimilarCandidate(c: TrimCandidate): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    objectNumber: c.objectNumber, title: c.title, creator: c.creator, score: c.score, url: c.url,
+  };
+  if (c.date) out.date = c.date;
+  if (c.type) out.type = c.type;
+  if (c.detail) out.detail = c.detail;
+  if (c.sharedNotations) out.sharedNotations = c.sharedNotations;
+  if (c.qualifierLabel) out.qualifierLabel = c.qualifierLabel;
+  if (c.qualifierCreator) out.qualifierCreator = c.qualifierCreator;
+  if (c.descSnippet) out.descSnippet = c.descSnippet;
+  if (c.sharedTerms) out.sharedTerms = c.sharedTerms;
+  return out;
+}
+
+/**
+ * Trimmed comparison summary for the text channel: seed core + per-channel
+ * {total, top} bounded to SIMILAR_TEXT_OVERALL_CAP candidates OVERALL via
+ * rank-interleave (rank-1 of every present channel, then rank-2, …; an exhausted
+ * channel is skipped so its budget flows to the others), plus the pooled
+ * consensus list capped separately. pageUrl serializes first.
+ */
+function buildSimilarTextSummary(s: InferOutput<typeof FindSimilarOutput>): Record<string, unknown> {
+  const present = Object.entries(s.modes)
+    .filter(([, arr]) => Array.isArray(arr) && arr.length > 0) as [string, TrimCandidate[]][];
+  const picked = new Map<string, TrimCandidate[]>(present.map(([k]) => [k, []]));
+  let taken = 0;
+  for (let rank = 0; taken < SIMILAR_TEXT_OVERALL_CAP; rank++) {
+    let progressed = false;
+    for (const [ch, arr] of present) {
+      if (rank < arr.length) {
+        picked.get(ch)!.push(arr[rank]);
+        taken++;
+        progressed = true;
+        if (taken >= SIMILAR_TEXT_OVERALL_CAP) break;
+      }
+    }
+    if (!progressed) break;
+  }
+
+  const channels: Record<string, unknown> = {};
+  for (const [ch, arr] of present) {
+    channels[ch] = { total: arr.length, top: picked.get(ch)!.map(leanSimilarCandidate) };
+  }
+
+  const seed: Record<string, unknown> = {
+    objectNumber: s.query.objectNumber, title: s.query.title, creator: s.query.creator,
+  };
+  if (s.query.date) seed.date = s.query.date;
+  if (s.query.type) seed.type = s.query.type;
+
+  const pooledTop = s.pooled.slice(0, SIMILAR_TEXT_POOLED_CAP).map((p: TrimPooled) => ({
+    ...leanSimilarCandidate(p),
+    sources: p.sources,
+    matchCount: p.matchCount,
+  }));
+
+  return {
+    pageUrl: s.pageUrl,
+    seed,
+    poolThreshold: s.poolThreshold,
+    channels,
+    pooled: { total: s.pooled.length, top: pooledTop },
+  };
+}
 
 const ArtworkDetailOutput = {
   // ArtworkSummary base
@@ -3232,7 +3325,10 @@ function registerTools(
       if (result.totalInSet > 0) headerBits.push(`offset ${offset}–${nextOffset - 1} of ${result.totalInSet}`);
       const header = headerBits.join(" — ");
       const lines = result.records.map((r, i) => formatBrowseSetRecord(r, offset + i));
-      return structuredResponse(data, [header, ...lines].join("\n"));
+      // jsonText: per-record description + extentText are dropped from the Tier-2
+      // one-liner; expose them as a JSON copy for LLM/JSON clients (the CLI already
+      // reads structuredContent). Guarded — degrades to a marker over the cap.
+      return structuredResponse(data, [header, ...lines].join("\n"), { jsonText: true });
     })
   );
 
@@ -3767,7 +3863,14 @@ function registerTools(
             // Format events
             for (const e of artwork.events) {
               const marker = e.matched ? ">>>" : "   ";
-              const partyNames = e.parties.map(p => p.name).join(", ");
+              // Surface buyer/seller direction: a clean 2-party sender→receiver
+              // pair renders as "sender→receiver"; otherwise list "name (role)"
+              // so the role (buyer/seller/consignor/…) disambiguates each party.
+              const senders = e.parties.filter(p => p.position === "sender");
+              const receivers = e.parties.filter(p => p.position === "receiver");
+              const partyNames = e.parties.length === 2 && senders.length === 1 && receivers.length === 1
+                ? `${senders[0].name}→${receivers[0].name}`
+                : e.parties.map(p => (p.role ? `${p.name} (${p.role})` : p.name)).join(", ");
               const parts: string[] = [];
               if (e.transferType !== "unknown") parts.push(e.unsold ? `${e.transferType} (unsold)` : e.transferType);
               if (partyNames) parts.push(partyNames);
@@ -3776,6 +3879,8 @@ function registerTools(
               if (e.location) parts.push(e.location);
               if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}${e.batchPrice ? " (batch)" : ""}`);
               if (e.isCrossRef && e.crossRefTarget) parts.push(`→ see ${e.crossRefTarget}`);
+              const srcRef = e.citations?.[0]?.text;
+              if (srcRef) parts.push(`src: ${srcRef.length > 60 ? srcRef.slice(0, 57) + "..." : srcRef}`);
               const meta: string[] = [];
               const parseT = compactMethodTag(e.parseMethod, "peg");
               if (parseT) meta.push(`parse=${parseT}`);
@@ -4629,8 +4734,10 @@ function registerTools(
         ];
 
         // Structured output (#379): the full per-channel data a programmatic/CLI
-        // client needs. Gated by STRUCTURED_CONTENT; text channel is unchanged
-        // (URL + counts) so chat hosts keep "just the link".
+        // client needs, on structuredContent. The text channel carries the prose
+        // link + counts (block[0]) AND a trimmed comparison summary (block[1], via
+        // jsonTextData) so text-only LLM hosts can answer about the comparison
+        // without reading structuredContent or fetching the HTML page.
         const structured: InferOutput<typeof FindSimilarOutput> = {
           query: pageData.query,
           modes: pageData.modes,
@@ -4642,7 +4749,11 @@ function registerTools(
           ...(pageData.visualTotalResults && { visualTotalResults: pageData.visualTotalResults }),
         };
 
-        return structuredResponse(structured, textLines.join("\n"));
+        return structuredResponse(structured, textLines.join("\n"), {
+          jsonText: true,
+          jsonTextData: buildSimilarTextSummary(structured),
+          maxJsonTextBytes: 50_000,
+        });
       })
     );
   }
