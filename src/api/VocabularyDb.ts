@@ -3465,7 +3465,7 @@ export class VocabularyDb {
    *  Reuses `memberCount` from the curated-sets cache, avoiding a per-page
    *  COUNT(DISTINCT) scan over all collection_set mappings. */
   browseSet(
-    setSpec: string, maxResults: number, offset: number,
+    setSpec: string, maxResults: number, offset: number, includeExtentText = false,
   ): { records: BrowseSetRecord[]; totalInSet: number } {
     if (!this.db) return { records: [], totalInSet: 0 };
     const collectionSetFieldId = this.requireFieldId("collection_set");
@@ -3523,7 +3523,7 @@ export class VocabularyDb {
         creator: r.creator_label ?? "",
         date: r.date_display ?? formatDateRange(r.date_earliest, r.date_latest) ?? "",
         ...(r.description_text && { description: r.description_text }),
-        ...(r.extent_text && { extentText: r.extent_text }),
+        ...(includeExtentText && r.extent_text && { extentText: r.extent_text }),
         ...(r.record_modified && { datestamp: r.record_modified }),
         hasImage,
         ...(iiifId && {

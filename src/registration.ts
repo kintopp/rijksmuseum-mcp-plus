@@ -2207,6 +2207,8 @@ function registerTools(
           .describe(
             "A Linked Art URI (e.g. 'https://id.rijksmuseum.nl/200666460')"
           ),
+        verboseExtent: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+          .describe("Include the verbose free-text extentText (dcterms:extent). Default false; the structured dimensions[] and physicalDimensions cover the headline measurements."),
       }).strict(),
       ...withOutputSchema(ArtworkDetailOutput),
     },
@@ -2260,7 +2262,13 @@ function registerTools(
       const parsedInscriptions = parseInscriptions(detail.inscriptions);
       const inscriptionSummary = summarizeInscriptions(parsedInscriptions);
 
-      const enriched = { ...detail, provenanceChain, parsedInscriptions, inscriptionSummary };
+      const enriched = {
+        ...detail,
+        extentText: args.verboseExtent === true ? detail.extentText : null,
+        provenanceChain,
+        parsedInscriptions,
+        inscriptionSummary,
+      };
       const text = formatDetailSummary(enriched);
       return structuredResponse(enriched, text);
     })
@@ -3172,6 +3180,8 @@ function registerTools(
           .describe(
             "Pagination token from a previous browse_set result. When provided, setSpec is ignored."
           ),
+        includeExtentText: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+          .describe("Include the verbose extentText (dcterms:extent) per record. Default false — it is large and not rendered in the text channel."),
       }).strict(),
       ...withOutputSchema(BrowseSetOutput),
     },
@@ -3197,7 +3207,7 @@ function registerTools(
         offset = 0;
       }
 
-      const result = vocabDb!.browseSet(setSpec, args.maxResults, offset);
+      const result = vocabDb!.browseSet(setSpec, args.maxResults, offset, args.includeExtentText === true);
       const nextOffset = offset + result.records.length;
       const hasMore = nextOffset < result.totalInSet;
       const resumptionToken = hasMore ? encodeBrowseSetToken(setSpec, nextOffset) : undefined;
