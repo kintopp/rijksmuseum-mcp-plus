@@ -35,6 +35,14 @@ export interface JsonTextOptions {
   jsonText?: boolean;
   /** Per-copy cap override (defaults to DEFAULT_JSON_TEXT_BUDGET). */
   maxJsonTextBytes?: number;
+  /**
+   * When present, THIS object is serialized into the text-channel JSON copy
+   * instead of `data`, while the full `data` still rides on structuredContent.
+   * Lets a tool send a trimmed/answer-shaped summary to text-only LLM hosts
+   * (claude.ai/Desktop) while keeping the full payload for structuredContent
+   * readers (the CLI). See find_similar (plan json-text-compat-rollout §E).
+   */
+  jsonTextData?: object;
 }
 
 /** Documented per-result ceiling for claude.ai / Claude Desktop (characters). */
@@ -60,6 +68,14 @@ export interface BuildBlocksOptions {
   maxJsonTextBytes?: number;
   /** Whether structuredContent will ALSO ride on this result (≈ same serialized bytes). */
   structuredContentEmitted: boolean;
+  /**
+   * Byte length of the structuredContent payload when it DIFFERS from the text
+   * copy (i.e. the caller passed jsonTextData, so structuredContent carries a
+   * fuller object than the text block). When omitted, the guard assumes
+   * structuredContent ≈ the text copy — the common case where both serialize
+   * the same `data`.
+   */
+  structuredPayloadBytes?: number;
 }
 
 /**
@@ -103,8 +119,12 @@ export function buildContentBlocks(
   const humanBytes = Buffer.byteLength(humanText, "utf8");
   const perCopyCap = opts.maxJsonTextBytes ?? DEFAULT_JSON_TEXT_BUDGET;
   // structuredContent (when attached) ≈ the same serialized payload, so adding
-  // the text copy roughly doubles the structured payload's contribution.
-  const structuredBytes = opts.structuredContentEmitted ? copyBytes : 0;
+  // the text copy roughly doubles the structured payload's contribution — UNLESS
+  // the caller diverged the two (jsonTextData), in which case use the actual
+  // (larger) structuredContent size so the projected-total guard stays honest.
+  const structuredBytes = opts.structuredContentEmitted
+    ? (opts.structuredPayloadBytes ?? copyBytes)
+    : 0;
   const projectedTotal = humanBytes + copyBytes + structuredBytes;
 
   if (copyBytes <= perCopyCap && projectedTotal <= SAFE_RESULT_BUDGET) {

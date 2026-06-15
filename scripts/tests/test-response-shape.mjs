@@ -303,6 +303,69 @@ section("Case 9: Spec annotations on two-block results");
   );
 }
 
+// ── Case 10: Divergent payloads (jsonTextData → structuredPayloadBytes guard) ──
+// find_similar (plan json-text-compat-rollout §E) sends a TRIMMED object to the
+// text channel while structuredContent carries the full payload. structuredResponse
+// passes the trimmed object as buildContentBlocks' `data` plus structuredPayloadBytes
+// = the FULL payload's size, so the projected-total guard counts the real wire cost.
+
+section("Case 10: Divergent payloads (jsonTextData → structuredPayloadBytes guard)");
+
+{
+  const trimmed = { pageUrl: "u", channels: { iconclass: { total: 20, top: [{ objectNumber: "x" }] } } };
+
+  // 10a: tiny text copy, but the FULL structuredContent (130 KB) pushes the
+  // projected total over SAFE_RESULT_BUDGET → marker (proves the guard counts the
+  // full structuredContent size, not the small trimmed copy).
+  const blocks10a = buildContentBlocks(trimmed, "human", {
+    jsonText: true,
+    structuredContentEmitted: true,
+    structuredPayloadBytes: 130000,
+  });
+  assert(blocks10a.length === 2, "10a: length is 2");
+  try {
+    const marker = JSON.parse(blocks10a[1].text);
+    assert(
+      marker.reason === "exceeds_result_ceiling",
+      '10a: marker.reason === "exceeds_result_ceiling" (full structuredContent counted, not trimmed copy)',
+    );
+  } catch (e) {
+    failed++;
+    failures.push(`10a: marker parse — ${e.message}`);
+    console.log(`  ✗ 10a: marker parse — ${e.message}`);
+  }
+
+  // 10b: modest structuredContent → JSON included, and block[1] carries the
+  // TRIMMED object — confirming text and structuredContent legitimately diverge.
+  const blocks10b = buildContentBlocks(trimmed, "human", {
+    jsonText: true,
+    structuredContentEmitted: true,
+    structuredPayloadBytes: 5000,
+  });
+  assert(blocks10b.length === 2, "10b: length is 2");
+  try {
+    const parsed = JSON.parse(blocks10b[1].text);
+    deepStrictEqual(parsed, trimmed);
+    passed++;
+    console.log("  ✓ 10b: block[1].text deep-equals the trimmed payload (text carries jsonTextData)");
+  } catch (e) {
+    failed++;
+    failures.push(`10b: block[1] equals trimmed — ${e.message}`);
+    console.log(`  ✗ 10b: block[1] equals trimmed — ${e.message}`);
+  }
+
+  // 10c: backward-compat — omitting structuredPayloadBytes falls back to the copy
+  // size (the common single-payload case), so existing callers are unaffected.
+  const blocks10c = buildContentBlocks({ a: 1 }, "human", {
+    jsonText: true,
+    structuredContentEmitted: true,
+  });
+  assert(
+    blocks10c.length === 2 && JSON.parse(blocks10c[1].text).a === 1,
+    "10c: omitted structuredPayloadBytes → JSON included (copy-size fallback preserved)",
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${"═".repeat(60)}`);
