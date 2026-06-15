@@ -152,6 +152,7 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 | File | Description |
 |------|-------------|
 | `POST-REPARSE-STEPS.md` | Step-by-step guide for restoring LLM enrichments + manual corrections after a full re-parse (6 steps, strict order). |
+| `provenance-change-report.mjs` | Read-only diff: compares `artworks.provenance_text_hash` (current harvest) against `provenance_parse_state` (last parse) or a `--baseline <db>` to classify artworks as unchanged / modified / new / removed and flag re-enrichment candidates. |
 | `manual-corrections-2026-03-23.csv` | Manual corrections CSV: hand-verified fixes for parser artifacts (lot numbers parsed as years, missing transfer types, etc.). Applied by `reimport-snapshots.py` or writeback scripts. |
 
 ## Profiling & Diagnostics

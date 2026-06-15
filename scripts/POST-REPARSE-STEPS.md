@@ -16,6 +16,27 @@ at the bottom until the store-driven cutover has run cleanly on a real re-parse 
 > parties 800, events 101,171, periods 81,207, unsold 665; hard invariants 0/0/0; 7d 199/361, 0 skips).
 > See `plans/provenance-enrichment-structural-confidence-leak.md` + `plans/015-*.md`.
 
+## Pre-parse: change detection (optional)
+
+Before re-parsing, run the change-detection report to size the re-enrichment surface:
+
+```bash
+node scripts/provenance-change-report.mjs --db data/vocabulary.db
+```
+
+This diffs `artworks.provenance_text_hash` (current harvest) against the hashes as of the last parse
+(`provenance_parse_state`, stamped by `batch-parse-provenance.mjs` at the end of every non-dry-run
+parse). It outputs counts for `unchanged / modified / new / removed` artworks and cross-references
+`provenance_enrichments` to flag re-enrichment candidates.
+
+**The parser always does a full rebuild** — the report scopes *re-enrichment* (which artworks need a
+fresh LLM pass), not *re-parsing*. The `modified ∩ store` and `new` sets are the artworks worth an
+LLM re-enrichment pass; everything else re-applies deterministically from the store.
+
+For the first run before any stamp exists, pass `--baseline data/vocabulary.db.pre017-20260614` (or
+whichever backup represents the last-parsed state). See `scripts/provenance-change-report.mjs --help`
+(or read the script header) for all flags.
+
 ## Order matters
 
 Steps run sequentially — later steps depend on earlier ones.
