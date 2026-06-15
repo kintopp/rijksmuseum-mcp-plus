@@ -106,6 +106,15 @@ python3 scripts/geocoding/promote_inferred_via_rijks_wikidata.py
 # ~2,770 promotions in v0.30; idempotent; --skip-fetch uses cache only.
 python3 scripts/geocoding/promote_inferred_via_rijks_tgn.py
 
+# NULL-coord TGN geocode: ~2,962 place rows with coord_method IS NULL that
+# carry a Rijks-supplied TGN ID in vocabulary_external_ids but were never
+# geocoded by any previous pass (all prior scripts required a pre-existing
+# coord). Cross-checks TGN ID against the Rijks place dump (filters out
+# reconciliation-introduced IDs). Writes deterministic/tgn_rdf_direct; MUST
+# run before strip_non_authority_coords.py. Cache:
+# data/null-coord-rijks-tgn-coords.csv. Idempotent; --skip-fetch uses cache.
+python3 scripts/geocoding/promote_null_coord_via_rijks_tgn.py
+
 # Aggressive NULL-detail recovery: for the ~4,549 rows that are
 # coord_method='inferred' with NULL coord_method_detail (legacy pre-audit-trail
 # coords with no provenance), check whether ANY Rijks-supplied authority in VEI

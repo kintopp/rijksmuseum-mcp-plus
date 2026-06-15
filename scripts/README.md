@@ -59,6 +59,7 @@ The place-geocoding subsystem — the multi-phase pipeline plus the apply/promot
 | `geocoding/apply_curated_coord_corrections.py` | Python | Applies hand-verified coord fixes from `data/backfills/curated-coord-corrections.csv`. |
 | `geocoding/apply_curated_vei_additions.py` | Python | Adds curated `vocabulary_external_ids` rows from `data/backfills/curated-vei-additions.csv` (re-apply after every fresh harvest). |
 | `geocoding/promote_inferred_via_rijks_tgn.py` / `promote_inferred_via_rijks_wikidata.py` | Python | Promote former `inferred`-tier coords to `deterministic` where a Rijks-supplied TGN / Wikidata ID actually backs the value. |
+| `geocoding/promote_null_coord_via_rijks_tgn.py` | Python | Geocode always-NULL-coord places (coord_method IS NULL) that carry a Rijks-supplied TGN ID in vocabulary_external_ids. Writes `deterministic`/`tgn_rdf_direct`. Idempotent (#336). |
 | `geocoding/promote_null_detail_via_authority.py` | Python | Recovers coords for NULL-detail rows that turn out to have an authority ID. |
 | `geocoding/promote_snapshot_backfill_to_authority.py` | Python | Re-tiers v0.25-snapshot backfilled coords to `deterministic` where authority-traceable. |
 | `geocoding/strip_non_authority_coords.py` | Python | The two-tier-policy enforcement step: NULLs every coord whose `coord_method` isn't `deterministic` (drops the entire `inferred` tier + the 8 `manual` centroids). VEI rows are preserved for a future re-geocode. |
