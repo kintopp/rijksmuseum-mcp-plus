@@ -116,8 +116,9 @@ from the party's role), `type_mapping` (deterministic, from the event's
 transfer type), `llm_enrichment` (LLM-classified), or `llm_disambiguation`
 (LLM-decomposed from merged party text).
 
-Coverage: ~90K parties across ~100K events, ~49K artworks with at least one
-parsed provenance event. Not all events have named parties — bare-name
+Coverage spans tens of thousands of artworks with at least one parsed
+provenance event, and a larger pool of individual events and named parties
+(roughly one named party per event). Not all events have named parties — bare-name
 `collection` events and cross-references often lack structured party data.
 
 ---

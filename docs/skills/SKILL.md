@@ -3,8 +3,8 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings even when the user doesn't name the collection.
 metadata:
-  version: "0.70"
-  last_updated: "2026-06-13"
+  version: "0.71"
+  last_updated: "2026-06-15"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -112,6 +112,7 @@ The three attribution-scoping filters (`attributionQualifier`, `productionRole`,
 | "workshop of X" / "studio of X"                        | `attributionQualifier: "workshop of"` + `creator: "X"`                                                                          |
 | "follower of X" / "circle of X" / "school of X"        | corresponding `attributionQualifier` value + `creator: "X"`                                                                     |
 | "in the style of X" / "in the manner of X"             | `attributionQualifier: "manner of"` + `creator: "X"` (precise), or `aboutActor: "X"` (broader, cross-language)                  |
+| "all 'follower of' / 'workshop of' works (any source artist)" | corresponding `attributionQualifier` value **alone**, no `creator` — returns the full collection-wide set |
 | "inspired by X" (ambiguous)                            | Ask the user — could mean `manner of`, `after`, or `follower of`                                                                |
 
 
@@ -120,17 +121,6 @@ The three attribution-scoping filters (`attributionQualifier`, `productionRole`,
 **Two adjacent reproductive roles exist.** Besides the three medium-specific `after X by` roles, the catalogue also uses `after design by` (other-reproductive, generic non-medium-specific) and `after own design by` (**self-reproductive** — the creator made the work after their own design, so they are both source and maker; a common pattern for autograph etchings after the artist's own preparatory drawing). For the user phrasing "by someone else after X", exclude `after own design by` — those works are autograph and belong with X's own œuvre, not with reproductive works by others. Pull in `after design by` only if you also want non-medium-specific reproductions.
 
 **Scope qualifier filters to a specific source artist by combining with `creator`.** Standalone, `attributionQualifier: "follower of"` returns every follower-of-anyone work in the collection. Combined with `creator: "X"`, it returns just the follower-of-X subset — the source artist is recorded on the same production row as the qualifier (and the same-row fix surfaces that linkage), even though the work's display `creator` field is typically `Unknown [painter]` or `anonymous`. For citation rigour on a single work, `attributionEvidence` from `get_artwork_details` cites the source text supporting each attribution.
-
-**Strategy table:**
-
-
-| Goal                                      | Working approach                                                                                                            |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Autograph paintings/drawings/prints by X  | `creator: "X"` + `productionRole: "painter"` / `"draughtsman"` / `"print maker"` + `sameRowMatching: true` + `type`         |
-| Works in the manner/style of artist X     | `attributionQualifier: "manner of"` + `creator: "X"` (precise), or `aboutActor: "X"` (broader, cross-language)              |
-| All "follower of" works in the collection | `attributionQualifier: "follower of"` alone (returns the full collection-wide set)                                          |
-| Follower of source artist X specifically  | `attributionQualifier: "follower of"` + `creator: "X"` (same-row enforced automatically)                                    |
-
 
 **Canonical name form matters.** The Rijksmuseum catalogue uses historical Dutch/Latin spellings for some artists. Bosch is catalogued as **"Jheronimus Bosch"**, not "Hieronymus Bosch". Always check `get_artwork_details` on a known work to confirm the canonical form before filtering.
 
@@ -172,7 +162,7 @@ The periods interpretation is much more restrictive — `dateFrom=1933, dateTo=1
 
 **Filter requirement**: both layers reject bare queries. At least one content filter is required. If you need a collection-wide ranking, use a broad filter such as `dateFrom: 1400` as a catch-all.
 
-**`creditLineQuery` — unstructured credit-line fallback.** Parsed provenance covers only a small share of the catalogue; the raw credit-line field ("Gift of …", "Bequest of …", "Purchased with the support of the … Fonds") covers much more. When a structured query is empty or thin, extend it with `creditLineQuery` — a free-text, tokenized-AND search restricted to works with *no* parsed provenance (so no overlap, no dedup). It is a standalone mode: other filters are ignored, and matches return in `creditLineResults`, **not** `results`. Treat them as lower-confidence — credit lines record how the *museum* acquired the work, not prior ownership — so tell the user the answer is from unstructured credit-line text. **Expectation-setting:** credit lines are highly boilerplate — c. 8,500 distinct bilingual (Dutch | English) funding/loan templates. Generic acquisition words ("purchase", "gift", "loan", "Fonds", "bequest") return huge, undifferentiated result sets; match instead on a *distinctive* donor/fund/society name (e.g. "Waller-Fonds", "Mondriaan Stichting"). Phrase/word-order nuance buys little — templated text, not prose.
+**`creditLineQuery` — unstructured credit-line fallback.** Parsed provenance covers only a small share of the catalogue; the raw credit-line field ("Gift of …", "Bequest of …", "Purchased with the support of the … Fonds") covers much more. When a structured query is empty or thin, extend it with `creditLineQuery` — a free-text, tokenized-AND search restricted to works with *no* parsed provenance (so no overlap, no dedup). It is a standalone mode: other filters are ignored, and matches return in `creditLineResults`, **not** `results`. Treat them as lower-confidence — credit lines record how the *museum* acquired the work, not prior ownership — so tell the user the answer is from unstructured credit-line text. **Expectation-setting:** credit lines are highly boilerplate — many thousands of distinct bilingual (Dutch | English) funding/loan templates. Generic acquisition words ("purchase", "gift", "loan", "Fonds", "bequest") return huge, undifferentiated result sets; match instead on a *distinctive* donor/fund/society name (e.g. "Waller-Fonds", "Mondriaan Stichting"). Phrase/word-order nuance buys little — templated text, not prose.
 
 For the full provenance data model — AAM text format, transfer type vocabulary, party roles and positions, date/currency representations, and tested query patterns — see `references/provenance-and-enrichment-patterns.md`.
 
