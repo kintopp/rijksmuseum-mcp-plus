@@ -209,6 +209,8 @@ export class OaiPmhClient {
       identifier: String(header.identifier ?? ""),
       datestamp: String(header.datestamp ?? ""),
       setSpecs: (Array.isArray(specs) ? specs : [specs]).map(String),
+      // Deleted records carry header @status="deleted" (deletedRecord=persistent).
+      ...(header["@status"] === "deleted" ? { deleted: true } : {}),
     };
   }
 
@@ -221,6 +223,30 @@ export class OaiPmhClient {
     const datestamp = String(header.datestamp ?? "");
     const setSpecs = (header.setSpec ?? []).map(String);
     const identifier = String(header.identifier ?? "");
+
+    // Deleted records carry header @status="deleted" and no <metadata> block,
+    // so every field below resolves empty — short-circuit to a minimal record.
+    if (header["@status"] === "deleted") {
+      return {
+        lodUri: identifier,
+        objectNumber: "",
+        datestamp,
+        deleted: true,
+        title: null,
+        description: null,
+        date: null,
+        dimensions: null,
+        type: null,
+        materials: [],
+        edmType: null,
+        creator: null,
+        imageUrl: null,
+        iiifServiceUrl: null,
+        rights: null,
+        setMemberships: setSpecs,
+        subjects: [],
+      };
+    }
 
     // RDF container
     const metadata = record.metadata ?? {};
