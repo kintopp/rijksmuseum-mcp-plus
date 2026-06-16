@@ -319,6 +319,7 @@ export function buildNameIndex(toolSchemas) {
   const index = new Map();
   for (const [tool, fields] of Object.entries(toolSchemas)) {
     for (const f of fields) {
+      if (f.path.endsWith("[]")) continue;          // skip primitive-array element dup of its container
       const leaf = f.path.split(".").pop().replace(/\[\]/g, "");
       if (!leaf) continue;
       const entry = { tool, ...f };
