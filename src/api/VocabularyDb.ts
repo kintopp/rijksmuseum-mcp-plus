@@ -3680,6 +3680,7 @@ export class VocabularyDb {
     const hasArtworks = unused ? false : (params.hasArtworks !== false); // default true; unused overrides
 
     const creatorFieldId = this.fieldIdMap.get("creator");
+    const subjectFieldId = this.fieldIdMap.get("subject");
     const birthPlaceFieldId = this.fieldIdMap.get("birth_place");
     const deathPlaceFieldId = this.fieldIdMap.get("death_place");
     const professionFieldId = this.fieldIdMap.get("profession");
@@ -3809,6 +3810,16 @@ export class VocabularyDb {
         `NOT EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)`
       );
       bindings.push(creatorFieldId);
+      // True orphan, not merely "not a maker": a person used only as a depicted
+      // subject is a legitimate term, not an orphaned maker name. Persons appear
+      // in only two roles (creator, subject), so excluding both yields the
+      // no-link-anywhere set. Both probes ride idx_mappings_field_vocab (cheap).
+      if (subjectFieldId !== undefined) {
+        conditions.push(
+          `NOT EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)`
+        );
+        bindings.push(subjectFieldId);
+      }
     }
 
     const where = conditions.join(" AND ");

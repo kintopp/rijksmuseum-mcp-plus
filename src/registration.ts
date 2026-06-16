@@ -2228,7 +2228,7 @@ function registerTools(
           hasArtworks: z.preprocess(stripNullCoerceBool, z.boolean().optional().default(true))
             .describe("Restrict to persons appearing as creator on ≥1 artwork. Default true."),
           unused: z.preprocess(stripNullCoerceBool, z.boolean().optional())
-            .describe("Restrict to persons who are NOT a creator on any artwork in the published LOD — the inverse of hasArtworks, for finding orphaned maker names. Overrides hasArtworks when both are set. Caveat: 'unused' means no creator link in the public LOD harvest; a name unused here may still be linked internally, so treat results as cleanup candidates, not confirmed orphans."),
+            .describe("Restrict to persons with no link to any artwork in the published LOD — neither as a maker (creator) nor as a depicted subject — i.e. genuinely orphaned authority names for catalogue clean-up. Overrides hasArtworks when both are set. Caveat: 'unused' means no link in the public LOD harvest; a name unused here may still be linked internally, so treat results as cleanup candidates, not confirmed orphans."),
           maxResults: z.number().int().min(1).max(TOOL_LIMITS.search_persons.max).default(TOOL_LIMITS.search_persons.default)
             .describe(`Maximum persons to return (1-${TOOL_LIMITS.search_persons.max}, default ${TOOL_LIMITS.search_persons.default}).`),
           offset: z.preprocess(stripNull, z.number().int().min(0).default(0).optional())

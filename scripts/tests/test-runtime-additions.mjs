@@ -28,13 +28,15 @@ for (const p of (unusedSC?.persons ?? [])) {
   assert(p.artworkCount == null, `A1: person ${p.vocabId} has no artworkCount (unused)`);
 }
 
-// A2: totalResults for unused:true ≈ 230,753 (SQL orphan count; allow ±0)
-// We verify it's in the right ballpark (>200,000 and <300,000)
+// A2: totalResults for unused:true ≈ 181,378 (true-orphan count: persons with
+// no creator AND no subject mapping). We verify it's in the right ballpark.
 const totalUnused = unusedSC?.totalResults ?? 0;
-assert(totalUnused > 200000 && totalUnused < 300000, `A2: totalResults ${totalUnused} ≈ 230753 (in 200k-300k range)`);
+assert(totalUnused > 150000 && totalUnused < 210000, `A2: totalResults ${totalUnused} ≈ 181378 (in 150k-210k range)`);
 
-// A3: exact parity with the SQL count
-assert(totalUnused === 230753, `A3: totalResults ${totalUnused} === 230753 (exact SQL parity)`);
+// A3: exact parity with the SQL count. Tightened to exclude depicted-only
+// persons (used as subject, not creator) — those are legitimate terms, not
+// orphaned maker names. Reverting the subject exclusion regresses this to 230753.
+assert(totalUnused === 181378, `A3: totalResults ${totalUnused} === 181378 (exact SQL parity, true orphans)`);
 
 // A4: unused:true, name:"Rembrandt" returns 0 (Rembrandt is a creator)
 const rUnusedRembrandt = await c.callTool({ name: "search_persons", arguments: { unused: true, name: "Rembrandt van Rijn" } });
