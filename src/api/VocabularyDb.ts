@@ -2,6 +2,7 @@ import Database, { type Database as DatabaseType, type Statement } from "better-
 import { escapeFts5, escapeFts5Token, expandFtsQuery, compileTextQuery, TEXT_QUERY_FIELD_COLUMNS, resolveDbPath } from "../utils/db.js";
 import { lruGetOrCreate } from "../utils/lru.js";
 import type { TextQueryDsl } from "../utils/db.js";
+import { labelForPlacetype, urisForPlacetypeLabel } from "../placetypeLabels.js";
 import {
   parseInscriptions,
   groupInscriptionMatches,
@@ -4541,13 +4542,24 @@ export class VocabularyDb {
       }
     }
     // Tier 3 (#320): placeType — restrict to artworks whose production place has this placetype.
+    // Accepts either a human label (e.g. "city", resolved back to its authority URI(s))
+    // or a raw authority URI (back-compat). plan 027.
     if (params.placeType) {
       const spatialFieldId = this.fieldIdMap.get("spatial");
       if (spatialFieldId !== undefined) {
-        conditions.push(
-          `a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid WHERE m.field_id = ? AND v.placetype = ?)`,
-        );
-        bindings.push(spatialFieldId, params.placeType);
+        const uris = urisForPlacetypeLabel(params.placeType);
+        if (uris.length > 0) {
+          const placeholders = uris.map(() => "?").join(", ");
+          conditions.push(
+            `a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid WHERE m.field_id = ? AND v.placetype IN (${placeholders}))`,
+          );
+          bindings.push(spatialFieldId, ...uris);
+        } else {
+          conditions.push(
+            `a.art_id IN (SELECT m.artwork_id FROM mappings m JOIN vocabulary v ON v.vocab_int_id = m.vocab_rowid WHERE m.field_id = ? AND v.placetype = ?)`,
+          );
+          bindings.push(spatialFieldId, params.placeType);
+        }
       }
     }
     // has* boolean predicates (#320)
@@ -4723,7 +4735,7 @@ export class VocabularyDb {
       // Run the dimension query (with LIMIT/OFFSET)
       const rows = this.db.prepare(dimQuery.sql).all(...dimQuery.extraBindings) as { label: string | number; cnt: number }[];
       const entries: StatsEntry[] = rows.map(r => ({
-        label: r.label,
+        label: params.dimension === "placeType" ? labelForPlacetype(String(r.label)) : r.label,
         count: r.cnt,
         percentage: Math.round((r.cnt / total) * 1000) / 10,
       }));
