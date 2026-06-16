@@ -148,3 +148,31 @@ export function buildContentBlocks(
 
   return blocks;
 }
+
+/**
+ * Mirror the shared `warnings` convention (a `string[]` on the response payload,
+ * used by the search-family tools) into the human text channel with a unified
+ * `⚠ ` prefix. This is the SINGLE place warnings reach `content[].text`; tool
+ * handlers MUST NOT append `⚠ ` lines themselves (that double-renders).
+ *
+ * - `humanText === undefined` → returned unchanged (the JSON-only legacy path
+ *   already serializes `warnings` inside the object).
+ * - `data.warnings` absent / not an array / empty → `humanText` unchanged.
+ * - otherwise → the warning lines are appended after a blank-line separator so
+ *   they stand visually apart from the result body.
+ *
+ * Pure + payload-tolerant: reads `warnings` off an unknown object and ignores it
+ * unless it is a non-empty array. Generic enough to live beside the block
+ * builder; deliberately NOT folded into `buildContentBlocks`, which stays
+ * payload-shape-agnostic.
+ */
+export function mirrorWarningsToText(
+  data: unknown,
+  humanText: string | undefined,
+): string | undefined {
+  if (humanText === undefined) return humanText;
+  const w = (data as { warnings?: unknown }).warnings;
+  if (!Array.isArray(w) || w.length === 0) return humanText;
+  const block = w.map(x => `⚠ ${x}`).join("\n");
+  return humanText ? `${humanText}\n\n${block}` : block;
+}
