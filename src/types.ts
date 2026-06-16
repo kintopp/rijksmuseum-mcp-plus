@@ -39,6 +39,7 @@ export interface OaiRecordHeader {
   identifier: string;
   datestamp: string;
   setSpecs: string[];
+  deleted?: boolean;
 }
 
 export interface OaiCreator {
@@ -59,6 +60,7 @@ export interface OaiParsedRecord {
   lodUri: string;
   objectNumber: string;
   datestamp: string;
+  deleted?: boolean;
   title: string | null;
   description: string | null;
   date: string | null;

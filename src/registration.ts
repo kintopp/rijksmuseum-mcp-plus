@@ -643,14 +643,17 @@ function formatBrowseSetRecord(r: BrowseSetRecord, i: number): string {
 
 /** Format an OAI-PMH record as a compact one-liner (Tier 2). */
 function formatRecordLine(r: Record<string, unknown>, i: number): string {
-  const obj = (r.objectNumber as string) || "?";
+  const deleted = r.deleted === true;
+  // Deleted records carry no objectNumber (no metadata block); fall back to the
+  // LOD URI (full mode) or header identifier (identifiersOnly mode).
+  const obj = (r.objectNumber as string) || (r.lodUri as string) || (r.identifier as string) || "?";
   const title = (r.title as string) || "";
   const creator = r.creator && typeof r.creator === "object" && (r.creator as Record<string, unknown>).name
     ? (r.creator as Record<string, unknown>).name as string
     : "";
   const type = (r.type as string) || "";
   const datestamp = (r.datestamp as string) || "";
-  let line = `${i + 1}. ${obj}`;
+  let line = `${i + 1}. ${deleted ? "[DELETED] " : ""}${obj}`;
   if (datestamp) line += ` | ${datestamp}`;
   if (type) line += ` | ${type}`;
   if (title) line += ` | "${title}"`;
@@ -3337,7 +3340,8 @@ function registerTools(
       description:
         "OAI-PMH delta feed — records changed within a date range since a known harvest checkpoint, with resumption-token pagination. " +
         "Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). " +
-        "Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image.",
+        "Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. " +
+        "Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.",
       inputSchema: z.object({
         from: optStr()
           .optional()
