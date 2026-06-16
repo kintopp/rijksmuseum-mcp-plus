@@ -29,13 +29,14 @@ Outputs:
   data/tgn-rdf-pending-manual-review.csv     (bucket 3)
 """
 import csv
-import re
 import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
-DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from geocoding import batch_geocode as bg  # noqa: E402
+
 DATA_DIR = PROJECT_DIR / "data"
 
 INPUT_CSV = DATA_DIR / "tgn-rdf-discrepancies.csv"
@@ -50,22 +51,14 @@ STATUS_WIKIDATA = "rijks_wikidata_authoritative"
 STATUS_REVIEW = "pending_manual_review"
 
 
-def make_subject_uri_re(place_id: str) -> re.Pattern:
-    return re.compile(
-        rf"<https://id\.rijksmuseum\.nl/{re.escape(place_id)}>\s+"
-        rf"<http[^>]+>\s+"
-        rf"<(http[^>]+)>"
-    )
-
-
 def rijks_external_uris(vocab_id: str) -> list[str]:
     """All external URIs Rijks publishes with the place as subject."""
-    fpath = DUMP_DIR / vocab_id
+    fpath = bg.DUMP_DIR / vocab_id
     if not fpath.exists():
         return []
     text = fpath.read_text()
-    rx = make_subject_uri_re(vocab_id)
-    return [m.group(1) for m in rx.finditer(text)]
+    rx = bg.make_subject_uri_re(vocab_id)
+    return [m.group(2) for m in rx.finditer(text)]
 
 
 def load_overrides() -> set[str]:

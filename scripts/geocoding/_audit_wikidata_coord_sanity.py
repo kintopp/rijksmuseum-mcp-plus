@@ -21,7 +21,9 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
-DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from geocoding import batch_geocode as bg  # noqa: E402
+
 DB = PROJECT_DIR / "data" / "vocabulary.db"
 COORDS_CSV = PROJECT_DIR / "data" / "tgn-rdf-rijks-wikidata-coords.csv"
 
@@ -63,7 +65,7 @@ def fetch_wikidata_labels(qid: str) -> dict[str, str]:
 
 
 def rijks_dump(vid: str) -> tuple[list[str], str | None]:
-    fpath = DUMP_DIR / vid
+    fpath = bg.DUMP_DIR / vid
     if not fpath.exists():
         return [], None
     text = fpath.read_text()

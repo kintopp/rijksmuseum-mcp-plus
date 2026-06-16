@@ -14,7 +14,9 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
-DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from geocoding import batch_geocode as bg  # noqa: E402
+
 CSV_PATH = PROJECT_DIR / "data" / "tgn-rdf-discrepancies.csv"
 
 RE_EQUIVALENT = re.compile(
@@ -30,7 +32,7 @@ RE_SAME_AS = re.compile(
 
 
 def equivalents_for(place_id: str) -> list[str]:
-    fpath = DUMP_DIR / place_id
+    fpath = bg.DUMP_DIR / place_id
     if not fpath.exists():
         return []
     try:
@@ -49,8 +51,8 @@ def main() -> int:
     if not CSV_PATH.exists():
         print(f"missing {CSV_PATH}", file=sys.stderr)
         return 1
-    if not DUMP_DIR.exists():
-        print(f"missing {DUMP_DIR}", file=sys.stderr)
+    if not bg.DUMP_DIR.exists():
+        print(f"missing {bg.DUMP_DIR}", file=sys.stderr)
         return 1
 
     rows = []
@@ -79,7 +81,7 @@ def main() -> int:
         method = r["existing_method_detail"] or "(blank)"
         by_method[method] += 1
         eqs = equivalents_for(vid)
-        if eqs == [] and not (DUMP_DIR / vid).exists():
+        if eqs == [] and not (bg.DUMP_DIR / vid).exists():
             not_in_dump += 1
             continue
         in_dump += 1

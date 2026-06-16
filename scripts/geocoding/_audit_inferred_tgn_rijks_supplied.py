@@ -14,7 +14,6 @@ Reports per detail bucket:
   - rows where NONE of the place's TGN IDs are in the Rijks dump
   - rows where the place isn't in the Rijks dump at all (cannot verify)
 """
-import re
 import sqlite3
 import sys
 from collections import Counter
@@ -22,37 +21,15 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
-DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from geocoding import batch_geocode as bg  # noqa: E402
+
 DB = PROJECT_DIR / "data" / "vocabulary.db"
 
 ELIGIBLE_DETAILS = (
     "v0.25-snapshot-backfill:whg_reconciliation",
     "v0.25-snapshot-backfill:wikidata_reconciliation",
 )
-
-
-def make_subject_uri_re(place_id: str) -> re.Pattern:
-    return re.compile(
-        rf"<https://id\.rijksmuseum\.nl/{re.escape(place_id)}>\s+"
-        rf"<http[^>]+>\s+"
-        rf"<(http[^>]+)>"
-    )
-
-
-def rijks_published_tgn_ids(vocab_id: str) -> tuple[set[str], bool]:
-    """Returns (set_of_tgn_ids_in_dump, dump_file_exists)."""
-    fpath = DUMP_DIR / vocab_id
-    if not fpath.exists():
-        return set(), False
-    text = fpath.read_text()
-    rx = make_subject_uri_re(vocab_id)
-    out: set[str] = set()
-    for m in rx.finditer(text):
-        obj = m.group(1)
-        if "vocab.getty.edu/tgn/" in obj:
-            tgn_local = obj.rstrip("/").rsplit("/", 1)[-1]
-            out.add(tgn_local)
-    return out, True
 
 
 def main() -> int:
@@ -92,7 +69,7 @@ def main() -> int:
     bucket_counts: dict[str, Counter] = {d: Counter() for d in ELIGIBLE_DETAILS}
     examples: dict[tuple[str, str], list[str]] = {}
     for vid, info in per_place.items():
-        rijks_tgns, dump_exists = rijks_published_tgn_ids(vid)
+        rijks_tgns, dump_exists = bg.rijks_published_tgn_ids(vid)
         if not dump_exists:
             bucket = "not_in_dump"
         elif info["vei_tgns"] & rijks_tgns:

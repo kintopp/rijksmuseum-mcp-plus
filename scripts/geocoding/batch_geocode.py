@@ -17,6 +17,7 @@ Usage:
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 import threading
@@ -53,6 +54,49 @@ def sparql_query(endpoint: str, query: str) -> list[dict]:
     url = f"{endpoint}?{params}"
     data = fetch_json(url, {"Accept": "application/sparql-results+json"})
     return data.get("results", {}).get("bindings", [])
+
+
+# ---------------------------------------------------------------------------
+# Rijksmuseum place-dump authority helpers
+#
+# Parse a place's file in the Rijksmuseum 2025 places dump to recover the
+# external authority URIs the museum officially publishes (its equivalent /
+# sameAs predicates). The strict-authority geocoding gate intersects the TGN IDs
+# returned here with a row's vocabulary_external_ids to decide a coordinate is
+# Rijks-authority-backed. Shared by the promote_* and audit geocoding scripts.
+# ---------------------------------------------------------------------------
+
+DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
+
+
+def make_subject_uri_re(place_id: str) -> re.Pattern:
+    """N-Triples matcher for lines whose subject is this place's
+    id.rijksmuseum.nl URI and whose object is a URI.
+    Capture groups: 1 = predicate, 2 = object."""
+    return re.compile(
+        rf"<https://id\.rijksmuseum\.nl/{re.escape(place_id)}>\s+"
+        rf"<(http[^>]+)>\s+"
+        rf"<(http[^>]+)>"
+    )
+
+
+def rijks_published_tgn_ids(vocab_id: str) -> tuple[set[str], bool]:
+    """Return (set_of_TGN_ids_Rijks_publishes_for_this_place, dump_file_exists).
+
+    The set holds bare TGN local ids (e.g. '7011405') drawn from the place
+    dump's equivalent/sameAs object URIs. The bool distinguishes 'place absent
+    from the dump' (cannot verify) from 'in the dump but no TGN concordance' —
+    callers that only need the set can discard it: ``ids, _ = ...``."""
+    fpath = DUMP_DIR / vocab_id
+    if not fpath.exists():
+        return set(), False
+    text = fpath.read_text()
+    out: set[str] = set()
+    for m in make_subject_uri_re(vocab_id).finditer(text):
+        obj = m.group(2)
+        if "vocab.getty.edu/tgn/" in obj:
+            out.add(obj.rstrip("/").rsplit("/", 1)[-1])
+    return out, True
 
 
 # ---------------------------------------------------------------------------

@@ -9,24 +9,16 @@ Looks at every URI value (not just sameAs/equivalent) and classifies by
 authority host, scoped to triples with the place itself as subject.
 """
 import csv
-import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
-DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
-CSV_PATH = PROJECT_DIR / "data" / "tgn-rdf-discrepancies.csv"
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from geocoding import batch_geocode as bg  # noqa: E402
 
-# Match any triple where the SUBJECT is the place's id.rijksmuseum.nl URI.
-# We capture predicate + object (URI) so we can both classify and report.
-def make_subject_uri_re(place_id: str) -> re.Pattern:
-    return re.compile(
-        rf"<https://id\.rijksmuseum\.nl/{re.escape(place_id)}>\s+"
-        rf"<(http[^>]+)>\s+"
-        rf"<(http[^>]+)>"
-    )
+CSV_PATH = PROJECT_DIR / "data" / "tgn-rdf-discrepancies.csv"
 
 
 AUTHORITY_HOSTS = (
@@ -89,13 +81,13 @@ def main() -> int:
 
     for r in unique_rows:
         vid = r["vocab_id"]
-        fpath = DUMP_DIR / vid
+        fpath = bg.DUMP_DIR / vid
         if not fpath.exists():
             bucket_counts["__not_in_dump"] += 1
             continue
         text = fpath.read_text()
         # All triples where the subject is THIS place's URI and object is a URI.
-        rx = make_subject_uri_re(vid)
+        rx = bg.make_subject_uri_re(vid)
         per_authority: set[str] = set()
         for m in rx.finditer(text):
             pred, obj = m.group(1), m.group(2)

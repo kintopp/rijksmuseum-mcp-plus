@@ -39,7 +39,6 @@ Usage:
 """
 import argparse
 import csv
-import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -53,7 +52,6 @@ from geocoding import batch_geocode as bg       # noqa: E402  — reuse TGN-RDF 
 DATA_DIR = PROJECT_DIR / "data"
 DB_PATH = DATA_DIR / "vocabulary.db"
 COORDS_CACHE = DATA_DIR / "inferred-rijks-tgn-coords.csv"
-DUMP_DIR = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "place_extracted"
 
 ELIGIBLE_DETAILS = (
     "v0.25-snapshot-backfill:whg_reconciliation",
@@ -98,29 +96,6 @@ def write_cache(rows: dict[str, dict]) -> None:
             w.writerow({k: rows[vid].get(k, "") for k in CACHE_FIELDS})
 
 
-def make_subject_uri_re(place_id: str) -> re.Pattern:
-    return re.compile(
-        rf"<https://id\.rijksmuseum\.nl/{re.escape(place_id)}>\s+"
-        rf"<http[^>]+>\s+"
-        rf"<(http[^>]+)>"
-    )
-
-
-def rijks_published_tgn_ids(vocab_id: str) -> set[str]:
-    """Return the set of TGN IDs Rijksmuseum publishes for this place via
-    its place dump's equivalent/sameAs predicates."""
-    fpath = DUMP_DIR / vocab_id
-    if not fpath.exists():
-        return set()
-    text = fpath.read_text()
-    out: set[str] = set()
-    for m in make_subject_uri_re(vocab_id).finditer(text):
-        obj = m.group(1)
-        if "vocab.getty.edu/tgn/" in obj:
-            out.add(obj.rstrip("/").rsplit("/", 1)[-1])
-    return out
-
-
 def fetch_eligible(conn: sqlite3.Connection,
                    excluded: set[str]) -> list[tuple[str, str, str]]:
     """Return [(vocab_id, label, rijks_supplied_tgn_id)]. For places with
@@ -152,7 +127,7 @@ def fetch_eligible(conn: sqlite3.Connection,
     for vid, info in per_place.items():
         if vid in excluded:
             continue
-        rijks_set = rijks_published_tgn_ids(vid)
+        rijks_set, _ = bg.rijks_published_tgn_ids(vid)
         eligible_tgns = sorted(info["vei_tgns"] & rijks_set)
         if not eligible_tgns:
             continue
