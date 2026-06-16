@@ -3,8 +3,8 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings even when the user doesn't name the collection.
 metadata:
-  version: "0.71"
-  last_updated: "2026-06-15"
+  version: "0.80"
+  last_updated: "2026-06-17"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -28,7 +28,7 @@ metadata:
 | "Find/order artworks by physical size or by date"                             | `search_artwork` with `heightRange`/`widthRange` (e.g. `"10-50"`, `"100-"`, `"-30"`) and/or `sort` (e.g. `"height:desc"`, `"dateEarliest:asc"`)  |
 | "Curatorial theme tags on a work / theme distribution"                        | `search_artwork(theme=…)` / `collection_stats(dimension="theme")`                                                    |
 | "Cataloguing-channel breakdown (designs, drawings, paintings, prints…)"       | `search_artwork(sourceType=…)` / `collection_stats(dimension="sourceType")`                                          |
-| "What changed since YYYY-MM-DD?" / "Has anything changed since the last harvest checkpoint?" — OAI-PMH delta | `get_recent_changes` (resumption-token pagination)                                                                   |
+| "What changed since YYYY-MM-DD?" / "Has anything changed since the last harvest checkpoint?" — OAI-PMH delta | `get_recent_changes` (resumption-token pagination; withdrawn records flagged as deletions)                           |
 | "What does the Rijksmuseum say about this work?"                              | `get_artwork_details`                                                                                                |
 | "Wikidata Q-id, handle.net URI, other external IDs"                           | `get_artwork_details` → `externalIds` (work-level) and `production[].creator.wikidataId`                             |
 | "Show this artwork to the user / open the zoomable viewer"                    | `get_artwork_image`                                                                                                  |
@@ -275,13 +275,16 @@ Use `compact: true` on `search_artwork` only when you need the actual object num
 
 | Domain     | Dimensions                                                                                                                                                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Artwork    | `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `sourceType`, `theme`, `exhibition`, `century`, `decade`, `decadeModified`, `height`, `width`                         |
-| Provenance | `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod`                                                   |
+| Artwork    | `type`, `material`, `technique`, `creator`, `depictedPerson`, `depictedPlace`, `productionPlace`, `placeType`, `sourceType`, `theme`, `exhibition`, `century`, `decade`, `decadeModified`, `height`, `width`            |
+| Creator    | `productionRole`, `profession`, `gender`, `creatorBirthDecade`, `creatorBirthCentury`, `birthPlace`, `deathPlace`                                                                                                       |
+| Provenance | `transferType`, `transferCategory`, `provenanceDecade`, `provenanceLocation`, `party`, `partyPosition`, `partyRole`, `currency`, `categoryMethod`, `positionMethod`, `parseMethod`                                       |
 
 
 `decadeModified` is clamped to 1990–2030; records modified outside that window land in the coverage residual rather than a bucket. Pass `sortBy: "count"` to flip ordinal dimensions (`decade`, `height`, `width`, etc.) from natural-order to most-populous-first.
 
-Filters from both domains combine freely; one call replaces N iterations. For gender breakdowns (no `creatorGender` dimension exists) run `search_persons` first, then call `collection_stats(creator=<vocabId>)` once per person and aggregate client-side — `creator` takes a single vocab ID, and (as in `search_artwork`) an array is AND-combined, not a cohort.
+The **Creator** dimensions bucket each artwork by its maker's enriched person record (`gender` → male/female/unknown; `creatorBirthDecade`/`creatorBirthCentury` by birth year). They count artworks, not persons — a multi-creator work counts under each maker, and works whose creator has no enriched person record fall in the coverage residual; treat the result as a distribution of *works*, not a census of artists. `placeType` buckets by the kind of place a work was made or depicts (city / region / nation, resolved to human labels). Most of these names also work as **filters** (e.g. `dimension="type", gender="female"` or `placeType="nations"`). A parallel family of presence filters narrows any breakdown to works that carry a given attribute: `hasInscription`, `hasNarrative`, `hasDimensions`, `hasExhibitions`, `hasExternalIds`, `hasParent`, `hasExaminations`, `hasModifications`, `hasWikidataCreator`, `hasAltNames`, plus the event flags `uncertain`, `unsold`, `gap`, `crossRef`.
+
+Filters from both domains combine freely; one call replaces N iterations. An aggregate **gender** (or `profession` / `creatorBirthCentury` / `birthPlace` / `deathPlace`) breakdown is now a single `collection_stats(dimension="gender")` call (see the Creator-dimension note above). To list the actual *works* by a demographic cohort you still need the two-step `search_persons` → `search_artwork(creator=<vocabId>)` pattern (§9) — `search_artwork` has no demographic filters, and `creator` takes a single vocab ID (an array is AND-combined, not a cohort).
 
 ### 2. Iconclass Research
 
@@ -463,7 +466,9 @@ search_artwork(productionPlace="Japan", type="print", maxResults=10)  # sample w
 
 ### 9. Gender and Demographic Analysis
 
-Demographic gating is a **two-step pattern** via `search_persons`. There are no `creatorGender` / `creatorBornAfter` / `creatorBornBefore` modifiers on `search_artwork` and no `creatorGender` dimension on `collection_stats` — demographic predicates live exclusively on `search_persons`, which returns vocab IDs you then feed to `search_artwork(creator=…)`.
+**For an aggregate breakdown**, `collection_stats` now carries the demographic dimensions directly — `dimension="gender"` (also `profession`, `creatorBirthDecade`, `creatorBirthCentury`, `birthPlace`, `deathPlace`), each usable as a filter too (e.g. `dimension="type", gender="female"`). These bucket *artworks* by their maker's enriched person record, so read them as distributions of works, not artist head-counts (see §1's Creator-dimension caveat).
+
+**For the actual works by a demographic cohort, the two-step pattern via `search_persons` is still required.** `search_artwork` has no `gender` / `bornAfter` / `bornBefore` / `profession` filters, so demographic predicates reach individual works only through `search_persons` (which returns vocab IDs) → `search_artwork(creator=…)`.
 
 ```
 # Step 1 — find the persons matching the demographic profile
@@ -486,7 +491,7 @@ search_artwork(creator=vocabId_2, type="painting", dateMatch="midpoint")
 
 **Coverage caveat:** demographic filters (`gender`, `bornAfter`, `bornBefore`) need person-enrichment — zero rows without it, undercounts where it's sparse. Structural filters (`birthPlace`, `deathPlace`, `profession`) pivot through creator-mapped artworks, so the artwork-level attribute leaks to co-creators on multi-creator works (e.g. prints) — expect false positives (incl. `anonymous`/`unknown` placeholders). Treat these person lists as approximate, not authoritative cohorts.
 
-Most persons in the catalogue never appear as a creator on any artwork — the default `hasArtworks: true` limits results to those who do.
+Most persons in the catalogue never appear as a creator on any artwork — the default `hasArtworks: true` limits results to those who do. Pass `unused: true` to invert that: it returns only persons with **no** creator mapping, a quick way to surface orphaned or duplicate authority entries.
 
 ### 10. Similarity Research
 
