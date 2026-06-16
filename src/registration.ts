@@ -19,7 +19,7 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { getOrComputeWithInflight } from "./utils/inflightCache.js";
-import { buildContentBlocks, type JsonTextOptions, type TextBlock } from "./utils/responseShape.js";
+import { buildContentBlocks, mirrorWarningsToText, type JsonTextOptions, type TextBlock } from "./utils/responseShape.js";
 import axios from "axios";
 import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
@@ -181,7 +181,8 @@ function structuredResponse(
   // (trimmed) object while structuredContent keeps the full `data`; the guard
   // then needs the full payload's size, not the trimmed copy's.
   const textPayload = opts?.jsonTextData ?? data;
-  const content = buildContentBlocks(textPayload, textContent, {
+  const humanText = mirrorWarningsToText(data, textContent);
+  const content = buildContentBlocks(textPayload, humanText, {
     jsonText: opts?.jsonText ?? JSON_TEXT_COMPAT,
     maxJsonTextBytes: opts?.maxJsonTextBytes,
     structuredContentEmitted: EMIT_STRUCTURED,
@@ -2101,7 +2102,6 @@ function registerTools(
           textParts.push(formatFacets(compactResult.facets));
         }
         if (compactResult.ids.length) textParts.push(compactResult.ids.join(", "));
-        if (compactResult.warnings?.length) textParts.push(...compactResult.warnings.map(w => `⚠ ${w}`));
         const data: InferOutput<typeof SearchResultOutput> = compactResult;
         return structuredResponse(data, textParts.join("\n"));
       }
@@ -2161,7 +2161,6 @@ function registerTools(
         textParts.push(formatFacets(result.facets));
       }
       textParts.push(...result.results.map((r, i) => formatSearchLine(r, i)));
-      if (result.warnings?.length) textParts.push(...result.warnings.map(w => `⚠ ${w}`));
       const structured: InferOutput<typeof SearchResultOutput> = result;
       return structuredResponse(structured, textParts.join("\n"));
     })
@@ -2271,10 +2270,6 @@ function registerTools(
           if (p.wikidataId) line += ` · Q${p.wikidataId.replace(/^Q/, "")}`;
           lines.push(line);
         }
-        if (result.warnings?.length) {
-          lines.push(...result.warnings.map(w => `⚠ ${w}`));
-        }
-
         return structuredResponse(result, lines.join("\n"));
       })
     );
@@ -4466,11 +4461,6 @@ function registerTools(
           }
         }
 
-        if (result.warnings?.length) {
-          lines.push("");
-          lines.push(...result.warnings.map(w => `⚠ ${w}`));
-        }
-
         return structuredResponse(result, lines.join("\n"));
       })
     );
@@ -4937,7 +4927,6 @@ function registerTools(
           results,
           ...(warnings.length > 0 && { warnings }),
         };
-        if (warnings.length) textParts.push("\n" + warnings.map(w => `⚠ ${w}`).join("\n"));
         return structuredResponse(data, textParts.join("\n"));
         });
       })
