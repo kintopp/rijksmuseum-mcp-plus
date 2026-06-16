@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from collections import Counter
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PLACE_DUMP = Path("/tmp/rm-dump-place")
 VOCAB_DB = REPO_ROOT / "data" / "vocabulary.db"
 LIDO_DB = REPO_ROOT / "data" / "lido-events-snapshot.db"

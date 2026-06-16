@@ -34,7 +34,7 @@ from pathlib import Path
 
 import requests
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DB_PATH = PROJECT_ROOT / "data" / "vocabulary.db"
 CACHE_PATH = PROJECT_ROOT / "data" / "audit" / "wikidata-creator-crosswalk-pilot.jsonl"
 

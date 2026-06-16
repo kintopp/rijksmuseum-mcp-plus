@@ -28,7 +28,7 @@ from xml.etree import ElementTree as ET
 LIDO_NS = "http://www.lido-schema.org"
 NS = {"lido": LIDO_NS}
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DUMP = Path("/Users/abosse/Downloads/rijksmuseum-data-dumps/202001-rma-lido-collection.xml")
 AUDIT_DIR = PROJECT_ROOT / "data" / "audit"
 

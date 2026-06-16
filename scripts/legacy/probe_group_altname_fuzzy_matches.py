@@ -39,7 +39,7 @@ from pathlib import Path
 from rapidfuzz import fuzz
 from unidecode import unidecode
 
-PROJECT_DIR = Path(__file__).resolve().parents[1]
+PROJECT_DIR = Path(__file__).resolve().parents[2]
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 EDM_ZIP = Path.home() / "Downloads" / "rijksmuseum-data-dumps" / "201911-rma-edm-actors.zip"
 OUT_TSV = PROJECT_DIR / "data" / "audit" / "group-altname-fuzzy-candidates.tsv"

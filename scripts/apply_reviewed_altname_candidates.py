@@ -1,6 +1,6 @@
 """Apply human-reviewed alt-name candidates to entity_alt_names with full provenance.
 
-One-shot for v0.26 dress-rehearsal DB. Companion to scripts/probe_group_altname_fuzzy_matches.py
+One-shot for v0.26 dress-rehearsal DB. Companion to scripts/legacy/probe_group_altname_fuzzy_matches.py
 (which generates candidates) and scripts/backfill_group_altnames_from_edm.py (which did the
 initial tier-0-only auto-insert).
 

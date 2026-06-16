@@ -21,7 +21,7 @@ import random
 import sqlite3
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 DB = ROOT / "data" / "vocabulary.db"
 OUT_DIR = ROOT / "offline" / "geo" / "gov-probe"
 OUT_DIR.mkdir(parents=True, exist_ok=True)

@@ -26,7 +26,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 HARVEST = REPO_ROOT / "scripts" / "harvest-vocabulary-db.py"
 
 DUMPS = [

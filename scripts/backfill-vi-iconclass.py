@@ -15,7 +15,7 @@ after an interrupt.
 
 Pre-condition: the target DB must have `artwork_hmo_ids` populated (#253). On a
 fresh v0.25+ harvest this happens automatically in `run_phase3()`. For pre-#253
-backups that still have `linked_art_uri`, run `scripts/materialize-artwork-hmo-ids.py`
+backups that still have `linked_art_uri`, run `scripts/legacy/materialize-artwork-hmo-ids.py`
 first.
 
 Usage:

@@ -28,7 +28,7 @@ from pathlib import Path
 
 import requests
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 DB = ROOT / "data" / "vocabulary.db"
 OUT_DIR = ROOT / "offline" / "geo" / "histogis-probe"
 OUT_DIR.mkdir(parents=True, exist_ok=True)

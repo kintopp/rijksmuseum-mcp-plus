@@ -31,7 +31,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_OUT_DIR = ROOT / "offline" / "geo" / "gov-probe"
 DEFAULT_INPUT = DEFAULT_OUT_DIR / "probe-input.csv"
 DEFAULT_CONCORDANCES = DEFAULT_OUT_DIR / "current-concordances.csv"

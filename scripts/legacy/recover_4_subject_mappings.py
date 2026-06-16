@@ -21,7 +21,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 VOCAB_DB = REPO_ROOT / "data" / "vocabulary.db"
 LIDO_DB = REPO_ROOT / "data" / "lido-events-snapshot.db"
 

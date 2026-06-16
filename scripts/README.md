@@ -2,16 +2,25 @@
 
 All scripts operate on the databases in `data/`. Python scripts use the `embeddings` conda env unless noted. Node scripts require `npm run build` first.
 
+## CLI
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `cli.mjs` | Node | Headless CLI over the server's stateless tools (`npm run cli -- <verb>`, `rijks-mcp` bin). An MCP *client*, not a second search implementation: `--http <url>`/`RIJKS_MCP_HTTP` hits a warm server, else stdio-spawns `dist/index.js`. JSON-first output (JSONL / `--json` / `--table` / `--fields`); counts + paging on stderr; exit 0/1/2. Verbs and flag coercion derive from the live `inputSchema`. Use `env -u RIJKS_MCP_HTTP …` to exercise unpushed local changes. |
+
 ## Harvest & DB Build
 
 The core pipeline that produces the two databases (vocabulary + embeddings) from scratch. Iconclass moved to its own service in v0.23.1 — see `legacy/` below.
 
 | Script | Lang | Description |
 |--------|------|-------------|
+| `harvest-preflight.py` | Python | Pre-flight check for `harvest-vocabulary-db.py`: verifies dumps, env, DB schema, and disk are in place before a multi-hour run. `--skip-dump` / `--db PATH`. |
 | `harvest-vocabulary-db.py` | Python | Full vocabulary DB builder. 6 phases: data dump parsing, OAI-PMH harvest (836K records), vocab resolution, Linked Art enrichment, post-processing (FTS5, importance, geocoding import, **offline-dump enrichment** — actor bios, wikidata, place/concept hierarchy, coordinate inheritance). Hours to run. Pass `--skip-enrichment` to bypass the dump-based enrichment step. |
 | `compute_importance.py` | Python | Computes the `importance` column on artworks. Called by harvest Phase 3 but also runnable standalone. |
 | `harvest-person-names.py` | Python | Targeted-refetch tool for LA-shape (21xxx) person name variants. Canonical population is in `harvest-vocabulary-db.py` (covers both 21xxx LA-shape and 31xxx Schema.org-shape via `INSERT OR IGNORE`); this script is for ad-hoc upstream-correction refetch only. Idempotent — never deletes. |
 | `package-harvest-artifacts.sh` | Bash | Bundle post-harvest artifacts (report, log, audit JSON + CSVs) into a single tarball for transfer back from a remote harvest machine. Run from the repo root with the harvest version label, e.g. `scripts/package-harvest-artifacts.sh v0.27`. The DB is excluded by default — pass `--with-db` to include it. Closes #229B (audit transfer hygiene). |
+
+Finished one-off harvest-recovery passes (`finish-v024-phase3`, `materialize-artwork-hmo-ids`, the three `recover_*`, `enrich-orphan-vocab-csv`) have been archived — see [Legacy](#legacy-legacy).
 
 ## Enrichment & Backfill
 
@@ -23,6 +32,14 @@ Scripts that add data the harvest doesn't produce on its own. Results are captur
 | `backfill-dates.py` | Python | Backfills missing `date_earliest`/`date_latest` via Search API + Linked Art resolution. Hits live APIs. |
 | `backfill-iiif-ids.py` | Python | Backfills `iiif_id` from OAI-PMH `edm:isShownBy` URLs. No extra HTTP beyond OAI-PMH pages. |
 | `reimport-snapshots.py` | Python | Reimports all supplementary data from snapshot CSVs in `data/` after a fresh harvest. COALESCE semantics (fills NULLs only). Supports `--only actors|broader|geo|dates` and `--dry-run`. |
+| `backfill-artwork-joins.py` | Python | Resolves `artwork_exhibitions` / `related_objects.related_art_id` / `artwork_parent.parent_art_id` joins via the Linked Art API for DBs where Phase 3's URI-suffix extraction left them unfilled. `--dry-run`, `--threads`. |
+| `backfill-vi-iconclass.py` | Python | Backfills VisualItem-sourced Iconclass concepts into `mappings` (field=`subject`) via the Linked Art API (#203). Needs `artwork_hmo_ids` (#253). `--resume`. |
+| `backfill-production-role-pairs.py` | Python | Builds the `production_role_pairs` table from Linked Art `produced_by.part[]`, restoring per-part creator↔role association that the `mappings` table loses at harvest — powers same-row `creator` + `productionRole` matching (#357). |
+| `apply_curated_label_corrections.py` | Python | Overrides upstream typos in `vocabulary.label_{en,nl}` from `data/backfills/curated-label-corrections.csv`. Refuses rows whose current label ≠ the CSV's expected `old_label`. Idempotent. `--dry-run`. Re-apply after every fresh harvest. |
+| `apply_reviewed_altname_candidates.py` | Python | Applies human-reviewed alt-name candidates to `entity_alt_names` with full provenance + the three-tier `tier` vocabulary (#268). Companion to `probe_group_altname_fuzzy_matches.py`. |
+| `backfill_group_altnames_from_edm.py` | Python | Backfills `entity_alt_names` for `type='group'`/`'organisation'` by matching EDM actors-dump prefLabels against vocab labels (#306). One-shot ahead of the harvest landing the same logic. `--dry-run`. |
+| `cleanup_bogus_tgn_external_ids.py` | Python | Deletes the 16 `vocabulary_external_ids` rows where `authority='tgn'` but the id is provably not a TGN ID (#335). Idempotent. `--dry-run`. |
+| `post-harvest-corrections.py` | Python | Stage F: re-applies local-vs-prod drift patches lost in the v0.25 cold rerun (TGN-redirect coords + manual `is_areal` flips) from `data/backfills/` TSVs. Per-row idempotent + `.applied` marker. `--apply`. |
 | `backfills/2026-05-01-apply-theme-en-labels.py` | Python | Applies hand-curated English labels to top-100 theme vocab terms (#300). Reads `backfills/theme-en-labels-top-100.tsv`, idempotent (only writes where `label_en IS NULL`). Re-apply after every fresh harvest. |
 
 ## Shared modules (`lib/`)
@@ -36,6 +53,7 @@ Importable library modules (not standalone scripts) used by the harvest, geocodi
 | `lib/altname_methods.py` | Python | `tier_for_row` semantics for person/group alt-name candidates (#268): exact matches stay deterministic; only reviewed fuzzy candidates are elevated to manual. |
 | `lib/provenance_enrichment_methods.py` | Python | `METHOD_TO_TIER` for provenance event/party enrichment method literals. |
 | `lib/provenance-enrichment-methods.mjs` | Node | JS twin of `provenance_enrichment_methods.py`, imported by the provenance `.mjs` writeback/audit scripts. `test-enrichment-tiers.py` asserts the two stay in sync. |
+| `lib/raw-text-hash.mjs` | Node | `rawTextHash()` (sha256 of an event's `raw_text`) + `buildDupOrdinals()` — the content-addressing primitives for the provenance enrichment store (plan 015 / #185). Imported by the migrate/reapply/emit enrichment-store scripts. |
 | `lib/placetype_map.py` | Python | `AAT_IS_AREAL` (206 entries) + `WD_IS_AREAL` (632 entries) areal-place classifier dicts. Append-only contract — never modify existing values. v0.25 extension 2026-04-26 added 129 AAT + 565 WD entries (100% TGN coverage, 89.7% Wikidata). |
 | `lib/geo_math.py` | Python | Haversine + pairwise-distance helpers (`haversine_km`, `trimmed_pairwise_km`, `max_pairwise_km`) used by the coord-inheritance audit. |
 | `lib/harvest_audit.py` | Python | Per-phase harvest audit framework (#222): `run_phase_audit`, `AuditResult`, table/summary formatters. |
@@ -53,6 +71,8 @@ The place-geocoding subsystem — the multi-phase pipeline plus the apply/promot
 | `geocoding/run_authority_only_geocode.py` | Python | Orchestrator for the strict authority-only re-geocode (no inferred-tier writes). |
 | `geocoding/preflight_regeo.py` | Python | Pre-flight checker for a re-geocode run: required env vars, committed-file presence, DB schema/columns, disk space. `--skip-live-api` for offline checks. |
 | `harvest-placetypes.py` *(in `scripts/`)* | Python | Populates `vocabulary.placetype` / `placetype_source` / `is_areal` via TGN + Wikidata SPARQL using `lib/placetype_map.py`. `--reclassify-only` re-applies an updated classifier without re-querying upstream. |
+| `post_run_diagnostics.py` *(in `scripts/`)* | Python | Read-only post-geocode gate: emits a markdown report and exits non-zero unless all required targets pass (WHG >500 km rate, areal pollution, NULL/invalid `coord_method`, placetype coverage). The orchestrator's success signal. |
+| `_download_v025_assets.sh` *(in `scripts/`)* | Bash | Pre-harvest download of the v0.25 geocoding seed bundle (WOF per-country Parquet ~2 GB + Pleiades places) into `data/seed/`, with sha256 manifests. Resumable (`curl -C -`). |
 | `geocoding/apply_areal_overrides.py` + `areal_overrides.tsv` | Python + Data | Applies manual `is_areal=1` overrides from the curated 101-entry TSV to vocab rows whose centroid is meaningless for point queries (continents, oceans, historical polities, region-scale entities). `build_areal_overrides.py` regenerates the TSV from a seed + DB sweep. |
 | `geocoding/apply_rijks_authority_coords.py` | Python | Writes coords for places whose Rijks-supplied authority ID (TGN/Wikidata/GeoNames) resolves to a point. |
 | `geocoding/apply_tgn_areal_flag.py` | Python | Flags `is_areal=1` for places whose Rijks-supplied TGN ID is a region/polity. |
@@ -92,8 +112,23 @@ One-shot diagnostic probes + apply script that surfaced and fixed 13 obsolete-TG
 | `generate-embeddings-mps.py` | Python | Generates artwork embeddings locally using Apple MPS GPU. Streaming to SQLite. |
 | `generate-vocabulary-embeddings-modal.py` | Python | Generates artwork embeddings on Modal cloud GPUs (A10) under different source text strategies. Production script for `no-subjects` strategy. |
 | `generate-description-embeddings-modal.py` | Python | Generates description-only embeddings on Modal A10G. PCA dimensionality reduction (384→256), int8 quantisation. Writes `desc_embeddings` + `vec_desc_artworks` tables to embeddings DB. |
+| `assemble-embeddings-release.py` | Python | Assembles a deployable embeddings DB from a freshly-regenerated MAIN index (`artwork_embeddings`/`vec_artworks`) plus the carried-over DESCRIPTION index (`desc_embeddings`/`vec_desc_artworks`). Run after any main-only regen so find_similar's Description channel survives — `--main`/`--desc-source`/`--out`. |
+| `build-inscription-embed-text.mjs` | Node | Pre-pass for #383: runs the shipping TS parser (`formatInscriptionsForEmbedding`) over every inscription-bearing artwork and writes boilerplate-stripped text to a sidecar DB the Modal generator reads in Phase 1. Imports from `dist/`. |
+| `delete_phantom_vec0_rowids.mjs` | Node | Surgical cleanup of phantom `vec_artworks` rowids left by the vec0 chunk allocator (#261). Dry-run unless `--apply`; `--db` defaults to `data/embeddings.db`. |
 
 (The original non-streaming generator, `generate-embeddings-outdated.py`, now lives in `legacy/` — see below.)
+
+## IIIF Image Corpus
+
+The ~729K-image corpus ingest — downloads from `iiif.micr.io` and packs ~200 per-shard tarballs into the Tigris-backed Railway bucket. Independent of the two SQLite DBs. Nightly runbook: `offline/runbooks/ingest-iiif-tarballs.md`.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `ingest-iiif-tarballs.py` | Python | Per-shard ingest pipeline: download a shard's 1568px JPEGs, pack one `tarballs/shard-NNN.tar`, upload to the bucket. Resume-safe; `--shard-id`/`--shard-range`/`--audit`. Run via `uv run --with requests --with boto3 …`. |
+| `_iiif_ingest_state.py` | Python | Importable per-shard state machine (`ShardState`/`ShardStatus`/`classify_action`) used by `ingest-iiif-tarballs.py` and the repair/verify tools. Not a standalone script. |
+| `verify-bucket-tar-integrity.py` | Python | Pulls a shard's bucket tarball and re-hashes every member against the sidecar manifest's sha256s. Read-only (does not modify the bucket). |
+| `repair-case-collisions.py` | Python | Repairs v0.24 tarballs whose members were corrupted by APFS case-insensitive filename collisions (126 `iiif_id` pairs across 92 tarballs). Rewrites affected tarballs in place. |
+| `redownload-missing-local.py` | Python | Re-fetches JPEGs that vanished from the SSD loose-file `downloads/` cache (the bucket stays authoritative), verifying sha256 against the ledger. Bucket + state files untouched. |
 
 ## Analysis & Probing
 
@@ -108,6 +143,27 @@ Read-only scripts that inspect data without modifying it.
 | `generate-cluster-viz.py` | Python | Generates interactive Plotly HTML from pre-computed cluster data. |
 | `discover-linked-art-schema.py` | Python | Exhaustive Linked Art field-path analysis. Resolves sample artworks, walks JSON-LD trees, reports coverage/cardinality/anomalies. Run before harvests. |
 | `provenance-sample-analysis.mjs` | Node | Analyses 100 stratified provenance records from vocab DB to catalogue patterns for PEG grammar design. |
+| `probe-edm-shape.py` | Python | Captures the current OAI-PMH EDM wire shape as a baseline, so the announced Europeana-validation EDM release can be diffed against it. Read-only. Sibling to `probe-harvest.py` (which monitors the Linked Art JSON shape). |
+| `probe-dumps.py` | Python | Quick probe of the Schema.org / Linked Art dump archives: samples members, enumerates predicates with counts. Used by the v0.26 dump audit. |
+
+### Inscription field analysis (#383)
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `build-inscription-report.py` | Python | Explanatory report characterising `artworks.inscription_text` as a mark-and-annotation log rather than a complete text corpus. → `offline/explorations/inscription-field-analysis.html`. |
+| `build-inscription-explorer.mjs` | Node | Parser-centric companion visualization: shows the five query axes the shipping parser unlocks, calling the real `VocabularyDb.searchInscriptions()`. Imports from `dist/`. |
+| `diagnose-inscription-parser.mjs` | Node | Diagnostic (R7): runs the shipping parser over the full inscription population and reports vocabulary coverage + the unrecognised long tail, so the bucket maps can be tuned before the facet contract freezes. Imports from `dist/`. |
+
+### LIDO 2020 snapshot (one-off)
+
+Frozen-2020 reference frame extracted from the Rijksmuseum LIDO XML dump, used to cross-validate the provenance parser and recover dropped mappings. Joinable to the vocab DB via `priref`.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `extract-lido-events.py` | Python | Streams the dump and writes per-record event/actor/inscription/classification metadata to `data/lido-events-snapshot.db`. |
+| `extract-lido-subjects.py` | Python | Second pass over the same XML: writes a `lido_subjects` table (subjectConcept iconclass URIs/notations + bilingual labels) to recover the #245 subject orphans. |
+
+The one-off cross-walk / dump-quality / gazetteer-suitability probes (`compare-iconclass-sources`, `probe_group_altname_fuzzy_matches`, `probe_wikidata_creator_crosswalk`, `probe_317_html_dumps`, `probe_318_external_stubs`, `build-gov-probe-input`, `probe-gov-overlap`, `probe-globalise-overlap`, the `probe-histogis-*`, the `probe-rce-*`) have been archived — see [Legacy](#legacy-legacy).
 
 ## Provenance
 
@@ -118,6 +174,7 @@ Read-only scripts that inspect data without modifying it.
 | `batch-parse-provenance.mjs` | Node | Batch parse provenance records from vocab DB. Runs Layer 1 (PEG parser) + Layer 2 (interpretation), populates `provenance_events` + `provenance_periods`. Supports `--dry-run`, `--limit`, `--layer1-only`. |
 | `audit-provenance-batch.mjs` | Node | Automated parser audit via Anthropic Batches API. Six modes: `silent-errors`, `pattern-mining`, `semantic-catalogue`, `position-enrichment`, `structural-signals`, `type-classification`. Supports `--resume`, `--dry-run`, `--stratify`, `--model`, `--thinking`, `--records`. |
 | `audit-disambiguate-parties.mjs` | Node | LLM-based party disambiguation: decomposes merged party text (213+ records) into structured sender/receiver/agent names. Outputs audit JSON. |
+| `recompute-periods.mjs` | Node | Re-derives `provenance_periods` (Layer 2) from `provenance_events` (Layer 1) via `interpretPeriods()`. Use after event splits/reclassifications make the periods stale. `--all`/`--artwork-ids`/`--dry-run`. |
 
 ### Writebacks
 
@@ -136,6 +193,7 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 | `writeback-event-splitting.mjs` | Node | Writes back LLM event splits: replaces original event with multiple sub-events, re-sequences all events/parties for the artwork. |
 | `writeback-field-corrections.mjs` | Node | Writes back LLM field corrections: truncated/wrong locations (#149/#119), missing receivers (#116). |
 | `backfill-enrichment-reasoning.mjs` | Node | Backfills `enrichment_reasoning` column from all audit JSON files (type classification, position enrichment, party disambiguation). |
+| `translate-party-extraction.mjs` | Node | Glue: rewrites `audit-provenance-batch --mode party-extraction` output (`data.extractions[]`) into the `data.corrections[]` shape `writeback-field-corrections.mjs` expects (one row per party). |
 
 ### Review & Collection
 
@@ -148,11 +206,24 @@ Deterministic and LLM-informed write-back scripts that update `provenance_events
 | `collect-round1-results.mjs` | Node | One-time: collects round 1 position-enrichment batch results from Anthropic API. |
 | `collect-disambig-results.mjs` | Node | One-time: collects party-disambiguation batch results from Anthropic API. |
 
+### Enrichment store (content-addressed, plan 015 / #185)
+
+Layer 2 of the re-parse survival story: a content-addressed `provenance_enrichments` store keyed on each event's `raw_text` hash (via `lib/raw-text-hash.mjs`), so LLM/manual enrichments re-attach by content rather than by ordinal position after a re-parse changes event segmentation.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `migrate-enrichments-to-store.mjs` | Node | One-time migration of existing DB-resident LLM enrichments + manual CSV corrections + audit-JSON structural ops into the `provenance_enrichments` store. Additive modes `--value`/`--manual`/`--structural`; `--dry-run`. |
+| `reapply-enrichments-from-store.mjs` | Node | Re-applies value, parties, and structural enrichments from the store onto current provenance tables, content-matching each to the event still carrying the same `raw_text`. Re-apply order mirrors POST-REPARSE-STEPS. |
+| `emit-deterministic-parents.mjs` | Node | Read-only parent-text oracle: re-parses `artworks.provenance_text` with a clean deterministic pass and emits `{object_number, sequence, raw_text}` JSONL, so structural ops can be content-addressed on the pre-split parent event. Writes nothing. |
+
 ### Post-Reparse
 
 | File | Description |
 |------|-------------|
 | `POST-REPARSE-STEPS.md` | Step-by-step guide for restoring LLM enrichments + manual corrections after a full re-parse (6 steps, strict order). |
+| `verify-audit-files.mjs` | Pre-flight for POST-REPARSE: asserts every expected audit JSON exists, is **not** a dry-run, and carries collected results — guards against the silent stale-dry-run failures of the 2026-04-19 incident. Exit 0/1. |
+| `provenance-parse-snapshot.mjs` | Per-record before/after parse-regression harness: snapshots events + parties across the corpus so two runs (e.g. old vs new grammar) diff per artwork into INTENDED (`resegmented`) vs COLLATERAL (`field_drift`) change. `--from-db` reads stored rows instead of re-parsing. |
+| `reconstruct-7d-from-baseline.mjs` | Restores the Step-7d party-extraction enrichments (199 events / 361 parties in the v0.40 baseline) that a fresh re-parse can't reproduce — the 7d audit JSON was never persisted, so the baseline DB is the only surviving record. |
 | `provenance-change-report.mjs` | Read-only diff: compares `artworks.provenance_text_hash` (current harvest) against `provenance_parse_state` (last parse) or a `--baseline <db>` to classify artworks as unchanged / modified / new / removed and flag re-enrichment candidates. |
 | `manual-corrections-2026-03-23.csv` | Manual corrections CSV: hand-verified fixes for parser artifacts (lot numbers parsed as years, missing transfer types, etc.). Applied by `reimport-snapshots.py` or writeback scripts. |
 
@@ -188,9 +259,57 @@ Scripts retained for reference but no longer part of any release path. Do not ru
 | `legacy/generate-embeddings-outdated.py` | Python | **Superseded** by `generate-embeddings-mps.py`. Original non-streaming artwork-embedding generator. |
 | `legacy/backfill-from-v23.1.mjs` | Node | One-time migration that carried supplementary columns forward from a v0.23.1 vocab DB into the v0.24 re-harvest. Not part of any current release path. |
 
+### One-off harvest recovery
+
+Finished recovery passes for a specific past harvest's gaps — idempotent, but obsolete now that newer harvests fix the underlying cause at source. Their repo-root anchor was bumped one level on archival so they still run from the repo root (`python scripts/legacy/<name>.py`).
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `legacy/finish-v024-phase3.py` | Python | Replayed the remaining v0.24 Phase-3 work after the 2026-04-17 crash (temp-table JOINs in place of the O(N×M) correlated UPDATEs). |
+| `legacy/materialize-artwork-hmo-ids.py` | Python | One-shot: populated `artwork_hmo_ids` (#253) into a pre-Phase-3-drops DB still carrying `linked_art_uri`. Done automatically on v0.25+ harvests. |
+| `legacy/recover_245_dropouts.py` | Python | Re-parsed the four affected v0.26 dump dirs (post-Tier-1 parser + iconclass.db fallback), recovering 271 dropped vocab rows (#245). No network. |
+| `legacy/recover_316_alias_places.py` | Python | Recovered label-less alias-stub places carrying an internal `schema:sameAs` to an already-loaded `id.rijksmuseum.nl` row (#316, Tier 2 of #245). |
+| `legacy/recover_4_subject_mappings.py` | Python | Re-created the 4 subject `mappings` from the v0.26 orphan CSV whose vocab targets became live (after `extract-lido-subjects.py`). |
+| `legacy/enrich-orphan-vocab-csv.py` | Python | Enriched `orphan-vocab-ids-v0.24.csv` with Phase-2 failure status + dump-side label lookup (v0.26 orphan triage). Read + CSV only. |
+
+### One-off investigation probes
+
+Read-only spikes whose findings already informed a now-locked decision (external-gazetteer suitability, dump quality, vocab cross-walks). Kept for reference / re-running the same analysis on a future harvest.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `legacy/compare-iconclass-sources.py` | Python | Compared Iconclass subjects from OAI-PMH vs Linked Art VisualItem over the Top-100 curated set (#203, closed). |
+| `legacy/probe_group_altname_fuzzy_matches.py` | Python | Generated 6-tier fuzzy alt-name candidates (EDM prefLabels ↔ vocab labels) for groups/organisations (#268). → TSV. Feeds `apply_reviewed_altname_candidates.py`. |
+| `legacy/probe_wikidata_creator_crosswalk.py` | Python | Pilot for #307: Wikidata cross-walk hit-rate on 21xxx creators lacking a direct Wikidata URI. |
+| `legacy/probe_317_html_dumps.py` | Python | Quantified how many `rm-dump-*` `.nt` files are actually saved 404-HTML error pages (#317). |
+| `legacy/probe_318_external_stubs.py` | Python | Located label-less Linked Art place stubs whose only pointer is an external `schema:sameAs` (#318); measured LIDO 2020 label coverage. |
+| `legacy/probe-lido-dump.py` | Python | Exploratory streaming census of the 12 GB LIDO 2020 XML (tag paths, classification/role/event URIs, record count). |
+| `legacy/build-gov-probe-input.py` | Python | Built the 200-row stratified probe-input + current-concordances CSVs for the GOV gazetteer investigation. |
+| `legacy/probe-gov-overlap.py` | Python | Probed GOV (German historical gazetteer) overlap for the 200-row sample — MiniGOV bulk files + live API. |
+| `legacy/probe-globalise-overlap.py` | Python | Pre-Stage-E sizing probe for GLOBALISE/ESTA gazetteer overlap with the v0.25 DB. |
+| `legacy/probe-histogis-where-was.py` / `legacy/probe-histogis-coverage.py` / `legacy/probe-histogis-non-nl.py` | Python | HistoGIS (temporal polygon) coverage probes — point-in-polygon, QID-tag, and non-NL Central-European-stratified variants. |
+| `legacy/probe-rce-funnel.py` / `legacy/probe-rce-name-search.py` | Python | RCE/Rijksmonument funnel diagnostic + name-search rescue probe for ungeocoded building-shaped Dutch places. |
+
 ## Tests (`tests/`)
 
-Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTransport. Use `run-all.mjs` to run all stdio tests in sequence.
+Run an individual test with `node scripts/tests/<script>`. Tests come in three shapes: **hermetic** unit tests (in-memory SQLite / pure functions imported from `dist/` — no `data/` access), **integration smoke** tests (boot `dist/index.js` over stdio via the MCP SDK `Client`), and **query-plan** guards (assert `EXPLAIN QUERY PLAN` shape). The canonical entrypoints are the `npm` suites below; `run-all.mjs` is an older stdio-only runner kept for convenience but is **not** what CI runs.
+
+### npm suites
+
+| Command | Runs |
+|---------|------|
+| `npm test` | `test-pure-functions.mjs` only (fast). |
+| `npm run test:base` | The hermetic CI core: pure-functions, provenance-parser, provenance-peg, inscription-parser, overlay-scoring, lru-cache, origin-validation, text-query-dsl, usage-stats-perinput, inflight-cache, provenance-enrichment-store, enrichment-review-html, provenance-change-report, response-shape, warnings-rendering, audit-name-collision, placetype-labels, oai-deletions. |
+| `npm run test:ci` | `test:base` + `test-viewer-build.mjs` + `test-vocabdb-fixture.mjs`. |
+| `npm run test:all` | `test:base` + `test-harvest-run-provenance.py` (Python). |
+| `npm run test:track2` | title-variants, parent-grouping, related-objects, track2-mcp, creator-vocabid, attribution-same-row, attribution-qualifiers, stats-provenance-plan, stats-unfiltered-provenance-plan, stats-field-shape-plan, collection-stats-tier1/2/3, runtime-additions. |
+| `npm run test:inscriptions` | `test-inscription-details.mjs` + `test-search-inscriptions.mjs` (need a built `dist/` + DB). |
+| `npm run test:fixture` | `test-vocabdb-fixture.mjs`. |
+| `npm run test:viewer-build` | `test-viewer-build.mjs`. |
+| `npm run test:viewer-app` | `test-app-conformance.mjs` (needs `./dist`). |
+| `npm run test:cli` | `test-cli.mjs` (needs `dist/` + DBs + live IIIF; excluded from `test:all`). |
+
+### Test catalogue
 
 | Script | Assertions | Description |
 |--------|-----------|-------------|
@@ -223,6 +342,54 @@ Run with `node scripts/tests/<script>`. All use MCP SDK Client + StdioClientTran
 | `profile-cross-filters.mjs` | — | Cross-filter performance profiling |
 | `profile-db-space.mjs` | — | DB space analysis |
 | `test-classify-path.py` | 39 | Python unit tests for `discover-linked-art-schema.py`'s `classify_path()` — covers the context-aware `EVIDENCE_DATA_PARENTS` rule (#275), the multilingual `notation`/`@language`/`@value` scaffolding rule, and regression coverage of the v0.24 extractor paths added 2026-04-26. |
+
+### Hermetic & unit tests (CI core)
+
+Imported from `dist/` or run against in-memory SQLite — no `data/` access. Part of `npm run test:base`/`test:ci`/`test:all`.
+
+| Script | Description |
+|--------|-------------|
+| `test-inscription-parser.mjs` | Unit tests for the inscription parser (`src/inscriptions.ts`, #383). Imports from `dist/`. |
+| `test-overlay-scoring.mjs` | Tests for `overlay-scoring.mjs` pure functions (`iou`, `centerOffsetPct`, `sizeRatio`, …). |
+| `test-lru-cache.mjs` | Unit tests for `lruGetOrCreate` (#79). |
+| `test-origin-validation.mjs` | Unit tests for the `/mcp` Origin allowlist helpers (`src/utils/origin.ts`). |
+| `test-text-query-dsl.mjs` | Tests for `compileTextQuery` — the `textQuery` DSL → FTS5 MATCH compiler (#363). |
+| `test-usage-stats-perinput.mjs` | Unit test for the #378 slow-query `UsageStats` instrumentation (per-input histograms, LRU-capped map). In-memory. |
+| `test-inflight-cache.mjs` | Unit test for `getOrComputeWithInflight` (#378 Step 4) — cache + in-flight de-dup behind `semantic_search`. |
+| `test-provenance-enrichment-store.mjs` | Hermetic tests for the content-addressed enrichment store. In-memory SQLite. |
+| `test-enrichment-review-html.mjs` | Tests for the enrichment review HTML generator (chain-of-thought leak suppression, etc.). |
+| `test-provenance-change-report.mjs` | Fixture-based unit tests for `provenance-change-report.mjs`'s pure diff function. In-memory. |
+| `test-response-shape.mjs` | Unit tests for `buildContentBlocks` (`src/utils/responseShape.ts`). |
+| `test-warnings-rendering.mjs` | Unit tests for `mirrorWarningsToText` — the single warnings→`content[].text` path. |
+| `test-audit-name-collision.mjs` | Unit tests for `buildNameIndex`/`findShapeCollisions` in the schema-audit harness (primitive-array self-collision fix). |
+| `test-placetype-labels.mjs` | Unit tests for `placetypeLabels` (`src/placetypeLabels.ts`). |
+| `test-oai-deletions.mjs` | Unit test for OAI-PMH deleted-record surfacing (`header @status="deleted"`, #394). |
+| `test-vocabdb-fixture.mjs` | Hermetic characterization tests for `VocabularyDb` (plans/003): a tiny synthetic fixture DB locks in core query-builder behaviour. |
+| `test-harvest-run-provenance.py` | Python unit tests for the harvest run-provenance helpers in `harvest-vocabulary-db.py` (#230). |
+
+### Integration, smoke & query-plan tests
+
+Boot `dist/index.js` over stdio (or assert `EXPLAIN QUERY PLAN` shape). Most need a built `dist/`; the smoke tests need `data/` DBs.
+
+| Script | Description |
+|--------|-------------|
+| `test-cli.mjs` | Smoke test for the headless CLI (`cli.mjs`, #368): spawns it over cold stdio, asserts output shapes + exit codes. |
+| `test-app-conformance.mjs` | MCP Apps metadata/conformance for the artwork-viewer (resource mime / `_meta.ui`, render-tool `resourceUri`, app-only visibility). |
+| `test-inscription-details.mjs` | Smoke: `get_artwork_details` surfaces `parsedInscriptions` + `inscriptionSummary` (#383). Needs DB. |
+| `test-search-inscriptions.mjs` | Smoke: `search_inscriptions` runtime (#383). Needs `dist/` + DB. |
+| `test-title-variants.mjs` | Smoke: `get_artwork_details` surfaces `title_variants[]` (Night Watch's 6 variants). |
+| `test-parent-grouping.mjs` | Smoke: `parents` + `childCount` + children preview; `findParentGroupings` input-set restriction. |
+| `test-related-objects.mjs` | Smoke: `relatedObjects[]` peer relations (v0.27 cluster E, #296 — the 3 related-variant labels). |
+| `test-track2-mcp.mjs` | End-to-end MCP smoke for the Track-2 wirings (title_variants, artwork_parent + `groupBy=parent`, related_objects). |
+| `test-creator-vocabid.mjs` | #364 regression: `search_artwork({creator: <vocabId>})` numeric-vocabId match. |
+| `test-attribution-same-row.mjs` | Same-row attribution: `creator`+`attributionQualifier` (#349) and `creator`+`productionRole` (#357) evaluate against the SAME production row. |
+| `test-stats-provenance-plan.mjs` | Query-plan guard: `collection_stats` `hasProvenance` driver optimisation. |
+| `test-stats-unfiltered-provenance-plan.mjs` | Query-plan guard: unfiltered `collection_stats` provenance dims must not wrap WHERE in `artwork_id IN (…)` (#378 REC #2). |
+| `test-stats-field-shape-plan.mjs` | Query-plan guard: `collection_stats` vocab dims pick the mappings-field access shape by candidate-set size (`STATS_INDEX_THRESHOLD`, #378 Step 3). |
+| `test-collection-stats-tier1.mjs` | plan 018 Tier 1: productionRole/profession/birth+death-place dims+filters, gender, creator birth decade/century. |
+| `test-collection-stats-tier2.mjs` | plan 018 Tier 2: parseMethod/unsold/uncertain/gap/crossRef filters, partyRole dim+filter, exhibition filter. |
+| `test-collection-stats-tier3.mjs` | plan 018 Tier 3: placeType dim+filter, `has*` boolean filters. |
+| `test-runtime-additions.mjs` | plan 021: `unused` person filter, `extentText` opt-in, productionPlace recall. |
 
 ### v0.25 Stage A audit probes
 
