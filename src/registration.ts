@@ -19,7 +19,7 @@ import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { getOrComputeWithInflight } from "./utils/inflightCache.js";
-import { buildContentBlocks, mirrorWarningsToText, type JsonTextOptions, type TextBlock } from "./utils/responseShape.js";
+import { buildContentBlocks, mirrorWarningsToText, SAFE_RESULT_BUDGET, type JsonTextOptions, type TextBlock } from "./utils/responseShape.js";
 import axios from "axios";
 import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
@@ -171,6 +171,17 @@ const EMIT_STRUCTURED = process.env.STRUCTURED_CONTENT !== "false";
 /** When true, every human-summary response also carries a serialized-JSON
  *  text block (size-guarded). Off by default — opt in per deployment. */
 const JSON_TEXT_COMPAT = process.env.MCP_TEXT_JSON_COMPAT === "true";
+
+/**
+ * Bytes reserved from SAFE_RESULT_BUDGET for the search_provenance non-compact
+ * TEXT channel + JSON-RPC framing when deciding whether to auto-downgrade to
+ * compact. We measure the (large, variable) structuredContent exactly; the text
+ * channel is the small, bounded term (~24K at maxResults 50) so a fixed reserve
+ * is enough. Comparing structuredContent against (budget − reserve) keeps the
+ * whole result under SAFE_RESULT_BUDGET. Tunable; raise if a very verbose query
+ * is observed to slip over.
+ */
+const PROVENANCE_TEXT_RESERVE = 30_000;
 
 function structuredResponse(
   data: object,
@@ -3546,6 +3557,8 @@ function registerTools(
       "MUST state that the answer derives from unstructured credit-line text, not parsed provenance.",
     ),
     warnings: z.array(z.string()).optional(),
+    autoCompacted: z.boolean().optional()
+      .describe("True when the server returned compact summaries because the full (compact=false) result would exceed the per-result size limit. You requested full mode; re-query with fewer artworks (maxResults ≤ 10) or a single objectNumber for full event-by-event chains."),
     error: z.string().optional(),
   };
 
@@ -3679,7 +3692,11 @@ function registerTools(
       },
       withLogging("search_provenance", async (args: Record<string, unknown>) => {
         const layer = (args.layer as string | undefined) ?? "events";
-        const compact = args.compact === true;
+        const requestedCompact = args.compact === true;
+        // effectiveCompact may flip to true below if a non-compact result would
+        // exceed the host size ceiling (auto-downgrade, plan 029).
+        let effectiveCompact = requestedCompact;
+        let autoCompacted = false;
 
         // ── Credit-line fallback (standalone unstructured mode) ──
         // When creditLineQuery is set we ignore all structured provenance filters and
@@ -3738,7 +3755,7 @@ function registerTools(
           // #386: compact mode defaults higher (per-artwork payload is tiny) so a single
           // call can compare many works; still clamped to the tool max.
           maxResults: (args.maxResults as number | undefined)
-            ?? (compact ? Math.min(12, TOOL_LIMITS.search_provenance.max) : TOOL_LIMITS.search_provenance.default),
+            ?? (requestedCompact ? Math.min(12, TOOL_LIMITS.search_provenance.max) : TOOL_LIMITS.search_provenance.default),
           layer: layer as "events" | "periods",
         };
         if (args.party) params.party = args.party as string;
@@ -3793,10 +3810,23 @@ function registerTools(
           ? vocabDb!.searchProvenancePeriods(params)
           : vocabDb!.searchProvenance(params);
 
+        // Auto-downgrade guard (plan 029): a non-compact events result at high
+        // maxResults can exceed the host's ~150K-char per-result ceiling, driven
+        // by structuredContent (which claude.ai meters but never reads). Measure
+        // the would-be non-compact structuredContent exactly; if it + the reserved
+        // text budget would breach SAFE_RESULT_BUDGET, return compact instead.
+        if (!requestedCompact && EMIT_STRUCTURED && layer === "events") {
+          const structuredBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
+          if (structuredBytes > SAFE_RESULT_BUDGET - PROVENANCE_TEXT_RESERVE) {
+            effectiveCompact = true;
+            autoCompacted = true;
+          }
+        }
+
         // #386: in compact mode, project each artwork to header + fixed-size summary +
         // matched-event one-liners (omit the full event/period arrays). Computed once and
         // shared by the structured and text channels.
-        const compactResults = compact
+        const compactResults = effectiveCompact
           ? result.results.map(art => ({
               objectNumber: art.objectNumber,
               title: art.title,
@@ -3822,7 +3852,7 @@ function registerTools(
           lines.push(`${artwork.objectNumber} | "${artwork.title}" — ${artwork.creator}${artwork.date ? ` (${artwork.date})` : ""}`);
           lines.push(`  ${artwork.url}`);
 
-          if (compact) {
+          if (effectiveCompact) {
             // Reuse the projection already built for the structured channel.
             const { summary: s, matchedEvents } = compactResults![i];
             const rollup: string[] = [`${s.matchedEventCount}/${s.eventCount} events matched`];
@@ -3981,13 +4011,24 @@ function registerTools(
           lines.push(formatFacets(result.facets));
         }
 
-        const data: InferOutput<typeof ProvenanceSearchOutput> = compact
+        if (autoCompacted) {
+          const n = result.results.length;
+          const warning =
+            `Returned compact summaries: the full provenance chains for ${n} ` +
+            `artwork${n === 1 ? "" : "s"} would exceed the result-size limit. For ` +
+            `full event-by-event detail, request fewer artworks (maxResults ≤ 10) ` +
+            `or query a single objectNumber.`;
+          result.warnings = [...(result.warnings ?? []), warning];
+        }
+
+        const data: InferOutput<typeof ProvenanceSearchOutput> = effectiveCompact
           ? {
               totalArtworks: result.totalArtworks,
               totalArtworksCapped: result.totalArtworksCapped,
               results: compactResults!,
               ...(result.facets && { facets: result.facets }),
               ...(result.warnings && { warnings: result.warnings }),
+              ...(autoCompacted && { autoCompacted: true as const }),
             }
           : result;
         return structuredResponse(data, lines.join("\n"));
