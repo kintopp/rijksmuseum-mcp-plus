@@ -4277,7 +4277,7 @@ function registerTools(
           // Tier 2 (#320): gender + cohort
           gender: optStr().describe("Filter by creator gender (e.g. 'female', 'male', 'unknown'). Restricts to artworks with ≥1 creator-mapped person of that gender."),
           // Tier 3 (#320): production place type
-          placeType: optStr().describe("Filter to artworks whose production place has this placetype (e.g. 'country', 'city', 'region')."),
+          placeType: optStr().describe("Filter to artworks whose production place has this placetype. Accepts a human label exactly as shown in the placeType dimension breakdown (e.g. 'city', 'inhabited places', 'countries (sovereign states)') or a raw authority URI (Getty AAT / Wikidata)."),
           // has* boolean predicates (#320)
           hasInscription: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of inscription text."),
           hasNarrative: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Filter by presence of curatorial narrative text."),
