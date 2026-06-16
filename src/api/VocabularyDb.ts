@@ -873,7 +873,7 @@ const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
 
 /** Dimensions where each artwork falls in exactly one bucket. For these,
  *  coverage.withBucket == Σ(bucket counts) when all buckets are present, so the
- *  dimensionCoverageCount re-scan can be skipped (#348 Layer 1). Derived from the
+ *  coverage re-scan can be skipped (#348 Layer 1). Derived from the
  *  `multiValued` flag above — single-valued (≤1 bucket/artwork) is exactly the
  *  property that makes the sum identity hold, so the metadata is the single source
  *  of truth (a new single-valued dim gets the fast path automatically). */
@@ -1183,6 +1183,9 @@ export interface ArtworkMeta {
 }
 
 // ─── VocabularyDb ────────────────────────────────────────────────────
+
+/** Return type for dimension SQL builders: entries query + coverage query from the same FROM/WHERE. */
+type DimQuery = { sql: string; extraBindings: unknown[]; coverageSql: string; coverageBindings: unknown[] };
 
 export class VocabularyDb {
   /** Resolve title from primary title + fallback title_all_text (first line). */
@@ -4090,7 +4093,7 @@ export class VocabularyDb {
 
   // ── Collection-wide stats ─────────────────────────────────────────
 
-  /** #378 Step 3 — mappings-field access shape shared by artworkDimensionSql + dimensionCoverageCount:
+  /** #378 Step 3 — mappings-field access shape shared by artworkDimensionSql + provenanceDimensionSql:
    *  broad/unfiltered drives the field's covering index (explicit INDEXED BY survives a future
    *  ANALYZE/STAT4, per reviewer); narrow keeps the +m.field_id PK-probe from the small filtered
    *  set. The _stats_artworks membership is present only when filtered (unfiltered drops the no-op,
@@ -4110,7 +4113,7 @@ export class VocabularyDb {
     ordering: "count_desc" | "label_asc",
     filtered = true,
     useIndexedField = false,
-  ): { sql: string; extraBindings: unknown[] } | null {
+  ): DimQuery | null {
     const orderBy = ordering === "count_desc" ? "cnt DESC" : "label";
     const { fieldFrom, fieldPred, statsMembership } = this.statsFieldShape(filtered, useIndexedField);
     const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
@@ -4121,47 +4124,59 @@ export class VocabularyDb {
       // Suppress areal regions (continents, oceans, empires) from place-typed dimensions —
       // their meaningless centroid coords would otherwise dominate top-N place rollups.
       const arealFilter = vocabDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
+      const where = `FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.label_en IS NOT NULL${typeFilter}${arealFilter}${statsMembership}`;
       return {
         sql: `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT m.artwork_id) AS cnt
-          FROM ${fieldFrom}
-          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.label_en IS NOT NULL${typeFilter}${arealFilter}${statsMembership}
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
+        coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
+        coverageBindings: [fieldId],
       };
     }
 
     if (dim === "century") {
+      const where = `FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+          WHERE a.date_earliest IS NOT NULL`;
       return {
         sql: `SELECT (CASE WHEN a.date_earliest >= 0 THEN (a.date_earliest / 100 + 1) * 100 - 100
                 ELSE -((-a.date_earliest - 1) / 100 + 1) * 100 END) AS label,
               COUNT(*) AS cnt
-          FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
-          WHERE a.date_earliest IS NOT NULL
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [topN, offset],
+        coverageSql: `SELECT COUNT(*) AS cnt ${where}`,
+        coverageBindings: [],
       };
     }
 
     if (dim === "decade") {
+      const where = `FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+          WHERE a.date_earliest IS NOT NULL`;
       return {
         sql: `SELECT (a.date_earliest / ?) * ? AS label, COUNT(*) AS cnt
-          FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
-          WHERE a.date_earliest IS NOT NULL
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, topN, offset],
+        coverageSql: `SELECT COUNT(*) AS cnt ${where}`,
+        coverageBindings: [],
       };
     }
 
     // Physical dimension binning (cm) — excludes 0.0 sentinels
     const dimCol = dim === "height" ? "a.height_cm" : dim === "width" ? "a.width_cm" : null;
     if (dimCol && this.hasDimensions) {
+      const where = `FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+          WHERE ${dimCol} > 0`;
       return {
         sql: `SELECT CAST((${dimCol} / ?) * ? AS INTEGER) AS label, COUNT(*) AS cnt
-          FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
-          WHERE ${dimCol} > 0
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, topN, offset],
+        coverageSql: `SELECT COUNT(*) AS cnt ${where}`,
+        coverageBindings: [],
       };
     }
 
@@ -4170,41 +4185,50 @@ export class VocabularyDb {
     if (dim === "theme") {
       const fieldId = this.fieldIdMap.get("theme");
       if (fieldId === undefined) return null;
+      const where = `FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)${statsMembership}`;
       return {
         sql: `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT m.artwork_id) AS cnt
-          FROM ${fieldFrom}
-          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)${statsMembership}
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
+        coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
+        coverageBindings: [fieldId],
       };
     }
 
     // Exhibitions — JOINs through artwork_exhibitions, no vocab table involved.
     if (dim === "exhibition") {
-      return {
-        sql: `SELECT COALESCE(e.title_en, e.title_nl) AS label, COUNT(*) AS cnt
-          FROM artwork_exhibitions ae
+      const where = `FROM artwork_exhibitions ae
           JOIN exhibitions e ON e.exhibition_id = ae.exhibition_id
           WHERE ae.art_id IN (SELECT art_id FROM _stats_artworks)
-            AND (e.title_en IS NOT NULL OR e.title_nl IS NOT NULL)
+            AND (e.title_en IS NOT NULL OR e.title_nl IS NOT NULL)`;
+      return {
+        sql: `SELECT COALESCE(e.title_en, e.title_nl) AS label, COUNT(*) AS cnt
+          ${where}
           GROUP BY ae.exhibition_id ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [topN, offset],
+        coverageSql: `SELECT COUNT(DISTINCT ae.art_id) AS cnt ${where}`,
+        coverageBindings: [],
       };
     }
 
     // record_modified bucketed by decade. Filter to 1990–2030 — the column has sentinel
     // values spanning year 0001 → 2107 that would otherwise produce bogus tail buckets.
     if (dim === "decadeModified") {
+      const where = `FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
+          WHERE a.record_modified IS NOT NULL
+            AND a.record_modified >= '1990-01-01'
+            AND a.record_modified <  '2030-01-01'`;
       return {
         sql: `SELECT (CAST(SUBSTR(a.record_modified, 1, 4) AS INTEGER) / 10) * 10 AS label,
               COUNT(*) AS cnt
-          FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
-          WHERE a.record_modified IS NOT NULL
-            AND a.record_modified >= '1990-01-01'
-            AND a.record_modified <  '2030-01-01'
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [topN, offset],
+        coverageSql: `SELECT COUNT(*) AS cnt ${where}`,
+        coverageBindings: [],
       };
     }
 
@@ -4213,13 +4237,16 @@ export class VocabularyDb {
     if (dim === "gender") {
       const fieldId = this.fieldIdMap.get("creator");
       if (fieldId === undefined) return null;
+      const where = `FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.type = 'person' AND v.gender IS NOT NULL${statsMembership}`;
       return {
         sql: `SELECT v.gender AS label, COUNT(DISTINCT m.artwork_id) AS cnt
-          FROM ${fieldFrom}
-          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.type = 'person' AND v.gender IS NOT NULL${statsMembership}
+          ${where}
           GROUP BY v.gender ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
+        coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
+        coverageBindings: [fieldId],
       };
     }
 
@@ -4229,13 +4256,16 @@ export class VocabularyDb {
     if (dim === "creatorBirthDecade") {
       const fieldId = this.fieldIdMap.get("creator");
       if (fieldId === undefined) return null;
+      const where = `FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}`;
       return {
         sql: `SELECT (v.birth_year / ?) * ? AS label, COUNT(DISTINCT m.artwork_id) AS cnt
-          FROM ${fieldFrom}
-          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, fieldId, topN, offset],
+        coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
+        coverageBindings: [fieldId],
       };
     }
 
@@ -4243,15 +4273,18 @@ export class VocabularyDb {
     if (dim === "creatorBirthCentury") {
       const fieldId = this.fieldIdMap.get("creator");
       if (fieldId === undefined) return null;
+      const where = `FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}`;
       return {
         sql: `SELECT (CASE WHEN v.birth_year >= 0 THEN (v.birth_year / 100 + 1) * 100 - 100
                 ELSE -((-v.birth_year - 1) / 100 + 1) * 100 END) AS label,
               COUNT(DISTINCT m.artwork_id) AS cnt
-          FROM ${fieldFrom}
-          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
+        coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
+        coverageBindings: [fieldId],
       };
     }
 
@@ -4259,13 +4292,16 @@ export class VocabularyDb {
     if (dim === "placeType") {
       const fieldId = this.fieldIdMap.get("spatial");
       if (fieldId === undefined) return null;
+      const where = `FROM ${fieldFrom}
+          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
+          WHERE ${fieldPred} AND v.placetype IS NOT NULL${statsMembership}`;
       return {
         sql: `SELECT v.placetype AS label, COUNT(DISTINCT m.artwork_id) AS cnt
-          FROM ${fieldFrom}
-          JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.placetype IS NOT NULL${statsMembership}
+          ${where}
           GROUP BY v.placetype ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [fieldId, topN, offset],
+        coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
+        coverageBindings: [fieldId],
       };
     }
 
@@ -4282,7 +4318,7 @@ export class VocabularyDb {
     eventConditions?: { conds: string[]; bindings: unknown[] },
     partyConditions?: { conds: string[]; bindings: unknown[] },
     filtered = true,
-  ): { sql: string; extraBindings: unknown[] } | null {
+  ): DimQuery | null {
     if (!this.hasProvenanceTables_) return null;
     const orderBy = ordering === "count_desc" ? "cnt DESC" : "label";
 
@@ -4306,12 +4342,15 @@ export class VocabularyDb {
 
     // Special case: provenanceDecade uses arithmetic binning
     if (dim === "provenanceDecade") {
+      const where = `FROM provenance_events pe
+          WHERE ${membership}pe.date_year IS NOT NULL${evExtra}`;
       return {
         sql: `SELECT (pe.date_year / ?) * ? AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
-          FROM provenance_events pe
-          WHERE ${membership}pe.date_year IS NOT NULL${evExtra}
+          ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, ...evBindings, topN, offset],
+        coverageSql: `SELECT COUNT(DISTINCT pe.artwork_id) AS cnt ${where}`,
+        coverageBindings: [...evBindings],
       };
     }
 
@@ -4331,156 +4370,17 @@ export class VocabularyDb {
       ? `${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)`
       : "1";
 
+    const where = `FROM ${tbl} ${alias}
+        WHERE ${membershipAlias}
+          ${notNull}${rowFilter}`;
     return {
       sql: `SELECT ${alias}.${def.col} AS label, COUNT(DISTINCT ${alias}.artwork_id) AS cnt
-        FROM ${tbl} ${alias}
-        WHERE ${membershipAlias}
-          ${notNull}${rowFilter}
+        ${where}
         GROUP BY ${alias}.${def.col} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
       extraBindings: [...rowBindings, topN, offset],
+      coverageSql: `SELECT COUNT(DISTINCT ${alias}.artwork_id) AS cnt ${where}`,
+      coverageBindings: [...rowBindings],
     };
-  }
-
-  /** Coverage count: artworks in the filtered pool that have ≥1 value for the given dimension.
-   *  Used to populate the structured-output `coverage.withBucket` field, which lets a consumer
-   *  reconstruct the residual to 100% without per-dim NULL knowledge. */
-  private dimensionCoverageCount(
-    dim: string,
-    eventConditions?: { conds: string[]; bindings: unknown[] },
-    partyConditions?: { conds: string[]; bindings: unknown[] },
-    filtered = true,
-    useIndexedField = false,
-  ): number {
-    if (!this.db) return 0;
-    const evExtra = eventConditions?.conds.length ? " AND " + eventConditions.conds.join(" AND ") : "";
-    const evBindings = eventConditions?.bindings ?? [];
-    const ppExtra = partyConditions?.conds.length ? " AND " + partyConditions.conds.join(" AND ") : "";
-    const ppBindings = partyConditions?.bindings ?? [];
-    const { fieldFrom, fieldPred, statsMembership } = this.statsFieldShape(filtered, useIndexedField);
-
-    // Vocab-backed dim: count artworks with ≥1 mapping for this field.
-    const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
-    if (vocabDef) {
-      const fieldId = this.fieldIdMap.get(vocabDef.field);
-      if (fieldId === undefined) return 0;
-      const typeFilter = vocabDef.vocabType ? ` AND v.type = '${vocabDef.vocabType}'` : "";
-      const arealFilter = vocabDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
-      const row = this.db.prepare(
-        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM ${fieldFrom}
-         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-         WHERE ${fieldPred} AND v.label_en IS NOT NULL${typeFilter}${arealFilter}${statsMembership}`,
-      ).get(fieldId) as { cnt: number };
-      return row.cnt;
-    }
-
-    if (dim === "century" || dim === "decade") {
-      const row = this.db.prepare(
-        `SELECT COUNT(*) AS cnt FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
-         WHERE a.date_earliest IS NOT NULL`,
-      ).get() as { cnt: number };
-      return row.cnt;
-    }
-
-    if ((dim === "height" || dim === "width") && this.hasDimensions) {
-      const col = dim === "height" ? "a.height_cm" : "a.width_cm";
-      const row = this.db.prepare(
-        `SELECT COUNT(*) AS cnt FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
-         WHERE ${col} > 0`,
-      ).get() as { cnt: number };
-      return row.cnt;
-    }
-
-    if (dim === "theme") {
-      const fieldId = this.fieldIdMap.get("theme");
-      if (fieldId === undefined) return 0;
-      const row = this.db.prepare(
-        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM ${fieldFrom}
-         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-         WHERE ${fieldPred} AND (v.label_en IS NOT NULL OR v.label_nl IS NOT NULL)${statsMembership}`,
-      ).get(fieldId) as { cnt: number };
-      return row.cnt;
-    }
-
-    if (dim === "exhibition") {
-      const row = this.db.prepare(
-        `SELECT COUNT(DISTINCT ae.art_id) AS cnt FROM artwork_exhibitions ae
-         JOIN exhibitions e ON e.exhibition_id = ae.exhibition_id
-         WHERE ae.art_id IN (SELECT art_id FROM _stats_artworks)
-           AND (e.title_en IS NOT NULL OR e.title_nl IS NOT NULL)`,
-      ).get() as { cnt: number };
-      return row.cnt;
-    }
-
-    if (dim === "decadeModified") {
-      const row = this.db.prepare(
-        `SELECT COUNT(*) AS cnt FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
-         WHERE a.record_modified IS NOT NULL
-           AND a.record_modified >= '1990-01-01'
-           AND a.record_modified <  '2030-01-01'`,
-      ).get() as { cnt: number };
-      return row.cnt;
-    }
-
-    // Tier 2 (#320): coverage for gender/creatorBirthDecade/creatorBirthCentury
-    if (dim === "gender" || dim === "creatorBirthDecade" || dim === "creatorBirthCentury") {
-      const fieldId = this.fieldIdMap.get("creator");
-      if (fieldId === undefined) return 0;
-      const colFilter = dim === "gender"
-        ? "AND v.type = 'person' AND v.gender IS NOT NULL"
-        : "AND v.type = 'person' AND v.birth_year IS NOT NULL";
-      const row = this.db.prepare(
-        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM ${fieldFrom}
-         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-         WHERE ${fieldPred} ${colFilter}${statsMembership}`,
-      ).get(fieldId) as { cnt: number };
-      return row.cnt;
-    }
-
-    // Tier 3 (#320): coverage for placeType
-    if (dim === "placeType") {
-      const fieldId = this.fieldIdMap.get("spatial");
-      if (fieldId === undefined) return 0;
-      const row = this.db.prepare(
-        `SELECT COUNT(DISTINCT m.artwork_id) AS cnt FROM ${fieldFrom}
-         JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-         WHERE ${fieldPred} AND v.placetype IS NOT NULL${statsMembership}`,
-      ).get(fieldId) as { cnt: number };
-      return row.cnt;
-    }
-
-    if (!this.hasProvenanceTables_) return 0;
-
-    // Unfiltered: drop the no-op all-artworks membership so the provenance table scans
-    // directly instead of a per-artwork PK probe (#378 REC #2). Mirrors provenanceDimensionSql.
-    if (dim === "provenanceDecade") {
-      const membership = filtered
-        ? "pe.artwork_id IN (SELECT art_id FROM _stats_artworks) AND "
-        : "";
-      const row = this.db.prepare(
-        `SELECT COUNT(DISTINCT pe.artwork_id) AS cnt FROM provenance_events pe
-         WHERE ${membership}pe.date_year IS NOT NULL${evExtra}`,
-      ).get(...evBindings) as { cnt: number };
-      return row.cnt;
-    }
-
-    const def = PROV_DIMENSION_DEFS.find(d => d.label === dim);
-    if (!def) return 0;
-    if (def.table === "parties" && !this.hasPartyTable_) return 0;
-
-    const tbl = def.table === "events" ? "provenance_events" : "provenance_parties";
-    const alias = def.table === "events" ? "pe" : "pp";
-    const notNull = def.notNull ? `AND ${alias}.${def.col} IS NOT NULL` : "";
-    const rowFilter = def.table === "events" ? evExtra : ppExtra;
-    const rowBindings = def.table === "events" ? evBindings : ppBindings;
-    const membershipAlias = filtered
-      ? `${alias}.artwork_id IN (SELECT art_id FROM _stats_artworks)`
-      : "1";
-    const row = this.db.prepare(
-      `SELECT COUNT(DISTINCT ${alias}.artwork_id) AS cnt FROM ${tbl} ${alias}
-       WHERE ${membershipAlias}
-         ${notNull}${rowFilter}`,
-    ).get(...rowBindings) as { cnt: number };
-    return row.cnt;
   }
 
   /** Echo of accepted filter args for round-trip in structuredContent. Excludes control params. */
@@ -4794,7 +4694,7 @@ export class VocabularyDb {
 
     // #378 Step 3: broad/unfiltered candidate sets scan the vocab field's covering index;
     // narrow filtered sets keep the +field_id PK-probe (cheaper for small sets). Only affects
-    // the vocab + theme branches of artworkDimensionSql/dimensionCoverageCount.
+    // the vocab + theme branches of artworkDimensionSql/provenanceDimensionSql.
     const useIndexedField = !filtered || total >= STATS_INDEX_THRESHOLD;
 
     // _stats_artworks is referenced inside dimension SQL fragments.
@@ -4846,7 +4746,7 @@ export class VocabularyDb {
       // algebraic identity (Σ bucket counts) — skip the second mappings-scale scan.
       const withBucket = (SINGLE_VALUED_STATS_DIMS.has(params.dimension) && offset === 0 && entries.length < topN)
         ? entries.reduce((sum, e) => sum + e.count, 0)
-        : this.dimensionCoverageCount(params.dimension, provEventConds, provPartyConds, filtered, useIndexedField);
+        : (this.db.prepare(dimQuery.coverageSql).get(...dimQuery.coverageBindings) as { cnt: number }).cnt;
       const withoutBucket = Math.max(0, total - withBucket);
 
       // Fixed width from meta, else binWidth for binned dims, else undefined.
