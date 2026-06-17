@@ -26,7 +26,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-The vocabulary and embeddings databases are downloaded automatically on first start (~463 MB + ~595 MB compressed; ~1.9 GB + ~1.1 GB uncompressed). The server works without them, but [vocabulary-backed search parameters](search-parameters.md) and `semantic_search` won't be available. The embedding model (~130 MB) is also downloaded on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
+The vocabulary and embeddings databases are downloaded automatically on first start (~491 MB + ~584 MB compressed; ~1.9 GB + ~1.1 GB uncompressed). The server works without them, but [vocabulary-backed search parameters](search-parameters.md) and `semantic_search` won't be available. The embedding model (~130 MB) is also downloaded on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
 
 Restart your MCP client after updating the config.
 
@@ -56,6 +56,42 @@ The included `railway.json` supports one-click deployment on [Railway](https://r
 
 A headless CLI (`scripts/cli.mjs`, exposed as `npm run cli` or the `rijks-mcp` bin — run `npm link` once to put it on your `PATH`) drives the server's stateless tools as an MCP *client* — so a CLI query returns exactly what an LLM would get, and it doubles as a debug/regression harness. It is JSON-first, aimed at agents and shell pipelines. The four viewer/stateful tools (`get_artwork_image`, `navigate_viewer`, `remount_viewer`, `poll_viewer_commands`) are out of scope.
 
+##### CLI-only installation (per OS)
+
+If you only want the `rijks-mcp` command line (not an MCP client integration), the tidiest path is the [`just`](https://github.com/casey/just) command runner over a clone. The `just cli <verb> …` recipe is the wrapper equivalent of the `npm run cli -- <verb> …` examples shown in this section.
+
+**Prerequisites (all platforms):** [Node.js 24.x](https://nodejs.org) (`>=24.14.1 <25`) and the `just` runner. The native dependencies (`better-sqlite3`, `sharp`, `@huggingface/transformers`) ship prebuilt binaries for Windows/macOS/Linux on x64 and arm64, so no compiler is needed except on musl/Alpine.
+
+Install `just`:
+
+| OS | Command |
+|---|---|
+| macOS | `brew install just` |
+| Linux | `apt install just` (or `cargo install just`, or a [prebuilt binary](https://github.com/casey/just/releases)) |
+| Windows | `winget install --id Casey.Just` (or `scoop install just` / `choco install just`) |
+
+Clone the repo — it ships a `justfile` at the root with `install`, `build`, `cli`, and `serve` recipes (and a commented-out `RIJKS_MCP_HTTP` line to switch to HTTP; run `just` with no arguments to list them):
+
+```bash
+git clone https://github.com/kintopp/rijksmuseum-mcp-plus.git
+cd rijksmuseum-mcp-plus
+```
+
+Then:
+
+```bash
+just install         # stdio and HTTP both need this
+just build           # stdio only — skip for HTTP
+just cli search --query "tulip" --max 5
+```
+
+**Requirements per transport:**
+
+| Transport | Needs | Notes |
+|---|---|---|
+| **stdio** (default) | `just install` + `just build` + the databases (~1.9 GB + ~1.1 GB on disk) | Selected when neither `--http` nor `RIJKS_MCP_HTTP` is set — the CLI spawns `node dist/index.js` itself (zero-config). The vocabulary and embeddings DBs download automatically to `data/` on the first `cli` run (fully local/offline afterwards); the embedding model (~130 MB) downloads on first `semantic`/`similar` use. |
+| **HTTP** | `just install` + a reachable `/mcp` server | Selected via `--http <url>` or `RIJKS_MCP_HTTP` — talks to a running `npm run serve`/Railway server, warm so calls return instantly. No local build or DBs when targeting an already-running server; uncomment the `RIJKS_MCP_HTTP` line in the justfile (the public Railway instance, or your own `just serve`, which itself needs the full stdio setup). |
+
 ```bash
 npm run cli -- search --query "tulip" --max 5 --fields objectNumber,title
 npm run cli -- details SK-C-5 --json
@@ -65,7 +101,6 @@ npm run cli -- tools --json          # capabilities dump (the agent bootstrap)
 npm run cli -- search --help         # flags for one command, generated from the live schema
 ```
 
-- **Transport:** `--http <url>` (or `RIJKS_MCP_HTTP`) talks to a running `npm run serve` / Railway server — warm, so calls are instant. With no `--http`, it falls back to spawning `node dist/index.js` over stdio (zero-config; needs `npm run build` + the DBs in `data/`).
 - **Commands** are short verbs aliased to tools (`search`, `semantic`, `persons`, `provenance`, `inscriptions`, `details`, `stats`, `similar`, `browse-set`, `list-sets`, `changes`, `inspect`). The first positional maps to the tool's primary parameter; everything else is a `--flag`. Help and flag coercion are derived from the live `inputSchema`, so they never drift.
 - **Output:** list tools emit JSONL on stdout (one object per line, `jq -c`-friendly); single-object tools emit one compact JSON object. `--json` prints the whole payload pretty; `--table` is a terse human view; `--fields a,b,c` projects keys (the main token lever). Counts, pagination hints (`--offset` / `--resumption-token`), and warnings go to stderr to keep stdout clean. `--show-call` prints the resolved `{tool, arguments}` without executing.
 - **Exit codes:** `0` ok · `1` tool/connection error · `2` usage error. Tool errors preserve the server's prose routing hints (on stderr).
