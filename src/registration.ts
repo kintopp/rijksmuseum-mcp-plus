@@ -9,15 +9,15 @@ import { z } from "zod";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type ProvenanceArtworkResult, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings, type InscriptionSearchParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, formatDateRange, formatDimensions, pluralize, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type ProvenanceArtworkResult, type CollectionStatsParams, type PersonSearchParams, type SearchTimings, type InscriptionSearchParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import { getOrComputeWithInflight } from "./utils/inflightCache.js";
+import { SAFE_RESULT_BUDGET } from "./utils/responseShape.js";
 import {
   IIIF_REGION_RE,
   type CropLocalSize,
@@ -46,379 +46,117 @@ import {
   computeDeliveryState,
   projectToFullImage,
 } from "./registration/geometry.js";
-import { buildContentBlocks, mirrorWarningsToText, SAFE_RESULT_BUDGET, type JsonTextOptions, type TextBlock } from "./utils/responseShape.js";
-import axios from "axios";
+import {
+  __dirname,
+  ARTWORK_VIEWER_RESOURCE_URI,
+  ANN_READ_CLOSED,
+  ANN_VIEWER,
+  TOOL_LIMITS,
+  MODIFIER_KEYS,
+  COMPOUND_PUBLIC_KEYS,
+  PROVENANCE_EVENT_ONLY_FILTERS,
+  PROVENANCE_PERIOD_ONLY_FILTERS,
+  PROVENANCE_SHARED_FILTERS,
+  PROVENANCE_ALL_FILTERS,
+  FACET_DIMENSIONS,
+  stripNull,
+  stripNullCoerceBool,
+  normalizeStringOrArray,
+  stringOrArray,
+  optStr,
+  optMinStr,
+  textQueryClauseSchema,
+  textQuerySchema,
+  type ToolResponse,
+  type StructuredToolResponse,
+  type InferOutput,
+  errorResponse,
+  EMIT_STRUCTURED,
+  JSON_TEXT_COMPAT,
+  PROVENANCE_TEXT_RESERVE,
+  structuredResponse,
+  withOutputSchema,
+  formatSearchLine,
+  detectComponentClustering,
+  formatFacets,
+  addPercentages,
+  truncate,
+  truncateSnippet,
+  parseDimRange,
+  parseSortParam,
+  compactMethodTag,
+  provenanceCompactSummary,
+  provenanceMatchedEvents,
+  formatSetLine,
+  encodeBrowseSetToken,
+  decodeBrowseSetToken,
+  formatBrowseSetRecord,
+  formatRecordLine,
+  canonicalInputKey,
+  createLogger,
+  paginatedResponse,
+  drainOaiBuffer,
+  resolveOaiBuffer,
+} from "./registration/helpers.js";
+import {
+  ResolvedTermShape,
+  SearchResultOutput,
+  LabeledTermShape,
+  SimilarCandidateShape,
+  PooledCandidateShape,
+  FindSimilarOutput,
+  buildSimilarTextSummary,
+  ArtworkDetailOutput,
+  ImageInfoOutput,
+  InspectImageOutput,
+  PaginatedBase,
+  BrowseSetOutput,
+  RecentChangesOutput,
+  SemanticSearchOutput,
+  CuratedSetsOutput,
+} from "./registration/outputSchemas.js";
+import {
+  resolveObjectNodeId,
+  fetchVisualSimilar,
+} from "./registration/visualSearch.js";
 import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "./enrichmentReviewHtml.js";
 import { parseProvenance } from "./provenance.js";
 import { parseInscriptions, summarizeInscriptions, type ParsedInscription, type InscriptionSummary } from "./inscriptions.js";
 import { compositeOverlays, computeCropRect, readImageDimensions } from "./overlay-compositor.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Helpers, formatters, output schemas, and visual-search functions are in
+// ./registration/helpers.ts, ./registration/outputSchemas.ts, and ./registration/visualSearch.ts
+// (imported above). Re-export symbols that scripts/tests/test-pure-functions.mjs
+// imports from dist/registration.js (must not be modified):
+export { parseDimRange, parseSortParam, stripNullCoerceBool };
 
-const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
-// MCP tool annotations (behavioural hints; see issue #259).
-// `destructiveHint` defaults to true in the spec, so omitting annotations mislabels read-only tools.
-// `openWorldHint` is false on every tool: per the spec example (memory tool = closed,
-// web search = open), this server's entire domain is the bounded ~834K-artwork
-// Rijksmuseum corpus — including viewer tools, which target artworks from the same set.
-const ANN_READ_CLOSED = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
-const ANN_VIEWER = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+// State (IIIF_REGION_RE, viewerQueues, similarPages, enrichmentReviewPages, caches) are
+// imported from ./registration/state.js above.
+// Re-export the two symbols that src/index.ts imports from this module:
+export { similarPages, enrichmentReviewPages };
 
-/**
- * Per-tool result limits. Defaults reflect payload weight:
- * - 25: lightweight per-result data (title, creator, date, score)
- * -  1: very heavy per-result data (full provenance chains with events, parties, prices)
- * - 10: heavy records — full OAI-PMH/EDM records (get_recent_changes), or DB-backed records carrying a per-record description (browse_set)
- * - 15: medium — semantic scores plateau ~15, plus a reconstructed sourceText block per result
- * - 20: enriched comparisons (similarity signals)
- *
- * collection_stats returns compact text tables — high default + max for comprehensive distributions.
- * search_provenance defaults to 1 because each artwork's full chain is large;
- *   totalArtworks in the response + offset enables paging when more are needed.
- *
- * Max caps: 50 for individual results (100 for persons), 500 for stats.
- */
-const TOOL_LIMITS = {
-  search_artwork:      { max: 50,  default: 25 },
-  search_persons:      { max: 100, default: 25 },
-  semantic_search:     { max: 50,  default: 15 },
-  search_provenance:   { max: 50,  default: 1 },
-  search_inscriptions: { max: 100, default: 20 },
-  browse_set:          { max: 50,  default: 10 },
-  get_recent_changes:  { max: 50,  default: 10 },
-  find_similar:        { max: 50,  default: 20 },
-  collection_stats:    { max: 500, default: 25 },
-} as const;
-
-/** Params that narrow results but are too broad to stand alone as the only filter. */
-const MODIFIER_KEYS = new Set(["imageAvailable", "hasProvenance", "expandPlaceHierarchy", "sameRowMatching", "compact"]);
-
-/** Public compound params on search_artwork that get parsed into internal fields
- *  before forwarding to VocabularyDb — never passed through as-is. */
-const COMPOUND_PUBLIC_KEYS = new Set(["heightRange", "widthRange", "sort"]);
-
-/** Provenance filter categorization by layer support. */
-const PROVENANCE_EVENT_ONLY_FILTERS = ["transferType", "excludeTransferType", "currency", "hasPrice", "hasGap", "relatedTo", "categoryMethod", "positionMethod"];
-const PROVENANCE_PERIOD_ONLY_FILTERS = ["ownerName", "acquisitionMethod", "minDuration", "maxDuration", "periodLocation"];
-const PROVENANCE_SHARED_FILTERS = ["party", "location", "dateFrom", "dateTo", "objectNumber", "creator"];
-const PROVENANCE_ALL_FILTERS = [...PROVENANCE_SHARED_FILTERS, ...PROVENANCE_EVENT_ONLY_FILTERS, ...PROVENANCE_PERIOD_ONLY_FILTERS];
-
-/** Available facet dimensions for search_artwork. Single source of truth for preprocess + z.enum. */
-const FACET_DIMENSIONS = [
-  "type", "material", "technique", "century", "rights", "imageAvailable",
-  "creator", "depictedPerson", "depictedPlace", "productionPlace",
-  "theme", "sourceType",
-] as const;
-
-/** Preprocess: strip JSON null / "null" string / "" → undefined BEFORE Zod validates.
- *  claude.ai sends actual JSON null for every optional string param the LLM omits.
- *  z.string().optional() rejects null (only accepts string | undefined), so the
- *  null must be converted before type-checking.  Using factory functions (not shared
- *  constants) so each field gets a unique Zod instance — zod-to-json-schema deduplicates
- *  by identity, and shared instances caused $ref pointers that claude.ai cannot resolve. */
-const stripNull = (v: unknown) =>
-  (v === null || v === undefined || v === "null" || v === "") ? undefined : v;
-
-/** Preprocessor for boolean input fields. Composes stripNull with string-coerce
- *  for "true"/"false" — defence in depth against client wrappers that may
- *  serialize booleans as strings (the bug shape reported in the 2026-05-19
- *  transcript, never reproduced in controlled testing but cheap to hedge).
- *  Lowercase only — strict canonical form. */
-export const stripNullCoerceBool = (v: unknown) => {
-  const stripped = stripNull(v);
-  if (stripped === "true") return true;
-  if (stripped === "false") return false;
-  return stripped;
+// Geometry helpers are in ./registration/geometry.ts — imported above.
+// Re-export all geometry symbols (scripts/tests/test-pure-functions.mjs imports them
+// from dist/registration.js and must not be modified):
+export {
+  regionToPixels,
+  computeVerificationRegion,
+  parsePctRegion,
+  parseCropPixelsRegion,
+  cropPixelsToIiifPixels,
+  type OobWarning,
+  oobError,
+  checkRegionBounds,
+  type DeliveryState,
+  computeDeliveryState,
+  projectToFullImage,
 };
 
-/** Normalize null/arrays into string | string[] | undefined. */
-function normalizeStringOrArray(v: unknown): unknown {
-  if (v === null || v === undefined || v === "null" || v === "") return undefined;
-  if (typeof v === "string") {
-    const trimmed = v.trim();
-    return trimmed === "" ? undefined : trimmed;
-  }
-  // Array: strip nulls/empties
-  if (Array.isArray(v)) {
-    const cleaned = v.filter((x): x is string => typeof x === "string" && x.trim() !== "").map(x => x.trim());
-    return cleaned.length === 0 ? undefined : cleaned.length === 1 ? cleaned[0] : cleaned;
-  }
-  return v; // let Zod reject unsupported types
-}
-const stringOrArray = () => z.preprocess(
-  normalizeStringOrArray,
-  z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
-);
-const optStr = () => z.preprocess(stripNull, z.string().optional());
-const optMinStr = () => z.preprocess(stripNull, z.string().min(1).optional());
-
-// #363: structured textQuery DSL schema. Built via factories so each of
-// must/should/mustNot gets a *distinct* clause-schema instance — sharing one
-// instance would make zod-to-json-schema emit $defs/$ref, which the inputSchema
-// conformance test forbids (must stay $ref-free).
-const textQueryClauseSchema = () =>
-  z.object({
-    field: z.enum(["title", "description", "inscription", "curatorialNarrative"]).optional(),
-    phrase: z.string().min(1).optional(),
-    any: z.array(z.string().min(1)).min(1).optional(),
-    anyPrefix: z.array(z.string().min(1)).min(1).optional(),
-    prefix: z.string().min(1).optional(),
-    near: z.object({
-      terms: z.array(z.union([z.string().min(1), z.array(z.string().min(1)).min(1)])).min(2),
-      distance: z.number().int().positive(),
-    }).strict().optional(),
-  }).strict();
-const textQuerySchema = () =>
-  z.object({
-    must: z.array(textQueryClauseSchema()).min(1).optional(),
-    should: z.array(textQueryClauseSchema()).min(1).optional(),
-    mustNot: z.array(textQueryClauseSchema()).min(1).optional(),
-  }).strict();
-
-type ToolResponse = { content: TextBlock[] };
-type StructuredToolResponse = ToolResponse & { structuredContent: Record<string, unknown> };
-
-/** Infer a TypeScript type from a Zod shape (plain object of ZodTypes used for outputSchema). */
-type InferOutput<T extends Record<string, z.ZodTypeAny>> = z.infer<z.ZodObject<T>>;
-
-function errorResponse(message: string) {
-  // Never emit structuredContent here — a bare { error } won't conform to
-  // any tool's outputSchema (which has required fields like totalResults,
-  // results, etc.) and causes the SDK to reject with -32602.
-  return { content: [{ type: "text" as const, text: message }], isError: true as const };
-}
-
-/** Return both structured content (for apps/typed clients) and text content (for LLMs).
- *  Set STRUCTURED_CONTENT=false to omit structuredContent (workaround for client bugs). */
-const EMIT_STRUCTURED = process.env.STRUCTURED_CONTENT !== "false";
-
-/** When true, every human-summary response also carries a serialized-JSON
- *  text block (size-guarded). Off by default — opt in per deployment. */
-const JSON_TEXT_COMPAT = process.env.MCP_TEXT_JSON_COMPAT === "true";
-
-/**
- * Bytes reserved from SAFE_RESULT_BUDGET for the search_provenance non-compact
- * TEXT channel + JSON-RPC framing when deciding whether to auto-downgrade to
- * compact. We measure the (large, variable) structuredContent exactly; the text
- * channel is the small, bounded term (~24K at maxResults 50) so a fixed reserve
- * is enough. Comparing structuredContent against (budget − reserve) keeps the
- * whole result under SAFE_RESULT_BUDGET. Tunable; raise if a very verbose query
- * is observed to slip over.
- */
-const PROVENANCE_TEXT_RESERVE = 30_000;
-
-function structuredResponse(
-  data: object,
-  textContent?: string,
-  opts?: JsonTextOptions,
-): ToolResponse | StructuredToolResponse {
-  // When jsonTextData is supplied, the text-channel JSON copy carries that
-  // (trimmed) object while structuredContent keeps the full `data`; the guard
-  // then needs the full payload's size, not the trimmed copy's.
-  const textPayload = opts?.jsonTextData ?? data;
-  const humanText = mirrorWarningsToText(data, textContent);
-  const content = buildContentBlocks(textPayload, humanText, {
-    jsonText: opts?.jsonText ?? JSON_TEXT_COMPAT,
-    maxJsonTextBytes: opts?.maxJsonTextBytes,
-    structuredContentEmitted: EMIT_STRUCTURED,
-    ...(opts?.jsonTextData && EMIT_STRUCTURED
-      ? { structuredPayloadBytes: Buffer.byteLength(JSON.stringify(data), "utf8") }
-      : {}),
-  });
-  if (!EMIT_STRUCTURED) {
-    return { content };
-  }
-  return { content, structuredContent: data as Record<string, unknown> };
-}
-
-/** Conditionally attach an outputSchema when structured content is enabled. */
-function withOutputSchema<T>(schema: T): { outputSchema: T } | Record<never, never> {
-  return EMIT_STRUCTURED ? { outputSchema: schema } : {};
-}
-
-/** Format a search result as a compact one-liner for LLM content. */
-function formatSearchLine(r: { objectNumber: string; title: string; creator: string; date?: string; type?: string; url?: string; nearestPlace?: string; distance_km?: number; groupedChildCount?: number }, i: number): string {
-  let line = `${i + 1}. ${r.objectNumber}`;
-  if (r.type) line += ` | ${r.type}`;
-  if (r.date) line += ` | ${r.date}`;
-  line += ` | "${r.title}"`;
-  if (r.creator) line += ` — ${r.creator}`;
-  if (r.nearestPlace) line += ` [${r.nearestPlace}, ${r.distance_km?.toFixed(1)}km]`;
-  if (r.groupedChildCount) line += ` (+${r.groupedChildCount} children collapsed)`;
-  if (r.url) line += ` ${r.url}`;
-  return line;
-}
-
-/**
- * Detect component-record clustering in search results.
- * When ≥3 results share an object number prefix before '(' (e.g. folio records
- * from the same sketchbook), return a warning string. Returns undefined otherwise.
- */
-function detectComponentClustering(objectNumbers: string[]): string | undefined {
-  const groups = new Map<string, number>();
-  for (const on of objectNumbers) {
-    const parenIdx = on.indexOf("(");
-    if (parenIdx > 0) {
-      const prefix = on.slice(0, parenIdx).replace(/-$/, ""); // trim trailing dash
-      groups.set(prefix, (groups.get(prefix) ?? 0) + 1);
-    }
-  }
-  const clusters: string[] = [];
-  for (const [prefix, count] of groups) {
-    if (count >= 3) clusters.push(`${count} results are folios/components of ${prefix}`);
-  }
-  if (clusters.length === 0) return undefined;
-  return "Note: " + clusters.join("; ") + ". Add filters to narrow, or inspect the parent object directly.";
-}
-
-/** Format faceted counts as a compact "Narrow by:" block for LLM content. */
-function formatFacets(facets: Record<string, Array<{ label: string; count: number; percentage?: number }>>): string {
-  const lines: string[] = ["Narrow by:"];
-  for (const [dim, entries] of Object.entries(facets)) {
-    const dimLabel = dim.charAt(0).toUpperCase() + dim.slice(1);
-    const items = entries.map(e => {
-      const pct = e.percentage != null ? `, ${e.percentage.toFixed(1)}%` : "";
-      return `${e.label} (${e.count.toLocaleString()}${pct})`;
-    }).join(", ");
-    lines.push(`  ${dimLabel}: ${items}`);
-  }
-  return lines.join("\n");
-}
-
-/** Add percentage to each facet entry based on the sum of counts in that dimension. */
-function addPercentages(facets: Record<string, Array<{ label: string; count: number; percentage?: number }>>): void {
-  for (const entries of Object.values(facets)) {
-    const total = entries.reduce((sum, e) => sum + e.count, 0);
-    if (total > 0) {
-      for (const e of entries) {
-        e.percentage = Math.round((e.count / total) * 1000) / 10;
-      }
-    }
-  }
-}
-
-/** Truncate a string to maxLen, appending "..." if truncated. */
-function truncate(s: string, maxLen: number): string {
-  return s.length <= maxLen ? s : s.slice(0, maxLen - 3) + "...";
-}
-
-/** Truncate a description snippet to maxLen on a word boundary, appending " [\u2026]" if truncated. */
-function truncateSnippet(s: string | undefined, maxLen: number): string | undefined {
-  if (!s) return undefined;
-  if (s.length <= maxLen) return s;
-  const cut = s.lastIndexOf(" ", maxLen);
-  return (cut > 0 ? s.slice(0, cut) : s.slice(0, maxLen)) + " [\u2026]";
-}
-
-const DIM_RANGE_RE = /^(\d+(?:\.\d+)?)?-(\d+(?:\.\d+)?)?$/;
-const SORT_PARAM_RE = /^([A-Za-z]+)(?::(asc|desc))?$/;
-const SORT_COLUMN_SET = new Set<string>(SORT_COLUMNS);
-
-/** Parse search_artwork `heightRange` / `widthRange` strings: '10-50', '10-', '-50'. */
-export function parseDimRange(input: unknown): { min?: number; max?: number } | null {
-  if (typeof input !== "string") return null;
-  const m = input.match(DIM_RANGE_RE);
-  if (!m) return null;
-  const min = m[1] ? parseFloat(m[1]) : undefined;
-  const max = m[2] ? parseFloat(m[2]) : undefined;
-  if (min == null && max == null) return null;
-  return { min, max };
-}
-
-/** Parse search_artwork `sort` string: 'column' or 'column:asc|desc' (default desc). */
-export function parseSortParam(input: unknown): { sortBy: SortColumn; sortOrder: "asc" | "desc" } | null {
-  if (typeof input !== "string") return null;
-  const m = input.match(SORT_PARAM_RE);
-  if (!m) return null;
-  if (!SORT_COLUMN_SET.has(m[1])) return null;
-  return { sortBy: m[1] as SortColumn, sortOrder: (m[2] as "asc" | "desc") ?? "desc" };
-}
-
-// ─── Rijksmuseum visual search (website API) ─────────────────────────
-
-interface VisualSearchArtObject {
-  objectNumber: string;
-  title: string;
-  makerSubtitleLine: string;
-  objectNodeId: string;
-  micrioImage?: { micrioId: string } | null;
-}
-
-// Module-scope caches for visual search HTTP calls (objectNumber→nodeId is
-// essentially immutable; visual results are stable for the duration of a session).
-const nodeIdCache = new Map<string, { value: string | null; expiresAt: number }>();
-const visualCache = new Map<string, { value: { candidates: SimilarCandidate[]; totalResults: number; searchUrl: string }; expiresAt: number }>();
-const NODE_ID_TTL = 60 * 60_000;  // 1 hour (mapping is immutable)
-const VISUAL_TTL = 30 * 60_000;   // 30 min (matches similarPages TTL)
-
-/** Resolve an objectNumber to the Rijksmuseum website's objectNodeId (hex hash).
- *  Returns null if the artwork is not in the website search index. */
-async function resolveObjectNodeId(objectNumber: string): Promise<string | null> {
-  const cached = nodeIdCache.get(objectNumber);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
-  try {
-    const resp = await axios.get("https://www.rijksmuseum.nl/api/v1/collection/search", {
-      params: { query: objectNumber, language: "en", pageSize: 5 },
-      timeout: 5000,
-    });
-    const objs: VisualSearchArtObject[] = resp.data?.artObjects ?? [];
-    const match = objs.find(o => o.objectNumber === objectNumber);
-    const nodeId = match?.objectNodeId ?? null;
-    nodeIdCache.set(objectNumber, { value: nodeId, expiresAt: Date.now() + NODE_ID_TTL });
-    return nodeId;
-  } catch {
-    return null;
-  }
-}
-
-/** Fetch visual similarity results from the Rijksmuseum website API.
- *  Returns candidates + total count + visual search URL, or empty on failure. */
-async function fetchVisualSimilar(
-  objectNodeId: string,
-  maxResults: number,
-): Promise<{ candidates: SimilarCandidate[]; totalResults: number; searchUrl: string }> {
-  const cacheKey = `${objectNodeId}:${maxResults}`;
-  const cached = visualCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
-
-  const searchUrl = `https://www.rijksmuseum.nl/en/collection/visual/search?objectNodeId=${objectNodeId}`;
-  try {
-    const resp = await axios.get("https://www.rijksmuseum.nl/api/v1/collection/visualsearch", {
-      params: { objectNodeId, language: "en", page: 1, pageSize: maxResults },
-      timeout: 8000,
-    });
-    const objs: VisualSearchArtObject[] = resp.data?.artObjects ?? [];
-    const hasMore: boolean = resp.data?.hasMoreResults ?? false;
-
-    const candidates: SimilarCandidate[] = objs.map((o, i) => {
-      // Extract creator from makerSubtitleLine (format: "Creator Name, date")
-      const creator = o.makerSubtitleLine?.split(",")[0]?.trim() ?? "";
-      // IIIF thumbnail via micrio — same pattern as our own thumbnails
-      const iiifId = o.micrioImage?.micrioId ?? undefined;
-      return {
-        objectNumber: o.objectNumber,
-        title: o.title ?? "",
-        creator,
-        iiifId,
-        score: maxResults - i, // rank-order score (no similarity scores from API)
-        url: `https://www.rijksmuseum.nl/en/collection/${o.objectNumber}`,
-      };
-    });
-
-    const result = {
-      candidates,
-      totalResults: hasMore ? maxResults + 1 : objs.length, // indicate "more available"
-      searchUrl,
-    };
-    visualCache.set(cacheKey, { value: result, expiresAt: Date.now() + VISUAL_TTL });
-    return result;
-  } catch {
-    return { candidates: [], totalResults: 0, searchUrl };
-  }
-}
+// ─── Provenance chain + detail helpers (used by get_artwork_details) ────────
+// These depend on InferOutput<typeof ArtworkDetailOutput> and must live here
+// rather than in helpers.ts (which would create a circular dep with outputSchemas.ts).
 
 interface ProvenanceChainEvent {
   sequence: number;
@@ -578,825 +316,6 @@ function formatDetailSummary(d: DetailWithChain): string {
 
   return lines.join("\n");
 }
-
-/**
- * Render a classification-method code as a compact text-channel tag, or null
- * if it equals the parser default (so the formatter can omit it). Lossless on
- * `rule:*` qualifiers; abbreviates `llm_*` → `llm:*`; strips the
- * `llm_structural:` prefix on correction codes.
- */
-function compactMethodTag(method: string | null | undefined, defaultMethod?: string): string | null {
-  if (!method) return null;
-  if (defaultMethod && method === defaultMethod) return null;
-  if (method.startsWith("llm_structural:")) return method.slice("llm_structural:".length);
-  if (method.startsWith("llm_")) return "llm:" + method.slice("llm_".length);
-  return method;
-}
-
-/** #386 compact-mode rollup of a provenance chain — fixed-size summary derived from the
- *  full event list (events are sequence-ordered). Used by both the structured and text
- *  channels so they stay in sync. */
-function provenanceCompactSummary(art: ProvenanceArtworkResult) {
-  const years = art.events.map(e => e.dateYear).filter((y): y is number => y != null);
-  const names = art.events.flatMap(e => e.parties.map(p => p.name)).filter(Boolean);
-  const transferTypes = [...new Set(
-    art.events.map(e => e.transferType).filter(t => t !== "unknown" && t !== "non_provenance"),
-  )];
-  return {
-    eventCount: art.eventCount,
-    matchedEventCount: art.matchedEventCount,
-    yearSpan: [years.length ? Math.min(...years) : null, years.length ? Math.max(...years) : null] as (number | null)[],
-    transferTypes,
-    firstOwner: names[0] ?? null,
-    lastOwner: names.length ? names[names.length - 1] : null,
-    hasGap: art.events.some(e => e.gap === true),
-    hasPrice: art.events.some(e => e.price != null),
-  };
-}
-
-/** #386 lean matched-event one-liners for compact mode (names only, trimmed rawText). */
-function provenanceMatchedEvents(art: ProvenanceArtworkResult) {
-  return art.events.filter(e => e.matched).map(e => ({
-    sequence: e.sequence,
-    transferType: e.transferType,
-    parties: e.parties.map(p => p.name),
-    dateExpression: e.dateExpression,
-    location: e.location,
-    price: e.price,
-    rawText: e.rawText.trim(),
-  }));
-}
-
-/** Format a curated set as a compact one-liner (Tier 2). */
-function formatSetLine(
-  s: {
-    setSpec: string;
-    name: string;
-    lodUri?: string;
-    memberCount?: number;
-    dominantTypes?: { label: string; count: number }[];
-    category?: string | null;
-  },
-  i: number,
-): string {
-  let line = `${i + 1}. ${s.setSpec} | ${s.name}`;
-  if (s.memberCount != null) line += ` | ${s.memberCount.toLocaleString()} members`;
-  if (s.category) line += ` | ${s.category}`;
-  if (s.dominantTypes && s.dominantTypes.length > 0) {
-    const top = s.dominantTypes.slice(0, 2).map(t => t.label).join(", ");
-    line += ` | ${top}`;
-  }
-  if (s.lodUri) line += ` | ${s.lodUri}`;
-  return line;
-}
-
-/** Stateless base64 token: "<setSpec>\t<offset>". Tokens are not portable across
- *  server versions — pre-v0.27 OAI-PMH tokens fail to decode here, by design. */
-function encodeBrowseSetToken(setSpec: string, offset: number): string {
-  return Buffer.from(`${setSpec}\t${offset}`, "utf8").toString("base64");
-}
-function decodeBrowseSetToken(token: string): { setSpec: string; offset: number } | null {
-  try {
-    const decoded = Buffer.from(token, "base64").toString("utf8");
-    const tab = decoded.indexOf("\t");
-    if (tab < 0) return null;
-    const setSpec = decoded.slice(0, tab);
-    const offset = parseInt(decoded.slice(tab + 1), 10);
-    if (!setSpec || isNaN(offset) || offset < 0) return null;
-    return { setSpec, offset };
-  } catch {
-    return null;
-  }
-}
-
-/** Format a DB-backed browse_set record as a compact one-liner (Tier 2). */
-function formatBrowseSetRecord(r: BrowseSetRecord, i: number): string {
-  let line = `${i + 1}. ${r.objectNumber}`;
-  if (r.title) line += ` | "${r.title}"`;
-  if (r.creator) line += ` — ${r.creator}`;
-  if (r.date) line += ` (${r.date})`;
-  if (r.hasImage) line += " [image]";
-  return line;
-}
-
-/** Format an OAI-PMH record as a compact one-liner (Tier 2). */
-function formatRecordLine(r: Record<string, unknown>, i: number): string {
-  const deleted = r.deleted === true;
-  // Deleted records carry no objectNumber (no metadata block); fall back to the
-  // LOD URI (full mode) or header identifier (identifiersOnly mode).
-  const obj = (r.objectNumber as string) || (r.lodUri as string) || (r.identifier as string) || "?";
-  const title = (r.title as string) || "";
-  const creator = r.creator && typeof r.creator === "object" && (r.creator as Record<string, unknown>).name
-    ? (r.creator as Record<string, unknown>).name as string
-    : "";
-  const type = (r.type as string) || "";
-  const datestamp = (r.datestamp as string) || "";
-  let line = `${i + 1}. ${deleted ? "[DELETED] " : ""}${obj}`;
-  if (datestamp) line += ` | ${datestamp}`;
-  if (type) line += ` | ${type}`;
-  if (title) line += ` | "${title}"`;
-  if (creator) line += ` — ${creator}`;
-  return line;
-}
-
-/** Stable canonical key for a tool's input (sorted keys). Full-length by default so it's a
- *  collision-free cache key; pass `maxLen` to cap it for the per-input latency map (where a
- *  rare long-input collision only merges latency buckets, but a cache collision would serve a
- *  wrong result). */
-function canonicalInputKey(input: unknown, maxLen?: number): string {
-  if (input == null || typeof input !== "object") return String(input);
-  const obj = input as Record<string, unknown>;
-  const parts = Object.keys(obj)
-    .filter(k => obj[k] !== undefined)
-    .sort()
-    .map(k => `${k}=${JSON.stringify(obj[k])}`);
-  const s = parts.join("&");
-  return maxLen != null && s.length > maxLen ? s.slice(0, maxLen) : s;
-}
-
-/** Create a logging wrapper that records timing to stderr and optional UsageStats. */
-function createLogger(stats?: UsageStats) {
-  return function withLogging<A extends unknown[], R>(
-    toolName: string,
-    fn: (...args: A) => Promise<R>
-  ): (...args: A) => Promise<R> {
-    return async (...args: A): Promise<R> => {
-      // Log tool input params (args[0]); skip args[1] which is MCP session metadata
-      const input = args[0] && typeof args[0] === "object" ? args[0] : undefined;
-      const start = performance.now();
-      try {
-        const result = await fn(...args);
-        const ms = Math.round(performance.now() - start);
-        const ok = !(result && typeof result === "object" && "isError" in result && (result as Record<string, unknown>).isError);
-        console.error(JSON.stringify({ tool: toolName, ms, ok, ...(input && { input }) }));
-        stats?.record(toolName, ms, ok);
-        stats?.recordInput(toolName, canonicalInputKey(input, 300), ms);
-        return result;
-      } catch (err) {
-        const ms = Math.round(performance.now() - start);
-        const error = err instanceof Error ? err.message : String(err);
-        console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
-        stats?.record(toolName, ms, false);
-        stats?.recordInput(toolName, canonicalInputKey(input, 300), ms);
-        // Do NOT emit structuredContent here — a bare { error } fails SDK
-        // validation against any outputSchema with required fields (-32602).
-        // Tools that need schema-conformant errors handle them internally.
-        const errResult: Record<string, unknown> = {
-          content: [{ type: "text" as const, text: `Error in ${toolName}: ${error}` }],
-          isError: true,
-        };
-        return errResult as R;
-      }
-    };
-  };
-}
-
-/**
- * Server-side OAI page buffer. When `maxResults` truncates an upstream page,
- * the remainder is stored here keyed by a server-generated token. The next
- * continuation drains the buffer before fetching a new upstream page.
- * TTL: 30 minutes, swept every 60s.
- */
-interface OaiPageBuffer {
-  remainder: unknown[];
-  upstreamToken: string | null;
-  completeListSize: number | null;
-  identifiersOnly?: boolean;
-  toolName: string;
-  lastAccess: number;
-}
-const oaiPageBuffers = new Map<string, OaiPageBuffer>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, buf] of oaiPageBuffers) {
-    if (now - buf.lastAccess > 1_800_000) oaiPageBuffers.delete(id);
-  }
-}, 60_000).unref();
-
-/** Format an OAI-PMH paginated list result into a tool response. */
-function paginatedResponse(
-  result: { records: unknown[]; completeListSize: number | null; resumptionToken: string | null },
-  maxResults: number,
-  totalLabel: string,
-  toolName: string,
-  extra?: Record<string, unknown>,
-  formatLine?: (record: Record<string, unknown>, index: number) => string,
-  identifiersOnly?: boolean,
-): ToolResponse | StructuredToolResponse {
-  const records = result.records.splice(0, maxResults);
-  const overflow = result.records; // splice mutated: remainder is what's left
-
-  // Build server-side continuation token when there are buffered records or an upstream token
-  let serverToken: string | null = null;
-  const hasMore = overflow.length > 0 || result.resumptionToken;
-  if (hasMore) {
-    serverToken = randomUUID();
-    oaiPageBuffers.set(serverToken, {
-      remainder: overflow,
-      upstreamToken: result.resumptionToken,
-      completeListSize: result.completeListSize,
-      identifiersOnly: identifiersOnly || undefined,
-      toolName,
-      lastAccess: Date.now(),
-    });
-  }
-
-  const data: Record<string, unknown> = {
-    ...(result.completeListSize != null ? { [totalLabel]: result.completeListSize } : {}),
-    returnedCount: records.length,
-    ...extra,
-    records,
-    ...(serverToken
-      ? {
-          resumptionToken: serverToken,
-          hint: `Pass this resumptionToken to ${toolName} to get the next page.`,
-        }
-      : {}),
-  };
-
-  if (formatLine) {
-    const total = result.completeListSize;
-    const header = total != null
-      ? `${records.length} of ${total} records`
-      : `${records.length} records`;
-    const lines = records.map((r, i) => formatLine(r as Record<string, unknown>, i));
-    const parts = [header, ...lines];
-    if (serverToken) parts.push("[resumptionToken available for next page]");
-    // jsonText only for full records — they drop materials/dates/authority links
-    // from the one-liner. The lean identifiersOnly listing stays prose-only.
-    return structuredResponse(data, parts.join("\n"), { jsonText: !identifiersOnly });
-  }
-  return structuredResponse(data);
-}
-
-/**
- * Drain an OAI page buffer or fetch a fresh upstream page.
- * Shared by browse_set and get_recent_changes to avoid duplicating buffer-drain logic.
- */
-async function drainOaiBuffer(
-  buffered: OaiPageBuffer,
-  maxResults: number,
-  totalLabel: string,
-  toolName: string,
-  fetchUpstream: (token: string) => Promise<{ records: unknown[]; completeListSize: number | null; resumptionToken: string | null }>,
-  extra?: Record<string, unknown>,
-  formatLine?: (record: Record<string, unknown>, index: number) => string,
-): Promise<ToolResponse | StructuredToolResponse> {
-  const identifiers = buffered.identifiersOnly;
-  if (buffered.remainder.length >= maxResults || !buffered.upstreamToken) {
-    return paginatedResponse(
-      { records: buffered.remainder, completeListSize: buffered.completeListSize, resumptionToken: buffered.upstreamToken },
-      maxResults, totalLabel, toolName, extra, formatLine, identifiers,
-    );
-  }
-  // Buffer too small — fetch next upstream page and prepend remainder
-  const upstream = await fetchUpstream(buffered.upstreamToken);
-  const merged = { records: [...buffered.remainder, ...upstream.records], completeListSize: upstream.completeListSize ?? buffered.completeListSize, resumptionToken: upstream.resumptionToken };
-  return paginatedResponse(merged, maxResults, totalLabel, toolName, extra, formatLine, identifiers);
-}
-
-/**
- * Look up and validate a server-side OAI continuation token.
- * Returns the buffer if valid, an error response if invalid, or undefined if not a server token.
- * Does NOT delete the buffer entry — entries expire via TTL (#142: retry-safe).
- */
-function resolveOaiBuffer(
-  token: string | undefined,
-  expectedTool: string,
-): { buffered: OaiPageBuffer } | { error: ReturnType<typeof errorResponse> } | undefined {
-  if (!token) return undefined;
-  const buffered = oaiPageBuffers.get(token);
-  if (!buffered) {
-    // Token looks like a server UUID but isn't in the buffer — expired or wrong instance
-    // Only treat UUIDs as server tokens; raw OAI tokens are longer/different format
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
-      return { error: errorResponse("Continuation token expired or not found. Please start a new query.") };
-    }
-    return undefined; // Not a server token — let it pass through as upstream OAI token
-  }
-  if (buffered.toolName !== expectedTool) {
-    return { error: errorResponse(`This continuation token belongs to ${buffered.toolName}, not ${expectedTool}.`) };
-  }
-  buffered.lastAccess = Date.now(); // refresh TTL on access
-  return { buffered };
-}
-
-/**
- * Register all tools and resources on the given McpServer.
- * `httpPort` is provided when running in HTTP mode so viewer URLs can be generated.
- */
-/** Resolve the public base URL from environment. Used by both index.ts and registerTools. */
-export function resolvePublicUrl(httpPort?: number): string | undefined {
-  if (!httpPort) return undefined;
-  return process.env.PUBLIC_URL
-    || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${httpPort}`);
-}
-
-export function registerAll(
-  server: McpServer,
-  apiClient: RijksmuseumApiClient,
-  oaiClient: OaiPmhClient,
-  vocabDb: VocabularyDb | null,
-  embeddingsDb: EmbeddingsDb | null,
-  embeddingModel: EmbeddingModel | null,
-  httpPort?: number,
-  stats?: UsageStats
-): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats), stats);
-  registerResources(server);
-  registerAppViewerResource(server);
-
-  // Log whether the connected client supports MCP Apps (SHOULD-level capability negotiation)
-  server.server.oninitialized = () => {
-    const clientCaps = server.server.getClientCapabilities();
-    const uiCap = getUiCapability(clientCaps);
-    if (uiCap) {
-      console.error(`[mcp] Client supports MCP Apps (mimeTypes: ${uiCap.mimeTypes?.join(', ') ?? 'none'})`);
-    }
-  };
-}
-
-// ─── Output Schemas (Zod raw shapes for outputSchema) ───────────────
-
-/** Factory — each call returns a unique Zod instance so zod-to-json-schema
- *  won't deduplicate into $ref pointers (which claude.ai cannot resolve). */
-const ResolvedTermShape = () => z.object({
-  id: z.string(),
-  label: z.string(),
-  equivalents: z.record(z.string()).optional(),
-});
-
-const SearchResultOutput = {
-  totalResults: z.number().int().nullable().optional()
-    .describe("Total matching artworks (always present when vocabulary DB is available). Use with compact=true for efficient counting."),
-  results: z.array(z.object({
-    objectNumber: z.string(),
-    title: z.string(),
-    creator: z.string(),
-    date: z.string().optional(),
-    type: z.string().optional(),
-    url: z.string(),
-    nearestPlace: z.string().optional(),
-    distance_km: z.number().optional(),
-    groupedChildCount: z.number().int().positive().optional()
-      .describe("Set on parent records when groupBy='parent' collapses children into them."),
-  })).optional().describe("Artwork summaries. Absent when compact=true."),
-  ids: z.array(z.string()).optional().describe("Object numbers (compact mode)."),
-  source: z.literal("vocabulary").optional(),
-  referencePlace: z.string().optional(),
-  facets: z.record(z.string(), z.array(z.object({
-    label: z.string(),
-    count: z.number().int(),
-    percentage: z.number().optional(),
-  }))).optional().describe("Counts per dimension (configurable via facetLimit, default top-5). Computed when results are truncated and facets is set."),
-  warnings: z.array(z.string()).optional(),
-  error: z.string().optional(),
-};
-
-// ── find_similar output schema (#379) ──
-// SimilarCandidate is reused across 9+ channels, so it MUST be a factory:
-// each call mints a fresh Zod instance, preventing zod-to-json-schema from
-// deduplicating into $ref pointers claude.ai cannot resolve.
-
-const LabeledTermShape = () => z.object({
-  label: z.string(),
-  wikidataUri: z.string().optional(),
-});
-
-/** Factory — one fresh instance per channel to avoid $ref dedup. */
-const SimilarCandidateShape = () => z.object({
-  objectNumber: z.string(),
-  title: z.string(),
-  creator: z.string(),
-  date: z.string().optional(),
-  type: z.string().optional(),
-  iiifId: z.string().optional(),
-  score: z.number().describe("Channel-native similarity score. Visual has no score (0); not comparable across channels."),
-  url: z.string(),
-  detail: z.string().optional().describe("Human-readable 'why' line (shared motifs, lineage pairs, etc.)."),
-  // Channel-specific extras (present only on the relevant channel):
-  sharedNotations: z.array(z.string()).optional().describe("Iconclass: shared notation codes."),
-  qualifierLabel: z.string().optional().describe("Lineage: primary assignment-qualifier label."),
-  qualifierUri: z.string().optional().describe("Lineage: Getty AAT URI for the qualifier."),
-  qualifierCreator: z.string().optional().describe("Lineage: creator referenced by the qualifier."),
-  descSnippet: z.string().optional().describe("Description: truncated matching description text."),
-  sharedTerms: z.array(LabeledTermShape()).optional().describe("Depicted Person/Place, Theme, Related*: shared terms."),
-});
-
-const PooledCandidateShape = () => SimilarCandidateShape().extend({
-  sources: z.array(z.string()).describe("Channels this artwork appeared in."),
-  matchCount: z.number().int().describe("Number of channels that matched (= sources.length)."),
-});
-
-const FindSimilarOutput = {
-  query: z.object({
-    objectNumber: z.string(),
-    title: z.string(),
-    creator: z.string(),
-    date: z.string().optional(),
-    type: z.string().optional(),
-    iiifId: z.string().optional(),
-    description: z.string().optional(),
-    iconclassCodes: z.array(z.object({ notation: z.string(), label: z.string() })).optional(),
-    lineageQualifiers: z.array(z.object({ label: z.string(), aatUri: z.string(), creator: z.string() })).optional(),
-    depictedPersons: z.array(LabeledTermShape()).optional(),
-    depictedPlaces: z.array(LabeledTermShape()).optional(),
-    themes: z.array(z.string()).optional(),
-    relatedVariantLabels: z.array(z.string()).optional(),
-    relatedObjectLabels: z.array(z.string()).optional(),
-  }).describe("Query artwork metadata plus the per-channel terms that explain why each channel matched."),
-
-  // Required channels always present; best-effort/optional channels mirror SimilarPageData.modes optionality.
-  modes: z.object({
-    iconclass: z.array(SimilarCandidateShape()),
-    lineage: z.array(SimilarCandidateShape()),
-    description: z.array(SimilarCandidateShape()),
-    visual: z.array(SimilarCandidateShape()).optional().describe("Best-effort (Rijksmuseum website API); absent on failure or no image."),
-    theme: z.array(SimilarCandidateShape()).optional(),
-    relatedVariant: z.array(SimilarCandidateShape()).optional(),
-    relatedObject: z.array(SimilarCandidateShape()).optional(),
-    depictedPerson: z.array(SimilarCandidateShape()).optional(),
-    depictedPlace: z.array(SimilarCandidateShape()).optional(),
-  }).describe("Up to 9 independent similarity channels. Each channel is independently ranked; scores are not cross-comparable."),
-
-  pooled: z.array(PooledCandidateShape())
-    .describe("Artworks appearing in >= poolThreshold channels, sorted by matchCount desc. The cross-channel consensus signal."),
-  poolThreshold: z.number().int().describe("Minimum channel count for the pooled list (currently 4)."),
-
-  pageUrl: z.string().describe("URL (HTTP mode) or file path (stdio mode) of the rendered HTML comparison page. Same value as the text channel."),
-  generatedAt: z.string(),
-  visualSearchUrl: z.string().optional().describe("Link to full visual-search results on rijksmuseum.nl."),
-  visualTotalResults: z.number().int().optional(),
-  error: z.string().optional(),
-};
-
-// ── find_similar text-channel trim (plan json-text-compat-rollout §E) ──
-// The Claude model on claude.ai/Desktop reads content[].text (not
-// structuredContent) and can't fetch the HTML page, so it gets a trimmed,
-// answer-shaped summary in the text block while structuredContent keeps the full
-// per-channel depth (maxResults) for the CLI. No client reads both into the model.
-const SIMILAR_TEXT_OVERALL_CAP = 72;   // total candidates across ALL channels
-const SIMILAR_TEXT_POOLED_CAP = 16;    // pooled consensus list, capped separately
-
-type TrimCandidate = z.infer<ReturnType<typeof SimilarCandidateShape>>;
-type TrimPooled = z.infer<ReturnType<typeof PooledCandidateShape>>;
-
-/** Keep schema-required fields + the per-candidate "why"; drop viewer/URI plumbing. */
-function leanSimilarCandidate(c: TrimCandidate): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    objectNumber: c.objectNumber, title: c.title, creator: c.creator, score: c.score, url: c.url,
-  };
-  if (c.date) out.date = c.date;
-  if (c.type) out.type = c.type;
-  if (c.detail) out.detail = c.detail;
-  if (c.sharedNotations) out.sharedNotations = c.sharedNotations;
-  if (c.qualifierLabel) out.qualifierLabel = c.qualifierLabel;
-  if (c.qualifierCreator) out.qualifierCreator = c.qualifierCreator;
-  if (c.descSnippet) out.descSnippet = c.descSnippet;
-  if (c.sharedTerms) out.sharedTerms = c.sharedTerms;
-  return out;
-}
-
-/**
- * Trimmed comparison summary for the text channel: seed core + per-channel
- * {total, top} bounded to SIMILAR_TEXT_OVERALL_CAP candidates OVERALL via
- * rank-interleave (rank-1 of every present channel, then rank-2, …; an exhausted
- * channel is skipped so its budget flows to the others), plus the pooled
- * consensus list capped separately. pageUrl serializes first.
- */
-function buildSimilarTextSummary(s: InferOutput<typeof FindSimilarOutput>): Record<string, unknown> {
-  const present = Object.entries(s.modes)
-    .filter(([, arr]) => Array.isArray(arr) && arr.length > 0) as [string, TrimCandidate[]][];
-  const picked = new Map<string, TrimCandidate[]>(present.map(([k]) => [k, []]));
-  let taken = 0;
-  for (let rank = 0; taken < SIMILAR_TEXT_OVERALL_CAP; rank++) {
-    let progressed = false;
-    for (const [ch, arr] of present) {
-      if (rank < arr.length) {
-        picked.get(ch)!.push(arr[rank]);
-        taken++;
-        progressed = true;
-        if (taken >= SIMILAR_TEXT_OVERALL_CAP) break;
-      }
-    }
-    if (!progressed) break;
-  }
-
-  const channels: Record<string, unknown> = {};
-  for (const [ch, arr] of present) {
-    channels[ch] = { total: arr.length, top: picked.get(ch)!.map(leanSimilarCandidate) };
-  }
-
-  const seed: Record<string, unknown> = {
-    objectNumber: s.query.objectNumber, title: s.query.title, creator: s.query.creator,
-  };
-  if (s.query.date) seed.date = s.query.date;
-  if (s.query.type) seed.type = s.query.type;
-
-  const pooledTop = s.pooled.slice(0, SIMILAR_TEXT_POOLED_CAP).map((p: TrimPooled) => ({
-    ...leanSimilarCandidate(p),
-    sources: p.sources,
-    matchCount: p.matchCount,
-  }));
-
-  return {
-    pageUrl: s.pageUrl,
-    seed,
-    poolThreshold: s.poolThreshold,
-    channels,
-    pooled: { total: s.pooled.length, top: pooledTop },
-  };
-}
-
-const ArtworkDetailOutput = {
-  // ArtworkSummary base
-  id: z.string(),
-  objectNumber: z.string(),
-  title: z.string(),
-  creator: z.string(),
-  date: z.string(),
-  type: z.string().optional()
-    .describe("Primary object type — convenience sugar equal to objectTypes[0]?.label when present. objectTypes[] is the authoritative structured form (label + vocabulary id)."),
-  url: z.string(),
-  // ArtworkDetail fields
-  description: z.string().nullable(),
-  techniqueStatement: z.string().nullable(),
-  physicalDimensions: z.string().nullable().describe("Short reconstructed dimensions string (e.g. \"h 379.5 cm × w 453.5 cm\") from formatDimensions(height, width). Same value and key the viewer tools (get_artwork_image / remount_viewer) emit. For the full structured measurements use dimensions[]; for verbose cataloguer prose use extentText."),
-  provenance: z.string().nullable(),
-  provenanceChain: z.array(z.object({
-    sequence: z.number().int(),
-    gap: z.boolean(),
-    uncertain: z.boolean(),
-    transferType: z.string().describe("Normalized transfer type: sale, inheritance, by_descent, widowhood, bequest, commission, confiscation, theft, looting, recuperation, loan, transfer, collection, gift, exchange, deposit, restitution, inventory, or unknown."),
-    party: z.object({
-      name: z.string(),
-    }).nullable(),
-    location: z.string().nullable(),
-    date: z.object({
-      year: z.number().int().nullable().describe("Best-effort single year; null if the date couldn't be reduced to a year."),
-      text: z.string().describe("Original date expression as it appeared in the source."),
-    }).nullable(),
-    price: z.object({
-      currency: z.string(),
-      amount: z.number().nullable(),
-      text: z.string(),
-    }).nullable(),
-  })).nullable()
-    .describe("Parsed provenance events derived from the raw `provenance` string via the project's PEG parser. Null when no provenance text is available. Clients can re-derive counts, gaps, year spans, transfer-type histograms, and earliest-known-owner from this array; the text channel renders a summary built from the same data."),
-  creditLine: z.string().nullable(),
-  inscriptions: z.array(z.string()),
-  parsedInscriptions: z.array(z.object({
-    sequence: z.number().int(),
-    raw: z.string(),
-    language: z.enum(["nl", "en", "unknown"]).describe("Inferred only from which vocabulary the type/qualifier tokens came from; value-only and collector-mark-only segments are legitimately 'unknown'."),
-    type: z.string().nullable().describe("Raw type token as catalogued (first comma-field of the header)."),
-    normalizedType: z.string().nullable().describe("Canonical type bucket (e.g. \"collector's mark\", \"signature\", \"inscription\", \"number\"), or null when the raw token is outside the documented set. Open string, not a closed enum — preserve raw `type` alongside."),
-    placement: z.string().nullable().describe("Raw placement qualifier text (e.g. \"verso linksonder\")."),
-    normalizedPlacement: z.string().nullable().describe("Coarse surface bucket: \"recto\" | \"verso\" | null. Finer positions stay in raw `placement`."),
-    technique: z.string().nullable().describe("Raw technique qualifier text (e.g. \"gestempeld\")."),
-    normalizedTechnique: z.string().nullable().describe("Canonical technique bucket (e.g. \"stamped\", \"handwritten\", \"printed\"), or null."),
-    value: z.string().nullable().describe("Raw post-colon text; null when the segment is a bare type label."),
-    transcribedText: z.array(z.string()).describe("Quoted strings only — text actually transcribed *on* the work (signatures, captions, dates). Empty does NOT mean the object bears no text: coverage is uneven by object type (high for prints, low for coins/medals/posters)."),
-    collectorMarks: z.array(z.object({ catalogue: z.string(), number: z.string() })).describe("Collector-mark catalogue references (Lugt N) found in the value."),
-    unknownQualifiers: z.array(z.string()).describe("Header comma-fields that matched no known placement/technique vocabulary."),
-    isCollectorMark: z.boolean(),
-    isPlaceholder: z.boolean().describe("Type-label-only row with no value/quote/mark (e.g. `datum | date`) — a data-entry placeholder, not artwork-borne text."),
-  })).describe("Structured parse of the raw `inscriptions` blob (each physical mark is recorded twice — a detailed Dutch form and an English gloss; both are preserved here losslessly, one entry per segment). This is catalogue-entered inscription/mark data — NOT OCR and NOT an exhaustive transcription of visible text. The field is dominated by verso collector's-mark stamps; the artist-/image-applied text is a real but minority component. Use transcribedText to find what is actually written on the work; use isCollectorMark/isPlaceholder to filter ownership-stamp boilerplate."),
-  inscriptionSummary: z.object({
-    hasTranscribedText: z.boolean().describe("At least one segment carries a quoted transcription."),
-    hasCollectorMarkOnly: z.boolean().describe("Has collector marks and no transcribed text — pure ownership-stamp boilerplate."),
-    collectorMarks: z.array(z.string()).describe("Deduped collector marks (e.g. \"Lugt 2228\")."),
-    types: z.array(z.string()).describe("Distinct normalized types present."),
-    placements: z.array(z.string()).describe("Distinct normalized placements present (recto/verso)."),
-    techniques: z.array(z.string()).describe("Distinct normalized techniques present."),
-  }).describe("Per-artwork rollup over parsedInscriptions — lets a client distinguish 'object bears text' from 'verso collector stamp boilerplate' at a glance."),
-  location: z.object({
-    roomId: z.string(),
-    floor: z.string().nullable(),
-    roomName: z.string().nullable(),
-  }).nullable().describe("Current museum room (resolved via current_location → museum_rooms join). Null if not on display."),
-  collectionSets: z.array(z.string()),
-  externalIds: z.object({
-    handle: z.string().nullable().describe("Persistent handle URI (hdl.handle.net)."),
-    other: z.array(z.string()).describe("Non-handle external IDs (rare — handful of rows DB-wide)."),
-  }),
-  // Enriched Group A
-  titles: z.array(z.object({
-    title: z.string(),
-    language: z.enum(TITLE_LANGUAGES),
-    qualifier: z.enum(TITLE_QUALIFIERS),
-  })),
-  curatorialNarrative: z.object({ en: z.string().nullable(), nl: z.string().nullable() }),
-  license: z.string().nullable(),
-  dimensions: z.array(z.object({
-    type: z.enum(DIMENSION_TYPES), value: z.union([z.number(), z.string()]), unit: z.string(), note: z.string().nullable(),
-  })),
-  relatedObjects: z.array(z.object({
-    relationship: z.string().describe("English relationship label: 'different example', 'production stadia', or 'pendant'."),
-    objectNumber: z.string().nullable().describe("Peer artwork's object number when it resolves to a row in our DB; null for unresolved Linked Art URIs."),
-    title: z.string().nullable().describe("Peer artwork's title when resolved; null otherwise."),
-    objectUri: z.string().describe("Original Linked Art URI from the harvest. Pass to get_artwork_details(uri=…) for full peer metadata."),
-    iiifId: z.string().nullable().describe("Peer artwork's IIIF identifier when resolved and the peer carries an image; null otherwise. Powers in-viewer prev/next navigation."),
-  })).describe("Related-variant peer relations — creator-invariant curator-declared edges ('different example' / 'production stadia' / 'pendant'). Other curator-declared relationships (pair, set, recto|verso, original|reproduction, related object) are exposed via find_similar's Related Object channel rather than here. Capped at 25 entries — see relatedObjectsTotalCount."),
-  relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total related-variant peer-relation count before capping. Equals relatedObjects.length when ≤ 25."),
-  parents: z.array(z.object({
-    objectNumber: z.string(),
-    title: z.string(),
-  })).describe("Parent records (e.g. the sketchbook this folio belongs to). Empty for top-level objects."),
-  childCount: z.number().int().nonnegative().describe("Total number of child records (e.g. folios in a sketchbook). 0 for non-parent objects."),
-  children: z.array(z.object({
-    objectNumber: z.string(),
-    title: z.string(),
-  })).describe("Up to 25 child records, ordered by object_number. Use search_artwork to enumerate the full set."),
-  persistentId: z.string().nullable(),
-  // Enriched Group B
-  objectTypes: z.array(ResolvedTermShape()),
-  materials: z.array(ResolvedTermShape()),
-  production: z.array(z.object({
-    name: z.string(), role: z.string().nullable(), attributionQualifier: z.string().nullable(), place: z.string().nullable(), actorUri: z.string(),
-    personInfo: z.object({
-      birthYear: z.number().int().nullable(),
-      deathYear: z.number().int().nullable(),
-      gender: z.string().nullable(),
-      wikidataId: z.string().nullable(),
-    }).optional(),
-  })),
-  collectionSetLabels: z.array(ResolvedTermShape()),
-  // Enriched Group C
-  subjects: z.object({
-    iconclass: z.array(ResolvedTermShape()),
-    depictedPersons: z.array(ResolvedTermShape()),
-    depictedPlaces: z.array(ResolvedTermShape()),
-  }),
-  // Enriched Group D — v0.27 (#291)
-  dateDisplay: z.string().nullable()
-    .describe("Free-text Rijksmuseum-formatted display date (e.g. '1642', 'c. 1665-1667'). Use this for prose; date for ISO-shaped output."),
-  extentText: z.string().nullable()
-    .describe("Free-text extent / dimensions string (dcterms:extent). Verbose human-readable form."),
-  recordCreated: z.string().nullable()
-    .describe("ISO 8601 timestamp of catalogue record creation."),
-  recordModified: z.string().nullable()
-    .describe("ISO 8601 timestamp of catalogue record's most recent modification."),
-  themes: z.array(ResolvedTermShape())
-    .describe("Curatorial thematic tags (overseas history, political history, costume, …)."),
-  themesTotalCount: z.number().int().nonnegative(),
-  exhibitions: z.array(z.object({
-    exhibitionId: z.number().int(),
-    titleEn: z.string().nullable(),
-    titleNl: z.string().nullable(),
-    dateStart: z.string().nullable(),
-    dateEnd: z.string().nullable(),
-  })).describe("Exhibitions this artwork has appeared in. Most-recent first."),
-  exhibitionsTotalCount: z.number().int().nonnegative(),
-  attributionEvidence: z.array(z.object({
-    partIndex: z.number().int().nonnegative()
-      .describe("Upstream LinkedArt part index (preserved for future correlation; do not assume it maps to production[] index)."),
-    evidenceTypeAat: z.string().nullable()
-      .describe("AAT URI for evidence type (signature, inscription, ...). Labels not yet harvested."),
-    carriedByUri: z.string().nullable()
-      .describe("Linked Art URI of the inscription/signature object."),
-    labelText: z.string().nullable()
-      .describe("Free-text label of the evidence (e.g. transcribed signature)."),
-  })).describe("Evidence supporting attribution claims (signatures, inscriptions, monograms, …). Artwork-level — partIndex preserves upstream ordering but does NOT map to production[] index."),
-  error: z.string().optional(),
-};
-
-const ImageInfoOutput = {
-  objectNumber: z.string(),
-  title: z.string().optional(),
-  creator: z.string().nullable().optional(),
-  date: z.string().nullable().optional(),
-  width: z.number().int().optional(),
-  height: z.number().int().optional(),
-  license: z.string().nullable().optional(),
-  physicalDimensions: z.string().nullable().optional(),
-  url: z.string().optional(),
-  iiifInfoUrl: z.string().optional(),
-  viewUUID: z.string().optional().describe("Viewer session ID for use with navigate_viewer."),
-  error: z.string().optional(),
-};
-
-const InspectImageOutput = {
-  objectNumber: z.string(),
-  region: z.string(),
-  requestedSize: z.number().int(),
-  nativeWidth: z.number().int().optional(),
-  nativeHeight: z.number().int().optional(),
-  cropPixelWidth: z.number().int().optional()
-    .describe("Actual width in pixels of the returned inspect image/crop. Use with cropPixelHeight for crop-local pixel overlays."),
-  cropPixelHeight: z.number().int().optional()
-    .describe("Actual height in pixels of the returned inspect image/crop. Use with cropPixelWidth for crop-local pixel overlays."),
-  cropRegion: z.string().optional()
-    .describe("Normalized IIIF region used for the fetch; crop_pixels: inputs are normalized to plain IIIF pixel regions."),
-  rotation: z.number().int(),
-  quality: z.string(),
-  fetchTimeMs: z.number().int().optional().describe("Time spent fetching from IIIF server (ms)"),
-  viewUUID: z.string().optional().describe("Active viewer session ID (if a viewer is open for this artwork)"),
-  viewerNavigated: z.boolean().optional().describe("Whether the viewer was auto-navigated to the inspected region"),
-  overlaysRendered: z.number().int().optional().describe("Number of viewer overlays composited onto the returned image (show_overlays only)"),
-  overlaysSkipped: z.number().int().optional().describe("Number of viewer overlays that fell outside the inspected region and were not drawn (show_overlays only)"),
-  overlaysError: z.string().optional().describe("Reason the composite couldn't proceed when show_overlays was requested (e.g. 'no_active_viewer', 'compositor_failed')"),
-  error: z.string().optional(),
-};
-
-const PaginatedBase = {
-  returnedCount: z.number().int(),
-  records: z.array(z.record(z.unknown())),
-  resumptionToken: z.string().optional(),
-  hint: z.string().optional(),
-  error: z.string().optional(),
-};
-
-const BrowseSetOutput = {
-  records: z.array(z.object({
-    objectNumber: z.string(),
-    title: z.string(),
-    creator: z.string(),
-    date: z.string(),
-    description: z.string().optional(),
-    extentText: z.string().optional()
-      .describe("Verbose free-text extent/dimensions string (dcterms:extent) — the same shape as get_artwork_details.extentText. (Renamed from `dimensions` in v0.60; that key collided with get_artwork_details.dimensions[], which is a structured array.)"),
-    datestamp: z.string().optional(),
-    hasImage: z.boolean(),
-    imageUrl: z.string().optional(),
-    iiifServiceUrl: z.string().optional(),
-    edmType: z.string().optional(),
-    lodUri: z.string(),
-    url: z.string(),
-  })),
-  totalInSet: z.number().int().optional(),
-  resumptionToken: z.string().optional(),
-  error: z.string().optional(),
-};
-
-const RecentChangesOutput = {
-  ...PaginatedBase,
-  totalChanges: z.number().int().optional(),
-  identifiersOnly: z.boolean().optional(),
-};
-
-const SemanticSearchOutput = {
-  searchMode: z.enum(["semantic", "semantic+filtered"]),
-  query: z.string(),
-  returnedCount: z.number().int(),
-  results: z.array(z.object({
-    rank: z.number().int(),
-    objectNumber: z.string(),
-    title: z.string(),
-    creator: z.string(),
-    date: z.string().optional(),
-    type: z.string().optional(),
-    similarityScore: z.number(),
-    sourceText: z.string().optional(),
-    url: z.string(),
-  })),
-  warnings: z.array(z.string()).optional(),
-  error: z.string().optional(),
-};
-
-const CuratedSetsOutput = {
-  totalSets: z.number().int(),
-  filteredFrom: z.number().int().optional(),
-  query: z.string().optional(),
-  sets: z.array(z.object({
-    setSpec: z.string(),
-    name: z.string(),
-    lodUri: z.string(),
-    memberCount: z.number().int().optional(),
-    dominantTypes: z.array(z.object({
-      label: z.string(),
-      count: z.number().int(),
-    })).optional(),
-    dominantCenturies: z.array(z.object({
-      century: z.string(),
-      count: z.number().int(),
-    })).optional(),
-    category: z.enum(["object_type", "iconographic", "album", "sub_collection", "umbrella"]).nullable().optional(),
-  })),
-  error: z.string().optional(),
-};
-
-// State (IIIF_REGION_RE, viewerQueues, similarPages, enrichmentReviewPages, caches) are
-// imported from ./registration/state.js above.
-// Re-export the two symbols that src/index.ts imports from this module:
-export { similarPages, enrichmentReviewPages };
-
-// Geometry helpers are in ./registration/geometry.ts — imported above.
-// Re-export all geometry symbols (scripts/tests/test-pure-functions.mjs imports them
-// from dist/registration.js and must not be modified):
-export {
-  regionToPixels,
-  computeVerificationRegion,
-  parsePctRegion,
-  parseCropPixelsRegion,
-  cropPixelsToIiifPixels,
-  type OobWarning,
-  oobError,
-  checkRegionBounds,
-  type DeliveryState,
-  computeDeliveryState,
-  projectToFullImage,
-};
 
 // ─── Tools ──────────────────────────────────────────────────────────
 
@@ -4788,4 +3707,36 @@ function registerAppViewerResource(server: McpServer): void {
       ],
     })
   );
+}
+
+// ─── Public entry points ─────────────────────────────────────────────
+
+export function resolvePublicUrl(httpPort?: number): string | undefined {
+  if (!httpPort) return undefined;
+  return process.env.PUBLIC_URL
+    || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${httpPort}`);
+}
+
+export function registerAll(
+  server: McpServer,
+  apiClient: RijksmuseumApiClient,
+  oaiClient: OaiPmhClient,
+  vocabDb: VocabularyDb | null,
+  embeddingsDb: EmbeddingsDb | null,
+  embeddingModel: EmbeddingModel | null,
+  httpPort?: number,
+  stats?: UsageStats
+): void {
+  registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats), stats);
+  registerResources(server);
+  registerAppViewerResource(server);
+
+  // Log whether the connected client supports MCP Apps (SHOULD-level capability negotiation)
+  server.server.oninitialized = () => {
+    const clientCaps = server.server.getClientCapabilities();
+    const uiCap = getUiCapability(clientCaps);
+    if (uiCap) {
+      console.error(`[mcp] Client supports MCP Apps (mimeTypes: ${uiCap.mimeTypes?.join(', ') ?? 'none'})`);
+    }
+  };
 }
