@@ -50,7 +50,7 @@ For examples of more complex queries and responses, please see the [research sce
 
 ## Features
 
-Beside natural language search, rijksmuseum-mcp+ provides the following features and capabilities:
+Beside natural language search, rijksmuseum-mcp+ provides the following main features and capabilities:
 
 ### More searchable metadata
 
@@ -62,9 +62,9 @@ You can also search by who or what a work portrays, independently of who made it
 
 Full-text queries over the `title`, `description`, `inscription`, and `curatorialNarrative` fields can be structured. This lets you combine boolean clauses, field scoping, proximity, exact phrases, exclusions, and prefix matching, while simultaneously narrowing results with normal filters such as `creator`, `type`, `date`, `material`, or `technique`.
 
-Proximity searches on enriched geocoded locations let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). The necessary geo-coordinates were added only where the Rijksmuseum's own metadata provided a link to an external geographic authority such as the Getty [Thesaurus of Geographic Names](https://www.getty.edu/research/tools/vocabularies/tgn/).
+Proximity searches (`nearPlace`, `nearLat` + `nearLon`) on enriched, geocoded places let you find artworks related to locations in the museum's catalogue (e.g. "artworks depicting places within 25 km of Leiden"). The geo-coordinates were added only where the Rijksmuseum's own metadata provided a link to an external authority such as the Getty [Thesaurus of Geographic Names](https://www.getty.edu/research/tools/vocabularies/tgn/). Alternatively, a proximity search also can be made with arbitary, user or AI-assistant provided values (`nearPlaceRadius`).
 
-`Iconclass` notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource.
+`Iconclass` notations can be searched (also semantically) by title and description and explored hierarchically by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. In addition, rijksmuseum-iconclass-mcp privides custom links to [ArtResearch](https://artresearch.net/) to let you view more artworks sharing this notation from the twelve member institutions in the [PHAROS consortium](https://artresearch.net/resource/Partners).
 
 ### Semantic search
 
