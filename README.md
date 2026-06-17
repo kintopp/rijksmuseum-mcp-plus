@@ -62,7 +62,7 @@ You can also search by who or what a work portrays, independently of who made it
 
 Full-text queries over the `title`, `description`, `inscription`, and `curatorialNarrative` fields can be structured. This lets you combine boolean clauses, field scoping, proximity, exact phrases, exclusions, and prefix matching, while simultaneously narrowing results with normal filters such as `creator`, `type`, `date`, `material`, or `technique`.
 
-Proximity searches on enriched geocoded locations let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). The necessary geo-coordinates added only where the Rijksmuseum's own metadata provided an external geographic authority such as the Getty [Thesaurus of Geographic Names](https://www.getty.edu/research/tools/vocabularies/tgn/).
+Proximity searches on enriched geocoded locations let you find artworks related to a location (e.g. "artworks depicting places within 25 km of Leiden"). The necessary geo-coordinates were added only where the Rijksmuseum's own metadata provided a link to an external geographic authority such as the Getty [Thesaurus of Geographic Names](https://www.getty.edu/research/tools/vocabularies/tgn/).
 
 `Iconclass` notations can be searched by title and description and explored by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource.
 
