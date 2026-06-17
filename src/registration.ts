@@ -1708,7 +1708,7 @@ function registerTools(
       title: "Search Artwork",
       annotations: ANN_READ_CLOSED,
       description:
-        "Structured filter search — returns artworks matching ALL of the given criteria (subject, material, technique, dates, place, person, theme, …). " +
+        "Structured filter search — artworks matching ALL given filters (subject, material, technique, date, place, person). " +
         "Returns artwork summaries with titles, creators, and dates; every response includes totalResults (exact match count, not just the returned page). " +
         "Not for free-text concept queries — use semantic_search for those. " +
         "Not for artwork-to-artwork similarity — use find_similar with an objectNumber. " +
@@ -2205,8 +2205,7 @@ function registerTools(
         title: "Search Persons",
         annotations: ANN_READ_CLOSED,
         description:
-          "Demographic/structural lookup of persons (artists, depicted figures, donors) by " +
-          "gender, birth/death year, birth/death place, or profession. " +
+          "Demographic/structural lookup of persons by gender, birth/death year or place, or profession; returns vocab IDs. " +
           "Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, " +
           "or search_artwork({aboutActor: <name>}) for works depicting them. " +
           "Two-step pattern: search_persons → search_artwork. " +
@@ -2297,7 +2296,7 @@ function registerTools(
       title: "Get Artwork Details",
       annotations: ANN_READ_CLOSED,
       description:
-        "Full metadata for ONE artwork — titles, creator, dates, materials, provenance, inscriptions, related objects, and more. " +
+        "Full metadata for ONE artwork by objectNumber: creator, dates, materials, provenance, inscriptions, related objects. " +
         "Typically follows a search_artwork / semantic_search / find_similar result, or a user-named objectNumber. " +
         "Provide exactly one of objectNumber (e.g. 'SK-C-5' for The Night Watch) or uri (a Linked Art URI from relatedObjects).\n\n" +
         "Returns metadata including titles (primary plus the full set of variants with language and qualifier — Dutch/English brief/full/display/former), " +
@@ -2449,7 +2448,7 @@ function registerTools(
       title: "Get Artwork Image",
       annotations: ANN_VIEWER,
       description:
-        "Opens an interactive deep-zoom viewer for the user (zoom, pan, rotate, flip, j/k/l navigation between related artworks). " +
+        "Opens an interactive deep-zoom viewer for the user — only when they ask to see, show, or view an artwork. " +
         "Call ONLY when the user explicitly wants to see, show, or view an artwork. " +
         "Do NOT call for list, summary, count, or text-only requests. " +
         "Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. " +
@@ -2580,7 +2579,7 @@ function registerTools(
       title: "Inspect Artwork Image",
       annotations: ANN_READ_CLOSED,
       description:
-        "Returns image bytes (base64) so the LLM can visually analyse an artwork or region — identifying details, reading inscriptions, comparing compositions, planning overlays. " +
+        "Returns image bytes (base64) for the LLM's own visual analysis of an artwork or region — not for the user to view. " +
         "The LLM can see and reason about the image immediately. " +
         "Not for the user to view — use get_artwork_image for the interactive viewer. " +
         "Not for listing or summarising artworks — use search_artwork.\n\n" +
@@ -2919,7 +2918,7 @@ function registerTools(
       title: "Navigate Viewer",
       annotations: ANN_VIEWER,
       description:
-        "Steers an already-open viewer to a region — zoom there, add a labelled overlay, or clear overlays (typically after inspect_artwork_image). " +
+        "Steers an already-open viewer: zoom to a region, add a labelled overlay, or clear overlays. " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
         "Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image. " +
         "Commands execute in order: typically clear_overlays → navigate → add_overlay.\n\n" +
@@ -3211,8 +3210,7 @@ function registerTools(
       title: "List Curated Sets",
       annotations: ANN_READ_CLOSED,
       description:
-        "Browse thematic and sub-collection groupings curated by Rijksmuseum staff, ranging from substantive sub-collections " +
-        "(drawings, paintings, photographs) through iconographic groupings to umbrella sets (Alle gepubliceerde objecten = 834K members). " +
+        "Browse thematic and sub-collection groupings curated by Rijksmuseum staff (drawings, paintings, iconographic sets). " +
         "Each result carries memberCount, top dominantTypes, top dominantCenturies by membership, and a category heuristic " +
         "(object_type / iconographic / album / sub_collection / umbrella) so you can pick the right scope. " +
         "Use minMembers: 100, maxMembers: 200000 to avoid umbrella sets when the user wants a substantive subset. " +
@@ -3349,7 +3347,7 @@ function registerTools(
       title: "Get Recent Changes",
       annotations: ANN_READ_CLOSED,
       description:
-        "OAI-PMH delta feed — records changed within a date range since a known harvest checkpoint, with resumption-token pagination. " +
+        "OAI-PMH delta feed — records changed within a date range since a known harvest checkpoint, paginated. " +
         "Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). " +
         "Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. " +
         "Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.",
@@ -3569,8 +3567,7 @@ function registerTools(
         title: "Search Provenance",
         annotations: ANN_READ_CLOSED,
         description:
-          "Ownership-history search across parsed provenance chains — collectors, sales, inheritances, gifts, confiscations, restitutions " +
-          "(~48K artworks with structured records). " +
+          "Ownership-history search across parsed provenance chains — collectors, sales, gifts, confiscations, restitutions. " +
           "Returns full provenance chains grouped by artwork, with matching events flagged.\n\n" +
           "Not for catalogue keyword search — use search_artwork. " +
           "Not for aggregate provenance counts — use collection_stats with provenance dimensions/filters. " +
@@ -4075,8 +4072,7 @@ function registerTools(
         title: "Search Inscriptions (Marks, Signatures, Transcribed Text)",
         annotations: ANN_READ_CLOSED,
         description:
-          "Structured search over artwork inscriptions — collector's marks, signatures, dates, numbers, and transcribed text — " +
-          "parsed at query time from the catalogue's `inscription_text` field.\n\n" +
+          "Structured search over artwork inscriptions — collector's marks, signatures, dates, numbers, transcribed text.\n\n" +
           "IMPORTANT — what this field is: catalogue-entered inscription/mark data, NOT OCR and NOT an exhaustive transcription of " +
           "visible text. It is dominated by VERSO collector's-mark stamps (the Rijksprentenkabinet's own mark and former-owner stamps " +
           "account for a large share of all records); genuine artist-/image-applied text (signatures, captions, addresses) is a real but " +
@@ -4219,7 +4215,7 @@ function registerTools(
         title: "Collection-wide Aggregate Counts (Distributions, Histograms, Statistics)",
         annotations: ANN_READ_CLOSED,
         description:
-          "One call returns a group-by breakdown over any structured dimension (type, decade, place, transferType, …) — counts, percentages, distributions, and histograms without search_artwork loops. " +
+          "Group-by breakdown over one structured dimension (type, decade, place, creator) — counts, percentages, histograms. " +
           "Covers totals, summaries, and group-by / count-by / distribution-of / statistics-over queries across the Rijksmuseum collection. " +
           "Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). " +
           "Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.\n\n" +
@@ -4520,7 +4516,7 @@ function registerTools(
         title: "Find Similar Artworks",
         annotations: ANN_READ_CLOSED,
         description:
-          "Given one artwork's objectNumber, finds others like it across 9 independent similarity channels (visual, subject, lineage, theme, …). " +
+          "Given one artwork's objectNumber, finds others like it across 9 similarity channels plus a pooled consensus. " +
           "Generates an HTML comparison page with IIIF thumbnails across all 9 channels: " +
           "Visual (image-embedding nearest neighbours), Related Variant (creator-invariant curator-declared edges: pendants, production stadia, different examples), " +
           "Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), " +
@@ -4802,7 +4798,7 @@ function registerTools(
         title: "Semantic Search",
         annotations: ANN_READ_CLOSED,
         description:
-          "Free-text concept search by embedding similarity — finds artworks for ideas like 'solitude', 'maritime trade', or 'vanitas symbolism' that resist structured metadata. " +
+          "Free-text concept search by embedding similarity — for ideas like 'solitude' or 'vanitas' that resist metadata. " +
           "Returns artworks ranked by Dutch-description embedding similarity to the query, with source text for grounding — " +
           "use that text to explain why results are relevant or to flag false positives.\n\n" +
           "Not for queries expressible as structured metadata (specific artists, dates, places, materials) — use search_artwork for those. " +
