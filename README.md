@@ -50,7 +50,7 @@ For examples of more complex queries and responses, please see the [research sce
 
 ## Features
 
-Rijksmuseum-mcp+ provides the following features and capabilities over and beyond those made available by the Rijksmuseum on their [search collections](https://www.rijksmuseum.nl/en/collection) page:
+Beside natural language search, rijksmuseum-mcp+ provides the following features and capabilities:
 
 ### More searchable metadata
 
