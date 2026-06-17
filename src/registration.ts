@@ -13,12 +13,26 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
-import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type ProvenanceArtworkResult, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings, type CollectionStatsResult, type InscriptionSearchParams } from "./api/VocabularyDb.js";
+import { VocabularyDb, FILTER_ART_IDS_KEYS, STATS_DIMENSION_NAMES, TITLE_LANGUAGES, TITLE_QUALIFIERS, DIMENSION_TYPES, SORT_COLUMNS, formatDateRange, formatDimensions, pluralize, type SortColumn, type ArtworkMeta, type ArtworkDetailFromDb, type DepictedSimilarResult, type ProvenanceSearchParams, type ProvenanceArtworkResult, type CollectionStatsParams, type BrowseSetRecord, type PersonSearchParams, type SearchTimings, type InscriptionSearchParams } from "./api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
-import { ResponseCache } from "./utils/ResponseCache.js";
 import { getOrComputeWithInflight } from "./utils/inflightCache.js";
+import {
+  IIIF_REGION_RE,
+  CropLocalSize,
+  OverlayEntry,
+  ViewerQueue,
+  sweepTtlMap,
+  viewerQueues,
+  ACTIVE_OVERLAYS_CAP,
+  similarPages,
+  enrichmentReviewPages,
+  collectionStatsCache,
+  semanticSearchCache,
+  semanticInflight,
+  similarTempFiles,
+} from "./registration/state.js";
 import { buildContentBlocks, mirrorWarningsToText, SAFE_RESULT_BUDGET, type JsonTextOptions, type TextBlock } from "./utils/responseShape.js";
 import axios from "axios";
 import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "./similarHtml.js";
@@ -1349,84 +1363,10 @@ const CuratedSetsOutput = {
   error: z.string().optional(),
 };
 
-// ─── Shared IIIF region validation ───────────────────────────────────
-
-const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+,[0-9.]+,[0-9.]+|crop_pixels:\d+,\d+,\d+,\d+)$/;
-
-// ─── Viewer command queue (module-scoped — survives across HTTP requests) ─
-
-interface ViewerCommand {
-  action: "navigate" | "add_overlay" | "clear_overlays";
-  region?: string;
-  relativeTo?: string;
-  relativeToSize?: CropLocalSize;
-  label?: string;
-  color?: string;
-}
-interface OverlayEntry {
-  label?: string;
-  region: string;
-  color?: string;
-}
-interface ViewerQueue {
-  commands: ViewerCommand[];
-  createdAt: number;
-  lastAccess: number;
-  lastPolledAt?: number;
-  objectNumber: string;
-  imageWidth?: number;
-  imageHeight?: number;
-  activeOverlays: OverlayEntry[];
-}
-/** Start a 60s interval that deletes entries older than `ttlMs` from a Map. */
-function sweepTtlMap<T extends { lastAccess: number }>(map: Map<string, T>, ttlMs = 1_800_000): void {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [id, entry] of map) {
-      if (now - entry.lastAccess > ttlMs) map.delete(id);
-    }
-  }, 60_000).unref();
-}
-
-const viewerQueues = new Map<string, ViewerQueue>();
-sweepTtlMap(viewerQueues);
-
-const ACTIVE_OVERLAYS_CAP = 64;
-
-export const similarPages = new Map<string, { html: string; lastAccess: number }>();
-sweepTtlMap(similarPages);
-
-export const enrichmentReviewPages = new Map<string, { html: string; lastAccess: number }>();
-sweepTtlMap(enrichmentReviewPages);
-
-// #378 Step 4: module-scope result caches (must survive the per-request server rebuild in
-// HTTP mode, like viewerQueues). Keyed on DB build-id so a deploy/DB-swap can't serve stale
-// aggregates. collection_stats is synchronous (better-sqlite3 blocks the loop) so a plain
-// cache already coalesces identical concurrent calls; semantic_search awaits embed() before
-// its sync vec0 scan, so it also needs in-flight de-dup to stop two identical queries each
-// paying the ~1s scan.
-const CACHE_TTL_MS = 1_800_000; // 30 min
-const collectionStatsCache = new ResponseCache<CollectionStatsResult>(300, CACHE_TTL_MS);
-const semanticSearchCache = new ResponseCache<ToolResponse | StructuredToolResponse>(500, CACHE_TTL_MS);
-const semanticInflight = new Map<string, Promise<ToolResponse | StructuredToolResponse>>();
-
-/** Stdio-mode temp files for find_similar. Swept on same 30-min TTL. */
-const similarTempFiles = new Map<string, number>(); // path → createdAt
-setInterval(() => {
-  const now = Date.now();
-  for (const [filePath, createdAt] of similarTempFiles) {
-    if (now - createdAt > 1_800_000) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
-          console.warn(`[similar-sweeper] failed to unlink ${filePath}:`, err);
-        }
-      }
-      similarTempFiles.delete(filePath);
-    }
-  }
-}, 60_000).unref();
+// State (IIIF_REGION_RE, viewerQueues, similarPages, enrichmentReviewPages, caches) are
+// imported from ./registration/state.js above.
+// Re-export the two symbols that src/index.ts imports from this module:
+export { similarPages, enrichmentReviewPages };
 
 // ─── Geometry helpers (pure) ─────────────────────────────────────────
 
@@ -1623,12 +1563,6 @@ export function computeDeliveryState(
   if (lastPolledAtMs == null) return "no_live_viewer_seen";
   if (nowMs - lastPolledAtMs < recentMs) return "delivered_recently";
   return "queued_waiting_for_viewer";
-}
-
-// Exported for testing
-interface CropLocalSize {
-  width: number;
-  height: number;
 }
 
 // Exported for testing
