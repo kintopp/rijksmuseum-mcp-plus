@@ -64,7 +64,7 @@ Full-text queries over the `title`, `description`, `inscription`, and `curatoria
 
 Proximity searches (`nearPlace`, `nearLat` + `nearLon`) on enriched, geocoded places let you find artworks related to locations already in the museum's catalogue (e.g. "artworks depicting places within 25 km of Leiden"). The necessary geo-coordinates were added only where the Rijksmuseum's own metadata provided a link to an external authority such as the Getty [Thesaurus of Geographic Names](https://www.getty.edu/research/tools/vocabularies/tgn/). Alternatively, proximity searches can also be made on the basis of arbitrary, user or AI provided coordinates (`nearPlaceRadius`).
 
-`Iconclass` notations can be searched (also semantically) by title and description and explored hierarchically by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. In addition, rijksmuseum-iconclass-mcp privides custom links to [ArtResearch](https://artresearch.net/) to let you view more artworks sharing this notation from the twelve member institutions in the [PHAROS consortium](https://artresearch.net/resource/Partners).
+`Iconclass` notations can be searched (also semantically) by title and description and explored hierarchically by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. Rijksmuseum-iconclass-mcp also provides custom links to [ArtResearch](https://artresearch.net/) queries to let you view more artworks sharing an Iconclass notation from the collections of the twelve member institutions of the [PHAROS consortium](https://artresearch.net/resource/Partners).
 
 ### Semantic search
 
@@ -82,9 +82,9 @@ By switching the viewer into *interactive mode* (press "i" or click on the □ i
 
 ### Find similar artworks
 
-A search for artworks 'similar to' other artworks (e.g. "find artworks similar to van Gogh's Zelfportret") creates a comparison webpage that places an artwork alongside the works most similar to it, evaluated across nine dimensions: visual appearance, related variant (curator-declared pendants, production stadia, different examples), related object (other curator-declared edges such as pairs, sets, recto/verso, and reproductions), artistic lineage (shared creators, workshops, or attribution chains), Iconclass subject classification, semantic description, shared curatorial themes, depicted persons, and depicted places. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection.
+A search for artworks 'similar to' other artworks (e.g. "find artworks similar to van Gogh's Zelfportret") creates a custom, comparison webpage that places an artwork alongside the works most similar to it, evaluated across nine dimensions: `visual appearance`, `related variant` (curator-declared pendants, production stadia, different examples), `related object` (other curator-declared edges such as pairs, sets, recto/verso, and reproductions), `artistic lineage` (shared creators, workshops, or attribution chains), `Iconclass subject classification`, `semantic description`, `curatorial themes`, `depicted persons`, and `depicted places`. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection.
 
-Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-1115.html) of a `find_similar` analysis. These webpages are automatically deleted from the server after 30 minutes — use your browser's 'Save As' (not bookmark) function to keep a copy.
+Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-1115.html) of a custom webpage with a `find_similar` analysis. 
 
 ### Collection statistics and distributions
 
@@ -98,13 +98,14 @@ Many artworks carry inscriptions on the object itself — collector's marks, sig
 
 The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the [AAM punctuation convention](https://www.museumprovenance.org/pages/standard_v1/). Rijksmuseum-mcp+ has [parsed](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-parser-visualization.html) and partially enriched these narratives into over 100,000 structured events with a [CMOA-aligned transfer vocabulary](https://www.museumprovenance.org/reference/acquisition_methods/), making them searchable by party name, transfer type (e.g. sale, gift, bequest, inheritance, confiscation or restitution), date range, location, and price in the original historical currency. This enables structured queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries.
 
-Every provenance record carries searchable provenance-of-provenance metadata tracking how it was enriched. In addition, because some enrichments are inferred by an LLM rather than derived by rule, whenever a provenance search returns LLM-assisted results the server also generates a companion review webpage that sets each artwork's original narrative next to the parsed events and the model's stated reasoning for every inferred classification. These webpages are automatically deleted from the server after 30 minutes — use your browser's 'Save As' (not bookmark) function to keep a copy.
+Every provenance record carries searchable provenance-of-provenance metadata tracking how it was enriched. In addition, because some enrichments are inferred by an LLM rather than derived by rule, whenever a provenance search returns LLM-assisted results the server also generates a custom review webpage that sets each artwork's original narrative next to the parsed events and the model's stated reasoning for every inferred classification.
 
 For more details, please see the [provenance reference](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html) documentation.
 
 ### Command-line interface
 
 Rijksmuseum-mcp+ includes a command-line interface tool (`rijks-mcp`) for scripting, data pipelines, and reproducible bulk queries. This is itself a lightweight MCP client that drives the same queries the AI assistants use — so a terminal query returns exactly the results an LLM would. It exposes each of the stateless tools as a verb (search, semantic, provenance, details, similar, and more), connecting either to a (hosted) HTTP or its own STDIO server. Output is JSON-first for easy piping into tools such as `jq`, with `--fields`, `--json`, and `--table` formatting options and `rijks-mcp <verb> --help` describing each command.
+
 ## Choosing an AI system
 
 Technically speaking, rijksmuseum-mcp+ works with any chatbot or application supporting the open [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) (MCP) and [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview) standards. As such, it also works with many other browser based chatbots including those whose large language models (LLMs) can be used **without a paid subscription**.
