@@ -855,7 +855,7 @@ function resolveOaiBuffer(
 }
 
 /**
- * Register all tools, resources, and prompts on the given McpServer.
+ * Register all tools and resources on the given McpServer.
  * `httpPort` is provided when running in HTTP mode so viewer URLs can be generated.
  */
 /** Resolve the public base URL from environment. Used by both index.ts and registerTools. */
@@ -878,7 +878,6 @@ export function registerAll(
   registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats), stats);
   registerResources(server);
   registerAppViewerResource(server);
-  registerPrompts(server);
 
   // Log whether the connected client supports MCP Apps (SHOULD-level capability negotiation)
   server.server.oninitialized = () => {
@@ -5046,104 +5045,4 @@ function registerAppViewerResource(server: McpServer): void {
       ],
     })
   );
-}
-
-// ─── Prompts ────────────────────────────────────────────────────────
-
-function registerPrompts(server: McpServer): void {
-  server.registerPrompt(
-    "generate-artist-timeline",
-    {
-      title: "Artist Timeline",
-      description:
-        "Generate a chronological timeline of an artist's works in the collection.",
-      argsSchema: {
-        artist: z.string().describe("Name of the artist"),
-        maxWorks: z
-          .string()
-          .optional()
-          .describe(`Maximum number of works to include (1-${TOOL_LIMITS.search_artwork.max}, default: ${TOOL_LIMITS.search_artwork.default})`),
-      },
-    },
-    async (args) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Create a visual timeline showing the chronological progression of ${args.artist}'s most notable works` +
-              `${args.maxWorks ? ` (limited to ${args.maxWorks} works)` : ""}.\n\n` +
-              `Use search_artwork with creator="${args.artist}"` +
-              `${args.maxWorks ? ` and maxResults=${args.maxWorks}` : ""} to get the data, then sort by date.\n\n` +
-              `Note: search returns at most ${TOOL_LIMITS.search_artwork.max} works. For prolific artists, this is a small sample of their collection.\n\n` +
-              `For each work, include:\n` +
-              `- Year of creation\n` +
-              `- Title of the work\n` +
-              `- A brief description of its significance\n\n` +
-              `Format as a visually appealing chronological progression using markdown.`,
-          },
-        },
-      ],
-    })
-  );
-
-  server.registerPrompt(
-    "generate-session-trace",
-    {
-      title: "Session Debug Trace",
-      description:
-        "Developer Feedback: Creates a record of interactions between the AI assistant " +
-        "and the rijksmuseum-mcp+ server for debugging purposes.",
-      argsSchema: {
-        description: z
-          .string()
-          .optional()
-          .describe("Optional: brief description of what you were trying to do in this session"),
-      },
-    },
-    async (args) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Review all tool calls made to the rijksmuseum-mcp+ server during this conversation and output a debug trace.\n\n` +
-              (args.description
-                ? `Session context: ${args.description}\n\n`
-                : "") +
-              `**Privacy:** Include ONLY tool calls made to this MCP server and client-side tool discovery calls (e.g. tool_search/ToolSearch) that loaded its tools. ` +
-              `Do NOT include any user messages, your own reasoning, or any other conversation content — ` +
-              `the user may have discussed private topics earlier in this conversation that must not appear in the trace. ` +
-              `The trace must contain nothing beyond the tool call data.\n\n` +
-              `**Output format:** Create a downloadable markdown artifact. ` +
-              `The file should be named \`session-trace-YYYY-MM-DD.md\` using today's date.\n\n` +
-              `The markdown file must contain:\n` +
-              `1. A heading: \`# Session Trace — YYYY-MM-DD\`\n` +
-              (args.description
-                ? `2. A line: \`Session: ${args.description}\`\n`
-                : "") +
-              `${args.description ? "3" : "2"}. A fenced code block (language: jsonl) with one JSON object per line.\n\n` +
-              `Each JSONL line must have these fields:\n` +
-              `- "timestamp": ISO 8601 UTC (use sequential timestamps 1 second apart)\n` +
-              `- "tool": the bare tool name without any server prefix — e.g. "search_artwork", not "Rijksmuseum:search_artwork"\n` +
-              `- "input": the arguments object passed to the tool. Omit keys whose value was null — do not include them.\n` +
-              `- "ok": true if the tool succeeded, false if it returned an error\n` +
-              `- "ms": 0 (latency is not available from conversation context)\n` +
-              `- "result_summary": 1–2 sentence summary of the result\n\n` +
-              `**result_summary rules:**\n` +
-              `- For search/semantic_search: include totalResults and first 3 object numbers\n` +
-              `- For artwork details: include title, creator, date\n` +
-              `- For inspect_artwork_image: note region and that image was returned (omit base64 data entirely)\n` +
-              `- For errors: include the error message\n` +
-              `- For all others: summarize the key information returned\n\n` +
-              `After the artifact, politely ask the user to review the trace before sharing it, ` +
-              `to make sure it contains only the tool call data and nothing personal.`,
-          },
-        },
-      ],
-    })
-  );
-
 }

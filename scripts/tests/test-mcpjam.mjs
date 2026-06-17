@@ -74,21 +74,10 @@ for (const name of expectedTools) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  2. Prompts listing
+//  2. search_artwork — basic keyword search
 // ══════════════════════════════════════════════════════════════════
 
-section("2. Prompt listing");
-
-const promptsResult = await manager.listPrompts(SERVER_ID);
-const promptNames = promptsResult.prompts.map(p => p.name).sort();
-console.log(`  Found ${promptNames.length} prompts: ${promptNames.join(", ")}`);
-assert(promptNames.length >= 2, `At least 2 prompts registered (got ${promptNames.length})`);
-
-// ══════════════════════════════════════════════════════════════════
-//  3. search_artwork — basic keyword search
-// ══════════════════════════════════════════════════════════════════
-
-section("3. search_artwork — keyword search");
+section("2. search_artwork — keyword search");
 
 const searchResult = await manager.executeTool(SERVER_ID, "search_artwork", {
   title: "Nachtwacht",
@@ -98,10 +87,10 @@ assert(!searchResult.isError, "search_artwork succeeded");
 assert(searchText.includes("Nachtwacht") || searchText.includes("Night Watch"), "Found Nachtwacht/Night Watch");
 
 // ══════════════════════════════════════════════════════════════════
-//  4. search_artwork — type filter
+//  3. search_artwork — type filter
 // ══════════════════════════════════════════════════════════════════
 
-section("4. search_artwork — type filter");
+section("3. search_artwork — type filter");
 
 const typeResult = await manager.executeTool(SERVER_ID, "search_artwork", {
   type: "painting",
@@ -112,10 +101,10 @@ assert(!typeResult.isError, "search_artwork with filters succeeded");
 assert(typeText.toLowerCase().includes("rembrandt"), "Results mention Rembrandt");
 
 // ══════════════════════════════════════════════════════════════════
-//  5. get_artwork_details
+//  4. get_artwork_details
 // ══════════════════════════════════════════════════════════════════
 
-section("5. get_artwork_details");
+section("4. get_artwork_details");
 
 const detailResult = await manager.executeTool(SERVER_ID, "get_artwork_details", {
   objectNumber: "SK-C-5",
@@ -126,10 +115,10 @@ assert(detailText.includes("Nachtwacht") || detailText.includes("Night Watch"), 
 assert(detailText.includes("Rembrandt"), "Details include creator");
 
 // ══════════════════════════════════════════════════════════════════
-//  6. collection_stats — type dimension
+//  5. collection_stats — type dimension
 // ══════════════════════════════════════════════════════════════════
 
-section("6. collection_stats — type dimension");
+section("5. collection_stats — type dimension");
 
 const statsResult = await manager.executeTool(SERVER_ID, "collection_stats", {
   dimension: "type",
@@ -139,10 +128,10 @@ assert(!statsResult.isError, "collection_stats succeeded");
 assert(statsText.includes("painting") || statsText.includes("print"), "Stats include known types");
 
 // ══════════════════════════════════════════════════════════════════
-//  7. collection_stats — filtered
+//  6. collection_stats — filtered
 // ══════════════════════════════════════════════════════════════════
 
-section("7. collection_stats — filtered by type");
+section("6. collection_stats — filtered by type");
 
 const statsFiltered = await manager.executeTool(SERVER_ID, "collection_stats", {
   dimension: "creator",
@@ -154,10 +143,10 @@ assert(!statsFiltered.isError, "collection_stats with type filter succeeded");
 assert(statsFilteredText.length > 20, "Filtered stats returned results");
 
 // ══════════════════════════════════════════════════════════════════
-//  8. list_curated_sets
+//  7. list_curated_sets
 // ══════════════════════════════════════════════════════════════════
 
-section("8. list_curated_sets");
+section("7. list_curated_sets");
 
 const setsResult = await manager.executeTool(SERVER_ID, "list_curated_sets", {});
 const setsText = setsResult.content?.[0]?.text ?? "";
@@ -165,10 +154,10 @@ assert(!setsResult.isError, "list_curated_sets succeeded");
 assert(setsText.includes("set") || setsText.includes("Set"), "Response mentions sets");
 
 // ══════════════════════════════════════════════════════════════════
-//  9. browse_set
+//  8. browse_set
 // ══════════════════════════════════════════════════════════════════
 
-section("9. browse_set");
+section("8. browse_set");
 
 // Extract a setSpec from list_curated_sets output
 const specMatch = setsText.match(/(\d{3,6})/);  // set IDs are numeric
@@ -181,10 +170,10 @@ const browseResult = await manager.executeTool(SERVER_ID, "browse_set", {
 assert(!browseResult.isError, `browse_set(setSpec="${setSpec}") succeeded`);
 
 // ══════════════════════════════════════════════════════════════════
-//  10. semantic_search
+//  9. semantic_search
 // ══════════════════════════════════════════════════════════════════
 
-section("10. semantic_search");
+section("9. semantic_search");
 
 const semResult = await manager.executeTool(SERVER_ID, "semantic_search", {
   query: "winter landscape with ice skaters",
@@ -194,10 +183,10 @@ assert(!semResult.isError, "semantic_search succeeded");
 assert(semText.length > 50, "semantic_search returned substantial results");
 
 // ══════════════════════════════════════════════════════════════════
-//  11. search_provenance
+//  10. search_provenance
 // ══════════════════════════════════════════════════════════════════
 
-section("11. search_provenance");
+section("10. search_provenance");
 
 const provResult = await manager.executeTool(SERVER_ID, "search_provenance", {
   party: "Goudstikker",
@@ -207,10 +196,10 @@ assert(!provResult.isError, "search_provenance succeeded");
 assert(provText.toLowerCase().includes("goudstikker"), "Provenance results mention Goudstikker");
 
 // ══════════════════════════════════════════════════════════════════
-//  12. get_artwork_image (app tool)
+//  11. get_artwork_image (app tool)
 // ══════════════════════════════════════════════════════════════════
 
-section("12. get_artwork_image");
+section("11. get_artwork_image");
 
 const imageResult = await manager.executeTool(SERVER_ID, "get_artwork_image", {
   objectNumber: "SK-C-5",
@@ -220,10 +209,10 @@ assert(!imageResult.isError, "get_artwork_image succeeded");
 assert(imageText.includes("viewUUID") || imageText.includes("viewer"), "Response contains viewer reference");
 
 // ══════════════════════════════════════════════════════════════════
-//  13. get_recent_changes
+//  12. get_recent_changes
 // ══════════════════════════════════════════════════════════════════
 
-section("13. get_recent_changes");
+section("12. get_recent_changes");
 
 const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 const changesResult = await manager.executeTool(SERVER_ID, "get_recent_changes", {
@@ -235,10 +224,10 @@ assert(!changesResult.isError, "get_recent_changes succeeded");
 assert(changesText.length > 20, "get_recent_changes returned content");
 
 // ══════════════════════════════════════════════════════════════════
-//  14. search_artwork — invalid params rejected (strict schemas)
+//  13. search_artwork — invalid params rejected (strict schemas)
 // ══════════════════════════════════════════════════════════════════
 
-section("14. Strict schema validation");
+section("13. Strict schema validation");
 
 const badResult = await manager.executeTool(SERVER_ID, "search_artwork", {
   title: "test",
