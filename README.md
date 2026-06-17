@@ -33,17 +33,17 @@ The downloaded skill file can be installed in Claude by following [these instruc
 
 ## Sample Queries
 
-After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language. For examples of the kinds of queries the systems can answer, please see the prompts below:
+After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language.
 
-- _What German artworks at the Rijksmuseum evoke vanitas and mortality?_ [link](https://claude.ai/share/735c54c1-c4f4-4293-9c30-66d5ba8bd23b)
-- _Which artworks have a provenance linked to Emperor Bonaparte?_ [link](https://claude.ai/share/0f38737d-176b-4c46-bb3d-044404e0b334)
-- _Show artworks which include an inscription saying, 'Amor vincit omnia'_ [link](https://claude.ai/share/7415012a-5062-4866-a3e8-9278e9532a21)
-- _Find artworks similar to SK-A-2350_ [link](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-2350.html)
-- _Which work in the collection had previously been held for the longest time by the same family?_ [link](https://claude.ai/share/157e5fd1-c8bd-497f-9fa2-36b21482f6e5)
-- _Show me sculptures in the collection by artists born in Leiden_ [link](https://claude.ai/share/077db4fb-d748-4b17-86fa-494a982b5bcb)
-- _What are the three largest paintings in the collection by width?_ [link](https://claude.ai/share/1a7f9a3c-012c-4065-9222-fbfca265585a)
-- _Which 15th-century paintings are listed as workshop productions?_ [link](https://claude.ai/share/8733dcfc-4d25-4efd-b2af-6b2c3cddd7bb)
-- _Show me the Roermondse passie and highlight the Betrayal of Judas_ [link](https://claude.ai/share/ca56c81b-7422-477e-9839-f921c0423c03)
+- _What German artworks at the Rijksmuseum evoke vanitas and mortality?_
+- _Which artworks have a provenance linked to Emperor Bonaparte?_
+- _Show artworks which include an inscription saying, 'Amor vincit omnia'_
+- _Find artworks similar to SK-A-2350_
+- _Which work in the collection had previously been held for the longest time by the same family?_
+- _Show me sculptures in the collection by artists born in Leiden_
+- _What are the three largest paintings in the collection by width?_
+- _Which 15th-century paintings are listed as workshop productions?_
+- _Show me the Roermondse passie and highlight the Betrayal of Judas_
   (requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai))
 
 For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md).
