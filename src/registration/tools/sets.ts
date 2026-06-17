@@ -26,7 +26,7 @@ import {
 
 export function registerSetsTools(
   server: McpServer,
-  oai: OaiPmhClient,
+  _oai: OaiPmhClient,
   vocabDb: VocabularyDb | null,
   withLogging: ReturnType<typeof createLogger>,
   _stats?: UsageStats

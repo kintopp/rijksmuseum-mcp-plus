@@ -9,18 +9,14 @@ import { VocabularyDb, formatDimensions } from "../../api/VocabularyDb.js";
 import { UsageStats } from "../../utils/UsageStats.js";
 import {
   IIIF_REGION_RE,
-  type OverlayEntry,
   viewerQueues,
   ACTIVE_OVERLAYS_CAP,
 } from "../state.js";
 import {
   parsePctRegion,
-  parseCropPixelsRegion,
   cropPixelsToIiifPixels,
-  type OobWarning,
   oobError,
   checkRegionBounds,
-  type DeliveryState,
   computeDeliveryState,
   projectToFullImage,
   regionToPixels,
@@ -48,7 +44,7 @@ export function registerViewerTools(
   server: McpServer,
   api: RijksmuseumApiClient,
   vocabDb: VocabularyDb | null,
-  publicBaseUrl: string | undefined,
+  _publicBaseUrl: string | undefined,
   withLogging: ReturnType<typeof createLogger>,
   _stats?: UsageStats
 ): void {

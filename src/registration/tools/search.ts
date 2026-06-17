@@ -10,7 +10,6 @@ import {
   FACET_DIMENSIONS,
   stripNull,
   stripNullCoerceBool,
-  normalizeStringOrArray,
   stringOrArray,
   optStr,
   optMinStr,
