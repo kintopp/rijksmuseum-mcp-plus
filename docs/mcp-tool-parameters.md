@@ -224,6 +224,26 @@ Search ownership and provenance history across ~48K artworks with parsed provena
 
 ---
 
+## search_inscriptions
+
+Structured search over artwork inscriptions — collector's marks, signatures, dates, transcribed text. Catalogue-entered data (not OCR), dominated by verso collector's-mark stamps. Runtime parse with no derived index: at least one narrowing filter is required, and a single broad facet may trip the candidate cap and return partial results (`candidatesCapped: true`).
+
+| Parameter | Description |
+|---|---|
+| `text` | Blunt full-text match over the entire inscription blob (all segments, marks included). Use `transcribedText` for on-object text only. |
+| `transcribedText` | Find works whose transcribed (quoted) text contains this string — signatures, captions, dates actually written on the work. Substring, case-insensitive. |
+| `inscriptionType` | Normalized type (string or array, OR-combined). Documented values: `collector's mark`, `signature`, `signature and date`, `inscription`, `annotation`, `number`, `date`, `title`, `name`, `monogram`, `watermark`, `stamp`, `maker's mark`, `seal`, `circumscription`. Open set — other values match the raw catalogued token. |
+| `placement` | Surface placement: `recto` or `verso` (string or array). ~⅔ of inscriptions are on the verso. |
+| `technique` | Normalized technique (string or array, OR-combined). Documented values: `stamped`, `handwritten`, `printed`, `engraved`, `etched`, `pencil`, `pen`, `chalk`, `embossed`, `struck`, `typed`. |
+| `collectorMark` | Lugt collector-mark reference — `Lugt 240`, `Lugt 2228`, or just the number `240`. |
+| `hasTranscribedText` | `true` = only works with ≥1 transcribed string; `false` = only works without. |
+| `excludeCollectorMarkOnly` | `true` drops works whose inscriptions are pure collector-mark boilerplate (marks but no transcribed text). |
+| `isPlaceholder` | Filter on type-label-only placeholder rows (e.g. `datum \| date` with no value). `true` = only placeholders; `false` = exclude them. |
+| `offset` | Skip this many confirmed artworks (pagination) |
+| `maxResults` | 1–100 (default 20) |
+
+---
+
 ## get_artwork_details
 
 | Parameter | Description |
@@ -307,6 +327,7 @@ Discover curated collection sets (193 total). Results carry `memberCount`, top `
 | `setSpec` | Set identifier from `list_curated_sets` |
 | `maxResults` | 1–50 (default 10) |
 | `resumptionToken` | Pagination token from a previous result (overrides `setSpec`) |
+| `includeExtentText` | Include the verbose `extentText` (`dcterms:extent`) per record. Default `false` — it is large and not rendered in the text channel. |
 
 ---
 

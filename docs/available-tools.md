@@ -7,6 +7,7 @@
 - **`search_persons`** — Find persons (artists, depicted figures, donors) by demographic (gender, born/died) or structural (birth/death place, profession) criteria. Two-step pattern: feed the returned vocab IDs into `search_artwork({creator: <vocabId>})`.
 - **`collection_stats`** — Aggregate statistics, counts, and distributions across the collection.
 - **`browse_set`** — DB-backed enumeration of artworks within a curated collection set.
+- **`search_inscriptions`** — Structured search over artwork inscriptions: collector's marks (Lugt numbers), signatures, and transcribed text, with facets for type/placement/technique. Catalogue-entered data, not OCR.
 
 ## Artwork Details
 

@@ -4,7 +4,7 @@
 
 Parameters that accept arrays (marked **[]**) AND-combine their values: `subject: ["landscape", "seascape"]` returns artworks tagged with *both* subjects.
 
-All searches are backed by a vocabulary database of ~418,000 controlled terms mapped to ~834,000 artworks via ~14.8 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~20.9K authority-geocoded places). Demographic person filters (gender, birth/death year, birth/death place, profession) are exposed through the separate [`search_persons`](mcp-tool-parameters.md#search_persons) tool — feed the returned vocab IDs into `creator` here.
+All searches are backed by a vocabulary database of ~418,000 controlled terms mapped to ~834,000 artworks via ~14.8 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~23.9K authority-geocoded places). Demographic person filters (gender, birth/death year, birth/death place, profession) are exposed through the separate [`search_persons`](mcp-tool-parameters.md#search_persons) tool — feed the returned vocab IDs into `creator` here.
 
 - [Ranking](#ranking)
 - [Result limits and pagination](#result-limits-and-pagination)
@@ -165,7 +165,7 @@ All values in centimeters. Both range parameters accept the same shape: `'10-50'
 
 ### Geographic proximity
 
-Searches both depicted and production places within the specified radius, using coordinates from ~20,900 authority-geocoded places (strict-authority policy since v0.40 — only `coord_method='deterministic'` rows from Rijks-supplied [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/) IDs are retained).
+Searches both depicted and production places within the specified radius, using coordinates from ~23,900 authority-geocoded places (strict-authority policy since v0.40 — only `coord_method='deterministic'` rows from Rijks-supplied [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/) IDs are retained).
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
@@ -207,7 +207,7 @@ Each artwork's embedding is generated from a composite source text built from fo
 | Component | Field | Description |
 |-----------|-------|-------------|
 | Title | `title` | Primary artwork title |
-| Inscriptions | `inscription_text` | Transcribed text from the object surface |
+| Inscriptions | `inscription_text` | Transcribed text on the work (signatures, captions, dates); verso collector's-mark stamps and placeholder rows are stripped before embedding |
 | Description | `description_text` | Cataloguer description (compositional details, motifs, condition) |
 | Narrative | `narrative_text` | Curatorial wall text (art-historical interpretation) |
 

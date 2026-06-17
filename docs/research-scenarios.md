@@ -54,7 +54,7 @@ The links following each research question show you how the query was answered i
 
 ## Subject and Iconographic Search
 
-`search_artwork` includes [40 database-backed filters](search-parameters.md) drawn from a vocabulary database of ~417,000 controlled terms mapped to ~833,000 artworks via ~14.7 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~20.9K geocoded places, 64% of known places). These enable searches by what is depicted, where it was made, who made it (including life dates, gender, and production roles), what is written on it, what the museum says about it, and how large it is.
+`search_artwork` includes [40 database-backed filters](search-parameters.md) drawn from a vocabulary database of ~417,000 controlled terms mapped to ~834,000 artworks via ~14.8 million mappings, enriched with creator biographical data (~49K life dates, ~64K gender annotations, ~15.5K Wikidata IDs) and a spatial place hierarchy (~23.9K geocoded places, 64% of known places). These enable searches by what is depicted, where it was made, who made it (including life dates, gender, and production roles), what is written on it, what the museum says about it, and how large it is.
 
 ### 4. Mapping the Visual Rhetoric of the Stadholders
 
@@ -98,7 +98,7 @@ The links following each research question show you how the query was answered i
 
 ## Artwork Details and Metadata
 
-`get_artwork_details` returns [26 metadata categories](metadata-categories.md) per artwork — far more than a typical museum search interface exposes. This depth enables object-level research that would otherwise require on-site catalogue consultation.
+`get_artwork_details` returns [34 metadata categories](metadata-categories.md) per artwork — far more than a typical museum search interface exposes. This depth enables object-level research that would otherwise require on-site catalogue consultation.
 
 ### 7. Dimensions as Evidence for Workshop Practice
 

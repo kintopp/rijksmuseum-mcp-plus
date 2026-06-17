@@ -9,7 +9,7 @@ Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 38
 | Field | Source | Coverage |
 |-------|--------|----------|
 | Title | All title variants (brief, full, former × EN/NL) | ~99% |
-| Inscriptions | Transcribed text from the object surface | ~60% |
+| Inscriptions | Transcribed text on the work (signatures, captions, dates); verso collector's-mark stamps and placeholder rows are stripped, so only genuine transcribed text is embedded | ~29% (of the ~60% that carry any inscription field) |
 | Description | Cataloguer observations (Dutch) | ~61% |
 | Curatorial narrative | Museum wall text (English only — Dutch column always null) | ~2% (14K works) |
 
