@@ -38,16 +38,17 @@ import {
   createLogger,
 } from "./registration/helpers.js";
 
-// Helpers, formatters, output schemas, and visual-search functions are in
-// ./registration/helpers.ts, ./registration/outputSchemas.ts, and ./registration/visualSearch.ts
-// (imported above). Re-export symbols that scripts/tests/test-pure-functions.mjs
-// imports from dist/registration.js (must not be modified):
+// Re-export the pure helpers that scripts/tests/test-pure-functions.mjs imports
+// from dist/registration.js (that path must keep working). They live in
+// ./registration/helpers.ts (imported above); the output schemas and
+// visual-search functions are imported only by the individual tool registrars,
+// not by this façade.
 export { parseDimRange, parseSortParam, stripNullCoerceBool };
 
 
-// State (IIIF_REGION_RE, viewerQueues, similarPages, enrichmentReviewPages, caches) are
-// imported from ./registration/state.js above.
-// Re-export the two symbols that src/index.ts imports from this module:
+// Re-export the two state symbols that src/index.ts imports from this module.
+// The rest of the module-scope state (viewerQueues, IIIF_REGION_RE, caches) lives
+// in ./registration/state.ts and is consumed directly by the tool registrars.
 export { similarPages, enrichmentReviewPages };
 
 // Geometry helpers are in ./registration/geometry.ts — imported above.
@@ -105,15 +106,6 @@ function registerTools(
   registerStatsTools(server, vocabDb, embeddingsDb, embeddingModel, withLogging, stats);
   registerSimilarTools(server, vocabDb, embeddingsDb, publicBaseUrl, withLogging, stats);
   registerSemanticTools(server, embeddingsDb, embeddingModel, vocabDb, withLogging, stats);
-}
-
-// ─── Resources ──────────────────────────────────────────────────────
-
-function registerResources(
-  server: McpServer,
-): void {
-  // Resources registered by registerAppViewerResource() only; others converted to prompts.
-  void server;
 }
 
 // ─── MCP App Resource ────────────────────────────────────────────────
@@ -199,7 +191,7 @@ export function registerAll(
   stats?: UsageStats
 ): void {
   registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats), stats);
-  registerResources(server);
+  // The only MCP resource is the artwork viewer UI, registered next.
   registerAppViewerResource(server);
 
   // Log whether the connected client supports MCP Apps (SHOULD-level capability negotiation)
