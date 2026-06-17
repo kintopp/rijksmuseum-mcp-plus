@@ -36,7 +36,7 @@
 | caster | 227 | klompenmaker | 2 | schoenenfabriek | 10 |
 | censor | 125 | knipkunstenaar | 235 | schoenmaker | 151 |
 | ciseleur | 1 | koperslager | 101 | schrijver | ~37,000 |
-| clichemaker | ~24,000 | kunsthandelaar | 26 | sculptor | 1,441 |
+| clichémaker | ~24,000 | kunsthandelaar | 26 | sculptor | 1,441 |
 | clockmaker | 261 | lacquerer | 48 | silversmith | 2,568 |
 | componist | 207 | laksnijder | 2 | slotenmaker | 12 |
 | coupeuse | 25 | landmeter | 515 | smid | 96 |
