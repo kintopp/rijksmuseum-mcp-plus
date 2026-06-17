@@ -44,8 +44,7 @@ After you've connected the resource to your AI system, you can search, explore a
 - _What are the three largest paintings in the collection by width?_
 - _Which 15th-century paintings are listed as workshop productions?_
 - _Show me the Roermondse passie and highlight the Betrayal of Judas_
-  (requires [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai))
-
+ 
 For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md).
 
 ## Features
