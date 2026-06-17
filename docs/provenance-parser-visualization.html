@@ -252,11 +252,11 @@
       <code style="color:#fde68a; font-size:0.85em;">llm</code>) so its source can be audited.
     </p>
     <div class="stats-row">
-      <div class="stat"><div class="num">48,539</div><div class="desc">artworks with provenance</div></div>
-      <div class="stat"><div class="num">101,092</div><div class="desc">events parsed</div></div>
+      <div class="stat"><div class="num">48,559</div><div class="desc">artworks with provenance</div></div>
+      <div class="stat"><div class="num">101,171</div><div class="desc">events parsed</div></div>
       <div class="stat"><div class="num">20</div><div class="desc">transfer types</div></div>
       <div class="stat"><div class="num">14</div><div class="desc">currencies recognised</div></div>
-      <div class="stat"><div class="num">7</div><div class="desc">unresolved events</div></div>
+      <div class="stat"><div class="num">15</div><div class="desc">unresolved events</div></div>
     </div>
   </div>
 </div>
@@ -303,7 +303,7 @@
     </div>
 
     <div style="margin-top:1rem;">
-      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Parse method distribution (101,092 events)</div>
+      <div class="label" style="margin-bottom:0.4rem; color:#94a3b8;">Parse method distribution (101,171 events)</div>
       <div class="method-bar">
         <div class="bar-peg" style="width:80%;" title="PEG grammar: 80%">Parsing Expression Grammar (PEG) &nbsp;80%</div>
         <div class="bar-crossref" style="width:19.7%;" title="Cross-references: 19.7%">Cross-ref &nbsp;20%</div>
@@ -405,7 +405,7 @@
       <div class="card">
         <div class="card-icon">&oplus;</div>
         <h3>Locations</h3>
-        <p>Place names matched against the vocabulary database's place terms. 81% of known places are
+        <p>Place names matched against the vocabulary database's place terms. 64% of known places are
           geocoded, enabling proximity search and region-based queries.</p>
         <div class="example">
           "Amsterdam" &rarr; loc: Amsterdam (52.37&deg;N, 4.89&deg;E)<br>
@@ -559,13 +559,13 @@
 
     <h3 style="margin-top:1.2rem;">Ownership transfers</h3>
     <div class="type-grid">
-      <div class="type-item"><span class="t-name">sale</span><span class="t-count">15,657</span></div>
-      <div class="type-item"><span class="t-name">collection</span><span class="t-count">18,561</span></div>
-      <div class="type-item"><span class="t-name">gift</span><span class="t-count">10,897</span></div>
-      <div class="type-item"><span class="t-name">by_descent</span><span class="t-count">13,663</span></div>
+      <div class="type-item"><span class="t-name">sale</span><span class="t-count">15,687</span></div>
+      <div class="type-item"><span class="t-name">collection</span><span class="t-count">18,588</span></div>
+      <div class="type-item"><span class="t-name">gift</span><span class="t-count">10,910</span></div>
+      <div class="type-item"><span class="t-name">by_descent</span><span class="t-count">13,667</span></div>
       <div class="type-item"><span class="t-name">bequest</span><span class="t-count">4,378</span></div>
-      <div class="type-item"><span class="t-name">widowhood</span><span class="t-count">3,455</span></div>
-      <div class="type-item"><span class="t-name">commission</span><span class="t-count">580</span></div>
+      <div class="type-item"><span class="t-name">widowhood</span><span class="t-count">3,456</span></div>
+      <div class="type-item"><span class="t-name">commission</span><span class="t-count">574</span></div>
       <div class="type-item"><span class="t-name">recuperation</span><span class="t-count">853</span></div>
       <div class="type-item"><span class="t-name">restitution</span><span class="t-count">86</span></div>
       <div class="type-item"><span class="t-name">inventory</span><span class="t-count">122</span></div>
@@ -584,14 +584,14 @@
 
     <h3 style="margin-top:1.2rem;">Other / unresolved</h3>
     <div class="type-grid">
-      <div class="type-item"><span class="t-name">transfer</span> <span class="muted" style="font-size:0.75rem;">(administrative)</span><span class="t-count">6,275</span></div>
-      <div class="type-item"><span class="t-name">non_provenance</span> <span class="muted" style="font-size:0.75rem;">(Step 7 reclassification)</span><span class="t-count">67</span></div>
-      <div class="type-item"><span class="t-name">unknown</span> <span class="muted" style="font-size:0.75rem;">(incl. cross-refs)</span><span class="t-count">19,879</span></div>
+      <div class="type-item"><span class="t-name">transfer</span> <span class="muted" style="font-size:0.75rem;">(administrative)</span><span class="t-count">6,274</span></div>
+      <div class="type-item"><span class="t-name">non_provenance</span> <span class="muted" style="font-size:0.75rem;">(Step 7 reclassification)</span><span class="t-count">70</span></div>
+      <div class="type-item"><span class="t-name">unknown</span> <span class="muted" style="font-size:0.75rem;">(incl. cross-refs)</span><span class="t-count">19,887</span></div>
     </div>
 
     <p class="muted" style="margin-top:1rem;">
-      The 19,879 <em>unknown</em> events include 19,872 cross-references (<code>"see provenance of SK-A-XXXX"</code>)
-      that link to companion works and are not true unknowns. After excluding cross-references, only 7 events remain
+      The 19,887 <em>unknown</em> events include 19,872 cross-references (<code>"see provenance of SK-A-XXXX"</code>)
+      that link to companion works and are not true unknowns. After excluding cross-references, only 15 events remain
       genuinely unresolved.
     </p>
   </div>
@@ -616,7 +616,7 @@
         <div>
           <div class="label" style="color:#92400e; margin-bottom:0.3rem;">1. Transfer type classification</div>
           <p style="font-size:0.82rem; color:#78350f;">
-            166 events used institution-specific jargon, archaic terminology, or non-standard phrasing
+            158 events used institution-specific jargon, archaic terminology, or non-standard phrasing
             that no keyword rule could reliably match. The LLM classified each with a transfer type
             and written reasoning.
           </p>
@@ -656,7 +656,7 @@
     </div>
 
     <!-- Waterfall -->
-    <h3 style="margin-top:1.5rem;">From 3,204 unknowns to 7</h3>
+    <h3 style="margin-top:1.5rem;">From 3,204 unknowns to 15</h3>
     <p style="margin-bottom:0.5rem; font-size:0.88rem; color:#555;">
       In the end, a series of grammar improvements, structural signal detection, deterministic rules,
       and targeted LLM passes reduced the (non-cross-reference) unknowns by 99.8%.
@@ -690,12 +690,12 @@
       </div>
       <div class="wf-row">
         <div class="wf-label" style="color:#d97706; font-weight:600;">Transfer type classification</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:5.2%; background:#f59e0b;">&minus;166</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:5.2%; background:#f59e0b;">&minus;158</div></div>
         <div class="wf-note muted">LLM</div>
       </div>
       <div class="wf-row">
         <div class="wf-label" style="font-weight:700;">Remaining</div>
-        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:0.7%; background:#ef4444; min-width:24px;">7</div></div>
+        <div class="wf-bar-track"><div class="wf-bar-fill" style="width:0.7%; background:#ef4444; min-width:24px;">15</div></div>
         <div class="wf-note"></div>
       </div>
     </div>
