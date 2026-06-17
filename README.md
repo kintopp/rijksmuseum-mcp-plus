@@ -114,8 +114,6 @@ Mistral's [LeChat](https://chat.mistral.ai/chat) is an example (follow [these in
 
 However, subjectively speaking, most of the LLMs powering alternative AI assistants are not as 'smart' in their use of this MCP server as Anthropic's leading models. For this reason, at present (June, 2026), the best way to use rijksmuseum-mcp+ remains Anthropic's [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) combined with a paid ('Pro') or higher [subscription](https://claude.com/pricing). ChatGPT plus a supscription is a good second choice. And if a paid subscription is not feasible, Mistral's [LeChat](https://chat.mistral.ai/chat) using its free model also works well, albeit slowly and with less intelligence.
 
-Note to developers: the rijksmuseum-mcp+ server can be run locally from a web browser in STDIO mode with local copies of its metadata and embedding databases. Or make use of it via its own CLI tool (`rijks-mcp`). Please see the [technical notes](docs/technical-guide.md) for details.
-
 ## How it works
 
 When you submit your question, the AI assistant decides on the basis of their [descriptions](/docs/mcp-server+tool-descriptions.md) which combination of [tools](/docs/available-tools.md) and [search parameters](/docs/mcp-tool-parameters.md) provided by rijksmuseum-mcp+ will best answer it by drawing on the the museum's [metadata](/docs/metadata-categories.md). The assistant might [search](/docs/search-parameters.md) the collection using structured filters (`search_artwork`), look up an artwork's full metadata (`get_artwork_details`), query ownership history (`search_provenance`), or find artworks by meaning or concept (`semantic_search`). During this process, it will often chain several tools together in sequence (the so-called 'agentic loop'), each result informing the next query. The results from each tool come back as structured data and text, which the AI assistant interprets, contextualises, and when satisfied, finally sends back as an answer in natural language.
@@ -187,7 +185,7 @@ flowchart LR
 
 ## Technical notes
 
-For local setup (stdio or HTTP, including cli), deployment, architecture, data sources, and configuration, see the [technical guide](/docs/technical-guide.md). Further technical documentation TBA.
+For local setup (stdio or HTTP, also via cli), deployment, architecture, data sources, and configuration, please see the [technical guide](/docs/technical-guide.md). 
 
 ## Roadmap
 
@@ -201,6 +199,7 @@ Later:
 - paper/presentation
 - make tool logic reusable beyond MCP
 - investigate DINOv3 image retrieval
+- investigate OCR/HTR of artwork images
 
 Maybe:
 
@@ -208,7 +207,7 @@ Maybe:
 - incorporating historical exhibition data
 - integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - supporting inferred geolocation data
-- improve the `description` signal for find_similar (e.g. via LLM re-ranker)
+- improving the `description` signal for find_similar (e.g. via a LLM re-ranker)
 
 ## Authors
 
