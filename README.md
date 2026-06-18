@@ -156,7 +156,7 @@ flowchart LR
     418K vocab terms
     14.8M mappings")]
     Search --> EmbeddingsDB[("Embeddings DB
-    832K vectors
+    834K vectors
     semantic search")]
     Details --> VocabDB
     Images --> IIIF["IIIF Image API
