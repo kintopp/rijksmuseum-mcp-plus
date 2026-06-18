@@ -290,6 +290,17 @@ Read-only spikes whose findings already informed a now-locked decision (external
 | `legacy/probe-histogis-where-was.py` / `legacy/probe-histogis-coverage.py` / `legacy/probe-histogis-non-nl.py` | Python | HistoGIS (temporal polygon) coverage probes — point-in-polygon, QID-tag, and non-NL Central-European-stratified variants. |
 | `legacy/probe-rce-funnel.py` / `legacy/probe-rce-name-search.py` | Python | RCE/Rijksmonument funnel diagnostic + name-search rescue probe for ungeocoded building-shaped Dutch places. |
 
+### One-off provenance reclassify/split reverts (#397)
+
+Finished one-off passes that undid mis-firing LLM-structural corrections from the 2026-04-19 `event-reclassification` batch, after a full self-audit of each family (shared bug: free-form `reasoning` deliberated "no-split / no-reclassification" while the action bucket did the opposite). The reclassify families (`#87`/`#103`/`#104`) and the `#117` split were systematically wrong; the `#125`/`#99`/`#102` split families were mostly sound (44 of 64 reverted, 20 genuine kept). Applied to the local DB 2026-06-18; each deletes the offending `provenance_enrichments` store rows so a future re-parse + reapply never re-applies the batch. Idempotent-safe (re-running aborts via their own guards — the work is gone). Pre-revert backups live in `data/audit/revert-*-backup-2026-06-18.json`. Run from the repo root (`node scripts/legacy/<name>.mjs [--apply]`).
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `legacy/revert-87-phantom-batch.mjs` | Node | Reverted all 60 `#87` `phantom_event` suppressions (59/60 audited false; citation-only re-suppress test passed for zero) to their genuine PEG `transfer_type`, re-inserted one `merge_with_adjacent`-deleted event, deleted all 63 store rows. |
+| `legacy/revert-103-104-reclassify.mjs` | Node | Restored 5 events deleted by wrong `#103` (alternative_acquisition) / `#104` (location_as_event) merges + repaired 2 clobbered locations; kept the 1 correct merge (`SK-A-372` seq 7). |
+| `legacy/revert-117-bequest-splits.mjs` | Node | Un-split the 18 wrong `#117` (bequest_chain) splits (duplicate-owner / fabricated children) by deleting the 2 children and re-inserting the single PEG parent; kept the 13 legitimate citation-isolation + 2-transfer splits. |
+| `legacy/revert-125-99-102-splits.mjs` | Node | Un-split 44 of 64 `#125` (multi_transfer) / `#99` (gap_bridge) / `#102` (catalogue_fragment) splits: 4 fabricated intermediates, 2 forward-dup "1960 transfer" children, 34 Mannheimer "Führermuseum" purpose-reifications, 4 borderline over-splits; kept 20 genuine (incl. `SK-A-4717`'s 6-way parser-merge fix). Children matched by segment text for multi-split artworks (`SK-C-1349`). |
+
 ## Tests (`tests/`)
 
 Run an individual test with `node scripts/tests/<script>`. Tests come in three shapes: **hermetic** unit tests (in-memory SQLite / pure functions imported from `dist/` — no `data/` access), **integration smoke** tests (boot `dist/index.js` over stdio via the MCP SDK `Client`), and **query-plan** guards (assert `EXPLAIN QUERY PLAN` shape). The canonical entrypoints are the `npm` suites below; `run-all.mjs` is an older stdio-only runner kept for convenience but is **not** what CI runs.
