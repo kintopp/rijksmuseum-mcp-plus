@@ -103,7 +103,7 @@ For more details, please see the [provenance reference](https://kintopp.github.i
 
 ### Command-line interface
 
-Rijksmuseum-mcp+ includes a command-line interface tool (`rijks-mcp`) for scripting, data pipelines, and reproducible bulk queries. This is itself a lightweight MCP client that drives the same queries the AI assistants use — so a terminal query returns exactly the results an LLM would. It exposes each of the stateless tools as a verb (search, semantic, provenance, details, similar, and more), connecting either to a (hosted) HTTP or its own STDIO server. Output is JSON-first for easy piping into tools such as `jq`, with `--fields`, `--json`, and `--table` formatting options and `rijks-mcp <verb> --help` describing each command.
+Rijksmuseum-mcp+ includes a command-line interface tool (`rijks-mcp`) for scripting, data pipelines, and reproducible bulk queries. This is itself a lightweight MCP client that drives the same queries the AI assistants use — so a terminal query returns exactly the results an LLM would. It exposes each of the stateless tools as a verb (search, semantic, provenance, details, similar, and more), connecting either to a hosted HTTP server or its own STDIO server. Output is JSONL by default (one JSON object per line) for easy piping into tools such as `jq`, with `--fields`, `--json`, and `--table` formatting options and `rijks-mcp <verb> --help` describing each command.
 
 ## Choosing an AI system
 
