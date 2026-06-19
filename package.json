@@ -23,6 +23,7 @@
     "serve": "node dist/index.js --http",
     "cli": "node scripts/cli.mjs",
     "test:cli": "node scripts/tests/test-cli.mjs",
+    "test:mcp": "node scripts/tests/test-mcp-smoke.mjs",
     "test:inscriptions": "node scripts/tests/test-inscription-details.mjs && node scripts/tests/test-search-inscriptions.mjs",
     "dev:viewer": "vite dev -c apps/artwork-viewer/vite.config.ts",
     "lint": "eslint src/",
@@ -52,7 +53,6 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
-    "@mcpjam/sdk": "^0.8.16",
     "@types/better-sqlite3": "^7.6.13",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
