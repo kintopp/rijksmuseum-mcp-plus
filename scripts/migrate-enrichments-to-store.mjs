@@ -15,6 +15,13 @@
  *                 field-correction) from the audit JSONs, keyed on the parent
  *                 event's raw_text via the deterministic-parent oracle (Phase 2).
  *
+ * #397/#408 GUARD: --structural consults scripts/provenance-revert-denylist.json and
+ * skips any (object_number, sequence, issue_type) the v0.81 audit reverted — the
+ * source audit JSONs are frozen and still hold those entries, so a guard-less rebuild
+ * would resurrect the whole reverted batch (60 phantom suppressions, 18 bad bequest
+ * splits, 43 Mannheimer reifications, …). Regenerate the denylist with
+ * scripts/build-revert-denylist.mjs, ONLY against a corrected (post-revert) store.
+ *
  * Options:
  *   --dry-run   Read + print summary, write nothing
  *   --db PATH   Vocab DB path (default: data/vocabulary.db)
@@ -47,6 +54,34 @@ export const MIN_STRUCTURAL_CONFIDENCE = 0.7;
 export const TYPE_CLASSIFICATION_AUDIT = "data/audit/audit-type-classification-2026-03-22.json";
 const MIN_TYPE_CONFIDENCE = 0.7;
 const TYPE_SKIP = new Set(["non_provenance", "unknown"]);
+
+// The #397/#408 revert denylist (scripts/provenance-revert-denylist.json): structural
+// ops the v0.81 audit reverted. runStructuralExtractor skips any source-audit entry
+// whose (object_number, sequence, issue_type) is listed, so a store rebuild never
+// resurrects the reverted batch. Built by scripts/build-revert-denylist.mjs.
+export const REVERT_DENYLIST_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "provenance-revert-denylist.json"
+);
+
+/**
+ * Load the revert denylist as a Set of `${object_number}|${sequence}|${issue_type}`
+ * keys. Returns an empty Set if the file is absent (fresh checkouts / unit tests that
+ * pass synthetic data simply apply no denials — their object_numbers never match).
+ * @param {string} [file]
+ * @returns {Set<string>}
+ */
+export function loadRevertDenylist(file = REVERT_DENYLIST_PATH) {
+  let text;
+  try {
+    text = readFileSync(file, "utf-8");
+  } catch (e) {
+    if (e.code === "ENOENT") return new Set();
+    throw e;
+  }
+  const data = JSON.parse(text);
+  return new Set((data.entries ?? []).map((d) => `${d.object_number}|${d.sequence}|${d.issue_type}`));
+}
 
 /**
  * Normalize typographic quotes/apostrophes to ASCII. The v0.24 type-classification
@@ -626,8 +661,12 @@ function extractLeadingJsonArray(str) {
  * @param {{ dryRun: boolean, seenPK?: Set<string>, auditFiles?: object, oracle?: object }} opts
  * @returns {{ event_split: number, event_reclassify: number, event_fieldcorrection: number, unresolved: number, structural_unparseable: number }}
  */
-export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFiles = STRUCTURAL_AUDIT_FILES, oracle } = {}) {
-  const counts = { event_split: 0, event_reclassify: 0, event_fieldcorrection: 0, unresolved: 0, structural_unparseable: 0 };
+export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFiles = STRUCTURAL_AUDIT_FILES, oracle, denylist = loadRevertDenylist() } = {}) {
+  const counts = { event_split: 0, event_reclassify: 0, event_fieldcorrection: 0, unresolved: 0, structural_unparseable: 0, denied: 0 };
+
+  // #397/#408 guard — skip source-audit entries the v0.81 audit reverted.
+  const isReverted = (objectNumber, sequence, issueType) =>
+    denylist.has(`${objectNumber}|${sequence}|${issueType}`);
 
   // Build the parent-text oracle from a clean deterministic re-parse, unless one
   // was supplied (tests pass a synthetic oracle).
@@ -692,6 +731,7 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
         // splits (< 2 replacement events are not real splits).
         if (s.confidence < MIN_STRUCTURAL_CONFIDENCE) continue;
         if (!s.replacement_events || s.replacement_events.length < 2) continue;
+        if (isReverted(objectNumber, s.original_sequence, s.issue_type)) { counts.denied++; continue; }
         emitStructural({
           objectNumber,
           sequence: s.original_sequence,
@@ -756,6 +796,7 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
         // Mirror writeback-event-reclassification: keep only confidence >= 0.7
         // (its `.filter(rc => rc.confidence >= minConfidence)` drops undefined).
         if (!(r.confidence >= MIN_STRUCTURAL_CONFIDENCE)) continue;
+        if (isReverted(objectNumber, r.event_sequence, r.issue_type)) { counts.denied++; continue; }
         emitStructural({
           objectNumber,
           sequence: r.event_sequence,
@@ -790,6 +831,10 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
         // Mirror writeback-field-corrections: keep only confidence >= 0.7
         // (its `.filter(c => c.confidence >= minConfidence)` drops undefined).
         if (!(c.confidence >= MIN_STRUCTURAL_CONFIDENCE)) continue;
+        // #397/#408 guard, per-correction PRE-grouping: drop a reverted correction
+        // while keeping legitimate siblings on the same event (e.g. a kept
+        // truncated_location grouped with a reverted missing_receiver).
+        if (isReverted(objectNumber, c.event_sequence, c.issue_type)) { counts.denied++; continue; }
         const seq = c.event_sequence;
         if (!byEvent.has(seq)) byEvent.set(seq, []);
         byEvent.get(seq).push(c);
@@ -884,6 +929,7 @@ export function migrate(db, { value = false, manual = false, structural = false,
       allCounts.event_fieldcorrection = (allCounts.event_fieldcorrection ?? 0) + c.event_fieldcorrection;
       allCounts.structural_unresolved = (allCounts.structural_unresolved ?? 0) + c.unresolved;
       allCounts.structural_unparseable = (allCounts.structural_unparseable ?? 0) + c.structural_unparseable;
+      allCounts.structural_denied = (allCounts.structural_denied ?? 0) + c.denied;
     }
 
     return allCounts;

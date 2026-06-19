@@ -212,7 +212,7 @@ Layer 2 of the re-parse survival story: a content-addressed `provenance_enrichme
 
 | Script | Lang | Description |
 |--------|------|-------------|
-| `migrate-enrichments-to-store.mjs` | Node | One-time migration of existing DB-resident LLM enrichments + manual CSV corrections + audit-JSON structural ops into the `provenance_enrichments` store. Additive modes `--value`/`--manual`/`--structural`; `--dry-run`. |
+| `migrate-enrichments-to-store.mjs` | Node | One-time migration of existing DB-resident LLM enrichments + manual CSV corrections + audit-JSON structural ops into the `provenance_enrichments` store. Additive modes `--value`/`--manual`/`--structural`; `--dry-run`. `--structural` consults `provenance-revert-denylist.json` to skip the #397/#408-reverted ops (reports `structural_denied`). |
 | `reapply-enrichments-from-store.mjs` | Node | Re-applies value, parties, and structural enrichments from the store onto current provenance tables, content-matching each to the event still carrying the same `raw_text`. Re-apply order mirrors POST-REPARSE-STEPS. |
 | `emit-deterministic-parents.mjs` | Node | Read-only parent-text oracle: re-parses `artworks.provenance_text` with a clean deterministic pass and emits `{object_number, sequence, raw_text}` JSONL, so structural ops can be content-addressed on the pre-split parent event. Writes nothing. |
 
@@ -301,6 +301,13 @@ Finished one-off passes that undid mis-firing LLM-structural corrections from th
 | `legacy/revert-117-bequest-splits.mjs` | Node | Un-split the 18 wrong `#117` (bequest_chain) splits (duplicate-owner / fabricated children) by deleting the 2 children and re-inserting the single PEG parent; kept the 13 legitimate citation-isolation + 2-transfer splits. |
 | `legacy/revert-125-99-102-splits.mjs` | Node | Un-split 44 of 64 `#125` (multi_transfer) / `#99` (gap_bridge) / `#102` (catalogue_fragment) splits: 4 fabricated intermediates, 2 forward-dup "1960 transfer" children, 34 Mannheimer "Führermuseum" purpose-reifications, 4 borderline over-splits; kept 20 genuine (incl. `SK-A-4717`'s 6-way parser-merge fix). Children matched by segment text for multi-split artworks (`SK-C-1349`). |
 | `legacy/cleanup-partyadd-fieldedit-397.mjs` | Node | Removed the 11-item defect tail from the party-add / field-edit families (otherwise ~98% sound): 10 stray llm-added receiver parties (6 "Führermuseum" + 4 duplicates of a rule-mapped party) + 1 wrong location (`BK-17110-B` Linz→The Hague). Deletes each party from `provenance_parties` + the `events.parties` JSON, strips re-addable `new_party` corrections from the store. |
+
+**Durability guard.** The reverts above only delete store rows; the *source* audit JSONs (`data/audit/audit-event-*-v0.24-2026-04-19.json`) are frozen and still contain every reverted entry, so a `migrate-enrichments-to-store --structural` rebuild would silently resurrect the whole batch. `build-revert-denylist.mjs` captures exactly what the reverts removed (set-difference: source-audit candidates − surviving store entries) into `provenance-revert-denylist.json` (138 entries), which `runStructuralExtractor` consults to skip them. Regenerate **only against a corrected store**.
+
+| Script | Lang | Description |
+|--------|------|-------------|
+| `build-revert-denylist.mjs` | Node | Generates `provenance-revert-denylist.json` — the `(object_number, sequence, issue_type)` of every structural op the #397/#408 reverts removed. `--dry-run` prints the per-`issue_type` summary. Run against a post-revert store. |
+| `provenance-revert-denylist.json` | data | The committed denylist (138 entries) consulted by `runStructuralExtractor` at `--structural` build time. |
 
 ## Tests (`tests/`)
 

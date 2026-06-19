@@ -55,6 +55,14 @@ node scripts/tests/verify-enrichment-store-parity.mjs --db data/vocabulary.db   
 Rebuild it only when the audit JSONs or the migrate extractor change (e.g. the plan-015 structural
 confidence fix). Ordinary re-parses re-apply from the surviving store; no rebuild needed.
 
+**#397/#408 revert guard:** `--structural` consults `scripts/provenance-revert-denylist.json` and
+skips the structural ops the v0.81 audit reverted (60 phantom suppressions, 18 bad bequest splits,
+43 Mannheimer reifications, …) — the frozen source audit JSONs still hold them, so a guard-less
+rebuild would resurrect the whole batch. If a future revert changes the corrected store, regenerate
+the denylist with `node scripts/build-revert-denylist.mjs` **against the corrected store** (running
+it against an already-polluted rebuild yields an empty denylist). The migrate run reports
+`structural_denied` so the suppression count is visible.
+
 ## `--id-remap` is NOT needed on the store path
 
 The store keys on `object_number` (not the per-harvest integer `art_id`), and

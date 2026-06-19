@@ -1,0 +1,837 @@
+{
+  "_comment": "Structural provenance-correction ops reverted by the v0.81 #397/#408 audit. runStructuralExtractor() skips any source-audit entry whose (object_number, sequence, issue_type) appears here, so a store rebuild never resurrects the reverted batch. Regenerate via scripts/build-revert-denylist.mjs ONLY against a corrected (post-revert) store.",
+  "source": "data/audit/audit-event-{splitting,reclassification,field-correction}-v0.24-2026-04-19.json",
+  "reverts": "scripts/legacy/revert-{87-phantom-batch,103-104-reclassify,117-bequest-splits,125-99-102-splits}.mjs + cleanup-partyadd-fieldedit-397.mjs",
+  "generated_against": "v0.81 local vocabulary.db",
+  "count": 138,
+  "entries": [
+    {
+      "object_number": "AK-RBK-17520-A",
+      "sequence": 2,
+      "issue_type": "missing_receiver",
+      "family": "fieldcorrection"
+    },
+    {
+      "object_number": "BK-17110-B",
+      "sequence": 3,
+      "issue_type": "truncated_location",
+      "family": "fieldcorrection"
+    },
+    {
+      "object_number": "BK-17198",
+      "sequence": 3,
+      "issue_type": "missing_receiver",
+      "family": "fieldcorrection"
+    },
+    {
+      "object_number": "NG-47",
+      "sequence": 3,
+      "issue_type": "missing_receiver",
+      "family": "fieldcorrection"
+    },
+    {
+      "object_number": "RP-T-1899-A-4296",
+      "sequence": 3,
+      "issue_type": "missing_receiver",
+      "family": "fieldcorrection"
+    },
+    {
+      "object_number": "RP-T-1901-A-4520(V)",
+      "sequence": 3,
+      "issue_type": "missing_receiver",
+      "family": "fieldcorrection"
+    },
+    {
+      "object_number": "RP-T-1953-196",
+      "sequence": 4,
+      "issue_type": "missing_receiver",
+      "family": "fieldcorrection"
+    },
+    {
+      "object_number": "SK-A-4053",
+      "sequence": 2,
+      "issue_type": "missing_receiver",
+      "family": "fieldcorrection"
+    },
+    {
+      "object_number": "AK-RAK-1996-4-2",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-14577",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-15313-A",
+      "sequence": 5,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-15315-A-1",
+      "sequence": 5,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-15316-B",
+      "sequence": 5,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-15316-B-1",
+      "sequence": 5,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-15316-D",
+      "sequence": 5,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-18760-A",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-1976-46-A",
+      "sequence": 10,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-1977-134-A-1",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-1977-134-A-2",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-1978-36",
+      "sequence": 5,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-2016-44-1",
+      "sequence": 3,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-2016-44-1",
+      "sequence": 8,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-2016-44-1",
+      "sequence": 9,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-2016-44-1",
+      "sequence": 10,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-AM-33-B",
+      "sequence": 11,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-AM-51-1-E",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-AM-51-1-H",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-BR-515",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-BR-515",
+      "sequence": 5,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-BR-515",
+      "sequence": 6,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-BR-946-H",
+      "sequence": 3,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-KOG-1723",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-KOG-1723-1",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-11859",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-11859",
+      "sequence": 3,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-1198",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-12006-16",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-12006-3",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-12006-8",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-1202",
+      "sequence": 3,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-1203",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-1214",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-1228",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "BK-NM-1606",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "NG-1990-1-2",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "RP-T-1960-209(R)",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "RP-T-1988-129",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "RP-T-1988-130",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-101",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-126",
+      "sequence": 3,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-126",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-1356",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-2318",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-25",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-3134",
+      "sequence": 6,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-363",
+      "sequence": 5,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-372",
+      "sequence": 4,
+      "issue_type": "location_as_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-3747",
+      "sequence": 8,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-379",
+      "sequence": 7,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-4265",
+      "sequence": 1,
+      "issue_type": "location_as_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-4753",
+      "sequence": 2,
+      "issue_type": "alternative_acquisition",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-480",
+      "sequence": 3,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-4837",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-510",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-52",
+      "sequence": 3,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-52",
+      "sequence": 6,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-590",
+      "sequence": 6,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-63",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-63",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-800",
+      "sequence": 4,
+      "issue_type": "alternative_acquisition",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-808",
+      "sequence": 2,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-81",
+      "sequence": 8,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-A-867",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-C-108",
+      "sequence": 4,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-C-200",
+      "sequence": 10,
+      "issue_type": "phantom_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "SK-C-243",
+      "sequence": 6,
+      "issue_type": "location_as_event",
+      "family": "reclassify"
+    },
+    {
+      "object_number": "AK-RBK-17525",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-14823-A",
+      "sequence": 3,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16677",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16853",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16859",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16863-A",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16885",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16885-12",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16885-14",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16885-60",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16885-79",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16885-8",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16918",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16919",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16925-B",
+      "sequence": 4,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16929",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16937",
+      "sequence": 6,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16965-A",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-16974",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17048",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17063",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17065",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17073",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17083",
+      "sequence": 4,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17096-1",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17131",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17216",
+      "sequence": 4,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17281",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17297",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17315",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17355-2",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17366-B",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17366-D",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17382-A",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17401-A",
+      "sequence": 4,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17428-A",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17436",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17502-A",
+      "sequence": 2,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-17506-A",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-2013-9-1",
+      "sequence": 6,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-2016-13",
+      "sequence": 3,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "BK-KOG-760",
+      "sequence": 7,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "RP-P-1961-868",
+      "sequence": 3,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "RP-T-1898-A-3991",
+      "sequence": 2,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "RP-T-1898-A-4067",
+      "sequence": 2,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "RP-T-1944-200(R)",
+      "sequence": 3,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "RP-T-1948-398",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "RP-T-1979-205",
+      "sequence": 2,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "RP-T-2010-43-194",
+      "sequence": 3,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "RP-T-2010-43-226",
+      "sequence": 3,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-3158",
+      "sequence": 3,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-3467",
+      "sequence": 3,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-3469",
+      "sequence": 3,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-3612",
+      "sequence": 2,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-3681",
+      "sequence": 2,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-3723",
+      "sequence": 2,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-3993",
+      "sequence": 5,
+      "issue_type": "gap_bridge",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-4008",
+      "sequence": 5,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-4854-J",
+      "sequence": 9,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-A-705",
+      "sequence": 14,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-C-1349",
+      "sequence": 6,
+      "issue_type": "multi_transfer",
+      "family": "split"
+    },
+    {
+      "object_number": "SK-C-243",
+      "sequence": 5,
+      "issue_type": "bequest_chain",
+      "family": "split"
+    }
+  ]
+}
