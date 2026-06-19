@@ -63,6 +63,10 @@ data/audit/*
 !data/backfills/
 data/backfills/*
 !data/backfills/curated-*.csv
+# recovered-*.csv: authority-resolved place rows + depicted-place subject
+# mappings the harvest drops (Tier 4/#318, Tier 2/#316). Same system-of-record
+# role as curated-*.csv — must be versioned to survive a fresh harvest (#410).
+!data/backfills/recovered-*.csv
 __pycache__/
 
 # Generated test fixture DB (rebuilt at test time from fixtures/vocab-schema.sql; plans/003)

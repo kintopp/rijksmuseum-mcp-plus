@@ -145,6 +145,18 @@ python3 scripts/apply_curated_label_corrections.py
 # Source: data/backfills/curated-coord-corrections.csv. Currently 3 rows in v0.30.
 python3 scripts/geocoding/apply_curated_coord_corrections.py
 
+# Recovered places (Tier 4 / #318; tier-aware schema folds in Tier 2 / #316).
+# Re-inserts the label-less schema:Place stubs the harvest drops (no en/nl
+# label) that carry an external sameAs, with authority-resolved label + coords
+# (coord_method='deterministic') + placetype, PLUS the depicted-place subject
+# mappings recovered from the work dump's schema:about edges (~685 in v0.30).
+# Sources: data/backfills/recovered-places.csv + recovered-place-mappings.csv
+# (regenerate with: scripts/recover_318_external_stub_places.py --emit-curated
+# data/backfills --scan-works <work.tar.gz>). Idempotent INSERT OR IGNORE; NO
+# network. MUST run before strip_non_authority_coords.py so the deterministic
+# coords survive the two-tier gate. See issue #410.
+python3 scripts/apply_recovered_places.py
+
 # FINAL STEP — two-tier geo policy: strip lat/lon AND coord_method from
 # EVERY place whose coord_method is not 'deterministic' (i.e. not traceable
 # to a Rijks-supplied authority ID). This wipes the entire 'inferred' tier
