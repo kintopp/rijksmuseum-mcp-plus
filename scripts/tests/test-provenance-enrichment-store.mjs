@@ -18,6 +18,7 @@ import {
   applyEnrichmentsSchema,
   migrate,
   runStructuralExtractor,
+  loadRevertDenylist,
 } from "../migrate-enrichments-to-store.mjs";
 import { reapply } from "../reapply-enrichments-from-store.mjs";
 import { rawTextHash, buildDupOrdinals } from "../lib/raw-text-hash.mjs";
@@ -1259,6 +1260,100 @@ function writeTmpJson(content) {
       const n9204 = db.prepare("SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number='SK-A-9204'").get().n;
       assertEq(n9204, 0, "case15: sub-0.7 audit entry skipped (no store row)");
     }
+  }
+
+  // ── Case 16: #397/#408 revert denylist guard ──────────────────────────────
+  // The source audit JSONs are frozen and still hold every entry the v0.81 audit
+  // reverted; runStructuralExtractor MUST skip any (object_number, sequence,
+  // issue_type) in scripts/provenance-revert-denylist.json so a store rebuild never
+  // resurrects the reverted batch. Critically, the field-correction guard runs
+  // PER-correction BEFORE grouping, so a reverted correction is dropped while a
+  // legitimate sibling on the same event survives. See
+  // scripts/build-revert-denylist.mjs. (#397/#408)
+  section("Case 16: revert denylist skips reverted ops, keeps grouped siblings");
+  {
+    const db = makeDb();
+    const re2 = [
+      { raw_text_segment: "frag A", transfer_type: "sale", transfer_category: null, parties: [] },
+      { raw_text_segment: "frag B", transfer_type: "gift", transfer_category: null, parties: [] },
+    ];
+    const splitPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case16-split" },
+      results: [{ data: { object_number: "SK-A-9301", splits: [
+        { original_sequence: 1, issue_type: "multi_transfer", confidence: 0.9, reasoning: "reverted", replacement_events: re2 },
+        { original_sequence: 2, issue_type: "multi_transfer", confidence: 0.9, reasoning: "genuine, kept", replacement_events: re2 },
+      ] } }],
+    }), "utf-8");
+    const reclassPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case16-reclass" },
+      results: [{ data: { object_number: "SK-A-9302", reclassifications: [
+        { event_sequence: 1, issue_type: "phantom_event", action: "mark_non_provenance", confidence: 0.9, reasoning: "reverted" },
+      ] } }],
+    }), "utf-8");
+    const fieldPath = writeTmpJson(JSON.stringify({
+      meta: { batchId: "audit:case16-field" },
+      results: [{ data: { object_number: "SK-A-9303", corrections: [
+        { event_sequence: 1, field: "location", current_value: "X", corrected_value: "Y", confidence: 0.9, issue_type: "truncated_location", reasoning: "genuine, kept" },
+        { event_sequence: 1, field: "parties", confidence: 0.9, issue_type: "missing_receiver", new_party: { name: "Führermuseum" }, reasoning: "reverted" },
+      ] } }],
+    }), "utf-8");
+
+    const byObjSeq = new Map();
+    const groupsByObj = new Map();
+    for (const [obj, seqs] of Object.entries({ "SK-A-9301": [1, 2], "SK-A-9302": [1], "SK-A-9303": [1] })) {
+      const evs = seqs.map((seq) => {
+        const rawText = `Parent event text for ${obj} seq ${seq}`;
+        byObjSeq.set(`${obj}|${seq}`, rawText);
+        return { sequence: seq, raw_text: rawText };
+      });
+      groupsByObj.set(obj, buildDupOrdinals(evs));
+    }
+    const oracle = { byObjSeq, groupsByObj };
+
+    // Reverted: the seq-1 multi_transfer, the phantom_event, and the missing_receiver.
+    const denylist = new Set([
+      "SK-A-9301|1|multi_transfer",
+      "SK-A-9302|1|phantom_event",
+      "SK-A-9303|1|missing_receiver",
+    ]);
+
+    let counts, threw = false;
+    try {
+      counts = runStructuralExtractor(db, {
+        dryRun: false, seenPK: new Set(),
+        auditFiles: { split: splitPath, reclassify: reclassPath, fieldcorrection: fieldPath },
+        oracle, denylist,
+      });
+    } catch (e) {
+      threw = true; failures.push(`case16: runStructuralExtractor threw: ${e.message}`);
+    } finally {
+      cleanTmp(splitPath); cleanTmp(reclassPath); cleanTmp(fieldPath);
+    }
+    assert(!threw, "case16: runStructuralExtractor does NOT throw");
+    if (counts) {
+      assertEq(counts.denied, 3, "case16: counts.denied = 3 (split + reclassify + grouped correction)");
+      assertEq(counts.event_split, 1, "case16: reverted split skipped, genuine split kept");
+      assertEq(counts.event_reclassify, 0, "case16: reverted phantom_event reclassification skipped");
+      assertEq(counts.event_fieldcorrection, 1, "case16: grouped event still emits (legit sibling survives)");
+      const n9301seq1 = db.prepare("SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number='SK-A-9301' AND field='event.split'").get().n;
+      assertEq(n9301seq1, 1, "case16: exactly one SK-A-9301 split row (the kept seq-2)");
+      const n9302 = db.prepare("SELECT COUNT(*) AS n FROM provenance_enrichments WHERE object_number='SK-A-9302'").get().n;
+      assertEq(n9302, 0, "case16: SK-A-9302 produced no store row (reverted)");
+      const fcRow = db.prepare("SELECT payload FROM provenance_enrichments WHERE object_number='SK-A-9303' AND field='event.fieldcorrection'").get();
+      assert(fcRow != null, "case16: SK-A-9303 fieldcorrection row present (legit truncated_location kept)");
+      if (fcRow) {
+        const corr = JSON.parse(fcRow.payload).corrections;
+        assertEq(corr.length, 1, "case16: reverted missing_receiver stripped from grouped payload");
+        assertEq(corr[0].issue_type, "truncated_location", "case16: surviving correction is the legit truncated_location");
+      }
+    }
+
+    // ENOENT fallback: a missing denylist file degrades to no denials, never throws.
+    let denyThrew = false, emptySet = null;
+    try { emptySet = loadRevertDenylist("/nonexistent/provenance-revert-denylist.json"); }
+    catch { denyThrew = true; }
+    assert(!denyThrew, "case16: loadRevertDenylist does NOT throw on a missing file");
+    assert(emptySet instanceof Set && emptySet.size === 0, "case16: missing denylist file → empty Set (no denials)");
   }
 
   // ─── Summary ───────────────────────────────────────────────────────────────
