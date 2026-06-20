@@ -172,4 +172,14 @@ check("getConservationHistory returns null for an unknown objectNumber", () => {
   assert.equal(db.getConservationHistory("NOPE-9999"), null);
 });
 
+check("getArtworkDetail pairs production role↔creator row-aware, not positionally (#354 / RP-F-00-173)", () => {
+  const d = db.getArtworkDetail("FX-9");
+  assert.ok(d, "FX-9 not found");
+  const roleOf = (uri) => d.production.find((p) => p.actorUri === uri)?.role;
+  // The dead source painter must be 'after painting by', NOT the photographer of his own reproduction.
+  assert.equal(roleOf("v-deadmaster"), "after painting by", "source painter must be 'after painting by', not fotograaf");
+  // The 19th-c. photographer must carry 'fotograaf' (label_en empty → label_nl fallback).
+  assert.equal(roleOf("v-photog"), "fotograaf", "photographer must carry fotograaf");
+});
+
 console.log(`\n${passed} passed\n`);

@@ -1251,6 +1251,7 @@ export class VocabularyDb {
   private stmtArtworkRow: Statement | null = null;
   private stmtArtworkMappings: Statement | null = null;
   private stmtArtworkAssignmentPairs: Statement | null = null; // #376: row-aware qualifier↔creator pairing for the detail view
+  private stmtArtworkRolePairs: Statement | null = null; // #354: row-aware role↔creator pairing for the detail view
   private stmtArtworkTitleVariants: Statement | null = null;
   private stmtArtworkParents: Statement | null = null;
   private stmtArtworkChildCount: Statement | null = null;
@@ -1594,6 +1595,15 @@ export class VocabularyDb {
           JOIN vocabulary v ON v.id = ap.qualifier_id
           WHERE ap.artwork_id = ?
           ORDER BY ap.creator_id, ap.part_index, ap.qualifier_id
+        `);
+      }
+      if (this.hasProductionRolePairs) {
+        this.stmtArtworkRolePairs = this.db.prepare(`
+          SELECT prp.creator_id, v.label_en, v.label_nl
+          FROM production_role_pairs prp
+          JOIN vocabulary v ON v.id = prp.role_id
+          WHERE prp.artwork_id = ?
+          ORDER BY prp.creator_id, prp.part_index, prp.role_id
         `);
       }
 
@@ -1945,6 +1955,29 @@ export class VocabularyDb {
     return null;
   }
 
+  /** Build a creator_id → label map from a row-aware pairs statement (assignment_pairs /
+   *  production_role_pairs, both part_index-keyed), taking the first label per creator.
+   *  Returns null when the statement is absent or the artwork has no pair rows, so the
+   *  caller falls back to the positional zip. Shared by the qualifier (#376) and role (#354)
+   *  pairing in getArtworkDetail so the two cannot drift. */
+  private buildCreatorLabelMap(
+    stmt: Statement | null,
+    artId: number,
+    creatorCount: number,
+  ): Map<string, string> | null {
+    if (!stmt || creatorCount === 0) return null;
+    const rows = stmt.all(artId) as
+      { creator_id: string; label_en: string | null; label_nl: string | null }[];
+    if (rows.length === 0) return null;
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (!map.has(r.creator_id)) {
+        map.set(r.creator_id, r.label_en || r.label_nl || "");
+      }
+    }
+    return map;
+  }
+
   /**
    * Full artwork detail from the vocab DB — replaces the Linked Art resolver +
    * toDetailEnriched() for get_artwork_details. Two queries: artwork row + mappings.
@@ -2009,10 +2042,10 @@ export class VocabularyDb {
       .filter((m) => m.vocab_type === "place")
       .map(toTerm);
 
-    // Production participants: positional matching of creator/role/qualifier
-    // Only zip positionally when array lengths match (1:1 correspondence).
-    // When lengths differ, the mappings table lacks join keys to pair them
-    // correctly (#144), so we leave unmatched fields null to avoid fabrication.
+    // Production participants: role↔creator and qualifier↔creator are paired row-aware
+    // via production_role_pairs (#354) / assignment_pairs (#376); only place still zips
+    // positionally (no row-aware place table). Positional zips guard on equal array
+    // lengths and leave unmatched fields null to avoid fabrication (#144).
     const creators = byField.get("creator") ?? [];
     const roles = byField.get("production_role") ?? [];
     const qualifiers = byField.get("attribution_qualifier") ?? [];
@@ -2043,26 +2076,15 @@ export class VocabularyDb {
       safeQualifiers = [];
     }
 
-    // #376: when assignment_pairs carries rows for this artwork, pair connoisseurship
-    // qualifiers to creators by vocab id (row-aware) instead of positionally — this
-    // resolves multi-creator works the positional zip above leaves null, and fixes
-    // latent mispairing in equal-count works. Creators absent from the map (e.g.
-    // priority-only) correctly get null. Falls back to the positional safeguard only
-    // when the artwork has no assignment_pairs rows (pre-v0.24 DBs / no connoisseurship).
-    // (role/place stay positional.)
-    let qualifierByCreator: Map<string, string> | null = null;
-    if (this.stmtArtworkAssignmentPairs && creators.length > 0) {
-      const pairRows = this.stmtArtworkAssignmentPairs.all(row.art_id) as
-        { creator_id: string; label_en: string | null; label_nl: string | null }[];
-      if (pairRows.length > 0) {
-        qualifierByCreator = new Map();
-        for (const p of pairRows) {
-          if (!qualifierByCreator.has(p.creator_id)) {
-            qualifierByCreator.set(p.creator_id, p.label_en || p.label_nl || "");
-          }
-        }
-      }
-    }
+    // #376 / #354: pair connoisseurship qualifiers (assignment_pairs) and production roles
+    // (production_role_pairs) to creators by vocab id (row-aware, part_index-preserving)
+    // instead of positionally — this resolves multi-creator works the positional zip above
+    // leaves null and fixes latent mispairing in equal-count works (e.g. RP-F-00-173:
+    // Rembrandt tagged 'fotograaf'). Creators absent from a map correctly get null; each
+    // falls back to the positional safeguard only when the artwork has no rows in that table
+    // (pre-v0.24 DBs / no connoisseurship). place stays positional — no row-aware pairs table.
+    const qualifierByCreator = this.buildCreatorLabelMap(this.stmtArtworkAssignmentPairs, row.art_id, creators.length);
+    const roleByCreator = this.buildCreatorLabelMap(this.stmtArtworkRolePairs, row.art_id, creators.length);
 
     const production = creators.map((c, i) => {
       const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.wikidata_id)
@@ -2070,7 +2092,9 @@ export class VocabularyDb {
         : undefined;
       return {
         name: label(c),
-        role: safeRoles[i] ? label(safeRoles[i]) : null,
+        role: roleByCreator
+          ? (roleByCreator.get(c.vocab_id) ?? null)
+          : (safeRoles[i] ? label(safeRoles[i]) : null),
         attributionQualifier: qualifierByCreator
           ? (qualifierByCreator.get(c.vocab_id) ?? null)
           : (safeQualifiers[i] ? label(safeQualifiers[i]) : null),
