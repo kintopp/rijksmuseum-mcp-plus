@@ -347,6 +347,46 @@ export const ArtworkDetailOutput = {
   error: z.string().optional(),
 };
 
+export const ConservationHistoryOutput = {
+  objectNumber: z.string(),
+  title: z.string().nullable(),
+  creator: z.string().nullable(),
+  examinations: z.array(z.object({
+    examiner: z.string().nullable()
+      .describe("Name of the examiner / lab, when recorded."),
+    reportTypeId: z.string()
+      .describe("Rijksmuseum report-type concept URI."),
+    reportTypeLabel: z.string().nullable()
+      .describe("English label of the report type (e.g. 'infrared photography', 'dendrochronology'). Null on DBs where the label backfill has not been applied — fall back to reportTypeId."),
+    date: z.string().nullable(),
+    dateBegin: z.string().nullable(),
+    dateEnd: z.string().nullable(),
+  })).describe("Technical examinations / forensic reports (X-ray, dendrochronology, paint samples, infrared, …). Most-recent first."),
+  examinationsTotalCount: z.number().int().nonnegative(),
+  conservationHistory: z.array(z.object({
+    modifierUri: z.string().nullable()
+      .describe("Linked Art URI of the conservator / agent. Conservator names are not resolved — surface the description, which carries the substance."),
+    description: z.string().nullable()
+      .describe("Free-text treatment description (e.g. 'complete restoration', 'canvas lined')."),
+    date: z.string().nullable(),
+    dateBegin: z.string().nullable(),
+    dateEnd: z.string().nullable(),
+  })).describe("Restoration / conservation treatment events. Most-recent first."),
+  conservationHistoryTotalCount: z.number().int().nonnegative(),
+  attributionMarks: z.object({
+    signatures: z.number().int().nonnegative()
+      .describe("Count of recorded signature marks (Getty AAT 300028702)."),
+    inscriptions: z.number().int().nonnegative()
+      .describe("Count of recorded inscription marks (Getty AAT 300028705)."),
+    total: z.number().int().nonnegative()
+      .describe("Total attribution-evidence rows; if greater than signatures+inscriptions an unmapped evidence type is present (not silently dropped)."),
+  }).describe("Presence of signature/inscription marks only — a count, not content. The harvested rows carry no transcribed text and their carrier URIs do not resolve; use search_inscriptions / get_artwork_details.parsedInscriptions for the actual transcriptions."),
+  provenanceTextSummary: z.string().nullable()
+    .describe("Short excerpt of the raw provenance text, for forensic cross-reference. Null when absent."),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+};
+
 export const ImageInfoOutput = {
   objectNumber: z.string(),
   title: z.string().optional(),

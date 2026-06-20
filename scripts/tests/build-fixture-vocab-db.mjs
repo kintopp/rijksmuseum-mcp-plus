@@ -178,6 +178,23 @@ export function buildFixture() {
   );
   insertMany("INSERT INTO mappings (artwork_id, vocab_rowid, field_id) VALUES (?, ?, ?)", MAPPINGS);
   insertMany("INSERT INTO version_info (key, value) VALUES (?, ?)", VERSION_INFO);
+  insertMany(
+    "INSERT INTO examinations (art_id, seq, examiner_name, report_type_id, report_type_en, date_display, date_begin, date_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [[1, 0, "G. Tauber", "https://id.rijksmuseum.nl/22015553", "infrared photography", "2016", "2016-01-01", "2016-12-31"]]
+  );
+  insertMany(
+    "INSERT INTO modifications (art_id, seq, modifier_uri, date_display, date_begin, date_end, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [[1, 0, "https://id.rijksmuseum.nl/21059655", "1991 - 1992", "1991-01-01", "1992-12-31", "complete restoration"]]
+  );
+  // Seed TWO rows with label_text = null (the production shape — label_text is empty for every
+  // harvested row) and the two real evidence_type_aat codes, so the counts assertion is meaningful.
+  insertMany(
+    "INSERT INTO attribution_evidence (art_id, part_index, evidence_type_aat, carried_by_uri, label_text) VALUES (?, ?, ?, ?, ?)",
+    [
+      [1, 0, "http://vocab.getty.edu/aat/300028702", "https://id.rijksmuseum.nl/200111", null],
+      [1, 1, "http://vocab.getty.edu/aat/300028705", "https://id.rijksmuseum.nl/200222", null],
+    ]
+  );
 
   // External-content FTS: rebuild from the content tables we just populated.
   db.exec("INSERT INTO vocabulary_fts(vocabulary_fts) VALUES('rebuild')");

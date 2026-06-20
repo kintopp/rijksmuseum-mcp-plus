@@ -130,6 +130,20 @@ export interface ArtworkDetailFromDb {
   }[];
 }
 
+export interface ConservationHistoryFromDb {
+  objectNumber: string;
+  title: string | null;
+  creator: string | null;
+  examinations: { examiner: string | null; reportTypeId: string; reportTypeLabel: string | null;
+    date: string | null; dateBegin: string | null; dateEnd: string | null; }[];
+  examinationsTotalCount: number;
+  conservationHistory: { modifierUri: string | null; description: string | null;
+    date: string | null; dateBegin: string | null; dateEnd: string | null; }[];
+  conservationHistoryTotalCount: number;
+  attributionMarks: { signatures: number; inscriptions: number; total: number };
+  provenanceTextSummary: string | null;
+}
+
 // ─── find_similar types ──────────────────────────────────────────────
 
 export interface SharedMotif {
@@ -1238,6 +1252,9 @@ export class VocabularyDb {
   private stmtArtworkExternalIds: Statement | null = null;
   private stmtArtworkAttributionEvidence: Statement | null = null;
   private stmtArtworkExhibitions: Statement | null = null;
+  private stmtConservationHeader: Statement | null = null;
+  private stmtConservationExaminations: Statement | null = null;
+  private stmtConservationModifications: Statement | null = null;
   private stmtBrowseSetLookup: Statement | null = null;
   private stmtBrowseSetCount: Statement | null = null;
   private stmtBrowseSetPage: Statement | null = null;
@@ -1620,6 +1637,25 @@ export class VocabularyDb {
            FROM attribution_evidence
            WHERE art_id = ?
            ORDER BY part_index, evidence_type_aat, carried_by_uri`
+        );
+      }
+
+      this.stmtConservationHeader = this.db.prepare(
+        `SELECT art_id, object_number, title, title_all_text, creator_label, provenance_text
+         FROM artworks WHERE object_number = ?`
+      );
+      if (this.tableExists("examinations")) {
+        this.stmtConservationExaminations = this.db.prepare(
+          `SELECT examiner_name, report_type_id, report_type_en, date_display, date_begin, date_end
+           FROM examinations WHERE art_id = ?
+           ORDER BY date_begin IS NULL, date_begin DESC, seq`
+        );
+      }
+      if (this.tableExists("modifications")) {
+        this.stmtConservationModifications = this.db.prepare(
+          `SELECT modifier_uri, date_display, date_begin, date_end, description
+           FROM modifications WHERE art_id = ?
+           ORDER BY date_begin IS NULL, date_begin DESC, seq`
         );
       }
 
@@ -2236,6 +2272,70 @@ export class VocabularyDb {
       carriedByUri: r.carried_by_uri,
       labelText: r.label_text,
     }));
+  }
+
+  private fetchConservationExaminations(artId: number): ConservationHistoryFromDb["examinations"] {
+    if (!this.stmtConservationExaminations) return [];
+    const rows = this.stmtConservationExaminations.all(artId) as {
+      examiner_name: string | null; report_type_id: string; report_type_en: string | null;
+      date_display: string | null; date_begin: string | null; date_end: string | null;
+    }[];
+    return rows.map((r) => ({
+      examiner: r.examiner_name,
+      reportTypeId: r.report_type_id,
+      reportTypeLabel: r.report_type_en,
+      date: r.date_display, dateBegin: r.date_begin, dateEnd: r.date_end,
+    }));
+  }
+
+  private fetchConservationModifications(artId: number): ConservationHistoryFromDb["conservationHistory"] {
+    if (!this.stmtConservationModifications) return [];
+    const rows = this.stmtConservationModifications.all(artId) as {
+      modifier_uri: string | null; description: string | null;
+      date_display: string | null; date_begin: string | null; date_end: string | null;
+    }[];
+    return rows.map((r) => ({
+      modifierUri: r.modifier_uri, description: r.description,
+      date: r.date_display, dateBegin: r.date_begin, dateEnd: r.date_end,
+    }));
+  }
+
+  /** Forensics surface for one artwork: examinations + conservation history + attribution evidence. */
+  getConservationHistory(objectNumber: string): ConservationHistoryFromDb | null {
+    if (!this.stmtConservationHeader) return null;
+    const row = this.stmtConservationHeader.get(objectNumber) as {
+      art_id: number; object_number: string; title: string | null;
+      title_all_text: string | null; creator_label: string | null; provenance_text: string | null;
+    } | undefined;
+    if (!row) return null;
+
+    const examinations = this.fetchConservationExaminations(row.art_id);
+    const conservationHistory = this.fetchConservationModifications(row.art_id);
+    // Reduce the (hollow) attribution_evidence rows to a presence signal — reuse the
+    // existing fetch method (no new prepared statement). label_text is empty and the
+    // carriers don't resolve, so we surface counts only; transcriptions live in search_inscriptions.
+    const ae = this.fetchAttributionEvidence(row.art_id);
+    const AAT_SIGNATURE = "http://vocab.getty.edu/aat/300028702";
+    const AAT_INSCRIPTION = "http://vocab.getty.edu/aat/300028705";
+    const attributionMarks = {
+      signatures: ae.filter((a) => a.evidenceTypeAat === AAT_SIGNATURE).length,
+      inscriptions: ae.filter((a) => a.evidenceTypeAat === AAT_INSCRIPTION).length,
+      total: ae.length,
+    };
+    const prov = row.provenance_text;
+    const provenanceTextSummary = prov
+      ? (prov.length > 600 ? prov.slice(0, 600).trimEnd() + "…" : prov)
+      : null;
+
+    return {
+      objectNumber: row.object_number,
+      title: VocabularyDb.resolveTitle(row.title, row.title_all_text, "Untitled"),
+      creator: row.creator_label,
+      examinations, examinationsTotalCount: examinations.length,
+      conservationHistory, conservationHistoryTotalCount: conservationHistory.length,
+      attributionMarks,
+      provenanceTextSummary,
+    };
   }
 
   /** Most-recent first. Max observed in v0.26 is 5 rows/artwork — no cap applied. */

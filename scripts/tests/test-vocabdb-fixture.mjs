@@ -135,4 +135,32 @@ check("reconstructSourceText assembles the labelled composite text", () => {
   assert.ok(text.includes("[Narrative] Curatorial note"), "narrative segment");
 });
 
+check("getConservationHistory returns the forensic surfaces + attribution presence signal", () => {
+  const d = db.getConservationHistory("FX-1"); // the object you seeded
+  assert.ok(d, "conservation history not found");
+  assert.equal(d.examinationsTotalCount, 1);
+  assert.equal(d.examinations[0].reportTypeLabel, "infrared photography");
+  assert.equal(d.examinations[0].reportTypeId, "https://id.rijksmuseum.nl/22015553");
+  assert.equal(d.conservationHistoryTotalCount, 1);
+  assert.equal(d.conservationHistory[0].description, "complete restoration");
+  assert.equal(d.conservationHistory[0].modifierUri, "https://id.rijksmuseum.nl/21059655");
+  // attribution surfaced as counts, NOT a row array; label_text is null in production
+  assert.equal(d.attributionMarks.signatures, 1);
+  assert.equal(d.attributionMarks.inscriptions, 1);
+  assert.equal(d.attributionMarks.total, 2);
+});
+
+check("getConservationHistory returns empty arrays / zero counts for an artwork with no forensic data", () => {
+  const d = db.getConservationHistory("FX-2"); // an object you did NOT seed
+  assert.ok(d, "header not found");
+  assert.deepEqual(d.examinations, []);
+  assert.equal(d.examinationsTotalCount, 0);
+  assert.deepEqual(d.conservationHistory, []);
+  assert.deepEqual(d.attributionMarks, { signatures: 0, inscriptions: 0, total: 0 });
+});
+
+check("getConservationHistory returns null for an unknown objectNumber", () => {
+  assert.equal(db.getConservationHistory("NOPE-9999"), null);
+});
+
 console.log(`\n${passed} passed\n`);
