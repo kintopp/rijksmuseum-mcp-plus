@@ -2297,7 +2297,6 @@ export class VocabularyDb {
     };
   }
 
-
   private fetchConservationExaminations(artId: number): ConservationHistoryFromDb["examinations"] {
     if (!this.stmtConservationExaminations) return [];
     const rows = this.stmtConservationExaminations.all(artId) as {
