@@ -1019,10 +1019,14 @@ const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
 
 /**
  * Maximum art_ids returned by filterArtIds(). The chunked vec_distance_cosine path
- * in EmbeddingsDb scales linearly (~3ms/1K) up to this limit; beyond it, pure KNN
- * + post-filter (~1.5s) kicks in. Benchmarked at ~600ms for 200K candidates.
+ * in EmbeddingsDb scales linearly (~1.9ms/1K candidates, warm); at/above this limit,
+ * the approximate pure-KNN + post-filter fallback (~1.5s flat) kicks in. Set to 400K
+ * so the exact chunked path serves the 200K–400K band (~760ms at 400K) rather than
+ * the approximate fallback — the two cross at ~750K candidates, so 400K keeps the
+ * worst-case exact query comfortably under the fallback while bounding per-query
+ * memory. (issue #74 benchmark: scripts/tests/bench-filter-limit-scaling.mjs)
  */
-export const FILTER_ART_IDS_LIMIT = 200_000;
+export const FILTER_ART_IDS_LIMIT = 400_000;
 
 /**
  * Parameter keys eligible for filterArtIds — all VOCAB_FILTERS params plus direct-column filters.

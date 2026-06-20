@@ -198,18 +198,19 @@ export class EmbeddingsDb {
   /**
    * Filtered KNN search — pre-filter by art_id set, then compute distances.
    * Uses regular table + vec_distance_cosine() per sqlite-vec maintainer recommendation.
-   * Chunked path scales linearly (~3ms/1K candidates) up to FILTER_ART_IDS_LIMIT;
-   * beyond that, falls back to pure KNN + post-filter (~1.5s full scan).
+   * Chunked path scales linearly (~1.9ms/1K candidates, warm) up to FILTER_ART_IDS_LIMIT;
+   * at/above that, falls back to pure KNN + post-filter (~1.5s full scan).
    */
   searchFiltered(queryEmbedding: Float32Array, candidateArtIds: number[], k: number): FilteredSearchResponse {
     if (!this.db || !this.stmtQuantize || candidateArtIds.length === 0) return { results: [] };
 
     const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
 
-    // For very large candidate sets (>200K), fall back to pure KNN + post-filter.
-    // The chunked vec_distance_cosine path scales linearly (~2.5ms/1K candidates)
-    // and stays faster than the ~1.5s full vec0 scan up to ~600K candidates.
-    // 200K is a conservative threshold (~500ms) that leaves headroom.
+    // For very large candidate sets (≥ FILTER_ART_IDS_LIMIT), fall back to pure
+    // KNN + post-filter. The chunked vec_distance_cosine path scales linearly
+    // (~1.9ms/1K candidates, warm) and stays faster than the ~1.5s flat fallback
+    // up to ~750K candidates; the 400K limit keeps the exact path's worst case
+    // (~760ms) well under the fallback. (issue #74)
     if (candidateArtIds.length >= FILTER_ART_IDS_LIMIT) {
       const allResults = this.search(queryEmbedding, 4096);
       const idSet = new Set(candidateArtIds);

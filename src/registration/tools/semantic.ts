@@ -52,7 +52,9 @@ export function registerSemanticTools(
           "Filter notes: supports pre-filtering by subject, depictedPerson, depictedPlace, productionPlace, collectionSet, aboutActor, iconclass, and imageAvailable " +
           "in addition to type, material, technique, creator, and creationDate. " +
           "Use type: 'painting' to restrict to the paintings collection. Do NOT use technique: 'painting' — it matches painted decoration on any object type " +
-          "(ceramics, textiles, frames) and will return unexpected results.\n\n" +
+          "(ceramics, textiles, frames) and will return unexpected results. " +
+          "A single very broad filter (e.g. type: 'print' or material: 'paper' alone) can exceed the internal candidate limit, so ranking then operates on a near-optimal subset " +
+          "rather than the full match set and may miss equally-relevant works — pair it with a narrower filter (e.g. type: 'print', subject: 'landscape') for exact ranking.\n\n" +
           "Painting queries — two-step pattern: paintings are underrepresented (prints and drawings outnumber them ~77:1). " +
           "For queries where paintings are the expected result type, ALWAYS combine semantic_search with a follow-up " +
           "search_artwork(type: 'painting', subject: …) or search_artwork(type: 'painting', creator: …) — do not wait to observe skew, " +
