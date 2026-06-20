@@ -1955,6 +1955,29 @@ export class VocabularyDb {
     return null;
   }
 
+  /** Build a creator_id → label map from a row-aware pairs statement (assignment_pairs /
+   *  production_role_pairs, both part_index-keyed), taking the first label per creator.
+   *  Returns null when the statement is absent or the artwork has no pair rows, so the
+   *  caller falls back to the positional zip. Shared by the qualifier (#376) and role (#354)
+   *  pairing in getArtworkDetail so the two cannot drift. */
+  private buildCreatorLabelMap(
+    stmt: Statement | null,
+    artId: number,
+    creatorCount: number,
+  ): Map<string, string> | null {
+    if (!stmt || creatorCount === 0) return null;
+    const rows = stmt.all(artId) as
+      { creator_id: string; label_en: string | null; label_nl: string | null }[];
+    if (rows.length === 0) return null;
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (!map.has(r.creator_id)) {
+        map.set(r.creator_id, r.label_en || r.label_nl || "");
+      }
+    }
+    return map;
+  }
+
   /**
    * Full artwork detail from the vocab DB — replaces the Linked Art resolver +
    * toDetailEnriched() for get_artwork_details. Two queries: artwork row + mappings.
@@ -2053,45 +2076,15 @@ export class VocabularyDb {
       safeQualifiers = [];
     }
 
-    // #376: when assignment_pairs carries rows for this artwork, pair connoisseurship
-    // qualifiers to creators by vocab id (row-aware) instead of positionally — this
-    // resolves multi-creator works the positional zip above leaves null, and fixes
-    // latent mispairing in equal-count works. Creators absent from the map (e.g.
-    // priority-only) correctly get null. Falls back to the positional safeguard only
-    // when the artwork has no assignment_pairs rows (pre-v0.24 DBs / no connoisseurship).
-    // (role/place stay positional.)
-    let qualifierByCreator: Map<string, string> | null = null;
-    if (this.stmtArtworkAssignmentPairs && creators.length > 0) {
-      const pairRows = this.stmtArtworkAssignmentPairs.all(row.art_id) as
-        { creator_id: string; label_en: string | null; label_nl: string | null }[];
-      if (pairRows.length > 0) {
-        qualifierByCreator = new Map();
-        for (const p of pairRows) {
-          if (!qualifierByCreator.has(p.creator_id)) {
-            qualifierByCreator.set(p.creator_id, p.label_en || p.label_nl || "");
-          }
-        }
-      }
-    }
-
-    // #354: pair role↔creator row-aware via production_role_pairs (carries part_index)
-    // instead of the positional zip below, which mispairs whenever the creator and role
-    // mappings sort to different orders (e.g. RP-F-00-173: Rembrandt tagged 'fotograaf').
-    // Mirrors the qualifierByCreator path (#376). Creators absent from the map get null.
-    // Falls back to the positional safeguard only when the artwork has no role-pair rows.
-    let roleByCreator: Map<string, string> | null = null;
-    if (this.stmtArtworkRolePairs && creators.length > 0) {
-      const roleRows = this.stmtArtworkRolePairs.all(row.art_id) as
-        { creator_id: string; label_en: string | null; label_nl: string | null }[];
-      if (roleRows.length > 0) {
-        roleByCreator = new Map();
-        for (const r of roleRows) {
-          if (!roleByCreator.has(r.creator_id)) {
-            roleByCreator.set(r.creator_id, r.label_en || r.label_nl || "");
-          }
-        }
-      }
-    }
+    // #376 / #354: pair connoisseurship qualifiers (assignment_pairs) and production roles
+    // (production_role_pairs) to creators by vocab id (row-aware, part_index-preserving)
+    // instead of positionally — this resolves multi-creator works the positional zip above
+    // leaves null and fixes latent mispairing in equal-count works (e.g. RP-F-00-173:
+    // Rembrandt tagged 'fotograaf'). Creators absent from a map correctly get null; each
+    // falls back to the positional safeguard only when the artwork has no rows in that table
+    // (pre-v0.24 DBs / no connoisseurship). place stays positional — no row-aware pairs table.
+    const qualifierByCreator = this.buildCreatorLabelMap(this.stmtArtworkAssignmentPairs, row.art_id, creators.length);
+    const roleByCreator = this.buildCreatorLabelMap(this.stmtArtworkRolePairs, row.art_id, creators.length);
 
     const production = creators.map((c, i) => {
       const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.wikidata_id)
