@@ -1251,6 +1251,7 @@ export class VocabularyDb {
   private stmtArtworkRow: Statement | null = null;
   private stmtArtworkMappings: Statement | null = null;
   private stmtArtworkAssignmentPairs: Statement | null = null; // #376: row-aware qualifier↔creator pairing for the detail view
+  private stmtArtworkRolePairs: Statement | null = null; // #354: row-aware role↔creator pairing for the detail view
   private stmtArtworkTitleVariants: Statement | null = null;
   private stmtArtworkParents: Statement | null = null;
   private stmtArtworkChildCount: Statement | null = null;
@@ -1594,6 +1595,15 @@ export class VocabularyDb {
           JOIN vocabulary v ON v.id = ap.qualifier_id
           WHERE ap.artwork_id = ?
           ORDER BY ap.creator_id, ap.part_index, ap.qualifier_id
+        `);
+      }
+      if (this.hasProductionRolePairs) {
+        this.stmtArtworkRolePairs = this.db.prepare(`
+          SELECT prp.creator_id, v.label_en, v.label_nl
+          FROM production_role_pairs prp
+          JOIN vocabulary v ON v.id = prp.role_id
+          WHERE prp.artwork_id = ?
+          ORDER BY prp.creator_id, prp.part_index, prp.role_id
         `);
       }
 
@@ -2009,10 +2019,10 @@ export class VocabularyDb {
       .filter((m) => m.vocab_type === "place")
       .map(toTerm);
 
-    // Production participants: positional matching of creator/role/qualifier
-    // Only zip positionally when array lengths match (1:1 correspondence).
-    // When lengths differ, the mappings table lacks join keys to pair them
-    // correctly (#144), so we leave unmatched fields null to avoid fabrication.
+    // Production participants: role↔creator and qualifier↔creator are paired row-aware
+    // via production_role_pairs (#354) / assignment_pairs (#376); only place still zips
+    // positionally (no row-aware place table). Positional zips guard on equal array
+    // lengths and leave unmatched fields null to avoid fabrication (#144).
     const creators = byField.get("creator") ?? [];
     const roles = byField.get("production_role") ?? [];
     const qualifiers = byField.get("attribution_qualifier") ?? [];
@@ -2064,13 +2074,34 @@ export class VocabularyDb {
       }
     }
 
+    // #354: pair role↔creator row-aware via production_role_pairs (carries part_index)
+    // instead of the positional zip below, which mispairs whenever the creator and role
+    // mappings sort to different orders (e.g. RP-F-00-173: Rembrandt tagged 'fotograaf').
+    // Mirrors the qualifierByCreator path (#376). Creators absent from the map get null.
+    // Falls back to the positional safeguard only when the artwork has no role-pair rows.
+    let roleByCreator: Map<string, string> | null = null;
+    if (this.stmtArtworkRolePairs && creators.length > 0) {
+      const roleRows = this.stmtArtworkRolePairs.all(row.art_id) as
+        { creator_id: string; label_en: string | null; label_nl: string | null }[];
+      if (roleRows.length > 0) {
+        roleByCreator = new Map();
+        for (const r of roleRows) {
+          if (!roleByCreator.has(r.creator_id)) {
+            roleByCreator.set(r.creator_id, r.label_en || r.label_nl || "");
+          }
+        }
+      }
+    }
+
     const production = creators.map((c, i) => {
       const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.wikidata_id)
         ? { birthYear: c.birth_year, deathYear: c.death_year, gender: c.gender, wikidataId: c.wikidata_id }
         : undefined;
       return {
         name: label(c),
-        role: safeRoles[i] ? label(safeRoles[i]) : null,
+        role: roleByCreator
+          ? (roleByCreator.get(c.vocab_id) ?? null)
+          : (safeRoles[i] ? label(safeRoles[i]) : null),
         attributionQualifier: qualifierByCreator
           ? (qualifierByCreator.get(c.vocab_id) ?? null)
           : (safeQualifiers[i] ? label(safeQualifiers[i]) : null),

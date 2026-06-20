@@ -84,6 +84,10 @@ const VOCAB = [
   ["v-canvas", "classification", "canvas", "doek", "canvas", "doek", 103],
   ["v-rembrandt", "person", "Rembrandt van Rijn", "Rembrandt van Rijn", "rembrandtvanrijn", "rembrandtvanrijn", 104],
   ["v-amsterdam", "place", "Amsterdam", "Amsterdam", "amsterdam", "amsterdam", 105],
+  ["v-deadmaster", "person", "Old Master", "Old Master", "oldmaster", "oldmaster", 110],
+  ["v-photog", "person", "Studio Photographer", "Studio Photographer", "studiophotographer", "studiophotographer", 111],
+  ["v-role-fotograaf", "classification", "", "fotograaf", "", "fotograaf", 112],
+  ["v-role-afterpaint", "classification", "after painting by", "naar schilderij van", "afterpaintingby", "naarschilderijvan", 113],
 ];
 
 // object_number, art_id, title, creator_label, description_text, inscription_text,
@@ -97,6 +101,7 @@ const ARTWORKS = [
   ["FX-6", 6, "Self-Portrait", "Rembrandt van Rijn", "The artist in later life.", "aetatis 54", null, 70, 55, 1660, 1660, 1, 2, "iiif-fx-6"],
   ["FX-7", 7, "Tulip Still Life", "Ambrosius Bosschaert", "A vase of tulips in a niche.", null, null, 45, 35, 1620, 1625, 1, 2, "iiif-fx-7"],
   ["FX-8", 8, "Sketch of a Lion", "Anonymous", null, null, null, null, null, 1700, 1700, 0, 1, null],
+  ["FX-9", 9, "Photographic reproduction after an Old Master", "Studio Photographer", "A 19th-c. albumen print reproducing an Old Master painting.", null, null, 30, 24, 1865, 1890, 0, 1, null],
 ];
 
 // artwork_id (art_id), vocab_rowid (vocab_int_id), field_id
@@ -112,6 +117,13 @@ const MAPPINGS = [
   [6, 101, 15], [6, 104, 4],
   [7, 101, 15],
   [8, 102, 15],
+  [9, 110, 4], [9, 111, 4], [9, 112, 8], [9, 113, 8],
+];
+
+// artwork_id, creator_id, role_id, part_index — the TRUE row-aware pairing for FX-9.
+const PRODUCTION_ROLE_PAIRS = [
+  [9, "v-deadmaster", "v-role-afterpaint", 1],
+  [9, "v-photog", "v-role-fotograaf", 0],
 ];
 
 const VERSION_INFO = [
@@ -194,6 +206,10 @@ export function buildFixture() {
       [1, 0, "http://vocab.getty.edu/aat/300028702", "https://id.rijksmuseum.nl/200111", null],
       [1, 1, "http://vocab.getty.edu/aat/300028705", "https://id.rijksmuseum.nl/200222", null],
     ]
+  );
+  insertMany(
+    "INSERT INTO production_role_pairs (artwork_id, creator_id, role_id, part_index) VALUES (?, ?, ?, ?)",
+    PRODUCTION_ROLE_PAIRS
   );
 
   // External-content FTS: rebuild from the content tables we just populated.
