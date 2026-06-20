@@ -29,7 +29,7 @@ for (const obj of ["SK-C-5", "SK-A-4969", "SK-A-3953", "KOG-MP-2-2061-2"]) {
   console.log(`keyCount       : ${keys.length}`);
   console.log(`themes         : ${d.themes?.length}/${d.themesTotalCount}`);
   console.log(`exhibitions    : ${d.exhibitions?.length}/${d.exhibitionsTotalCount}`);
-  console.log(`attribEvidence : ${d.attributionEvidence?.length}`);
+  console.log(`attribMarks    : ${d.attributionMarks?.total}`);
   console.log(`dimensions     : ${d.dimensions.map(x => x.type).join(",")}`);
   console.log(`dateDisplay    : ${d.dateDisplay ?? "(null)"}`);
   console.log(`extentText     : ${(d.extentText ?? "(null)").slice(0, 70)}`);

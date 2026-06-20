@@ -199,7 +199,7 @@ export function registerDetailsTools(
         "Returns metadata including titles (primary plus the full set of variants with language and qualifier — Dutch/English brief/full/display/former), " +
         "creator, date, dateDisplay (free-text form), description, curatorial narrative, dimensions (text + structured: height/width/depth/weight/diameter where present), " +
         "extentText, materials, object type, production details (with creator life dates, gender, and Wikidata ID where available), provenance, credit line, inscriptions, license, " +
-        "related objects (each carrying objectNumber + iiifId for in-viewer navigation), themes, exhibitions, attributionEvidence, externalIds (handle + other), " +
+        "related objects (each carrying objectNumber + iiifId for in-viewer navigation), themes, exhibitions, attributionMarks (signature/inscription counts), externalIds (handle + other), " +
         "location (museum room when on display, as { roomId, floor, roomName }), recordCreated/recordModified timestamps, plus collection sets and reference metadata. " +
         "The relatedObjects field carries each peer's objectNumber (canonical handle) plus a Linked Art objectUri; pass either form back here, objectNumber preferred.\n\n" +
         "Not for filter-based discovery — use search_artwork. Not for similarity discovery — use find_similar. Not for aggregate counts — use collection_stats.",

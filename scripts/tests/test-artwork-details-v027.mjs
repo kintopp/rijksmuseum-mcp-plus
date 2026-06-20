@@ -5,13 +5,13 @@
  * against the local v0.26 DB:
  *   - new top-level fields: dateDisplay, extentText, recordCreated, recordModified,
  *     themes[], themesTotalCount, exhibitions[], exhibitionsTotalCount,
- *     attributionEvidence[], externalIds.{handle, other}, location (room struct)
+ *     attributionMarks, externalIds.{handle, other}, location (room struct)
  *   - extended dimensions[] union (height/width/depth/weight/diameter)
  *   - confirms removal: no personInfo.bio, no examinations, no conservationHistory
  *
  * Three fixtures:
  *   - SK-A-4969  (Portret van Jan Valckenburgh, 2026 hanging) — themes + exhibitions
- *                + attributionEvidence + externalIds.handle + on-display location
+ *                + attributionMarks + externalIds.handle + on-display location
  *   - KOG-MP-2-2061-2 — small object with depth_cm dimension
  *   - SK-A-3953  (Portret van Ambrogio Spinola) — themes/exhibitions populated
  *                but current_location IS NULL → location: null
@@ -84,16 +84,10 @@ assert(typeof ex0?.exhibitionId === "number", "exhibition has numeric exhibition
 assert("titleEn" in ex0 && "titleNl" in ex0 && "dateStart" in ex0 && "dateEnd" in ex0,
   "exhibition row carries titleEn/titleNl/dateStart/dateEnd");
 
-// Attribution evidence (artwork-level array, NOT per-production)
-assert(Array.isArray(d1.attributionEvidence), "attributionEvidence is array");
-assert(d1.attributionEvidence.length >= 1, "attributionEvidence has at least one entry");
-const aev = d1.attributionEvidence[0];
-assert(typeof aev.partIndex === "number" && aev.partIndex >= 0, "evidence has numeric partIndex");
-assert("evidenceTypeAat" in aev && "carriedByUri" in aev && "labelText" in aev,
-  "evidence row carries evidenceTypeAat / carriedByUri / labelText");
-// Crucially, attributionEvidence is NOT inside production[]
-assert(!d1.production.some(p => "attributionEvidence" in p),
-  "attributionEvidence is NOT nested inside production[] entries (artwork-level per revision 2026-05-01)");
+// Attribution marks (artwork-level presence signal — counts, not the old array)
+assert(d1.attributionMarks && typeof d1.attributionMarks.total === "number", "attributionMarks is an object with numeric total");
+assert(d1.attributionMarks.total >= 1, "attributionMarks.total >= 1 for a known-attribution object");
+assert(!("attributionEvidence" in d1), "old attributionEvidence array removed");
 
 // External IDs (struct, not record)
 assert(typeof d1.externalIds === "object" && d1.externalIds !== null,
@@ -150,7 +144,7 @@ assert(d3.objectNumber === "SK-A-3953", "objectNumber returned");
 assert(d3.location === null,
   `location is null when current_location IS NULL (got ${JSON.stringify(d3.location)})`);
 assert(d3.themesTotalCount >= 2, "still has themes populated");
-assert(d3.attributionEvidence.length >= 1, "still has attributionEvidence populated");
+assert(d3.attributionMarks.total >= 1, "d3 still has attribution marks");
 
 // ══════════════════════════════════════════════════════════════════
 section("4. outputSchema $ref-free verification");

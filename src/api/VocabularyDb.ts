@@ -45,6 +45,19 @@ export interface PersonInfo {
   wikidataId: string | null;
 }
 
+export interface AttributionEvidenceRow {
+  partIndex: number;
+  evidenceTypeAat: string | null;
+  carriedByUri: string | null;
+  labelText: string | null;
+}
+
+export interface AttributionMarks {
+  signatures: number;
+  inscriptions: number;
+  total: number;
+}
+
 /** Full artwork detail assembled from vocab DB — replaces ArtworkDetailEnriched from Linked Art. */
 export interface ArtworkDetailFromDb {
   id: string;
@@ -121,13 +134,8 @@ export interface ArtworkDetailFromDb {
     dateEnd: string | null;
   }[];
   exhibitionsTotalCount: number;
-  /** Evidence supporting attribution claims (signatures, inscriptions, monograms, …). Artwork-level — partIndex is preserved for upstream correlation, but not assumed to map to production[] index. */
-  attributionEvidence: {
-    partIndex: number;
-    evidenceTypeAat: string | null;
-    carriedByUri: string | null;
-    labelText: string | null;
-  }[];
+  /** Presence of signature/inscription marks (a count, not content). Transcriptions live in parsedInscriptions. */
+  attributionMarks: AttributionMarks;
 }
 
 export interface ConservationHistoryFromDb {
@@ -140,7 +148,7 @@ export interface ConservationHistoryFromDb {
   conservationHistory: { modifierUri: string | null; description: string | null;
     date: string | null; dateBegin: string | null; dateEnd: string | null; }[];
   conservationHistoryTotalCount: number;
-  attributionMarks: { signatures: number; inscriptions: number; total: number };
+  attributionMarks: AttributionMarks;
   provenanceTextSummary: string | null;
 }
 
@@ -2135,7 +2143,7 @@ export class VocabularyDb {
       themes,
       themesTotalCount,
       ...this.fetchExhibitions(row.art_id),
-      attributionEvidence: this.fetchAttributionEvidence(row.art_id),
+      attributionMarks: this.computeAttributionMarks(row.art_id),
     };
   }
 
@@ -2260,7 +2268,7 @@ export class VocabularyDb {
   }
 
   /** Artwork-level — partIndex is preserved but does NOT map to production[] index (only 36% agreement empirically). */
-  private fetchAttributionEvidence(artId: number): ArtworkDetailFromDb["attributionEvidence"] {
+  private fetchAttributionEvidence(artId: number): AttributionEvidenceRow[] {
     if (!this.stmtArtworkAttributionEvidence) return [];
     const rows = this.stmtArtworkAttributionEvidence.all(artId) as {
       part_index: number; evidence_type_aat: string | null;
@@ -2272,6 +2280,21 @@ export class VocabularyDb {
       carriedByUri: r.carried_by_uri,
       labelText: r.label_text,
     }));
+  }
+
+  /** Reduce the (content-free) attribution_evidence rows for one artwork to a presence signal
+   *  ({signatures, inscriptions, total}). Shared by getArtworkDetail and getConservationHistory
+   *  so the two tools cannot drift. label_text is empty and carriers don't resolve in the harvested
+   *  DB, so we surface counts only; transcriptions live in parsedInscriptions / search_inscriptions. */
+  private computeAttributionMarks(artId: number): AttributionMarks {
+    const ae = this.fetchAttributionEvidence(artId);
+    const AAT_SIGNATURE = "http://vocab.getty.edu/aat/300028702";
+    const AAT_INSCRIPTION = "http://vocab.getty.edu/aat/300028705";
+    return {
+      signatures: ae.filter((a) => a.evidenceTypeAat === AAT_SIGNATURE).length,
+      inscriptions: ae.filter((a) => a.evidenceTypeAat === AAT_INSCRIPTION).length,
+      total: ae.length,
+    };
   }
 
   private fetchConservationExaminations(artId: number): ConservationHistoryFromDb["examinations"] {
@@ -2311,17 +2334,7 @@ export class VocabularyDb {
 
     const examinations = this.fetchConservationExaminations(row.art_id);
     const conservationHistory = this.fetchConservationModifications(row.art_id);
-    // Reduce the (hollow) attribution_evidence rows to a presence signal — reuse the
-    // existing fetch method (no new prepared statement). label_text is empty and the
-    // carriers don't resolve, so we surface counts only; transcriptions live in search_inscriptions.
-    const ae = this.fetchAttributionEvidence(row.art_id);
-    const AAT_SIGNATURE = "http://vocab.getty.edu/aat/300028702";
-    const AAT_INSCRIPTION = "http://vocab.getty.edu/aat/300028705";
-    const attributionMarks = {
-      signatures: ae.filter((a) => a.evidenceTypeAat === AAT_SIGNATURE).length,
-      inscriptions: ae.filter((a) => a.evidenceTypeAat === AAT_INSCRIPTION).length,
-      total: ae.length,
-    };
+    const attributionMarks = this.computeAttributionMarks(row.art_id);
     const prov = row.provenance_text;
     const provenanceTextSummary = prov
       ? (prov.length > 600 ? prov.slice(0, 600).trimEnd() + "…" : prov)
