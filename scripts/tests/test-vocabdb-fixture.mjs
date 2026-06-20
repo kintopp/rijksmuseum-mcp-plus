@@ -112,6 +112,15 @@ check("getArtworkDetail returns null for an unknown object number", () => {
   assert.equal(db.getArtworkDetail("NOPE-1"), null);
 });
 
+check("getArtworkDetail surfaces attributionMarks counts, not the old array", () => {
+  const d = db.getArtworkDetail("FX-1");
+  assert.ok(d, "FX-1 not found");
+  assert.equal(d.attributionEvidence, undefined, "old attributionEvidence array must be gone");
+  assert.deepEqual(d.attributionMarks, { signatures: 1, inscriptions: 1, total: 2 });
+  const d2 = db.getArtworkDetail("FX-2");
+  assert.deepEqual(d2.attributionMarks, { signatures: 0, inscriptions: 0, total: 0 });
+});
+
 // ── Batch / lookup helpers ─────────────────────────────────────────────────
 check("lookupTypes maps object numbers to their type label", () => {
   const m = db.lookupTypes(["FX-1", "FX-3"]);

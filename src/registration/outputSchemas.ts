@@ -334,16 +334,14 @@ export const ArtworkDetailOutput = {
     dateEnd: z.string().nullable(),
   })).describe("Exhibitions this artwork has appeared in. Most-recent first."),
   exhibitionsTotalCount: z.number().int().nonnegative(),
-  attributionEvidence: z.array(z.object({
-    partIndex: z.number().int().nonnegative()
-      .describe("Upstream LinkedArt part index (preserved for future correlation; do not assume it maps to production[] index)."),
-    evidenceTypeAat: z.string().nullable()
-      .describe("AAT URI for evidence type (signature, inscription, ...). Labels not yet harvested."),
-    carriedByUri: z.string().nullable()
-      .describe("Linked Art URI of the inscription/signature object."),
-    labelText: z.string().nullable()
-      .describe("Free-text label of the evidence (e.g. transcribed signature)."),
-  })).describe("Evidence supporting attribution claims (signatures, inscriptions, monograms, …). Artwork-level — partIndex preserves upstream ordering but does NOT map to production[] index."),
+  attributionMarks: z.object({
+    signatures: z.number().int().nonnegative()
+      .describe("Count of recorded signature marks (Getty AAT 300028702)."),
+    inscriptions: z.number().int().nonnegative()
+      .describe("Count of recorded inscription marks (Getty AAT 300028705)."),
+    total: z.number().int().nonnegative()
+      .describe("Total attribution-evidence rows; if greater than signatures+inscriptions an unmapped evidence type is present (not silently dropped)."),
+  }).describe("Presence of signature/inscription marks only — a count, not content. The harvested rows carry no transcribed text and their carrier URIs do not resolve; use parsedInscriptions / search_inscriptions for the actual transcriptions."),
   error: z.string().optional(),
 };
 
