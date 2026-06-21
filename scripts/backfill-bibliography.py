@@ -92,9 +92,16 @@ def ensure_citations_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+class PermanentFetchError(Exception):
+    """Raised for HTTP 404/410 — the resource is gone upstream (e.g. a
+    deaccessioned object). Callers should give up on it rather than retry."""
+
+
 def fetch_json(uri: str, timeout: int = 15) -> dict | None:
     """GET a URI with Accept: application/ld+json (follows 303 redirect).
-    Returns the parsed JSON dict, or None on failure.
+    Returns the parsed JSON dict, or None on a *transient* failure (timeout,
+    connection error, 5xx, bad JSON). Raises PermanentFetchError on HTTP
+    404/410 so callers can distinguish "gone for good" from "try again later".
     """
     req = urllib.request.Request(
         uri,
@@ -103,6 +110,11 @@ def fetch_json(uri: str, timeout: int = 15) -> dict | None:
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # HTTPError is a URLError subclass — catch it first to classify the code.
+        if e.code in (404, 410):
+            raise PermanentFetchError(f"HTTP {e.code} {uri}") from e
+        return None
     except (urllib.error.URLError, ValueError, OSError):
         return None
 
@@ -184,12 +196,18 @@ def main() -> None:
         if publication_id in _pub_cache:
             return _pub_cache[publication_id]
         uri = f"https://id.rijksmuseum.nl/{publication_id}"
-        pub = fetch_json(uri)
+        try:
+            pub = fetch_json(uri)
+        except PermanentFetchError:
+            # Publication gone upstream — compose_citation falls back to a
+            # "(publication NNN)" stub, so the citation row is still written.
+            pub = None
         _pub_cache[publication_id] = pub
         return pub
 
     processed = 0
     citation_total = 0
+    gone = 0
     t0 = time.time()
     PROGRESS_EVERY = 100
 
@@ -198,8 +216,21 @@ def main() -> None:
         hmo_id: str = row["hmo_id"]
         object_uri = f"https://id.rijksmuseum.nl/{hmo_id}"
 
-        data = fetch_json(object_uri)
+        try:
+            data = fetch_json(object_uri)
+        except PermanentFetchError:
+            # Object permanently gone upstream (deaccessioned). Checkpoint it so
+            # --resume won't retry it forever; leave any prior rows untouched.
+            conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
+            conn.commit()
+            gone += 1
+            processed += 1
+            if args.sleep:
+                time.sleep(args.sleep)
+            continue
         if data is None:
+            # Transient failure (timeout / 5xx / bad JSON) — skip WITHOUT a
+            # checkpoint so a later --resume retries it.
             processed += 1
             if args.sleep:
                 time.sleep(args.sleep)
@@ -247,7 +278,8 @@ def main() -> None:
             time.sleep(args.sleep)
 
     elapsed = time.time() - t0
-    print(f"\nDone: {processed:,} artworks in {elapsed / 60:.1f}min, {citation_total:,} citations written.")
+    print(f"\nDone: {processed:,} artworks in {elapsed / 60:.1f}min, "
+          f"{citation_total:,} citations written, {gone:,} skipped (gone upstream, checkpointed).")
     conn.close()
 
 
