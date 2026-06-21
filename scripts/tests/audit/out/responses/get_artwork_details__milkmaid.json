@@ -4,8 +4,8 @@
   "anchor": "SK-A-2344",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 8723,
-  "bytesText": 3628,
+  "bytesStructured": 8805,
+  "bytesText": 3742,
   "structured": {
     "id": "https://id.rijksmuseum.nl/8531",
     "objectNumber": "SK-A-2344",
@@ -16,7 +16,7 @@
     "url": "https://www.rijksmuseum.nl/en/collection/SK-A-2344",
     "description": "Een dienstmaagd staat achter een tafel en schenkt melk uit een kruik in een aardewerken kom. Op de tafel staat een mand met brood en een stenen kruik, links een venster met een rieten mand en een koperen pot. Onderaan de muur rechts een rijtje tegels en een stoofje. | Een dienstmaagd staat achter een tafel en schenkt melk uit een melkkan in een kookpot. Op de tafel staat een mand met brood en een stenen kruik, links een venster met een rieten mand en een koperen pot. Onderaan de muur rechts een rijtje tegels en een stoofje.",
     "techniqueStatement": null,
-    "dimensionStatement": "h 45.5 cm × w 41 cm",
+    "physicalDimensions": "h 45.5 cm × w 41 cm",
     "provenance": "? Pieter Claesz van Ruijven (1624-1674) and Maria Simonsdr de Knuijt (1623-1681), Delft; ? their daughter, Magdalena van Ruijven (1655-1682), Delft; ? her widower, Jacob Dissius (1653-1695), Delft;{Montias 1989, pp. 246-262, 359, doc. 417.} his sale, Amsterdam, 16 May 1696, no. 2, fl. 175, to Isaac Rooleeuw (1663-1701), Amsterdam;{Hoet and Terwesten 1752-1770, vol. 1 (1752), p. 34; Montias 1989, p. 363, doc. 439; Grijzenhout 2010, p. 66.} his sale, Amsterdam, 20 April 1701, no. 7, fl. 320;{Hoet and Terwesten 1752-1770, vol. 1 (1752), p. 62.} …; sale Jacob van Hoek (1670-1718), Amsterdam, 12 April 1719, no. 20, fl. 126;{Ibid., p. 221.} …; collection Pieter Leendert de Neufville (1707-1759), Amsterdam, after 1752;{Missing in the collection description of 1752, see Hoet and Terwesten 1752-1770, vol. 2 (1752), pp. 513-516.} his son, Leendert Pieter de Neufville (1729-1774?), Amsterdam; sale De Neufville, Amsterdam (J.M. Cok), 19 June 1765, no. 65, fl. 560, to the dealer Yver;{Copy RKD.} …; sale Jean Dulong (?-?), Amsterdam (H. de Winter and J. Yver), 18 April 1768, no. 10, fl. 925, to Van Diemen;{Copy RKD.} …; collection Jan Jacob de Bruyn (1720-1792), Amsterdam;{Reynolds 1996, p. 106.} his sale, Amsterdam (P. van der Schley <em>et al.</em>), 12 September 1798, no. 32, fl. 1,550, to the dealer J.A. Spaan;{Copy RKD.} …; sale Hendrik Muilman (1743-1812), Amsterdam (P. van der Schley <em>et al.</em>), 12 April 1813 _<em>sqq.</em>_, no. 96, fl. 2,125, to the dealer J. de Vries for Lucretia Johanna van Winter (1785-1845), Amsterdam;{Copy RKD.} her widower, Jonkheer Hendrik Six (1790-1847), Lord of Hillegom, Amsterdam; their son, Jonkheer Pieter Hendrik Six (1827-1905), Lord of Vromade, Amsterdam;{Archive Six family, inv.no. CS53207-002. 0014.} from whose heirs, fl. 550,000, with 38 other paintings, with the support of the Vereniging Rembrandt, to the museum, 1908",
     "creditLine": "Purchased with the support of the Vereniging Rembrandt | Aankoop met steun van de Vereniging Rembrandt",
     "inscriptions": [],
@@ -74,7 +74,6 @@
       "nl": null
     },
     "license": "http://creativecommons.org/publicdomain/mark/1.0/",
-    "webPage": "https://www.rijksmuseum.nl/en/collection/SK-A-2344",
     "dimensions": [
       {
         "type": "height",
@@ -184,7 +183,7 @@
       "depictedPlaces": []
     },
     "dateDisplay": "ca. 1660",
-    "extentText": "height 45.5 cm x width 41 cm | hoogte 45,5 cm x breedte 41 cm",
+    "extentText": null,
     "recordCreated": "2001-04-23T00:00:00Z",
     "recordModified": "2013-05-06T23:59:59Z",
     "themes": [
@@ -196,7 +195,11 @@
     "themesTotalCount": 1,
     "exhibitions": [],
     "exhibitionsTotalCount": 0,
-    "attributionEvidence": [],
+    "attributionMarks": {
+      "signatures": 0,
+      "inscriptions": 0,
+      "total": 0
+    },
     "provenanceChain": [
       {
         "sequence": 1,
@@ -445,9 +448,18 @@
           "text": "fl. 550,000,"
         }
       }
-    ]
+    ],
+    "parsedInscriptions": [],
+    "inscriptionSummary": {
+      "hasTranscribedText": false,
+      "hasCollectorMarkOnly": false,
+      "collectorMarks": [],
+      "types": [],
+      "placements": [],
+      "techniques": []
+    }
   },
-  "text": "SK-A-2344 — The Milkmaid\nJohannes Vermeer, 1660\nh 45.5 cm × w 41 cm\n\nTypes: painting\nMaterials: canvas, oil paint (paint)\nIconclass: 41C6413 | 41B23 | 41C222 | 47I22311 | 41A773 | 41C621\nProduction: Vermeer, Johannes (1632–1675) [painter], Delft\n\n[Description] Een dienstmaagd staat achter een tafel en schenkt melk uit een kruik in een aardewerken kom. Op de tafel staat een mand met brood en een stenen kruik, links een venster met een rieten mand en een koperen pot. Onderaan de muur rechts een rijtje tegels en een stoofje. | Een dienstmaagd staat achter een tafel en schenkt melk uit een melkkan in een kookpot. Op de tafel staat een mand met brood en een stenen kruik, links een venster met een rieten mand en een koperen pot. Onderaan de muur rechts een rijtje tegels en een stoofje.\n[Narrative] A maidservant pours milk, entirely absorbed in her work. Except for the stream of milk, everything else is still. Vermeer took this simple everyday activity and made it the subject of an impressive painting – the woman stands like a statue in the brightly lit room. Vermeer also had an eye for how light by means of hundreds of colourful dots plays over the surface of objects.\n[Provenance] ? Pieter Claesz van Ruijven (1624-1674) and Maria Simonsdr de Knuijt (1623-1681), Delft; ? their daughter, Magdalena van Ruijven (1655-1682), Delft; ? her widower, Jacob Dissius (1653-1695), Delft;{Montias 1989, pp. 246-262, 359, doc. 417.} his sale, Amsterdam, 16 May 1696, no. 2, fl. 175, to Isaac Rooleeuw (1663-1701), Amsterdam;{Hoet and Terwesten 1752-1770, vol. 1 (1752), p. 34; Montias 1989, p. 363, doc. 439; Grijzenhout 2010, p. 66.} his sale, Amsterdam, 20 April 1701, no. 7, fl. 320;{Hoet and Terwesten 1752-1770, vol. 1 (1752), p. 62.} …; sale Jacob van Hoek (1670-1718), Amsterdam, 12 April 1719, no. 20, fl. 126;{Ibid., p. 221.} …; collection Pieter Leendert de Neufville (1707-1759), Amsterdam, after 1752;{Missing in the collection description of 1752, see Hoet and Terwesten 1752-1770, vol. 2 (1752), pp. 513-516.} his son, Leendert Pieter de Neufville (1729-1774?), Amsterdam; sale De Neufville, Amsterdam (J.M. Cok), 19 June 1765, no. 65, fl. 560, to the dealer Yver;{Copy RKD.} …; sale Jean Dulong (?-?), Amsterdam (H. de Winter and J. Yver), 18 April 1768, no. 10, fl. 925, to Van Diemen;{Copy RKD.} …; collection Jan Jacob de Bruyn (1720-1792), Amsterdam;{Reynolds 1996, p. 106.} his sale, Amsterdam (P. van der Schley <em>et al.</em>), 12 September 1798, no. 32, fl. 1,550, to the dealer J.A. Spaan;{Copy RKD.} …; sale Hendrik Muilman (1743-1812), Amsterdam (P. van der Schley <em>et al.</em>), 12 April 1813 _<em>sqq.</em>_, no. 96, fl. 2,125, to the dealer J. de Vries for Lucretia Johanna van Winter (1785-1845), Amsterdam;{Copy RKD.} her widower, Jonkheer Hendrik Six (1790-1847), Lord of Hillegom, Amsterdam; their son, Jonkheer Pieter Hendrik Six (1827-1905), Lord of Vromade, Amsterdam;{Archive Six family, inv.no. CS53207-002. 0014.} from whose heirs, fl. 550,000, with 38 other paintings, with the support of the Vereniging Rembrandt, to the museum, 1908\n[Provenance parsed] 16 events, 5 gaps (1696–1908)\n  Acquired: sale, 1908, guilders 550,000\n  Chain: 3 by_descents, 2 widowhoods, 8 sales, 2 collections, 5 gaps\n  Earliest: Pieter Claesz van Ruijven, Delft (uncertain)\n[Credit line] Purchased with the support of the Vereniging Rembrandt | Aankoop met steun van de Vereniging Rembrandt\n[Titles] (6 variants) full/en: The Milkmaid | display/nl: Het melkmeisje | display/en: The Milkmaid | full/nl: Het melkmeisje | former/nl: De keukenmeid (+1)\nURL: https://www.rijksmuseum.nl/en/collection/SK-A-2344",
+  "text": "SK-A-2344 — The Milkmaid\nJohannes Vermeer, 1660\nh 45.5 cm × w 41 cm\n\nTypes: painting\nMaterials: canvas, oil paint (paint)\nCollections: schilderijen, Alle gepubliceerde objecten, Entire Public Domain Set, Top 1000, Top 100 ...and 2 more\nIconclass: 41C6413 | 41B23 | 41C222 | 47I22311 | 41A773 | 41C621\nProduction: Vermeer, Johannes (1632–1675) [painter], Delft\n\n[Description] Een dienstmaagd staat achter een tafel en schenkt melk uit een kruik in een aardewerken kom. Op de tafel staat een mand met brood en een stenen kruik, links een venster met een rieten mand en een koperen pot. Onderaan de muur rechts een rijtje tegels en een stoofje. | Een dienstmaagd staat achter een tafel en schenkt melk uit een melkkan in een kookpot. Op de tafel staat een mand met brood en een stenen kruik, links een venster met een rieten mand en een koperen pot. Onderaan de muur rechts een rijtje tegels en een stoofje.\n[Narrative] A maidservant pours milk, entirely absorbed in her work. Except for the stream of milk, everything else is still. Vermeer took this simple everyday activity and made it the subject of an impressive painting – the woman stands like a statue in the brightly lit room. Vermeer also had an eye for how light by means of hundreds of colourful dots plays over the surface of objects.\n[Provenance] ? Pieter Claesz van Ruijven (1624-1674) and Maria Simonsdr de Knuijt (1623-1681), Delft; ? their daughter, Magdalena van Ruijven (1655-1682), Delft; ? her widower, Jacob Dissius (1653-1695), Delft;{Montias 1989, pp. 246-262, 359, doc. 417.} his sale, Amsterdam, 16 May 1696, no. 2, fl. 175, to Isaac Rooleeuw (1663-1701), Amsterdam;{Hoet and Terwesten 1752-1770, vol. 1 (1752), p. 34; Montias 1989, p. 363, doc. 439; Grijzenhout 2010, p. 66.} his sale, Amsterdam, 20 April 1701, no. 7, fl. 320;{Hoet and Terwesten 1752-1770, vol. 1 (1752), p. 62.} …; sale Jacob van Hoek (1670-1718), Amsterdam, 12 April 1719, no. 20, fl. 126;{Ibid., p. 221.} …; collection Pieter Leendert de Neufville (1707-1759), Amsterdam, after 1752;{Missing in the collection description of 1752, see Hoet and Terwesten 1752-1770, vol. 2 (1752), pp. 513-516.} his son, Leendert Pieter de Neufville (1729-1774?), Amsterdam; sale De Neufville, Amsterdam (J.M. Cok), 19 June 1765, no. 65, fl. 560, to the dealer Yver;{Copy RKD.} …; sale Jean Dulong (?-?), Amsterdam (H. de Winter and J. Yver), 18 April 1768, no. 10, fl. 925, to Van Diemen;{Copy RKD.} …; collection Jan Jacob de Bruyn (1720-1792), Amsterdam;{Reynolds 1996, p. 106.} his sale, Amsterdam (P. van der Schley <em>et al.</em>), 12 September 1798, no. 32, fl. 1,550, to the dealer J.A. Spaan;{Copy RKD.} …; sale Hendrik Muilman (1743-1812), Amsterdam (P. van der Schley <em>et al.</em>), 12 April 1813 _<em>sqq.</em>_, no. 96, fl. 2,125, to the dealer J. de Vries for Lucretia Johanna van Winter (1785-1845), Amsterdam;{Copy RKD.} her widower, Jonkheer Hendrik Six (1790-1847), Lord of Hillegom, Amsterdam; their son, Jonkheer Pieter Hendrik Six (1827-1905), Lord of Vromade, Amsterdam;{Archive Six family, inv.no. CS53207-002. 0014.} from whose heirs, fl. 550,000, with 38 other paintings, with the support of the Vereniging Rembrandt, to the museum, 1908\n[Provenance parsed] 16 events, 5 gaps (1696–1908)\n  Acquired: sale, 1908, guilders 550,000\n  Chain: 3 by_descents, 2 widowhoods, 8 sales, 2 collections, 5 gaps\n  Earliest: Pieter Claesz van Ruijven, Delft (uncertain)\n[Credit line] Purchased with the support of the Vereniging Rembrandt | Aankoop met steun van de Vereniging Rembrandt\n[Titles] (6 variants) full/en: The Milkmaid | display/nl: Het melkmeisje | display/en: The Milkmaid | full/nl: Het melkmeisje | former/nl: De keukenmeid (+1)\nURL: https://www.rijksmuseum.nl/en/collection/SK-A-2344",
   "args": {
     "objectNumber": "SK-A-2344"
   }

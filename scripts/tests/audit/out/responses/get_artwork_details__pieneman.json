@@ -4,8 +4,8 @@
   "anchor": "SK-A-1115",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 6545,
-  "bytesText": 2934,
+  "bytesStructured": 6737,
+  "bytesText": 3109,
   "structured": {
     "id": "https://id.rijksmuseum.nl/8065",
     "objectNumber": "SK-A-1115",
@@ -16,7 +16,7 @@
     "url": "https://www.rijksmuseum.nl/en/collection/SK-A-1115",
     "description": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.",
     "techniqueStatement": null,
-    "dimensionStatement": "h 567 cm × w 823 cm",
+    "physicalDimensions": "h 567 cm × w 823 cm",
     "provenance": null,
     "creditLine": null,
     "inscriptions": [
@@ -71,7 +71,6 @@
       "nl": null
     },
     "license": "http://creativecommons.org/publicdomain/mark/1.0/",
-    "webPage": "https://www.rijksmuseum.nl/en/collection/SK-A-1115",
     "dimensions": [
       {
         "type": "height",
@@ -222,7 +221,7 @@
       ]
     },
     "dateDisplay": "1824",
-    "extentText": "height 567 cm x width 823 cm | length 565.7 cm | length 566.4 cm | length 650 cm x length 592 cm x width 40 cm | length 822.6 cm | length 822.7 cm | length 825.7 cm x width 555.1 cm x depth 10 cm | length 900 cm x length 842 cm x width 40 cm | buitenmaat: lengte 825,7 cm (maten inclusief huidige omlijsting) x breedte 555,1 cm (maten inclusief huidige omlijsting (555,1 (links) -555,8 (rechts))) x diepte 10 cm (maten inclusief huidige omlijsting) | drager: hoogte 567 cm x breedte 823 cm | kort deel 1 spieraam: lengte 565,7 cm | kort deel 2 spieraam: lengte 566,4 cm | kort deel lijst: lengte 650 cm x lengte 592 cm (dagmaat) x breedte 40 cm | lang deel 1 spieraam: lengte 822,7 cm | lang deel 2 spieraam: lengte 822,6 cm | lang deel lijst: lengte 900 cm x lengte 842 cm (dagmaat) x breedte 40 cm",
+    "extentText": null,
     "recordCreated": "2001-03-02T00:00:00Z",
     "recordModified": "2001-03-02T23:59:59Z",
     "themes": [
@@ -242,10 +241,64 @@
     "themesTotalCount": 3,
     "exhibitions": [],
     "exhibitionsTotalCount": 0,
-    "attributionEvidence": [],
-    "provenanceChain": null
+    "attributionMarks": {
+      "signatures": 0,
+      "inscriptions": 0,
+      "total": 0
+    },
+    "provenanceChain": null,
+    "parsedInscriptions": [
+      {
+        "sequence": 0,
+        "raw": "signatuur en datum, rechts op een affuit: ‘1824 J.W. Pieneman’",
+        "language": "nl",
+        "type": "signatuur en datum",
+        "normalizedType": "signature and date",
+        "placement": "rechts op een affuit",
+        "normalizedPlacement": null,
+        "technique": null,
+        "normalizedTechnique": null,
+        "value": "‘1824 J.W. Pieneman’",
+        "transcribedText": [
+          "1824 J.W. Pieneman"
+        ],
+        "collectorMarks": [],
+        "unknownQualifiers": [],
+        "isCollectorMark": false,
+        "isPlaceholder": false
+      },
+      {
+        "sequence": 1,
+        "raw": "signature and date: ‘1824 J.W. Pieneman’",
+        "language": "en",
+        "type": "signature and date",
+        "normalizedType": "signature and date",
+        "placement": null,
+        "normalizedPlacement": null,
+        "technique": null,
+        "normalizedTechnique": null,
+        "value": "‘1824 J.W. Pieneman’",
+        "transcribedText": [
+          "1824 J.W. Pieneman"
+        ],
+        "collectorMarks": [],
+        "unknownQualifiers": [],
+        "isCollectorMark": false,
+        "isPlaceholder": false
+      }
+    ],
+    "inscriptionSummary": {
+      "hasTranscribedText": true,
+      "hasCollectorMarkOnly": false,
+      "collectorMarks": [],
+      "types": [
+        "signature and date"
+      ],
+      "placements": [],
+      "techniques": []
+    }
   },
-  "text": "SK-A-1115 — The Battle of Waterloo\nJan Willem Pieneman, 1824\nh 567 cm × w 823 cm\nfirst, room 1.12\n\nTypes: painting\nMaterials: canvas, oil paint (paint)\nIconclass: 45E4 | 45H3 | 45H52\nDepicted persons: William II of the Netherlands, Wellington, Arthur Wellesley of, Hill, sir Rowland\nDepicted places: Waterloo\nProduction: Pieneman, Jan Willem (1779–1853) [painter], Abcoude\n\n[Description] De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.\n[Narrative] Here the Duke of Wellington is receiving the message that Prussian forces are coming to his aid. Wellington, commander of the Anglo-Dutch troops, is the central figure in this group portrait of the major players at Waterloo. Lying wounded on a stretcher in the left foreground is the Dutch Crown Prince, later King William II. Originally intended for Wellington, the painting remained in the Netherlands thanks to William I who bought the picture for his son.\n[Inscriptions] signatuur en datum, rechts op een affuit: ‘1824 J.W. Pieneman’; signature and date: ‘1824 J.W. Pieneman’\n[Titles] (4 variants) full/nl: De slag bij Waterloo | display/nl: De Slag bij Waterloo | display/en: The Battle of Waterloo | full/en: The Battle of Waterloo\n[Co-productions] production stadia: RP-T-1964-101A, RP-T-1964-102A, RP-T-1964-103, RP-T-1964-99\nURL: https://www.rijksmuseum.nl/en/collection/SK-A-1115",
+  "text": "SK-A-1115 — The Battle of Waterloo\nJan Willem Pieneman, 1824\nh 567 cm × w 823 cm\ndepth 10 cm\nfirst, room 1.12\n\nTypes: painting\nMaterials: canvas, oil paint (paint)\nCollections: schilderijen, Alle gepubliceerde objecten, Entire Public Domain Set, biografisch, Top 1000 ...and 2 more\nIconclass: 45E4 | 45H3 | 45H52\nDepicted persons: William II of the Netherlands, Wellington, Arthur Wellesley of, Hill, sir Rowland\nDepicted places: Waterloo\nProduction: Pieneman, Jan Willem (1779–1853) [painter], Abcoude\n\n[Description] De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.\n[Narrative] Here the Duke of Wellington is receiving the message that Prussian forces are coming to his aid. Wellington, commander of the Anglo-Dutch troops, is the central figure in this group portrait of the major players at Waterloo. Lying wounded on a stretcher in the left foreground is the Dutch Crown Prince, later King William II. Originally intended for Wellington, the painting remained in the Netherlands thanks to William I who bought the picture for his son.\n[Inscriptions] signatuur en datum, rechts op een affuit: ‘1824 J.W. Pieneman’; signature and date: ‘1824 J.W. Pieneman’\n[Inscription notes] bears transcribed text\n[Titles] (4 variants) full/nl: De slag bij Waterloo | display/nl: De Slag bij Waterloo | display/en: The Battle of Waterloo | full/en: The Battle of Waterloo\n[Related variants] production stadia: RP-T-1964-101A, RP-T-1964-102A, RP-T-1964-103, RP-T-1964-99\nURL: https://www.rijksmuseum.nl/en/collection/SK-A-1115",
   "args": {
     "objectNumber": "SK-A-1115"
   }

@@ -375,7 +375,7 @@ export const ConservationHistoryOutput = {
     dateEnd: z.string().nullable(),
   })).describe("Restoration / conservation treatment events. Most-recent first."),
   conservationHistoryTotalCount: z.number().int().nonnegative(),
-  attributionMarks: attributionMarksShape.describe("Presence of signature/inscription marks only — a count, not content. The harvested rows carry no transcribed text and their carrier URIs do not resolve; use search_inscriptions / get_artwork_details.parsedInscriptions for the actual transcriptions."),
+  attributionMarks: attributionMarksShape.describe("Presence of signature/inscription marks only — a count, not content. The harvested rows carry no transcribed text and their carrier URIs do not resolve; use get_artwork_details.parsedInscriptions / search_inscriptions for the actual transcriptions."),
   provenanceTextSummary: z.string().nullable()
     .describe("Short excerpt of the raw provenance text, for forensic cross-reference. Null when absent."),
   warnings: z.array(z.string()).optional(),
