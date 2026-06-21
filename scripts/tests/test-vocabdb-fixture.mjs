@@ -172,6 +172,35 @@ check("getConservationHistory returns null for an unknown objectNumber", () => {
   assert.equal(db.getConservationHistory("NOPE-9999"), null);
 });
 
+check("getBibliography returns all entries with full=true (limit 0)", () => {
+  const d = db.getBibliography("FX-1", { limit: 0 });
+  assert.ok(d, "bibliography not found");
+  assert.equal(d.total, 3);
+  assert.equal(d.entries.length, 3);
+  assert.equal(d.entries[0].sequence, 1);
+  assert.ok(d.entries[0].citation.includes("Burlington"), `entry 0 citation should mention Burlington: ${d.entries[0].citation}`);
+  assert.equal(d.entries[0].publicationUri, null, "Type B should have no publicationUri");
+  assert.equal(d.entries[1].publicationUri, "https://id.rijksmuseum.nl/301154354", "Type A publicationUri");
+  assert.equal(d.entries[1].worldcatUri, "http://www.worldcat.org/oclc/123456", "Type A worldcatUri");
+});
+
+check("getBibliography honors the limit (summary mode)", () => {
+  const d = db.getBibliography("FX-1", { limit: 2 });
+  assert.equal(d.total, 3, "total is the FULL count");
+  assert.equal(d.entries.length, 2, "entries capped at limit");
+});
+
+check("getBibliography returns total 0 for an artwork with no citations", () => {
+  const d = db.getBibliography("FX-2", { limit: 0 });
+  assert.ok(d);
+  assert.equal(d.total, 0);
+  assert.deepEqual(d.entries, []);
+});
+
+check("getBibliography returns null for an unknown objectNumber", () => {
+  assert.equal(db.getBibliography("NOPE-9999", {}), null);
+});
+
 check("getArtworkDetail pairs production role↔creator row-aware, not positionally (#354 / RP-F-00-173)", () => {
   const d = db.getArtworkDetail("FX-9");
   assert.ok(d, "FX-9 not found");
