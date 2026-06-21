@@ -382,6 +382,26 @@ export const ConservationHistoryOutput = {
   error: z.string().optional(),
 };
 
+export const BibliographyOutput = {
+  objectNumber: z.string(),
+  total: z.number().int().nonnegative()
+    .describe("Total citations for the artwork (full count, even when only the first few entries are returned)."),
+  entries: z.array(z.object({
+    sequence: z.number().int().nullable()
+      .describe("Citation order as catalogued; null when unsequenced."),
+    citation: z.string()
+      .describe("Human-readable reference: an inline citation string, or 'author, title, journal, volume(year) pages, locus' composed at harvest time from the linked publication's creditText/name/isPartOf/pagination fields."),
+    publicationUri: z.string().nullable()
+      .describe("Linked publication record URI (https://id.rijksmuseum.nl/301{biblionumber}); null for inline-only citations. The 301{biblionumber} matches the library catalogue's SRU rijkspid."),
+    pages: z.string().nullable(),
+    isbn: z.string().nullable(),
+    worldcatUri: z.string().nullable(),
+    libraryUrl: z.string().nullable(),
+  })).describe("Scholarly references for the artwork. Empty when none were harvested."),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+};
+
 export const ImageInfoOutput = {
   objectNumber: z.string(),
   title: z.string().optional(),

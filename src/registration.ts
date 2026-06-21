@@ -74,6 +74,7 @@ export {
 
 import { registerSearchTools } from "./registration/tools/search.js";
 import { registerDetailsTools } from "./registration/tools/details.js";
+import { registerBibliographyTools } from "./registration/tools/bibliography.js";
 import { registerConservationTools } from "./registration/tools/conservation.js";
 import { registerViewerTools } from "./registration/tools/viewer.js";
 import { registerSetsTools } from "./registration/tools/sets.js";
@@ -100,6 +101,7 @@ function registerTools(
 
   registerSearchTools(server, vocabDb, withLogging, stats);
   registerDetailsTools(server, vocabDb, withLogging, stats);
+  registerBibliographyTools(server, vocabDb, withLogging, stats);
   registerConservationTools(server, vocabDb, withLogging, stats);
   registerViewerTools(server, api, vocabDb, publicBaseUrl, withLogging, stats);
   registerSetsTools(server, oai, vocabDb, withLogging, stats);

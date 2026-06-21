@@ -65,6 +65,19 @@
 -- captured: 2026-06-13T10:46:00.849Z
 -- statements: 77 (tables + indexes; FTS shadow tables excluded)
 
+CREATE TABLE artwork_citations (
+  art_id          INTEGER NOT NULL,
+  seq             INTEGER,
+  citation_text   TEXT NOT NULL,
+  publication_id  INTEGER,
+  pages           TEXT,
+  isbn            TEXT,
+  worldcat_uri    TEXT,
+  library_url     TEXT
+);
+CREATE INDEX idx_artwork_citations_art ON artwork_citations(art_id);
+CREATE INDEX idx_artwork_citations_pub ON artwork_citations(publication_id);
+
 CREATE TABLE artwork_exhibitions (
                 art_id        INTEGER NOT NULL,
                 exhibition_id INTEGER NOT NULL,

@@ -54,7 +54,7 @@ section("1. tools --json");
   assert(r.code === 0, "exit 0");
   let tools = [];
   try { tools = JSON.parse(r.stdout); } catch { /* fail below */ }
-  assert(Array.isArray(tools) && tools.length === 13, `13 in-scope tools (got ${tools.length})`);
+  assert(Array.isArray(tools) && tools.length === 14, `14 in-scope tools (got ${tools.length})`);
   const names = new Set(tools.map((t) => t.name));
   assert(names.has("search_artwork") && names.has("find_similar") && names.has("search_inscriptions"), "includes search_artwork + find_similar + search_inscriptions");
   const viewer = ["get_artwork_image", "navigate_viewer", "remount_viewer", "poll_viewer_commands"];
@@ -150,7 +150,7 @@ section("9. tools --compact");
   assert(r.code === 0, "exit 0");
   let manifest = [];
   try { manifest = JSON.parse(r.stdout); } catch { /* fail below */ }
-  assert(Array.isArray(manifest) && manifest.length === 13, `13 in-scope tools (got ${manifest.length})`);
+  assert(Array.isArray(manifest) && manifest.length === 14, `14 in-scope tools (got ${manifest.length})`);
   const search = manifest.find((m) => m.tool === "search_artwork");
   assert(search && search.verb === "search" && search.positional === "query", "search entry: verb + positional");
   assert(search && search.result === "results" && search.page === "offset", "search entry: result/list key + paging");

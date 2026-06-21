@@ -211,6 +211,19 @@ export function buildFixture() {
     "INSERT INTO production_role_pairs (artwork_id, creator_id, role_id, part_index) VALUES (?, ?, ?, ?)",
     PRODUCTION_ROLE_PAIRS
   );
+  // Three citation rows for FX-1 (art_id 1) covering all three shapes.
+  // FX-2 intentionally has no rows — used for the empty-case test.
+  insertMany(
+    "INSERT INTO artwork_citations (art_id, seq, citation_text, publication_id, pages, isbn, worldcat_uri, library_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [
+      // Type B: inline string, no publication link
+      [1, 1, "E. van Duijn; J.P. Filedt Kok, The Art of Conservation III, The Burlington Magazine, 158, 2016, p. 117-128", null, "p. 117-128", null, null, null],
+      // Type A: composed from a resolved publication (publication_id = full URI segment)
+      [1, 2, "P. Broekhoff, Catalogue of Dutch Paintings (Amsterdam, 1976), p. 169-170", 301154354, "p. 169-170", null, "http://www.worldcat.org/oclc/123456", "https://library.rijksmuseum.nl/.../301154354"],
+      // Type C: composed from a bare BIBFRAME instance
+      [1, 3, "Bulletin van het Rijksmuseum, 64 (2016)", 301234479, null, null, null, null],
+    ]
+  );
 
   // External-content FTS: rebuild from the content tables we just populated.
   db.exec("INSERT INTO vocabulary_fts(vocabulary_fts) VALUES('rebuild')");
