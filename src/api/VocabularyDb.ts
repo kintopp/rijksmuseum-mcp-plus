@@ -138,6 +138,20 @@ export interface ArtworkDetailFromDb {
   attributionMarks: AttributionMarks;
 }
 
+export interface BibliographyFromDb {
+  objectNumber: string;
+  total: number;
+  entries: {
+    sequence: number | null;
+    citation: string;
+    publicationUri: string | null;
+    pages: string | null;
+    isbn: string | null;
+    worldcatUri: string | null;
+    libraryUrl: string | null;
+  }[];
+}
+
 export interface ConservationHistoryFromDb {
   objectNumber: string;
   title: string | null;
@@ -1264,6 +1278,7 @@ export class VocabularyDb {
   private stmtConservationHeader: Statement | null = null;
   private stmtConservationExaminations: Statement | null = null;
   private stmtConservationModifications: Statement | null = null;
+  private stmtArtworkCitations: Statement | null = null;
   private stmtBrowseSetLookup: Statement | null = null;
   private stmtBrowseSetCount: Statement | null = null;
   private stmtBrowseSetPage: Statement | null = null;
@@ -1674,6 +1689,14 @@ export class VocabularyDb {
           `SELECT modifier_uri, date_display, date_begin, date_end, description
            FROM modifications WHERE art_id = ?
            ORDER BY date_begin IS NULL, date_begin DESC, seq`
+        );
+      }
+
+      if (this.tableExists("artwork_citations")) {
+        this.stmtArtworkCitations = this.db.prepare(
+          `SELECT seq, citation_text, publication_id, pages, isbn, worldcat_uri, library_url
+           FROM artwork_citations WHERE art_id = ?
+           ORDER BY seq IS NULL, seq`
         );
       }
 
@@ -2372,6 +2395,38 @@ export class VocabularyDb {
       conservationHistory, conservationHistoryTotalCount: conservationHistory.length,
       attributionMarks,
       provenanceTextSummary,
+    };
+  }
+
+  /** Per-artwork scholarly bibliography from the harvested assigned_by[] citations. */
+  getBibliography(objectNumber: string, opts: { limit?: number } = {}): BibliographyFromDb | null {
+    if (!this.stmtLookupArtId) return null;
+    const row = this.stmtLookupArtId.get(objectNumber) as { art_id: number } | undefined;
+    if (!row) return null;
+    const { limit = 0 } = opts;
+
+    if (!this.stmtArtworkCitations) {
+      // Table absent (DB harvested before this feature) — degrade gracefully.
+      return { objectNumber, total: 0, entries: [] };
+    }
+    const all = this.stmtArtworkCitations.all(row.art_id) as {
+      seq: number | null; citation_text: string; publication_id: number | null;
+      pages: string | null; isbn: string | null; worldcat_uri: string | null; library_url: string | null;
+    }[];
+    const sliced = limit > 0 ? all.slice(0, limit) : all;
+    return {
+      objectNumber,
+      total: all.length,
+      entries: sliced.map((r) => ({
+        sequence: r.seq,
+        citation: r.citation_text,
+        publicationUri: r.publication_id != null
+          ? `https://id.rijksmuseum.nl/${r.publication_id}` : null,
+        pages: r.pages,
+        isbn: r.isbn,
+        worldcatUri: r.worldcat_uri,
+        libraryUrl: r.library_url,
+      })),
     };
   }
 
