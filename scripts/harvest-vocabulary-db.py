@@ -78,7 +78,9 @@ from lib.harvest_audit import (  # noqa: E402
     run_phase_audit,
 )
 from lib import enrichment_methods as em  # noqa: E402
-from lib.bibliography_extract import extract_citations, compose_citation  # noqa: E402
+from lib.bibliography_extract import (  # noqa: E402
+    extract_citations, compose_citation, CITATION_INSERT_SQL, citation_rows,
+)
 
 HARVEST_VERSION = "v0.24"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
@@ -3664,16 +3666,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                             row = compose_citation(rc, pub)
                             composed.append(row)
                         if composed:
-                            conn.executemany(
-                                "INSERT INTO artwork_citations "
-                                "(art_id, seq, citation_text, publication_id, pages, isbn, worldcat_uri, library_url) "
-                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                [
-                                    (art_id, r["seq"], r["citation_text"], r["publication_id"],
-                                     r["pages"], r["isbn"], r["worldcat_uri"], r["library_url"])
-                                    for r in composed
-                                ],
-                            )
+                            conn.executemany(CITATION_INSERT_SQL, citation_rows(art_id, composed))
                             citation_count += len(composed)
 
                 # Thematic vocab mappings (field='theme'). Uses MAPPING_INSERT_SQL

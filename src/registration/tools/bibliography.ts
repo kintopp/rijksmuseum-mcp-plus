@@ -3,13 +3,11 @@ import { z } from "zod";
 import { VocabularyDb, type BibliographyFromDb } from "../../api/VocabularyDb.js";
 import { UsageStats } from "../../utils/UsageStats.js";
 import {
-  ANN_READ_CLOSED, stripNullCoerceBool, errorResponse, structuredResponse, withOutputSchema, createLogger,
+  ANN_READ_CLOSED, stripNullCoerceBool, errorResponse, structuredResponse, withOutputSchema, createLogger, truncate,
 } from "../helpers.js";
 import { BibliographyOutput } from "../outputSchemas.js";
 
-function truncate(s: string, n: number): string { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
-
-function formatBibliographySummary(d: BibliographyFromDb & { warnings?: string[] }): string {
+function formatBibliographySummary(d: BibliographyFromDb): string {
   const lines: string[] = [`${d.objectNumber} — ${d.total} bibliography ${d.total === 1 ? "entry" : "entries"}`];
   d.entries.forEach((e, i) => {
     let line = `${i + 1}. ${truncate(e.citation, 100)}`;
@@ -54,8 +52,7 @@ export function registerBibliographyTools(
       if (data.total === 0) {
         warnings.push(`No bibliography for ${args.objectNumber} (or bibliography data not yet harvested into this database).`);
       }
-      const enriched = { ...data, warnings };
-      return structuredResponse(enriched, formatBibliographySummary(enriched));
+      return structuredResponse({ ...data, warnings }, formatBibliographySummary(data));
     }),
   );
 }

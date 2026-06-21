@@ -44,7 +44,9 @@ PROJECT_DIR = SCRIPT_DIR.parent
 
 # Make scripts/lib importable
 sys.path.insert(0, str(SCRIPT_DIR))
-from lib.bibliography_extract import extract_citations, compose_citation  # noqa: E402
+from lib.bibliography_extract import (  # noqa: E402
+    extract_citations, compose_citation, CITATION_INSERT_SQL, citation_rows,
+)
 
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
 USER_AGENT = "rijksmuseum-mcp-backfill-bibliography/1.0"
@@ -64,10 +66,6 @@ SUBSET_PREDICATES: dict[str, str | None] = {
     "provenance": "a.provenance_text IS NOT NULL AND a.provenance_text != ''",
     "all": None,
 }
-
-
-def get_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
 def ensure_citations_table(conn: sqlite3.Connection) -> None:
@@ -247,16 +245,7 @@ def main() -> None:
         # Idempotent per artwork: delete existing rows then re-insert
         conn.execute("DELETE FROM artwork_citations WHERE art_id = ?", (art_id,))
         if composed:
-            conn.executemany(
-                "INSERT INTO artwork_citations "
-                "(art_id, seq, citation_text, publication_id, pages, isbn, worldcat_uri, library_url) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                [
-                    (art_id, r["seq"], r["citation_text"], r["publication_id"],
-                     r["pages"], r["isbn"], r["worldcat_uri"], r["library_url"])
-                    for r in composed
-                ],
-            )
+            conn.executemany(CITATION_INSERT_SQL, citation_rows(art_id, composed))
         # Mark as processed in checkpoint table
         conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
         conn.commit()

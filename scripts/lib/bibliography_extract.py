@@ -4,8 +4,10 @@ Imported by:
   - scripts/harvest-vocabulary-db.py  (harvest fold-in, Step 1c)
   - scripts/backfill-bibliography.py  (standalone subset backfill)
 
-No DB or HTTP at import time. HTTP is dependency-injected (the ``resolve_publication``
-callable) so the module stays unit-testable and caller-agnostic.
+No DB or HTTP at import time. Publication resolution is the caller's
+responsibility: each caller fetches the publication record and passes the
+resolved dict to ``compose_citation`` — so the module stays unit-testable and
+caller-agnostic.
 
 AAT URIs used:
   300311954 — bibliography/citation entry
@@ -264,3 +266,26 @@ def compose_citation(raw: dict, pub: dict | None) -> dict:
             "worldcat_uri": None,
             "library_url": None,
         }
+
+
+# ─── Persistence shape ────────────────────────────────────────────────
+# The artwork_citations column order has ONE owner here so the harvest and
+# backfill writers can't drift. compose_citation() produces the 7 row fields;
+# art_id is supplied by the caller at write time.
+CITATION_COLUMNS = (
+    "art_id", "seq", "citation_text", "publication_id",
+    "pages", "isbn", "worldcat_uri", "library_url",
+)
+CITATION_INSERT_SQL = (
+    "INSERT INTO artwork_citations (" + ", ".join(CITATION_COLUMNS) + ") "
+    "VALUES (" + ", ".join(["?"] * len(CITATION_COLUMNS)) + ")"
+)
+
+
+def citation_rows(art_id: int, composed: list[dict]) -> list[tuple]:
+    """Build executemany() tuples for artwork_citations from composed rows."""
+    return [
+        (art_id, r["seq"], r["citation_text"], r["publication_id"],
+         r["pages"], r["isbn"], r["worldcat_uri"], r["library_url"])
+        for r in composed
+    ]
