@@ -42,6 +42,23 @@ def _extract_content(content) -> str | None:
     return None
 
 
+def _first_text(value) -> str | None:
+    """Coerce a Schema.org field that may be a string or a list-of-strings to a
+    single string (the first non-empty element). Schema.org/Linked Art records
+    return some fields (e.g. isPartOf.name with multiple title spellings) as a
+    list; take the first variant rather than joining near-duplicates. Returns
+    None for empty/missing/non-text values.
+    """
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, str) and item:
+                return item
+        return None
+    if isinstance(value, str):
+        return value or None
+    return None
+
+
 def extract_citations(data: dict) -> list[dict]:
     """Parse the OBJECT-level assigned_by[] for bibliography/citation entries.
 
@@ -196,16 +213,19 @@ def compose_citation(raw: dict, pub: dict | None) -> dict:
         # Compose against verified current Schema.org shape (NOT the stale OLD formatter
         # which used pub.publication[0].location.name + pub.publication[0].startDate —
         # those fields don't exist on today's records).
-        is_part_of_name = None
+        # Schema.org fields may be strings OR lists (Linked Art array quirk);
+        # _first_text coerces each to a single string so the join below can't
+        # raise TypeError. isPartOf itself is occasionally a list of dicts.
         is_part_of = pub.get("isPartOf")
-        if isinstance(is_part_of, dict):
-            is_part_of_name = is_part_of.get("name")
+        if isinstance(is_part_of, list):
+            is_part_of = next((x for x in is_part_of if isinstance(x, dict)), None)
+        is_part_of_name = _first_text(is_part_of.get("name")) if isinstance(is_part_of, dict) else None
 
         parts = [
-            pub.get("creditText"),
-            pub.get("name"),
+            _first_text(pub.get("creditText")),
+            _first_text(pub.get("name")),
             is_part_of_name,
-            pub.get("pagination"),
+            _first_text(pub.get("pagination")),
             pages,  # artwork-specific page locus (Type A) or None (Type C)
         ]
         citation_text = ", ".join(p for p in parts if p)
@@ -227,8 +247,8 @@ def compose_citation(raw: dict, pub: dict | None) -> dict:
             "publication_id": publication_id,
             "pages": pages,
             "isbn": isbn,
-            "worldcat_uri": pub.get("sameAs"),
-            "library_url": pub.get("url"),
+            "worldcat_uri": _first_text(pub.get("sameAs")),
+            "library_url": _first_text(pub.get("url")),
         }
     else:
         # Resolution failed or not attempted — fallback, never empty (NOT NULL column)

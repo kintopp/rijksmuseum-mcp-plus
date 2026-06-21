@@ -276,6 +276,36 @@ def check_compose_isbn_list():
 check("compose_citation: isbn list → scalar string (F1 guard)", check_compose_isbn_list)
 
 
+def check_compose_list_valued_fields():
+    """Schema.org fields may be lists (Linked Art quirk) — compose must not crash;
+    coerce each to its first non-empty string. Regression for the live isPartOf.name
+    list found on publication 301233651 during the paintings backfill."""
+    pub = dict(
+        STUB_PUB,
+        creditText=["Author One", "Author Two"],
+        isPartOf={"name": ["Journal Variant A", "Journal Variant B"]},
+    )
+    raw = {"seq": 1, "ctype": "A", "publication_id": 301233651, "pages": "p. 5", "inline_text": None}
+    row = compose_citation(raw, pub)
+    assert isinstance(row["citation_text"], str), f"citation_text must be str, got {type(row['citation_text'])}"
+    assert "Author One" in row["citation_text"], f"first creditText variant missing: {row['citation_text']!r}"
+    assert "Journal Variant A" in row["citation_text"], f"first isPartOf.name variant missing: {row['citation_text']!r}"
+    assert "Journal Variant B" not in row["citation_text"], "should take only the first list variant"
+
+check("compose_citation: list-valued pub fields → coerced to first string (no crash)", check_compose_list_valued_fields)
+
+
+def check_compose_list_valued_ispartof_list():
+    """isPartOf itself as a list-of-dicts — pick the first dict, don't crash."""
+    pub = dict(STUB_PUB, isPartOf=[{"name": "Series X"}, {"name": "Series Y"}])
+    raw = {"seq": 1, "ctype": "A", "publication_id": 301154354, "pages": None, "inline_text": None}
+    row = compose_citation(raw, pub)
+    assert isinstance(row["citation_text"], str)
+    assert "Series X" in row["citation_text"], f"isPartOf[0].name missing: {row['citation_text']!r}"
+
+check("compose_citation: isPartOf as list-of-dicts → first dict's name", check_compose_list_valued_ispartof_list)
+
+
 # ─── Summary ─────────────────────────────────────────────────────────
 
 print(f"\n{'='*50}")
