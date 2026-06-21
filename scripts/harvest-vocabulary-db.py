@@ -78,6 +78,7 @@ from lib.harvest_audit import (  # noqa: E402
     run_phase_audit,
 )
 from lib import enrichment_methods as em  # noqa: E402
+from lib.bibliography_extract import extract_citations, compose_citation  # noqa: E402
 
 HARVEST_VERSION = "v0.24"
 DB_PATH = PROJECT_DIR / "data" / "vocabulary.db"
@@ -714,6 +715,23 @@ CREATE TABLE IF NOT EXISTS attribution_evidence (
     PRIMARY KEY (art_id, part_index, evidence_type_aat, carried_by_uri)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_attribution_evidence_art ON attribution_evidence(art_id);
+
+-- Per-artwork scholarly bibliography harvested from Linked Art assigned_by[]
+-- (object-level entries classified AAT 300311954). Populated by Phase 4
+-- alongside other Tier 2 fields; resolution of 301* publication URIs is done
+-- via get_http_session() with a run-scoped dedup cache (see run_phase4).
+CREATE TABLE IF NOT EXISTS artwork_citations (
+  art_id          INTEGER NOT NULL,
+  seq             INTEGER,
+  citation_text   TEXT NOT NULL,
+  publication_id  INTEGER,
+  pages           TEXT,
+  isbn            TEXT,
+  worldcat_uri    TEXT,
+  library_url     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_artwork_citations_art ON artwork_citations(art_id);
+CREATE INDEX IF NOT EXISTS idx_artwork_citations_pub ON artwork_citations(publication_id);
 
 -- Artwork-level external IDs (Wikidata, handle, etc. on the HMO itself,
 -- distinct from `vocabulary_external_ids` which keys on vocab terms).
@@ -3226,6 +3244,11 @@ def resolve_artwork(uri: str) -> dict | None:
     artwork_external_ids = extract_artwork_external_ids(data)
     visualitem_uri = extract_visualitem_uri(data)
 
+    # Raw citation entries (no publication resolution yet — resolution happens
+    # in run_phase4 after all artwork futures complete, using a shared
+    # dedup cache keyed by publication_id to bound HTTP cost).
+    raw_citations = extract_citations(data)
+
     return {
         "inscription_text": inscription_text,
         "provenance_text": provenance_text,
@@ -3262,6 +3285,7 @@ def resolve_artwork(uri: str) -> dict | None:
         "about_vocab_ids": about_vocab_ids,
         "artwork_external_ids": artwork_external_ids,
         "visualitem_uri": visualitem_uri,
+        "raw_citations": raw_citations,
     }
 
 
@@ -3363,6 +3387,12 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
 
     MAPPING_INSERT_SQL = _mapping_insert_sql(int_mappings)
 
+    # Guard: only insert citations if the table was created (it will always exist
+    # for harvests that include the updated schema; older DBs may not have it).
+    has_citations_table = bool(conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='artwork_citations'"
+    ).fetchone())
+
     processed = 0
     succeeded = 0
     failed = 0
@@ -3390,8 +3420,41 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     attribution_evidence_count = 0
     about_count = 0
     artwork_external_id_count = 0
+    citation_count = 0
     with_record_timestamp = 0
     t0 = time.time()
+
+    # Dedup cache for publication records (publication_id → Schema.org dict|None).
+    # Keyed by publication_id (integer path segment, e.g. 301154354).
+    # Resolution cost scales with DISTINCT cited publications, not total citations.
+    # Resolution runs in the main thread (not in the artwork ThreadPoolExecutor)
+    # to avoid cache-miss races; each artwork's raw_citations are processed after
+    # the artwork's future resolves.
+    _pub_cache: dict[int, dict | None] = {}
+
+    def _resolve_publication(publication_id: int) -> dict | None:
+        """Fetch a 301* publication record (Schema.org, follows 303 redirect).
+        Returns the parsed dict, or None on failure. Results are cached in
+        _pub_cache to avoid re-fetching the same publication across artworks.
+        """
+        if publication_id in _pub_cache:
+            return _pub_cache[publication_id]
+        uri = f"https://id.rijksmuseum.nl/{publication_id}"
+        try:
+            resp = get_http_session().get(
+                uri,
+                headers={"Accept": "application/ld+json", "User-Agent": USER_AGENT},
+                timeout=15,
+                allow_redirects=True,
+            )
+            if resp.ok:
+                pub = resp.json()
+            else:
+                pub = None
+        except Exception:
+            pub = None
+        _pub_cache[publication_id] = pub
+        return pub
 
     TIER2_UPDATE_SQL = """
         UPDATE artworks SET
@@ -3588,6 +3651,31 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
                         )
                         artwork_external_id_count += len(ext_ids)
 
+                    # Bibliography citations from object-level assigned_by[].
+                    # raw_citations are extracted in resolve_artwork (pure, thread-safe);
+                    # publication resolution runs here in the main thread via _pub_cache.
+                    raw_cits = result.get("raw_citations") or []
+                    if raw_cits and has_citations_table:
+                        composed = []
+                        for rc in raw_cits:
+                            pub = None
+                            if rc.get("publication_id") is not None:
+                                pub = _resolve_publication(rc["publication_id"])
+                            row = compose_citation(rc, pub)
+                            composed.append(row)
+                        if composed:
+                            conn.executemany(
+                                "INSERT INTO artwork_citations "
+                                "(art_id, seq, citation_text, publication_id, pages, isbn, worldcat_uri, library_url) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                [
+                                    (art_id, r["seq"], r["citation_text"], r["publication_id"],
+                                     r["pages"], r["isbn"], r["worldcat_uri"], r["library_url"])
+                                    for r in composed
+                                ],
+                            )
+                            citation_count += len(composed)
+
                 # Thematic vocab mappings (field='theme'). Uses MAPPING_INSERT_SQL
                 # like other vocab fields; orphan vocab_ids (entity not yet
                 # harvested) are silently dropped during integer encoding.
@@ -3640,6 +3728,7 @@ def run_phase4(conn: sqlite3.Connection, threads: int = DEFAULT_THREADS):
     print(f"    Attr. evidence:{attribution_evidence_count:,}")
     print(f"    about[] themes:{about_count:,}")
     print(f"    Artwork ext IDs:{artwork_external_id_count:,}")
+    print(f"    Citations:    {citation_count:,}")
 
 
 # ─── Phase 4.5: VisualItem.about[] dereference (#283) ────────────────
