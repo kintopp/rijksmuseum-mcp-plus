@@ -136,6 +136,8 @@ export interface ArtworkDetailFromDb {
   exhibitionsTotalCount: number;
   /** Presence of signature/inscription marks (a count, not content). Transcriptions live in parsedInscriptions. */
   attributionMarks: AttributionMarks;
+  /** Number of bibliography entries for this artwork. Null when the artwork_citations table is absent. */
+  bibliographyCount: number | null;
 }
 
 export interface BibliographyFromDb {
@@ -1279,6 +1281,7 @@ export class VocabularyDb {
   private stmtConservationExaminations: Statement | null = null;
   private stmtConservationModifications: Statement | null = null;
   private stmtArtworkCitations: Statement | null = null;
+  private stmtCitationCount: Statement | null = null;
   private stmtBrowseSetLookup: Statement | null = null;
   private stmtBrowseSetCount: Statement | null = null;
   private stmtBrowseSetPage: Statement | null = null;
@@ -1697,6 +1700,9 @@ export class VocabularyDb {
           `SELECT seq, citation_text, publication_id, pages, isbn, worldcat_uri, library_url
            FROM artwork_citations WHERE art_id = ?
            ORDER BY seq IS NULL, seq`
+        );
+        this.stmtCitationCount = this.db.prepare(
+          "SELECT COUNT(*) AS n FROM artwork_citations WHERE art_id = ?"
         );
       }
 
@@ -2150,6 +2156,10 @@ export class VocabularyDb {
       ? techniques.map((t) => t.label).join(", ")
       : null;
 
+    const bibliographyCount = this.stmtCitationCount
+      ? (this.stmtCitationCount.get(row.art_id) as { n: number }).n
+      : null;
+
     return {
       id: `https://id.rijksmuseum.nl/${row.art_id}`,
       objectNumber: row.object_number,
@@ -2191,6 +2201,7 @@ export class VocabularyDb {
       themesTotalCount,
       ...this.fetchExhibitions(row.art_id),
       attributionMarks: this.computeAttributionMarks(row.art_id),
+      bibliographyCount,
     };
   }
 

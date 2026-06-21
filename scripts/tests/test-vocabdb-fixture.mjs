@@ -121,6 +121,18 @@ check("getArtworkDetail surfaces attributionMarks counts, not the old array", ()
   assert.deepEqual(d2.attributionMarks, { signatures: 0, inscriptions: 0, total: 0 });
 });
 
+check("getArtworkDetail reports bibliographyCount for a cited artwork", () => {
+  const d = db.getArtworkDetail("FX-1");
+  assert.ok(d);
+  assert.equal(d.bibliographyCount, 3);
+});
+
+check("getArtworkDetail reports bibliographyCount 0 for an uncited artwork", () => {
+  const d = db.getArtworkDetail("FX-2");
+  assert.ok(d);
+  assert.equal(d.bibliographyCount, 0);
+});
+
 // ── Batch / lookup helpers ─────────────────────────────────────────────────
 check("lookupTypes maps object numbers to their type label", () => {
   const m = db.lookupTypes(["FX-1", "FX-3"]);

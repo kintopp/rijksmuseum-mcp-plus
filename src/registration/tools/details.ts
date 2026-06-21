@@ -174,6 +174,7 @@ function formatDetailSummary(d: DetailWithChain): string {
     lines.push(`[Related variants]${cap} ${groups}`);
   }
 
+  if (d.bibliographyCount) lines.push(`\nBibliography: ${d.bibliographyCount} entries`);
   lines.push(`URL: ${d.url}`);
 
   return lines.join("\n");

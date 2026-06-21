@@ -346,6 +346,8 @@ export const ArtworkDetailOutput = {
   })).describe("Exhibitions this artwork has appeared in. Most-recent first."),
   exhibitionsTotalCount: z.number().int().nonnegative(),
   attributionMarks: attributionMarksShape.describe("Presence of signature/inscription marks only — a count, not content. The harvested rows carry no transcribed text and their carrier URIs do not resolve; use parsedInscriptions / search_inscriptions for the actual transcriptions."),
+  bibliographyCount: z.number().int().nullable()
+    .describe("Citation count for this artwork — call get_artwork_bibliography for the entries. Null when bibliography data isn't present in this database."),
   error: z.string().optional(),
 };
 
