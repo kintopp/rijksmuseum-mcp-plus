@@ -26,18 +26,22 @@ Subset counts (verified 2026-06-19 against v0.81 DB):
 Publication resolution is dedup-cached per run (bounded by distinct publications,
 not total citations). Object fetches require network; --dry-run skips fetches.
 
-Dependencies: stdlib only (argparse, json, sqlite3, time, urllib.request).
-Shared extraction logic: scripts/lib/bibliography_extract.py.
+Dependencies: requests (HTTP keep-alive). Shared extraction logic: scripts/lib/bibliography_extract.py.
+
+Example with concurrency:
+    python3 scripts/backfill-bibliography.py --subset provenance --threads 8
+    python3 scripts/backfill-bibliography.py --subset paintings --threads 4 --dry-run --limit 5
 """
 
 import argparse
-import json
 import sqlite3
 import sys
+import threading
 import time
-import urllib.request
-import urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
+import requests
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
@@ -95,26 +99,39 @@ class PermanentFetchError(Exception):
     deaccessioned object). Callers should give up on it rather than retry."""
 
 
-def fetch_json(uri: str, timeout: int = 15) -> dict | None:
-    """GET a URI with Accept: application/ld+json (follows 303 redirect).
-    Returns the parsed JSON dict, or None on a *transient* failure (timeout,
-    connection error, 5xx, bad JSON). Raises PermanentFetchError on HTTP
-    404/410 so callers can distinguish "gone for good" from "try again later".
-    """
-    req = urllib.request.Request(
-        uri,
-        headers={"Accept": "application/ld+json", "User-Agent": USER_AGENT},
-    )
+def fetch_json(session: requests.Session, uri: str, timeout: int = 15) -> dict | None:
+    """GET a URI with Accept: application/ld+json over a pooled keep-alive
+    session (follows the 303 redirect by default). Returns the parsed JSON dict,
+    or None on a *transient* failure (timeout, connection error, 5xx, bad JSON).
+    Raises PermanentFetchError on HTTP 404/410 ("gone for good")."""
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        # HTTPError is a URLError subclass — catch it first to classify the code.
-        if e.code in (404, 410):
-            raise PermanentFetchError(f"HTTP {e.code} {uri}") from e
+        resp = session.get(
+            uri,
+            headers={"Accept": "application/ld+json", "User-Agent": USER_AGENT},
+            timeout=timeout,
+        )
+    except requests.RequestException:
         return None
-    except (urllib.error.URLError, ValueError, OSError):
+    if resp.status_code in (404, 410):
+        raise PermanentFetchError(f"HTTP {resp.status_code} {uri}")
+    if not resp.ok:
         return None
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+
+def make_session(pool_size: int) -> requests.Session:
+    """A keep-alive session whose connection pool is sized to the worker count,
+    so pooled connections are reused across concurrent fetches."""
+    s = requests.Session()
+    adapter = requests.adapters.HTTPAdapter(
+        pool_connections=pool_size, pool_maxsize=pool_size, max_retries=0,
+    )
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
 
 
 def build_subset_query(subset: str, where_extra: str | None, limit: int) -> str:
@@ -148,6 +165,8 @@ def main() -> None:
     group.add_argument("--where", metavar="SQL", help="Custom SQL predicate on artworks table (overrides --subset)")
     parser.add_argument("--limit", type=int, default=0, metavar="N", help="Stop after N artworks (0 = all)")
     parser.add_argument("--sleep", type=float, default=0.1, metavar="SEC", help="Seconds to sleep between artworks (default: 0.1)")
+    parser.add_argument("--threads", type=int, default=8, metavar="N",
+                        help="Concurrent fetch workers (default: 8; 1 = sequential). Keep modest (<=12) to be polite to the API.")
     parser.add_argument("--dry-run", action="store_true", help="Print subset count; do not fetch or write")
     parser.add_argument("--resume", action="store_true", help="Skip art_ids already in checkpoint table")
     args = parser.parse_args()
@@ -187,84 +206,84 @@ def main() -> None:
         rows = [r for r in rows if r["art_id"] not in done]
         print(f"  Resuming: {len(done):,} already done, {len(rows):,} remaining")
 
-    # Run-scoped publication cache (dedup by publication_id)
+    session = make_session(args.threads)
+
+    # Run-scoped publication cache shared across workers (dedup by publication_id)
     _pub_cache: dict[int, dict | None] = {}
+    _pub_lock = threading.Lock()
 
     def resolve_pub(publication_id: int) -> dict | None:
-        if publication_id in _pub_cache:
-            return _pub_cache[publication_id]
+        with _pub_lock:
+            if publication_id in _pub_cache:
+                return _pub_cache[publication_id]
         uri = f"https://id.rijksmuseum.nl/{publication_id}"
         try:
-            pub = fetch_json(uri)
+            pub = fetch_json(session, uri)  # fetch OUTSIDE the lock
         except PermanentFetchError:
             # Publication gone upstream — compose_citation falls back to a
             # "(publication NNN)" stub, so the citation row is still written.
             pub = None
-        _pub_cache[publication_id] = pub
+        with _pub_lock:
+            _pub_cache[publication_id] = pub
         return pub
+
+    def process_artwork(art_id: int, hmo_id: str) -> dict:
+        """Worker: all HTTP for one artwork. Returns a result; does NO DB I/O."""
+        object_uri = f"https://id.rijksmuseum.nl/{hmo_id}"
+        try:
+            data = fetch_json(session, object_uri)
+        except PermanentFetchError:
+            return {"art_id": art_id, "status": "gone", "rows": []}
+        if data is None:
+            return {"art_id": art_id, "status": "transient", "rows": []}
+        composed = []
+        for rc in extract_citations(data):
+            pub = resolve_pub(rc["publication_id"]) if rc.get("publication_id") is not None else None
+            composed.append(compose_citation(rc, pub))
+        if args.sleep:
+            time.sleep(args.sleep)  # per-worker politeness delay
+        return {"art_id": art_id, "status": "ok", "rows": composed}
 
     processed = 0
     citation_total = 0
     gone = 0
     t0 = time.time()
     PROGRESS_EVERY = 100
+    total_to_do = len(rows)
 
-    for row in rows:
-        art_id: int = row["art_id"]
-        hmo_id: str = row["hmo_id"]
-        object_uri = f"https://id.rijksmuseum.nl/{hmo_id}"
-
-        try:
-            data = fetch_json(object_uri)
-        except PermanentFetchError:
-            # Object permanently gone upstream (deaccessioned). Checkpoint it so
-            # --resume won't retry it forever; leave any prior rows untouched.
-            conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
-            conn.commit()
-            gone += 1
+    with ThreadPoolExecutor(max_workers=args.threads) as pool:
+        futures = [pool.submit(process_artwork, r["art_id"], r["hmo_id"]) for r in rows]
+        for fut in as_completed(futures):
+            result = fut.result()
+            art_id = result["art_id"]
+            status = result["status"]
+            if status == "gone":
+                conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
+                conn.commit()
+                gone += 1
+            elif status == "transient":
+                pass  # no checkpoint → retried on a later --resume
+            else:  # ok
+                rows_out = result["rows"]
+                # Idempotent per artwork: delete existing rows then re-insert
+                conn.execute("DELETE FROM artwork_citations WHERE art_id = ?", (art_id,))
+                if rows_out:
+                    conn.executemany(CITATION_INSERT_SQL, citation_rows(art_id, rows_out))
+                conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
+                conn.commit()
+                citation_total += len(rows_out)
             processed += 1
-            if args.sleep:
-                time.sleep(args.sleep)
-            continue
-        if data is None:
-            # Transient failure (timeout / 5xx / bad JSON) — skip WITHOUT a
-            # checkpoint so a later --resume retries it.
-            processed += 1
-            if args.sleep:
-                time.sleep(args.sleep)
-            continue
-
-        raw_cits = extract_citations(data)
-        composed = []
-        for rc in raw_cits:
-            pub = None
-            if rc.get("publication_id") is not None:
-                pub = resolve_pub(rc["publication_id"])
-            composed.append(compose_citation(rc, pub))
-
-        # Idempotent per artwork: delete existing rows then re-insert
-        conn.execute("DELETE FROM artwork_citations WHERE art_id = ?", (art_id,))
-        if composed:
-            conn.executemany(CITATION_INSERT_SQL, citation_rows(art_id, composed))
-        # Mark as processed in checkpoint table
-        conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
-        conn.commit()
-
-        citation_total += len(composed)
-        processed += 1
-
-        if processed % PROGRESS_EVERY == 0 or processed == len(rows):
-            elapsed = time.time() - t0
-            rate = processed / elapsed if elapsed > 0 else 0
-            remaining_est = (len(rows) - processed) / rate if rate > 0 else 0
-            print(
-                f"  {processed:,}/{len(rows):,} ({rate:.1f}/s, {citation_total:,} citations, "
-                f"~{remaining_est / 60:.0f}min left, {len(_pub_cache):,} pubs cached)",
-                flush=True,
-            )
-
-        if args.sleep:
-            time.sleep(args.sleep)
+            if processed % PROGRESS_EVERY == 0 or processed == total_to_do:
+                elapsed = time.time() - t0
+                rate = processed / elapsed if elapsed > 0 else 0
+                remaining_est = (total_to_do - processed) / rate if rate > 0 else 0
+                with _pub_lock:
+                    pubs_cached = len(_pub_cache)
+                print(
+                    f"  {processed:,}/{total_to_do:,} ({rate:.1f}/s, {citation_total:,} citations, "
+                    f"~{remaining_est / 60:.0f}min left, {pubs_cached:,} pubs cached, {args.threads} threads)",
+                    flush=True,
+                )
 
     elapsed = time.time() - t0
     print(f"\nDone: {processed:,} artworks in {elapsed / 60:.1f}min, "
