@@ -3,8 +3,8 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.80"
-  last_updated: "2026-06-17"
+  version: "0.90"
+  last_updated: "2026-06-21"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -31,6 +31,8 @@ metadata:
 | "What changed since YYYY-MM-DD?" / "Has anything changed since the last harvest checkpoint?" — OAI-PMH delta | `get_recent_changes` (resumption-token pagination; withdrawn records flagged as deletions)                           |
 | "What does the Rijksmuseum say about this work?"                              | `get_artwork_details`                                                                                                |
 | "Wikidata Q-id, handle.net URI, other external IDs"                           | `get_artwork_details` → `externalIds` (work-level) and `production[].creator.wikidataId`                             |
+| "Scholarly references / citations / bibliography for one work"                 | `get_artwork_bibliography` by `objectNumber` (`get_artwork_details` → `bibliographyCount` tells you whether any exist; `full: true` for all entries) |
+| "Conservation/restoration history, technical examinations (X-ray, dendro, IR, paint samples) for one work" | `get_conservation_history` by `objectNumber`                                          |
 | "Show this artwork to the user / open the zoomable viewer"                    | `get_artwork_image`                                                                                                  |
 | "Examine this image closely / read this inscription"                          | `inspect_artwork_image`                                                                                              |
 | "Find works similar to this one" — visual, thematic, lineage, shared subject  | `find_similar`                                                                                                       |
@@ -57,7 +59,7 @@ These rules govern how to present results regardless of which tool produced them
 - Always report `objectNumber` (e.g. `SK-C-5`) linked to the Rijksmuseum's page for that artwork when surfacing works — it is the stable identifier across all tools.
 - For citation, use the persistent handle.net URI from `get_artwork_details` → `externalIds` (work-level external IDs surface here, including handle and other authority links).
 - For person-level external IDs (Wikidata Q-id and others), consult `production[].creator.wikidataId` on `get_artwork_details`, or `wikidataId` on `search_persons` results.
-- The `attributionEvidence` array on `get_artwork_details` cites the specific text/object that supports each attribution — useful for citation rigour.
+- `get_artwork_details` → `attributionMarks` reports the *count* of signature/inscription marks on a work (presence only — the harvested rows carry no transcribed text and their carrier URIs do not resolve); use `parsedInscriptions` / `search_inscriptions` for what is actually written. For the full forensics record (technical examinations + restoration treatments + that mark count + a provenance excerpt), use `get_conservation_history`.
 - When citing a creator from a result, preserve any qualifier prefix exactly as the result returned it ("attributed to Claes van Beresteyn", "workshop of Rembrandt", "after Rembrandt van Rijn"). The formatter injects these prefixes deliberately; stripping them in summary text misrepresents the catalogue's attribution position.
 - When presenting multiple works, lead with the most significant first (the default importance ranking handles this for vocabulary queries).
 - For image inspection findings, distinguish explicitly between what the structured metadata says and what the AI reads directly from the image — the distinction matters for research rigour.
@@ -120,7 +122,7 @@ The three attribution-scoping filters (`attributionQualifier`, `productionRole`,
 
 **Two adjacent reproductive roles exist.** Besides the three medium-specific `after X by` roles, the catalogue also uses `after design by` (other-reproductive, generic non-medium-specific) and `after own design by` (**self-reproductive** — the creator made the work after their own design, so they are both source and maker; a common pattern for autograph etchings after the artist's own preparatory drawing). For the user phrasing "by someone else after X", exclude `after own design by` — those works are autograph and belong with X's own œuvre, not with reproductive works by others. Pull in `after design by` only if you also want non-medium-specific reproductions.
 
-**Scope qualifier filters to a specific source artist by combining with `creator`.** Standalone, `attributionQualifier: "follower of"` returns every follower-of-anyone work in the collection. Combined with `creator: "X"`, it returns just the follower-of-X subset — the source artist is recorded on the same production row as the qualifier (and the same-row fix surfaces that linkage), even though the work's display `creator` field is typically `Unknown [painter]` or `anonymous`. For citation rigour on a single work, `attributionEvidence` from `get_artwork_details` cites the source text supporting each attribution.
+**Scope qualifier filters to a specific source artist by combining with `creator`.** Standalone, `attributionQualifier: "follower of"` returns every follower-of-anyone work in the collection. Combined with `creator: "X"`, it returns just the follower-of-X subset — the source artist is recorded on the same production row as the qualifier (and the same-row fix surfaces that linkage), even though the work's display `creator` field is typically `Unknown [painter]` or `anonymous`.
 
 **Canonical name form matters.** The Rijksmuseum catalogue uses historical Dutch/Latin spellings for some artists. Bosch is catalogued as **"Jheronimus Bosch"**, not "Hieronymus Bosch". Always check `get_artwork_details` on a known work to confirm the canonical form before filtering.
 
