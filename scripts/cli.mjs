@@ -87,7 +87,7 @@ const VERB_HELP = {
                   example: `rijks-mcp conservation SK-C-5 --json | jq '.examinations'` },
   bibliography: { summary: "Scholarly references for one artwork by object number — citations with linked publication, pages, ISBN.",
                   example: `rijks-mcp bibliography SK-C-5 --fields sequence,citation` },
-  citing:       { summary: "Reverse bibliography — artworks whose references cite a given publication (by URI or id); complement of bibliography. --full for all (else first 20 + total).",
+  citing:       { summary: "Reverse bibliography — artworks whose references cite a publication (by URI or id); complement of bibliography.",
                   example: `rijks-mcp citing 30189730 --full --fields objectNumber,creator` },
   stats:        { summary: "Group-by breakdown over one dimension (type, decade, creator, place…) — counts/percentages. Cap with --topN, not --max.",
                   example: `rijks-mcp stats type --topN 10 --fields label,count --table` },
