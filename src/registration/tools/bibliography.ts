@@ -83,10 +83,9 @@ export function registerBibliographyTools(
       if (data.total === 0) {
         warnings.push(`No artworks cite publication ${publicationId} (or bibliography data not yet harvested).`);
       }
-      const enriched = { ...data, warnings };
       const header = `${data.total} artwork(s) cite ${data.publicationUri}`;
-      const lines = enriched.artworks.map((a, i) => `${i + 1}. ${a.objectNumber} — ${a.title}${a.creator ? `, ${a.creator}` : ""}`);
-      return structuredResponse(enriched, [header, ...lines].join("\n"));
+      const lines = data.artworks.map((a, i) => `${i + 1}. ${a.objectNumber} — ${a.title}${a.creator ? `, ${a.creator}` : ""}`);
+      return structuredResponse({ ...data, warnings }, [header, ...lines].join("\n"));
     }),
   );
 }
