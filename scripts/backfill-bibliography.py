@@ -34,14 +34,17 @@ Example with concurrency:
 """
 
 import argparse
+import os
 import sqlite3
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from itertools import islice
 from pathlib import Path
 
 import requests
+from requests.adapters import HTTPAdapter, Retry
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
@@ -99,11 +102,12 @@ class PermanentFetchError(Exception):
     deaccessioned object). Callers should give up on it rather than retry."""
 
 
-def fetch_json(session: requests.Session, uri: str, timeout: int = 15) -> dict | None:
-    """GET a URI with Accept: application/ld+json over a pooled keep-alive
-    session (follows the 303 redirect by default). Returns the parsed JSON dict,
-    or None on a *transient* failure (timeout, connection error, 5xx, bad JSON).
-    Raises PermanentFetchError on HTTP 404/410 ("gone for good")."""
+def fetch_json(session: requests.Session, uri: str, timeout: tuple[float, float] = (5, 20)) -> dict | None:
+    """GET a URI with Accept: application/ld+json (follows the 303 redirect by
+    default). timeout is a (connect, read) tuple so both phases are bounded.
+    Returns the parsed JSON dict, or None on a *transient* failure (timeout,
+    connection error, 5xx, bad JSON). Raises PermanentFetchError on HTTP 404/410
+    ("gone for good")."""
     try:
         resp = session.get(
             uri,
@@ -123,11 +127,17 @@ def fetch_json(session: requests.Session, uri: str, timeout: int = 15) -> dict |
 
 
 def make_session(pool_size: int) -> requests.Session:
-    """A keep-alive session whose connection pool is sized to the worker count,
-    so pooled connections are reused across concurrent fetches."""
+    """A keep-alive session sized to the worker count, with automatic retries on
+    transient connect/read/5xx failures. Combined with the (connect, read) tuple
+    timeout in fetch_json, a stalled or server-reaped connection raises and is
+    retried on a fresh connection instead of silently dropping the artwork."""
     s = requests.Session()
-    adapter = requests.adapters.HTTPAdapter(
-        pool_connections=pool_size, pool_maxsize=pool_size, max_retries=0,
+    retry = Retry(
+        total=3, connect=3, read=3, backoff_factor=0.5,
+        status_forcelist=(429, 500, 502, 503, 504), raise_on_status=False,
+    )
+    adapter = HTTPAdapter(
+        pool_connections=pool_size, pool_maxsize=pool_size, max_retries=retry,
     )
     s.mount("https://", adapter)
     s.mount("http://", adapter)
@@ -236,10 +246,14 @@ def main() -> None:
             return {"art_id": art_id, "status": "gone", "rows": []}
         if data is None:
             return {"art_id": art_id, "status": "transient", "rows": []}
-        composed = []
-        for rc in extract_citations(data):
-            pub = resolve_pub(rc["publication_id"]) if rc.get("publication_id") is not None else None
-            composed.append(compose_citation(rc, pub))
+        try:
+            composed = []
+            for rc in extract_citations(data):
+                pub = resolve_pub(rc["publication_id"]) if rc.get("publication_id") is not None else None
+                composed.append(compose_citation(rc, pub))
+        except Exception as exc:  # noqa: BLE001 — one malformed record must not kill the run
+            # Not checkpointed → reprocessable after a parser fix or in a later run.
+            return {"art_id": art_id, "status": "error", "error": repr(exc), "rows": []}
         if args.sleep:
             time.sleep(args.sleep)  # per-worker politeness delay
         return {"art_id": art_id, "status": "ok", "rows": composed}
@@ -247,47 +261,81 @@ def main() -> None:
     processed = 0
     citation_total = 0
     gone = 0
+    errors = 0
     t0 = time.time()
     PROGRESS_EVERY = 100
     total_to_do = len(rows)
 
+    STALL_TIMEOUT = 120  # seconds with zero completions ⇒ all workers wedged
+    WINDOW = max(args.threads * 4, args.threads + 1)  # bounded in-flight fetches
+
+    def commit_result(result: dict) -> None:
+        nonlocal gone, citation_total, errors
+        art_id, status = result["art_id"], result["status"]
+        if status == "gone":
+            conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
+            conn.commit()
+            gone += 1
+        elif status == "transient":
+            return  # no checkpoint → retried on a later --resume
+        elif status == "error":
+            errors += 1
+            if errors <= 10:  # surface the first few, then count silently
+                print(f"  ⚠ parse error on art_id {art_id}: {result.get('error')}", flush=True)
+            return  # no checkpoint → reprocessable later
+        else:  # ok
+            rows_out = result["rows"]
+            # Idempotent per artwork: delete existing rows then re-insert
+            conn.execute("DELETE FROM artwork_citations WHERE art_id = ?", (art_id,))
+            if rows_out:
+                conn.executemany(CITATION_INSERT_SQL, citation_rows(art_id, rows_out))
+            conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
+            conn.commit()
+            citation_total += len(rows_out)
+
+    def print_progress() -> None:
+        elapsed = time.time() - t0
+        rate = processed / elapsed if elapsed > 0 else 0
+        remaining_est = (total_to_do - processed) / rate if rate > 0 else 0
+        with _pub_lock:
+            pubs_cached = len(_pub_cache)
+        print(
+            f"  {processed:,}/{total_to_do:,} ({rate:.1f}/s, {citation_total:,} citations, "
+            f"~{remaining_est / 60:.0f}min left, {pubs_cached:,} pubs cached, {args.threads} threads)",
+            flush=True,
+        )
+
+    row_iter = iter(rows)
     with ThreadPoolExecutor(max_workers=args.threads) as pool:
-        futures = [pool.submit(process_artwork, r["art_id"], r["hmo_id"]) for r in rows]
-        for fut in as_completed(futures):
-            result = fut.result()
-            art_id = result["art_id"]
-            status = result["status"]
-            if status == "gone":
-                conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
+        # Keep only a bounded window of fetches in flight (vs. submitting all rows
+        # at once) so commits start immediately and memory stays flat on big subsets.
+        inflight = {pool.submit(process_artwork, r["art_id"], r["hmo_id"])
+                    for r in islice(row_iter, WINDOW)}
+        while inflight:
+            done, inflight = wait(inflight, timeout=STALL_TIMEOUT, return_when=FIRST_COMPLETED)
+            if not done:
+                # No fetch finished in STALL_TIMEOUT s ⇒ workers wedged on dead
+                # sockets. All progress is checkpointed, so force-exit past the
+                # unkillable worker threads; re-run with --resume to continue.
+                print(f"\n⚠ STALL: 0 fetches completed in {STALL_TIMEOUT}s "
+                      f"({len(inflight)} in flight). {processed:,} done this run; "
+                      f"re-run with --resume to continue.", flush=True)
                 conn.commit()
-                gone += 1
-            elif status == "transient":
-                pass  # no checkpoint → retried on a later --resume
-            else:  # ok
-                rows_out = result["rows"]
-                # Idempotent per artwork: delete existing rows then re-insert
-                conn.execute("DELETE FROM artwork_citations WHERE art_id = ?", (art_id,))
-                if rows_out:
-                    conn.executemany(CITATION_INSERT_SQL, citation_rows(art_id, rows_out))
-                conn.execute(f"INSERT OR REPLACE INTO {CHECKPOINT_TABLE} (art_id) VALUES (?)", (art_id,))
-                conn.commit()
-                citation_total += len(rows_out)
-            processed += 1
-            if processed % PROGRESS_EVERY == 0 or processed == total_to_do:
-                elapsed = time.time() - t0
-                rate = processed / elapsed if elapsed > 0 else 0
-                remaining_est = (total_to_do - processed) / rate if rate > 0 else 0
-                with _pub_lock:
-                    pubs_cached = len(_pub_cache)
-                print(
-                    f"  {processed:,}/{total_to_do:,} ({rate:.1f}/s, {citation_total:,} citations, "
-                    f"~{remaining_est / 60:.0f}min left, {pubs_cached:,} pubs cached, {args.threads} threads)",
-                    flush=True,
-                )
+                conn.close()
+                os._exit(2)
+            for fut in done:
+                commit_result(fut.result())
+                processed += 1
+                nxt = next(row_iter, None)
+                if nxt is not None:  # refill the window
+                    inflight.add(pool.submit(process_artwork, nxt["art_id"], nxt["hmo_id"]))
+                if processed % PROGRESS_EVERY == 0 or processed == total_to_do:
+                    print_progress()
 
     elapsed = time.time() - t0
     print(f"\nDone: {processed:,} artworks in {elapsed / 60:.1f}min, "
-          f"{citation_total:,} citations written, {gone:,} skipped (gone upstream, checkpointed).")
+          f"{citation_total:,} citations written, {gone:,} skipped (gone upstream, checkpointed), "
+          f"{errors:,} parse errors (not checkpointed).")
     conn.close()
 
 
