@@ -12,6 +12,7 @@
 - [Structured Text Search](#structured-text-search)
 - [Inscriptions and Marks](#inscriptions-and-marks)
 - [Bibliography and Citations](#bibliography-and-citations)
+- [Conservation and Technical Examination](#conservation-and-technical-examination)
 
 ## Searching the Collection
 
@@ -452,7 +453,7 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 
 ### 32. Reconstructing an Exhibition Beyond the Museum's Own Sets
 
-*I'm trying to reconstruct which Rijksmuseum objects appeared in the 1936 Tentoonstelling van Aziatische Kunst — the landmark loan exhibition that gathered Asian art from Dutch public and private collections — a show the museum has never turned into one of its own curated sets. Start from a work that was likely in it, find the exhibition catalogue listed in that work's bibliography, then give me every Rijksmuseum object whose catalogue cites the same publication. Show me the checklist you assemble.*
+*I'm trying to reconstruct which Rijksmuseum objects appeared in the 1936 Tentoonstelling van Aziatische Kunst — the landmark loan exhibition that gathered Asian art from Dutch public and private collections — a show that is not in the list of the museum's own curated sets. Start from a work that was likely in it, find the exhibition catalogue listed in that work's bibliography, then give me every Rijksmuseum object whose catalogue cites the same publication. Show me the checklist you assemble.* <draft>
 
 **How the tools enable it:**
 - Start from one object you know was shown — `search_artwork` for a candidate, then `get_artwork_bibliography` to read its references and find the exhibition catalogue entry; copy its `publicationUri`
@@ -460,11 +461,11 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 - `get_artwork_details` and `get_artwork_image` on each result to study the selection and how the works relate
 - Cross-check with `list_curated_sets` to confirm the exhibition is *not* already a Rijksmuseum grouping — establishing that the bibliographic route reaches what the curated-set tools cannot
 
-**Why it matters:** A temporary exhibition vanishes when it comes down; its catalogue endures as the record of what hung together and why. A show staged before the museum began building its digital groupings leaves no curated set to call up — the only trace it leaves behind is the citation each exhibited object's record still carries to that catalogue. Reading those citations in reverse rebuilds the checklist from the objects up, recovering the museum's contribution to a historical exhibition that no stored grouping preserves — and the same route works for the colonial and naval shows of earlier decades, or any exhibition whose catalogue the collection happens to cite. It reaches only the works the Rijksmuseum itself lent — one institution's slice of a multi-lender show — but for studying how earlier curators selected, sequenced, and argued with objects, that reconstruction is evidence that would otherwise mean finding a copy of the printed catalogue and matching it against the collection entry by entry.
+**Why it matters:** A show staged before the museum began building its digital groupings leaves no curated set to call up — the only trace it leaves behind is the citation each exhibited object's record still carries to that catalogue. Reading those citations in reverse rebuilds the checklist from the objects up, recovering the museum's contribution to a historical exhibition that no stored grouping preserves.
 
 ### 33. The Footprint of a Reference Catalogue
 
-*Hollstein's "Dutch and Flemish Etchings, Engravings and Woodcuts" is the standard catalogue of early Netherlandish printmaking, and a Rijksmuseum print's entry routinely cites its Hollstein volume and number. Take a print you know Hollstein covers, find the exact volume in its bibliography, then show me every Rijksmuseum print that cites that same volume — the slice of the collection that one volume reaches. Then do the same for a single artist's catalogue raisonné, and tell me how much of that artist's work the collection treats as part of the recognised corpus.*
+*Hollstein's "Dutch and Flemish Etchings, Engravings and Woodcuts" is the standard catalogue of early Netherlandish printmaking, and a Rijksmuseum print's entry routinely cites its Hollstein volume and number. Take a print you know Hollstein covers, find the exact volume in its bibliography, then show me every Rijksmuseum print that cites that same volume. Then do the same for a single artist's catalogue raisonné, and tell me how much of that artist's work the collection treats as part of the recognised corpus.* <draft>
 
 **How the tools enable it:**
 - Identify the reference: `get_artwork_bibliography` on a print you know it covers, then copy the volume's `publicationUri` from the results (the entry also carries `worldcatUri` and `libraryUrl`, so you can confirm exactly which publication you have)
@@ -472,4 +473,47 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 - `get_artwork_details` on the results to triage by creator, date, or technique; and because the `publicationUri` carries the same identifier the museum's own library catalogue uses, the publication's full catalogue record is only a step away
 - The returned works are *bibliographically coupled* — connected by shared scholarship rather than by subject, creator, or visual similarity — so the set reads as the corpus the authority recognises within the collection
 
-**Why it matters:** A catalogue raisonné or standard catalogue is the scholarly backbone for an artist, a genre, or a technique, and the print collection is catalogued densely against exactly these works — the references cited most often across the collection are Hollstein, Leblanc's *Manuel de l'amateur d'estampes*, the *Inventaire du fonds français*, and Frederik Muller's portrait catalogues, each binding together thousands of sheets. Turning one of these references back into the set of works that cite it converts a bibliographic shorthand into a finding aid: it shows how deeply a foundational catalogue reaches into the holdings, lets a researcher assemble the recognised corpus for an artist as the collection actually defines it, and — read against the catalogue's own numbered entries — points to where the museum's impressions are dense and where they are missing.
+**Why it matters:** A catalogue raisonné or standard catalogue is the scholarly backbone for an artist, a genre, or a technique, and the print collection is catalogued densely against exactly these works — the references cited most often across the collection are Hollstein, Leblanc's *Manuel de l'amateur d'estampes*, the *Inventaire du fonds français*, and Frederik Muller's portrait catalogues, each binding together thousands of sheets. Turning one of these references back into the set of works that cite it converts a bibliographic shorthand into a finding aid and points to where the museum's impressions are dense and where they are missing.
+
+---
+
+## Conservation and Technical Examination
+
+`get_conservation_history` gathers, for a single artwork, the record of its physical life that a museum keeps but rarely publishes: the **technical examinations** it has undergone — X-radiography, infrared reflectography, dendrochronology, paint-sample and pigment analysis, and a dozen rarer methods — and the **conservation treatments** performed on it, from cleaning and revarnishing to relining and retouching. Each entry carries its date and, where recorded, the examiner or laboratory; the same call also counts any signature or inscription marks the work bears and returns a short provenance excerpt, so physical and documentary evidence sit side by side. Coverage is selective — on the order of 1,300 works carry examination records and about a thousand carry treatment histories, concentrated on paintings, above all early Netherlandish and Dutch panels and canvases — so most of the collection returns nothing. And the tool reports *that* an examination happened and of what kind, not the report's findings: it is a finding aid into the conservation archive, not the archive itself.
+
+### 34. The Technical Biography of a Painting
+
+*Govert Flinck's "Isaac Blessing Jacob" (SK-A-110) has passed through the conservation studio many times. Pull its complete technical examination record — what kinds of examination it has had, when, and by whom — and tell me what the run of methods, from the first X-rays of the 1930s to the recent infrared and paint-sample campaigns, reveals about how the painting has been studied across the last century.* <draft>
+
+**How the tools enable it:**
+- `get_conservation_history` with `objectNumber: "SK-A-110"` returns the full `examinations` array (most-recent first), each entry naming its method, its date, and the examiner or lab where recorded — here a record running from X-radiography in 1930 and again in 1953 to a dense modern campaign of paint samples, X-ray fluorescence, X-ray diffraction, infrared reflectography, and infrared photography between 1999 and 2010, with named conservation scientists (A. Wallert, G. Tauber, M. van Eikema Hommes)
+- `examinationsTotalCount` reports the full tally — this is one of the most heavily examined works in the collection
+- the `conservationHistory` array, kept separate from the examinations, lists any cleaning or restoration the painting received, so analytical study and physical intervention can be read against one another
+- `get_artwork_details` supplies the catalogue frame the findings hang on (support, technique statement, dimensions); `get_artwork_image` opens the painting at deep zoom beside the record
+
+**Why it matters:** A much-studied painting accumulates a technical file normally scattered across decades of internal reports and reachable only on site; drawing it together in one call turns the work into a legible research object. The *sequence* of methods is itself evidence — each generation of instrument answered a question the previous one could not — so the record doubles as a history of how conservation science learned to look, though it names the examinations, not their conclusions.
+
+### 35. Reading a Surface Through Its Restoration History
+
+*Frans Hals and Pieter Codde's "The Meagre Company" (SK-C-374) is a large 17th-century militia canvas that has been worked on repeatedly since it entered the museum. Give me its full restoration history, and explain what the sequence of interventions — cleaning, revarnishing, retouching, a tear repair, a complete restoration with the canvas relined — means for how I should read the painting's surface today.* <draft>
+
+**How the tools enable it:**
+- `get_conservation_history` with `objectNumber: "SK-C-374"` returns the `conservationHistory` array, most-recent first, each treatment with its description and date — a century of work here, from a 1914 general restoration and revarnishing through cleanings in the 1930s to a 1984 tear repair and a 1988 complete restoration in which the canvas was relined
+- `conservationHistoryTotalCount` gives the number of recorded treatments
+- the `examinations` array shows whether technical study accompanied a treatment campaign — conservators routinely X-ray or sample a painting before they intervene
+- `provenanceTextSummary`, returned in the same call, lets you line treatment dates up against changes of ownership — a work is often restored when it is sold, bequeathed, or first enters a museum
+- `get_artwork_details` confirms the support (relining matters only because this is a canvas); `get_artwork_image` lets you inspect the much-treated surface at high zoom
+
+**Why it matters:** What a viewer sees in a centuries-old painting is never only the artist's hand but the cumulative product of every cleaning, varnish, and retouching the work has survived — a relined canvas reflects light differently, an old retouching discolours at its own rate. For any argument about colour, condition, or where original paint ends and restoration begins, the treatment history is indispensable context that a gallery label never carries; these terse cataloguer's summaries establish *what* was done and when, and point to the studio file for the rest.
+
+### 36. Technical Evidence for a Contested Attribution
+
+*"The Dying Cleopatra" (SK-A-2843) is catalogued only as "attributed to Jan van Scorel" — the name is not secure. Before I take a position, show me what physical evidence already exists: what technical examinations the museum has carried out, whether any signature or inscription anchors the name, and what the provenance says.* <draft>
+
+**How the tools enable it:**
+- `get_conservation_history` with `objectNumber: "SK-A-2843"` returns the technical battery the panel has already undergone — paint samples (analysed in 1978 by J.R.J. van Asperen de Boer), X-radiography, dendrochronology (twice, by the panel-dating specialist P. Klein), a condition report, and infrared reflectography — the physical evidence on which an attribution argument is built; the dendrochronology in particular means the wood itself has been dated
+- `attributionMarks` in the same response counts any signature or inscription evidence the work carries — here the count is **zero**, which is itself the finding: there is no inscribed name to anchor the attribution, so it rests wholly on the technical evidence and the connoisseur's eye (where the count is non-zero, follow with `search_inscriptions` or `get_artwork_details`'s `parsedInscriptions` for the transcription, since this tool returns only the count)
+- `provenanceTextSummary` supplies a provenance excerpt for documentary cross-reference — for this panel, a 1920 bequest from Ridder de Stuers — early ownership that can corroborate or complicate the attribution
+- `inspect_artwork_image` / `get_artwork_image` let you examine the underdrawing- and pentimenti-revealing features the infrared and X-ray campaigns were after
+
+**Why it matters:** A modern attribution rests as much on technical evidence — the date of the wood, the underdrawing beneath the paint, the pigments in the layers — as on the trained eye, and the museum's instruments cluster on exactly the uncertain cases: well over a third of all technically-examined works are catalogued as anonymous, "workshop of", or "attributed to". The tool lets a researcher inventory the existing dossier for a contested work in one call — what has been done, so it need not be repeated, and what is missing, so it can be commissioned — reporting that the studies exist, not their verdicts.
