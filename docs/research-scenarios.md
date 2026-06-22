@@ -11,6 +11,7 @@
 - [Provenance Research](#provenance-research)
 - [Structured Text Search](#structured-text-search)
 - [Inscriptions and Marks](#inscriptions-and-marks)
+- [Bibliography and Citations](#bibliography-and-citations)
 
 ## Searching the Collection
 
@@ -442,3 +443,33 @@ The `search_inscriptions` tool sorts this field into recognised kinds of mark �
 - Confirm and extend with `search_artwork({creator})`, or read a single object's `parsedInscriptions` and `inscriptionSummary` via `get_artwork_details`; `get_artwork_image` then zooms in to read the mark on the sheet itself
 
 **Why it matters:** How an artist signed a work — a full name or a bare monogram, in pen or in chalk, on the front or hidden on the back — is a question of connoisseurship and dating, yet the evidence for it lies buried beneath the ownership stamps that fill most of the inscription field. What the tool adds is the ability to separate the artist's own mark from a later owner's, and a signature on the front from an inscription on the back — distinctions an ordinary keyword search cannot draw. With those in hand, a researcher can study signing practice directly, and ask whether the convention shifts by period, by an artist's standing, or by medium.
+
+---
+
+## Bibliography and Citations
+
+Citations in the catalogue are extensive — on the order of 378,000 works carry them — and the linked publications range from journal articles and museum bulletins to exhibition catalogues and the standard reference catalogues of printmaking. The bibliography tool can retrieve the scholarly references catalogued for a single artwork but also retrieve that link in reverse (i.e. from a publication to every Rijksmuseum work whose catalogue cites it).
+
+### 32. Reconstructing an Exhibition Beyond the Museum's Own Sets
+
+*I'm trying to reconstruct which Rijksmuseum objects appeared in the 1936 Tentoonstelling van Aziatische Kunst — the landmark loan exhibition that gathered Asian art from Dutch public and private collections — a show the museum has never turned into one of its own curated sets. Start from a work that was likely in it, find the exhibition catalogue listed in that work's bibliography, then give me every Rijksmuseum object whose catalogue cites the same publication. Show me the checklist you assemble.*
+
+**How the tools enable it:**
+- Start from one object you know was shown — `search_artwork` for a candidate, then `get_artwork_bibliography` to read its references and find the exhibition catalogue entry; copy its `publicationUri`
+- `find_artworks_citing_publication` with that URI returns every Rijksmuseum work whose catalogue cites the same exhibition publication — the museum's full contribution to the show, assembled from the citation graph rather than a stored grouping (the *Catalogus der tentoonstelling van Aziatische kunst* resolves to some 45 works; the museum's own post-war *Aanwinsten 1940–1946* show to some 710)
+- `get_artwork_details` and `get_artwork_image` on each result to study the selection and how the works relate
+- Cross-check with `list_curated_sets` to confirm the exhibition is *not* already a Rijksmuseum grouping — establishing that the bibliographic route reaches what the curated-set tools cannot
+
+**Why it matters:** A temporary exhibition vanishes when it comes down; its catalogue endures as the record of what hung together and why. A show staged before the museum began building its digital groupings leaves no curated set to call up — the only trace it leaves behind is the citation each exhibited object's record still carries to that catalogue. Reading those citations in reverse rebuilds the checklist from the objects up, recovering the museum's contribution to a historical exhibition that no stored grouping preserves — and the same route works for the colonial and naval shows of earlier decades, or any exhibition whose catalogue the collection happens to cite. It reaches only the works the Rijksmuseum itself lent — one institution's slice of a multi-lender show — but for studying how earlier curators selected, sequenced, and argued with objects, that reconstruction is evidence that would otherwise mean finding a copy of the printed catalogue and matching it against the collection entry by entry.
+
+### 33. The Footprint of a Reference Catalogue
+
+*Hollstein's "Dutch and Flemish Etchings, Engravings and Woodcuts" is the standard catalogue of early Netherlandish printmaking, and a Rijksmuseum print's entry routinely cites its Hollstein volume and number. Take a print you know Hollstein covers, find the exact volume in its bibliography, then show me every Rijksmuseum print that cites that same volume — the slice of the collection that one volume reaches. Then do the same for a single artist's catalogue raisonné, and tell me how much of that artist's work the collection treats as part of the recognised corpus.*
+
+**How the tools enable it:**
+- Identify the reference: `get_artwork_bibliography` on a print you know it covers, then copy the volume's `publicationUri` from the results (the entry also carries `worldcatUri` and `libraryUrl`, so you can confirm exactly which publication you have)
+- `find_artworks_citing_publication` with that URI returns the reference's full footprint in the collection — e.g. the Hollstein *Heer–Kuyl* volume resolves to roughly 3,200 prints, *Boekhorst–Brueghel* to some 2,500; a single-artist catalogue raisonné such as Van Eeghen & Van der Kellen's *Het werk van Jan en Casper Luyken* to some 6,100 works
+- `get_artwork_details` on the results to triage by creator, date, or technique; and because the `publicationUri` carries the same identifier the museum's own library catalogue uses, the publication's full catalogue record is only a step away
+- The returned works are *bibliographically coupled* — connected by shared scholarship rather than by subject, creator, or visual similarity — so the set reads as the corpus the authority recognises within the collection
+
+**Why it matters:** A catalogue raisonné or standard catalogue is the scholarly backbone for an artist, a genre, or a technique, and the print collection is catalogued densely against exactly these works — the references cited most often across the collection are Hollstein, Leblanc's *Manuel de l'amateur d'estampes*, the *Inventaire du fonds français*, and Frederik Muller's portrait catalogues, each binding together thousands of sheets. Turning one of these references back into the set of works that cite it converts a bibliographic shorthand into a finding aid: it shows how deeply a foundational catalogue reaches into the holdings, lets a researcher assemble the recognised corpus for an artist as the collection actually defines it, and — read against the catalogue's own numbered entries — points to where the museum's impressions are dense and where they are missing.
