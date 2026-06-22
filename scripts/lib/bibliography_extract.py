@@ -100,8 +100,8 @@ def extract_citations(data: dict) -> list[dict]:
         assigned_list = entry.get("assigned") or []
         assigned = assigned_list[0] if assigned_list else None
 
-        if not assigned:
-            # No assigned element — Type B with empty inline text
+        if not isinstance(assigned, dict):
+            # No assigned element, or a variant shape (e.g. a bare string) — Type B with empty inline text
             results.append({
                 "seq": seq,
                 "ctype": "B",
