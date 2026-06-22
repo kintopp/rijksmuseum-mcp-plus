@@ -213,6 +213,19 @@ check("getBibliography returns null for an unknown objectNumber", () => {
   assert.equal(db.getBibliography("NOPE-9999", {}), null);
 });
 
+check("getArtworksCitingPublication finds the citing artwork", () => {
+  const d = db.getArtworksCitingPublication(301154354, {});
+  assert.equal(d.total, 1);
+  assert.equal(d.artworks[0].objectNumber, "FX-1");
+  assert.equal(d.publicationUri, "https://id.rijksmuseum.nl/301154354");
+});
+
+check("getArtworksCitingPublication returns total 0 for an uncited publication", () => {
+  const d = db.getArtworksCitingPublication(999999, {});
+  assert.equal(d.total, 0);
+  assert.deepEqual(d.artworks, []);
+});
+
 check("getArtworkDetail pairs production role↔creator row-aware, not positionally (#354 / RP-F-00-173)", () => {
   const d = db.getArtworkDetail("FX-9");
   assert.ok(d, "FX-9 not found");

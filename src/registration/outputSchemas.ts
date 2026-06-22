@@ -404,6 +404,19 @@ export const BibliographyOutput = {
   error: z.string().optional(),
 };
 
+export const PublicationArtworksOutput = {
+  publicationUri: z.string(),
+  publicationId: z.number().int(),
+  total: z.number().int().nonnegative(),
+  artworks: z.array(z.object({
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string().nullable(),
+  })).describe("Artworks whose bibliography cites this publication. Empty when none (or bibliography not harvested)."),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+};
+
 export const ImageInfoOutput = {
   objectNumber: z.string(),
   title: z.string().optional(),

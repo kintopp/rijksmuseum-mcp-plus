@@ -69,12 +69,13 @@ const toolsResult = await client.listTools();
 const toolNames = toolsResult.tools.map((t) => t.name).sort();
 console.log(`  Found ${toolNames.length} tools: ${toolNames.join(", ")}`);
 
-// All 18 tools registered with ENABLE_FIND_SIMILAR=true: 15 standard
-// (incl. find_similar + search_inscriptions + get_conservation_history + get_artwork_bibliography) + 3 app (get_artwork_image,
+// All 19 tools registered with ENABLE_FIND_SIMILAR=true: 16 standard
+// (incl. find_similar + search_inscriptions + get_conservation_history + get_artwork_bibliography + find_artworks_citing_publication) + 3 app (get_artwork_image,
 // remount_viewer, poll_viewer_commands).
 const expectedTools = [
   "browse_set",
   "collection_stats",
+  "find_artworks_citing_publication",
   "find_similar",
   "get_artwork_bibliography",
   "get_artwork_details",
