@@ -32,6 +32,7 @@ metadata:
 | "What does the Rijksmuseum say about this work?"                              | `get_artwork_details`                                                                                                |
 | "Wikidata Q-id, handle.net URI, other external IDs"                           | `get_artwork_details` → `externalIds` (work-level) and `production[].creator.wikidataId`                             |
 | "Scholarly references / citations / bibliography for one work"                 | `get_artwork_bibliography` by `objectNumber` (`get_artwork_details` → `bibliographyCount` tells you whether any exist; `full: true` for all entries) |
+| "Which works cite a given publication / reverse bibliography lookup"            | `find_artworks_citing_publication` — the reverse of `get_artwork_bibliography`; pass a `publication` URI or id (e.g. from a bibliography entry's `publicationUri`), `full: true` for all citing works |
 | "Conservation/restoration history, technical examinations (X-ray, dendro, IR, paint samples) for one work" | `get_conservation_history` by `objectNumber`                                          |
 | "Show this artwork to the user / open the zoomable viewer"                    | `get_artwork_image`                                                                                                  |
 | "Examine this image closely / read this inscription"                          | `inspect_artwork_image`                                                                                              |
