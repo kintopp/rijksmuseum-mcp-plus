@@ -38,6 +38,9 @@ Results are ranked differently depending on which filters are active:
 | `get_recent_changes` | 10 | 50 | `resumptionToken` | OAI-PMH token-based pagination |
 | `find_similar` | 20 | 50 | — | Results per similarity signal; not pageable |
 | `get_artwork_details` | — | — | — | Single artwork lookup |
+| `get_artwork_bibliography` | 5 | — | `full` | First 5 entries + `total`; `full: true` returns all (major works 100+) |
+| `find_artworks_citing_publication` | 20 | — | `full` | First 20 + `total`; `full: true` returns all citing artworks |
+| `get_conservation_history` | — | — | — | Single artwork lookup |
 
 Tools with `offset` pagination return a total count in the response (`totalResults` or `totalArtworks`), allowing the client to page through the full result set. OAI-PMH tools use opaque `resumptionToken` values returned with each page.
 
@@ -218,3 +221,5 @@ Fields are concatenated as `[Title] ... [Inscriptions] ... [Description] ... [Na
 ## Artwork detail fields
 
 `get_artwork_details` returns the [full metadata category reference](metadata-categories.md) per artwork, plus summary fields (`id`, `title`, `creator`, `date`, `url`). Nearly all categories are also searchable collection-wide via corresponding `search_artwork` parameters — see the [metadata categories reference](metadata-categories.md) for the full list, including a table of search-only filters that have no corresponding return field.
+
+Two companion single-artwork lookups return scholarly and forensic records that are not part of the search-filter set: [`get_artwork_bibliography`](mcp-tool-parameters.md#get_artwork_bibliography) (citations, linked publications, pages, ISBN — the `bibliographyCount` field on the detail record tells you whether any exist) and [`get_conservation_history`](mcp-tool-parameters.md#get_conservation_history) (technical examinations, restoration treatments, attribution-mark counts, a provenance excerpt). The reverse bibliography direction — which artworks cite a given publication — is [`find_artworks_citing_publication`](mcp-tool-parameters.md#find_artworks_citing_publication).

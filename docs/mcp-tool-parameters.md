@@ -253,6 +253,38 @@ Structured search over artwork inscriptions — collector's marks, signatures, d
 
 ---
 
+## get_artwork_bibliography
+
+Scholarly references for one artwork by object number — citations with the linked publication, pages, and ISBN where known. Returns the first 5 entries plus a `total` count by default; `full: true` returns all (major works can carry 100+).
+
+| Parameter | Description |
+|---|---|
+| `objectNumber` | Object identifier, e.g. `SK-C-5` |
+| `full` | `true` returns ALL entries (may be 100+); default returns the first 5 + a `total` count |
+
+---
+
+## find_artworks_citing_publication
+
+Reverse bibliography — artworks whose references cite a given publication. Local and resolver-free. Pass the `publicationUri` from a `get_artwork_bibliography` entry (e.g. `https://id.rijksmuseum.nl/301154354`) or the bare numeric id.
+
+| Parameter | Description |
+|---|---|
+| `publication` | Publication URI (`https://id.rijksmuseum.nl/301…`) or the bare publication id |
+| `full` | `true` returns ALL citing artworks; default returns the first 20 + a `total` count |
+
+---
+
+## get_conservation_history
+
+Conservation / forensics record for one artwork by object number — technical examinations (X-ray, dendrochronology, infrared, paint samples), restoration and conservation treatments, a count of recorded signature/inscription marks, and a short provenance excerpt. Not for general metadata (use [`get_artwork_details`](#get_artwork_details)); not for transcribed inscriptions (use [`search_inscriptions`](#search_inscriptions)).
+
+| Parameter | Description |
+|---|---|
+| `objectNumber` | Object identifier, e.g. `SK-C-5` |
+
+---
+
 ## get_artwork_image
 
 | Parameter | Description |

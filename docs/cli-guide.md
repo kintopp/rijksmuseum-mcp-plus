@@ -42,7 +42,7 @@ The `npm run cli` form needs `--` before tool flags so npm doesn't swallow them.
 `rijks-mcp` form, link the bin onto your `PATH` once with `npm link` (or `npm install -g .`) from
 the repo root; all three forms are otherwise identical.
 
-**Scope.** The CLI exposes the 12 stateless tools. The four viewer/stateful tools
+**Scope.** The CLI exposes the 15 stateless tools. The four viewer/stateful tools
 (`get_artwork_image`, `navigate_viewer`, `remount_viewer`, `poll_viewer_commands`) depend on the
 live viewer iframe and are intentionally excluded — invoking one is a usage error (exit 2).
 
@@ -242,6 +242,9 @@ $ node scripts/cli.mjs --show-call search --query "tulip" --type print --max 10
 | `provenance` | `search_provenance` | `party` | `--max` | `results` | offset |
 | `inscriptions` | `search_inscriptions` | `text` | `--max` | `results` | offset |
 | `details` | `get_artwork_details` | `objectNumber` | — (single) | — | — |
+| `bibliography` | `get_artwork_bibliography` | `objectNumber` | `--full` | `entries` | — |
+| `citing` | `find_artworks_citing_publication` | `publication` | `--full` | `artworks` | — |
+| `conservation` | `get_conservation_history` | `objectNumber` | — (single) | — | — |
 | `stats` | `collection_stats` | `dimension` | `--topN` | `entries` | offset |
 | `similar` | `find_similar` | `objectNumber` | `--max` | — (single) | — |
 | `browse-set` | `browse_set` | `setSpec` | `--max` | `records` | token |
@@ -390,6 +393,72 @@ node scripts/cli.mjs details SK-C-5 --json | jq '.provenanceChain'
 
 Note the field rename in recent versions: physical dimensions are under `physicalDimensions` (was
 `dimensionStatement`).
+
+---
+
+### `bibliography` → `get_artwork_bibliography`
+
+Scholarly references for one artwork — citations with the linked publication, pages, and ISBN where
+known. Default returns the first 5 entries + a `total` count; `--full` returns all (major works can
+carry 100+).
+
+```bash
+$ node scripts/cli.mjs bibliography SK-C-5 --fields sequence,citation
+{"sequence":1,"citation":"Anne Lenders, 'Short notice. The Dog in The Night Watch ...', The Rijksmuseum Bulletin 73 (2025) nr. 3, p. 212-223."}
+...
+# stderr: 5 shown
+
+# All entries; pull just the linked-publication URIs
+node scripts/cli.mjs bibliography SK-C-5 --full --json | jq -r '.entries[].publicationUri | select(. != null)'
+```
+
+Output keys: `objectNumber`, `total` (e.g. 111 for SK-C-5), `entries`. Each entry: `sequence`,
+`citation`, `publicationUri` (the linked publication record, or null for inline-only citations),
+`pages`, `isbn`, `worldcatUri`, `libraryUrl`.
+
+---
+
+### `citing` → `find_artworks_citing_publication`
+
+The reverse of `bibliography` — artworks whose references cite a given publication. Pass the
+`publicationUri` from a bibliography entry (or the bare numeric id). Default returns the first 20 +
+a `total` count; `--full` returns all.
+
+```bash
+$ node scripts/cli.mjs citing https://id.rijksmuseum.nl/301154354 --fields objectNumber,title,creator
+{"objectNumber":"RP-P-OB-20.603","title":"Portret van dr. Gachet","creator":"Vincent van Gogh"}
+...
+# stderr: 19 shown
+
+# The bare id works too
+node scripts/cli.mjs citing 301154354 --full --fields objectNumber,creator
+```
+
+Output keys: `publicationUri`, `publicationId`, `total`, `artworks`. Each artwork: `objectNumber`,
+`title`, `creator`.
+
+---
+
+### `conservation` → `get_conservation_history`
+
+Forensics record for one artwork — technical examinations (X-ray, dendrochronology, infrared, paint
+samples), restoration/conservation treatments, a count of signature/inscription marks, and a
+provenance excerpt. Single-object output.
+
+```bash
+$ node scripts/cli.mjs conservation SK-A-110 --json | jq '{title, examinationsTotalCount, conservationHistoryTotalCount}'
+{"title":"Isaak zegent Jakob","examinationsTotalCount":15,"conservationHistoryTotalCount":5}
+
+# Just the technical examinations (report type, examiner, date)
+$ node scripts/cli.mjs conservation SK-A-110 --json | jq -c '.examinations[] | {reportTypeLabel, examiner, date}'
+{"reportTypeLabel":"infrared photography","examiner":"G. Tauber","date":"2010-09-09"}
+...
+```
+
+Output keys: `objectNumber`, `title`, `creator`, `examinations` (+`examinationsTotalCount`),
+`conservationHistory` (+`conservationHistoryTotalCount`), `attributionMarks`
+(`{signatures, inscriptions, total}`), `provenanceTextSummary`. A work with no records returns a
+`warnings` note on stderr.
 
 ---
 

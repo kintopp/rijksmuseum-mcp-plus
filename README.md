@@ -44,7 +44,7 @@ After you've connected the resource to your AI system, you can search, explore a
 - _What are the three largest paintings in the collection by width?_
 - _Which 15th-century paintings are listed as workshop productions?_
 - _Show me the Roermondse passie and highlight the Betrayal of Judas_
- 
+
 For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md).
 
 ## Features
@@ -83,7 +83,7 @@ By switching the viewer into *interactive mode* (press "i" or click on the □ i
 
 A search for artworks 'similar to' other artworks (e.g. "find artworks similar to van Gogh's Zelfportret") creates a custom, comparison webpage that places an artwork alongside the works most similar to it, evaluated across nine dimensions: `visual appearance`, `related variant` (curator-declared pendants, production stadia, different examples), `related object` (other curator-declared edges such as pairs, sets, recto/verso, and reproductions), `artistic lineage` (shared creators, workshops, or attribution chains), `Iconclass subject classification`, `semantic description`, `curatorial themes`, `depicted persons`, and `depicted places`. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection.
 
-Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-1115.html) of a custom webpage with a `find_similar` analysis. 
+Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-1115.html) of a custom webpage with a `find_similar` analysis.
 
 ### Collection statistics and distributions
 
@@ -100,6 +100,14 @@ The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text
 Every provenance record carries searchable provenance-of-provenance metadata tracking how it was enriched. In addition, because some enrichments are inferred by an LLM rather than derived by rule, whenever a provenance search returns LLM-assisted results the server also generates a custom review webpage that sets each artwork's original narrative next to the parsed events and the model's stated reasoning for every inferred classification.
 
 For more details, please see the [provenance reference](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html) documentation.
+
+### Conservation and technical examinations
+
+For a single artwork, rijksmuseum-mcp+ can assemble its conservation and forensic record: the technical examinations a work has undergone (X-radiography, dendrochronology, infrared reflectography, paint-sample analysis, and the like), its documented restoration and conservation treatments, a count of the signature and inscription marks recorded on it, and a short excerpt of its provenance text for cross-reference. This gathers in one place the material-history evidence that conservators and technical art historians rely on (e.g. "what technical imaging exists for Govert Flinck's *Isaak zegent Jakob*, and when was it last restored?").
+
+### Bibliography and citations
+
+Many works carry scholarly references — catalogue entries, journal articles, and monographs that discuss them. Rijksmuseum-mcp+ exposes these citations for a given artwork, each with its linked publication record, page range, and ISBN where known, so you can see at a glance how extensively a work has been published. The relationship can also be followed in reverse: starting from a publication, you can list every artwork in the collection whose references cite it (e.g. "which works in the collection does this exhibition catalogue document?").
 
 ### Command-line interface
 
@@ -135,7 +143,7 @@ flowchart LR
 
     AI <-->|"MCP tool calls
     (agentic loop)"| Server["rijksmuseum-mcp+
-    16 tools"]
+    19 tools"]
 
     Server --> Search["Search & Discovery
     structured filters,
@@ -144,6 +152,7 @@ flowchart LR
 
     Server --> Details["Details & Metadata
     provenance chains,
+    bibliography & conservation,
     similarity comparison"]
 
     Server --> Images["Image Inspection
@@ -184,7 +193,7 @@ flowchart LR
 
 ## Technical notes
 
-For local setup (stdio or HTTP, also via cli), deployment, architecture, data sources, and configuration, please see the [technical guide](/docs/technical-guide.md). 
+For local setup (stdio or HTTP, also via cli), deployment, architecture, data sources, and configuration, please see the [technical guide](/docs/technical-guide.md).
 
 ## Roadmap
 
@@ -196,13 +205,11 @@ Ongoing:
 Later:
 
 - paper/presentation
-- make tool logic reusable beyond MCP
 - investigate DINOv3 image retrieval
 - investigate OCR/HTR of artwork images
 
 Maybe:
 
-- new bibliographic SRU MCP server (rijksmuseum-biblio-mcp)
 - incorporating historical exhibition data
 - integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - supporting inferred geolocation data
@@ -218,7 +225,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
 
 **APA (7th ed.)**
 
-> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.80.0) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
+> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.81) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
 
 **BibTeX**
 ```bibtex
@@ -226,7 +233,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
   author    = {Bosse, Arno},
   title     = {{rijksmuseum-mcp+}},
   year      = {2026},
-  version   = {0.80.0},
+  version   = {0.81},
   publisher = {Research and Infrastructure Support (RISE), University of Basel},
   url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
   orcid     = {0000-0003-3681-1289},

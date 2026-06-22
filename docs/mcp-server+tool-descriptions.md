@@ -20,13 +20,13 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 >
 > Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that resist structured metadata, find_similar for artwork-to-artwork similarity from a known objectNumber. For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.
 >
-> Specialised tools: search_provenance for ownership-history questions across the ~48K artworks with parsed provenance; list_curated_sets + browse_set for exhibition/thematic groupings curated by Rijksmuseum staff; get_recent_changes for OAI-PMH delta tracking against a harvest checkpoint.
+> Specialised tools: search_provenance for ownership-history questions across the ~48K artworks with parsed provenance; get_artwork_bibliography for a single artwork's scholarly citations (linked publication, pages, ISBN), with find_artworks_citing_publication for the reverse lookup — which artworks cite a given publication; get_conservation_history for a single artwork's technical examinations (X-ray, dendrochronology, infrared, paint samples) and restoration/conservation treatments; list_curated_sets + browse_set for exhibition/thematic groupings curated by Rijksmuseum staff; get_recent_changes for OAI-PMH delta tracking against a harvest checkpoint.
 
 ---
 
 ## Tool Descriptions
 
-16 tools total: 13 standard tools + 3 app tools (`get_artwork_image` user-facing; `remount_viewer` and `poll_viewer_commands` internal viewer plumbing). Listed in registration order — this is the order the SDK surfaces them in `tools/list`.
+19 tools total: 16 standard tools + 3 app tools (`get_artwork_image` user-facing; `remount_viewer` and `poll_viewer_commands` internal viewer plumbing). Listed in registration order — this is the order the SDK surfaces them in `tools/list`.
 
 ### 1. `search_artwork`
 
@@ -54,15 +54,27 @@ Returns metadata including titles (primary plus the full set of variants with la
 
 Not for filter-based discovery — use search_artwork. Not for similarity discovery — use find_similar. Not for aggregate counts — use collection_stats.
 
-### 4. `get_artwork_image` *(app tool — user-facing)*
+### 4. `get_artwork_bibliography`
+
+Scholarly references for ONE artwork by objectNumber: citations, with linked publication, pages, ISBN where known. Follows a search_artwork / get_artwork_details result. By default returns the first 5 plus a total count; set full=true for all entries (major works can have 100+ — mind the context window). Not for general metadata — use get_artwork_details. Not for library-catalogue search.
+
+### 5. `find_artworks_citing_publication`
+
+Reverse bibliography lookup: artworks whose references cite a given publication, by its URI or id. Use the publicationUri from get_artwork_bibliography (e.g. 'https://id.rijksmuseum.nl/301154354') or the bare id. Local and resolver-free. Not for topic search of the library catalogue.
+
+### 6. `get_conservation_history`
+
+Conservation/forensics record for ONE artwork: technical examinations and restoration treatment history. Follows get_artwork_details / a search result, by objectNumber. Returns technical examinations (X-ray, dendrochronology, paint samples, infrared), conservation/restoration treatment events, a count of recorded signature/inscription marks (use search_inscriptions for the actual transcriptions), and a short provenance excerpt. Not for general metadata — use get_artwork_details. Not for transcribed inscriptions — use search_inscriptions. Not for aggregate counts — use collection_stats.
+
+### 7. `get_artwork_image` *(app tool — user-facing)*
 
 Opens an interactive deep-zoom viewer for the user — only when they ask to see, show, or view an artwork. Call ONLY when the user explicitly wants to see, show, or view an artwork. Do NOT call for list, summary, count, or text-only requests. Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. Not all artworks have images available. Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl).
 
-### 5. `remount_viewer` *(app tool — internal)*
+### 8. `remount_viewer` *(app tool — internal)*
 
 Internal: switch the viewer to a different artwork while preserving the viewUUID. Called by the artwork-viewer iframe during in-viewer related navigation. Overlays are cleared on remount because their coordinates belong to the previous artwork.
 
-### 6. `inspect_artwork_image`
+### 9. `inspect_artwork_image`
 
 Returns image bytes (base64) for the LLM's own visual analysis of an artwork or region — not for the user to view. The LLM can see and reason about the image immediately. Not for the user to view — use get_artwork_image for the interactive viewer. Not for listing or summarising artworks — use search_artwork.
 
@@ -81,7 +93,7 @@ Auto-navigation: when a viewer is open for this artwork, the viewer automaticall
 
 The response includes the active viewUUID (if any) for follow-up navigate_viewer calls.
 
-### 7. `navigate_viewer`
+### 10. `navigate_viewer`
 
 Steers an already-open viewer: zoom to a region, add a labelled overlay, or clear overlays. Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image. Commands execute in order: typically clear_overlays → navigate → add_overlay.
 
@@ -103,23 +115,23 @@ Coordinate shortcut: when placing overlays based on a prior inspect_artwork_imag
 
 Response field deliveryState reports whether the iframe drained the commands immediately (`delivered_recently`), the iframe exists but hasn't polled recently and the commands are queued (`queued_waiting_for_viewer` — typical when scrolled out of view), or no iframe has connected yet (`no_live_viewer_seen`). In the queued case, overlay state is preserved server-side and will apply automatically when the viewer resumes polling — do not narrate this as a delivery failure to the user.
 
-### 8. `poll_viewer_commands` *(app tool — internal)*
+### 11. `poll_viewer_commands` *(app tool — internal)*
 
 Internal: poll for pending viewer navigation commands.
 
-### 9. `list_curated_sets`
+### 12. `list_curated_sets`
 
 Browse thematic and sub-collection groupings curated by Rijksmuseum staff (drawings, paintings, iconographic sets). Each result carries memberCount, top dominantTypes, top dominantCenturies by membership, and a category heuristic (object_type / iconographic / album / sub_collection / umbrella) so you can pick the right scope. Use minMembers: 100, maxMembers: 200000 to avoid umbrella sets when the user wants a substantive subset. Pair with browse_set(setSpec) to enumerate members. Not for keyword search across artworks — use search_artwork. Not for aggregate counts — use collection_stats.
 
-### 10. `browse_set`
+### 13. `browse_set`
 
 Enumerate the member artworks of one curated set by setSpec (from list_curated_sets). DB-backed (warm calls in tens of ms). Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. Supports pagination via resumptionToken (stateless base64; not portable across server upgrades). Not for set discovery — use list_curated_sets first.
 
-### 11. `get_recent_changes`
+### 14. `get_recent_changes`
 
 OAI-PMH delta feed — records changed within a date range since a known harvest checkpoint, paginated. Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.
 
-### 12. `search_provenance`
+### 15. `search_provenance`
 
 Ownership-history search across parsed provenance chains — collectors, sales, gifts, confiscations, restitutions. Returns full provenance chains grouped by artwork, with matching events flagged.
 
@@ -141,7 +153,7 @@ Use hasGap to find artworks with gaps in their provenance chain — red flags fo
 
 FALLBACK — creditLineQuery: only ~48K artworks have parsed provenance, but many more carry an unstructured credit-line field (acquisition/funding statements). Use creditLineQuery as a SECOND step: run a normal structured search first; if the relevant artworks turn out to have no parsed provenance, offer to extend the search with creditLineQuery. It runs a standalone free-text search over credit lines of artworks lacking parsed provenance, returns matches in creditLineResults (not results), and ignores all other filters. Credit-line data is a weaker, less reliable source (the museum's terminal acquisition channel, not prior ownership) — when you present these results you MUST tell the user the answer derives from unstructured credit-line text, not structured provenance.
 
-### 13. `search_inscriptions`
+### 16. `search_inscriptions`
 
 Structured search over artwork inscriptions — collector's marks, signatures, dates, numbers, transcribed text.
 
@@ -153,7 +165,7 @@ Each result carries matchedInscriptions — the segments that matched, with the 
 
 Runtime parse with no derived index: a query must include at least one narrowing filter, and a broad single facet (e.g. inscriptionType:"collector's mark", roughly half the corpus) will trip the candidate cap and return PARTIAL results (candidatesCapped:true) — add a narrowing term. For free-text keyword search across the whole catalogue use search_artwork; search_artwork({inscription}) is a raw FTS over the same field, whereas this tool adds the structured facets and gloss-deduped matches.
 
-### 14. `collection_stats`
+### 17. `collection_stats`
 
 Group-by breakdown over one structured dimension (type, decade, place, creator) — counts, percentages, histograms. Covers totals, summaries, and group-by / count-by / distribution-of / statistics-over queries across the Rijksmuseum collection. Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.
 
@@ -171,7 +183,7 @@ Provenance dimensions: transferType, transferCategory, provenanceDecade, provena
 
 Filters from both domains combine freely. Artwork filters narrow the artwork set; provenance filters further restrict to artworks matching those provenance criteria. Provenance event-level filters (transferType + provenanceLocation + provenanceDateFrom/To + categoryMethod + parseMethod + unsold/uncertain/gap/crossRef) compose on the same event row; party-level filters (party + positionMethod + partyRole) compose on the same party row. For demographic-filtered counts (e.g. female artists by century), use gender='female' directly or run search_persons to get vocab IDs, then pass them as creator.
 
-### 15. `find_similar`
+### 18. `find_similar`
 
 Given one artwork's objectNumber, finds others like it across 9 similarity channels plus a pooled consensus. Generates an HTML comparison page with IIIF thumbnails across all 9 channels: Visual (image-embedding nearest neighbours), Related Variant (creator-invariant curator-declared edges: pendants, production stadia, different examples), Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.
 
@@ -179,7 +191,7 @@ Not for free-text concept queries — use semantic_search. Not for filter-based 
 
 IMPORTANT: The result is a file path or URL to an HTML page. Your ONLY job is to show the user the path/URL so they can open it in a browser. Do NOT attempt to open, read, fetch, summarise, or characterise the page contents. Do NOT make additional tool calls to look up the same artworks. Simply present the link and explain that it contains a visual comparison page. (The full per-channel results are also returned as structuredContent for programmatic/CLI clients; chat hosts should ignore that payload and present only the link.)
 
-### 16. `semantic_search`
+### 19. `semantic_search`
 
 Free-text concept search by embedding similarity — for ideas like 'solitude' or 'vanitas' that resist metadata. Returns artworks ranked by Dutch-description embedding similarity to the query, with source text for grounding — use that text to explain why results are relevant or to flag false positives.
 

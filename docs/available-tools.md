@@ -12,6 +12,9 @@
 ## Artwork Details
 
 - **`get_artwork_details`** — Full metadata for a specific artwork (by object number or Linked Art URI).
+- **`get_artwork_bibliography`** — Scholarly references for one artwork (citations, linked publication, pages, ISBN) by object number. First 5 + a total count by default; `full: true` for all (major works can carry 100+).
+- **`find_artworks_citing_publication`** — Reverse bibliography: artworks whose references cite a given publication, by its URI or bare id (e.g. a `publicationUri` from `get_artwork_bibliography`).
+- **`get_conservation_history`** — Conservation/forensics for one artwork: technical examinations (X-ray, dendrochronology, infrared, paint samples), restoration treatments, a count of signature/inscription marks, and a provenance excerpt.
 - **`get_artwork_image`** — High-resolution interactive deep-zoom viewer (with j/k/l navigation between related artworks).
 - **`inspect_artwork_image`** — Fetch an artwork image (or region) as base64 for direct visual analysis by the LLM.
 
