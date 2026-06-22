@@ -226,6 +226,13 @@ check("getArtworksCitingPublication returns total 0 for an uncited publication",
   assert.deepEqual(d.artworks, []);
 });
 
+check("getArtworksCitingPublication dedupes an artwork citing a publication on multiple rows (DISTINCT)", () => {
+  const d = db.getArtworksCitingPublication(301999001, {});
+  assert.equal(d.total, 1, "FX-3 cites 301999001 on two citation rows but must be counted once");
+  assert.equal(d.artworks.length, 1);
+  assert.equal(d.artworks[0].objectNumber, "FX-3");
+});
+
 check("getArtworkDetail pairs production role↔creator row-aware, not positionally (#354 / RP-F-00-173)", () => {
   const d = db.getArtworkDetail("FX-9");
   assert.ok(d, "FX-9 not found");

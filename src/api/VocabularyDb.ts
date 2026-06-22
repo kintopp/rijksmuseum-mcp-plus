@@ -1713,7 +1713,10 @@ export class VocabularyDb {
           "SELECT COUNT(*) AS n FROM artwork_citations WHERE art_id = ?"
         );
         this.stmtArtworksByPublication = this.db.prepare(
-          `SELECT a.object_number, a.title, a.title_all_text, a.creator_label
+          // DISTINCT: an artwork may cite the same publication on >1 citation row
+          // (different page ranges); dedupe to one row per artwork so total + the
+          // list count distinct artworks, not citation rows.
+          `SELECT DISTINCT a.object_number, a.title, a.title_all_text, a.creator_label
            FROM artwork_citations c JOIN artworks a ON a.art_id = c.art_id
            WHERE c.publication_id = ?
            ORDER BY a.object_number`
