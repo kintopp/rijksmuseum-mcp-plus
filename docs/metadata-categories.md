@@ -1,6 +1,6 @@
 # Artwork Metadata Categories
 
-The `get_artwork_details` tool returns ~34 metadata fields for each artwork, grouped here into categories. All data is served from the local vocabulary database (built from periodic harvests of the Rijksmuseum's Linked Art, OAI-PMH, and Schema.org dump APIs). Categories include artwork identification, creation details with biographical data, physical characteristics, provenance with parsed ownership chains, iconographic subjects, curatorial context (themes, exhibitions, attribution evidence), hierarchical relations (parents/children for sketchbooks, albums, series), and rights information.
+The `get_artwork_details` tool returns ~36 metadata fields for each artwork, grouped here into categories. All data is served from the local vocabulary database (built from periodic harvests of the Rijksmuseum's Linked Art, OAI-PMH, and Schema.org dump APIs). Categories include artwork identification, creation details with biographical data, physical characteristics, provenance with parsed ownership chains, iconographic subjects, curatorial context (themes, exhibitions, attribution evidence), hierarchical relations (parents/children for sketchbooks, albums, series), pointers into the artwork's conservation record and bibliography, and rights information.
 
 Nearly all categories have corresponding search parameters in `search_artwork` — see the [full search parameter reference](search-parameters.md) for filters grouped by type, or the [tool parameters reference](mcp-tool-parameters.md) for all tools.
 
@@ -89,6 +89,15 @@ Nearly all categories have corresponding search parameters in `search_artwork` �
 |---|----------|-------|-------------|
 | 33 | **Record created** | `recordCreated` | ISO 8601 timestamp of catalogue record creation. |
 | 34 | **Record modified** | `recordModified` | ISO 8601 timestamp of the catalogue record's most recent modification. Not a range filter; order a result set by it with `search_artwork`'s `sort: 'recordModified:desc'`, or use `get_recent_changes` to list recently modified records. |
+
+## Conservation & References
+
+These two fields are *pointers* — a presence/count flag on the detail record that routes you to a dedicated single-artwork tool for the full data.
+
+| # | Category | Field | Description |
+|---|----------|-------|-------------|
+| 35 | **Attribution marks** | `attributionMarks` | `{ signatures, inscriptions, total }` — the *count* of signature/inscription marks recorded on the object (presence only; the harvested rows carry no transcribed text and their carrier URIs do not resolve). Use `parsedInscriptions` / `search_inscriptions` for the actual transcriptions. The same count, alongside technical examinations and restoration treatments, is returned by [`get_conservation_history`](mcp-tool-parameters.md#get_conservation_history). |
+| 36 | **Bibliography count** | `bibliographyCount` | Number of scholarly citations recorded for the artwork — a pointer, not the references themselves. Call [`get_artwork_bibliography`](mcp-tool-parameters.md#get_artwork_bibliography) for the entries (citation text, linked publication, pages, ISBN). Null when bibliography data is not present in this database. |
 
 ---
 #### Search-only filters

@@ -236,8 +236,12 @@ function createServer(httpPort?: number): McpServer {
         "For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.\n\n" +
 
         "Specialised tools: search_provenance for ownership-history questions across the ~48K artworks with " +
-        "parsed provenance; list_curated_sets + browse_set for exhibition/thematic groupings curated by Rijksmuseum " +
-        "staff; get_recent_changes for OAI-PMH delta tracking against a harvest checkpoint.",
+        "parsed provenance; get_artwork_bibliography for a single artwork's scholarly citations (linked publication, " +
+        "pages, ISBN), with find_artworks_citing_publication for the reverse lookup — which artworks cite a given " +
+        "publication; get_conservation_history for a single artwork's technical examinations (X-ray, dendrochronology, " +
+        "infrared, paint samples) and restoration/conservation treatments; list_curated_sets + browse_set for " +
+        "exhibition/thematic groupings curated by Rijksmuseum staff; get_recent_changes for OAI-PMH delta tracking " +
+        "against a harvest checkpoint.",
     }
   );
 
