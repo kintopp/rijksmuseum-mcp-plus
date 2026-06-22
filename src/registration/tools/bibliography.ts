@@ -5,7 +5,7 @@ import { UsageStats } from "../../utils/UsageStats.js";
 import {
   ANN_READ_CLOSED, stripNullCoerceBool, errorResponse, structuredResponse, withOutputSchema, createLogger, truncate,
 } from "../helpers.js";
-import { BibliographyOutput } from "../outputSchemas.js";
+import { BibliographyOutput, PublicationArtworksOutput } from "../outputSchemas.js";
 
 function formatBibliographySummary(d: BibliographyFromDb): string {
   const lines: string[] = [`${d.objectNumber} — ${d.total} bibliography ${d.total === 1 ? "entry" : "entries"}`];
@@ -53,6 +53,39 @@ export function registerBibliographyTools(
         warnings.push(`No bibliography for ${args.objectNumber} (or bibliography data not yet harvested into this database).`);
       }
       return structuredResponse({ ...data, warnings }, formatBibliographySummary(data));
+    }),
+  );
+
+  server.registerTool(
+    "find_artworks_citing_publication",
+    {
+      title: "Find Artworks Citing a Publication",
+      annotations: ANN_READ_CLOSED,
+      description:
+        "Reverse bibliography lookup: artworks whose references cite a given publication, by its URI or id. " +
+        "Use the publicationUri from get_artwork_bibliography (e.g. 'https://id.rijksmuseum.nl/301154354') or the bare id. " +
+        "Local and resolver-free. Not for topic search of the library catalogue.",
+      inputSchema: z.object({
+        publication: z.string().min(1)
+          .describe("Publication URI (https://id.rijksmuseum.nl/301…) or the bare publication id."),
+        full: z.preprocess(stripNullCoerceBool, z.boolean().optional())
+          .describe("If true, return ALL citing artworks. Default: first 20 + total count."),
+      }).strict(),
+      ...withOutputSchema(PublicationArtworksOutput),
+    },
+    withLogging("find_artworks_citing_publication", async (args) => {
+      if (!vocabDb?.available) return errorResponse("find_artworks_citing_publication requires the vocabulary database.");
+      const m = String(args.publication).match(/(\d+)\s*$/);
+      if (!m) throw new Error(`Could not parse a publication id from: ${args.publication}`);
+      const publicationId = Number(m[1]);
+      const data = vocabDb.getArtworksCitingPublication(publicationId, { limit: args.full ? 0 : 20 });
+      const warnings: string[] = [];
+      if (data.total === 0) {
+        warnings.push(`No artworks cite publication ${publicationId} (or bibliography data not yet harvested).`);
+      }
+      const header = `${data.total} artwork(s) cite ${data.publicationUri}`;
+      const lines = data.artworks.map((a, i) => `${i + 1}. ${a.objectNumber} — ${a.title}${a.creator ? `, ${a.creator}` : ""}`);
+      return structuredResponse({ ...data, warnings }, [header, ...lines].join("\n"));
     }),
   );
 }

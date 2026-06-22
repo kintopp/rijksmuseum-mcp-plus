@@ -154,6 +154,13 @@ export interface BibliographyFromDb {
   }[];
 }
 
+export interface PublicationArtworksFromDb {
+  publicationUri: string;
+  publicationId: number;
+  total: number;
+  artworks: { objectNumber: string; title: string; creator: string | null }[];
+}
+
 export interface ConservationHistoryFromDb {
   objectNumber: string;
   title: string | null;
@@ -1282,6 +1289,7 @@ export class VocabularyDb {
   private stmtConservationModifications: Statement | null = null;
   private stmtArtworkCitations: Statement | null = null;
   private stmtCitationCount: Statement | null = null;
+  private stmtArtworksByPublication: Statement | null = null;
   private stmtBrowseSetLookup: Statement | null = null;
   private stmtBrowseSetCount: Statement | null = null;
   private stmtBrowseSetPage: Statement | null = null;
@@ -1703,6 +1711,15 @@ export class VocabularyDb {
         );
         this.stmtCitationCount = this.db.prepare(
           "SELECT COUNT(*) AS n FROM artwork_citations WHERE art_id = ?"
+        );
+        this.stmtArtworksByPublication = this.db.prepare(
+          // DISTINCT: an artwork may cite the same publication on >1 citation row
+          // (different page ranges); dedupe to one row per artwork so total + the
+          // list count distinct artworks, not citation rows.
+          `SELECT DISTINCT a.object_number, a.title, a.title_all_text, a.creator_label
+           FROM artwork_citations c JOIN artworks a ON a.art_id = c.art_id
+           WHERE c.publication_id = ?
+           ORDER BY a.object_number`
         );
       }
 
@@ -2437,6 +2454,24 @@ export class VocabularyDb {
         isbn: r.isbn,
         worldcatUri: r.worldcat_uri,
         libraryUrl: r.library_url,
+      })),
+    };
+  }
+
+  getArtworksCitingPublication(publicationId: number, opts: { limit?: number } = {}): PublicationArtworksFromDb {
+    const publicationUri = `https://id.rijksmuseum.nl/${publicationId}`;
+    if (!this.stmtArtworksByPublication) return { publicationUri, publicationId, total: 0, artworks: [] };
+    const rows = this.stmtArtworksByPublication.all(publicationId) as {
+      object_number: string; title: string | null; title_all_text: string | null; creator_label: string | null;
+    }[];
+    const { limit = 0 } = opts;
+    const sliced = limit > 0 ? rows.slice(0, limit) : rows;
+    return {
+      publicationUri, publicationId, total: rows.length,
+      artworks: sliced.map((r) => ({
+        objectNumber: r.object_number,
+        title: VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled"),
+        creator: r.creator_label,
       })),
     };
   }

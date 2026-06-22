@@ -213,6 +213,8 @@ export function buildFixture() {
   );
   // Three citation rows for FX-1 (art_id 1) covering all three shapes.
   // FX-2 intentionally has no rows — used for the empty-case test.
+  // FX-3 (art_id 3) cites ONE publication (301999001) on TWO rows (different page
+  // ranges) — exercises the SELECT DISTINCT dedup in getArtworksCitingPublication.
   insertMany(
     "INSERT INTO artwork_citations (art_id, seq, citation_text, publication_id, pages, isbn, worldcat_uri, library_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     [
@@ -222,6 +224,9 @@ export function buildFixture() {
       [1, 2, "P. Broekhoff, Catalogue of Dutch Paintings (Amsterdam, 1976), p. 169-170", 301154354, "p. 169-170", null, "http://www.worldcat.org/oclc/123456", "https://library.rijksmuseum.nl/.../301154354"],
       // Type C: composed from a bare BIBFRAME instance
       [1, 3, "Bulletin van het Rijksmuseum, 64 (2016)", 301234479, null, null, null, null],
+      // FX-3 cites publication 301999001 twice (distinct page ranges) — dedup fixture.
+      [3, 1, "J. Jansen, Dutch Etchings (Amsterdam, 1980), p. 12", 301999001, "p. 12", null, null, null],
+      [3, 2, "J. Jansen, Dutch Etchings (Amsterdam, 1980), p. 45", 301999001, "p. 45", null, null, null],
     ]
   );
 
