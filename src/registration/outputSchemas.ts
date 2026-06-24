@@ -9,7 +9,7 @@ import { type InferOutput } from "./helpers.js";
 export const ResolvedTermShape = () => z.object({
   id: z.string(),
   label: z.string(),
-  equivalents: z.record(z.string()).optional(),
+  equivalents: z.record(z.string(), z.string()).optional(),
 });
 
 export const SearchResultOutput = {
@@ -457,7 +457,7 @@ export const InspectImageOutput = {
 
 export const PaginatedBase = {
   returnedCount: z.number().int(),
-  records: z.array(z.record(z.unknown())),
+  records: z.array(z.record(z.string(), z.unknown())),
   resumptionToken: z.string().optional(),
   hint: z.string().optional(),
   error: z.string().optional(),

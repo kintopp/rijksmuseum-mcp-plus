@@ -49,7 +49,7 @@
     "fast-xml-parser": "^5.3.5",
     "sharp": "^0.34.5",
     "sqlite-vec": "0.1.9",
-    "zod": "^3.25.0"
+    "zod": "^4.4.0"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
