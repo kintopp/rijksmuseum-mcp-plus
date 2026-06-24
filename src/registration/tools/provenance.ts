@@ -143,7 +143,7 @@ const ProvenanceSearchOutput = {
       beginYearLatest: z.number().int().nullable(),
       endYear: z.number().int().nullable(),
       duration: z.number().int().nullable().describe("Ownership duration in years (endYear - beginYear), null if unknown."),
-      derivation: z.record(z.string()).describe("How each field was derived from source events."),
+      derivation: z.record(z.string(), z.string()).describe("How each field was derived from source events."),
       uncertain: z.boolean(),
       citations: z.array(z.object({ text: z.string() })),
       sourceEvents: z.array(z.number().int()),

@@ -120,7 +120,7 @@ export function registerViewerTools(
         objectNumber: z
           .string()
           .describe("The object number of the artwork (e.g. 'SK-C-5')"),
-      }).strict() as z.ZodTypeAny,
+      }).strict(),
       ...withOutputSchema(ImageInfoOutput),
       _meta: {
         ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
@@ -179,7 +179,7 @@ export function registerViewerTools(
       inputSchema: z.object({
         viewUUID: z.string().describe("Existing viewer UUID returned by a prior get_artwork_image call"),
         objectNumber: z.string().describe("Object number of the artwork to remount into the viewer"),
-      }).strict() as z.ZodTypeAny,
+      }).strict(),
       ...withOutputSchema(ImageInfoOutput),
       // No ui.resourceUri here: this is an app-only tool (visibility:["app"]),
       // and a template binding on a tool the user never sees is contradictory.
@@ -854,7 +854,7 @@ export function registerViewerTools(
       description: "Internal: poll for pending viewer navigation commands",
       inputSchema: z.object({
         viewUUID: z.string(),
-      }).strict() as z.ZodTypeAny,
+      }).strict(),
       ...withOutputSchema(PollViewerCommandsOutput),
       // App-only tool (visibility:["app"]) — no ui.resourceUri. The iframe polls
       // this via app.callServerTool() and reads the result directly; it never
