@@ -57,7 +57,7 @@
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.0.0",
     "adm-zip": "^0.5.17",
     "bplist-parser": "^0.3.2",
     "eslint": "^10.0.2",
