@@ -30,7 +30,6 @@ It is possible (with some tradeoffs) to use rijksmuseum-mcp+ without a paid subs
 The `rijksmuseum-mcp+` skill file ([.zip archive](docs/skills/rijksmuseum-mcp-plus.skill.zip)) gives the AI assistant detailed guidance in natural language on how to use rijksmuseum-mcp+ effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions (e.g. `subject` terms vs `iconclass` notations), and known limitations. The package also includes reference files with full description of the available provenance search patterns and the `find_similar` functionality. Making use of a skill is optional but will significantly improve the quality and efficiency of your AI assistant's responses when exploring the collection.
 
 The downloaded skill file can be installed in Claude by following [these instructions](https://claude.com/resources/tutorials/teach-claude-your-way-of-working-using-skills). Skills were [originally developed by Anthropic](https://support.claude.com/en/articles/12512176-what-are-skills) for their Claude products but have since become an [open standard](https://agentskills.io/home). Even chatbots and applications without explicit support for skill packages can make use of the rijksmuseum-mcp+ skill by uploading/sharing [its components](/docs/skills/rijksmuseum-mcp-plus/) with an AI assistant at the start of a research session. Some chatbots (e.g. Mistral's [LeChat](https://chat.mistral.ai/chat)) allow you to permanently share files such as this with an LLM across sessions by uploading it to a [personal library](https://help.mistral.ai/en/articles/347582-what-are-libraries-and-how-do-i-use-them-in-le-chat).
-
 ## Sample Queries
 
 After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language.
@@ -39,39 +38,52 @@ After you've connected the resource to your AI system, you can search, explore a
 - _Which artworks have a provenance linked to Emperor Bonaparte?_
 - _Show artworks which include an inscription saying, 'Amor vincit omnia'_
 - _Find artworks similar to SK-A-2350_
-- _Which work in the collection had previously been held for the longest time by the same family?_
 - _Show me sculptures in the collection by artists born in Leiden_
 - _What are the three largest paintings in the collection by width?_
 - _Which 15th-century paintings are listed as workshop productions?_
 - _Show me the Roermondse passie and highlight the Betrayal of Judas_
 
 For examples of more complex queries and responses, please see the [research scenarios](docs/research-scenarios.md).
-
 ## Features
 
-Rijksmuseum-mcp+ provides the following main features and capabilities, all via natural language prompts:
-
+Rijksmuseum-mcp+ provides the following key features and capabilities, all via natural language prompts:
 ### More searchable metadata
 
-Where the Rijksmuseum's own [Search API](https://data.rijksmuseum.nl/docs/search) offers around a dozen filter parameters, rijksmuseum-mcp+ provides roughly thirty, and they can be combined freely within a single query. Beyond the basic maker, object type, material, technique, and date filters, you can also search and filter on `subject` matter (Iconclass themes and depicted scenes, matched with basic English stemming so that, e.g., `cat` also finds `cats` and `painting` finds `paint`), the place where a work was produced, curatorial `theme` tags, an artwork's `description`, `inscription`, `provenance`, `creditLine`, and `curatorialNarrative` full-texts, `creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all `title` variants for an artwork, and attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`). Physical dimension filters support queries about the size of an artwork (e.g. "paintings wider than 3 metres").
+Where the Rijksmuseum's own [Search API](https://data.rijksmuseum.nl/docs/search) offers around a dozen filter parameters, rijksmuseum-mcp+ provides roughly thirty, and most can be combined freely within a single query.
 
-When searching, matching is accent-insensitive (so "Cezanne" finds "Cézanne") and relevance-ranked. The museum's Search API returns results in a fixed order (by internal identifier), not by relevance — so its first hits are not necessarily the best matches, and an AI assistant (or person) who reads only the top few could miss the most relevant work entirely.
+Beyond the basic maker, object type, material, technique, and date filters, you can search and filter on `subject` matter, the place where a work was produced, curatorial `theme` tags,`creator` demographics (e.g. `gender`, `profession`, `birthPlace`), all `title` variants for an artwork, and attribution qualifiers (e.g. `workshop of`, `circle of`, `attributed to`). Physical dimension filters support queries about the size of an artwork (e.g. "paintings wider than 3 metres"). You can also search by who or what a work portrays, independently of who made it or where it was produced: a `depictedPerson` query finds artworks portraying a named individual (e.g. portraits of Willem van Oranje), matching a large set of historical name variants, while a `depictedPlace` query finds works that depict a given location (e.g. topographical views of Amsterdam), with automatic disambiguation for multi-word or ambiguous place names. To complement query-driven discovery, the collection can also be explored through thematic and sub-collection groupings curated by Rijksmuseum staff — for example sets of drawings or paintings, or works gathered around an iconographic theme.
 
-You can also search by who or what a work portrays, independently of who made it or where it was produced: a `depictedPerson` query finds artworks portraying a named individual (e.g. portraits of Willem van Oranje), matching a large set of historical name variants, while a `depictedPlace` query finds works that depict a given location (e.g. topographical views of Amsterdam), with automatic disambiguation for multi-word or ambiguous place names.
-
-Full-text queries over the `title`, `description`, `inscription`, and `curatorialNarrative` fields can be structured. This lets you combine boolean clauses, field scoping, proximity, exact phrases, exclusions, and prefix matching, while simultaneously narrowing results with normal filters such as `creator`, `type`, `date`, `material`, or `technique`.
+Full-text queries over the `title`, `description`, `inscription`, and `curatorialNarrative` fields can optionally be structured. This lets you combine boolean clauses, field scoping, proximity, exact phrases, exclusions, and prefix matching, while simultaneously narrowing results with normal filters such as `creator`, `type`, `date`, `material`, or `technique`.
 
 Proximity searches on enriched, geocoded places let you find artworks related to locations already in the museum's catalogue (e.g. "artworks depicting places within 25 km of Leiden"). The necessary geo-coordinates were added only where the Rijksmuseum's own metadata provided a link to an external authority such as the Getty [Thesaurus of Geographic Names](https://www.getty.edu/research/tools/vocabularies/tgn/). Alternatively, proximity searches can also be made on the basis of arbitrary, user or AI provided coordinates.
 
-[Iconclass[(https://iconclass.org) notations can be searched (also semantically) by title and description and explored hierarchically by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. Rijksmuseum-iconclass-mcp knows which Iconclass notations are attached to Rijksmuseum artworks and can also provides links to [ArtResearch](https://artresearch.net/) queries to let you view more artworks sharing an Iconclass notation from the collections of the twelve member institutions of the [PHAROS consortium](https://artresearch.net/resource/Partners).
-
+When searching, matching is accent-insensitive (so "Cezanne" finds "Cézanne") and relevance-ranked. The museum's Search API returns results in a fixed order (by internal identifier), not by relevance — so its first hits are not necessarily the best matches, and an AI assistant (or person) who reads only the top few could miss the most relevant work entirely. `Subject` searches (i.e. Iconclass themes and depicted scenes) are matched using basic English stemming so that, e.g. `cat` also finds `cats` and `painting` finds `paint`.
 ### Semantic search
 
 Rijksmuseum-mcp+ adds support for multilingual, concept-based, exploratory searches drawing simultaneously on the full-texts of several metadata fields (`title`, `description`, `inscription`, `curatorialNarrative`). This allows for broad, interpretive queries of their contents by meaning (e.g. "a sense of loneliness in domestic interiors") that go beyond what structured, keyword-based searches or filters can reveal. For more details, please see [semantic search](/docs/semantic-search.md).
+### Inscriptions
 
-### Browse curated sets
+Many artworks carry inscriptions on the object itself — collector's marks, signatures, dates, numbers, and other transcribed text. Rijksmuseum-mcp+ parses these free-text inscription records into structured segments, including recognised Lugt collector's marks, which identify the collectors and dealers through whose hands a work passed. This makes them searchable in their own right (e.g. finding all works bearing a particular collector's mark, signed in a given year, or carrying a specific transcribed phrase).
 
-To complement query-driven discovery, the collection can also be explored through thematic and sub-collection groupings curated by Rijksmuseum staff — for example sets of drawings or paintings, or works gathered around an iconographic theme. You can use this to enumerate the available groupings, and list the artworks included in each.
+### Iconclass
+
+[Iconclass](https://iconclass.org) notations can be searched (also semantically) by title and description and explored hierarchically by following their parent and child branches via the companion [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp) resource. Rijksmuseum-iconclass-mcp knows which Iconclass notations are attached to Rijksmuseum artworks and can also provides links to [ArtResearch](https://artresearch.net/) queries to let you view more artworks sharing an Iconclass notation from the collections of the twelve member institutions of the [PHAROS consortium](https://artresearch.net/resource/Partners).
+
+### Analyse provenance (experimental)
+
+The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the [AAM punctuation convention](https://www.museumprovenance.org/pages/standard_v1/). Rijksmuseum-mcp+ has [parsed](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-parser-visualization.html) and partially enriched these narratives into over 100,000 structured events with a [CMOA-aligned transfer vocabulary](https://www.museumprovenance.org/reference/acquisition_methods/), making them searchable by party name, transfer type (e.g. sale, gift, bequest, inheritance, confiscation or restitution), date range, location, and price in the original historical currency. This enables structured queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries.
+
+Every provenance record carries searchable provenance-of-provenance metadata tracking how it was enriched. In addition, because some enrichments are inferred by an LLM rather than derived by rule, whenever a provenance search returns LLM-assisted results the server also generates a custom review webpage that sets each artwork's original narrative next to the parsed events and the model's stated reasoning for every inferred classification.
+
+For more details, please see the [provenance reference](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html) documentation.
+
+### Conservation and technical examinations
+
+For a single artwork, rijksmuseum-mcp+ can assemble its conservation and forensic record: the technical examinations a work has undergone (X-radiography, dendrochronology, infrared reflectography, paint-sample analysis, and the like), its documented restoration and conservation treatments, a count of the signature and inscription marks recorded on it, and a short excerpt of its provenance text for cross-reference.
+
+### Bibliography and citations
+
+You can request to the citations for a given artwork, each with its linked publication record, page range, and ISBN where known. The relationship can also be followed in reverse: starting from a publication, you can list every artwork in the collection whose references cite it (e.g. "which works in the collection does this publication document?").
 
 ### Interactive image viewer with AI analysis
 
@@ -84,30 +96,9 @@ By switching the viewer into *interactive mode* (press "i" or click on the □ i
 A search for artworks 'similar to' other artworks (e.g. "find artworks similar to van Gogh's Zelfportret") creates a custom, comparison webpage that places an artwork alongside the works most similar to it, evaluated across nine dimensions: `visual appearance`, `related variant` (curator-declared pendants, production stadia, different examples), `related object` (other curator-declared edges such as pairs, sets, recto/verso, and reproductions), `artistic lineage` (shared creators, workshops, or attribution chains), `Iconclass subject classification`, `semantic description`, `curatorial themes`, `depicted persons`, and `depicted places`. Works that appear across multiple dimensions are listed in a final, combined "pooled" view, highlighting the most broadly connected artworks in the collection.
 
 Here is [an example](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-1115.html) of a custom webpage with a `find_similar` analysis.
-
 ### Collection statistics and distributions
 
 Beyond retrieving individual artworks, rijksmuseum-mcp+ can compute aggregate statistics across the whole collection by grouping the collection along a chosen dimension and returning counts, percentages, and histograms (e.g. "how do artwork types break down by century?", "which persons are depicted most often?", or "what is the distribution of provenance transfer types — sale, gift, bequest — for Rembrandt?"). Artwork and provenance filters combine freely, so a single query can ask, for instance, for the `type` breakdown of an artist's autograph paintings, or for sales by decade between 1600 and 1900.
-
-### Search inscriptions
-
-Many artworks carry inscriptions on the object itself — collector's marks, signatures, dates, numbers, and other transcribed text. Rijksmuseum-mcp+ parses these free-text inscription records into structured segments, including recognised Lugt collector's marks, which identify the collectors and dealers through whose hands a work passed. This makes them searchable in their own right (e.g. finding all works bearing a particular collector's mark, signed in a given year, or carrying a specific transcribed phrase).
-
-### Analyse provenance (experimental)
-
-The Rijksmuseum records the ownership history of c. 48,000 artworks as free-text provenance narratives following the [AAM punctuation convention](https://www.museumprovenance.org/pages/standard_v1/). Rijksmuseum-mcp+ has [parsed](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-parser-visualization.html) and partially enriched these narratives into over 100,000 structured events with a [CMOA-aligned transfer vocabulary](https://www.museumprovenance.org/reference/acquisition_methods/), making them searchable by party name, transfer type (e.g. sale, gift, bequest, inheritance, confiscation or restitution), date range, location, and price in the original historical currency. This enables structured queries such as tracing a collector's activity across the collection, identifying artworks that were confiscated but never restituted, or comparing auction prices in guilders across centuries.
-
-Every provenance record carries searchable provenance-of-provenance metadata tracking how it was enriched. In addition, because some enrichments are inferred by an LLM rather than derived by rule, whenever a provenance search returns LLM-assisted results the server also generates a custom review webpage that sets each artwork's original narrative next to the parsed events and the model's stated reasoning for every inferred classification.
-
-For more details, please see the [provenance reference](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html) documentation.
-
-### Conservation and technical examinations
-
-For a single artwork, rijksmuseum-mcp+ can assemble its conservation and forensic record: the technical examinations a work has undergone (X-radiography, dendrochronology, infrared reflectography, paint-sample analysis, and the like), its documented restoration and conservation treatments, a count of the signature and inscription marks recorded on it, and a short excerpt of its provenance text for cross-reference. This gathers in one place the material-history evidence that conservators and technical art historians rely on (e.g. "what technical imaging exists for Govert Flinck's *Isaak zegent Jakob*, and when was it last restored?").
-
-### Bibliography and citations
-
-Many works carry scholarly references — catalogue entries, journal articles, and monographs that discuss them. Rijksmuseum-mcp+ exposes these citations for a given artwork, each with its linked publication record, page range, and ISBN where known, so you can see at a glance how extensively a work has been published. The relationship can also be followed in reverse: starting from a publication, you can list every artwork in the collection whose references cite it (e.g. "which works in the collection does this exhibition catalogue document?").
 
 ### Command-line interface
 
@@ -187,9 +178,9 @@ flowchart LR
 
 ## Tips and Limitations
 
-- **If a tool call fails unexpectedly, try disconnecting and reconnecting the connector.** Because rijksmuseum-mcp+ runs as a hosted remote MCP server, changes to its configuration from recent updates can leave the connector in a stale state — symptoms include queries never being answered, generic error messages, or the AI assistant reporting that a tool is unavailable. If connecting/disconnecting does not resolve the issue, remove the connector (MCP server) entirely and re-add it.
+- **If something fails unexpectedly, try disconnecting and reconnecting the connector.** Because rijksmuseum-mcp+ runs as a hosted remote MCP server, changes to its configuration from recent updates can leave the connector in an incorrect state — symptoms include queries never being answered, generic error messages, or the AI assistant reporting that a tool is unavailable. If connecting/disconnecting does not resolve the issue, remove the connector (MCP server) entirely and re-add it.
 
-- **Ask the assistant to explain which tools and filters it used — and steer it if the first answer looks off.** Because rijksmuseum-mcp+ exposes many overlapping search patterns (e.g. keyword filters, semantic search, spatial queries), the AI assistant sometimes picks a narrower or broader strategy than you intended. If a result seems incomplete or suspiciously tidy, ask follow-ups like _"let me the see the remaining artworks for this query as well"_, or _"explain how you reached this result"_. Being explicit in your prompt about whether you want a structured search (e.g. "all paintings by X made in Y") versus an exploratory search (e.g. "list a few...") will help the AI assistant interpret your question correctly. Installing the optional [research skill](#research-skill) will also improve the quality of the responses.
+- **Ask the assistant to explain which tools and filters it used.** Because rijksmuseum-mcp+ exposes many overlapping search patterns (e.g. keyword filters, semantic search, spatial queries), the AI assistant sometimes picks a narrower or broader strategy than you intended. If a result seems incomplete or suspiciously tidy, ask follow-ups like _"let me the see the remaining artworks for this query as well"_, or _"explain how you reached this result"_. Being explicit in your prompt about whether you want a structured search (e.g. "all paintings by X made in Y") versus an exploratory search (e.g. "list a few...") will help the AI assistant interpret your question. Drawing on the optional [research skill](#research-skill) should also improve the quality of the responses.
 
 ## Technical notes
 
@@ -213,7 +204,7 @@ Maybe:
 - incorporating historical exhibition data
 - integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
 - supporting inferred geolocation data
-- improving the `description` signal for find_similar (e.g. via a LLM re-ranker)
+- improving the `description` signal for *find_similar* (e.g. via a LLM re-ranker)
 
 ## Authors
 
@@ -225,7 +216,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
 
 **APA (7th ed.)**
 
-> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.81) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
+> Bosse, A. (2026). *rijksmuseum-mcp+* (Version 0.90) [Software]. Research and Infrastructure Support (RISE), University of Basel. https://github.com/kintopp/rijksmuseum-mcp-plus
 
 **BibTeX**
 ```bibtex
@@ -233,7 +224,7 @@ If you use rijksmuseum-mcp+ in your research, please cite it as follows:
   author    = {Bosse, Arno},
   title     = {{rijksmuseum-mcp+}},
   year      = {2026},
-  version   = {0.81},
+  version   = {0.90},
   publisher = {Research and Infrastructure Support (RISE), University of Basel},
   url       = {https://github.com/kintopp/rijksmuseum-mcp-plus},
   orcid     = {0000-0003-3681-1289},
