@@ -126,7 +126,7 @@ const ProvenanceSearchOutput = {
     matchedEvents: z.array(z.object({
       sequence: z.number().int(),
       transferType: z.string(),
-      parties: z.array(z.string()).describe("Party names only."),
+      parties: z.array(z.string()).describe("Party names, with the role (buyer/seller/consignor/…) annotated in parentheses when known, e.g. 'Jacques Goudstikker (seller)'."),
       dateExpression: z.string().nullable(),
       location: z.string().nullable(),
       price: z.object({ amount: z.number(), currency: z.string() }).nullable(),
