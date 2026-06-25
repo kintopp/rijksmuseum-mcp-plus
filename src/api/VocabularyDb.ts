@@ -2387,7 +2387,7 @@ export class VocabularyDb {
     if (!stmt) {
       const ph = unique.map(() => "?").join(", ");
       stmt = this.db.prepare(
-        `SELECT person_id, name FROM person_names WHERE person_id IN (${ph}) ORDER BY person_id, name`
+        `SELECT DISTINCT person_id, name FROM person_names WHERE person_id IN (${ph}) ORDER BY person_id, name`
       );
       this.stmtNameVariantsCache.set(unique.length, stmt);
     }
