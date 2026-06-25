@@ -202,6 +202,7 @@ export function registerDetailsTools(
         "extentText, materials, object type, production details (with creator life dates, gender, and Wikidata ID where available), provenance, credit line, inscriptions, license, " +
         "related objects (each carrying objectNumber + iiifId for in-viewer navigation), themes, exhibitions, attributionMarks (signature/inscription counts), externalIds (handle + other), " +
         "location (museum room when on display, as { roomId, floor, roomName }), recordCreated/recordModified timestamps, plus collection sets and reference metadata. " +
+        "Authority IDs appear at two levels: work-level under externalIds (handle + other), and entity-level under equivalents[] arrays on objectTypes, materials, production entries, subjects.depictedPersons / subjects.depictedPlaces, collectionSetLabels and themes — each entry a { authority, id, uri } triple (VIAF/ULAN/RKD/Getty TGN+AAT/GeoNames/Wikidata), and one entity can carry several, so read every entry (iconclass terms have none). " +
         "The relatedObjects field carries each peer's objectNumber (canonical handle) plus a Linked Art objectUri; pass either form back here, objectNumber preferred.\n\n" +
         "Not for filter-based discovery — use search_artwork. Not for similarity discovery — use find_similar. Not for aggregate counts — use collection_stats.",
       inputSchema: z.object({
