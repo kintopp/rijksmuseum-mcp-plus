@@ -271,4 +271,25 @@ check("getArtworkDetail pairs production role↔creator row-aware, not positiona
   assert.equal(roleOf("v-photog"), "fotograaf", "photographer must carry fotograaf");
 });
 
+// ── search_persons equivalents + nameVariants ──────────────────────────────
+check("searchPersons surfaces equivalents[] and nameVariants[] for a known person", () => {
+  const res = db.searchPersons({ name: "Rembrandt", hasArtworks: false });
+  const r = res.persons.find((p) => p.vocabId === "v-rembrandt");
+  assert.ok(r, "Rembrandt not found in search_persons");
+  assert.deepEqual(r.equivalents.map((e) => e.authority), ["wikidata", "viaf", "ulan", "rkd"]);
+  assert.equal(r.equivalents.some((e) => e.authority === "rijks_internal"), false);
+  // nameVariants excludes the primary-label echo
+  assert.deepEqual(r.nameVariants.sort(), ["Rembrandt Harmensz. van Rijn", "Rijn, Rembrandt van"]);
+  assert.equal(r.nameVariants.includes("Rembrandt van Rijn"), false, "primary label leaked into variants");
+});
+
+check("searchPersons omits equivalents/nameVariants for persons with none", () => {
+  // Use no-name search to avoid FTS dependency — v-photog has no person_names rows.
+  const res = db.searchPersons({ hasArtworks: false });
+  const r = res.persons.find((p) => p.vocabId === "v-photog");
+  assert.ok(r, "v-photog not found");
+  assert.equal(r.equivalents, undefined);
+  assert.equal(r.nameVariants, undefined);
+});
+
 console.log(`\n${passed} passed\n`);
