@@ -211,6 +211,21 @@ export function buildFixture() {
     "INSERT INTO production_role_pairs (artwork_id, creator_id, role_id, part_index) VALUES (?, ?, ?, ?)",
     PRODUCTION_ROLE_PAIRS
   );
+  // vocabulary_external_ids — exercise the allowlist (rijks_internal MUST be excluded).
+  const VOCAB_EXTERNAL_IDS = [
+    ["v-rembrandt", "wikidata", "Q5598", "http://www.wikidata.org/entity/Q5598"],
+    ["v-rembrandt", "viaf", "64013650", "http://viaf.org/viaf/64013650"],
+    ["v-rembrandt", "ulan", "500011051", "http://vocab.getty.edu/ulan/500011051"],
+    ["v-rembrandt", "rkd", "66219", "https://rkd.nl/explore/artists/66219"],
+    ["v-rembrandt", "rijks_internal", "JUNK-1", "urn:internal:JUNK-1"], // must NOT appear in output
+    ["v-amsterdam", "tgn", "7006952", "http://vocab.getty.edu/tgn/7006952"],
+    ["v-amsterdam", "geonames", "2759794", "https://sws.geonames.org/2759794/"],
+    ["v-paint", "aat", "300033618", "http://vocab.getty.edu/aat/300033618"],
+  ];
+  insertMany(
+    "INSERT INTO vocabulary_external_ids (vocab_id, authority, id, uri) VALUES (?, ?, ?, ?)",
+    VOCAB_EXTERNAL_IDS
+  );
   // Three citation rows for FX-1 (art_id 1) covering all three shapes.
   // FX-2 intentionally has no rows — used for the empty-case test.
   // FX-3 (art_id 3) cites ONE publication (301999001) on TWO rows (different page

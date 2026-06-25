@@ -106,6 +106,7 @@ export interface ArtworkDetailFromDb {
   production: {
     name: string; role: string | null; attributionQualifier: string | null;
     place: string | null; actorUri: string;
+    equivalents?: { authority: string; id: string; uri: string }[];
     personInfo?: PersonInfo;
   }[];
   collectionSetLabels: VocabTerm[];
@@ -302,6 +303,7 @@ export function formatDimensions(heightCm: number | null | undefined, widthCm: n
 export interface VocabTerm {
   id: string;
   label: string;
+  equivalents?: { authority: string; id: string; uri: string }[];
 }
 
 export interface VocabSearchParams {
@@ -1297,12 +1299,18 @@ export class VocabularyDb {
   private hasTitleVariants_ = false;
   private hasArtworkParent_ = false;
   private hasRelatedObjects_ = false;
+  private hasVocabExternalIds_ = false;
   /** Maximum child records included inline on a parent's detail view. */
   private static readonly CHILD_PREVIEW_LIMIT = 25;
   /** Maximum related-object peers included inline on a detail view. */
   private static readonly RELATED_PREVIEW_LIMIT = 25;
   /** Maximum themes / exhibitions included inline on a detail view. */
   private static readonly DETAIL_PREVIEW_LIMIT = 25;
+  /** Outbound authority identifiers exposed via equivalents[]. Internal authorities
+   *  (rijks_internal, rijksmuseum_alias, other) are excluded. */
+  private static readonly EXTERNAL_AUTHORITIES = [
+    "wikidata", "viaf", "ulan", "rkd", "tgn", "geonames", "aat", "iconclass", "cerl", "biografisch_portaal", "nypl",
+  ] as const;
   /** Keep in sync with `RijksmuseumApiClient.IIIF_BASE`. Duplicated here to avoid
    *  a DB → API client dependency. */
   private static readonly IIIF_BASE = "https://iiif.micr.io";
@@ -1318,6 +1326,7 @@ export class VocabularyDb {
   private stmtBatchDescByArtIdCache = new Map<number, Statement>();
   private stmtBatchImportanceByArtIdCache = new Map<number, Statement>();
   private stmtParentGroupingsCache = new Map<number, Statement>();
+  private stmtEquivalentsCache = new Map<number, Statement>();
   /** Column list for batchLookupByArtId — resolved once at construction so the
    *  chunk-size-keyed statement cache doesn't need hasIiif in its key. */
   private batchByArtIdCols = "";
@@ -1456,6 +1465,7 @@ export class VocabularyDb {
       this.hasTitleVariants_ = this.tableExists("title_variants");
       this.hasArtworkParent_ = this.tableExists("artwork_parent");
       this.hasRelatedObjects_ = this.tableExists("related_objects");
+      this.hasVocabExternalIds_ = this.tableExists("vocabulary_external_ids");
       this.hasImageColumn = this.columnExists("artworks", "has_image");
       this.hasRecordModified_ = this.columnExists("artworks", "record_modified");
       this.hasImportance = this.columnExists("artworks", "importance");
@@ -2063,7 +2073,12 @@ export class VocabularyDb {
     }
 
     const label = (m: typeof mappings[0]) => m.label_en || m.label_nl || "";
-    const toTerm = (m: typeof mappings[0]) => ({ id: m.vocab_id, label: label(m) });
+    const equivMap = this.fetchEquivalents(mappings.map((m) => m.vocab_id));
+    const toTerm = (m: typeof mappings[0]) => {
+      const eq = equivMap.get(m.vocab_id);
+      return eq && eq.length ? { id: m.vocab_id, label: label(m), equivalents: eq }
+                             : { id: m.vocab_id, label: label(m) };
+    };
 
     // Object types
     const objectTypes = (byField.get("type") ?? []).map(toTerm);
@@ -2136,6 +2151,7 @@ export class VocabularyDb {
       const personInfo = (c.birth_year != null || c.death_year != null || c.gender || c.wikidata_id)
         ? { birthYear: c.birth_year, deathYear: c.death_year, gender: c.gender, wikidataId: c.wikidata_id }
         : undefined;
+      const eq = equivMap.get(c.vocab_id);
       return {
         name: label(c),
         role: roleByCreator
@@ -2146,6 +2162,7 @@ export class VocabularyDb {
           : (safeQualifiers[i] ? label(safeQualifiers[i]) : null),
         place: safeSpatials[i] ? label(safeSpatials[i]) : (safeBirthPlaces[i] ? label(safeBirthPlaces[i]) : null),
         actorUri: c.vocab_id,
+        ...(eq && eq.length ? { equivalents: eq } : {}),
         personInfo,
       };
     });
@@ -2326,6 +2343,35 @@ export class VocabularyDb {
     }
     const rows = stmt.all(...objectNumbers, ...objectNumbers) as { child_obj: string; parent_obj: string }[];
     for (const r of rows) out.set(r.child_obj, r.parent_obj);
+    return out;
+  }
+
+  /** Batch-resolve external authority crosswalks for a set of vocab ids. One PK-backed
+   *  query; excludes internal authorities. Returns {} for ids with no equivalents. */
+  private fetchEquivalents(vocabIds: string[]): Map<string, { authority: string; id: string; uri: string }[]> {
+    const out = new Map<string, { authority: string; id: string; uri: string }[]>();
+    if (!this.db || !this.hasVocabExternalIds_ || vocabIds.length === 0) return out;
+    // De-dup the id set (an artwork can repeat a vocab id across fields).
+    const unique = [...new Set(vocabIds)];
+    let stmt = this.stmtEquivalentsCache.get(unique.length);
+    if (!stmt) {
+      const idPlaceholders = unique.map(() => "?").join(", ");
+      const authList = VocabularyDb.EXTERNAL_AUTHORITIES.map((a) => `'${a}'`).join(", ");
+      const rank = VocabularyDb.EXTERNAL_AUTHORITIES
+        .map((a, i) => `WHEN '${a}' THEN ${i}`).join(" ");
+      stmt = this.db.prepare(`
+        SELECT vocab_id, authority, id, uri FROM vocabulary_external_ids
+        WHERE vocab_id IN (${idPlaceholders}) AND authority IN (${authList})
+        ORDER BY vocab_id, CASE authority ${rank} ELSE 99 END, id
+      `);
+      this.stmtEquivalentsCache.set(unique.length, stmt);
+    }
+    const rows = stmt.all(...unique) as { vocab_id: string; authority: string; id: string; uri: string }[];
+    for (const r of rows) {
+      let arr = out.get(r.vocab_id);
+      if (!arr) { arr = []; out.set(r.vocab_id, arr); }
+      arr.push({ authority: r.authority, id: r.id, uri: r.uri });
+    }
     return out;
   }
 

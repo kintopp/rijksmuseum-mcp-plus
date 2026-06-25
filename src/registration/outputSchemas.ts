@@ -9,7 +9,11 @@ import { type InferOutput } from "./helpers.js";
 export const ResolvedTermShape = () => z.object({
   id: z.string(),
   label: z.string(),
-  equivalents: z.record(z.string(), z.string()).optional(),
+  equivalents: z.array(z.object({
+    authority: z.string(),
+    id: z.string(),
+    uri: z.string(),
+  })).optional().describe("External authority crosswalks (owl:sameAs / equivalent): Getty TGN/ULAN/AAT, VIAF, RKD, GeoNames, Wikidata, etc. Each entry links this term to an external knowledge base. Absent when none are known."),
 });
 
 export const SearchResultOutput = {
@@ -311,6 +315,8 @@ export const ArtworkDetailOutput = {
   materials: z.array(ResolvedTermShape()),
   production: z.array(z.object({
     name: z.string(), role: z.string().nullable(), attributionQualifier: z.string().nullable(), place: z.string().nullable(), actorUri: z.string(),
+    equivalents: z.array(z.object({ authority: z.string(), id: z.string(), uri: z.string() })).optional()
+      .describe("External authority crosswalks for this creator (VIAF, ULAN, RKD, Wikidata, …)."),
     personInfo: z.object({
       birthYear: z.number().int().nullable(),
       deathYear: z.number().int().nullable(),

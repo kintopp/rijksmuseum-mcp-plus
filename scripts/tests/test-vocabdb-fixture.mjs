@@ -233,6 +233,34 @@ check("getArtworksCitingPublication dedupes an artwork citing a publication on m
   assert.equal(d.artworks[0].objectNumber, "FX-3");
 });
 
+check("getArtworkDetail surfaces equivalents[] from vocabulary_external_ids (allowlist applied)", () => {
+  const d = db.getArtworkDetail("FX-1");
+  assert.ok(d, "FX-1 not found");
+  // production creator Rembrandt → 4 external authorities, rijks_internal filtered out
+  const prod = d.production.find((p) => p.actorUri === "v-rembrandt");
+  assert.ok(prod, "Rembrandt production entry missing");
+  assert.deepEqual(prod.equivalents.map((e) => e.authority), ["wikidata", "viaf", "ulan", "rkd"]);
+  assert.equal(prod.equivalents.some((e) => e.authority === "rijks_internal"), false, "internal authority leaked");
+  assert.equal(prod.equivalents[0].uri, "http://www.wikidata.org/entity/Q5598");
+  // objectTypes term 'painting' (v-paint) → AAT
+  const paint = d.objectTypes.find((t) => t.id === "v-paint");
+  assert.deepEqual(paint.equivalents.map((e) => e.authority), ["aat"]);
+});
+
+check("getArtworkDetail surfaces depictedPlaces equivalents (TGN/GeoNames)", () => {
+  const d = db.getArtworkDetail("FX-5");
+  assert.ok(d, "FX-5 not found");
+  const ams = d.subjects.depictedPlaces.find((p) => p.id === "v-amsterdam");
+  assert.ok(ams, "Amsterdam depictedPlace missing");
+  assert.deepEqual(ams.equivalents.map((e) => e.authority), ["tgn", "geonames"]);
+});
+
+check("terms with no external ids omit equivalents", () => {
+  const d = db.getArtworkDetail("FX-1");
+  const canvas = d.materials.find((m) => m.id === "v-canvas");
+  assert.equal(canvas.equivalents, undefined, "equivalents should be omitted, not []");
+});
+
 check("getArtworkDetail pairs production role↔creator row-aware, not positionally (#354 / RP-F-00-173)", () => {
   const d = db.getArtworkDetail("FX-9");
   assert.ok(d, "FX-9 not found");
