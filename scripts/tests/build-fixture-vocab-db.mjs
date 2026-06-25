@@ -250,6 +250,7 @@ export function buildFixture() {
     ["v-rembrandt", "Rembrandt van Rijn", "en", "display"],     // == primary label → excluded
     ["v-rembrandt", "Rijn, Rembrandt van", "nl", "inverted"],
     ["v-rembrandt", "Rembrandt Harmensz. van Rijn", "nl", "alternate"],
+    ["v-rembrandt", "Rijn, Rembrandt van", "en", "former"],     // DUPLICATE name (diff lang) → must collapse to one
   ];
   insertMany(
     "INSERT INTO person_names (person_id, name, lang, classification) VALUES (?, ?, ?, ?)",

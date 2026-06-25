@@ -292,4 +292,13 @@ check("searchPersons omits equivalents/nameVariants for persons with none", () =
   assert.equal(r.nameVariants, undefined);
 });
 
+check("searchPersons de-duplicates nameVariants (same name across lang/classification rows)", () => {
+  const res = db.searchPersons({ name: "Rembrandt", hasArtworks: false });
+  const r = res.persons.find((p) => p.vocabId === "v-rembrandt");
+  assert.ok(r, "Rembrandt not found in search_persons");
+  // "Rijn, Rembrandt van" is seeded twice (lang nl + en) — must appear exactly once.
+  assert.equal(r.nameVariants.length, new Set(r.nameVariants).size, "nameVariants contains duplicates");
+  assert.equal(r.nameVariants.filter((n) => n === "Rijn, Rembrandt van").length, 1, "duplicate name not collapsed");
+});
+
 console.log(`\n${passed} passed\n`);
