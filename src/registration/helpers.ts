@@ -324,12 +324,12 @@ export function provenanceCompactSummary(art: ProvenanceArtworkResult) {
   };
 }
 
-/** #386 lean matched-event one-liners for compact mode (names only, trimmed rawText). */
+/** #386 lean matched-event one-liners for compact mode (names with role annotation, trimmed rawText). */
 export function provenanceMatchedEvents(art: ProvenanceArtworkResult) {
   return art.events.filter(e => e.matched).map(e => ({
     sequence: e.sequence,
     transferType: e.transferType,
-    parties: e.parties.map(p => p.name),
+    parties: e.parties.map(p => (p.role ? `${p.name} (${p.role})` : p.name)),
     dateExpression: e.dateExpression,
     location: e.location,
     price: e.price,
