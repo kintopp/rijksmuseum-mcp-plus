@@ -560,6 +560,10 @@ export function registerSearchTools(
         gender: z.string().nullable(),
         wikidataId: z.string().nullable(),
         artworkCount: z.number().int().optional(),
+        equivalents: z.array(z.object({ authority: z.string(), id: z.string(), uri: z.string() })).optional()
+          .describe("External authority crosswalks (VIAF, ULAN, RKD, Wikidata, …) for this person."),
+        nameVariants: z.array(z.string()).optional()
+          .describe("Alternate/historical/inverted name forms for disambiguation (excludes the primary label)."),
       })),
       warnings: z.array(z.string()).optional(),
     };

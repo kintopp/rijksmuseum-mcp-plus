@@ -245,9 +245,21 @@ export function buildFixture() {
     ]
   );
 
+  // person_names — variants for v-rembrandt (one equals the primary label, must be filtered out).
+  const PERSON_NAMES = [
+    ["v-rembrandt", "Rembrandt van Rijn", "en", "display"],     // == primary label → excluded
+    ["v-rembrandt", "Rijn, Rembrandt van", "nl", "inverted"],
+    ["v-rembrandt", "Rembrandt Harmensz. van Rijn", "nl", "alternate"],
+  ];
+  insertMany(
+    "INSERT INTO person_names (person_id, name, lang, classification) VALUES (?, ?, ?, ?)",
+    PERSON_NAMES
+  );
+
   // External-content FTS: rebuild from the content tables we just populated.
   db.exec("INSERT INTO vocabulary_fts(vocabulary_fts) VALUES('rebuild')");
   db.exec("INSERT INTO artwork_texts_fts(artwork_texts_fts) VALUES('rebuild')");
+  db.exec("INSERT INTO person_names_fts(person_names_fts) VALUES('rebuild')");
 
   const n = db.prepare("SELECT COUNT(*) AS n FROM artworks").get().n;
   db.close();

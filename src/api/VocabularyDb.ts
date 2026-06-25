@@ -417,6 +417,8 @@ export interface PersonResult {
   gender: string | null;
   artworkCount?: number;
   wikidataId: string | null;
+  equivalents?: { authority: string; id: string; uri: string }[];
+  nameVariants?: string[];
 }
 
 export interface PersonSearchResult {
@@ -1327,6 +1329,7 @@ export class VocabularyDb {
   private stmtBatchImportanceByArtIdCache = new Map<number, Statement>();
   private stmtParentGroupingsCache = new Map<number, Statement>();
   private stmtEquivalentsCache = new Map<number, Statement>();
+  private stmtNameVariantsCache = new Map<number, Statement>();
   /** Column list for batchLookupByArtId — resolved once at construction so the
    *  chunk-size-keyed statement cache doesn't need hasIiif in its key. */
   private batchByArtIdCols = "";
@@ -2371,6 +2374,28 @@ export class VocabularyDb {
       let arr = out.get(r.vocab_id);
       if (!arr) { arr = []; out.set(r.vocab_id, arr); }
       arr.push({ authority: r.authority, id: r.id, uri: r.uri });
+    }
+    return out;
+  }
+
+  /** Batch-resolve name variants for a set of person vocab ids (idx_person_names_id-backed). */
+  private fetchNameVariants(personIds: string[]): Map<string, string[]> {
+    const out = new Map<string, string[]>();
+    if (!this.db || !this.hasPersonNames || personIds.length === 0) return out;
+    const unique = [...new Set(personIds)];
+    let stmt = this.stmtNameVariantsCache.get(unique.length);
+    if (!stmt) {
+      const ph = unique.map(() => "?").join(", ");
+      stmt = this.db.prepare(
+        `SELECT person_id, name FROM person_names WHERE person_id IN (${ph}) ORDER BY person_id, name`
+      );
+      this.stmtNameVariantsCache.set(unique.length, stmt);
+    }
+    const rows = stmt.all(...unique) as { person_id: string; name: string }[];
+    for (const r of rows) {
+      let arr = out.get(r.person_id);
+      if (!arr) { arr = []; out.set(r.person_id, arr); }
+      arr.push(r.name);
     }
     return out;
   }
@@ -4176,13 +4201,19 @@ export class VocabularyDb {
       for (const r of countRows) artworkCountMap.set(r.vocab_rowid, r.cnt);
     }
 
+    const pageVocabIds = pageRows.map((r) => r.id);
+    const equivMap = this.fetchEquivalents(pageVocabIds);
+    const nameVariantMap = this.fetchNameVariants(pageVocabIds);
+
     const persons: PersonResult[] = pageRows.map(r => {
       const artworkCount = nameOrder
         ? (artworkCountMap.get(r.vocab_int_id) ?? 0)
         : (r as PageRow & { artwork_count: number }).artwork_count;
+      const primary = r.label_en ?? r.label_nl ?? r.id;
+      const variants = (nameVariantMap.get(r.id) ?? []).filter((n) => n !== primary);
       return {
         vocabId: r.id,
-        label: r.label_en ?? r.label_nl ?? r.id,
+        label: primary,
         labelEn: r.label_en,
         labelNl: r.label_nl,
         birthYear: r.birth_year,
@@ -4190,6 +4221,8 @@ export class VocabularyDb {
         gender: r.gender,
         ...(hasArtworks && { artworkCount }),
         wikidataId: r.wikidata_id,
+        ...(equivMap.get(r.id)?.length ? { equivalents: equivMap.get(r.id) } : {}),
+        ...(variants.length ? { nameVariants: variants } : {}),
       };
     });
 
