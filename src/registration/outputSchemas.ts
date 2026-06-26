@@ -440,8 +440,18 @@ export const ImageInfoOutput = {
 
 export const InspectImageOutput = {
   objectNumber: z.string(),
+  title: z.string().optional()
+    .describe("Artwork title — mirrors the caption in the text/image channel so structuredContent readers retain it."),
+  creator: z.string().nullable().optional()
+    .describe("Artwork creator — mirrors the caption in the text/image channel."),
   region: z.string(),
   requestedSize: z.number().int(),
+  regionRecovery: z.object({
+    requested: z.string().describe("The offending region exactly as supplied."),
+    clampedTo: z.string().describe("An in-bounds replacement region — retry with this, or a corrected box within validRange."),
+    validRange: z.string().describe("Human-readable valid coordinate range for this image."),
+  }).optional()
+    .describe("Out-of-bounds recovery hint. Present only on an `overlay_region_out_of_bounds` error — mirrors the recovery payload that the text channel renders, so a structuredContent reader can self-correct without parsing prose."),
   nativeWidth: z.number().int().optional(),
   nativeHeight: z.number().int().optional(),
   cropPixelWidth: z.number().int().optional()

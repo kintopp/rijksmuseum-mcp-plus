@@ -21,6 +21,7 @@ import {
   projectToFullImage,
   regionToPixels,
   computeVerificationRegion,
+  type OobWarning,
 } from "../geometry.js";
 import {
   ARTWORK_VIEWER_RESOURCE_URI,
@@ -311,7 +312,7 @@ export function registerViewerTools(
       ...withOutputSchema(InspectImageOutput),
     },
     withLogging("inspect_artwork_image", async (args) => {
-      const cropError = (error: string, text?: string) => {
+      const cropError = (error: string, text?: string, recovery?: OobWarning["details"]) => {
         const data: InferOutput<typeof InspectImageOutput> = {
           objectNumber: args.objectNumber,
           region: args.region,
@@ -319,6 +320,13 @@ export function registerViewerTools(
           rotation: args.rotation,
           quality: args.quality,
           error,
+          ...(recovery && {
+            regionRecovery: {
+              requested: recovery.requested,
+              clampedTo: recovery.clamped_to,
+              validRange: recovery.valid_range,
+            },
+          }),
         };
         return {
           ...structuredResponse(data, text ?? error),
@@ -517,6 +525,8 @@ export function registerViewerTools(
         if (!EMIT_STRUCTURED) return { content };
         const inspectData: InferOutput<typeof InspectImageOutput> = {
           objectNumber: args.objectNumber,
+          title: artwork.title,
+          creator: artwork.creator,
           region: args.region,
           requestedSize: effectiveSize,
           nativeWidth: imageInfo.width,
@@ -561,7 +571,15 @@ export function registerViewerTools(
 
   const NavigateViewerOutput = {
     viewUUID: z.string(),
+    objectNumber: z.string().optional()
+      .describe("Object number of the artwork in this viewer session — mirrors the inspect_artwork_image verify-after nudge in the text channel, so a structuredContent reader has the identity needed for the follow-up call."),
     queued: z.number().int(),
+    regionRecovery: z.object({
+      requested: z.string().describe("The offending region exactly as supplied."),
+      clampedTo: z.string().describe("An in-bounds replacement region — retry with this, or a corrected box within validRange."),
+      validRange: z.string().describe("Human-readable valid coordinate range."),
+    }).optional()
+      .describe("Out-of-bounds recovery hint. Present only on an `overlay_region_out_of_bounds` error — mirrors the recovery payload the text channel renders, so a structuredContent reader can self-correct without parsing prose."),
     imageWidth: z.number().int().optional(),
     imageHeight: z.number().int().optional(),
     overlays: z.array(z.object({
@@ -657,9 +675,19 @@ export function registerViewerTools(
       ...withOutputSchema(NavigateViewerOutput),
     },
     withLogging("navigate_viewer", async (args) => {
-      const navError = (error: string, text?: string) => {
+      const navError = (error: string, text?: string, recovery?: OobWarning["details"]) => {
         const data: InferOutput<typeof NavigateViewerOutput> = {
           viewUUID: args.viewUUID, queued: 0, error,
+          // queue is resolved below; on the no-viewer path it's undefined, so the
+          // identity is simply omitted (nothing to recover anyway).
+          ...(queue?.objectNumber && { objectNumber: queue.objectNumber }),
+          ...(recovery && {
+            regionRecovery: {
+              requested: recovery.requested,
+              clampedTo: recovery.clamped_to,
+              validRange: recovery.valid_range,
+            },
+          }),
         };
         return { ...structuredResponse(data, text ?? error), isError: true as const };
       };

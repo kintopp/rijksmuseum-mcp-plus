@@ -107,6 +107,9 @@ assert(imageContent?.data?.length > 1000, `base64 data present (~${Math.round((i
 assert(textContent?.text?.includes("SK-C-5"), "Caption includes object number");
 assert(/\d+ms/.test(textContent?.text ?? ""), "Caption includes fetch timing");
 assert(!r2a.isError, "Not marked as error");
+// Channel parity: title/creator from the caption must also ride structuredContent.
+assert((r2a.structuredContent?.title?.length ?? 0) > 0, "structuredContent carries artwork title (caption parity)");
+assert("creator" in (r2a.structuredContent ?? {}), "structuredContent carries artwork creator key (caption parity)");
 
 // 2b. Percentage region
 console.log("\n--- 2b: pct region (SK-C-5, pct:0,0,50,50, 400px) ---");
@@ -149,6 +152,12 @@ const oobInspectText = r2cOob.content?.find(c => c.type === "text")?.text ?? "";
 assert(oobInspectText.includes("overlay_region_out_of_bounds"), "inspect error text includes warning code");
 assert(oobInspectText.includes("y=325 outside 0–100"), "inspect error text identifies y=325 issue");
 assert(oobInspectText.includes("please re-examine"), "inspect error text carries retry cue");
+// Channel parity: the recovery payload (clampedTo/validRange) the prose dumps must
+// also be structured so a structuredContent reader can self-correct without parsing prose.
+const oobInspectRecovery = r2cOob.structuredContent?.regionRecovery;
+assert(oobInspectRecovery != null, "inspect OOB exposes structured regionRecovery");
+assert((oobInspectRecovery?.clampedTo?.length ?? 0) > 0, "inspect regionRecovery.clampedTo present");
+assert((oobInspectRecovery?.validRange?.length ?? 0) > 0, "inspect regionRecovery.validRange present");
 
 // 2d. Square region
 console.log("\n--- 2d: Square region (SK-C-5, 600px) ---");
@@ -638,6 +647,12 @@ assert(oobText.includes("overlay_region_out_of_bounds"), "error text includes wa
 assert(oobText.includes("y=325 outside 0–100"), "error text identifies y=325 issue");
 assert(oobText.includes("clamped_to"), "error text includes clamped_to preview");
 assert(oobText.includes("please re-examine the image"), "error text carries retry cue");
+// Channel parity: structured recovery payload + the artwork identity needed for the
+// inspect_artwork_image verify-after step (both prose-only before the fix).
+const navOobRecovery = r4bisB.structuredContent?.regionRecovery;
+assert(navOobRecovery != null, "navigate OOB exposes structured regionRecovery");
+assert((navOobRecovery?.clampedTo?.length ?? 0) > 0, "navigate regionRecovery.clampedTo present");
+assert((r4bisB.structuredContent?.objectNumber?.length ?? 0) > 0, "navigate OOB carries objectNumber (verify-after identity)");
 
 // 4bis-c. add_overlay with x+w > 100 rejected
 console.log("\n--- 4bis-c: OOB pct (x+w=110) rejected ---");

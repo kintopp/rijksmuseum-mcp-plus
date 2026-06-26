@@ -25,6 +25,7 @@
     "test:cli": "node scripts/tests/test-cli.mjs",
     "test:mcp": "node scripts/tests/test-mcp-smoke.mjs",
     "test:inscriptions": "node scripts/tests/test-inscription-details.mjs && node scripts/tests/test-search-inscriptions.mjs",
+    "test:provenance-review": "node scripts/tests/test-provenance-enrichment-review.mjs",
     "dev:viewer": "vite dev -c apps/artwork-viewer/vite.config.ts",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",

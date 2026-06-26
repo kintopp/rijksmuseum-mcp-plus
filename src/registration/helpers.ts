@@ -147,8 +147,18 @@ export function errorResponse(message: string) {
  *  Set STRUCTURED_CONTENT=false to omit structuredContent (workaround for client bugs). */
 export const EMIT_STRUCTURED = process.env.STRUCTURED_CONTENT !== "false";
 
-/** When true, every human-summary response also carries a serialized-JSON
- *  text block (size-guarded). Off by default — opt in per deployment. */
+/**
+ * DEPRECATED (compat shim). When true, every human-summary response ALSO carries
+ * a verbatim serialized-JSON text block (size-guarded by buildContentBlocks).
+ * Its ONLY purpose is to hand parseable JSON to a *model* whose host cannot
+ * surface `structuredContent` (claude.ai / Claude Desktop today). Once those
+ * clients read structuredContent, this block is token-for-token redundancy and
+ * should be removed. Off by default; slated for deletion — do not build new
+ * behaviour on it.
+ *
+ * SCOPE: this deprecation covers only the GLOBAL default below. The per-call
+ * `jsonText` option (forced by paginatedResponse for full OAI records, and by
+ * citation/source tools) is a SEPARATE, still-live mechanism — not deprecated. */
 export const JSON_TEXT_COMPAT = process.env.MCP_TEXT_JSON_COMPAT === "true";
 
 /**

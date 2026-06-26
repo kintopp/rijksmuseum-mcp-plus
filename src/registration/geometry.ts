@@ -97,10 +97,19 @@ export interface OobWarning {
   };
 }
 
-/** Shape an out-of-bounds error: `emit` returns a tool error in the caller's format. */
-export function oobError<E>(oob: OobWarning, hint: string, emit: (error: string, text?: string) => E): E {
+/** Shape an out-of-bounds error: `emit` returns a tool error in the caller's format.
+ *  The structured `details` (requested / clamped_to / valid_range) are passed to
+ *  `emit` as a third arg so callers can mirror the recovery payload into
+ *  structuredContent — not just the prose channel (channel-parity, see the
+ *  `regionRecovery` field on the viewer output schemas). Emitters that ignore the
+ *  third arg keep their old behaviour. */
+export function oobError<E>(
+  oob: OobWarning,
+  hint: string,
+  emit: (error: string, text?: string, recovery?: OobWarning["details"]) => E,
+): E {
   const payload = JSON.stringify(oob, null, 2);
-  return emit(`overlay_region_out_of_bounds: ${oob.details.issue}`, `${payload}\n\n${hint}`);
+  return emit(`overlay_region_out_of_bounds: ${oob.details.issue}`, `${payload}\n\n${hint}`, oob.details);
 }
 
 // Exported for testing

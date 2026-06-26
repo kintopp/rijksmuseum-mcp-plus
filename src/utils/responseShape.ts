@@ -11,6 +11,13 @@
  * the per-copy cap AND (b) the PROJECTED TOTAL result — human summary + JSON
  * copy + the structuredContent the SDK also attaches — stays under
  * SAFE_RESULT_BUDGET. Otherwise a tiny marker is emitted instead of a copy.
+ *
+ * DEPRECATION NOTE: the JSON copy exists only for hosts that cannot surface
+ * structuredContent to the model. The *global* opt-in for it (JSON_TEXT_COMPAT /
+ * MCP_TEXT_JSON_COMPAT, helpers.ts) is a compat shim slated for removal once
+ * claude.ai / Claude Desktop read structuredContent. The per-call
+ * jsonText/jsonTextData options below stay live (paginatedResponse full records,
+ * citation tools).
  */
 
 export type TextBlock = {

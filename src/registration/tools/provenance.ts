@@ -174,6 +174,15 @@ const ProvenanceSearchOutput = {
   warnings: z.array(z.string()).optional(),
   autoCompacted: z.boolean().optional()
     .describe("True when the server returned compact summaries because the full (compact=false) result would exceed the per-result size limit. You requested full mode; re-query with fewer artworks (maxResults ≤ 10) or a single objectNumber for full event-by-event chains."),
+  enrichmentReview: z.object({
+    count: z.number().int()
+      .describe("Number of LLM-assisted (enriched) events/parties in this result covered by the review page."),
+    url: z.string().optional()
+      .describe("HTTP URL of the human-review page for the LLM-assisted records (HTTP mode). Surface verbatim to the user as a clickable link — same value as the REVIEW_URL line in the text channel."),
+    file: z.string().optional()
+      .describe("Local file path of the review HTML (stdio mode, when no public base URL is configured) — same value as the REVIEW_FILE line."),
+  }).optional()
+    .describe("Present when the result contains LLM-assisted (enriched) provenance records. Mirrors the REVIEW_URL/REVIEW_FILE line in the text channel so structuredContent readers get the same review affordance (and the same obligation to surface the link to the user)."),
   error: z.string().optional(),
 };
 
@@ -642,7 +651,10 @@ export function registerProvenanceTools(
         }
 
         // Enrichment review: only generate page when LLM-mediated items exist,
-        // but include rule-based enrichments on the page for context
+        // but include rule-based enrichments on the page for context.
+        // Captured here so the review link/count rides structuredContent too, not
+        // just the REVIEW_URL/REVIEW_FILE prose lines (channel-parity).
+        let enrichmentReview: { count: number; url?: string; file?: string } | undefined;
         if (layer === "events") {
           let llmEvents = 0;
           let llmParties = 0;
@@ -699,6 +711,7 @@ export function registerProvenanceTools(
             if (publicBaseUrl) {
               enrichmentReviewPages.set(uuid, { html, lastAccess: Date.now() });
               const reviewUrl = `${publicBaseUrl}/enrichment-review/${uuid}`;
+              enrichmentReview = { count: llmEvents + llmParties, url: reviewUrl };
               lines.push("");
               lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);
               lines.push(`REVIEW_URL: ${reviewUrl}`);
@@ -706,6 +719,7 @@ export function registerProvenanceTools(
             } else {
               const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
               fs.writeFileSync(filePath, html, "utf-8");
+              enrichmentReview = { count: llmEvents + llmParties, file: filePath };
               lines.push("");
               lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);
               lines.push(`REVIEW_FILE: ${filePath}`);
@@ -741,6 +755,7 @@ export function registerProvenanceTools(
               ...(autoCompacted && { autoCompacted: true as const }),
             }
           : result;
+        if (enrichmentReview) data.enrichmentReview = enrichmentReview;
         return structuredResponse(data, lines.join("\n"));
       })
     );
