@@ -344,6 +344,8 @@ node scripts/cli.mjs provenance --transferType gift --layer periods --max 5
 ```
 
 Output keys: `totalArtworks`, `results`, plus `periods`/`facets`/`warnings` depending on layer.
+When events contain LLM-assisted records, an `enrichmentReview` (`{ count, url | file }`) also
+rides the result — the review-page link, mirroring the `REVIEW_URL`/`REVIEW_FILE` text line.
 Each result: `objectNumber`, `title`, `creator`, `date`, `url`, `eventCount`, `matchedEventCount`,
 `events`.
 
@@ -584,8 +586,10 @@ $ node scripts/cli.mjs inspect SK-C-5 --region "pct:40,40,15,15"
 # stderr: Image bytes available (image/jpeg); pass --out <file> to save them.
 ```
 
-Metadata keys: `objectNumber`, `region`, `requestedSize`, `nativeWidth`, `nativeHeight`,
-`cropPixelWidth`, `cropPixelHeight`, `cropRegion`, `rotation`, `quality`, `fetchTimeMs`.
+Metadata keys: `objectNumber`, `title`, `creator`, `region`, `requestedSize`, `nativeWidth`,
+`nativeHeight`, `cropPixelWidth`, `cropPixelHeight`, `cropRegion`, `rotation`, `quality`, `fetchTimeMs`.
+On an out-of-bounds region the (error) result instead carries `regionRecovery` (`requested`,
+`clampedTo`, `validRange`) for self-correction.
 
 ---
 

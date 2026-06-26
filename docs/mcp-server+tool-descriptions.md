@@ -91,7 +91,7 @@ Best practice for overlay placement: ALWAYS inspect before overlaying. Start wit
 
 Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms to the inspected region (navigateViewer defaults to true, no effect when region is 'full'). This keeps the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom. Use navigate_viewer separately only when you need overlays, labels, or clear_overlays.
 
-The response includes the active viewUUID (if any) for follow-up navigate_viewer calls.
+The response includes the active viewUUID (if any) for follow-up navigate_viewer calls. The structured response also carries the artwork title and creator. An out-of-bounds region is rejected with an `overlay_region_out_of_bounds` error whose structured payload includes `regionRecovery` (requested / clampedTo / validRange), so a structuredContent reader can retry with a corrected box.
 
 ### 10. `navigate_viewer`
 
@@ -107,7 +107,7 @@ Region formats:
 - 'x,y,w,h' — equivalent to crop_pixels: (legacy IIIF form, kept for compatibility).
 - 'full' | 'square' — whole image shortcuts.
 
-Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — correct the coordinates and retry.
+Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — correct the coordinates and retry. The error's structured response carries `regionRecovery` (requested / clampedTo / validRange) plus the session `objectNumber` (the identity needed for the inspect_artwork_image verify-after step).
 
 Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set (overlays are append-only; there is no move/delete-one operation, so repositioning requires clear_overlays then re-adding ALL overlays you want to keep). When placing more than one overlay, prefer distinct 'color' values so the rectangles are distinguishable in inspect_artwork_image(show_overlays:true). Each add_overlay response includes a per-overlay verificationRegion (pct: crop) for the verify-after step. Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.
 
@@ -147,7 +147,7 @@ IMPORTANT flags on events:
 
 Every record carries provenance-of-provenance metadata: parseMethod shows how the event was parsed (peg, regex_fallback, cross_ref, credit_line, llm_structural), categoryMethod/positionMethod show how classifications and party positions were determined (type_mapping, role_mapping, llm_enrichment, llm_disambiguation, rule:transfer_is_ownership), correctionMethod (llm_structural:#NNN) shows LLM structural corrections (location fixes, event reclassification, event splitting), and enrichmentReasoning provides the LLM's reasoning for any non-deterministic decision. Parties have position (sender/receiver/agent) indicating their role in the transfer.
 
-IMPORTANT: When results contain LLM-enriched records, the response text ends with a REVIEW_URL or REVIEW_FILE line. You MUST copy this URL or file path verbatim into your response as a clickable link or openable path. Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). The user cannot see tool output — if you do not include the path, they have no way to find the review page.
+IMPORTANT: When results contain LLM-enriched records, the response text ends with a REVIEW_URL or REVIEW_FILE line. You MUST copy this URL or file path verbatim into your response as a clickable link or openable path. Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). The user cannot see tool output — if you do not include the path, they have no way to find the review page. The same link and an LLM-assisted-record count are also exposed in structuredContent as `enrichmentReview` ({ count, url | file }) for programmatic/CLI clients; the obligation to surface the link to the user is unchanged.
 
 Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable. At least one filter is required.
 

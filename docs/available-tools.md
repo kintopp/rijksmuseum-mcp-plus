@@ -16,11 +16,11 @@
 - **`find_artworks_citing_publication`** — Reverse bibliography: artworks whose references cite a given publication, by its URI or bare id (e.g. a `publicationUri` from `get_artwork_bibliography`).
 - **`get_conservation_history`** — Conservation/forensics for one artwork: technical examinations (X-ray, dendrochronology, infrared, paint samples), restoration treatments, a count of signature/inscription marks, and a provenance excerpt.
 - **`get_artwork_image`** — High-resolution interactive deep-zoom viewer (with j/k/l navigation between related artworks).
-- **`inspect_artwork_image`** — Fetch an artwork image (or region) as base64 for direct visual analysis by the LLM.
+- **`inspect_artwork_image`** — Fetch an artwork image (or region) as base64 for direct visual analysis by the LLM. Structured response carries the artwork title/creator; an out-of-bounds region returns a `regionRecovery` hint (requested / clampedTo / validRange).
 
 ## Provenance
 
-- **`search_provenance`** — Search ownership and provenance history across ~48K artworks with parsed records.
+- **`search_provenance`** — Search ownership and provenance history across ~48K artworks with parsed records. LLM-assisted records also surface a review-page link + count (`enrichmentReview`) to pass on to the user.
 
 ## Classification & Curation
 
@@ -33,6 +33,6 @@
 
 ## Viewer Navigation
 
-- **`navigate_viewer`** — Navigate the open deep-zoom viewer to a specific region; add or clear labelled overlays.
+- **`navigate_viewer`** — Navigate the open deep-zoom viewer to a specific region; add or clear labelled overlays. Out-of-bounds regions return a `regionRecovery` hint plus the session `objectNumber`.
 
 ---
