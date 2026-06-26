@@ -4,7 +4,7 @@
 
 - **`search_artwork`** — Filter the collection by structured criteria (subject, material, technique, dates, place, person, theme, …). Combinable filters; AND semantics on arrays.
 - **`semantic_search`** — Find artworks by meaning, concept, or theme using natural language. Ranked by Dutch-description embedding similarity.
-- **`search_persons`** — Find persons (artists, depicted figures, donors) by demographic (gender, born/died) or structural (birth/death place, profession) criteria. Two-step pattern: feed the returned vocab IDs into `search_artwork({creator: <vocabId>})`.
+- **`search_persons`** — Find persons (artists, depicted figures, donors) by demographic (gender, born/died) or structural (birth/death place, profession) criteria; each result also carries name variants and external authority IDs (VIAF/ULAN/RKD/Wikidata). Two-step pattern: feed the returned vocab IDs into `search_artwork({creator: <vocabId>})`.
 - **`collection_stats`** — Aggregate statistics, counts, and distributions across the collection.
 - **`browse_set`** — DB-backed enumeration of artworks within a curated collection set.
 - **`search_inscriptions`** — Structured search over artwork inscriptions: collector's marks (Lugt numbers), signatures, and transcribed text, with facets for type/placement/technique. Catalogue-entered data, not OCR.

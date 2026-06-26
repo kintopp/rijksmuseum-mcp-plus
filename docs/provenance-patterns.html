@@ -132,7 +132,7 @@
 <tr><td><code>inventory</code></td><td>ownership</td><td>Documented in an estate inventory or attestation</td></tr>
 <tr><td><code>loan</code></td><td>custody</td><td>On loan (temporary custody, no ownership change)</td></tr>
 <tr><td><code>deposit</code></td><td>custody</td><td>On deposit or in storage</td></tr>
-<tr><td><code>transfer</code></td><td>ambiguous</td><td>Administrative or intra-organisational transfer</td></tr>
+<tr><td><code>transfer</code></td><td>ownership</td><td>Administrative or intra-organisational transfer (predominantly ownership; a handful of custody/ambiguous variants also exist)</td></tr>
 <tr><td><code>unknown</code></td><td>ambiguous</td><td>Parser could not classify (includes cross-references)</td></tr>
 </table>
 <p>Extensions beyond CMOA: <code>recuperation</code> (physical recovery vs legal return), <code>collection</code> (AAM bare-name convention), <code>inventory</code> (attestation events).</p>
@@ -193,9 +193,9 @@
 <h2 id="enrichment-provenance">Enrichment Provenance</h2>
 <p>Every record carries provenance-of-provenance metadata tracking how it was determined:</p>
 <ul>
-  <li><code>parseMethod</code>: how the event was parsed (<code>peg</code>, <code>regex_fallback</code>, <code>cross_ref</code>, <code>credit_line</code>)</li>
+  <li><code>parseMethod</code>: how the event was parsed (<code>peg</code>, <code>regex_fallback</code>, <code>cross_ref</code>, <code>credit_line</code>, <code>llm_structural</code>)</li>
   <li><code>categoryMethod</code>: how the transfer type/category was determined (<code>type_mapping</code> = parser, <code>llm_enrichment</code> = LLM, <code>rule:transfer_is_ownership</code> = validated rule)</li>
-  <li><code>positionMethod</code> (on parties): how the party position was determined (<code>role_mapping</code> = parser, <code>type_mapping</code> = from transfer type, <code>llm_enrichment</code> = LLM, <code>llm_disambiguation</code> = LLM-decomposed merged text)</li>
+  <li><code>positionMethod</code> (on parties): how the party position was determined (<code>role_mapping</code> = parser, <code>type_mapping</code> = from transfer type, <code>llm_enrichment</code> = LLM, <code>llm_disambiguation</code> = LLM-decomposed merged text, <code>rule:missing_receiver</code> = deterministic tail-party backfill)</li>
   <li><code>enrichmentReasoning</code>: the LLM's reasoning for any non-deterministic decision</li>
 </ul>
 <p>When results contain LLM-enriched records, <code>search_provenance</code> provides a URL to an enrichment review page showing the full methodology and reasoning for each decision. <strong>Always show this URL to the user.</strong></p>
@@ -219,12 +219,14 @@ collection_stats(dimension="parseMethod")</code></pre>
 <h2 id="parse-method">Parse Method Values</h2>
 <p>The <code>parseMethod</code> field records how each provenance record was processed:</p>
 <table>
-<tr><th>Value</th><th>Share</th><th>Description</th></tr>
-<tr><td><code>peg</code></td><td>~80%</td><td>PEG grammar parser &mdash; highest confidence</td></tr>
-<tr><td><code>cross_ref</code></td><td>~20%</td><td>Cross-reference links</td></tr>
-<tr><td><code>credit_line</code></td><td>~0.1%</td><td>Inferred from the museum's credit line field when the provenance chain lacked acquisition information</td></tr>
-<tr><td><code>regex_fallback</code></td><td>&mdash;</td><td>Legacy, currently unused</td></tr>
+<tr><th>Value</th><th>Description</th></tr>
+<tr><td><code>peg</code></td><td>PEG grammar parser &mdash; highest confidence</td></tr>
+<tr><td><code>regex_fallback</code></td><td>Regex fallback applied when the PEG grammar fails on a segment</td></tr>
+<tr><td><code>cross_ref</code></td><td>Cross-reference links</td></tr>
+<tr><td><code>credit_line</code></td><td>Inferred from the museum's credit line field when the provenance chain lacked acquisition information</td></tr>
+<tr><td><code>llm_structural</code></td><td>LLM-resolved structural cases the PEG grammar could not parse</td></tr>
 </table>
+<p>For the current distribution of methods, use <code>collection_stats(dimension="parseMethod")</code>.</p>
 <p><code>credit_line</code> events are particularly useful: they recover acquisition context (donor name, purchase fund) that the provenance text omits.</p>
 
 <hr>
@@ -307,11 +309,11 @@ search_provenance(dateFrom=1400, dateTo=1500, sortBy="dateYear",
 <p>Use <code>collection_stats</code> for single-call time series &mdash; no manual pagination loop needed:</p>
 <pre><code># Sale events per decade 1600–1900
 collection_stats(dimension="provenanceDecade", transferType="sale",
-                 dateFrom=1600, dateTo=1900)
+                 provenanceDateFrom=1600, provenanceDateTo=1900)
 
 # Half-century bins
 collection_stats(dimension="provenanceDecade", transferType="sale",
-                 dateFrom=1600, dateTo=1900, binWidth=50)
+                 provenanceDateFrom=1600, provenanceDateTo=1900, binWidth=50)
 
 # Confiscation events by decade (wartime distribution)
 collection_stats(dimension="provenanceDecade", transferType="confiscation")

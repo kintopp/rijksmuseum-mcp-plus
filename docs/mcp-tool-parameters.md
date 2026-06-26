@@ -78,7 +78,7 @@ The primary search tool. All filters can be freely combined. See [search-paramet
 
 ## search_persons
 
-Search the ~290K person + ~12K group authority records by name (~700K name variants), demographic (gender, birth/death year) or structural (birth/death place, profession) criteria. Returns vocab IDs to feed into `search_artwork({creator: <vocabId>})` for works *by* them, or `search_artwork({aboutActor: <name>})` for works *depicting* them.
+Search the ~290K person + ~12K group authority records by name (~700K name variants), demographic (gender, birth/death year) or structural (birth/death place, profession) criteria. Returns vocab IDs to feed into `search_artwork({creator: <vocabId>})` for works *by* them, or `search_artwork({aboutActor: <name>})` for works *depicting* them. Each result also carries `nameVariants[]` (deduplicated alternate/inverted name forms) and `equivalents[]` (external authority crosswalks — VIAF, ULAN, RKD, Wikidata — each a `{ authority, id, uri }` triple); both are omitted when empty.
 
 | Parameter | Description |
 |---|---|
