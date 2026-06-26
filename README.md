@@ -83,7 +83,7 @@ For a single artwork, rijksmuseum-mcp+ can assemble its conservation and forensi
 
 ### Bibliography and citations
 
-You can request to the citations for a given artwork, each with its linked publication record, page range, and ISBN where known. The relationship can also be followed in reverse: starting from a publication, you can list every artwork in the collection whose references cite it (e.g. "which works in the collection does this publication document?").
+You can request the citations recorded for a given artwork, each with its linked publication record, page range, and ISBN where known. The relationship can also be followed in reverse: starting from a publication, you can list every artwork in the collection whose references cite it (e.g. "which works in the collection does this publication document?").
 
 ### Interactive image viewer with AI analysis
 
