@@ -83,9 +83,7 @@ export function registerStatsTools(
           "Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). " +
           "Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.\n\n" +
           "Examples:\n" +
-          "- \"What types of artworks have provenance?\" → dimension='type', hasProvenance=true\n" +
           "- \"Transfer type distribution for Rembrandt\" → dimension='transferType', creator='Rembrandt'\n" +
-          "- \"Top 20 depicted persons\" → dimension='depictedPerson', topN=20\n" +
           "- \"Sales by decade 1600–1900\" → dimension='provenanceDecade', transferType='sale', provenanceDateFrom=1600, provenanceDateTo=1900\n" +
           "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n" +
           "- \"Type breakdown of Rembrandt's autograph paintings\" → dimension='type', creator='Rembrandt van Rijn', productionRole='painter', sameRowMatching=true\n" +

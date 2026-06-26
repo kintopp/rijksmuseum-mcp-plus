@@ -170,9 +170,7 @@ Runtime parse with no derived index: a query must include at least one narrowing
 Group-by breakdown over one structured dimension (type, decade, place, creator) — counts, percentages, histograms. Covers totals, summaries, and group-by / count-by / distribution-of / statistics-over queries across the Rijksmuseum collection. Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.
 
 Examples:
-- "What types of artworks have provenance?" → dimension='type', hasProvenance=true
 - "Transfer type distribution for Rembrandt" → dimension='transferType', creator='Rembrandt'
-- "Top 20 depicted persons" → dimension='depictedPerson', topN=20
 - "Sales by decade 1600–1900" → dimension='provenanceDecade', transferType='sale', provenanceDateFrom=1600, provenanceDateTo=1900
 - "How many artworks have LLM-mediated interpretations?" → dimension='categoryMethod'
 - "Type breakdown of Rembrandt's autograph paintings" → dimension='type', creator='Rembrandt van Rijn', productionRole='painter', sameRowMatching=true
