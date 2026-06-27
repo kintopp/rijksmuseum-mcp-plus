@@ -343,6 +343,8 @@ Run an individual test with `node scripts/tests/<script>`. Tests come in three s
 | `bench-find-similar.mjs` | — | Benchmark find_similar across diverse artworks to profile performance across signal profiles. |
 | `bench-thread-count.py` | — | Benchmarks harvest-style Linked Art HTTP resolution at 8–16 threads (success rate, latency percentiles, throughput) against a fixed artwork sample. Used to tune harvest concurrency. |
 | `bench-thread-count-low.py` | — | Same benchmark at 1–8 threads — checks whether the ~10 req/s server cap holds at lower concurrency. |
+| `bench-iiif-download.py` | — | Benchmarks `iiif.micr.io` download throughput at concurrency N=1/4/8/16 over 400 random 1568px JPEGs split into 4 disjoint batches (disjoint avoids edge-cache inflation). Needs the vocab DB; run via `uv run --with requests …`. |
+| `iiif-pct-check.py` | — | Probes whether `iiif.micr.io` honours `pct:` region requests by decoding each crop's actual JPEG dimensions — distinguishes correct-crop / silently-returned-full / 400. Resolves a real image via `--id` or `objectNumber`→`iiif_id` from the vocab DB (default `SK-C-5`). Stdlib-only; hits live IIIF; exit 0/1 on a PASS/FAIL verdict. Also measures the server's unadvertised `/max/` size cap. Guards `inspect_artwork_image`'s reliance on `pct:` cropping. |
 | `test-description-similarity.mjs` | ~4 | Smoke test for find_similar description mode. Requires `ENABLE_FIND_SIMILAR=true`. |
 | `test-attribution-qualifiers.mjs` | ~5 | Verifies `attributionQualifier` extraction from Linked Art `assigned_by[].classified_as`. |
 | `test-provenance-parser.mjs` | ~39 | Unit tests for Layer 1 provenance parser functions (splitEvents, classifyTransfer, parseDate, parsePrice, etc.) |
