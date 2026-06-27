@@ -626,7 +626,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>0</kbd> / <kbd>k</kbd><span>Reset view</span></div>
               <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
               <div class="shortcut-row"><kbd>j</kbd> / <kbd>l</kbd><span>Previous / next related variant</span></div>
-              <div class="shortcut-row"><kbd>r</kbd> / <kbd>&#8679;r</kbd><span>Rotate right / left</span></div>
+              <div class="shortcut-row"><kbd>r</kbd> / <kbd>&#8679;r</kbd><span>Rotate left / right</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
               <div class="shortcut-row"><kbd>f</kbd><span>Fullscreen</span></div>
               <div class="shortcut-row"><kbd>i</kbd><span>Draw highlight</span></div>
@@ -792,7 +792,7 @@ function attachEventListeners(): void {
         break;
       case 'r':
       case 'R':
-        rotateBy(e.shiftKey ? -90 : 90);
+        rotateBy(e.shiftKey ? 90 : -90);
         break;
       case 'f':
         toggleFullscreen();
