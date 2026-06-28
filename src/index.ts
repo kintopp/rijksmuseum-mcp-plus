@@ -393,23 +393,17 @@ async function runHttp(): Promise<void> {
     res.type("html").send(page.html);
   });
 
-  // ── Warm DB pages before accepting traffic ─────────────────────
-  //
-  // Page in critical mmap regions so the first real user query is fast.
-  // This runs before app.listen(), so Railway's healthcheck only passes
-  // once the DBs are warm.
-
-  if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); vocabDb.ensureCuratedSetsCache(); }
-  if (embeddingsDb?.available) embeddingsDb.warmCorePages();
-
   // ── Health + readiness ──────────────────────────────────────────
   //
   // /health is the Railway liveness probe — passes as soon as express is
-  // listening (DB core pages already warmed above).
-  // /ready is an informational readiness flag: flips true once the ONNX
-  // embedding model has done one inference and the filtered-KNN path is
-  // warm. Railway is NOT configured to gate on /ready — the flag is purely
-  // for observability so cold-path spikes are attributable.
+  // listening. It deliberately does NOT wait for DB warm-up: on a scale-to-zero
+  // wake, /health and the DB-free MCP `initialize` handshake must answer within
+  // the client's connect timeout, so warming (below) runs AFTER listen(), not
+  // before it. (Pre-listen warming is what held a cold wake ~65s and lost
+  // Claude Desktop's connect race — App Sleeping was disabled 2026-06-01 for it.)
+  // /ready is an informational readiness flag: `warming` until the background
+  // warm-up (DB pages, find_similar caches, ONNX first inference, filtered-KNN
+  // path) completes, then `warm`. Railway is NOT configured to gate on /ready.
 
   let ready = false;
 
@@ -423,7 +417,7 @@ async function runHttp(): Promise<void> {
 
   // ── Memory observability (issue #272) ───────────────────────────
   //
-  // /debug/memory returns the same snapshot used for startup + periodic logs.
+  // /debug/memory returns the same snapshot used for the post-warm startup log.
   // Unauthenticated to match /health, /similar, /enrichment-review — the data
   // is operational signal, not sensitive.
 
@@ -438,33 +432,14 @@ async function runHttp(): Promise<void> {
     res.json(usageStats?.slowQueries() ?? { perInput: {}, phases: {} });
   });
 
-  // ── Start ───────────────────────────────────────────────────────
-
-  // Warm the ONNX first-inference + filtered-KNN page faults BEFORE accepting
-  // traffic, so /mcp never serves a request that pays the cold-model cost and
-  // /ready is already true when we start listening (#325). warmCorePages() above
-  // only pages in the vec0 index; the model's first inference and the
-  // filtered-KNN path are separately cold and were previously warmed after listen().
-  {
-    const t0 = Date.now();
-    try {
-      let warmVec: Float32Array | undefined;
-      if (embeddingModel?.available) {
-        warmVec = await embeddingModel.embed("warmup");
-        console.error(`  Embedding model first-inference warmed in ${Date.now() - t0}ms`);
-      }
-      if (embeddingsDb?.available) {
-        const vec = warmVec ?? new Float32Array(embeddingsDb.vectorDimensions);
-        embeddingsDb.warmFilteredPath(vec);
-      }
-      ready = true;
-      console.error(`  Pre-listen warmup complete in ${Date.now() - t0}ms — /ready now true`);
-      console.error(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));
-    } catch (err) {
-      console.error(`  Pre-listen warmup failed: ${err instanceof Error ? err.message : err}`);
-      ready = true; // don't leave /ready stuck — failure is logged
-    }
-  }
+  // ── Start listening, THEN warm in the background ────────────────
+  //
+  // Listening before warm-up is what makes scale-to-zero viable: a cold wake
+  // answers /health + the MCP `initialize` handshake (neither touches a DB) in
+  // ~seconds, instead of being held while the synchronous ~13s warm-up ran
+  // before listen(). The first real tool call after a wake may still pay a
+  // cold-page cost, but it completes within the /mcp 30s safety net, and the
+  // find_similar caches build lazily on first use regardless.
 
   httpServer = app.listen(port, () => {
     console.error(`Rijksmuseum MCP server listening on http://localhost:${port}`);
@@ -472,6 +447,49 @@ async function runHttp(): Promise<void> {
     console.error(`  Health:       GET  /health`);
     console.error(`  Ready:        GET  /ready`);
   });
+
+  // Background warm-up: only the CHEAP warms run here (core mmap pages, vec0
+  // index, ONNX first inference, filtered-KNN path — each well under ~0.5s).
+  //
+  // The EXPENSIVE builds are deliberately omitted: warmSimilarCaches() (~3-4s)
+  // and ensureCuratedSetsCache() (~9s, a single GROUP BY over the mappings
+  // table) are each one uninterruptible better-sqlite3 call — setImmediate
+  // can't preempt native C work, so warming them here would block /health and
+  // the MCP `initialize` handshake for their full duration and defeat fast wake.
+  // They build lazily on first find_similar / list_curated_sets call instead
+  // (one slow call per process, within the /mcp 30s safety net) — exactly how
+  // the stdio/CLI path already behaves under MCP_SKIP_STARTUP_WARM. The yieldTick
+  // between cheap steps keeps even those sub-second faults from starving a
+  // concurrent wake request. Not awaited — listen() is already serving traffic.
+  const warmInBackground = async (): Promise<void> => {
+    const yieldTick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+    const t0 = Date.now();
+    try {
+      await yieldTick(); // let listen()'s callback + any queued wake requests flush first
+      if (vocabDb?.available) {
+        vocabDb.warmCorePages(); await yieldTick();
+      }
+      if (embeddingsDb?.available) {
+        embeddingsDb.warmCorePages(); await yieldTick();
+      }
+      let warmVec: Float32Array | undefined;
+      if (embeddingModel?.available) {
+        warmVec = await embeddingModel.embed("warmup");
+      }
+      if (embeddingsDb?.available) {
+        const vec = warmVec ?? new Float32Array(embeddingsDb.vectorDimensions);
+        embeddingsDb.warmFilteredPath(vec);
+      }
+      ready = true;
+      console.error(`  Background warmup complete in ${Date.now() - t0}ms — /ready now true`);
+      console.error(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));
+    } catch (err) {
+      console.error(`  Background warmup failed: ${err instanceof Error ? err.message : err}`);
+      ready = true; // don't leave /ready stuck — failure is logged
+    }
+  };
+
+  void warmInBackground();
 }
 
 
