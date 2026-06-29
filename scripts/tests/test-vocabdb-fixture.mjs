@@ -327,4 +327,77 @@ check("searchPersons de-duplicates nameVariants (same name across lang/classific
   assert.equal(r.nameVariants.filter((n) => n === "Rijn, Rembrandt van").length, 1, "duplicate name not collapsed");
 });
 
+// ── find_similar characterization (plan 047) ───────────────────────────────
+// LOCK the exact ranked output of two find_similar channels on the seeded
+// fixture BEFORE the similarity cluster is extracted from VocabularyDb. Ranked
+// ORDER and scores are byte-identical guarantees the extraction must preserve
+// (these assert raw results[], not objs(), which would sort away the ranking).
+// The remaining channels (place/theme/lineage/related-variant/related-object)
+// need more fixture scaffolding — they are exercised by the DB-backed
+// test-find-similar-channels.mjs against data/vocabulary.db.
+check("findSimilarByIconclass ranks shared-notation neighbours by depth×IDF weight", () => {
+  const res = db.findSimilarByIconclass("FX-1", 10);
+  assert.ok(res, "iconclass result is null");
+  assert.deepEqual(res.queryNotations, [
+    { notation: "25F23", label: "beasts of prey", depth: 5 },
+    { notation: "11H", label: "male saints", depth: 3 },
+  ]);
+  // FX-2 (shares both notations) outranks FX-7 (shares only 25F23).
+  assert.deepEqual(res.results.map((r) => [r.objectNumber, r.score]), [
+    ["FX-2", 2.3],
+    ["FX-7", 1.4],
+  ]);
+  assert.deepEqual(res.results[0].sharedMotifs, [
+    { notation: "25F23", label: "beasts of prey", weight: 1.4384103622589042 },
+    { notation: "11H", label: "male saints", weight: 0.8630462173553426 },
+  ]);
+  // FX-3 shares only 11H (depth 3 < MIN_SOLO_NOTATION_DEPTH 5) → solo-filter drops it.
+  assert.equal(res.results.some((r) => r.objectNumber === "FX-3"), false);
+});
+
+check("findSimilarByIconclass warns + returns empty for an artwork with no notations", () => {
+  const res = db.findSimilarByIconclass("FX-5", 10);
+  assert.ok(res);
+  assert.deepEqual(res.queryNotations, []);
+  assert.deepEqual(res.results, []);
+  assert.deepEqual(res.warnings, ["This artwork has no Iconclass notations to search by."]);
+});
+
+check("findSimilarByIconclass returns null for an unknown object number", () => {
+  assert.equal(db.findSimilarByIconclass("NOPE-9999", 10), null);
+});
+
+check("findSimilarByDepictedPerson ranks shared-person neighbours by IDF overlap", () => {
+  const res = db.findSimilarByDepictedPerson("FX-1", 10);
+  assert.ok(res, "person result is null");
+  assert.deepEqual(res.queryTerms, [
+    { label: "Saint Peter", artworks: 2 },
+    { label: "William of Orange", artworks: 3 },
+  ]);
+  // FX-6 (shares both persons) outranks FX-4 (shares only William of Orange).
+  assert.deepEqual(res.results.map((r) => [r.objectNumber, r.score]), [
+    ["FX-6", 0.98],
+    ["FX-4", 0.29],
+  ]);
+  assert.deepEqual(res.results[0].sharedTerms, [
+    { label: "Saint Peter", weight: 0.69 },
+    { label: "William of Orange", weight: 0.29 },
+  ]);
+  assert.deepEqual(res.results[1].sharedTerms, [
+    { label: "William of Orange", weight: 0.29 },
+  ]);
+});
+
+check("findSimilarByDepictedPerson warns + returns empty for an artwork with no depicted persons", () => {
+  const res = db.findSimilarByDepictedPerson("FX-2", 10);
+  assert.ok(res);
+  assert.deepEqual(res.queryTerms, []);
+  assert.deepEqual(res.results, []);
+  assert.deepEqual(res.warnings, ["This artwork has no depicted persons to search by."]);
+});
+
+check("findSimilarByDepictedPerson returns null for an unknown object number", () => {
+  assert.equal(db.findSimilarByDepictedPerson("NOPE-9999", 10), null);
+});
+
 console.log(`\n${passed} passed\n`);
