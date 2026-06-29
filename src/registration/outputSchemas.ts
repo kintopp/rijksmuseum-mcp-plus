@@ -300,6 +300,14 @@ export const ArtworkDetailOutput = {
     iiifId: z.string().nullable().describe("Peer artwork's IIIF identifier when resolved and the peer carries an image; null otherwise. Powers in-viewer prev/next navigation."),
   })).describe("Related-variant peer relations — creator-invariant curator-declared edges ('different example' / 'production stadia' / 'pendant'). Other curator-declared relationships (pair, set, recto|verso, original|reproduction, related object) are exposed via find_similar's Related Object channel rather than here. Capped at 25 entries — see relatedObjectsTotalCount."),
   relatedObjectsTotalCount: z.number().int().nonnegative().describe("Total related-variant peer-relation count before capping. Equals relatedObjects.length when ≤ 25."),
+  physicalRelations: z.array(z.object({
+    relationship: z.string().describe("Physical-companion relationship: 'object | current frame', 'object | former frame', or 'object | pedestal'."),
+    objectNumber: z.string().nullable(),
+    title: z.string().nullable(),
+    objectUri: z.string(),
+    iiifId: z.string().nullable(),
+  })).describe("Physical-companion objects (the artwork's frame(s) / pedestal). Distinct from relatedObjects (creator-invariant variants) and from find_similar groupings. Capped at the same preview limit — see physicalRelationsTotalCount."),
+  physicalRelationsTotalCount: z.number().int().nonnegative().describe("Total physical-companion relation count before capping."),
   parents: z.array(z.object({
     objectNumber: z.string(),
     title: z.string(),

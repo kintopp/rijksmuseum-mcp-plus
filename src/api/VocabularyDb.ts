@@ -100,6 +100,16 @@ export interface ArtworkDetailFromDb {
   }[];
   /** Total related-object count before capping at {@link RELATED_PREVIEW_LIMIT}. */
   relatedObjectsTotalCount: number;
+  /** Physical-companion relations (frame/pedestal) — distinct from relatedObjects (creator-invariant variants). */
+  physicalRelations: {
+    relationship: string;
+    objectNumber: string | null;
+    title: string | null;
+    objectUri: string;
+    iiifId: string | null;
+  }[];
+  /** Total physical-companion count before capping at {@link RELATED_PREVIEW_LIMIT}. */
+  physicalRelationsTotalCount: number;
   persistentId: string | null;
   objectTypes: VocabTerm[];
   materials: VocabTerm[];
@@ -1285,6 +1295,8 @@ export class VocabularyDb {
   private stmtArtworkChildrenPreview: Statement | null = null;
   private stmtArtworkRelatedCount: Statement | null = null;
   private stmtArtworkRelatedPreview: Statement | null = null;
+  private stmtArtworkPhysicalCount: Statement | null = null;
+  private stmtArtworkPhysicalPreview: Statement | null = null;
   private stmtArtworkExternalIds: Statement | null = null;
   private stmtArtworkAttributionEvidence: Statement | null = null;
   private stmtArtworkExhibitions: Statement | null = null;
@@ -1369,6 +1381,11 @@ export class VocabularyDb {
   private relatedVariantByArtId: Map<number, { peerArtId: number; label: string }[]> | null = null;
   private static readonly RELATED_VARIANT_LABELS = [
     "different example", "production stadia", "pendant",
+  ] as const;
+  // Physical-companion relations (frame/pedestal) — surfaced ONLY in get_artwork_details.physicalRelations,
+  // deliberately NOT in RELATED_VARIANT_LABELS (find_similar treats these as companions, not similar artworks).
+  private static readonly RELATED_PHYSICAL_LABELS = [
+    "object | current frame", "object | former frame", "object | pedestal",
   ] as const;
 
   // Related Object cache — derivative works by other hands (B1) and
@@ -1675,6 +1692,23 @@ export class VocabularyDb {
           LEFT JOIN artworks a ON a.art_id = ro.related_art_id
           WHERE ro.art_id = ?
             AND ro.relationship_en IN (${relatedVariantPlaceholders})
+          ORDER BY ro.relationship_en, a.object_number
+          LIMIT ?
+        `);
+        // Physical-companion relations (frame/pedestal) — a separate label set,
+        // surfaced only via get_artwork_details.physicalRelations (NOT find_similar).
+        const physicalPlaceholdersForCount = VocabularyDb.RELATED_PHYSICAL_LABELS.map(() => "?").join(", ");
+        this.stmtArtworkPhysicalCount = this.db.prepare(
+          `SELECT COUNT(*) AS n FROM related_objects
+             WHERE art_id = ? AND relationship_en IN (${physicalPlaceholdersForCount})`
+        );
+        const physicalPlaceholders = VocabularyDb.RELATED_PHYSICAL_LABELS.map(() => "?").join(", ");
+        this.stmtArtworkPhysicalPreview = this.db.prepare(`
+          SELECT ro.relationship_en, ro.related_la_uri, a.object_number, a.title, a.title_all_text, a.iiif_id
+          FROM related_objects ro
+          LEFT JOIN artworks a ON a.art_id = ro.related_art_id
+          WHERE ro.art_id = ?
+            AND ro.relationship_en IN (${physicalPlaceholders})
           ORDER BY ro.relationship_en, a.object_number
           LIMIT ?
         `);
@@ -2221,6 +2255,7 @@ export class VocabularyDb {
       license: row.rights_uri,
       dimensions,
       ...this.fetchRelatedObjects(row.art_id),
+      ...this.fetchPhysicalRelations(row.art_id),
       persistentId: row.art_id ? `http://hdl.handle.net/10934/RM0001.COLLECT.${row.art_id}` : null,
       // Group B
       objectTypes,
@@ -2321,6 +2356,39 @@ export class VocabularyDb {
       iiifId: r.iiif_id,
     }));
     return { relatedObjects: items, relatedObjectsTotalCount: total };
+  }
+
+  /** Physical-companion relations (frame/pedestal) for get_artwork_details. */
+  private fetchPhysicalRelations(
+    artId: number,
+  ): Pick<ArtworkDetailFromDb, "physicalRelations" | "physicalRelationsTotalCount"> {
+    if (!this.stmtArtworkPhysicalCount || !this.stmtArtworkPhysicalPreview) {
+      return { physicalRelations: [], physicalRelationsTotalCount: 0 };
+    }
+    // Both prepared statements bind the 3 RELATED_PHYSICAL_LABELS as label
+    // filters in addition to artId / limit.
+    const labels = VocabularyDb.RELATED_PHYSICAL_LABELS;
+    const total = (this.stmtArtworkPhysicalCount.get(artId, ...labels) as { n: number }).n;
+    if (total === 0) return { physicalRelations: [], physicalRelationsTotalCount: 0 };
+
+    const rows = this.stmtArtworkPhysicalPreview.all(
+      artId, ...labels, VocabularyDb.RELATED_PREVIEW_LIMIT,
+    ) as {
+      relationship_en: string; related_la_uri: string;
+      object_number: string | null; title: string | null; title_all_text: string | null;
+      iiif_id: string | null;
+    }[];
+
+    const items: ArtworkDetailFromDb["physicalRelations"] = rows.map(r => ({
+      relationship: r.relationship_en,
+      objectNumber: r.object_number,
+      title: r.object_number
+        ? VocabularyDb.resolveTitle(r.title, r.title_all_text, "Untitled")
+        : null,
+      objectUri: r.related_la_uri,
+      iiifId: r.iiif_id,
+    }));
+    return { physicalRelations: items, physicalRelationsTotalCount: total };
   }
 
   /**

@@ -245,6 +245,18 @@ export function buildFixture() {
     ]
   );
 
+  // related_objects — frame/pedestal physical companions for FX-1 (art_id 1).
+  // related_art_id points at a peer artwork so the LEFT JOIN resolves object_number/title.
+  const RELATED_OBJECTS = [
+    [1, "https://id.rijksmuseum.nl/peer-frame-cur", 3, "object | current frame", "object | huidige lijst"],
+    [1, "https://id.rijksmuseum.nl/peer-frame-old", null, "object | former frame", "object | voormalige lijst"],
+    [1, "https://id.rijksmuseum.nl/peer-pedestal", 4, "object | pedestal", "object | sokkel"],
+  ];
+  insertMany(
+    "INSERT INTO related_objects (art_id, related_la_uri, related_art_id, relationship_en, relationship_nl) VALUES (?, ?, ?, ?, ?)",
+    RELATED_OBJECTS
+  );
+
   // person_names — variants for v-rembrandt (one equals the primary label, must be filtered out).
   const PERSON_NAMES = [
     ["v-rembrandt", "Rembrandt van Rijn", "en", "display"],     // == primary label → excluded

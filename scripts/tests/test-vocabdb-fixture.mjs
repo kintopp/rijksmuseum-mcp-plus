@@ -133,6 +133,32 @@ check("getArtworkDetail reports bibliographyCount 0 for an uncited artwork", () 
   assert.equal(d.bibliographyCount, 0);
 });
 
+check("getArtworkDetail surfaces physicalRelations (frame/pedestal), separate from relatedObjects", () => {
+  const d = db.getArtworkDetail("FX-1");
+  assert.ok(d, "FX-1 not found");
+  assert.equal(d.physicalRelationsTotalCount, 3);
+  // ordered by relationship_en then object_number (current frame, former frame, pedestal)
+  assert.deepEqual(d.physicalRelations.map((r) => r.relationship),
+    ["object | current frame", "object | former frame", "object | pedestal"]);
+  // current frame resolved to peer FX-3 via related_art_id
+  const cur = d.physicalRelations.find((r) => r.relationship === "object | current frame");
+  assert.equal(cur.objectNumber, "FX-3");
+  assert.equal(cur.objectUri, "https://id.rijksmuseum.nl/peer-frame-cur");
+  // former frame has no in-fixture peer → null objectNumber but URI preserved
+  const old = d.physicalRelations.find((r) => r.relationship === "object | former frame");
+  assert.equal(old.objectNumber, null);
+  assert.equal(old.objectUri, "https://id.rijksmuseum.nl/peer-frame-old");
+  // the existing relatedObjects (variant) path is unaffected — FX-1 has no variant edges
+  assert.deepEqual(d.relatedObjects, []);
+  assert.equal(d.relatedObjectsTotalCount, 0);
+});
+
+check("getArtworkDetail returns empty physicalRelations when none", () => {
+  const d = db.getArtworkDetail("FX-2");
+  assert.deepEqual(d.physicalRelations, []);
+  assert.equal(d.physicalRelationsTotalCount, 0);
+});
+
 // ── Batch / lookup helpers ─────────────────────────────────────────────────
 check("lookupTypes maps object numbers to their type label", () => {
   const m = db.lookupTypes(["FX-1", "FX-3"]);
