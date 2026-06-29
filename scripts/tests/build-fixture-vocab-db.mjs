@@ -88,6 +88,19 @@ const VOCAB = [
   ["v-photog", "person", "Studio Photographer", "Studio Photographer", "studiophotographer", "studiophotographer", 111],
   ["v-role-fotograaf", "classification", "", "fotograaf", "", "fotograaf", 112],
   ["v-role-afterpaint", "classification", "after painting by", "naar schilderij van", "afterpaintingby", "naarschilderijvan", 113],
+  // Depicted persons (type='person', no notation) for find_similar Depicted-Person channel (plan 047).
+  ["v-dp-peter", "person", "Saint Peter", "Petrus", "saintpeter", "petrus", 130],
+  ["v-dp-orange", "person", "William of Orange", "Willem van Oranje", "williamoforange", "willemvanoranje", 131],
+  ["v-dp-maria", "person", "Maria", "Maria", "maria", "maria", 132],
+];
+
+// Iconclass notations (vocabulary.notation set) for the find_similar Iconclass channel
+// (plan 047). type='concept' keeps them out of the person/place caches (which filter on
+// type='person'/'place'); the Iconclass cache keys off notation IS NOT NULL, not type.
+// id, type, label_en, label_nl, label_en_norm, label_nl_norm, vocab_int_id, notation
+const ICONCLASS_VOCAB = [
+  ["v-ic-prey", "concept", "beasts of prey", "roofdieren", "beastsofprey", "roofdieren", 120, "25F23"],
+  ["v-ic-saint", "concept", "male saints", "mannelijke heiligen", "malesaints", "mannelijkeheiligen", 121, "11H"],
 ];
 
 // object_number, art_id, title, creator_label, description_text, inscription_text,
@@ -118,6 +131,21 @@ const MAPPINGS = [
   [7, 101, 15],
   [8, 102, 15],
   [9, 110, 4], [9, 111, 4], [9, 112, 8], [9, 113, 8],
+  // ── find_similar fixtures (plan 047) — subject field (12) ──
+  // Iconclass overlap: FX-1 carries 25F23(len5) + 11H(len3). FX-2 shares both,
+  // FX-7 shares only 25F23 (depth 5 ≥ MIN_SOLO_NOTATION_DEPTH → kept), FX-3 shares
+  // only 11H (depth 3 < 5 → dropped by the solo-notation filter).
+  [1, 120, 12], [1, 121, 12],
+  [2, 120, 12], [2, 121, 12],
+  [3, 121, 12],
+  [7, 120, 12],
+  // Depicted-Person overlap: FX-1 depicts Saint Peter(130) + William of Orange(131).
+  // FX-6 shares both; FX-4 shares only 131; FX-8 carries Maria(132) alone (raises
+  // personN so 130/131 keep positive IDF and the two neighbours rank distinctly).
+  [1, 130, 12], [1, 131, 12],
+  [6, 130, 12], [6, 131, 12],
+  [4, 131, 12],
+  [8, 132, 12],
 ];
 
 // artwork_id, creator_id, role_id, part_index — the TRUE row-aware pairing for FX-9.
@@ -178,6 +206,10 @@ export function buildFixture() {
   insertMany(
     "INSERT INTO vocabulary (id, type, label_en, label_nl, label_en_norm, label_nl_norm, vocab_int_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
     VOCAB
+  );
+  insertMany(
+    "INSERT INTO vocabulary (id, type, label_en, label_nl, label_en_norm, label_nl_norm, vocab_int_id, notation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ICONCLASS_VOCAB
   );
   insertMany(
     `INSERT INTO artworks
