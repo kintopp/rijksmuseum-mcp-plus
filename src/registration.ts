@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/ext-apps/server";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
@@ -30,7 +31,6 @@ import {
   projectToFullImage,
 } from "./registration/geometry.js";
 import {
-  __dirname,
   ARTWORK_VIEWER_RESOURCE_URI,
   stripNullCoerceBool,
   parseDimRange,
@@ -123,9 +123,16 @@ const VIEWER_FALLBACK_HTML = `<!DOCTYPE html>
 
 let viewerHtmlCache: string | null = null;
 
+// Anchored to THIS module's location, not a shared helper's. registration.ts
+// compiles to dist/registration.js, so __dirname is dist/ and the bundled
+// viewer sits alongside at dist/apps/index.html. (Importing __dirname from
+// registration/helpers.ts — one directory deeper — silently resolved to
+// dist/dist/apps/index.html and served the "Viewer Not Built" fallback.)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 function loadViewerHtml(): string {
   if (viewerHtmlCache !== null) return viewerHtmlCache;
-  const htmlPath = path.join(__dirname, "..", "dist", "apps", "index.html");
+  const htmlPath = path.join(__dirname, "apps", "index.html");
   try {
     viewerHtmlCache = fs.readFileSync(htmlPath, "utf-8");
   } catch {

@@ -1,13 +1,8 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { SORT_COLUMNS, type SortColumn, type BrowseSetRecord, type ProvenanceArtworkResult } from "../api/VocabularyDb.js";
 import { UsageStats } from "../utils/UsageStats.js";
 import { buildContentBlocks, mirrorWarningsToText, type JsonTextOptions, type TextBlock } from "../utils/responseShape.js";
-
-export const __filename = fileURLToPath(import.meta.url);
-export const __dirname = path.dirname(__filename);
 
 export const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
