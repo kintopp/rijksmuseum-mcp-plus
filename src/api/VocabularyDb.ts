@@ -17,9 +17,10 @@ import { SimilarityQueries } from "./VocabularyDb.similarity.js";
 import {
   formatDateRange,
   formatDimensions,
-  LINEAGE_QUALIFIERS,
   RELATED_VARIANT_LABELS,
 } from "./vocab-format.js";
+// Re-exported for backward compat — importers still pull these from VocabularyDb.js
+// (outputSchemas/viewer/similar/semantic tools + the verify_lineage test).
 export {
   formatDateRange,
   formatDimensions,
