@@ -1,88 +1,880 @@
 {
-  "test-pure-functions.mjs": { "category": "base", "purpose": "pure exported-function unit tests (RijksmuseumApiClient, geometry, FTS, overlays)" },
-  "test-provenance-parser.mjs": { "category": "base", "purpose": "provenance parser unit tests (events, dates, prices, transfers)" },
-  "test-provenance-peg.mjs": { "category": "base", "purpose": "PEG provenance parser (Layer 1) + interpretation (Layer 2) unit tests" },
-  "test-parser-drift.mjs": { "category": "base", "purpose": "hermetic guard: committed provenance parser must equal a fresh peggy regen" },
-  "test-inscription-parser.mjs": { "category": "base", "purpose": "inscription parser unit tests (Lugt marks, segments, gloss-dedup)" },
-  "test-overlay-scoring.mjs": { "category": "base", "purpose": "overlay-scoring.mjs pure-function unit tests (IoU, projection, clamp)" },
-  "test-lru-cache.mjs": { "category": "base", "purpose": "lruGetOrCreate unit tests (imports from dist/)" },
-  "test-origin-validation.mjs": { "category": "base", "purpose": "/mcp Origin allowlist helper unit tests (isAllowedOrigin)" },
-  "test-text-query-dsl.mjs": { "category": "base", "purpose": "compileTextQuery DSL → FTS5 MATCH compiler unit tests" },
-  "test-usage-stats-perinput.mjs": { "category": "base", "purpose": "UsageStats per-input slow-query instrumentation unit tests (in-memory)" },
-  "test-inflight-cache.mjs": { "category": "base", "purpose": "getOrComputeWithInflight cache + in-flight de-dup unit tests" },
-  "test-provenance-enrichment-store.mjs": { "category": "base", "purpose": "content-addressed enrichment store tests (in-memory SQLite, hermetic)" },
-  "test-enrichment-review-html.mjs": { "category": "base", "purpose": "enrichment review HTML generator unit tests (imports from dist/)" },
-  "test-provenance-change-report.mjs": { "category": "base", "purpose": "provenance-change-report computeDiff fixture tests (in-memory SQLite)" },
-  "test-response-shape.mjs": { "category": "base", "purpose": "buildContentBlocks unit tests (responseShape.ts, imports from dist/)" },
-  "test-warnings-rendering.mjs": { "category": "base", "purpose": "mirrorWarningsToText unit tests (imports from dist/)" },
-  "test-audit-name-collision.mjs": { "category": "base", "purpose": "schema-audit buildNameIndex/findShapeCollisions unit tests (no I/O)" },
-  "test-placetype-labels.mjs": { "category": "base", "purpose": "placetypeLabels unit tests (imports from dist/)" },
-  "test-oai-deletions.mjs": { "category": "base", "purpose": "OAI-PMH deleted-record surfacing unit tests (fixture XML, stubbed HTTP)" },
-  "test-provenance-matched-events.mjs": { "category": "base", "purpose": "provenanceMatchedEvents compact-projection unit tests (imports from dist/)" },
-
-  "test-viewer-build.mjs": { "category": "ci", "purpose": "hermetic viewer build-output validation (self-contained single-file, size budget)" },
-  "test-vocabdb-fixture.mjs": { "category": "ci", "purpose": "hermetic VocabularyDb characterization against a synthetic fixture DB" },
-
-  "test-title-variants.mjs": { "category": "track2", "purpose": "title_variants surfacing via VocabularyDb (needs data/vocabulary.db)" },
-  "test-parent-grouping.mjs": { "category": "track2", "purpose": "parent/child grouping + findParentGroupings (needs data/vocabulary.db)" },
-  "test-related-objects.mjs": { "category": "track2", "purpose": "relatedObjects[] related-variant surfacing (needs data/vocabulary.db)" },
-  "test-track2-mcp.mjs": { "category": "track2", "purpose": "Track-2 wirings end-to-end over stdio MCP (needs built dist/ + DB)" },
-  "test-creator-vocabid.mjs": { "category": "track2", "purpose": "creator vocabId resolution regression (needs built dist/ + vocab DB)" },
-  "test-attribution-same-row.mjs": { "category": "track2", "purpose": "same-row attribution qualifier/role pairing (needs built dist/ + DB)" },
-  "test-attribution-qualifiers.mjs": { "category": "track2", "purpose": "attributionQualifier extraction in get_artwork_details (needs dist/ + DB)" },
-  "test-stats-provenance-plan.mjs": { "category": "track2", "purpose": "collection_stats hasProvenance driver query-plan guard (needs DB)" },
-  "test-stats-unfiltered-provenance-plan.mjs": { "category": "track2", "purpose": "unfiltered collection_stats provenance-dim query-plan guard (needs DB)" },
-  "test-stats-field-shape-plan.mjs": { "category": "track2", "purpose": "collection_stats vocab-dim access-shape query-plan guard (needs DB)" },
-  "test-collection-stats-tier1.mjs": { "category": "track2", "purpose": "collection_stats Tier-1 dims/filters (role/profession/place/gender) over stdio" },
-  "test-collection-stats-tier2.mjs": { "category": "track2", "purpose": "collection_stats Tier-2 dims/filters (parse/unsold/partyRole/exhibition) over stdio" },
-  "test-collection-stats-tier3.mjs": { "category": "track2", "purpose": "collection_stats Tier-3 dims/filters (placeType + has* booleans) over stdio" },
-  "test-runtime-additions.mjs": { "category": "track2", "purpose": "person filter + extentText opt-in + productionPlace recall over stdio (needs DB)" },
-
-  "test-cli.mjs": { "category": "db", "purpose": "headless CLI smoke test (needs built dist/ + DBs + live IIIF; in test:cli)" },
-  "test-mcp-smoke.mjs": { "category": "db", "purpose": "19-tool MCP smoke test over stdio (needs built dist/ + DBs + live IIIF; in test:mcp)" },
-  "test-inscription-details.mjs": { "category": "db", "purpose": "get_artwork_details parsedInscriptions smoke (needs dist/ + vocab DB; in test:inscriptions)" },
-  "test-search-inscriptions.mjs": { "category": "db", "purpose": "search_inscriptions smoke (needs dist/ + vocab DB; in test:inscriptions)" },
-  "test-provenance-enrichment-review.mjs": { "category": "db", "purpose": "search_provenance enrichment-review channel parity (needs dist/ + vocab DB; in test:provenance-review)" },
-  "test-app-conformance.mjs": { "category": "db", "purpose": "MCP Apps viewer metadata/conformance over stdio (needs built dist/; in test:viewer-app)" },
-
-  "test-324-concurrent-mcp.mjs": { "category": "live", "purpose": "concurrent POST /mcp probe (#324); hits a running HTTP server / production URL" },
-  "test-http-viewer-queues.mjs": { "category": "live", "purpose": "cross-request viewerQueues persistence; needs `npm run serve` running" },
-  "test-wake-timing.mjs": { "category": "live", "purpose": "HTTP cold-wake /health + initialize timing probe; spawns its own HTTP server" },
-
-  "test-boolean-coercion.mjs": { "category": "db", "purpose": "string-form boolean coercion over stdio (#359; needs built dist/ + DBs); orphaned" },
-  "test-browse-set-db.mjs": { "category": "db", "purpose": "browse_set DB-backed paging (#303; needs built dist/ + DB); orphaned" },
-  "test-collection-stats-attribution.mjs": { "category": "db", "purpose": "collection_stats attribution dims (#352) over stdio (needs dist/ + DB); orphaned" },
-  "test-collection-stats-new-dimensions.mjs": { "category": "db", "purpose": "collection_stats theme/exhibition/decade dims (#299; needs dist/ + DB); orphaned" },
-  "test-creditline-fallback.mjs": { "category": "db", "purpose": "search_provenance creditLineQuery fallback over stdio (needs dist/ + DB); orphaned" },
-  "test-description-similarity.mjs": { "category": "db", "purpose": "find_similar Description channel smoke (needs dist/ + embeddings DB); orphaned" },
-  "test-facet-warning.mjs": { "category": "db", "purpose": "facet-on-filtered-dimension warning (#351) via VocabularyDb (needs DB); orphaned" },
-  "test-find-similar-channels.mjs": { "category": "db", "purpose": "find_similar Theme + Related Object channels (needs live DBs); orphaned" },
-  "test-find-similar-theme-tiebreak.mjs": { "category": "db", "purpose": "find_similar Theme importance tie-break regression (#313; needs DB); orphaned" },
-  "test-find-similar.mjs": { "category": "db", "purpose": "find_similar HTML page across all channels (needs vocab+embeddings+iconclass DBs, net for Visual); orphaned" },
-  "test-fts-edge-cases.mjs": { "category": "db", "purpose": "FTS5 escaping edge cases via search_artwork over stdio (needs dist/ + DB); orphaned" },
-  "test-inspect-navigate.mjs": { "category": "db", "purpose": "inspect_artwork_image/navigate_viewer/poll workflow (needs dist/ + DBs + live IIIF); orphaned" },
-  "test-list-curated-sets.mjs": { "category": "db", "purpose": "list_curated_sets enrichment (#302; needs built dist/ + DB); orphaned" },
-  "test-new-filters.mjs": { "category": "db", "purpose": "theme/sourceType filters + facets (#292) over stdio (needs dist/ + DB); orphaned" },
-  "test-provenance-search.mjs": { "category": "db", "purpose": "search_provenance structured search over stdio (needs dist/ + vocab DB); orphaned" },
-  "test-provenance-size-guard.mjs": { "category": "db", "purpose": "search_provenance compact auto-downgrade (plan 029; needs dist/ + DBs); orphaned" },
-  "test-query-plans.mjs": { "category": "db", "purpose": "SQLite query-planner regression over 200 VocabularyDb queries (needs DB); orphaned" },
-  "test-remount-viewer.mjs": { "category": "db", "purpose": "remount_viewer viewUUID-preservation (#310) over stdio (needs dist/ + DB); orphaned" },
-  "test-removed-demographic-filters.mjs": { "category": "db", "purpose": "verifies removed demographic filters are Zod-rejected (#305; needs built dist/); orphaned" },
-  "test-removed-provenance-filter.mjs": { "category": "db", "purpose": "verifies search_artwork({provenance}) is Zod-rejected (#304; needs built dist/); orphaned" },
-  "test-schema-2020-12.mjs": { "category": "db", "purpose": "JSON Schema 2020-12 conformance over stdio tools/list (SEP-2106; needs built dist/); orphaned" },
-  "test-search-org-aliases.mjs": { "category": "db", "purpose": "creator org/group alt-name FTS resolution (#295) over stdio (needs dist/ + DB); orphaned" },
-  "test-search-persons.mjs": { "category": "db", "purpose": "search_persons tool (#305) over stdio (needs dist/ + vocab DB); orphaned" },
-  "test-search-provenance-compact.mjs": { "category": "db", "purpose": "search_provenance compact mode (#386; needs built dist/ + vocab DB); orphaned" },
-  "test-search-provenance-period-location.mjs": { "category": "db", "purpose": "search_provenance periodLocation filter (#298; needs built dist/ + DB); orphaned" },
-  "test-sort-by.mjs": { "category": "db", "purpose": "search_artwork sort columns + tiebreaker (#198) over stdio (needs dist/ + DB); orphaned" },
-  "test-tool-descriptions.mjs": { "category": "db", "purpose": "tool-description regression over stdio tools/list (#297/#392; needs built dist/); orphaned" },
-  "test-totalcount.mjs": { "category": "db", "purpose": "totalResults + facets directly via VocabularyDb (needs vocab DB); orphaned" },
-  "test-url-rename-smoke.mjs": { "category": "db", "purpose": "url-field rename smoke (#341) over stdio (needs built dist/ + DB); orphaned" },
-  "test-viewer-resource-load.mjs": { "category": "db", "purpose": "loadViewerHtml serves the real bundle not the 'Viewer Not Built' fallback over stdio (needs built dist/); orphaned" },
-
-  "test-artwork-details-v027.mjs": { "category": "exploratory", "purpose": "v0.27-era get_artwork_details smoke; superseded (asserts removal of conservation/examinations re-added in v0.90); orphaned" },
-  "test-overlay-harness-smoke.mjs": { "category": "exploratory", "purpose": "manual overlay-scoring runbook (needs ANTHROPIC_API_KEY + offline ground-truth assets); not auto-run; orphaned" },
-  "test-peg-modified-by.mjs": { "category": "exploratory", "purpose": "modified_by[] PEG fold categorisation probe over a samples fixture (analysis, not pass/fail gate); orphaned" },
-  "test-svg-overlays.mjs": { "category": "exploratory", "purpose": "manual visual SVG-overlay test (opens a viewer URL for inspection); orphaned" },
-  "test-v019-features-deprecated.mjs": { "category": "exploratory", "purpose": "DEPRECATED v0.19-era feature tests kept for historical reference; orphaned" }
+  "test-pure-functions.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "pure exported-function unit tests (RijksmuseumApiClient, geometry, FTS, overlays)"
+  },
+  "test-provenance-parser.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "provenance parser unit tests (events, dates, prices, transfers)"
+  },
+  "test-provenance-peg.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "PEG provenance parser (Layer 1) + interpretation (Layer 2) unit tests"
+  },
+  "test-parser-drift.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "hermetic guard: committed provenance parser must equal a fresh peggy regen"
+  },
+  "test-inscription-parser.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "inscription parser unit tests (Lugt marks, segments, gloss-dedup)"
+  },
+  "test-overlay-scoring.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "overlay-scoring.mjs pure-function unit tests (IoU, projection, clamp)"
+  },
+  "test-lru-cache.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "lruGetOrCreate unit tests (imports from dist/)"
+  },
+  "test-origin-validation.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "/mcp Origin allowlist helper unit tests (isAllowedOrigin)"
+  },
+  "test-text-query-dsl.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "compileTextQuery DSL → FTS5 MATCH compiler unit tests"
+  },
+  "test-usage-stats-perinput.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "UsageStats per-input slow-query instrumentation unit tests (in-memory)"
+  },
+  "test-inflight-cache.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "getOrComputeWithInflight cache + in-flight de-dup unit tests"
+  },
+  "test-provenance-enrichment-store.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "content-addressed enrichment store tests (in-memory SQLite, hermetic)"
+  },
+  "test-enrichment-review-html.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "enrichment review HTML generator unit tests (imports from dist/)"
+  },
+  "test-provenance-change-report.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "provenance-change-report computeDiff fixture tests (in-memory SQLite)"
+  },
+  "test-response-shape.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "buildContentBlocks unit tests (responseShape.ts, imports from dist/)"
+  },
+  "test-warnings-rendering.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "mirrorWarningsToText unit tests (imports from dist/)"
+  },
+  "test-audit-name-collision.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "schema-audit buildNameIndex/findShapeCollisions unit tests (no I/O)"
+  },
+  "test-placetype-labels.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "placetypeLabels unit tests (imports from dist/)"
+  },
+  "test-oai-deletions.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "OAI-PMH deleted-record surfacing unit tests (fixture XML, stubbed HTTP)"
+  },
+  "test-provenance-matched-events.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "provenanceMatchedEvents compact-projection unit tests (imports from dist/)"
+  },
+  "test-viewer-build.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "hermetic viewer build-output validation (self-contained single-file, size budget)"
+  },
+  "test-vocabdb-fixture.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "hermetic VocabularyDb characterization against a synthetic fixture DB"
+  },
+  "test-title-variants.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "vocabDb"
+    ],
+    "purpose": "title_variants surfacing via VocabularyDb (needs data/vocabulary.db)"
+  },
+  "test-parent-grouping.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "vocabDb"
+    ],
+    "purpose": "parent/child grouping + findParentGroupings (needs data/vocabulary.db)"
+  },
+  "test-related-objects.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "vocabDb"
+    ],
+    "purpose": "relatedObjects[] related-variant surfacing (needs data/vocabulary.db)"
+  },
+  "test-track2-mcp.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "Track-2 wirings end-to-end over stdio MCP (needs built dist/ + DB)"
+  },
+  "test-creator-vocabid.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "creator vocabId resolution regression (needs built dist/ + vocab DB)"
+  },
+  "test-attribution-same-row.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "same-row attribution qualifier/role pairing (needs built dist/ + DB)"
+  },
+  "test-attribution-qualifiers.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "attributionQualifier extraction in get_artwork_details (needs dist/ + DB)"
+  },
+  "test-stats-provenance-plan.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "vocabDb"
+    ],
+    "purpose": "collection_stats hasProvenance driver query-plan guard (needs DB)"
+  },
+  "test-stats-unfiltered-provenance-plan.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "vocabDb"
+    ],
+    "purpose": "unfiltered collection_stats provenance-dim query-plan guard (needs DB)"
+  },
+  "test-stats-field-shape-plan.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "vocabDb"
+    ],
+    "purpose": "collection_stats vocab-dim access-shape query-plan guard (needs DB)"
+  },
+  "test-collection-stats-tier1.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "collection_stats Tier-1 dims/filters (role/profession/place/gender) over stdio"
+  },
+  "test-collection-stats-tier2.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "collection_stats Tier-2 dims/filters (parse/unsold/partyRole/exhibition) over stdio"
+  },
+  "test-collection-stats-tier3.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "collection_stats Tier-3 dims/filters (placeType + has* booleans) over stdio"
+  },
+  "test-runtime-additions.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "person filter + extentText opt-in + productionPlace recall over stdio (needs DB)"
+  },
+  "test-cli.mjs": {
+    "category": "db",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "embeddingsDb",
+      "network",
+      "vocabDb"
+    ],
+    "purpose": "headless CLI smoke test (needs built dist/ + DBs + live IIIF; in test:cli)"
+  },
+  "test-mcp-smoke.mjs": {
+    "category": "db",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "embeddingsDb",
+      "network",
+      "vocabDb"
+    ],
+    "purpose": "19-tool MCP smoke test over stdio (needs built dist/ + DBs + live IIIF; in test:mcp)"
+  },
+  "test-inscription-details.mjs": {
+    "category": "db",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "get_artwork_details parsedInscriptions smoke (needs dist/ + vocab DB; in test:inscriptions)"
+  },
+  "test-search-inscriptions.mjs": {
+    "category": "db",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "search_inscriptions smoke (needs dist/ + vocab DB; in test:inscriptions)"
+  },
+  "test-provenance-enrichment-review.mjs": {
+    "category": "db",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "search_provenance enrichment-review channel parity (needs dist/ + vocab DB; in test:provenance-review)"
+  },
+  "test-app-conformance.mjs": {
+    "category": "db",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "MCP Apps viewer metadata/conformance over stdio (needs built dist/; in test:viewer-app)"
+  },
+  "test-324-concurrent-mcp.mjs": {
+    "category": "live",
+    "class": "smoke",
+    "status": "manual",
+    "runtime": "node",
+    "requires": [
+      "manual",
+      "network",
+      "server"
+    ],
+    "purpose": "concurrent POST /mcp probe (#324); hits a running HTTP server / production URL"
+  },
+  "test-http-viewer-queues.mjs": {
+    "category": "live",
+    "class": "smoke",
+    "status": "manual",
+    "runtime": "node",
+    "requires": [
+      "manual",
+      "server"
+    ],
+    "purpose": "cross-request viewerQueues persistence; needs `npm run serve` running"
+  },
+  "test-wake-timing.mjs": {
+    "category": "live",
+    "class": "smoke",
+    "status": "manual",
+    "runtime": "node",
+    "requires": [
+      "manual",
+      "server"
+    ],
+    "purpose": "HTTP cold-wake /health + initialize timing probe; spawns its own HTTP server"
+  },
+  "test-boolean-coercion.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "string-form boolean coercion over stdio (#359; needs built dist/ + DBs)"
+  },
+  "test-browse-set-db.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "browse_set DB-backed paging (#303; needs built dist/ + DB)"
+  },
+  "test-collection-stats-attribution.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "collection_stats attribution dims (#352) over stdio (needs dist/ + DB)"
+  },
+  "test-collection-stats-new-dimensions.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "collection_stats theme/exhibition/decade dims (#299; needs dist/ + DB)"
+  },
+  "test-creditline-fallback.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "search_provenance creditLineQuery fallback over stdio (needs dist/ + DB)"
+  },
+  "test-description-similarity.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "embeddingsDb",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "find_similar Description channel smoke (needs dist/ + embeddings DB)"
+  },
+  "test-facet-warning.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "facet-on-filtered-dimension warning (#351) via VocabularyDb (needs DB)"
+  },
+  "test-find-similar-channels.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "manual",
+      "network",
+      "vocabDb"
+    ],
+    "purpose": "find_similar Theme + Related Object channels (needs live DBs)"
+  },
+  "test-find-similar-theme-tiebreak.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "find_similar Theme importance tie-break regression (#313; needs DB)"
+  },
+  "test-find-similar.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "embeddingsDb",
+      "manual",
+      "network",
+      "vocabDb"
+    ],
+    "purpose": "find_similar HTML page across all channels (needs vocab+embeddings+iconclass DBs, net for Visual)"
+  },
+  "test-fts-edge-cases.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "FTS5 escaping edge cases via search_artwork over stdio (needs dist/ + DB)"
+  },
+  "test-inspect-navigate.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "embeddingsDb",
+      "manual",
+      "network",
+      "vocabDb"
+    ],
+    "purpose": "inspect_artwork_image/navigate_viewer/poll workflow (needs dist/ + DBs + live IIIF)"
+  },
+  "test-list-curated-sets.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "list_curated_sets enrichment (#302; needs built dist/ + DB)"
+  },
+  "test-new-filters.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "theme/sourceType filters + facets (#292) over stdio (needs dist/ + DB)"
+  },
+  "test-provenance-search.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "search_provenance structured search over stdio (needs dist/ + vocab DB)"
+  },
+  "test-provenance-size-guard.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "search_provenance compact auto-downgrade (plan 029; needs dist/ + DBs)"
+  },
+  "test-query-plans.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "SQLite query-planner regression over 200 VocabularyDb queries (needs DB)"
+  },
+  "test-remount-viewer.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "remount_viewer viewUUID-preservation (#310) over stdio (needs dist/ + DB)"
+  },
+  "test-removed-demographic-filters.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual"
+    ],
+    "purpose": "verifies removed demographic filters are Zod-rejected (#305; needs built dist/)"
+  },
+  "test-removed-provenance-filter.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual"
+    ],
+    "purpose": "verifies search_artwork({provenance}) is Zod-rejected (#304; needs built dist/)"
+  },
+  "test-schema-2020-12.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual"
+    ],
+    "purpose": "JSON Schema 2020-12 conformance over stdio tools/list (SEP-2106; needs built dist/)"
+  },
+  "test-search-org-aliases.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "creator org/group alt-name FTS resolution (#295) over stdio (needs dist/ + DB)"
+  },
+  "test-search-persons.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "search_persons tool (#305) over stdio (needs dist/ + vocab DB)"
+  },
+  "test-search-provenance-compact.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "search_provenance compact mode (#386; needs built dist/ + vocab DB)"
+  },
+  "test-search-provenance-period-location.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "search_provenance periodLocation filter (#298; needs built dist/ + DB)"
+  },
+  "test-sort-by.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "search_artwork sort columns + tiebreaker (#198) over stdio (needs dist/ + DB)"
+  },
+  "test-tool-descriptions.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual"
+    ],
+    "purpose": "tool-description regression over stdio tools/list (#297/#392; needs built dist/)"
+  },
+  "test-totalcount.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "totalResults + facets directly via VocabularyDb (needs vocab DB)"
+  },
+  "test-url-rename-smoke.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual",
+      "vocabDb"
+    ],
+    "purpose": "url-field rename smoke (#341) over stdio (needs built dist/ + DB)"
+  },
+  "test-viewer-resource-load.mjs": {
+    "category": "db",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "manual"
+    ],
+    "purpose": "loadViewerHtml serves the real bundle not the 'Viewer Not Built' fallback over stdio (needs built dist/)"
+  },
+  "test-artwork-details-v027.mjs": {
+    "category": "exploratory",
+    "class": "scratch",
+    "status": "deprecated",
+    "runtime": "node",
+    "requires": [
+      "manual"
+    ],
+    "purpose": "v0.27-era get_artwork_details smoke; superseded (asserts removal of conservation/examinations re-added in v0.90)"
+  },
+  "test-overlay-harness-smoke.mjs": {
+    "category": "exploratory",
+    "class": "scratch",
+    "status": "manual",
+    "runtime": "node",
+    "requires": [
+      "apiKey",
+      "manual"
+    ],
+    "purpose": "manual overlay-scoring runbook (needs ANTHROPIC_API_KEY + offline ground-truth assets); not auto-run"
+  },
+  "test-peg-modified-by.mjs": {
+    "category": "exploratory",
+    "class": "scratch",
+    "status": "scratch",
+    "runtime": "node",
+    "requires": [
+      "manual"
+    ],
+    "purpose": "modified_by[] PEG fold categorisation probe over a samples fixture (analysis, not pass/fail gate)"
+  },
+  "test-svg-overlays.mjs": {
+    "category": "exploratory",
+    "class": "scratch",
+    "status": "manual",
+    "runtime": "node",
+    "requires": [
+      "manual"
+    ],
+    "purpose": "manual visual SVG-overlay test (opens a viewer URL for inspection)"
+  },
+  "test-v019-features-deprecated.mjs": {
+    "category": "exploratory",
+    "class": "scratch",
+    "status": "deprecated",
+    "runtime": "node",
+    "requires": [
+      "manual"
+    ],
+    "purpose": "DEPRECATED v0.19-era feature tests kept for historical reference"
+  }
 }

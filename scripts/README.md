@@ -311,28 +311,38 @@ Finished one-off passes that undid mis-firing LLM-structural corrections from th
 
 ## Tests (`tests/`)
 
-Run an individual test with `node scripts/tests/<script>`. Tests come in three shapes: **hermetic** unit tests (in-memory SQLite / pure functions imported from `dist/` — no `data/` access), **integration smoke** tests (boot `dist/index.js` over stdio via the MCP SDK `Client`), and **query-plan** guards (assert `EXPLAIN QUERY PLAN` shape). The canonical entrypoints are the `npm` suites below; `run-all.mjs` is an older stdio-only runner kept for convenience but is **not** what CI runs.
+Run an individual test or probe with `node scripts/tests/<script>`. This directory is a mixed scratchpad: many files are one-off probes, feasibility checks, or historical diagnostics that would normally have lived in `/tmp`, but live here so project imports and Node's ESM resolver work reliably. A `test-*` filename does **not** imply CI ownership.
+
+The maintained surface is `scripts/tests/tests.manifest.json` plus `scripts/tests/run.mjs`. The manifest classifies each Node `test-*.mjs` file by:
+
+- `class`: `gate` (maintained CI gate), `smoke` (useful but DB/live/manual prerequisites), or `scratch` (expendable probe/history).
+- `status`: `promoted`, `manual`, `scratch`, or `deprecated`.
+- `requires`: structured prerequisites such as `dist`, `vocabDb`, `embeddingsDb`, `network`, `server`, `apiKey`, and `manual`.
+
+Uniform summaries and shared harness cleanup should apply to `gate` tests and newly promoted tests only. Scratch/manual/deprecated scripts are intentionally low-contract.
 
 ### npm suites
 
 | Command | Runs |
 |---------|------|
 | `npm test` | `test-pure-functions.mjs` only (fast). |
-| `npm run test:base` | The hermetic CI core: pure-functions, provenance-parser, provenance-peg, inscription-parser, overlay-scoring, lru-cache, origin-validation, text-query-dsl, usage-stats-perinput, inflight-cache, provenance-enrichment-store, enrichment-review-html, provenance-change-report, response-shape, warnings-rendering, audit-name-collision, placetype-labels, oai-deletions. |
-| `npm run test:ci` | `test:base` + `test-viewer-build.mjs` + `test-vocabdb-fixture.mjs`. |
+| `npm run test:base` | Manifest `category=base` (`gate` class unit/core tests). |
+| `npm run test:ci` | Manifest metadata check + manifest `class=gate` (`base` + `ci` categories). This is what GitHub Actions runs after build/typecheck/lint. |
 | `npm run test:all` | `test:base` + `test-harvest-run-provenance.py` (Python). |
-| `npm run test:track2` | title-variants, parent-grouping, related-objects, track2-mcp, creator-vocabid, attribution-same-row, attribution-qualifiers, stats-provenance-plan, stats-unfiltered-provenance-plan, stats-field-shape-plan, collection-stats-tier1/2/3, runtime-additions. |
+| `npm run test:track2` | Manifest `category=track2` (`smoke` class; needs DBs/built `dist` as documented per entry). |
 | `npm run test:inscriptions` | `test-inscription-details.mjs` + `test-search-inscriptions.mjs` (need a built `dist/` + DB). |
 | `npm run test:fixture` | `test-vocabdb-fixture.mjs`. |
 | `npm run test:viewer-build` | `test-viewer-build.mjs`. |
 | `npm run test:viewer-app` | `test-app-conformance.mjs` (needs `./dist`). |
 | `npm run test:cli` | `test-cli.mjs` (needs `dist/` + DBs + live IIIF; excluded from `test:all`). |
+| `npm run test:run` | Manifest default: `class=gate`. Use `node scripts/tests/run.mjs --class smoke` or `--class scratch` only when intentionally running those lower-contract scripts. |
+| `npm run test:manifest-check` | Verifies every Node `test-*.mjs` has a manifest entry with valid class/status/runtime/requires metadata. |
 
 ### Test catalogue
 
 | Script | Assertions | Description |
 |--------|-----------|-------------|
-| `run-all.mjs` | — | Test runner: executes all stdio test scripts in sequence (skips `test-http-viewer-queues.mjs`). |
+| `run-all.mjs` | — | Deprecated wrapper around `run.mjs` (default `class=gate`); kept so old muscle-memory does not bypass the manifest. |
 | `test-inspect-navigate.mjs` | 115 | Full inspect/navigate/poll viewer workflow |
 | `test-http-viewer-queues.mjs` | 16 | HTTP cross-request viewerQueue persistence (requires server on :3000) |
 | `smoke-v019-deprecated.mjs` | 25 | **DEPRECATED.** v0.19 feature smoke tests; predates v0.27 clusters A–F. Kept for reference. |
@@ -366,7 +376,7 @@ Run an individual test with `node scripts/tests/<script>`. Tests come in three s
 
 ### Hermetic & unit tests (CI core)
 
-Imported from `dist/` or run against in-memory SQLite — no `data/` access. Part of `npm run test:base`/`test:ci`/`test:all`.
+Imported from `dist/` or run against in-memory SQLite — no `data/` access. These are the manifest `class=gate` tests used by `npm run test:base`/`test:ci`/`test:all`.
 
 | Script | Description |
 |--------|-------------|

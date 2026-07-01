@@ -9,17 +9,20 @@
  * reads its exit code, runs them with bounded concurrency, and prints an
  * aggregate `PASS X / FAIL Y of Z` tally. It edits no test file.
  *
- * The committed manifest (tests.manifest.json) categorizes every test file and
- * documents what each one needs (DBs, network, etc.). It does NOT replace the
- * hand-maintained `&&` chains in package.json — it is purely additive tooling.
+ * The committed manifest (tests.manifest.json) classifies every test file by:
+ *   - category: functional grouping (base, ci, track2, db, live, exploratory)
+ *   - class: ownership level (gate, smoke, scratch)
+ *   - status: maintenance state (promoted, manual, scratch, deprecated)
+ *   - requires: structured prerequisites (dist, vocabDb, network, etc.)
  *
  * Flags:
- *   --category <name>   run only files whose manifest category === <name>
+ *   --class <name>      run files whose manifest class === gate|smoke|scratch
+ *   --category <name>   run files whose manifest category === <name>
+ *   --status <name>     run files whose manifest status === <name>
  *   --filter <substr>   run only files whose filename contains <substr>
  *   --check-manifest    assert every test-*.mjs on disk has a manifest entry
- *                       (and no entry points at a missing file), then exit
- *   (no args)           run the `ci` category (hermetic; falls back to globbing
- *                       all test-*.mjs if the manifest is absent)
+ *                       (and valid metadata), then exit
+ *   (no args)           run the `gate` class. Smoke/scratch scripts are opt-in.
  *
  * Dependency-free: node:child_process / node:fs / node:os / node:path / node:url.
  */
@@ -36,12 +39,18 @@ const MANIFEST_PATH = path.join(TESTS_DIR, "tests.manifest.json");
 // ── Parse args ──────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
 let category = null;
+let testClass = null;
+let status = null;
 let filter = null;
 let checkManifest = false;
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (a === "--category") category = argv[++i];
+  if (a === "--class") testClass = argv[++i];
+  else if (a.startsWith("--class=")) testClass = a.slice("--class=".length);
+  else if (a === "--category") category = argv[++i];
   else if (a.startsWith("--category=")) category = a.slice("--category=".length);
+  else if (a === "--status") status = argv[++i];
+  else if (a.startsWith("--status=")) status = a.slice("--status=".length);
   else if (a === "--filter") filter = argv[++i];
   else if (a.startsWith("--filter=")) filter = a.slice("--filter=".length);
   else if (a === "--check-manifest") checkManifest = true;
@@ -71,6 +80,32 @@ function loadManifest() {
 const onDisk = discoverTestFiles();
 const manifest = loadManifest();
 
+const ALLOWED_CATEGORIES = new Set(["base", "ci", "track2", "db", "live", "exploratory"]);
+const ALLOWED_CLASSES = new Set(["gate", "smoke", "scratch"]);
+const ALLOWED_STATUSES = new Set(["promoted", "manual", "scratch", "deprecated"]);
+const ALLOWED_RUNTIMES = new Set(["node"]);
+const ALLOWED_REQUIRES = new Set([
+  "apiKey",
+  "dist",
+  "embeddingsDb",
+  "manual",
+  "network",
+  "server",
+  "vocabDb",
+]);
+
+function validateSelector(label, value, allowed) {
+  if (value && !allowed.has(value)) {
+    console.error(`Unknown ${label}: ${value}`);
+    console.error(`Allowed ${label}s: ${[...allowed].join(", ")}`);
+    process.exit(2);
+  }
+}
+
+validateSelector("class", testClass, ALLOWED_CLASSES);
+validateSelector("category", category, ALLOWED_CATEGORIES);
+validateSelector("status", status, ALLOWED_STATUSES);
+
 // ── --check-manifest ────────────────────────────────────────────────────────
 if (checkManifest) {
   if (!manifest) {
@@ -93,28 +128,70 @@ if (checkManifest) {
     console.error(`✗ ${danglingEntry.length} manifest entr(y/ies) point at a missing file:`);
     for (const f of danglingEntry) console.error(`    ${f}`);
   }
+  for (const [file, meta] of Object.entries(manifest)) {
+    const problems = [];
+    if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+      problems.push("entry must be an object");
+    } else {
+      if (!ALLOWED_CATEGORIES.has(meta.category)) problems.push(`invalid category=${meta.category}`);
+      if (!ALLOWED_CLASSES.has(meta.class)) problems.push(`invalid class=${meta.class}`);
+      if (!ALLOWED_STATUSES.has(meta.status)) problems.push(`invalid status=${meta.status}`);
+      if (!ALLOWED_RUNTIMES.has(meta.runtime)) problems.push(`invalid runtime=${meta.runtime}`);
+      if (typeof meta.purpose !== "string" || !meta.purpose.trim()) problems.push("purpose must be non-empty");
+      if (!Array.isArray(meta.requires)) {
+        problems.push("requires must be an array");
+      } else {
+        for (const req of meta.requires) {
+          if (!ALLOWED_REQUIRES.has(req)) problems.push(`invalid requires item=${req}`);
+        }
+      }
+      if (meta.class === "gate" && meta.status !== "promoted") {
+        problems.push("gate tests must have status=promoted");
+      }
+      if (meta.status === "deprecated" && meta.class !== "scratch") {
+        problems.push("deprecated tests must have class=scratch");
+      }
+    }
+    if (problems.length) {
+      ok = false;
+      console.error(`✗ invalid manifest entry for ${file}:`);
+      for (const p of problems) console.error(`    ${p}`);
+    }
+  }
   if (ok) {
-    console.log(`✓ manifest in sync: ${onDisk.length} test file(s), each with an entry`);
+    console.log(`✓ manifest in sync: ${onDisk.length} test file(s), each with valid metadata`);
     process.exit(0);
   }
   process.exit(1);
 }
 
 // ── Build selection ─────────────────────────────────────────────────────────
-let selected;
-if (filter) {
-  selected = onDisk.filter((f) => f.includes(filter));
-} else if (category) {
-  if (!manifest) {
-    console.error("✗ --category requires a manifest (none found)");
-    process.exit(2);
+if ((category || testClass || status) && !manifest) {
+  console.error("✗ class/category/status selectors require a manifest (none found)");
+  process.exit(2);
+}
+
+let selected = onDisk;
+if (manifest) {
+  selected = selected.filter((f) => manifest[f]);
+  if (category) selected = selected.filter((f) => manifest[f].category === category);
+  if (testClass) selected = selected.filter((f) => manifest[f].class === testClass);
+  if (status) selected = selected.filter((f) => manifest[f].status === status);
+  if (!category && !testClass && !status && !filter) {
+    selected = selected.filter((f) => manifest[f].class === "gate");
   }
-  selected = onDisk.filter((f) => manifest[f] && manifest[f].category === category);
-} else {
-  // no args → ci category (or glob everything if no manifest is present)
-  selected = manifest
-    ? onDisk.filter((f) => manifest[f] && manifest[f].category === "ci")
-    : onDisk;
+} else if (!filter) {
+  console.error("✗ no manifest found; pass --filter to run an explicit filename subset");
+  process.exit(2);
+}
+if (filter) selected = selected.filter((f) => f.includes(filter));
+
+if (selected.some((f) => manifest?.[f]?.runtime !== "node")) {
+  const nonNode = selected.filter((f) => manifest?.[f]?.runtime !== "node");
+  for (const f of nonNode) {
+    console.error(`✗ ${f} is not a Node test`);
+  }
+  process.exit(2);
 }
 
 if (selected.length === 0) {

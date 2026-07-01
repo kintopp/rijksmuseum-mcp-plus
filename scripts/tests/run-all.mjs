@@ -1,31 +1,22 @@
 #!/usr/bin/env node
 /**
- * Run all stdio test scripts in scripts/tests/.
- * Skips test-http-viewer-queues.mjs (requires a running HTTP server).
- * Usage: node scripts/tests/run-all.mjs
+ * Compatibility wrapper for the older "run every stdio-looking test" command.
+ *
+ * The test directory is a mixed scratchpad. The maintained surface is now
+ * scripts/tests/run.mjs + tests.manifest.json, where scratch/manual/deprecated
+ * probes are classified explicitly and never run by default.
  */
-import { readdirSync } from "fs";
-import { execSync } from "child_process";
+import { spawnSync } from "node:child_process";
 
-const SKIP = new Set(["test-http-viewer-queues.mjs", "run-all.mjs"]);
-
-const tests = readdirSync("scripts/tests")
-  .filter((f) => f.startsWith("test-") && f.endsWith(".mjs") && !SKIP.has(f))
-  .sort();
-
-let failed = 0;
-for (const t of tests) {
-  console.log(`\n▶ ${t}`);
-  try {
-    execSync(`node scripts/tests/${t}`, { stdio: "inherit" });
-  } catch {
-    failed++;
-  }
-}
-
-console.log(
-  failed
-    ? `\n✗ ${failed}/${tests.length} suites failed`
-    : `\n✓ ${tests.length}/${tests.length} suites passed`,
+console.error(
+  "run-all.mjs is deprecated; using run.mjs (default class=gate) instead. " +
+  "Use run.mjs --class gate|smoke|scratch for explicit ownership classes.",
 );
-process.exit(failed ? 1 : 0);
+
+const result = spawnSync(
+  process.execPath,
+  ["scripts/tests/run.mjs", ...process.argv.slice(2)],
+  { stdio: "inherit" },
+);
+
+process.exit(result.status ?? 1);
