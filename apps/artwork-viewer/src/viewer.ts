@@ -12,6 +12,8 @@
  *   onteardown         → save zoom/pan state
  */
 
+/// <reference types="vite/client" />
+
 import {
   App,
   applyDocumentTheme,
@@ -21,8 +23,10 @@ import {
 
 import OpenSeadragon from 'openseadragon';
 
-// Data structure matching the JSON returned by get_artwork_image tool
-export interface ArtworkImageData {
+// Data structure matching the JSON returned by get_artwork_image tool.
+// A type alias (not an interface) so it carries an implicit index signature
+// and is assignable to the SDK's structuredContent `{ [x: string]: unknown }`.
+export type ArtworkImageData = {
   iiifId: string;
   iiifInfoUrl: string;
   thumbnailUrl: string;
@@ -36,7 +40,7 @@ export interface ArtworkImageData {
   physicalDimensions: string | null;
   url: string;
   viewUUID?: string;
-}
+};
 
 // App state
 let currentData: ArtworkImageData | null = null;
@@ -100,13 +104,16 @@ app.ontoolresult = (result) => {
   app.sendLog({ level: 'info', data: 'Tool result received' });
 
   if (result.isError) {
+    // content[] is a union (text | image | …); only the text branch has .text.
+    const firstBlock = result.content?.[0];
+    const errorText = firstBlock?.type === 'text' ? firstBlock.text : undefined;
     // Fail loud only when no viewer is mounted yet — otherwise the error may
     // belong to a navigate/inspect/remount echo and shouldn't tear down the
     // existing viewer.
     if (!currentData) {
-      showError('Error loading artwork', result.content?.[0]?.text || 'Unknown error');
+      showError('Error loading artwork', errorText || 'Unknown error');
     } else {
-      app.sendLog({ level: 'warn', data: `Tool error while viewer mounted: ${result.content?.[0]?.text || 'unknown'}` });
+      app.sendLog({ level: 'warning', data: `Tool error while viewer mounted: ${errorText || 'unknown'}` });
     }
     return;
   }
@@ -480,13 +487,13 @@ function computeSelectionRegion(
   };
 }
 
-function onSelectionPress(event: OpenSeadragon.MouseTrackerEvent): void {
+function onSelectionPress(event: OpenSeadragon.PointerMouseTrackerEvent): void {
   if (!viewer || !event.position) return;
   dragStart = viewer.viewport.viewerElementToImageCoordinates(event.position);
   removeSelectionPreview();
 }
 
-function onSelectionDrag(event: OpenSeadragon.MouseTrackerEvent): void {
+function onSelectionDrag(event: OpenSeadragon.DragMouseTrackerEvent): void {
   if (!viewer || !dragStart || !event.position || !currentData) return;
   const dragEnd = viewer.viewport.viewerElementToImageCoordinates(event.position);
   const r = computeSelectionRegion(dragStart, dragEnd, currentData.width, currentData.height);
@@ -499,7 +506,7 @@ function onSelectionDrag(event: OpenSeadragon.MouseTrackerEvent): void {
   showSelectionPreview(rect);
 }
 
-function onSelectionRelease(event: OpenSeadragon.MouseTrackerEvent): void {
+function onSelectionRelease(event: OpenSeadragon.ReleaseMouseTrackerEvent): void {
   if (!viewer || !dragStart || !event.position || !currentData) {
     dragStart = null;
     return;
