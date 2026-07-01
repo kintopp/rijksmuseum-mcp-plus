@@ -18,6 +18,15 @@ const visualCache = new Map<string, { value: { candidates: SimilarCandidate[]; t
 const NODE_ID_TTL = 60 * 60_000;  // 1 hour (mapping is immutable)
 const VISUAL_TTL = 30 * 60_000;   // 30 min (matches similarPages TTL)
 
+// Sweep expired entries every 60s so these maps stay bounded in a long-lived
+// HTTP process — the per-key expiry checks alone never evict keys that are
+// never re-requested. Mirrors the oaiPageBuffers sweeper in helpers.ts.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of nodeIdCache) if (v.expiresAt <= now) nodeIdCache.delete(k);
+  for (const [k, v] of visualCache) if (v.expiresAt <= now) visualCache.delete(k);
+}, 60_000).unref();
+
 /** Resolve an objectNumber to the Rijksmuseum website's objectNodeId (hex hash).
  *  Returns null if the artwork is not in the website search index. */
 export async function resolveObjectNodeId(objectNumber: string): Promise<string | null> {

@@ -322,6 +322,16 @@ async function runHttp(): Promise<void> {
   }
   const recentOriginRejections = new Map<string, number>();
   const ORIGIN_LOG_INTERVAL_MS = 60_000;
+  // Sweep stale throttle entries so the map stays bounded — otherwise an
+  // attacker spraying unique Origin headers grows it without limit. Entries
+  // older than the log interval are safe to drop: the next rejection from that
+  // Origin logs and re-adds it anyway.
+  setInterval(() => {
+    const cutoff = Date.now() - ORIGIN_LOG_INTERVAL_MS;
+    for (const [o, ts] of recentOriginRejections) {
+      if (ts < cutoff) recentOriginRejections.delete(o);
+    }
+  }, ORIGIN_LOG_INTERVAL_MS).unref();
   app.use("/mcp", (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const origin = req.get("origin");
     if (isAllowedOrigin(origin, mcpOriginAllowlist)) {

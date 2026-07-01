@@ -498,8 +498,13 @@ export function paginatedResponse(
   formatLine?: (record: Record<string, unknown>, index: number) => string,
   identifiersOnly?: boolean,
 ): ToolResponse | StructuredToolResponse {
-  const records = result.records.splice(0, maxResults);
-  const overflow = result.records; // splice mutated: remainder is what's left
+  // Non-mutating slice: callers may pass a retained buffer's array by reference
+  // (drainOaiBuffer Case A passes buffered.remainder directly), and splice()
+  // here would corrupt it — breaking #142 retry-safety, since retrying the same
+  // server resumptionToken would then return later records and silently skip a
+  // page. slice() leaves the caller's array intact.
+  const records = result.records.slice(0, maxResults);
+  const overflow = result.records.slice(maxResults);
 
   // Build server-side continuation token when there are buffered records or an upstream token
   let serverToken: string | null = null;
