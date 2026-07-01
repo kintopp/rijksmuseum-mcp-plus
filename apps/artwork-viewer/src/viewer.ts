@@ -1075,7 +1075,10 @@ async function copyToClipboard(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch { /* blocked in sandboxed iframe */ }
-  // Fallback: hidden textarea + execCommand
+  // Fallback: hidden textarea + execCommand. `execCommand` is deprecated (TS6387,
+  // suggestion-only — does not fail tsc) but intentionally retained: it is the only
+  // synchronous clipboard path when a host denies the sandboxed iframe clipboard-write
+  // permission and navigator.clipboard rejects. Do not remove to silence the hint.
   try {
     const ta = document.createElement('textarea');
     ta.value = text;
