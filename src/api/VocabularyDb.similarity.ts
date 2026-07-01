@@ -3,7 +3,7 @@ import {
   formatDateRange,
   LINEAGE_QUALIFIERS,
   RELATED_VARIANT_LABELS,
-} from "./VocabularyDb.js";
+} from "./vocab-format.js";
 import type {
   ArtworkMeta,
   IconclassSimilarResult,

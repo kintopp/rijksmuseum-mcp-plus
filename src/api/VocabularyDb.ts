@@ -14,6 +14,18 @@ import {
   type InscriptionMatch,
 } from "../inscriptions.js";
 import { SimilarityQueries } from "./VocabularyDb.similarity.js";
+import {
+  formatDateRange,
+  formatDimensions,
+  LINEAGE_QUALIFIERS,
+  RELATED_VARIANT_LABELS,
+} from "./vocab-format.js";
+export {
+  formatDateRange,
+  formatDimensions,
+  LINEAGE_QUALIFIERS,
+  RELATED_VARIANT_LABELS,
+} from "./vocab-format.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -259,17 +271,6 @@ export interface DepictedSimilarResult {
   warnings?: string[];
 }
 
-/** AAT qualifier URIs that carry visual-similarity signal, with strength weights. */
-export const LINEAGE_QUALIFIERS: ReadonlyMap<string, number> = new Map([
-  ["http://vocab.getty.edu/aat/300404286", 3.0],  // after
-  ["http://vocab.getty.edu/aat/300404287", 3.0],  // copyist of
-  ["http://vocab.getty.edu/aat/300404274", 2.0],  // workshop of
-  ["http://vocab.getty.edu/aat/300404269", 1.5],  // attributed to
-  ["http://vocab.getty.edu/aat/300404283", 1.0],  // circle of (kring van)
-  ["http://vocab.getty.edu/aat/300404284", 1.0],  // circle of (omgeving van) / school of
-  ["http://vocab.getty.edu/aat/300404282", 1.0],  // follower of
-]);
-
 /** #349: row-level priority markers on production parts. Distinct from connoisseurship
  *  qualifiers in that they're not carried by assignment_pairs and so can't enforce
  *  same-row matching with creator. */
@@ -282,27 +283,6 @@ export const PRIORITY_LEVEL_QUALIFIER_URIS: readonly string[] = [
 /** Label fallback for priority-level qualifier detection on DBs that predate
  *  assignment_pairs (where priorityLevelQualifierIds can't be resolved by URI). */
 const PRIORITY_QUALIFIER_LABELS: ReadonlySet<string> = new Set(["primary", "secondary", "undetermined"]);
-
-/** find_similar Related Variant labels (#293) — curator-declared peer edges where the
- *  creator is invariant. Module-scope (shared by VocabularyDb's related_objects /
- *  physicalRelations paths and the SimilarityQueries Related Variant channel). */
-export const RELATED_VARIANT_LABELS = [
-  "different example", "production stadia", "pendant",
-] as const;
-
-/** Format earliest/latest date integers into a display string (e.g. "1642" or "1640–1650"). */
-export function formatDateRange(earliest: number | null | undefined, latest: number | null | undefined): string | undefined {
-  if (earliest == null) return undefined;
-  return earliest === latest ? String(earliest) : `${earliest}–${latest}`;
-}
-
-/** Format height/width in cm as a dimension statement (e.g. "h 379.5 cm × w 453.5 cm"). */
-export function formatDimensions(heightCm: number | null | undefined, widthCm: number | null | undefined): string | null {
-  const parts: string[] = [];
-  if (heightCm != null) parts.push(`h ${heightCm} cm`);
-  if (widthCm != null) parts.push(`w ${widthCm} cm`);
-  return parts.length > 0 ? parts.join(" × ") : null;
-}
 
 /** A vocabulary term reference (id + label). */
 export interface VocabTerm {
