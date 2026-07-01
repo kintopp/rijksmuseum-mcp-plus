@@ -6,15 +6,32 @@ specialised query patterns beyond the examples in the main skill.
 
 ## Contents
 
-1. [Provenance Text Format (AAM Standard)](#provenance-text-format-aam-standard)
-2. [Transfer Types (CMOA/PLOD-aligned Vocabulary)](#transfer-types-cmoaplod-aligned-vocabulary)
-3. [Party Roles and Positions](#party-roles-and-positions)
-4. [Date Representation](#date-representation)
-5. [Historical Currencies](#historical-currencies)
-6. [Enrichment Provenance](#enrichment-provenance)
-7. [Parse Method Values](#parse-method-values)
-8. [Provenance Facets](#provenance-facets)
-9. [Tested Query Patterns](#tested-query-patterns)
+1. [Research Workflow: Three Levels of Scope](#research-workflow-three-levels-of-scope)
+2. [Provenance Text Format (AAM Standard)](#provenance-text-format-aam-standard)
+3. [Transfer Types (CMOA/PLOD-aligned Vocabulary)](#transfer-types-cmoaplod-aligned-vocabulary)
+4. [Party Roles and Positions](#party-roles-and-positions)
+5. [Date Representation](#date-representation)
+6. [Historical Currencies](#historical-currencies)
+7. [Enrichment Provenance](#enrichment-provenance)
+8. [Parse Method Values](#parse-method-values)
+9. [Provenance Facets](#provenance-facets)
+10. [Tested Query Patterns](#tested-query-patterns)
+
+---
+
+## Research Workflow: Three Levels of Scope
+
+Provenance research moves through three levels of detail:
+
+1. **Scope and profile** — `search_provenance` for keyword search over the raw provenance corpus, with `facets: true` for quick distributional context. For credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging Rembrandt") use `search_provenance` — the credit line covers a much larger share of the catalogue than parsed provenance chains do and captures the last link of acquisition.
+2. **Structured chain analysis** — `search_provenance` with structured filters (`transferType`, `party`, `dateFrom`/`dateTo`, etc.) returns parsed chains with dates, prices, transfer types, and ownership periods.
+3. **Single-object deep dive** — `search_provenance(objectNumber=...)` for the full chain, then `get_artwork_details` for narrative text and curatorial context.
+
+**Cross-domain queries**: `hasProvenance: true` on `search_artwork` or `collection_stats` bridges the two systems — e.g. `collection_stats(dimension="type", hasProvenance=true)`.
+
+**Enrichment transparency:** `categoryMethod` and `positionMethod` are queryable input filters on `search_provenance`, not just output fields. When results contain LLM-enriched records, the response includes a review URL — **always show it to the user** (see [Enrichment Provenance](#enrichment-provenance)).
+
+**Pagination**: when `totalArtworks` exceeds the page size, paginate with `offset` — advance it by the `maxResults` you used each call (caller-selectable 1–50, default 1), looping until `offset ≥ totalArtworks`.
 
 ---
 
