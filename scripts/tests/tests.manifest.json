@@ -69,6 +69,7 @@
   "test-remount-viewer.mjs": { "category": "db", "purpose": "remount_viewer viewUUID-preservation (#310) over stdio (needs dist/ + DB); orphaned" },
   "test-removed-demographic-filters.mjs": { "category": "db", "purpose": "verifies removed demographic filters are Zod-rejected (#305; needs built dist/); orphaned" },
   "test-removed-provenance-filter.mjs": { "category": "db", "purpose": "verifies search_artwork({provenance}) is Zod-rejected (#304; needs built dist/); orphaned" },
+  "test-schema-2020-12.mjs": { "category": "db", "purpose": "JSON Schema 2020-12 conformance over stdio tools/list (SEP-2106; needs built dist/); orphaned" },
   "test-search-org-aliases.mjs": { "category": "db", "purpose": "creator org/group alt-name FTS resolution (#295) over stdio (needs dist/ + DB); orphaned" },
   "test-search-persons.mjs": { "category": "db", "purpose": "search_persons tool (#305) over stdio (needs dist/ + vocab DB); orphaned" },
   "test-search-provenance-compact.mjs": { "category": "db", "purpose": "search_provenance compact mode (#386; needs built dist/ + vocab DB); orphaned" },
@@ -77,6 +78,7 @@
   "test-tool-descriptions.mjs": { "category": "db", "purpose": "tool-description regression over stdio tools/list (#297/#392; needs built dist/); orphaned" },
   "test-totalcount.mjs": { "category": "db", "purpose": "totalResults + facets directly via VocabularyDb (needs vocab DB); orphaned" },
   "test-url-rename-smoke.mjs": { "category": "db", "purpose": "url-field rename smoke (#341) over stdio (needs built dist/ + DB); orphaned" },
+  "test-viewer-resource-load.mjs": { "category": "db", "purpose": "loadViewerHtml serves the real bundle not the 'Viewer Not Built' fallback over stdio (needs built dist/); orphaned" },
 
   "test-artwork-details-v027.mjs": { "category": "exploratory", "purpose": "v0.27-era get_artwork_details smoke; superseded (asserts removal of conservation/examinations re-added in v0.90); orphaned" },
   "test-overlay-harness-smoke.mjs": { "category": "exploratory", "purpose": "manual overlay-scoring runbook (needs ANTHROPIC_API_KEY + offline ground-truth assets); not auto-run; orphaned" },
