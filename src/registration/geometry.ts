@@ -19,7 +19,7 @@ export function regionToPixels(region: string, w: number, h: number): string | u
  * inspect_artwork_image(show_overlays:true). The result is centred on the
  * overlay and expanded to ≥1.4× the overlay's footprint, ≥12% per axis,
  * shift-clamped to stay inside 0–100. The 12% floor keeps the overlay
- * visible after the 448 px clamp that show_overlays applies.
+ * visible after the 784 px clamp that show_overlays applies.
  *
  * Returns undefined for full/square/unparseable inputs or when image
  * dimensions are missing.

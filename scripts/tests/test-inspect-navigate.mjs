@@ -12,6 +12,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import sharp from "sharp";
+import { compositeOverlays } from "../../dist/overlay-compositor.js";
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -343,11 +345,17 @@ for (const entry of [overlayEntry1, overlayEntry2]) {
   }
 }
 
+// Plan 051 §1.2 reworded the nudge: disconfirmation (describe + self-point to the
+// label) plus an explicit failure path ("could not locate it" is an acceptable
+// outcome) and an edge-check full-view fallback — replacing the old
+// "re-add ALL" repositioning-only wording.
 const navText1 = r4a.content?.find(c => c.type === "text")?.text ?? "";
 assert(navText1.includes("show_overlays:true"),
   "navigate_viewer text response mentions show_overlays:true");
-assert(navText1.includes("clear_overlays") && navText1.includes("re-add ALL"),
-  "navigate_viewer text response mentions clear_overlays + re-add ALL guidance");
+assert(navText1.includes("clear_overlays") && navText1.includes("could not locate it"),
+  "navigate_viewer text response mentions clear_overlays + the could-not-locate failure path");
+assert(navText1.includes('region:"full"'),
+  "navigate_viewer text response mentions the edge-check full-view fallback");
 assert(overlayEntry1 && navText1.includes(overlayEntry1.verificationRegion),
   "navigate_viewer text response includes the suggested verificationRegion verbatim");
 
@@ -747,7 +755,7 @@ await client.callTool({
 });
 
 // Baseline: show_overlays=false returns a plain crop at a non-full region
-// (show_overlays + region=full is rejected — see 4ter-d).
+// (show_overlays + region=full is now allowed — see 4ter-d/4ter-d2, plan 051 §1.1(b)).
 console.log("\n--- 4ter-a: show_overlays=false → plain crop ---");
 const r4terA = await client.callTool({
   name: "inspect_artwork_image",
@@ -790,24 +798,30 @@ const compImage = r4terB.content.find(c => c.type === "image");
 assert(compImage != null, "composite response has image");
 assert(compImage.data !== plainImage.data, "composite bytes differ from plain bytes");
 
-// Size clamp: passing size=1200 with show_overlays=true still clamps to 448.
-console.log("\n--- 4ter-c: size=1200 force-clamped to 448 when show_overlays=true ---");
+// Size clamp: passing size=2000 with show_overlays=true still clamps to 784
+// (plan 051 §1.1(a) — raised from 448; 784 = 28×28 stays ×28-aligned, half the
+// 1568 default). SK-A-2152 is 6012×3321 native, so pct:0,0,50,50's regionWidth
+// (~3003px) doesn't further reduce the clamp — 784 is the binding constraint.
+console.log("\n--- 4ter-c: size=2000 force-clamped to 784 when show_overlays=true ---");
 const r4terC = await client.callTool({
   name: "inspect_artwork_image",
   arguments: {
     objectNumber: "SK-A-2152",
     region: "pct:0,0,50,50",
-    size: 1200,
+    size: 2000,
     navigateViewer: false,
     show_overlays: true,
     viewUUID: viewUUIDov,
   },
 });
 const clampSC = r4terC.structuredContent ?? JSON.parse(r4terC.content.find(c => c.type === "text").text);
-assert(clampSC.requestedSize === 448, `size=1200 clamped to 448 when show_overlays=true (got ${clampSC.requestedSize})`);
+assert(clampSC.requestedSize === 784, `size=2000 clamped to 784 when show_overlays=true (got ${clampSC.requestedSize})`);
+assert(784 % 28 === 0, "784 stays ×28-aligned (784 = 28×28)");
 
-// show_overlays on region="full" is rejected — feature-scale verification only.
-console.log("\n--- 4ter-d: show_overlays + region=full rejected ---");
+// show_overlays on region="full" is now allowed (plan 051 §1.1(b)) — the queued
+// overlay (p1-target, pct:10,10,20,20 → 20%×20%) is well above the 5% threshold,
+// so this succeeds silently with no warning.
+console.log("\n--- 4ter-d: show_overlays + region=full succeeds silently for a large (≥5%) overlay ---");
 const r4terD = await client.callTool({
   name: "inspect_artwork_image",
   arguments: {
@@ -818,10 +832,54 @@ const r4terD = await client.callTool({
     viewUUID: viewUUIDov,
   },
 });
-assert(r4terD.isError === true, "show_overlays on full returns isError");
-const fullErrText = r4terD.content?.find(c => c.type === "text")?.text ?? "";
-assert(fullErrText.includes("show_overlays_on_full_not_supported"), "error text includes reject code");
-assert(fullErrText.includes("feature-scale"), "error text explains the 'why'");
+assert(!r4terD.isError, "show_overlays on full with a large overlay does not error");
+const fullSC = r4terD.structuredContent ?? JSON.parse(r4terD.content.find(c => c.type === "text").text);
+assert(fullSC.overlaysRendered >= 1, `overlays rendered on full view (got ${fullSC.overlaysRendered})`);
+assert(!fullSC.warnings || fullSC.warnings.length === 0, "no warnings for a large (≥5%) overlay on full view");
+const fullText = r4terD.content?.find(c => c.type === "text")?.text ?? "";
+assert(!fullText.includes("show_overlays_on_full_not_supported"), "reject code no longer present for large overlays");
+
+// 4ter-d2. Tiny-overlay warning branch: a fresh viewer with a single overlay whose
+// long axis is <5% of the image (pct:10,10,3,3 on a 6012×3321 image → 3%×3%).
+// show_overlays + region=full must still succeed (warning, not error), and the
+// warning must appear in BOTH channels: structuredContent.warnings (schema field
+// added in 1.1(b)(ii)) and content[].text — this handler hand-builds its response
+// and never calls structuredResponse, so mirrorWarningsToText never runs on this
+// path (plan 051 §1.1(b)(iii)); the handler renders its own text instead.
+console.log("\n--- 4ter-d2: show_overlays + region=full warns (not errors) for a tiny (<5%) overlay ---");
+const r4terTiny0 = await client.callTool({
+  name: "get_artwork_image",
+  arguments: { objectNumber: "SK-A-2152" },
+});
+const imgTiny = r4terTiny0.structuredContent ?? JSON.parse(r4terTiny0.content[0].text);
+const viewUUIDtiny = imgTiny.viewUUID;
+await client.callTool({
+  name: "navigate_viewer",
+  arguments: {
+    viewUUID: viewUUIDtiny,
+    commands: [
+      { action: "add_overlay", region: "pct:10,10,3,3", label: "tiny-target", color: "red" },
+    ],
+  },
+});
+const r4terTiny = await client.callTool({
+  name: "inspect_artwork_image",
+  arguments: {
+    objectNumber: "SK-A-2152",
+    region: "full",
+    show_overlays: true,
+    navigateViewer: false,
+    viewUUID: viewUUIDtiny,
+  },
+});
+assert(!r4terTiny.isError, "tiny (<5%) overlay on full view still succeeds (warning, not error)");
+const tinySC = r4terTiny.structuredContent ?? JSON.parse(r4terTiny.content.find(c => c.type === "text").text);
+assert(Array.isArray(tinySC.warnings) && tinySC.warnings.length > 0,
+  `structuredContent.warnings is a non-empty array (got ${JSON.stringify(tinySC.warnings)})`);
+const tinyWarning = tinySC.warnings?.[0] ?? "";
+const tinyText = r4terTiny.content?.find(c => c.type === "text")?.text ?? "";
+assert(tinyWarning.length > 0 && tinyText.includes(tinyWarning),
+  "the same warning text is present in content[].text (hand-built caption, not mirrorWarningsToText)");
 
 // Recency tie-break: opening a second viewer for the same artwork + adding
 // an overlay there should make inspect (without viewUUID) pick the newer
@@ -1340,6 +1398,59 @@ console.log("\n--- 10b: artwork without provenance ---");
   } else {
     assert(true, "skipped — artwork not found");
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  11. overlay-compositor — tiny-box label-tag skip (plan 051 §1.3)
+// ══════════════════════════════════════════════════════════════════
+
+section("11. overlay-compositor — tiny-box label-tag skip");
+
+// buildLabelTagSvg (overlay-compositor.ts) is unexported and returns "" for
+// boxes narrower than 4x the tag height, so this test uses an exact proxy
+// already established by test-pure-functions.mjs's "compositeOverlays labels"
+// section: compare a labeled composite against the same region with label:""
+// (the no-tag baseline). If the tag is skipped, labeled and unlabeled bytes
+// are byte-identical (buildLabelTagSvg contributed no elements either way);
+// if the tag renders, the bytes differ.
+{
+  const testJpeg784 = await sharp({
+    create: { width: 784, height: 784, channels: 3, background: { r: 60, g: 60, b: 60 } },
+  }).jpeg().toBuffer();
+  const frame784 = { rect: { x: 0, y: 0, w: 784, h: 784 }, imageWidth: 784, imageHeight: 784 };
+
+  // Tiny box: ~2.5% of a 784px image on each axis (pct:10,10,2.5,2.5 → ~19.6×19.6px).
+  // tagH at this image scale is ~26.7px, so 4×tagH (~106.6px) >> 19.6px — the
+  // tag-skip guard should fire and no tag should be drawn.
+  const tinyLabeled = await compositeOverlays(
+    testJpeg784,
+    [{ region: "pct:10,10,2.5,2.5", color: "red", label: "tiny" }],
+    frame784,
+  );
+  const tinyUnlabeled = await compositeOverlays(
+    testJpeg784,
+    [{ region: "pct:10,10,2.5,2.5", color: "red", label: "" }],
+    frame784,
+  );
+  assert(tinyLabeled.rendered === 1, `tiny box: rendered=1 (got ${tinyLabeled.rendered})`);
+  assert(tinyLabeled.buffer.length === tinyUnlabeled.buffer.length,
+    `tiny box (~2.5% of 784px): labeled bytes === unlabeled bytes — tag skipped (${tinyLabeled.buffer.length} vs ${tinyUnlabeled.buffer.length})`);
+
+  // Normal box: 50% of a 784px image on each axis — well above the 4×tagH
+  // threshold, so the tag still renders as before.
+  const normalLabeled = await compositeOverlays(
+    testJpeg784,
+    [{ region: "pct:25,25,50,50", color: "red", label: "normal" }],
+    frame784,
+  );
+  const normalUnlabeled = await compositeOverlays(
+    testJpeg784,
+    [{ region: "pct:25,25,50,50", color: "red", label: "" }],
+    frame784,
+  );
+  assert(normalLabeled.rendered === 1, `normal box: rendered=1 (got ${normalLabeled.rendered})`);
+  assert(normalLabeled.buffer.length !== normalUnlabeled.buffer.length,
+    `normal box (50% of 784px): labeled bytes differ from unlabeled — tag still present (${normalLabeled.buffer.length} vs ${normalUnlabeled.buffer.length})`);
 }
 
 // ══════════════════════════════════════════════════════════════════
