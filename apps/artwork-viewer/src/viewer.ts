@@ -696,6 +696,19 @@ function initializeViewer(iiifInfoUrl: string): void {
   // Prevent browser scroll-into-view shift when OSD canvas receives focus
   viewer.canvas.addEventListener('focus', () => { window.scrollTo(0, 0); }, true);
 
+  // Suppress OSD's built-in 'f' = flip-horizontal so 'f' is free for the
+  // full-screen toggle (mapped in the document keydown handler). OSD raises
+  // 'canvas-key' with a preventDefaultAction flag BEFORE running its own key
+  // action; setting it for 'f'/'F' cancels ONLY the built-in flip — our own
+  // Shift+F / 'h' → toggleFlip (document-level) and every other OSD key
+  // (WASD pan, zoom, rotate) stay intact. Only fires when the canvas has focus.
+  viewer.addHandler('canvas-key', (e) => {
+    const key = (e.originalEvent as KeyboardEvent).key;
+    if (key === 'f' || key === 'F') {
+      e.preventDefaultAction = true;
+    }
+  });
+
   viewer.addHandler('open-failed', () => {
     const viewerContainer = document.getElementById('openseadragon-viewer');
     if (viewerContainer) {
