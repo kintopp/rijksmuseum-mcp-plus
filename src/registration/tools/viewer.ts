@@ -653,7 +653,11 @@ export function registerViewerTools(
       inputSchema: z.object({
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
         commands: z.array(z.object({
-          action: z.enum(["navigate", "add_overlay", "clear_overlays"]),
+          action: z.enum(["navigate", "add_overlay", "clear_overlays"]).describe(
+            "Command type and its minimal valid shape: 'navigate' → needs region; " +
+            "'add_overlay' → needs region, plus optional label + color; " +
+            "'clear_overlays' → no other fields."
+          ),
           region: optStr().optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', 'crop_pixels:x,y,w,h', or 'x,y,w,h'"),
           relativeTo: optStr().optional().describe(
             "Crop region from a prior inspect_artwork_image call. When provided, " +
