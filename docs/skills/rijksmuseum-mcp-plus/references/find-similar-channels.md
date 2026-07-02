@@ -6,18 +6,18 @@
 
 ## Channels
 
-| Channel               | Matches on                                                                        | Use when the user wants…                                           |
-| --------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Visual                | Image embedding (composition, palette, format)                                    | Look-alikes regardless of attribution                              |
-| Related Variant       | Creator-invariant curator edges (pendants, production stadia, different examples) | Pairs/companions/variants by the same hand                         |
-| Related Object        | Other curator edges (pairs, sets, recto/verso, reproductions — tiered)            | Components, derivatives, reproductive copies, sets/series          |
-| Lineage               | Shared creator + assignment-qualifier overlap                                     | Workshop / follower / pupil / copy neighbourhoods                  |
-| Iconclass             | Overlapping Iconclass notations                                                   | Same iconographic programme                                        |
-| Description           | Dutch-description embedding similarity                                            | Shared themes/technique/style in cataloguer text                   |
-| Theme                 | Curatorial-theme set overlap (IDF-weighted)                                       | Same collection-level narrative                                    |
-| Depicted Person       | Same person(s) portrayed                                                          | Sitters across portraits; historical figures                       |
-| Depicted Place        | Same place(s) shown                                                               | Views of the same city, building, or landscape                     |
-| Pooled                | Blend of all nine — works scoring in **4+** channels                              | Exploratory "what else is like this" when the axis isn't yet known |
+| Channel | Matches on | Use when the user wants… |
+| --- | --- | --- |
+| Visual | Image embedding (composition, palette, format) | Look-alikes regardless of attribution |
+| Related Variant | Creator-invariant curator edges (pendants, production stadia, different examples) | Pairs/companions/variants by the same hand |
+| Related Object | Other curator edges (pairs, sets, recto/verso, reproductions — tiered) | Components, derivatives, reproductive copies, sets/series |
+| Lineage | Shared creator + assignment-qualifier overlap | Workshop / follower / pupil / copy neighbourhoods |
+| Iconclass | Overlapping Iconclass notations | Same iconographic programme |
+| Description | Dutch-description embedding similarity | Shared themes/technique/style in cataloguer text |
+| Theme | Curatorial-theme set overlap (IDF-weighted) | Same collection-level narrative |
+| Depicted Person | Same person(s) portrayed | Sitters across portraits; historical figures |
+| Depicted Place | Same place(s) shown | Views of the same city, building, or landscape |
+| Pooled | Blend of all nine — works scoring in **4+** channels | Exploratory "what else is like this" when the axis isn't yet known |
 
 ## Example
 
@@ -25,6 +25,6 @@
 find_similar(objectNumber="RP-P-1958-335", maxResults=50)  # default 20
 ```
 
-## Feature gating and fallbacks
+## Availability and fallbacks
 
-Feature-gated (`ENABLE_FIND_SIMILAR`); Theme channel separately gated (`ENABLE_THEME_SIMILAR`). Fallback when unavailable: `semantic_search`, or `search_artwork` built from the source's creator + type + subject.
+The tool can be switched off server-side: if `find_similar` is absent from the tool list, fall back to `semantic_search`, or to a `search_artwork` built from the source work's creator + type + subject. The Theme channel can also be disabled independently — a comparison page without a Theme column is normal, not an error.
