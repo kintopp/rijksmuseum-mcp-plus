@@ -142,8 +142,13 @@ function buildLabelTagSvg(
   const padX = fontSize * 0.35;
   const padY = fontSize * 0.18;
   const charW = fontSize * 0.55;
-  const tagW = Math.min(jpegW, truncated.length * charW + padX * 2);
   const tagH = fontSize + padY * 2;
+
+  // Skip the tag entirely for boxes narrower than 4x the tag height — otherwise
+  // the filled label tag dwarfs a small overlay's rectangle (plan 051 §1.3).
+  if (rect.w < tagH * 4) return "";
+
+  const tagW = Math.min(jpegW, truncated.length * charW + padX * 2);
 
   const tagX = Math.max(0, Math.min(jpegW - tagW, rect.x));
   const tagY = rect.y - tagH >= 0 ? rect.y - tagH : rect.y;

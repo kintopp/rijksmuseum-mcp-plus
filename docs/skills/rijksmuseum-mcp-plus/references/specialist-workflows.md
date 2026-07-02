@@ -27,6 +27,10 @@ inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
 # → base64 image for AI analysis + viewer auto-zooms to the same region
 ```
 
+**Catalogue-first localization.** Before visually searching for a named feature, call `get_artwork_details` and read `description` (Dutch) and `curatorialNarrative` — cataloguers frequently state a feature's location verbally (e.g. "links een huilende jongen" = "a crying boy on the left"). This swaps the source of truth from model perception to catalogued text and is worth doing before spending an inspect call on a search. Caveats: description coverage is roughly 61% and mostly Dutch, the target may go unmentioned, stated directions are viewer-perspective, and the text describes the whole work — it cannot replace looking.
+
+**Survey before drilling.** Always call `inspect_artwork_image(region: "full")` before cropping in, even for a famous or frequently-reproduced work. Fame is not a substitute for looking — training-data memory of a well-known composition is frequently wrong in exactly the details worth highlighting.
+
 **Tight detail boxes: snap to the feature's actual edges.** Overlays around signatures, faces, inscriptions, or depicted objects should outline the feature, not loosely contain it — the overlay is a communicative claim to the user about where a feature sits, not a vague gesture toward its neighbourhood. Estimating "what percentage of this crop" is the weakest step in the accuracy chain — frame the overlay in the **same pixel grid you just analysed** instead. `inspect_artwork_image` returns `cropPixelWidth`, `cropPixelHeight`, and `cropRegion`; copy them into `navigate_viewer`'s `relativeToSize` alongside a `crop_pixels:` region and the server projects deterministically.
 
 ```
@@ -46,11 +50,17 @@ navigate_viewer(viewUUID=..., commands=[{
 
 **Magnify before measuring.** The "same pixel grid" only helps when the grid resolves the feature — a 30 px subject in a `region: "full"` inspection (≈1568 px wide) has no edges you can read precisely, and the resulting overlay will be loosely placed and oversized however careful the `crop_pixels:` arithmetic. Inspect first at a tight `pct:` region so the feature spans **hundreds of pixels** in the returned crop, then read its edges off that crop. For multiple spatially distinct features (e.g. a shell group on the left, a grasshopper on the right), prefer **one targeted inspect per region** over a single wide inspect — each crop's `cropPixelWidth`/`cropPixelHeight` then serves as its own `relativeToSize` for the overlays in that region.
 
+**Edge rule.** If the target touches any edge of the inspected crop, re-center the crop before tightening the overlay further — a feature straddling an edge is a sign the crop, not just the box, needs adjusting.
+
+**One overlay per instance — never union.** When a request names a plural feature (hands, eyes, figures), place one tight box per instance, not a single box spanning all of them plus padding. A union box communicates a much larger and vaguer claim than what was actually found.
+
 **Coarser variant — crop-local percentages.** When the feature lacks identifiable edges (atmospheric region, gradient, undefined area), omit `relativeToSize` and pass `region: "pct:..."` with the same `relativeTo`. For any feature with discernible edges, prefer `crop_pixels:`.
 
 `inspect_artwork_image` can surface content **absent from structured metadata** — unsigned Japanese prints often have readable artist signatures, publisher seals, and poem cartouches that the catalogue has not transcribed. Use `region="full"` for an initial composition overview before cropping to details.
 
-**Verifying overlay placement with `show_overlays`.** Pass each overlay's `verificationRegion` (`pct:`, returned by `navigate_viewer`) as the `region` for `inspect_artwork_image(show_overlays: true, viewUUID: …)`. Don't use `full` — the 448 px clamp shrinks overlays below visibility (server rejects with `show_overlays_on_full_not_supported`). Overlays are append-only: to reposition, `clear_overlays` then re-add ALL. Use distinct `color` per command so labels stay readable on overlapping boxes.
+**Verifying overlay placement with `show_overlays`.** Pass each overlay's `verificationRegion` (`pct:`, returned by `navigate_viewer`) as the `region` for `inspect_artwork_image(show_overlays: true, viewUUID: …)`. Describe what actually fills the box and point to the label yourself before trusting the placement; if the majority of the box is something else, or you can't point to the label inside it, `clear_overlays` and re-place — or tell the user you couldn't locate it (an acceptable outcome). If the box sits near a crop edge, also re-inspect at `region: "full"` to rule out the target sitting just outside the box — `full` is now allowed with `show_overlays` and is only downgraded to a warning when the largest active overlay is under roughly 5% of the image, since very small boxes can still be hard to see at full-image scale. Overlays are append-only: to reposition, `clear_overlays` then re-add ALL. Use distinct `color` per command so labels stay readable on overlapping boxes.
+
+**Honesty caveat — user-confirmation contract.** Narrate overlay placement as a checkable claim, not a settled fact: "I've boxed what I identified as X — please confirm it looks right, and correct me if not." Figure-level semantic highlighting (a face, a gesture, a specific object among several) is the least reliable use of this feature today and should always be framed this way; the reliable uses are region zoom, signature/inscription pointing at a catalogued location, and user-driven highlighting (the user names the exact box).
 
 ---
 

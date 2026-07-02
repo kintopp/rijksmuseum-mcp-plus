@@ -476,6 +476,7 @@ export const InspectImageOutput = {
   overlaysRendered: z.number().int().optional().describe("Number of viewer overlays composited onto the returned image (show_overlays only)"),
   overlaysSkipped: z.number().int().optional().describe("Number of viewer overlays that fell outside the inspected region and were not drawn (show_overlays only)"),
   overlaysError: z.string().optional().describe("Reason the composite couldn't proceed when show_overlays was requested (e.g. 'no_active_viewer', 'compositor_failed')"),
+  warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 };
 
