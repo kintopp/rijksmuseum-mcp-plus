@@ -72,13 +72,13 @@ Opens an interactive deep-zoom viewer for the user — only when they ask to see
 
 ### 8. `remount_viewer` *(app tool — internal)*
 
-Internal: switch the viewer to a different artwork while preserving the viewUUID. Called by the artwork-viewer iframe during in-viewer related navigation. Overlays are cleared on remount because their coordinates belong to the previous artwork.
+Internal: switch the viewer to a different artwork while preserving the viewUUID. Called by the artwork-viewer iframe during in-viewer related navigation. Any user highlight is cleared on remount because its coordinates belong to the previous artwork.
 
 ### 9. `inspect_artwork_image`
 
 Returns image bytes (base64) for the LLM's own visual analysis of an artwork or region — not for the user to view. The LLM can see and reason about the image immediately. Not for the user to view — use get_artwork_image for the interactive viewer. Not for listing or summarising artworks — use search_artwork.
 
-Use with region 'full' (default) to inspect the complete artwork, or specify a region to zoom into details, read inscriptions, or examine specific areas. The response includes cropPixelWidth/cropPixelHeight: the actual pixel dimensions of the returned image. Use those with navigate_viewer's relativeToSize when placing crop-local crop_pixels overlays.
+Use with region 'full' (default) to inspect the complete artwork, or specify a region to zoom into details, read inscriptions, or examine specific areas. The response includes cropPixelWidth/cropPixelHeight: the actual pixel dimensions of the returned image.
 
 Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), 'crop_pixels:x,y,w,h' (pixel coordinates of the full image — use with nativeWidth/nativeHeight from a prior response), or 'x,y,w,h' (legacy IIIF pixels, equivalent to crop_pixels). Quick reference:
 - Top-left quarter: pct:0,0,50,50
@@ -87,19 +87,19 @@ Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), 'crop
 - Full image: full (default)
 - For multi-panel works: use physical dimensions from get_artwork_details to estimate panel percentages, then inspect individual panels with close-up crops.
 
-Best practice for overlay placement: ALWAYS inspect before overlaying. Start with region 'full' to understand the layout, then use close-up crops (600–800px) to pinpoint specific features before calling navigate_viewer with add_overlay. Use navigate_viewer's 'relativeTo' parameter to place overlays using crop-local coordinates — the server handles the projection to full-image space, avoiding manual coordinate math. After placing, verify each overlay with show_overlays:true and a tight pct: crop around it (the navigate_viewer response includes a ready-to-paste verificationRegion per overlay). To reposition an overlay, issue clear_overlays then re-add ALL overlays with corrected coordinates — there is no move/delete-one operation.
+Iterative zoom: start with region 'full' to understand the layout, then use close-up crops (600–800px) to read specific features.
 
-Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms to the inspected region (navigateViewer defaults to true, no effect when region is 'full'). This keeps the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom. Use navigate_viewer separately only when you need overlays, labels, or clear_overlays.
+Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms to the inspected region (navigateViewer defaults to true, no effect when region is 'full'). This keeps the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom.
 
 The response includes the active viewUUID (if any) for follow-up navigate_viewer calls. The structured response also carries the artwork title and creator. An out-of-bounds region is rejected with an `overlay_region_out_of_bounds` error whose structured payload includes `regionRecovery` (requested / clampedTo / validRange), so a structuredContent reader can retry with a corrected box.
 
 ### 10. `navigate_viewer`
 
-Steers an already-open viewer: zoom to a region, add a labelled overlay, or clear overlays. Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image. Commands execute in order: typically clear_overlays → navigate → add_overlay.
+Zooms/pans an already-open viewer to a region — steer the user's view to a detail. Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image.
+
+In most cases you do NOT need this tool: inspect_artwork_image already auto-zooms the open viewer to whatever region it inspects. Call navigate_viewer only to move the user's view without fetching image bytes for your own analysis.
 
 By default, region coordinates are in full-image space (percentages or pixels of the original image), not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image will target the identical area in the viewer. Exception: when a command includes relativeTo, region is interpreted in that inspected crop's local coordinate space.
-
-For accurate overlay placement: inspect the target area with inspect_artwork_image first, verify the region contains what you expect, then use the same or refined coordinates here. Do not estimate overlay positions from memory — always inspect first.
 
 Region formats:
 - 'pct:x,y,w,h' — percentage of full image.
@@ -107,13 +107,11 @@ Region formats:
 - 'x,y,w,h' — equivalent to crop_pixels: (legacy IIIF form, kept for compatibility).
 - 'full' | 'square' — whole image shortcuts.
 
-Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — correct the coordinates and retry. The error's structured response carries `regionRecovery` (requested / clampedTo / validRange) plus the session `objectNumber` (the identity needed for the inspect_artwork_image verify-after step).
+Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — correct the coordinates and retry. The error's structured response carries `regionRecovery` (requested / clampedTo / validRange) plus the session `objectNumber`. Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.
 
-Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set (overlays are append-only; there is no move/delete-one operation, so repositioning requires clear_overlays then re-adding ALL overlays you want to keep). When placing more than one overlay, prefer distinct 'color' values so the rectangles are distinguishable in inspect_artwork_image(show_overlays:true). Each add_overlay response includes a per-overlay verificationRegion (pct: crop) for the verify-after step. Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.
+Coordinate shortcut: to zoom to a region of a prior inspect_artwork_image crop, use 'relativeTo' with the crop's region string and specify 'region' as coordinates within the crop's local space; the server projects to full-image space deterministically. Use pct:x,y,w,h for crop-local percentages, or crop_pixels:x,y,w,h plus relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from inspect_artwork_image for crop-local rendered pixels.
 
-Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, use 'relativeTo' with the crop's region string. Specify 'region' as coordinates within the crop's local space and the server projects to full-image space deterministically. Use pct:x,y,w,h for crop-local percentages, or crop_pixels:x,y,w,h plus relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from inspect_artwork_image for crop-local rendered pixels. Crop-local pixels are preferred for tight detail boxes.
-
-Response field deliveryState reports whether the iframe drained the commands immediately (`delivered_recently`), the iframe exists but hasn't polled recently and the commands are queued (`queued_waiting_for_viewer` — typical when scrolled out of view), or no iframe has connected yet (`no_live_viewer_seen`). In the queued case, overlay state is preserved server-side and will apply automatically when the viewer resumes polling — do not narrate this as a delivery failure to the user.
+Response field deliveryState reports whether the iframe drained the commands immediately (`delivered_recently`), the iframe exists but hasn't polled recently and the commands are queued (`queued_waiting_for_viewer` — typical when scrolled out of view), or no iframe has connected yet (`no_live_viewer_seen`). In the queued case, the command is preserved server-side and will apply automatically when the viewer resumes polling — do not narrate this as a delivery failure to the user.
 
 ### 11. `poll_viewer_commands` *(app tool — internal)*
 

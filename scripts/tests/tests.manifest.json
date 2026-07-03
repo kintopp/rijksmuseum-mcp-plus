@@ -7,7 +7,7 @@
     "requires": [
       "dist"
     ],
-    "purpose": "pure exported-function unit tests (RijksmuseumApiClient, geometry, FTS, overlays)"
+    "purpose": "pure exported-function unit tests (RijksmuseumApiClient, geometry, FTS)"
   },
   "test-provenance-parser.mjs": {
     "category": "base",
@@ -48,16 +48,6 @@
       "dist"
     ],
     "purpose": "inscription parser unit tests (Lugt marks, segments, gloss-dedup)"
-  },
-  "test-overlay-scoring.mjs": {
-    "category": "base",
-    "class": "gate",
-    "status": "promoted",
-    "runtime": "node",
-    "requires": [
-      "dist"
-    ],
-    "purpose": "overlay-scoring.mjs pure-function unit tests (IoU, projection, clamp)"
   },
   "test-lru-cache.mjs": {
     "category": "base",
@@ -836,17 +826,6 @@
     ],
     "purpose": "v0.27-era get_artwork_details smoke; superseded (asserts removal of conservation/examinations re-added in v0.90)"
   },
-  "test-overlay-harness-smoke.mjs": {
-    "category": "exploratory",
-    "class": "scratch",
-    "status": "manual",
-    "runtime": "node",
-    "requires": [
-      "apiKey",
-      "manual"
-    ],
-    "purpose": "manual overlay-scoring runbook (needs ANTHROPIC_API_KEY + offline ground-truth assets); not auto-run"
-  },
   "test-peg-modified-by.mjs": {
     "category": "exploratory",
     "class": "scratch",
@@ -856,16 +835,6 @@
       "manual"
     ],
     "purpose": "modified_by[] PEG fold categorisation probe over a samples fixture (analysis, not pass/fail gate)"
-  },
-  "test-svg-overlays.mjs": {
-    "category": "exploratory",
-    "class": "scratch",
-    "status": "manual",
-    "runtime": "node",
-    "requires": [
-      "manual"
-    ],
-    "purpose": "manual visual SVG-overlay test (opens a viewer URL for inspection)"
   },
   "test-v019-features-deprecated.mjs": {
     "category": "exploratory",

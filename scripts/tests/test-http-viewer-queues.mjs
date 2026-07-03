@@ -91,9 +91,9 @@ const r2 = await clientB.callTool({
   arguments: {
     viewUUID,
     commands: [
-      { action: "clear_overlays" },
       { action: "navigate", region: "full" },
-      { action: "add_overlay", region: "pct:25,25,50,50", label: "Cross-request overlay", color: "orange" },
+      { action: "navigate", region: "pct:25,25,50,50" },
+      { action: "navigate", region: "pct:0,0,10,10" },
     ],
   },
 });
@@ -121,11 +121,9 @@ const poll = r3.structuredContent ?? JSON.parse(r3.content[0].text);
 
 assert(Array.isArray(poll.commands), "commands is an array");
 assert(poll.commands.length === 3, `Drained 3 commands (got ${poll.commands.length})`);
-assert(poll.commands[0].action === "clear_overlays", "First: clear_overlays");
-assert(poll.commands[1].action === "navigate", "Second: navigate");
-assert(poll.commands[2].action === "add_overlay", "Third: add_overlay");
-assert(poll.commands[2].label === "Cross-request overlay", "Label preserved across requests");
-assert(poll.commands[2].color === "orange", "Color preserved across requests");
+assert(poll.commands.every(c => c.action === "navigate"), "All drained commands are navigate");
+assert(poll.commands[0].region === "full", "First: navigate full");
+assert(poll.commands[1].region === "pct:25,25,50,50", "Region preserved across requests");
 
 // Poll again — should be empty
 const r4 = await clientC.callTool({

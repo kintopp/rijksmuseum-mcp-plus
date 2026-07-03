@@ -12,8 +12,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import sharp from "sharp";
-import { compositeOverlays } from "../../dist/overlay-compositor.js";
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -293,71 +291,31 @@ assert(r3c.content.find(c => c.type === "image") != null, "Clamped request still
 
 section("4. navigate_viewer — command queuing");
 
-// 4a. Valid commands (matching diagnostic trace pattern)
-console.log("\n--- 4a: Clear + navigate + overlays ---");
+// 4a. Valid navigate/zoom commands
+console.log("\n--- 4a: navigate (zoom) commands ---");
 const r4a = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUID1,
     commands: [
-      { action: "clear_overlays" },
       { action: "navigate", region: "full" },
-      { action: "add_overlay", region: "pct:38,22,28,22", label: "Test overlay 1", color: "orange" },
-      { action: "add_overlay", region: "pct:50,50,30,30", label: "Test overlay 2", color: "steelblue" },
+      { action: "navigate", region: "pct:38,22,28,22" },
     ],
   },
 });
 const nav1 = r4a.structuredContent ?? JSON.parse(r4a.content[0].text);
-assert(nav1.queued === 4, `Queued 4 commands (got ${nav1.queued})`);
+assert(nav1.queued === 2, `Queued 2 commands (got ${nav1.queued})`);
 assert(nav1.viewUUID === viewUUID1, `viewUUID echoed back`);
 assert(!nav1.error, "No error");
 assert(!r4a.isError, "Not marked as error");
-
-// 4a-vr. verificationRegion + nudge text for the verify-and-adjust loop (#337)
-console.log("\n--- 4a-vr: verificationRegion + verify nudge ---");
-assert(Array.isArray(nav1.overlays) && nav1.overlays.length === 2,
-  `2 overlay entries returned (got ${nav1.overlays?.length})`);
-const overlayEntry1 = nav1.overlays.find(o => o.label === "Test overlay 1");
-const overlayEntry2 = nav1.overlays.find(o => o.label === "Test overlay 2");
-assert(overlayEntry1 != null, "overlay 1 present in response");
-assert(overlayEntry2 != null, "overlay 2 present in response");
-
-for (const entry of [overlayEntry1, overlayEntry2]) {
-  if (!entry) continue;
-  assert(typeof entry.verificationRegion === "string" && entry.verificationRegion.startsWith("pct:"),
-    `${entry.label}: verificationRegion is pct: string (got ${entry.verificationRegion})`);
-  const m = entry.verificationRegion.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-  assert(m != null, `${entry.label}: verificationRegion parseable`);
-  if (m) {
-    const [vx, vy, vw, vh] = m.slice(1).map(Number);
-    assert(vx >= 0 && vy >= 0, `${entry.label}: x/y >= 0`);
-    assert(vx + vw <= 100.001 && vy + vh <= 100.001,
-      `${entry.label}: x+w and y+h within 0–100 (got ${vx + vw}, ${vy + vh})`);
-    assert(vw >= 12 - 0.01 && vh >= 12 - 0.01,
-      `${entry.label}: each axis >= 12% (got ${vw}×${vh})`);
-    // Original overlay rect should fit inside the verification rect.
-    const orig = entry.region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-    if (orig) {
-      const [ox, oy, ow, oh] = orig.slice(1).map(Number);
-      assert(vx <= ox + 0.01 && vy <= oy + 0.01 && vx + vw + 0.01 >= ox + ow && vy + vh + 0.01 >= oy + oh,
-        `${entry.label}: verification rect contains the original overlay`);
-    }
-  }
-}
-
-// Plan 051 §1.2 reworded the nudge: disconfirmation (describe + self-point to the
-// label) plus an explicit failure path ("could not locate it" is an acceptable
-// outcome) and an edge-check full-view fallback — replacing the old
-// "re-add ALL" repositioning-only wording.
+// The reverse-overlay direction is removed: the response no longer carries
+// overlays[] / currentOverlays / verificationRegion, and the text is a plain
+// delivery/queue line.
+assert(nav1.overlays === undefined && nav1.currentOverlays === undefined,
+  "navigate_viewer no longer returns overlay entries");
 const navText1 = r4a.content?.find(c => c.type === "text")?.text ?? "";
-assert(navText1.includes("show_overlays:true"),
-  "navigate_viewer text response mentions show_overlays:true");
-assert(navText1.includes("clear_overlays") && navText1.includes("could not locate it"),
-  "navigate_viewer text response mentions clear_overlays + the could-not-locate failure path");
-assert(navText1.includes('region:"full"'),
-  "navigate_viewer text response mentions the edge-check full-view fallback");
-assert(overlayEntry1 && navText1.includes(overlayEntry1.verificationRegion),
-  "navigate_viewer text response includes the suggested verificationRegion verbatim");
+assert(!/show_overlays|verificationRegion|add_overlay/.test(navText1),
+  "navigate_viewer text no longer nudges toward overlay verification");
 
 // 4b. Invalid viewUUID
 console.log("\n--- 4b: Invalid viewUUID ---");
@@ -373,13 +331,13 @@ const nav4b = r4b.structuredContent ?? JSON.parse(r4b.content[0].text);
 assert(nav4b.error?.includes("No active viewer"), `Error message: "${nav4b.error?.slice(0, 50)}"`);
 
 // 4c. Invalid region in command
-console.log("\n--- 4c: Invalid region in add_overlay ---");
+console.log("\n--- 4c: Invalid region in navigate ---");
 const r4c = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUID1,
     commands: [
-      { action: "add_overlay", region: "not-valid", label: "Bad" },
+      { action: "navigate", region: "not-valid" },
     ],
   },
 });
@@ -392,7 +350,7 @@ const r4d = await client.callTool({
   arguments: {
     viewUUID: viewUUID1,
     commands: [
-      { action: "add_overlay", region: "pct:10,10,20,20", label: "Third overlay" },
+      { action: "navigate", region: "pct:10,10,20,20" },
     ],
   },
 });
@@ -407,32 +365,29 @@ const r4e = await client.callTool({
     viewUUID: viewUUID2,
     commands: [
       { action: "navigate", region: "pct:0,0,100,100" },
-      { action: "add_overlay", region: "pct:20,20,60,60", label: "Engraving detail" },
+      { action: "navigate", region: "pct:20,20,60,60" },
     ],
   },
 });
 const nav4e = r4e.structuredContent ?? JSON.parse(r4e.content[0].text);
 assert(nav4e.queued === 2, `Second viewer: queued 2 commands`);
 
-// 4f. relativeTo projection
+// 4f. relativeTo projection (crop-local → full-image, applied before queueing)
 console.log("\n--- 4f: relativeTo projection ---");
 const r4f = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUID1,
     commands: [
-      { action: "add_overlay", region: "pct:50,50,20,20", relativeTo: "pct:50,0,50,100", label: "Projected" },
+      { action: "navigate", region: "pct:50,50,20,20", relativeTo: "pct:50,0,50,100" },
     ],
   },
 });
 const nav4f = r4f.structuredContent ?? JSON.parse(r4f.content[0].text);
 assert(!r4f.isError, "relativeTo accepted");
 assert(nav4f.queued === 1, "1 command queued");
-// Verify the projected region in currentOverlays
-// pct:50,50,20,20 relative to pct:50,0,50,100 → pct:75,50,10,20
-const projected = nav4f.currentOverlays?.find(o => o.label === "Projected");
-assert(projected, "Projected overlay in currentOverlays");
-assert(projected.region === "pct:75,50,10,20", `Projected region correct: ${projected.region}`);
+// pct:50,50,20,20 relative to pct:50,0,50,100 → pct:75,50,10,20 — the projected
+// region is applied to the queued command and verified via poll in section 5.
 
 // 4g. relativeTo with non-pct region → error
 console.log("\n--- 4g: relativeTo with pixel region → error ---");
@@ -441,7 +396,7 @@ const r4g = await client.callTool({
   arguments: {
     viewUUID: viewUUID1,
     commands: [
-      { action: "add_overlay", region: "100,100,200,200", relativeTo: "pct:50,0,50,100", label: "Bad" },
+      { action: "navigate", region: "100,100,200,200", relativeTo: "pct:50,0,50,100" },
     ],
   },
 });
@@ -454,7 +409,7 @@ const r4h = await client.callTool({
   arguments: {
     viewUUID: viewUUID1,
     commands: [
-      { action: "add_overlay", region: "pct:10,10,20,20", relativeTo: "not-valid", label: "Bad" },
+      { action: "navigate", region: "pct:10,10,20,20", relativeTo: "not-valid" },
     ],
   },
 });
@@ -467,7 +422,7 @@ const r4i = await client.callTool({
   arguments: {
     viewUUID: viewUUID1,
     commands: [
-      { action: "add_overlay", region: "pct:10,10,20,20", relativeTo: "full", label: "Bad" },
+      { action: "navigate", region: "pct:10,10,20,20", relativeTo: "full" },
     ],
   },
 });
@@ -548,26 +503,25 @@ const viewUUIDcp = img4bis.viewUUID;
 assert(typeof viewUUIDcp === "string" && viewUUIDcp.length === 36,
   `Fresh viewUUID for crop_pixels tests (${viewUUIDcp?.slice(0, 8)}...)`);
 
-// 4bis-a. add_overlay with crop_pixels: format succeeds; prefix stripped before forwarding
+// 4bis-a. navigate with crop_pixels: format succeeds; prefix stripped before forwarding
 console.log("\n--- 4bis-a: crop_pixels format accepted ---");
 const r4bisA = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUIDcp,
     commands: [
-      { action: "add_overlay", region: "crop_pixels:100,200,300,400", label: "cp-test" },
+      { action: "navigate", region: "crop_pixels:100,200,300,400" },
     ],
   },
 });
-assert(!r4bisA.isError, "crop_pixels add_overlay should succeed");
+assert(!r4bisA.isError, "crop_pixels navigate should succeed");
 const polledA = await client.callTool({
   name: "poll_viewer_commands",
   arguments: { viewUUID: viewUUIDcp },
 });
 const pollA = polledA.structuredContent ?? JSON.parse(polledA.content[0].text);
-const cpOverlay = pollA.commands?.find((c) => c.action === "add_overlay" && c.label === "cp-test");
-assert(cpOverlay != null, "cp-test overlay is in queue");
-assert(cpOverlay?.region === "100,200,300,400", `crop_pixels: prefix stripped (got "${cpOverlay?.region}")`);
+const cpOverlay = pollA.commands?.find((c) => c.action === "navigate" && c.region === "100,200,300,400");
+assert(cpOverlay != null, `crop_pixels: prefix stripped and command queued (got "${pollA.commands?.[0]?.region}")`);
 
 // 4bis-a2. crop_pixels with relativeTo is interpreted as crop-local rendered pixels.
 console.log("\n--- 4bis-a2: crop-local crop_pixels via relativeToSize ---");
@@ -577,27 +531,24 @@ const r4bisA2 = await client.callTool({
     viewUUID: viewUUIDcp,
     commands: [
       {
-        action: "add_overlay",
+        action: "navigate",
         region: "crop_pixels:600,300,240,120",
         relativeTo: "pct:50,50,50,50",
         relativeToSize: { width: 1200, height: 600 },
-        label: "crop-local-px",
       },
     ],
   },
 });
-assert(!r4bisA2.isError, "crop-local crop_pixels add_overlay should succeed");
+assert(!r4bisA2.isError, "crop-local crop_pixels navigate should succeed");
 const navA2 = r4bisA2.structuredContent ?? JSON.parse(r4bisA2.content[0].text);
-const localPxOverlay = navA2.overlays?.find((c) => c.label === "crop-local-px");
-assert(localPxOverlay?.region === "pct:75,75,10,10", `crop-local pixels projected to pct:75,75,10,10 (got "${localPxOverlay?.region}")`);
-assert(localPxOverlay?.pixelRect != null, "Projected crop-local overlay has full-image pixelRect");
+assert(navA2.queued === 1, "crop-local navigate queued 1 command");
 const polledA2 = await client.callTool({
   name: "poll_viewer_commands",
   arguments: { viewUUID: viewUUIDcp },
 });
 const pollA2 = polledA2.structuredContent ?? JSON.parse(polledA2.content[0].text);
-const cropLocalCmd = pollA2.commands?.find((c) => c.action === "add_overlay" && c.label === "crop-local-px");
-assert(cropLocalCmd?.region === "pct:75,75,10,10", "Polled crop-local command is projected full-image pct");
+const cropLocalCmd = pollA2.commands?.find((c) => c.action === "navigate" && c.region === "pct:75,75,10,10");
+assert(cropLocalCmd != null, "Polled crop-local command is projected full-image pct (pct:75,75,10,10)");
 
 // 4bis-a3. crop-local pixels require the inspected crop dimensions.
 console.log("\n--- 4bis-a3: crop-local crop_pixels requires relativeToSize ---");
@@ -607,10 +558,9 @@ const r4bisA3 = await client.callTool({
     viewUUID: viewUUIDcp,
     commands: [
       {
-        action: "add_overlay",
+        action: "navigate",
         region: "crop_pixels:600,300,240,120",
         relativeTo: "pct:50,50,50,50",
-        label: "missing-size",
       },
     ],
   },
@@ -626,11 +576,10 @@ const r4bisA4 = await client.callTool({
     viewUUID: viewUUIDcp,
     commands: [
       {
-        action: "add_overlay",
+        action: "navigate",
         region: "crop_pixels:1190,10,50,50",
         relativeTo: "pct:50,50,50,50",
         relativeToSize: { width: 1200, height: 600 },
-        label: "local-oob",
       },
     ],
   },
@@ -638,14 +587,14 @@ const r4bisA4 = await client.callTool({
 assert(r4bisA4.isError === true, "crop-local OOB returns isError");
 assert((r4bisA4.content?.[0]?.text ?? "").includes("inspected crop dimensions"), "crop-local OOB error mentions crop dimensions");
 
-// 4bis-b. add_overlay with OOB pct returns structured warning + isError
+// 4bis-b. navigate with OOB pct returns structured warning + isError
 console.log("\n--- 4bis-b: OOB pct (y=325) rejected with structured warning ---");
 const r4bisB = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUIDcp,
     commands: [
-      { action: "add_overlay", region: "pct:36,325,35,30", label: "oob-pct" },
+      { action: "navigate", region: "pct:36,325,35,30" },
     ],
   },
 });
@@ -662,14 +611,14 @@ assert(navOobRecovery != null, "navigate OOB exposes structured regionRecovery")
 assert((navOobRecovery?.clampedTo?.length ?? 0) > 0, "navigate regionRecovery.clampedTo present");
 assert((r4bisB.structuredContent?.objectNumber?.length ?? 0) > 0, "navigate OOB carries objectNumber (verify-after identity)");
 
-// 4bis-c. add_overlay with x+w > 100 rejected
+// 4bis-c. navigate with x+w > 100 rejected
 console.log("\n--- 4bis-c: OOB pct (x+w=110) rejected ---");
 const r4bisC = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUIDcp,
     commands: [
-      { action: "add_overlay", region: "pct:80,10,30,20", label: "oob-width" },
+      { action: "navigate", region: "pct:80,10,30,20" },
     ],
   },
 });
@@ -679,12 +628,12 @@ assert(oobCText.includes("x+w=110"), "error text identifies x+w overflow");
 
 // 4bis-d. OOB call does not mutate queue
 console.log("\n--- 4bis-d: OOB rejection does not queue commands ---");
-// First queue a known-good overlay
+// First queue a known-good command
 await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUIDcp,
-    commands: [{ action: "add_overlay", region: "pct:0,0,50,50", label: "ok" }],
+    commands: [{ action: "navigate", region: "pct:0,0,50,50" }],
   },
 });
 // Drain, record baseline
@@ -699,7 +648,7 @@ const r4bisD = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUIDcp,
-    commands: [{ action: "add_overlay", region: "pct:10,10,0,50", label: "bad-w" }],
+    commands: [{ action: "navigate", region: "pct:10,10,0,50" }],
   },
 });
 assert(r4bisD.isError === true, "Zero-width region rejected");
@@ -719,7 +668,7 @@ const r4bisE = await client.callTool({
   arguments: {
     viewUUID: viewUUIDcp,
     commands: [
-      { action: "add_overlay", region: "crop_pixels:50000,0,100,100", label: "oob-cp" },
+      { action: "navigate", region: "crop_pixels:50000,0,100,100" },
     ],
   },
 });
@@ -730,181 +679,39 @@ assert(/exceeds imageWidth/.test(oobCpText), "crop_pixels OOB text identifies im
 assert(oobCpText.includes("please re-examine the image"), "crop_pixels OOB carries retry cue");
 
 // ══════════════════════════════════════════════════════════════════
-//  4ter. inspect_artwork_image show_overlays (P1, #247)
+//  4ter. inspect_artwork_image auto-discovers the most-recent viewer
 // ══════════════════════════════════════════════════════════════════
+//
+// (The former show_overlays compositing / self-verification path was removed
+// with the LLM-overlay feature; only the recency tie-break on multi-viewer
+// auto-discovery — shared with the kept auto-zoom path — survives.)
 
-section("4ter. inspect show_overlays compositing (#247)");
+section("4ter. inspect auto-discovers most-recent viewer");
 
-// Fresh viewer so activeOverlays state is deterministic.
-const r4ter0 = await client.callTool({
+// Two viewers for the same artwork; inspect without an explicit viewUUID must
+// resolve to the most recently accessed one (not collapse to 'ambiguous').
+const r4terA0 = await client.callTool({
   name: "get_artwork_image",
   arguments: { objectNumber: "SK-A-2152" },
 });
-const img4ter = r4ter0.structuredContent ?? JSON.parse(r4ter0.content[0].text);
-const viewUUIDov = img4ter.viewUUID;
+const viewUUIDov = (r4terA0.structuredContent ?? JSON.parse(r4terA0.content[0].text)).viewUUID;
 
-// Queue one known-good overlay.
-await client.callTool({
-  name: "navigate_viewer",
-  arguments: {
-    viewUUID: viewUUIDov,
-    commands: [
-      { action: "add_overlay", region: "pct:10,10,20,20", label: "p1-target", color: "red" },
-    ],
-  },
-});
-
-// Baseline: show_overlays=false returns a plain crop at a non-full region
-// (show_overlays + region=full is now allowed — see 4ter-d/4ter-d2, plan 051 §1.1(b)).
-console.log("\n--- 4ter-a: show_overlays=false → plain crop ---");
-const r4terA = await client.callTool({
-  name: "inspect_artwork_image",
-  arguments: {
-    objectNumber: "SK-A-2152",
-    region: "pct:0,0,50,50",
-    size: 448,
-    navigateViewer: false,
-    show_overlays: false,
-    viewUUID: viewUUIDov,
-  },
-});
-assert(!r4terA.isError, "plain inspect succeeds");
-const plainSC = r4terA.structuredContent ?? JSON.parse(r4terA.content.find(c => c.type === "text").text);
-assert(plainSC.overlaysRendered == null, "plain response omits overlaysRendered");
-const plainImage = r4terA.content.find(c => c.type === "image");
-assert(plainImage != null, "plain response has image");
-
-// Composite: show_overlays=true composites the queued overlay (pct:10,10,20,20
-// falls inside the pct:0,0,50,50 inspect region).
-console.log("\n--- 4ter-b: show_overlays=true → composited crop ---");
-const r4terB = await client.callTool({
-  name: "inspect_artwork_image",
-  arguments: {
-    objectNumber: "SK-A-2152",
-    region: "pct:0,0,50,50",
-    size: 448,
-    navigateViewer: false,
-    show_overlays: true,
-    viewUUID: viewUUIDov,
-  },
-});
-assert(!r4terB.isError, "composite inspect succeeds");
-const compSC = r4terB.structuredContent ?? JSON.parse(r4terB.content.find(c => c.type === "text").text);
-assert(compSC.overlaysRendered >= 1, `overlaysRendered ≥ 1 (got ${compSC.overlaysRendered})`);
-assert(compSC.overlaysSkipped === 0, `overlaysSkipped == 0 (got ${compSC.overlaysSkipped})`);
-assert(compSC.overlaysError == null, `no overlaysError on happy path (got ${compSC.overlaysError})`);
-assert(compSC.requestedSize === 448, `requestedSize clamped to 448 (got ${compSC.requestedSize})`);
-const compImage = r4terB.content.find(c => c.type === "image");
-assert(compImage != null, "composite response has image");
-assert(compImage.data !== plainImage.data, "composite bytes differ from plain bytes");
-
-// Size clamp: passing size=2000 with show_overlays=true still clamps to 784
-// (plan 051 §1.1(a) — raised from 448; 784 = 28×28 stays ×28-aligned, half the
-// 1568 default). SK-A-2152 is 6012×3321 native, so pct:0,0,50,50's regionWidth
-// (~3003px) doesn't further reduce the clamp — 784 is the binding constraint.
-console.log("\n--- 4ter-c: size=2000 force-clamped to 784 when show_overlays=true ---");
-const r4terC = await client.callTool({
-  name: "inspect_artwork_image",
-  arguments: {
-    objectNumber: "SK-A-2152",
-    region: "pct:0,0,50,50",
-    size: 2000,
-    navigateViewer: false,
-    show_overlays: true,
-    viewUUID: viewUUIDov,
-  },
-});
-const clampSC = r4terC.structuredContent ?? JSON.parse(r4terC.content.find(c => c.type === "text").text);
-assert(clampSC.requestedSize === 784, `size=2000 clamped to 784 when show_overlays=true (got ${clampSC.requestedSize})`);
-assert(784 % 28 === 0, "784 stays ×28-aligned (784 = 28×28)");
-
-// show_overlays on region="full" is now allowed (plan 051 §1.1(b)) — the queued
-// overlay (p1-target, pct:10,10,20,20 → 20%×20%) is well above the 5% threshold,
-// so this succeeds silently with no warning.
-console.log("\n--- 4ter-d: show_overlays + region=full succeeds silently for a large (≥5%) overlay ---");
-const r4terD = await client.callTool({
-  name: "inspect_artwork_image",
-  arguments: {
-    objectNumber: "SK-A-2152",
-    region: "full",
-    show_overlays: true,
-    navigateViewer: false,
-    viewUUID: viewUUIDov,
-  },
-});
-assert(!r4terD.isError, "show_overlays on full with a large overlay does not error");
-const fullSC = r4terD.structuredContent ?? JSON.parse(r4terD.content.find(c => c.type === "text").text);
-assert(fullSC.overlaysRendered >= 1, `overlays rendered on full view (got ${fullSC.overlaysRendered})`);
-assert(!fullSC.warnings || fullSC.warnings.length === 0, "no warnings for a large (≥5%) overlay on full view");
-const fullText = r4terD.content?.find(c => c.type === "text")?.text ?? "";
-assert(!fullText.includes("show_overlays_on_full_not_supported"), "reject code no longer present for large overlays");
-
-// 4ter-d2. Tiny-overlay warning branch: a fresh viewer with a single overlay whose
-// long axis is <5% of the image (pct:10,10,3,3 on a 6012×3321 image → 3%×3%).
-// show_overlays + region=full must still succeed (warning, not error), and the
-// warning must appear in BOTH channels: structuredContent.warnings (schema field
-// added in 1.1(b)(ii)) and content[].text — this handler hand-builds its response
-// and never calls structuredResponse, so mirrorWarningsToText never runs on this
-// path (plan 051 §1.1(b)(iii)); the handler renders its own text instead.
-console.log("\n--- 4ter-d2: show_overlays + region=full warns (not errors) for a tiny (<5%) overlay ---");
-const r4terTiny0 = await client.callTool({
-  name: "get_artwork_image",
-  arguments: { objectNumber: "SK-A-2152" },
-});
-const imgTiny = r4terTiny0.structuredContent ?? JSON.parse(r4terTiny0.content[0].text);
-const viewUUIDtiny = imgTiny.viewUUID;
-await client.callTool({
-  name: "navigate_viewer",
-  arguments: {
-    viewUUID: viewUUIDtiny,
-    commands: [
-      { action: "add_overlay", region: "pct:10,10,3,3", label: "tiny-target", color: "red" },
-    ],
-  },
-});
-const r4terTiny = await client.callTool({
-  name: "inspect_artwork_image",
-  arguments: {
-    objectNumber: "SK-A-2152",
-    region: "full",
-    show_overlays: true,
-    navigateViewer: false,
-    viewUUID: viewUUIDtiny,
-  },
-});
-assert(!r4terTiny.isError, "tiny (<5%) overlay on full view still succeeds (warning, not error)");
-const tinySC = r4terTiny.structuredContent ?? JSON.parse(r4terTiny.content.find(c => c.type === "text").text);
-assert(Array.isArray(tinySC.warnings) && tinySC.warnings.length > 0,
-  `structuredContent.warnings is a non-empty array (got ${JSON.stringify(tinySC.warnings)})`);
-const tinyWarning = tinySC.warnings?.[0] ?? "";
-const tinyText = r4terTiny.content?.find(c => c.type === "text")?.text ?? "";
-assert(tinyWarning.length > 0 && tinyText.includes(tinyWarning),
-  "the same warning text is present in content[].text (hand-built caption, not mirrorWarningsToText)");
-
-// Recency tie-break: opening a second viewer for the same artwork + adding
-// an overlay there should make inspect (without viewUUID) pick the newer
-// viewer, not collapse to 'ambiguous' as the old matchCount>1 logic did.
-console.log("\n--- 4ter-e: recency tie-break on multi-viewer auto-discovery ---");
 const r4terE0 = await client.callTool({
   name: "get_artwork_image",
   arguments: { objectNumber: "SK-A-2152" },
 });
-const img4terE = r4terE0.structuredContent ?? JSON.parse(r4terE0.content[0].text);
-const viewUUIDov2 = img4terE.viewUUID;
+const viewUUIDov2 = (r4terE0.structuredContent ?? JSON.parse(r4terE0.content[0].text)).viewUUID;
 assert(viewUUIDov2 !== viewUUIDov, "second viewer has a distinct UUID");
 
-// Place a distinct overlay on the NEW viewer only.
+// Touch the newer viewer so it is unambiguously most-recent.
 await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: viewUUIDov2,
-    commands: [
-      { action: "add_overlay", region: "pct:20,20,10,10", label: "recent-only", color: "blue" },
-    ],
+    commands: [{ action: "navigate", region: "pct:20,20,10,10" }],
   },
 });
 
-// Inspect without viewUUID — must auto-discover viewUUIDov2 (most recent).
 const r4terE = await client.callTool({
   name: "inspect_artwork_image",
   arguments: {
@@ -912,13 +719,10 @@ const r4terE = await client.callTool({
     region: "pct:0,0,50,50",
     size: 448,
     navigateViewer: false,
-    show_overlays: true,
   },
 });
 const recentSC = r4terE.structuredContent ?? JSON.parse(r4terE.content.find(c => c.type === "text").text);
 assert(recentSC.viewUUID === viewUUIDov2, `auto-discovered most recent viewer (expected ${viewUUIDov2?.slice(0, 8)}, got ${recentSC.viewUUID?.slice(0, 8)})`);
-assert(recentSC.overlaysRendered === 1, `picked up the recent viewer's overlay (got ${recentSC.overlaysRendered} rendered)`);
-assert(recentSC.overlaysError == null, "no overlaysError when viewer resolves cleanly");
 
 // ══════════════════════════════════════════════════════════════════
 //  5. poll_viewer_commands — queue draining
@@ -926,27 +730,25 @@ assert(recentSC.overlaysError == null, "no overlaysError when viewer resolves cl
 
 section("5. poll_viewer_commands — queue draining");
 
-// 5a. Poll viewer 1 — should have accumulated commands from 4a (4) + 4d (1) + 4f (1) = 6
-// Note: 4c/4g/4h were rejected, not queued
-console.log("\n--- 5a: Poll viewer 1 (should drain 6 commands) ---");
+// 5a. Poll viewer 1 — accumulated from 4a (2) + 4d (1) + 4f (1) = 4
+// Note: 4c/4g/4h/4i were rejected, not queued.
+console.log("\n--- 5a: Poll viewer 1 (should drain 4 commands) ---");
 const r5a = await client.callTool({
   name: "poll_viewer_commands",
   arguments: { viewUUID: viewUUID1 },
 });
 const poll1 = r5a.structuredContent ?? JSON.parse(r5a.content[0].text);
 assert(Array.isArray(poll1.commands), "commands is an array");
-assert(poll1.commands.length === 6, `Drained 6 commands (got ${poll1.commands.length})`);
+assert(poll1.commands.length === 4, `Drained 4 commands (got ${poll1.commands.length})`);
 
-// Verify command structure
-const clearCmd = poll1.commands.find(c => c.action === "clear_overlays");
-assert(clearCmd != null, "Includes clear_overlays command");
-const overlayCmd = poll1.commands.find(c => c.action === "add_overlay" && c.label === "Test overlay 1");
-assert(overlayCmd?.color === "orange", "Overlay preserves color");
-assert(overlayCmd?.region === "pct:38,22,28,22", "Overlay preserves region");
+// Every queued command is a zoom/pan navigate now.
+assert(poll1.commands.every(c => c.action === "navigate"), "all polled commands are navigate");
+const regionCmd = poll1.commands.find(c => c.region === "pct:38,22,28,22");
+assert(regionCmd != null, "navigate command preserves region");
 
-// Verify projected command has full-image region and no relativeTo
-const projCmd = poll1.commands.find(c => c.label === "Projected");
-assert(projCmd?.region === "pct:75,50,10,20", `Polled projected region: ${projCmd?.region}`);
+// The projected relativeTo command carries a full-image region and no relativeTo.
+const projCmd = poll1.commands.find(c => c.region === "pct:75,50,10,20");
+assert(projCmd != null, `projected relativeTo command present (${poll1.commands.map(c => c.region).join(", ")})`);
 assert(projCmd?.relativeTo === undefined, "relativeTo stripped from polled command");
 
 // 5b. Poll again — queue should be empty now
@@ -1017,22 +819,20 @@ const r6c = await client.callTool({
 const inspectOk = r6c.content.find(c => c.type === "image") != null;
 assert(inspectOk, "Full inspection returned image");
 
-// 6d. Navigate viewer with overlays (as in diagnostic trace Turn 3)
-console.log("\n--- 6d: navigate_viewer with overlays ---");
+// 6d. Navigate viewer (zoom) — diagnostic trace Turn 3, now zoom/pan only
+console.log("\n--- 6d: navigate_viewer zoom ---");
 const r6d = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: wfViewUUID,
     commands: [
-      { action: "clear_overlays" },
       { action: "navigate", region: "full" },
-      { action: "add_overlay", region: "pct:10,20,30,40", label: "Test region A", color: "gold" },
-      { action: "add_overlay", region: "pct:50,30,40,40", label: "Test region B", color: "crimson" },
+      { action: "navigate", region: "pct:10,20,30,40" },
     ],
   },
 });
 const navWf = r6d.structuredContent ?? JSON.parse(r6d.content[0].text);
-assert(navWf.queued === 4, `Queued 4 workflow commands`);
+assert(navWf.queued === 2, `Queued 2 workflow commands`);
 
 // 6e. Poll to verify
 console.log("\n--- 6e: poll_viewer_commands ---");
@@ -1041,15 +841,13 @@ const r6e = await client.callTool({
   arguments: { viewUUID: wfViewUUID },
 });
 const pollWf = r6e.structuredContent ?? JSON.parse(r6e.content[0].text);
-assert(pollWf.commands.length === 4, `Polled 4 commands (got ${pollWf.commands.length})`);
+assert(pollWf.commands.length === 2, `Polled 2 commands (got ${pollWf.commands.length})`);
 
-// Verify ordering preserved (clear → navigate → overlay → overlay)
-assert(pollWf.commands[0].action === "clear_overlays", "First command is clear_overlays");
-assert(pollWf.commands[1].action === "navigate", "Second command is navigate");
-assert(pollWf.commands[2].action === "add_overlay", "Third command is add_overlay");
-assert(pollWf.commands[3].action === "add_overlay", "Fourth command is add_overlay");
-assert(pollWf.commands[3].label === "Test region B", "Last overlay label preserved");
-assert(pollWf.commands[3].color === "crimson", "Last overlay color preserved");
+// Verify ordering preserved (navigate full → navigate region)
+assert(pollWf.commands[0].action === "navigate" && pollWf.commands[0].region === "full",
+  "First command is navigate full");
+assert(pollWf.commands[1].action === "navigate" && pollWf.commands[1].region === "pct:10,20,30,40",
+  "Second command is navigate to region");
 
 // ══════════════════════════════════════════════════════════════════
 //  7. Filter guard & coerceNull — client misbehaviour tests
@@ -1319,23 +1117,23 @@ console.log("\n--- 9c: all JSON nulls (should be rejected) ---");
   assert(isError, "All JSON null filters is rejected by filter guard");
 }
 
-// 9d. JSON null on navigate_viewer command fields
+// 9d. JSON null on navigate_viewer optional command field
 console.log("\n--- 9d: JSON null on navigate_viewer command fields ---");
 {
-  // navigate_viewer commands use optStr() for region, label, color —
-  // verify null values don't cause validation errors
+  // navigate_viewer commands use optStr() for region + relativeTo — verify a
+  // null value on an optional field doesn't cause a validation error.
   const r = await client.callTool({
     name: "navigate_viewer",
     arguments: {
       viewUUID: "00000000-0000-0000-0000-000000000000",
-      commands: [{ action: "navigate", region: "full", label: null, color: null }],
+      commands: [{ action: "navigate", region: "full", relativeTo: null }],
     },
   });
   // Will fail with "unknown viewer" but should NOT fail with validation error
   const { text } = parseResult(r);
   assert(
     !text.includes("Input validation error") && !text.includes("invalid_type"),
-    "navigate_viewer accepts null label/color without validation error"
+    "navigate_viewer accepts null relativeTo without validation error"
   );
 }
 
@@ -1398,59 +1196,6 @@ console.log("\n--- 10b: artwork without provenance ---");
   } else {
     assert(true, "skipped — artwork not found");
   }
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  11. overlay-compositor — tiny-box label-tag skip (plan 051 §1.3)
-// ══════════════════════════════════════════════════════════════════
-
-section("11. overlay-compositor — tiny-box label-tag skip");
-
-// buildLabelTagSvg (overlay-compositor.ts) is unexported and returns "" for
-// boxes narrower than 4x the tag height, so this test uses an exact proxy
-// already established by test-pure-functions.mjs's "compositeOverlays labels"
-// section: compare a labeled composite against the same region with label:""
-// (the no-tag baseline). If the tag is skipped, labeled and unlabeled bytes
-// are byte-identical (buildLabelTagSvg contributed no elements either way);
-// if the tag renders, the bytes differ.
-{
-  const testJpeg784 = await sharp({
-    create: { width: 784, height: 784, channels: 3, background: { r: 60, g: 60, b: 60 } },
-  }).jpeg().toBuffer();
-  const frame784 = { rect: { x: 0, y: 0, w: 784, h: 784 }, imageWidth: 784, imageHeight: 784 };
-
-  // Tiny box: ~2.5% of a 784px image on each axis (pct:10,10,2.5,2.5 → ~19.6×19.6px).
-  // tagH at this image scale is ~26.7px, so 4×tagH (~106.6px) >> 19.6px — the
-  // tag-skip guard should fire and no tag should be drawn.
-  const tinyLabeled = await compositeOverlays(
-    testJpeg784,
-    [{ region: "pct:10,10,2.5,2.5", color: "red", label: "tiny" }],
-    frame784,
-  );
-  const tinyUnlabeled = await compositeOverlays(
-    testJpeg784,
-    [{ region: "pct:10,10,2.5,2.5", color: "red", label: "" }],
-    frame784,
-  );
-  assert(tinyLabeled.rendered === 1, `tiny box: rendered=1 (got ${tinyLabeled.rendered})`);
-  assert(tinyLabeled.buffer.length === tinyUnlabeled.buffer.length,
-    `tiny box (~2.5% of 784px): labeled bytes === unlabeled bytes — tag skipped (${tinyLabeled.buffer.length} vs ${tinyUnlabeled.buffer.length})`);
-
-  // Normal box: 50% of a 784px image on each axis — well above the 4×tagH
-  // threshold, so the tag still renders as before.
-  const normalLabeled = await compositeOverlays(
-    testJpeg784,
-    [{ region: "pct:25,25,50,50", color: "red", label: "normal" }],
-    frame784,
-  );
-  const normalUnlabeled = await compositeOverlays(
-    testJpeg784,
-    [{ region: "pct:25,25,50,50", color: "red", label: "" }],
-    frame784,
-  );
-  assert(normalLabeled.rendered === 1, `normal box: rendered=1 (got ${normalLabeled.rendered})`);
-  assert(normalLabeled.buffer.length !== normalUnlabeled.buffer.length,
-    `normal box (50% of 784px): labeled bytes differ from unlabeled — tag still present (${normalLabeled.buffer.length} vs ${normalUnlabeled.buffer.length})`);
 }
 
 // ══════════════════════════════════════════════════════════════════

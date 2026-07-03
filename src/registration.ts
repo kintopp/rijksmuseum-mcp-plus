@@ -18,8 +18,6 @@ import {
   enrichmentReviewPages,
 } from "./registration/state.js";
 import {
-  regionToPixels,
-  computeVerificationRegion,
   parsePctRegion,
   parseCropPixelsRegion,
   cropPixelsToIiifPixels,
@@ -55,8 +53,6 @@ export { similarPages, enrichmentReviewPages };
 // Re-export all geometry symbols (scripts/tests/test-pure-functions.mjs imports them
 // from dist/registration.js and must not be modified):
 export {
-  regionToPixels,
-  computeVerificationRegion,
   parsePctRegion,
   parseCropPixelsRegion,
   cropPixelsToIiifPixels,

@@ -16,18 +16,14 @@ export interface CropLocalSize {
   height: number;
 }
 
+// The viewer command channel carries region zoom/pan only. relativeTo/relativeToSize
+// are transient input fields projected to full-image space and stripped before the
+// command is queued; the iframe only ever sees { action: "navigate", region }.
 interface ViewerCommand {
-  action: "navigate" | "add_overlay" | "clear_overlays";
+  action: "navigate";
   region?: string;
   relativeTo?: string;
   relativeToSize?: CropLocalSize;
-  label?: string;
-  color?: string;
-}
-export interface OverlayEntry {
-  label?: string;
-  region: string;
-  color?: string;
 }
 export interface ViewerQueue {
   commands: ViewerCommand[];
@@ -37,7 +33,6 @@ export interface ViewerQueue {
   objectNumber: string;
   imageWidth?: number;
   imageHeight?: number;
-  activeOverlays: OverlayEntry[];
 }
 /** Start a 60s interval that deletes entries older than `ttlMs` from a Map. */
 export function sweepTtlMap<T extends { lastAccess: number }>(map: Map<string, T>, ttlMs = 1_800_000): void {
@@ -51,8 +46,6 @@ export function sweepTtlMap<T extends { lastAccess: number }>(map: Map<string, T
 
 export const viewerQueues = new Map<string, ViewerQueue>();
 sweepTtlMap(viewerQueues);
-
-export const ACTIVE_OVERLAYS_CAP = 64;
 
 export const similarPages = new Map<string, { html: string; lastAccess: number }>();
 sweepTtlMap(similarPages);

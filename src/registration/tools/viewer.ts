@@ -4,13 +4,13 @@ import {
 } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
+import sharp from "sharp";
 import { RijksmuseumApiClient } from "../../api/RijksmuseumApiClient.js";
 import { VocabularyDb, formatDimensions } from "../../api/VocabularyDb.js";
 import { UsageStats } from "../../utils/UsageStats.js";
 import {
   IIIF_REGION_RE,
   viewerQueues,
-  ACTIVE_OVERLAYS_CAP,
 } from "../state.js";
 import {
   parsePctRegion,
@@ -19,8 +19,6 @@ import {
   checkRegionBounds,
   computeDeliveryState,
   projectToFullImage,
-  regionToPixels,
-  computeVerificationRegion,
   type OobWarning,
 } from "../geometry.js";
 import {
@@ -39,7 +37,6 @@ import {
   ImageInfoOutput,
   InspectImageOutput,
 } from "../outputSchemas.js";
-import { compositeOverlays, computeCropRect, readImageDimensions } from "../../overlay-compositor.js";
 
 export function registerViewerTools(
   server: McpServer,
@@ -149,7 +146,6 @@ export function registerViewerTools(
         objectNumber: payload.data.objectNumber,
         imageWidth: payload.width,
         imageHeight: payload.height,
-        activeOverlays: [],
       });
 
       const viewerData: InferOutput<typeof ImageInfoOutput> = { ...payload.data, viewUUID };
@@ -176,7 +172,7 @@ export function registerViewerTools(
       description:
         "Internal: switch the viewer to a different artwork while preserving the viewUUID. " +
         "Called by the artwork-viewer iframe during in-viewer related navigation. " +
-        "Overlays are cleared on remount because their coordinates belong to the previous artwork.",
+        "Any user highlight is cleared on remount because its coordinates belong to the previous artwork.",
       inputSchema: z.object({
         viewUUID: z.string().describe("Existing viewer UUID returned by a prior get_artwork_image call"),
         objectNumber: z.string().describe("Object number of the artwork to remount into the viewer"),
@@ -225,7 +221,6 @@ export function registerViewerTools(
       queue.objectNumber = payload.data.objectNumber;
       queue.imageWidth = payload.width;
       queue.imageHeight = payload.height;
-      queue.activeOverlays = [];
       queue.lastAccess = Date.now();
 
       const viewerData: InferOutput<typeof ImageInfoOutput> = { ...payload.data, viewUUID: args.viewUUID };
@@ -242,15 +237,13 @@ export function registerViewerTools(
       title: "Inspect Artwork Image",
       annotations: ANN_READ_CLOSED,
       description:
-        "Returns image bytes (base64) for the LLM's own visual analysis of an artwork or region — not for the user to view. " +
-        "The LLM can see and reason about the image immediately. " +
-        "Not for the user to view — use get_artwork_image for the interactive viewer. " +
+        "Returns image bytes (base64) for the LLM's own visual analysis of an artwork or region. " +
+        "The LLM can see and reason about the image immediately — not for the user to view (use get_artwork_image for the interactive viewer). " +
         "Not for listing or summarising artworks — use search_artwork.\n\n" +
         "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
         "region to zoom into details, read inscriptions, or examine specific areas. " +
         "The response includes cropPixelWidth/cropPixelHeight: the actual pixel dimensions " +
-        "of the returned image. Use those with navigate_viewer's relativeToSize when placing " +
-        "crop-local crop_pixels overlays.\n\n" +
+        "of the returned image.\n\n" +
         "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), " +
         "'crop_pixels:x,y,w,h' (pixel coordinates of the full image — use with " +
         "nativeWidth/nativeHeight from a prior response), or 'x,y,w,h' (legacy IIIF " +
@@ -260,19 +253,10 @@ export function registerViewerTools(
         "- Center strip: pct:25,25,50,50\n" +
         "- Full image: full (default)\n" +
         "- For multi-panel works: use physical dimensions from get_artwork_details to estimate panel percentages, then inspect individual panels with close-up crops.\n\n" +
-        "Best practice for overlay placement: ALWAYS inspect before overlaying. " +
-        "Start with region 'full' to understand the layout, then use close-up crops (600–800px) " +
-        "to pinpoint specific features before calling navigate_viewer with add_overlay. " +
-        "Use navigate_viewer's 'relativeTo' parameter to place overlays using crop-local coordinates — " +
-        "the server handles the projection to full-image space, avoiding manual coordinate math. " +
-        "After placing, verify each overlay with show_overlays:true and a tight pct: crop around it " +
-        "(the navigate_viewer response includes a ready-to-paste verificationRegion per overlay). " +
-        "To reposition an overlay, issue clear_overlays then re-add ALL overlays with corrected coordinates — " +
-        "there is no move/delete-one operation.\n\n" +
-        "Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms " +
-        "to the inspected region (navigateViewer defaults to true, no effect when region is 'full'). " +
-        "This keeps the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom. " +
-        "Use navigate_viewer separately only when you need overlays, labels, or clear_overlays.\n\n" +
+        "Iterative zoom: start with region 'full' to understand the layout, then use close-up crops " +
+        "(600–800px) to read specific features. When a viewer is open for this artwork, it automatically " +
+        "zooms to the inspected region (navigateViewer defaults to true, no effect when region is 'full'), " +
+        "keeping the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom.\n\n" +
         "The response includes the active viewUUID (if any) for follow-up navigate_viewer calls.",
       inputSchema: z.object({
         objectNumber: z
@@ -303,8 +287,6 @@ export function registerViewerTools(
           .describe("Image quality — 'gray' can help read inscriptions or signatures"),
         navigateViewer: z.preprocess(stripNullCoerceBool, z.boolean().default(true))
           .describe("Auto-navigate the open viewer to the inspected region (default: true). Only effective when a viewer is open for this artwork."),
-        show_overlays: z.preprocess(stripNullCoerceBool, z.boolean().default(false))
-          .describe("Composite active-viewer overlays onto the returned crop — opt-in verification step for navigate_viewer add_overlay. Requires a non-'full' region tightly around the overlay being checked (use the verificationRegion field from the navigate_viewer response). Response size is clamped to 784 px when enabled, so feature-scale crops are needed for overlays to be visible."),
         viewUUID: optStr()
           .optional()
           .describe("Target a specific viewer session (from get_artwork_image). When omitted, auto-discovers a viewer for this artwork."),
@@ -374,36 +356,6 @@ export function registerViewerTools(
         }
         const { artwork, imageInfo } = loaded;
 
-        // show_overlays on region="full": at the 784 px clamp a 3px stroke rectangle
-        // is visible even for a modest-sized overlay, and the full view is the only
-        // frame in which a mis-placed overlay's true target — sitting outside the
-        // box entirely — can be seen. Downgrade the old unconditional reject to a
-        // warning, firing only when the largest active overlay is genuinely tiny
-        // (<5% of the image on its long axis) — those can still vanish even at
-        // 784px. No active overlays (or no viewer) means nothing to verify —
-        // proceed silently.
-        let showOverlaysFullWarning: string | undefined;
-        if (args.show_overlays && args.region === "full") {
-          const overlaysForFullCheck = activeViewUUID ? (viewerQueues.get(activeViewUUID)?.activeOverlays ?? []) : [];
-          if (overlaysForFullCheck.length > 0 && imageInfo.width && imageInfo.height) {
-            let maxAxisPct = 0;
-            for (const overlay of overlaysForFullCheck) {
-              // computeCropRect handles all four overlay region forms (full/square/
-              // pct/plain-pixels) uniformly — regionToPixels only understands pct:.
-              const rect = computeCropRect(overlay.region, imageInfo.width, imageInfo.height);
-              if (!rect) continue;
-              const axisPct = Math.max(rect.w / imageInfo.width, rect.h / imageInfo.height) * 100;
-              if (axisPct > maxAxisPct) maxAxisPct = axisPct;
-            }
-            if (maxAxisPct > 0 && maxAxisPct < 5) {
-              showOverlaysFullWarning =
-                `The largest active overlay is only ~${maxAxisPct.toFixed(1)}% of the image on its long axis, ` +
-                `so it may be hard to see at full-image scale — consider inspecting a tighter region instead ` +
-                `(e.g. the verificationRegion from navigate_viewer).`;
-            }
-          }
-        }
-
         // Checked before prefix stripping so `requested` in the warning echoes
         // the user's exact input, not the normalized form.
         {
@@ -420,10 +372,8 @@ export function registerViewerTools(
         // Policy: never upscale — interpolated pixels add no real detail for LLM
         // inspection. pct regions suffer from server-side rounding that can yield
         // up to 3px less than the ideal pixel width, so we subtract 3 to stay
-        // inside the boundary. The 784 clamp when show_overlays is on is an
-        // LLM-only context-cost guard (784 = 28×28, half the 1568 default — stays
-        // on the ×28 vision-tile ladder the rest of the `size` schema uses).
-        let effectiveSize = args.show_overlays ? Math.min(args.size, 784) : args.size;
+        // inside the boundary.
+        let effectiveSize = args.size;
         if (imageInfo.width) {
           let regionWidth = imageInfo.width;
           const pctMatch = iiifRegion.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
@@ -455,56 +405,19 @@ export function registerViewerTools(
           return cropError(`Failed to fetch image: ${message}`);
         }
         const fetchTimeMs = Math.round(performance.now() - fetchStart);
-        let imageBuffer: Buffer<ArrayBufferLike> = Buffer.from(base64, "base64");
+        const imageBuffer: Buffer<ArrayBufferLike> = Buffer.from(base64, "base64");
         let cropPixelWidth: number | undefined;
         let cropPixelHeight: number | undefined;
 
-        let overlaysRendered: number | undefined;
-        let overlaysSkipped: number | undefined;
-        let overlaysError: string | undefined;
-        if (args.show_overlays && imageInfo.width && imageInfo.height) {
-          const queueForOverlays = activeViewUUID ? viewerQueues.get(activeViewUUID) : undefined;
-          if (!queueForOverlays) {
-            overlaysError = "no_active_viewer";
-            overlaysRendered = 0;
-            overlaysSkipped = 0;
-          } else {
-            const overlays = queueForOverlays.activeOverlays;
-            const cropRect = computeCropRect(iiifRegion, imageInfo.width, imageInfo.height);
-            if (overlays.length > 0 && cropRect) {
-              const frame = { rect: cropRect, imageWidth: imageInfo.width, imageHeight: imageInfo.height };
-              try {
-                const composite = await compositeOverlays(imageBuffer, overlays, frame);
-                imageBuffer = composite.buffer;
-                base64 = imageBuffer.toString("base64");
-                mimeType = composite.mimeType;
-                overlaysRendered = composite.rendered;
-                overlaysSkipped = composite.skipped;
-                cropPixelWidth = composite.width;
-                cropPixelHeight = composite.height;
-              } catch (err) {
-                // Non-fatal: return the plain crop and flag so the failure
-                // isn't indistinguishable from "all overlays fell outside".
-                const message = err instanceof Error ? err.message : String(err);
-                console.warn(`[inspect_artwork_image] overlay composite failed: ${message}`);
-                overlaysError = "compositor_failed";
-                overlaysRendered = 0;
-                overlaysSkipped = overlays.length;
-              }
-            } else {
-              overlaysRendered = 0;
-              overlaysSkipped = 0;
-            }
-          }
-        }
-
-        // Fallback when the composite path didn't run or didn't expose dims.
-        // Non-fatal on error: image bytes remain valid for the content response.
-        if (cropPixelWidth == null || cropPixelHeight == null) {
-          try {
-            ({ width: cropPixelWidth, height: cropPixelHeight } = await readImageDimensions(imageBuffer));
-          } catch { /* keep dims undefined */ }
-        }
+        // Report the returned crop's actual pixel dimensions — the model uses them
+        // (with nativeWidth/nativeHeight) for crop-local coordinate math on a
+        // follow-up navigate_viewer zoom. Non-fatal on error: the image bytes
+        // remain valid for the content response.
+        try {
+          const meta = await sharp(imageBuffer).metadata();
+          cropPixelWidth = meta.width;
+          cropPixelHeight = meta.height;
+        } catch { /* keep dims undefined */ }
 
         const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
         const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
@@ -532,14 +445,6 @@ export function registerViewerTools(
         }
         if (viewerNavigated) captionParts.push("| viewer navigated");
         else if (activeViewUUID) captionParts.push(`| viewer open (${activeViewUUID.slice(0, 8)})`);
-        if (overlaysRendered != null) {
-          const errNote = overlaysError ? ` (${overlaysError})` : "";
-          captionParts.push(`| overlays: ${overlaysRendered} rendered, ${overlaysSkipped} skipped${errNote}`);
-        }
-        // This handler hand-builds content/structuredContent directly rather than going
-        // through structuredResponse, so mirrorWarningsToText never runs on this path —
-        // the warning has to be rendered into the text channel here explicitly.
-        if (showOverlaysFullWarning) captionParts.push(`| ⚠ ${showOverlaysFullWarning}`);
         const caption = captionParts.join(" ");
 
         const content = [
@@ -564,10 +469,6 @@ export function registerViewerTools(
           fetchTimeMs,
           viewUUID: activeViewUUID,
           viewerNavigated: viewerNavigated || undefined,
-          overlaysRendered,
-          overlaysSkipped,
-          overlaysError,
-          warnings: showOverlaysFullWarning ? [showOverlaysFullWarning] : undefined,
         };
         return {
           content,
@@ -598,7 +499,7 @@ export function registerViewerTools(
   const NavigateViewerOutput = {
     viewUUID: z.string(),
     objectNumber: z.string().optional()
-      .describe("Object number of the artwork in this viewer session — mirrors the inspect_artwork_image verify-after nudge in the text channel, so a structuredContent reader has the identity needed for the follow-up call."),
+      .describe("Object number of the artwork in this viewer session — gives a structuredContent reader the identity needed for a follow-up call without parsing prose."),
     queued: z.number().int(),
     regionRecovery: z.object({
       requested: z.string().describe("The offending region exactly as supplied."),
@@ -608,18 +509,6 @@ export function registerViewerTools(
       .describe("Out-of-bounds recovery hint. Present only on an `overlay_region_out_of_bounds` error — mirrors the recovery payload the text channel renders, so a structuredContent reader can self-correct without parsing prose."),
     imageWidth: z.number().int().optional(),
     imageHeight: z.number().int().optional(),
-    overlays: z.array(z.object({
-      label: z.string().optional(),
-      region: z.string(),
-      pixelRect: z.string().optional(),
-      verificationRegion: z.string().optional()
-        .describe("Ready-to-paste pct: crop centred on this overlay (≥12% per axis). Use with inspect_artwork_image(show_overlays:true, region:<this>, viewUUID:<same UUID>) to verify placement after add_overlay."),
-    })).optional(),
-    currentOverlays: z.array(z.object({
-      label: z.string().optional(),
-      region: z.string(),
-      color: z.string().optional(),
-    })).optional(),
     pendingCommandCount: z.number().int().optional()
       .describe("Commands sitting in the queue that the iframe has not yet drained."),
     lastPolledAt: z.string().optional()
@@ -637,22 +526,16 @@ export function registerViewerTools(
       title: "Navigate Viewer",
       annotations: ANN_VIEWER,
       description:
-        "Steers an already-open viewer: zoom to a region, add a labelled overlay, or clear overlays. " +
+        "Zooms/pans an already-open viewer to a region — steer the user's view to a detail. " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
-        "Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image. " +
-        "Commands execute in order: typically clear_overlays → navigate → add_overlay.\n\n" +
-        "Honesty note: an overlay placed on a named visual feature (a face, gesture, or specific object) reflects " +
-        "the model's own perception and is approximate — narrate it to the user as a checkable claim (\"I've boxed " +
-        "what I identified as X — please confirm it looks right\"), not a settled fact. Region zoom, signature/" +
-        "inscription pointing at a catalogued location, and user-driven highlighting (the user names the exact box) " +
-        "remain the reliable uses today.\n\n" +
+        "Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image.\n\n" +
+        "In most cases you do NOT need this tool: inspect_artwork_image already auto-zooms the open viewer to " +
+        "whatever region it inspects. Call navigate_viewer only to move the user's view WITHOUT fetching image " +
+        "bytes for your own analysis.\n\n" +
         "By default, region coordinates are in full-image space (percentages or pixels of the original image), " +
         "not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image " +
         "will target the identical area in the viewer. Exception: when a command includes relativeTo, " +
         "region is interpreted in that inspected crop's local coordinate space.\n\n" +
-        "For accurate overlay placement: inspect the target area with inspect_artwork_image first, " +
-        "verify the region contains what you expect, then use the same or refined coordinates here. " +
-        "Do not estimate overlay positions from memory — always inspect first.\n\n" +
         "Region formats:\n" +
         "- 'pct:x,y,w,h' — percentage of full image.\n" +
         "- 'crop_pixels:x,y,w,h' — pixel coordinates of the full image. Use nativeWidth/nativeHeight " +
@@ -661,35 +544,26 @@ export function registerViewerTools(
         "- 'x,y,w,h' — equivalent to crop_pixels: (legacy IIIF form, kept for compatibility).\n" +
         "- 'full' | 'square' — whole image shortcuts.\n\n" +
         "Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — " +
-        "correct the coordinates and retry.\n\n" +
-        "Overlays persist in the viewer until clear_overlays is issued — each call appends to the existing set " +
-        "(overlays are append-only; there is no move/delete-one operation, so repositioning requires clear_overlays " +
-        "then re-adding ALL overlays you want to keep). When placing more than one overlay, prefer distinct 'color' " +
-        "values so the rectangles are distinguishable in inspect_artwork_image(show_overlays:true). " +
-        "Each add_overlay response includes a per-overlay verificationRegion (pct: crop) for the verify-after step. " +
-        "Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for " +
-        "30 minutes of idle inactivity — any polling or navigation resets the clock.\n\n" +
-        "Coordinate shortcut: when placing overlays based on a prior inspect_artwork_image crop, " +
-        "use 'relativeTo' with the crop's region string. Specify 'region' as coordinates within " +
-        "the crop's local space and the server projects to full-image space deterministically. " +
-        "Use pct:x,y,w,h for crop-local percentages, or crop_pixels:x,y,w,h plus " +
-        "relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from inspect_artwork_image " +
-        "for crop-local rendered pixels. Crop-local pixels are preferred for tight detail boxes.\n\n" +
+        "correct the coordinates and retry. Keep batches under 10 commands per call. The viewer session " +
+        "(viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.\n\n" +
+        "Coordinate shortcut: to zoom to a region of a prior inspect_artwork_image crop, use 'relativeTo' with " +
+        "the crop's region string and specify 'region' as coordinates within the crop's local space; the server " +
+        "projects to full-image space deterministically. Use pct:x,y,w,h for crop-local percentages, or " +
+        "crop_pixels:x,y,w,h plus relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from " +
+        "inspect_artwork_image for crop-local rendered pixels.\n\n" +
         "Response field deliveryState reports whether the iframe drained the commands immediately " +
         "(`delivered_recently`), the iframe exists but hasn't polled recently and the commands are " +
         "queued (`queued_waiting_for_viewer` — typical when scrolled out of view), or no iframe has " +
-        "connected yet (`no_live_viewer_seen`). In the queued case, overlay state is preserved " +
+        "connected yet (`no_live_viewer_seen`). In the queued case, the command is preserved " +
         "server-side and will apply automatically when the viewer resumes polling — do not narrate " +
         "this as a delivery failure to the user.",
       inputSchema: z.object({
         viewUUID: z.string().describe("Viewer UUID from a prior get_artwork_image call"),
         commands: z.array(z.object({
-          action: z.enum(["navigate", "add_overlay", "clear_overlays"]).describe(
-            "Command type and its minimal valid shape: 'navigate' → needs region; " +
-            "'add_overlay' → needs region, plus optional label + color; " +
-            "'clear_overlays' → no other fields."
+          action: z.enum(["navigate"]).describe(
+            "Command type — 'navigate' zooms/pans the viewer to region."
           ),
-          region: optStr().optional().describe("IIIF region (required for navigate/add_overlay): 'full', 'square', 'pct:x,y,w,h', 'crop_pixels:x,y,w,h', or 'x,y,w,h'"),
+          region: optStr().optional().describe("IIIF region (required): 'full', 'square', 'pct:x,y,w,h', 'crop_pixels:x,y,w,h', or 'x,y,w,h'"),
           relativeTo: optStr().optional().describe(
             "Crop region from a prior inspect_artwork_image call. When provided, " +
             "'region' is interpreted as coordinates within that crop's local space " +
@@ -703,9 +577,7 @@ export function registerViewerTools(
             "Actual pixel dimensions of the inspected crop, copied from inspect_artwork_image " +
             "cropPixelWidth/cropPixelHeight. Required when relativeTo is set and region uses crop_pixels:."
           ),
-          label: optStr().optional().describe("Label text for add_overlay"),
-          color: optStr().optional().describe("CSS color for add_overlay border (default: orange)"),
-        })).min(1).describe("Commands to execute in the viewer, in order"),
+        })).min(1).describe("Zoom/pan commands to execute in the viewer, in order"),
       }).strict(),
       ...withOutputSchema(NavigateViewerOutput),
     },
@@ -746,15 +618,13 @@ export function registerViewerTools(
         );
       }
 
-      // Validate region on commands that require it
+      // Validate region — every command is a navigate and requires one.
       for (const cmd of args.commands) {
-        if (cmd.action === "navigate" || cmd.action === "add_overlay") {
-          if (!cmd.region) {
-            return navError(`'${cmd.action}' requires a region. Use 'full', 'square', 'x,y,w,h', 'pct:x,y,w,h', or 'crop_pixels:x,y,w,h'.`);
-          }
-          if (!IIIF_REGION_RE.test(cmd.region)) {
-            return navError(`Invalid region '${cmd.region}'. Use 'full', 'square', 'x,y,w,h', 'pct:x,y,w,h', or 'crop_pixels:x,y,w,h'.`);
-          }
+        if (!cmd.region) {
+          return navError("'navigate' requires a region. Use 'full', 'square', 'x,y,w,h', 'pct:x,y,w,h', or 'crop_pixels:x,y,w,h'.");
+        }
+        if (!IIIF_REGION_RE.test(cmd.region)) {
+          return navError(`Invalid region '${cmd.region}'. Use 'full', 'square', 'x,y,w,h', 'pct:x,y,w,h', or 'crop_pixels:x,y,w,h'.`);
         }
         if (cmd.relativeTo && !parsePctRegion(cmd.relativeTo)) {
           return navError(`Invalid relativeTo '${cmd.relativeTo}'. Must be in pct:x,y,w,h format.`);
@@ -774,7 +644,6 @@ export function registerViewerTools(
       // Skip when relativeTo is used: the projected coordinates are validated
       // post-projection (see below).
       for (const cmd of args.commands) {
-        if (cmd.action !== "navigate" && cmd.action !== "add_overlay") continue;
         if (!cmd.region) continue;
         if (cmd.relativeTo) continue;
         const oob = checkRegionBounds(cmd.region, queue.imageWidth, queue.imageHeight);
@@ -817,30 +686,6 @@ export function registerViewerTools(
       queue.commands.push(...args.commands);
       queue.lastAccess = Date.now();
 
-      // Maintain server-side shadow overlay list. Capped at 64 so a long
-      // session can't grow the array unboundedly — the compositor iterates
-      // all entries on every show_overlays call.
-      for (const cmd of args.commands) {
-        if (cmd.action === "clear_overlays") queue.activeOverlays = [];
-        else if (cmd.action === "add_overlay") {
-          queue.activeOverlays.push({ label: cmd.label, region: cmd.region!, color: cmd.color });
-          if (queue.activeOverlays.length > ACTIVE_OVERLAYS_CAP) {
-            queue.activeOverlays = queue.activeOverlays.slice(-ACTIVE_OVERLAYS_CAP);
-          }
-        }
-      }
-
-      const overlayDetails = (queue.imageWidth && queue.imageHeight)
-        ? args.commands
-            .filter((c) => c.action === "add_overlay")
-            .map((c) => ({
-              label: c.label,
-              region: c.region!,
-              pixelRect: regionToPixels(c.region!, queue!.imageWidth!, queue!.imageHeight!),
-              verificationRegion: computeVerificationRegion(c.region!, queue!.imageWidth, queue!.imageHeight),
-            }))
-        : undefined;
-
       const now = Date.now();
       const deliveryState = computeDeliveryState(queue.lastPolledAt, now);
       const recentlyPolledByViewer = deliveryState === "delivered_recently";
@@ -850,49 +695,23 @@ export function registerViewerTools(
         queued: args.commands.length,
         imageWidth: queue.imageWidth,
         imageHeight: queue.imageHeight,
-        overlays: overlayDetails?.length ? overlayDetails : undefined,
-        currentOverlays: queue.activeOverlays.length ? queue.activeOverlays : undefined,
         pendingCommandCount: queue.commands.length,
         lastPolledAt: queue.lastPolledAt != null ? new Date(queue.lastPolledAt).toISOString() : undefined,
         recentlyPolledByViewer,
         deliveryState,
       };
 
-      const overlayCount = queue.activeOverlays.length;
-      const overlayClause = overlayCount ? ` | ${overlayCount} active overlays` : "";
       const shortUuid = args.viewUUID.slice(0, 8);
-      const baseText = (() => {
+      const text = (() => {
         switch (deliveryState) {
           case "delivered_recently":
-            return `Delivered ${args.commands.length} commands to active viewer ${shortUuid}${overlayClause}`;
+            return `Delivered ${args.commands.length} commands to active viewer ${shortUuid}`;
           case "queued_waiting_for_viewer":
-            return `Queued ${args.commands.length} commands for viewer ${shortUuid} (offscreen or paused — overlay state preserved, will apply when viewer resumes polling)${overlayClause}`;
+            return `Queued ${args.commands.length} commands for viewer ${shortUuid} (offscreen or paused — will apply when viewer resumes polling)`;
           case "no_live_viewer_seen":
-            return `Queued ${args.commands.length} commands for viewer ${shortUuid} (no viewer has connected yet)${overlayClause}`;
+            return `Queued ${args.commands.length} commands for viewer ${shortUuid} (no viewer has connected yet)`;
         }
       })();
-
-      // Verify-and-adjust loop nudge: fires whenever the batch contained an
-      // add_overlay AND the queue has image dimensions (so verificationRegion
-      // is computable). Surfaces the exact pct: crop the model should pass to
-      // inspect_artwork_image, plus a disconfirmation step (describe + self-point
-      // to the label before trusting the box) and an explicit failure path — "tell
-      // the user you could not locate it" is an acceptable outcome, not a retry
-      // trap. #337, plan 051 §1.2.
-      const verifiable = overlayDetails?.filter((o) => o.verificationRegion) ?? [];
-      const nudge = verifiable.length && queue.objectNumber
-        ? (() => {
-          const pairs = verifiable
-            .map((o) => `${o.label ? `"${o.label}" → ` : ""}${o.verificationRegion}`)
-            .join("; ");
-          return (
-            ` | Verify each overlay: inspect_artwork_image(objectNumber:"${queue.objectNumber}", show_overlays:true, viewUUID:"${args.viewUUID}", region:"<verificationRegion>"): ${pairs}. ` +
-            `Describe what actually fills each box, and first point to its label inside it YOURSELF. If the majority of a box is anything other than its label, or you cannot point to the label inside it, you MUST clear_overlays and re-place — or tell the user you could not locate it (that is an acceptable outcome). ` +
-            `If a box sits near a crop edge, also re-inspect at region:"full" to confirm the true target is not outside the box.`
-          );
-        })()
-        : "";
-      const text = baseText + nudge;
       return structuredResponse(navData, text);
     })
   );
@@ -903,12 +722,9 @@ export function registerViewerTools(
   // input commands plus inspect_artwork_image's internal auto-zoom push.
   const PollViewerCommandsOutput = {
     commands: z.array(z.object({
-      action: z.enum(["navigate", "add_overlay", "clear_overlays"]),
+      action: z.enum(["navigate"]),
       region: z.string().optional(),
-      relativeTo: z.string().optional(),
-      label: z.string().optional(),
-      color: z.string().optional(),
-    })).describe("Pending viewer commands drained from the queue, in order. Empty when nothing is queued."),
+    })).describe("Pending viewer navigation commands drained from the queue, in order. Empty when nothing is queued."),
   };
 
   registerAppTool(

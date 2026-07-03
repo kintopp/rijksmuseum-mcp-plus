@@ -879,17 +879,16 @@ function updateModelContext(data: ArtworkImageData): void {
   });
 }
 
-// ── Viewer navigation (polling + overlays) ──────────────────────
+// ── Viewer navigation (polling + user highlight) ────────────────
 
 interface ViewerCommand {
-  action: 'navigate' | 'add_overlay' | 'clear_overlays';
+  action: 'navigate';
   region?: string;
-  label?: string;
-  color?: string;
 }
 
-const OVERLAY_STROKE = 'rgba(255,100,0,0.7)';
-const OVERLAY_FILL = 'rgba(255,100,0,0.1)';
+// Overlay element registry — now backs only the user-drawn highlight
+// (addRegionOverlay / clearUserHighlight / clearAllOverlays). The model→viewer
+// overlay direction was removed; the model can no longer draw boxes here.
 const overlayElements: HTMLElement[] = [];
 
 // Adaptive polling. Each poll_viewer_commands call is a call_mcp round-trip
@@ -949,18 +948,10 @@ async function pollForCommands(gen: number, emptyRuns: number): Promise<void> {
 }
 
 function processCommands(commands: ViewerCommand[]): void {
+  // Zoom/pan only. The model→viewer overlay commands (add_overlay / clear_overlays)
+  // were removed; navigate is the sole command the viewer accepts.
   for (const cmd of commands) {
-    switch (cmd.action) {
-      case 'navigate':
-        if (cmd.region) navigateToRegion(cmd.region);
-        break;
-      case 'add_overlay':
-        if (cmd.region) addRegionOverlay(cmd.region, cmd.label, cmd.color);
-        break;
-      case 'clear_overlays':
-        clearAllOverlays();
-        break;
-    }
+    if (cmd.action === 'navigate' && cmd.region) navigateToRegion(cmd.region);
   }
 }
 
@@ -1002,20 +993,23 @@ function iiifRegionToViewportRect(region: string): OpenSeadragon.Rect | null {
   return null;
 }
 
+// Renders the user's drag-selected highlight (the only caller passes the
+// HIGHLIGHT_* colors + the 'Highlight' label). Kept general — color/fill fall
+// back to the highlight palette when omitted.
 function addRegionOverlay(region: string, label?: string, color?: string, fill?: string): HTMLElement | null {
   const rect = iiifRegionToViewportRect(region);
   if (!rect || !viewer) return null;
 
   const el = document.createElement('div');
   el.className = 'region-overlay';
-  const c = color || OVERLAY_STROKE;
+  const c = color || HIGHLIGHT_STROKE;
   el.style.border = `2px solid ${c}`;
   if (fill) {
     el.style.background = fill;
   } else {
     // Derive low-opacity fill from rgba colors; use fixed fallback for named/hex colors
     const rgbaMatch = c.match(/^(rgba?\([^)]+,\s*)[0-9.]+\)$/);
-    el.style.background = rgbaMatch ? `${rgbaMatch[1]}0.1)` : OVERLAY_FILL;
+    el.style.background = rgbaMatch ? `${rgbaMatch[1]}0.1)` : HIGHLIGHT_FILL;
   }
 
   if (label) {

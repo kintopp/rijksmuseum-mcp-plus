@@ -363,7 +363,6 @@ Uniform summaries and shared harness cleanup should apply to `gate` tests and ne
 | `test-query-plans.mjs` | 200+ | EXPLAIN QUERY PLAN validation — asserts the optimizer never uses `idx_mappings_field_vocab` as a covering-scan driver. |
 | `test-totalcount.mjs` | ~16 | Smoke test: totalResults always present + selective/compact facets. |
 | `test-v019-features-deprecated.mjs` | — | **DEPRECATED.** Targeted tests for v0.19 features; predates v0.27 clusters A–F. Kept for reference. |
-| `test-svg-overlays.mjs` | — | Visual test for SVG overlay rendering on The Night Watch. Opens viewer, adds various overlay shapes. |
 | `test-viewer-build.mjs` | — | Validates bundled viewer HTML is self-contained (no CDN dependencies) and within size budget. |
 | `audit-schemas.mjs` | — | Schema audit: checks all outputSchemas for structural risk factors (anyOf/oneOf, $ref/$defs, nesting depth). |
 | `validate-vocab-db.mjs` | — | Comprehensive vocab DB structure & integrity validation (13 checks: integrity, tables, FTS5, FK integrity, importance, server compat, etc.) |
@@ -381,7 +380,6 @@ Imported from `dist/` or run against in-memory SQLite — no `data/` access. The
 | Script | Description |
 |--------|-------------|
 | `test-inscription-parser.mjs` | Unit tests for the inscription parser (`src/inscriptions.ts`, #383). Imports from `dist/`. |
-| `test-overlay-scoring.mjs` | Tests for `overlay-scoring.mjs` pure functions (`iou`, `centerOffsetPct`, `sizeRatio`, …). |
 | `test-lru-cache.mjs` | Unit tests for `lruGetOrCreate` (#79). |
 | `test-origin-validation.mjs` | Unit tests for the `/mcp` Origin allowlist helpers (`src/utils/origin.ts`). |
 | `test-text-query-dsl.mjs` | Tests for `compileTextQuery` — the `textQuery` DSL → FTS5 MATCH compiler (#363). |

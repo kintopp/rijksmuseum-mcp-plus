@@ -7,65 +7,6 @@ import { type CropLocalSize } from "./state.js";
 export type { CropLocalSize };
 
 // Exported for testing
-export function regionToPixels(region: string, w: number, h: number): string | undefined {
-  const p = parsePctRegion(region);
-  if (!p) return undefined;
-  return `${Math.round(p[0] * w / 100)},${Math.round(p[1] * h / 100)},${Math.round(p[2] * w / 100)},${Math.round(p[3] * h / 100)}`;
-}
-
-// Exported for testing
-/**
- * Compute a ready-to-paste pct: crop for verifying a placed overlay via
- * inspect_artwork_image(show_overlays:true). The result is centred on the
- * overlay and expanded to ≥1.4× the overlay's footprint, ≥12% per axis,
- * shift-clamped to stay inside 0–100. The 12% floor keeps the overlay
- * visible after the 784 px clamp that show_overlays applies.
- *
- * Returns undefined for full/square/unparseable inputs or when image
- * dimensions are missing.
- */
-export function computeVerificationRegion(
-  region: string,
-  imageWidth?: number,
-  imageHeight?: number,
-): string | undefined {
-  if (!imageWidth || !imageHeight) return undefined;
-  if (region === "full" || region === "square") return undefined;
-
-  let x: number, y: number, w: number, h: number;
-  const pct = parsePctRegion(region);
-  if (pct) {
-    [x, y, w, h] = pct;
-  } else {
-    const cp = parseCropPixelsRegion(region);
-    const plainMatch = region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
-    const px: [number, number, number, number] | null = cp
-      ?? (plainMatch
-        ? [parseInt(plainMatch[1], 10), parseInt(plainMatch[2], 10), parseInt(plainMatch[3], 10), parseInt(plainMatch[4], 10)]
-        : null);
-    if (!px) return undefined;
-    x = (px[0] / imageWidth) * 100;
-    y = (px[1] / imageHeight) * 100;
-    w = (px[2] / imageWidth) * 100;
-    h = (px[3] / imageHeight) * 100;
-  }
-  if (w <= 0 || h <= 0) return undefined;
-
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  const vw = Math.min(100, Math.max(w * 1.4, 12));
-  const vh = Math.min(100, Math.max(h * 1.4, 12));
-  const vx = Math.max(0, Math.min(100 - vw, cx - vw / 2));
-  const vy = Math.max(0, Math.min(100 - vh, cy - vh / 2));
-
-  const fmt = (n: number) => {
-    const s = n.toFixed(1);
-    return s.endsWith(".0") ? s.slice(0, -2) : s;
-  };
-  return `pct:${fmt(vx)},${fmt(vy)},${fmt(vw)},${fmt(vh)}`;
-}
-
-// Exported for testing
 export function parsePctRegion(region: string): [number, number, number, number] | null {
   const m = region.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
   if (!m) return null;

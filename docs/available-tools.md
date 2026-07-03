@@ -33,6 +33,6 @@
 
 ## Viewer Navigation
 
-- **`navigate_viewer`** — Navigate the open deep-zoom viewer to a specific region; add or clear labelled overlays. Out-of-bounds regions return a `regionRecovery` hint plus the session `objectNumber`.
+- **`navigate_viewer`** — Zoom/pan the open deep-zoom viewer to a specific region. Out-of-bounds regions return a `regionRecovery` hint plus the session `objectNumber`.
 
 ---

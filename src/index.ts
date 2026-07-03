@@ -211,7 +211,7 @@ function createServer(httpPort?: number): McpServer {
 
         "Images are served via IIIF deep-zoom. Three viewer-family tools: get_artwork_image opens an interactive " +
         "viewer for the user; inspect_artwork_image returns base64 bytes for the LLM's own visual analysis; " +
-        "navigate_viewer highlights regions in an already-open viewer.\n\n" +
+        "navigate_viewer zooms/pans an already-open viewer to a region.\n\n" +
 
         "For demographic person queries (gender, birth/death year/place, profession), use search_persons → feed " +
         "the returned vocabId into search_artwork({creator}). For artworks depicting a known person, use " +

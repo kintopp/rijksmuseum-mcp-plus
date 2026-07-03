@@ -21,28 +21,16 @@ import {
 } from "../../dist/api/VocabularyDb.js";
 
 import {
-  regionToPixels,
   parsePctRegion,
   projectToFullImage,
   parseCropPixelsRegion,
   cropPixelsToIiifPixels,
   checkRegionBounds,
   computeDeliveryState,
-  computeVerificationRegion,
   parseDimRange,
   parseSortParam,
   stripNullCoerceBool,
 } from "../../dist/registration.js";
-
-import {
-  computeCropRect,
-  projectOverlayToCrop,
-  compositeOverlays,
-  truncateLabel,
-  escapeXml,
-} from "../../dist/overlay-compositor.js";
-
-import sharp from "sharp";
 
 import { escapeFts5, escapeFts5Token, generateMorphVariants, expandFtsQuery } from "../../dist/utils/db.js";
 
@@ -211,15 +199,6 @@ section("buildMultiWordPlaceWarning");
   assert(msg.includes("3 matches"), "no-context: count");
 }
 
-// ── regionToPixels ───────────────────────────────────────────────
-
-section("regionToPixels");
-
-assertEq(regionToPixels("pct:10,20,30,40", 1000, 500), "100,100,300,200", "valid pct → pixels");
-assertEq(regionToPixels("full", 1000, 500), undefined, "full → undefined");
-assertEq(regionToPixels("garbage", 1000, 500), undefined, "garbage → undefined");
-assertEq(regionToPixels("pct:0,0,100,100", 800, 600), "0,0,800,600", "full region → full size");
-
 // ── parsePctRegion ───────────────────────────────────────────────
 
 section("parsePctRegion");
@@ -331,191 +310,6 @@ assertEq(checkRegionBounds("crop_pixels:100,200,50,50"), null, "crop_pixels no d
   assert(oob != null, "plain pixels OOB with dims");
   assertEq(oob?.details.clamped_to, "100,200,20,50", "clamped has no prefix for plain pixels");
 }
-
-// ── computeCropRect ─────────────────────────────────────────────
-
-section("computeCropRect");
-
-assertDeepEq(computeCropRect("full", 1000, 800), { x: 0, y: 0, w: 1000, h: 800 }, "full → whole image");
-assertDeepEq(computeCropRect("square", 1000, 800), { x: 100, y: 0, w: 800, h: 800 }, "square on landscape — centered");
-assertDeepEq(computeCropRect("square", 600, 900), { x: 0, y: 150, w: 600, h: 600 }, "square on portrait — centered");
-assertDeepEq(computeCropRect("pct:25,25,50,50", 1000, 800), { x: 250, y: 200, w: 500, h: 400 }, "pct → proportional");
-assertDeepEq(computeCropRect("100,200,300,400", 1000, 800), { x: 100, y: 200, w: 300, h: 400 }, "plain pixels → as-is");
-assertEq(computeCropRect("bogus", 1000, 800), null, "unrecognised → null");
-
-// ── projectOverlayToCrop ────────────────────────────────────────
-
-section("projectOverlayToCrop");
-
-// Overlay fully inside crop: pct:40,40,20,20 on 1000×800 = (400,320,200,160).
-// Crop is pct:25,25,50,50 = (250,200,500,400). Rendered crop is 400×320 px → scale 0.8.
-// Overlay local = ((400-250)*0.8, (320-200)*0.8, 200*0.8, 160*0.8) = (120, 96, 160, 128).
-{
-  const frame = { rect: { x: 250, y: 200, w: 500, h: 400 }, imageWidth: 1000, imageHeight: 800 };
-  const local = projectOverlayToCrop("pct:40,40,20,20", frame, 400, 320);
-  assert(local != null, "overlay projects into crop");
-  assertEq(Math.round(local.x), 120, "local x");
-  assertEq(Math.round(local.y), 96, "local y");
-  assertEq(Math.round(local.w), 160, "local w");
-  assertEq(Math.round(local.h), 128, "local h");
-}
-
-// Overlay fully outside crop → null
-{
-  const frame = { rect: { x: 0, y: 0, w: 200, h: 200 }, imageWidth: 1000, imageHeight: 800 };
-  const local = projectOverlayToCrop("pct:80,80,10,10", frame, 200, 200);
-  assertEq(local, null, "overlay outside crop → null");
-}
-
-// Overlay straddling crop boundary → returned (SVG viewBox clips on render)
-{
-  const frame = { rect: { x: 100, y: 100, w: 200, h: 200 }, imageWidth: 1000, imageHeight: 800 };
-  // Overlay at (50, 50) with size 100×100 in full image — extends off crop's top-left.
-  const local = projectOverlayToCrop("50,50,100,100", frame, 200, 200);
-  assert(local != null, "straddling overlay returned (clipped by SVG on render)");
-  assertEq(Math.round(local.x), -50, "straddling x is negative");
-  assertEq(Math.round(local.y), -50, "straddling y is negative");
-}
-
-// Zero-dimension overlay → null
-{
-  const frame = { rect: { x: 0, y: 0, w: 1000, h: 800 }, imageWidth: 1000, imageHeight: 800 };
-  assertEq(projectOverlayToCrop("pct:10,10,0,10", frame, 1000, 800), null, "zero-width overlay → null");
-  assertEq(projectOverlayToCrop("pct:10,10,10,0", frame, 1000, 800), null, "zero-height overlay → null");
-}
-
-// ── computeVerificationRegion (#337) ────────────────────────────
-
-section("computeVerificationRegion");
-
-// Normal overlay well inside bounds — expanded to ≥1.4× and ≥12% per axis.
-{
-  const vr = computeVerificationRegion("pct:38,22,28,22", 1000, 800);
-  assert(vr?.startsWith("pct:"), `pct: prefix (got ${vr})`);
-  const m = vr.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-  assert(m != null, "parseable");
-  const [vx, vy, vw, vh] = m.slice(1).map(Number);
-  // 28 * 1.4 = 39.2 → vw, 22 * 1.4 = 30.8 → vh
-  assert(Math.abs(vw - 39.2) < 0.1, `w expanded to 1.4× (got ${vw})`);
-  assert(Math.abs(vh - 30.8) < 0.1, `h expanded to 1.4× (got ${vh})`);
-  // Centred on overlay centre (38+14, 22+11) = (52, 33)
-  assert(Math.abs(vx + vw / 2 - 52) < 0.1, "centred on overlay x-centre");
-  assert(Math.abs(vy + vh / 2 - 33) < 0.1, "centred on overlay y-centre");
-}
-
-// Tiny overlay → 12% floor on each axis.
-{
-  const vr = computeVerificationRegion("pct:50,50,5,5", 1000, 800);
-  const m = vr.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-  const [, , vw, vh] = m.slice(1).map(Number);
-  assert(Math.abs(vw - 12) < 0.01, `w floored to 12 (got ${vw})`);
-  assert(Math.abs(vh - 12) < 0.01, `h floored to 12 (got ${vh})`);
-}
-
-// Edge overlay → shift-clamped so x+w ≤ 100, contains original.
-{
-  const vr = computeVerificationRegion("pct:95,95,5,5", 1000, 800);
-  const m = vr.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-  const [vx, vy, vw, vh] = m.slice(1).map(Number);
-  assert(vx + vw <= 100.001, `edge overlay: x+w ≤ 100 (got ${vx + vw})`);
-  assert(vy + vh <= 100.001, `edge overlay: y+h ≤ 100 (got ${vy + vh})`);
-  // Contains the original overlay (95,95,5,5)
-  assert(vx <= 95.001 && vy <= 95.001 && vx + vw + 0.001 >= 100 && vy + vh + 0.001 >= 100,
-    "edge overlay: verification rect contains original");
-}
-
-// Plain pixels input → converted via image dimensions.
-{
-  const vr = computeVerificationRegion("100,80,200,160", 1000, 800);
-  // Equivalent pct: 10,10,20,20. 20*1.4=28; centred on (20,20).
-  const m = vr.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-  assert(m != null, "plain pixels converted to pct");
-  const [vx, vy, vw, vh] = m.slice(1).map(Number);
-  assert(Math.abs(vw - 28) < 0.1, `pixel w expanded (got ${vw})`);
-  assert(Math.abs(vh - 28) < 0.1, `pixel h expanded (got ${vh})`);
-  assert(Math.abs(vx + vw / 2 - 20) < 0.1, "pixel: centred");
-  assert(Math.abs(vy + vh / 2 - 20) < 0.1, "pixel: centred");
-}
-
-// Shape-only inputs → undefined.
-assertEq(computeVerificationRegion("full", 1000, 800), undefined, "full → undefined");
-assertEq(computeVerificationRegion("square", 1000, 800), undefined, "square → undefined");
-assertEq(computeVerificationRegion("bogus", 1000, 800), undefined, "unparseable → undefined");
-assertEq(computeVerificationRegion("pct:10,10,20,20"), undefined, "missing dims → undefined");
-
-// ── truncateLabel / escapeXml ───────────────────────────────────
-
-section("truncateLabel + escapeXml");
-
-assertEq(truncateLabel("short"), "short", "short label unchanged");
-assertEq(truncateLabel("a".repeat(32)), "a".repeat(32), "exactly 32 chars unchanged");
-{
-  const t = truncateLabel("a".repeat(50));
-  assertEq(t.length, 32, "long label truncated to 32 chars");
-  assert(t.endsWith("…"), "long label ends with ellipsis");
-}
-
-// Escape AFTER truncate — `&` shouldn't blow up the visible budget.
-{
-  const raw = "x&y<z>" + "a".repeat(100);
-  const truncated = truncateLabel(raw);
-  assertEq(truncated.length, 32, "truncate before escape: 32 chars");
-  const escaped = escapeXml(truncated);
-  assert(!/[<>&](?!amp;|lt;|gt;|quot;|apos;)/.test(escaped),
-    "escapeXml replaces all unescaped <, >, & characters");
-  assert(escaped.includes("&amp;") && escaped.includes("&lt;") && escaped.includes("&gt;"),
-    "escapeXml produces &amp;, &lt;, &gt;");
-}
-
-// ── compositeOverlays label rendering (#337) ─────────────────────
-
-section("compositeOverlays labels");
-
-// Build a synthetic JPEG so the test doesn't need network or real artwork.
-const testJpeg = await sharp({
-  create: { width: 400, height: 300, channels: 3, background: { r: 80, g: 80, b: 80 } },
-}).jpeg().toBuffer();
-
-const compFrame = { rect: { x: 0, y: 0, w: 400, h: 300 }, imageWidth: 400, imageHeight: 300 };
-
-const unlabeled = await compositeOverlays(
-  testJpeg,
-  [{ region: "pct:25,25,50,50", color: "orange" }],
-  compFrame,
-);
-const labeled = await compositeOverlays(
-  testJpeg,
-  [{ region: "pct:25,25,50,50", color: "orange", label: "Hello" }],
-  compFrame,
-);
-assertEq(unlabeled.rendered, 1, "unlabeled: rendered=1");
-assertEq(unlabeled.skipped, 0, "unlabeled: skipped=0");
-assertEq(labeled.rendered, 1, "labeled: rendered=1");
-assertEq(labeled.skipped, 0, "labeled: skipped=0");
-assert(labeled.buffer.length !== unlabeled.buffer.length,
-  `labeled composite bytes differ from unlabeled (${labeled.buffer.length} vs ${unlabeled.buffer.length})`);
-
-// Empty-string label is treated as no label — same byte output as unlabeled.
-const emptyLabel = await compositeOverlays(
-  testJpeg,
-  [{ region: "pct:25,25,50,50", color: "orange", label: "" }],
-  compFrame,
-);
-assertEq(emptyLabel.rendered, 1, "empty label: rendered=1");
-assert(emptyLabel.buffer.length === unlabeled.buffer.length,
-  "empty-string label produces same bytes as no label");
-
-// Multiple labelled overlays still report rendered=2.
-const twoLabeled = await compositeOverlays(
-  testJpeg,
-  [
-    { region: "pct:10,10,20,20", color: "red", label: "A" },
-    { region: "pct:60,60,20,20", color: "blue", label: "B" },
-  ],
-  compFrame,
-);
-assertEq(twoLabeled.rendered, 2, "two labelled overlays: rendered=2");
-assertEq(twoLabeled.skipped, 0, "two labelled overlays: skipped=0");
 
 // ── escapeFts5Token ─────────────────────────────────────────────
 

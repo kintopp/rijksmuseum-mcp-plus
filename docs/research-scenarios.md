@@ -170,7 +170,7 @@
 - `get_artwork_details` confirms the inscriptions field is empty — the catalogue has not transcribed the Japanese text
 - `get_artwork_image` opens the interactive deep-zoom viewer
 - `inspect_artwork_image` with `region: "full"` gives the AI an overview of the composition — it can identify the establishment signboard (松東居, "Matsu Higashi-ya") in the upper right and the artist's signature (哥麿筆, "drawn by Utamaro") below it, neither of which appears in the structured metadata
-- Targeted crops let the AI examine each text element at high resolution, and `navigate_viewer` with `add_overlay` highlights them for the user
+- Targeted crops let the AI examine each text element at high resolution, and `navigate_viewer` zooms the viewer to each one so the user can see what the AI found
 - The AI can also note what is *absent* — in this case, no publisher's seal (hanmoto) or censor's seal (kiwame-in) is visible, which is unusual for a print of this era and may indicate trimming
 - **User-directed inspection:** click the image viewer to give it focus, then press `i` (or click the rightmost toolbar button) to enter interactive mode. Draw a rectangle around any area of interest — the coordinates are sent to the chat as a prompt. Add your own question (e.g. "what does this text say?" or "is there a seal mark here?") and the AI will inspect that exact region at high resolution
 

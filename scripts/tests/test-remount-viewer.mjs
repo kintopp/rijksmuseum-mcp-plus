@@ -76,20 +76,6 @@ await client.callTool({
   arguments: { viewUUID: uuid },
 });
 
-// Add an overlay so we can later verify it was cleared.
-const rNav1 = await client.callTool({
-  name: "navigate_viewer",
-  arguments: {
-    viewUUID: uuid,
-    commands: [
-      { action: "add_overlay", region: "pct:10,10,20,20", label: "before-remount" },
-    ],
-  },
-});
-const nav1 = parseSc(rNav1);
-assert(Array.isArray(nav1.currentOverlays) && nav1.currentOverlays.length === 1,
-  `overlay added before remount (${nav1.currentOverlays?.length ?? 0})`);
-
 // Remount into a different artwork.
 const r2 = await client.callTool({
   name: "remount_viewer",
@@ -107,10 +93,10 @@ assert(img2.width !== w1 || img2.height !== h1,
   `dimensions actually changed vs. original (${w1}×${h1} → ${img2.width}×${img2.height})`);
 
 // ══════════════════════════════════════════════════════════════════
-//  2. Overlays cleared on remount + OOB validates against new dims
+//  2. navigate_viewer validates against the new artwork's dimensions
 // ══════════════════════════════════════════════════════════════════
 
-section("2. Overlays cleared + OOB uses new dimensions");
+section("2. navigate_viewer uses new dimensions post-remount");
 
 const rNav2 = await client.callTool({
   name: "navigate_viewer",
@@ -121,8 +107,6 @@ const rNav2 = await client.callTool({
 });
 const nav2 = parseSc(rNav2);
 
-assert(!nav2.currentOverlays || nav2.currentOverlays.length === 0,
-  `overlays cleared on remount (got ${nav2.currentOverlays?.length ?? 0})`);
 assert(nav2.imageWidth === img2.width && nav2.imageHeight === img2.height,
   `navigate_viewer reports new artwork's dimensions (${nav2.imageWidth}×${nav2.imageHeight})`);
 
@@ -152,7 +136,7 @@ const rNav3 = await client.callTool({
   name: "navigate_viewer",
   arguments: {
     viewUUID: uuid,
-    commands: [{ action: "add_overlay", region: "pct:5,5,10,10", label: "after-remount" }],
+    commands: [{ action: "navigate", region: "pct:5,5,10,10" }],
   },
 });
 const nav3 = parseSc(rNav3);
@@ -161,8 +145,8 @@ assert(rNav3.isError !== true,
   `navigate_viewer with original UUID succeeds after remount (isError=${rNav3.isError})`);
 assert(nav3.viewUUID === uuid,
   `response viewUUID matches original (${nav3.viewUUID?.slice(0, 8)}...)`);
-assert(Array.isArray(nav3.currentOverlays) && nav3.currentOverlays.some((o) => o.label === "after-remount"),
-  `new overlay registered against the original UUID's queue`);
+assert(typeof nav3.pendingCommandCount === "number",
+  `navigate command queued against the original UUID's queue (pending=${nav3.pendingCommandCount})`);
 
 // ══════════════════════════════════════════════════════════════════
 //  4. Negative — invalid UUID

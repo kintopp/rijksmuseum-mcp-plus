@@ -305,25 +305,22 @@ Fetch an artwork image or region as base64 for direct visual analysis by the LLM
 | `rotation` | Clockwise rotation: `0`, `90`, `180`, or `270` |
 | `quality` | `default` or `gray` (can help read inscriptions) |
 | `navigateViewer` | Auto-navigate open viewer to inspected region (default `true`) |
-| `show_overlays` | Composite active-viewer overlays onto the returned crop (default `false`; response width is clamped to 448 px when enabled) |
 | `viewUUID` | Target a specific viewer session (auto-discovered when omitted) |
 
 ---
 
 ## navigate_viewer
 
-Navigate the artwork viewer to a specific region and/or add visual overlays.
+Zoom/pan an already-open artwork viewer to a specific region.
 
 | Parameter | Description |
 |---|---|
 | `viewUUID` | Viewer UUID from a prior `get_artwork_image` call |
 | `commands` | Array of commands (executed in order), each with: |
-| ↳ `action` | `navigate`, `add_overlay`, or `clear_overlays` |
-| ↳ `region` | IIIF region (required for `navigate`/`add_overlay`) |
+| ↳ `action` | `navigate` (zoom/pan to `region`) |
+| ↳ `region` | IIIF region (required) |
 | ↳ `relativeTo` | Crop region from a prior `inspect_artwork_image` — coordinates in `region` are projected from crop-local to full-image space |
 | ↳ `relativeToSize` | `{ width, height }` — actual pixel dimensions of the inspected crop (copy from `cropPixelWidth`/`cropPixelHeight`). Required when `relativeTo` is set and `region` uses `crop_pixels:`. |
-| ↳ `label` | Label text (for `add_overlay`) |
-| ↳ `color` | CSS color for overlay border (default: orange) |
 
 ---
 
