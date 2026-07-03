@@ -27,7 +27,7 @@ inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
 # → base64 image for AI analysis + viewer auto-zooms to the same region
 ```
 
-**Catalogue-first localization.** Before visually searching for a named feature, call `get_artwork_details` and read `description` (Dutch) and `curatorialNarrative` — cataloguers frequently state a feature's location verbally (e.g. "links een huilende jongen" = "a crying boy on the left"). This swaps the source of truth from model perception to catalogued text and is worth doing before spending an inspect call on a search. Caveats: description coverage is roughly 61% and mostly Dutch, the target may go unmentioned, stated directions are viewer-perspective, and the text describes the whole work — it cannot replace looking.
+**Catalogue-first localization.** Before visually searching for a named feature, call `get_artwork_details` and read `description` (Dutch) and `curatorialNarrative` — cataloguers frequently state a feature's location verbally (e.g. "links een huilende jongen" = "a crying boy on the left"). This is worth doing before spending an inspect call on a search. Caveats: description coverage is roughly 61% and mostly Dutch, the target may go unmentioned, stated directions are viewer-perspective, and the text describes the whole work — it cannot replace looking.
 
 **Survey before drilling.** Always call `inspect_artwork_image(region: "full")` before cropping in, even for a famous or frequently-reproduced work. Fame is not a substitute for looking — training-data memory of a well-known composition is frequently wrong in exactly the details worth examining.
 
@@ -37,7 +37,7 @@ inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
 
 `inspect_artwork_image` can surface content **absent from structured metadata** — unsigned Japanese prints often have readable artist signatures, publisher seals, and poem cartouches that the catalogue has not transcribed. Use `region="full"` for an initial composition overview before cropping to details.
 
-**User-drawn highlights.** The user can draw a highlight box directly in the open viewer; its `pct:` region arrives in the chat as a message (`[Highlight: region pct:… on "<title>" (<objectNumber>)]`). Read those coordinates and act on them per the user's instruction — inspect that region, or answer a question about what it contains. This is the reliable way to bind a viewer location to a request: the user names the exact box, so there is no model-perception guesswork.
+**User-drawn highlights.** The user can draw a highlight box directly in the open viewer; its `pct:` region arrives in the chat as a message (`[Highlight: region pct:… on "<title>" (<objectNumber>)]`). This reliably binds a viewer location to the request — the user names the exact box, so there is no *coordinate* guesswork. The message carries the coordinates only, not the pixels, so before answering you **must** call `inspect_artwork_image` with that exact `pct:` region and base your response on the returned crop. Then act on it per the user's instruction — describe what the crop contains, or answer their question about it.
 
 ---
 
