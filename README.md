@@ -15,7 +15,7 @@ This tool was developed as a technology demo by the [Research and Infrastructure
 
 ## Quick Start
 
-The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding rijksmuseum-mcp+ as a [custom 'Connector'](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) to Claude using the URL below. This currently requires a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic.
+The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding rijksmuseum-mcp+ as a [custom 'Connector'](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) to Claude using the URL below. This currently free for one connector - additional connectors require a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic.
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
@@ -23,7 +23,7 @@ Go to _Customize_ → _Connectors_ → _Add custom connector_ → Name it as you
 
 Afterwards, follow the same procedure to install rijksmuseum-mcp+'s companion [IconClass](https://iconclass.org) resource, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). This allows you to automatically search and explore c. 1.3 million Iconclass notations, concepts, and descriptive texts alongside the Rijksmuseum's metadata.
 
-It is possible (with some tradeoffs) to use rijksmuseum-mcp+ without a paid subscription. For more details, please see the [Choosing an AI system](#choosing-an-ai-system) section below.
+Please see [choosing an AI system](#choosing-an-ai-system) section below for additional options for configuring an AI-assistant with this service.
 
 ## Research skill
 
