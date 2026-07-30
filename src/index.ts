@@ -329,17 +329,25 @@ async function runHttp(): Promise<void> {
       next();
       return;
     }
-    const ip = req.ip ?? "";
-    const bareIp = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
-    if (!mcpBlockedIps.has(ip) && !mcpBlockedIps.has(bareIp)) {
+    // Match every hop we can see, not just req.ip — proxy-hop counting
+    // (trust proxy) varies by platform, and for a BLOCKlist over-matching is
+    // safe: a spoofed X-Forwarded-For can only get a client blocked, never
+    // unblocked.
+    const xff = req.get("x-forwarded-for") ?? "";
+    const candidates = [req.ip ?? "", ...req.ips, ...xff.split(",")]
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .map((c) => (c.startsWith("::ffff:") ? c.slice(7) : c));
+    const hit = candidates.find((c) => mcpBlockedIps.has(c));
+    if (!hit) {
       next();
       return;
     }
     const now = Date.now();
-    const lastLogged = recentIpRejections.get(bareIp) ?? 0;
+    const lastLogged = recentIpRejections.get(hit) ?? 0;
     if (now - lastLogged >= ORIGIN_LOG_INTERVAL_MS) {
-      recentIpRejections.set(bareIp, now);
-      console.warn(`[mcp-block] 403 rejected ip=${bareIp}`);
+      recentIpRejections.set(hit, now);
+      console.warn(`[mcp-block] 403 rejected ip=${hit} (chain=${candidates.join("|")})`);
     }
     res.status(403).json({
       jsonrpc: "2.0",
