@@ -308,6 +308,45 @@ async function runHttp(): Promise<void> {
     next();
   });
 
+  // ── IP blocklist (operator-configured, MCP_BLOCKED_IPS) ─────────────────
+  //
+  // Comma-separated client IPs denied on /mcp with 403. Meant for abusive or
+  // sleep-defeating automated clients (e.g. a 3-min keepalive pinger); not a
+  // security boundary. req.ip is proxy-aware via `trust proxy` above. IPv4
+  // addresses may arrive as IPv6-mapped (::ffff:1.2.3.4), so compare both.
+  const mcpBlockedIps = new Set(
+    (process.env.MCP_BLOCKED_IPS ?? "")
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean)
+  );
+  if (mcpBlockedIps.size > 0) {
+    console.error(`[mcp-block] denying /mcp for ${mcpBlockedIps.size} IP(s): ${[...mcpBlockedIps].join(", ")}`);
+  }
+  const recentIpRejections = new Map<string, number>();
+  app.use("/mcp", (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (mcpBlockedIps.size === 0) {
+      next();
+      return;
+    }
+    const ip = req.ip ?? "";
+    const bareIp = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+    if (!mcpBlockedIps.has(ip) && !mcpBlockedIps.has(bareIp)) {
+      next();
+      return;
+    }
+    const now = Date.now();
+    const lastLogged = recentIpRejections.get(bareIp) ?? 0;
+    if (now - lastLogged >= ORIGIN_LOG_INTERVAL_MS) {
+      recentIpRejections.set(bareIp, now);
+      console.warn(`[mcp-block] 403 rejected ip=${bareIp}`);
+    }
+    res.status(403).json({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Forbidden" },
+    });
+  });
+
   // ── Origin validation (DNS-rebinding mitigation, spec §Streamable HTTP) ─
   //
   // Spec: https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
