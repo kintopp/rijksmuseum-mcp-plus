@@ -49,7 +49,7 @@ export function registerConservationTools(
       title: "Get Conservation History",
       annotations: ANN_READ_CLOSED,
       description:
-        "Conservation/forensics record for ONE artwork: technical examinations and restoration treatment history. " +
+        "Technical examinations and restoration history for ONE artwork. " +
         "Follows get_artwork_details / a search result, by objectNumber. " +
         "Returns technical examinations (X-ray, dendrochronology, paint samples, infrared), conservation/restoration " +
         "treatment events, a count of recorded signature/inscription marks (use search_inscriptions for the actual " +

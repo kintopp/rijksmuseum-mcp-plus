@@ -23,7 +23,7 @@ import {
 } from "../geometry.js";
 import {
   ARTWORK_VIEWER_RESOURCE_URI,
-  ANN_READ_CLOSED,
+  ANN_READ_OPEN,
   ANN_VIEWER,
   stripNullCoerceBool,
   optStr,
@@ -106,9 +106,10 @@ export function registerViewerTools(
     "get_artwork_image",
     {
       title: "Get Artwork Image",
-      annotations: ANN_VIEWER,
+      annotations: { ...ANN_VIEWER, openWorldHint: true },
       description:
-        "Opens an interactive deep-zoom viewer for the user — only when they ask to see, show, or view an artwork. " +
+        "Opens an interactive deep-zoom viewer for the user. " +
+        "Use only when they ask to see, show, or view an artwork. " +
         "Call ONLY when the user explicitly wants to see, show, or view an artwork. " +
         "Do NOT call for list, summary, count, or text-only requests. " +
         "Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. " +
@@ -235,9 +236,10 @@ export function registerViewerTools(
     "inspect_artwork_image",
     {
       title: "Inspect Artwork Image",
-      annotations: ANN_READ_CLOSED,
+      annotations: ANN_READ_OPEN,
       description:
-        "Returns image bytes (base64) for the LLM's own visual analysis of an artwork or region. " +
+        "Returns image bytes (base64) for the LLM's own visual analysis. " +
+        "Covers a whole artwork or a region. " +
         "The LLM can see and reason about the image immediately — not for the user to view (use get_artwork_image for the interactive viewer). " +
         "Not for listing or summarising artworks — use search_artwork.\n\n" +
         "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
@@ -526,7 +528,8 @@ export function registerViewerTools(
       title: "Navigate Viewer",
       annotations: ANN_VIEWER,
       description:
-        "Zooms/pans an already-open viewer to a region — steer the user's view to a detail. " +
+        "Zooms/pans an already-open viewer to a region. " +
+        "Steer the user's view to a detail. " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
         "Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image.\n\n" +
         "In most cases you do NOT need this tool: inspect_artwork_image already auto-zooms the open viewer to " +

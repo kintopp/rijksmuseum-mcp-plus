@@ -8,7 +8,7 @@ import { VocabularyDb, formatDateRange } from "../../api/VocabularyDb.js";
 import { EmbeddingsDb } from "../../api/EmbeddingsDb.js";
 import { UsageStats } from "../../utils/UsageStats.js";
 import {
-  ANN_READ_CLOSED,
+  ANN_READ_OPEN,
   TOOL_LIMITS,
   stripNull,
   type InferOutput,
@@ -46,9 +46,10 @@ export function registerSimilarTools(
       "find_similar",
       {
         title: "Find Similar Artworks",
-        annotations: ANN_READ_CLOSED,
+        annotations: ANN_READ_OPEN,
         description:
-          "Given one artwork's objectNumber, finds others like it across 9 similarity channels plus a pooled consensus. " +
+          "Finds artworks like a given one across 9 similarity channels. " +
+          "Takes one objectNumber; adds a pooled consensus. " +
           "Generates an HTML comparison page with IIIF thumbnails across all 9 channels: " +
           "Visual (image-embedding nearest neighbours), Related Variant (creator-invariant curator-declared edges: pendants, production stadia, different examples), " +
           "Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), " +

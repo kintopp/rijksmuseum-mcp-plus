@@ -209,23 +209,19 @@ function createServer(httpPort?: number): McpServer {
         "Vocabulary labels are bilingual (English/Dutch) — fall back to the Dutch term when an English query " +
         "returns nothing (e.g. 'fotograaf' for 'photographer').\n\n" +
 
-        "Images are served via IIIF deep-zoom. Three viewer-family tools: get_artwork_image opens an interactive " +
-        "viewer for the user; inspect_artwork_image returns base64 bytes for the LLM's own visual analysis; " +
-        "navigate_viewer zooms/pans an already-open viewer to a region.\n\n" +
+        "Images are served via IIIF deep-zoom: get_artwork_image opens the user's interactive viewer; " +
+        "inspect_artwork_image returns bytes for the LLM's own visual analysis.\n\n" +
 
         "For demographic person queries (gender, birth/death year/place, profession), use search_persons → feed " +
         "the returned vocabId into search_artwork({creator}). For artworks depicting a known person, use " +
         "search_artwork({aboutActor}) — broader recall than depictedPerson because it searches both subject and " +
         "creator vocabularies and tolerates cross-language name forms.\n\n" +
 
-        "Place searches support depictedPlace and productionPlace as vocabulary filters. " +
-        "For proximity, most place vocabulary entries lack coordinates — nearPlace only works for the subset that has been " +
-        "authority-geocoded, but nearLat/nearLon with explicit coordinates always works for searching artworks near any point. " +
-        "Multi-word place names like 'Oude Kerk Amsterdam' still resolve to a single vocabulary entry regardless of " +
-        "coordinate coverage.\n\n" +
+        "Place filters: depictedPlace and productionPlace. Most place entries lack coordinates — nearPlace " +
+        "works only for the authority-geocoded subset; nearLat/nearLon with explicit coordinates always works.\n\n" +
 
-        "Iconclass covers ~39,800 base subject notations (1.3M+ including key-expanded variants). Use the Iconclass server's search tool to find notation codes by concept, " +
-        "then pass them to search_artwork for precise iconographic filtering.\n\n" +
+        "Use the Iconclass server to find notation codes by concept, then pass them to search_artwork for " +
+        "precise iconographic filtering.\n\n" +
 
         "Two free-text corpora are searchable through search_artwork: descriptions (Dutch, cataloguer-written, " +
         "~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the " +
@@ -235,13 +231,8 @@ function createServer(httpPort?: number): McpServer {
         "resist structured metadata, find_similar for artwork-to-artwork similarity from a known objectNumber. " +
         "For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.\n\n" +
 
-        "Specialised tools: search_provenance for ownership-history questions across the ~48K artworks with " +
-        "parsed provenance; get_artwork_bibliography for a single artwork's scholarly citations (linked publication, " +
-        "pages, ISBN), with find_artworks_citing_publication for the reverse lookup — which artworks cite a given " +
-        "publication; get_conservation_history for a single artwork's technical examinations (X-ray, dendrochronology, " +
-        "infrared, paint samples) and restoration/conservation treatments; list_curated_sets + browse_set for " +
-        "exhibition/thematic groupings curated by Rijksmuseum staff; get_recent_changes for OAI-PMH delta tracking " +
-        "against a harvest checkpoint.",
+        "Specialised tools cover provenance, bibliography, conservation, curated sets, and OAI-PMH deltas — " +
+        "see their descriptions for routing.",
     }
   );
 

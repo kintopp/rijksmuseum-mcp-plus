@@ -39,7 +39,8 @@ export function registerSetsTools(
       title: "List Curated Sets",
       annotations: ANN_READ_CLOSED,
       description:
-        "Browse thematic and sub-collection groupings curated by Rijksmuseum staff (drawings, paintings, iconographic sets). " +
+        "Browse thematic sets curated by Rijksmuseum staff. " +
+        "Includes sub-collection groupings (drawings, paintings, iconographic sets). " +
         "Each result carries memberCount, top dominantTypes, top dominantCenturies by membership, and a category heuristic " +
         "(object_type / iconographic / album / sub_collection / umbrella) so you can pick the right scope. " +
         "Use minMembers: 100, maxMembers: 200000 to avoid umbrella sets when the user wants a substantive subset. " +
@@ -96,7 +97,8 @@ export function registerSetsTools(
       title: "Browse Set",
       annotations: ANN_READ_CLOSED,
       description:
-        "Enumerate the member artworks of one curated set by setSpec (from list_curated_sets). " +
+        "Enumerate the member artworks of one curated set by setSpec. " +
+        "Get setSpec values from list_curated_sets. " +
         "DB-backed (warm calls in tens of ms). " +
         "Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. " +
         "For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. " +

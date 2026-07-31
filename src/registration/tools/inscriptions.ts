@@ -60,7 +60,8 @@ export function registerInscriptionsTools(
         title: "Search Inscriptions (Marks, Signatures, Transcribed Text)",
         annotations: ANN_READ_CLOSED,
         description:
-          "Structured search over artwork inscriptions — collector's marks, signatures, dates, numbers, transcribed text.\n\n" +
+          "Structured search over artwork inscriptions and collector's marks. " +
+          "Also signatures, dates, numbers, transcribed text.\n\n" +
           "IMPORTANT — what this field is: catalogue-entered inscription/mark data, NOT OCR and NOT an exhaustive transcription of " +
           "visible text. It is dominated by VERSO collector's-mark stamps (the Rijksprentenkabinet's own mark and former-owner stamps " +
           "account for a large share of all records); genuine artist-/image-applied text (signatures, captions, addresses) is a real but " +

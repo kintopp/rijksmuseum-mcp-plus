@@ -38,7 +38,8 @@ export function registerSemanticTools(
         title: "Semantic Search",
         annotations: ANN_READ_CLOSED,
         description:
-          "Free-text concept search by embedding similarity — for ideas like 'solitude' or 'vanitas' that resist metadata. " +
+          "Free-text concept search by embedding similarity. " +
+          "For ideas like 'solitude' or 'vanitas' that resist metadata. " +
           "Returns artworks ranked by Dutch-description embedding similarity to the query, with source text for grounding — " +
           "use that text to explain why results are relevant or to flag false positives.\n\n" +
           "Not for queries expressible as structured metadata (specific artists, dates, places, materials) — use search_artwork for those. " +

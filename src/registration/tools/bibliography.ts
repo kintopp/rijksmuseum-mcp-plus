@@ -29,7 +29,8 @@ export function registerBibliographyTools(
       title: "Get Artwork Bibliography",
       annotations: ANN_READ_CLOSED,
       description:
-        "Scholarly references for ONE artwork by objectNumber: citations, with linked publication, pages, ISBN where known. " +
+        "Scholarly references (citations) for ONE artwork by objectNumber. " +
+        "Includes linked publication, pages, ISBN where known. " +
         "Follows a search_artwork / get_artwork_details result. By default returns the first 5 plus a total count; " +
         "set full=true for all entries (major works can have 100+ — mind the context window). " +
         "Not for general metadata — use get_artwork_details. Not for library-catalogue search.",
@@ -62,7 +63,7 @@ export function registerBibliographyTools(
       title: "Find Artworks Citing a Publication",
       annotations: ANN_READ_CLOSED,
       description:
-        "Reverse bibliography lookup: artworks whose references cite a given publication, by its URI or id. " +
+        "Reverse bibliography: artworks citing a given publication URI or id. " +
         "Use the publicationUri from get_artwork_bibliography (e.g. 'https://id.rijksmuseum.nl/301154354') or the bare id. " +
         "Local and resolver-free. Not for topic search of the library catalogue.",
       inputSchema: z.object({

@@ -78,7 +78,8 @@ export function registerStatsTools(
         title: "Collection-wide Aggregate Counts (Distributions, Histograms, Statistics)",
         annotations: ANN_READ_CLOSED,
         description:
-          "Group-by breakdown over one structured dimension (type, decade, place, creator) — counts, percentages, histograms. " +
+          "Group-by breakdown over one structured dimension — counts and histograms. " +
+          "Dimensions: type, decade, place, creator; includes percentages. " +
           "Covers totals, summaries, and group-by / count-by / distribution-of / statistics-over queries across the Rijksmuseum collection. " +
           "Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). " +
           "Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.\n\n" +

@@ -1007,9 +1007,12 @@ section("8. Schema surface — no $ref");
 
   // 8b. MCP tool annotations present on every tool (issue #259).
   // Without these, destructiveHint defaults to true and read tools get mislabelled.
-  // openWorldHint is false on every tool — per the spec example (memory = closed,
-  // web search = open), the server's entire domain is the bounded Rijksmuseum corpus.
+  // openWorldHint reflects whether the tool contacts a LIVE EXTERNAL service at call
+  // time (2026-07-31 decision): find_similar (rijksmuseum.nl), inspect/get_artwork_image
+  // (iiif.micr.io), get_recent_changes (live OAI-PMH) are open; local-DB tools stay
+  // closed (the bounded corpus, per the spec's memory-tool example).
   const ANN_READ_CLOSED = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+  const ANN_READ_OPEN   = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
   const ANN_VIEWER      = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
   const EXPECTED_ANNOTATIONS = {
     search_artwork:        ANN_READ_CLOSED,
@@ -1017,17 +1020,17 @@ section("8. Schema surface — no $ref");
     get_artwork_details:   ANN_READ_CLOSED,
     collection_stats:      ANN_READ_CLOSED,
     semantic_search:       ANN_READ_CLOSED,
-    find_similar:          ANN_READ_CLOSED,
+    find_similar:          ANN_READ_OPEN,
     search_provenance:     ANN_READ_CLOSED,
     search_inscriptions:   ANN_READ_CLOSED,
-    get_recent_changes:    ANN_READ_CLOSED,
+    get_recent_changes:    ANN_READ_OPEN,
     list_curated_sets:     ANN_READ_CLOSED,
     browse_set:            ANN_READ_CLOSED,
     get_conservation_history:         ANN_READ_CLOSED,
     get_artwork_bibliography:         ANN_READ_CLOSED,
     find_artworks_citing_publication: ANN_READ_CLOSED,
-    inspect_artwork_image: ANN_READ_CLOSED,
-    get_artwork_image:     ANN_VIEWER,
+    inspect_artwork_image: ANN_READ_OPEN,
+    get_artwork_image:     { ...ANN_VIEWER, openWorldHint: true },
     remount_viewer:        ANN_VIEWER,
     navigate_viewer:       ANN_VIEWER,
     poll_viewer_commands:  ANN_VIEWER,

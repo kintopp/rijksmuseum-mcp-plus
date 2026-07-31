@@ -10,6 +10,7 @@ import { UsageStats } from "../../utils/UsageStats.js";
 import { SAFE_RESULT_BUDGET } from "../../utils/responseShape.js";
 import {
   ANN_READ_CLOSED,
+  ANN_READ_OPEN,
   TOOL_LIMITS,
   PROVENANCE_EVENT_ONLY_FILTERS,
   PROVENANCE_PERIOD_ONLY_FILTERS,
@@ -202,9 +203,10 @@ export function registerProvenanceTools(
     "get_recent_changes",
     {
       title: "Get Recent Changes",
-      annotations: ANN_READ_CLOSED,
+      annotations: ANN_READ_OPEN,
       description:
-        "OAI-PMH delta feed — records changed within a date range since a known harvest checkpoint, paginated. " +
+        "OAI-PMH delta feed of records changed within a date range. " +
+        "Paginated; anchored to a known harvest checkpoint. " +
         "Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). " +
         "Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. " +
         "Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.",
@@ -289,7 +291,8 @@ export function registerProvenanceTools(
         title: "Search Provenance",
         annotations: ANN_READ_CLOSED,
         description:
-          "Ownership-history search across parsed provenance chains — collectors, sales, gifts, confiscations, restitutions. " +
+          "Ownership-history search across parsed provenance chains. " +
+          "Covers collectors, sales, gifts, confiscations, restitutions. " +
           "Returns full provenance chains grouped by artwork, with matching events flagged.\n\n" +
           "Not for catalogue keyword search — use search_artwork. " +
           "Not for aggregate provenance counts — use collection_stats with provenance dimensions/filters. " +

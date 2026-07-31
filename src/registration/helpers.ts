@@ -8,10 +8,13 @@ export const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html
 
 // MCP tool annotations (behavioural hints; see issue #259).
 // `destructiveHint` defaults to true in the spec, so omitting annotations mislabels read-only tools.
-// `openWorldHint` is false on every tool: per the spec example (memory tool = closed,
-// web search = open), this server's entire domain is the bounded ~834K-artwork
-// Rijksmuseum corpus — including viewer tools, which target artworks from the same set.
+// `openWorldHint` decision (2026-07-31, closes the sibling-audit DO-4 flag): the hint reflects
+// whether the tool contacts a LIVE EXTERNAL service at call time, not whether the domain is
+// bounded. Local-DB tools stay closed (the bounded ~834K-artwork corpus, per the spec's
+// memory-tool example). Open: find_similar (Visual channel → rijksmuseum.nl),
+// inspect_artwork_image + get_artwork_image (→ iiif.micr.io), get_recent_changes (→ live OAI-PMH).
 export const ANN_READ_CLOSED = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+export const ANN_READ_OPEN = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
 export const ANN_VIEWER = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 
 /**

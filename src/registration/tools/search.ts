@@ -73,7 +73,8 @@ export function registerSearchTools(
       title: "Search Artwork",
       annotations: ANN_READ_CLOSED,
       description:
-        "Structured filter search — artworks matching ALL given filters (subject, material, technique, date, place, person). " +
+        "Structured filter search — artworks matching ALL given filters. " +
+        "Filters cover subject, material, technique, date, place, person. " +
         "Returns artwork summaries with titles, creators, and dates; every response includes totalResults (exact match count, not just the returned page). " +
         "Not for free-text concept queries — use semantic_search for those. " +
         "Not for artwork-to-artwork similarity — use find_similar with an objectNumber. " +
@@ -574,7 +575,8 @@ export function registerSearchTools(
         title: "Search Persons",
         annotations: ANN_READ_CLOSED,
         description:
-          "Demographic/structural lookup of persons by gender, birth/death year or place, or profession; returns vocab IDs. " +
+          "Find persons by gender, birth/death year or place, or profession. " +
+          "Returns vocab IDs. " +
           "Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, " +
           "or search_artwork({aboutActor: <name>}) for works depicting them. " +
           "Two-step pattern: search_persons → search_artwork. " +

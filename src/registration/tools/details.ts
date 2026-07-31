@@ -194,7 +194,8 @@ export function registerDetailsTools(
       title: "Get Artwork Details",
       annotations: ANN_READ_CLOSED,
       description:
-        "Full metadata for ONE artwork by objectNumber: creator, dates, materials, provenance, inscriptions, related objects. " +
+        "Full metadata for ONE artwork by objectNumber. " +
+        "Covers creator, dates, materials, provenance, inscriptions, related objects. " +
         "Typically follows a search_artwork / semantic_search / find_similar result, or a user-named objectNumber. " +
         "Provide exactly one of objectNumber (e.g. 'SK-C-5' for The Night Watch) or uri (a Linked Art URI from relatedObjects).\n\n" +
         "Returns metadata including titles (primary plus the full set of variants with language and qualifier — Dutch/English brief/full/display/former), " +

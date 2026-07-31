@@ -154,8 +154,8 @@ assert(/DB-backed|DB-direct/.test(bs), "browse_set mentions DB-backed/DB-direct"
 section("search_persons");
 
 const sp = descOf("search_persons");
-assert(/^Demographic\/structural lookup of persons/.test(sp),
-  "search_persons: front-loaded 'Demographic/structural lookup of persons' lead");
+assert(/^Find persons by gender/.test(sp),
+  "search_persons: front-loaded 'Find persons by gender' lead");
 assert(sp.includes("search_artwork") && sp.includes("vocabId"),
   "search_persons cross-links to search_artwork({creator: vocabId})");
 
