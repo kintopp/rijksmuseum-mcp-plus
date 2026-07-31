@@ -1,4 +1,36 @@
 {
+  "test-live-schema-drift.mjs": {
+    "category": "live",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb",
+      "embeddingsDb",
+      "network"
+    ],
+    "purpose": "upstream-drift detector: live tool responses (IIIF, OAI-PMH, visual search) .parse()d against exported zod output schemas"
+  },
+  "test-description-gloss.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "tool-description lead ≤79 chars (deferred-catalogue gloss budget) + server instructions <2048"
+  },
+  "test-version-sync.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [],
+    "purpose": "version-policy sync: CITATION.cff == server major.minor; SKILL.md within the point-release window"
+  },
   "test-pure-functions.mjs": {
     "category": "base",
     "class": "gate",
