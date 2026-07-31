@@ -1586,7 +1586,7 @@ def run_phase0(conn: sqlite3.Connection):
 
     if not DUMPS_DIR.is_dir():
         print(f"  SKIP: Data dumps not found at {DUMPS_DIR}")
-        print(f"  Download from: https://data.rijksmuseum.nl/object-metadata/download/")
+        print(f"  Download from: https://data.rijksmuseum.nl/docs/data-dumps/")
         return
 
     # #245 Tier 1: build the iconclass-fallback resolver once. None if the

@@ -136,7 +136,7 @@ def check_dumps(c: Checker):
     """Check data dump tarballs for Phase 0."""
     if not DUMPS_DIR.is_dir():
         c.fail(f"Dumps directory not found: {DUMPS_DIR}")
-        c.warn("  Download from: https://data.rijksmuseum.nl/object-metadata/download/")
+        c.warn("  Download from: https://data.rijksmuseum.nl/docs/data-dumps/")
         return
 
     missing = []
