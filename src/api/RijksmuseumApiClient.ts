@@ -97,7 +97,9 @@ export class RijksmuseumApiClient {
 
   /** Shared info.json fetch + URL construction. */
   private async buildImageInfo(iiifId: string, thumbnailWidth: number): Promise<ArtworkImageInfo> {
-    const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/info.json`;
+    // iiifId is DB-resolved (short Micrio tokens), but encode as defense-in-depth
+    // against any future path where a less-sanitized id reaches these templates.
+    const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${encodeURIComponent(iiifId)}/info.json`;
     const info = await this.cache.getOrFetch<IIIFInfoResponse>(
       `iiif:${iiifId}`,
       async () => (await this.http.get<IIIFInfoResponse>(iiifInfoUrl)).data,
@@ -109,7 +111,7 @@ export class RijksmuseumApiClient {
     return {
       iiifId,
       iiifInfoUrl,
-      thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/full/${sizeParam}/0/default.jpg`,
+      thumbnailUrl: `${RijksmuseumApiClient.IIIF_BASE}/${encodeURIComponent(iiifId)}/full/${sizeParam}/0/default.jpg`,
       width: info.width,
       height: info.height,
     };
@@ -144,7 +146,7 @@ export class RijksmuseumApiClient {
     rotation: number = 0,
     quality: "default" | "gray" = "default",
   ): Promise<{ data: string; mimeType: string }> {
-    const url = `${RijksmuseumApiClient.IIIF_BASE}/${iiifId}/${region}/${size},/${rotation}/${quality}.jpg`;
+    const url = `${RijksmuseumApiClient.IIIF_BASE}/${encodeURIComponent(iiifId)}/${region}/${size},/${rotation}/${quality}.jpg`;
 
     // Cache full-image fetches (most commonly repeated in exploration sessions).
     // Cropped regions vary too much to cache effectively.

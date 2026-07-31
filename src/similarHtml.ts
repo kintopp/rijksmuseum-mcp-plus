@@ -221,7 +221,7 @@ function renderOptionalLink(label: string, uri: string | undefined): string {
 }
 
 function iiifThumbUrl(iiifId: string, width = 250): string {
-  return `https://iiif.micr.io/${iiifId}/full/${width},/0/default.jpg`;
+  return `https://iiif.micr.io/${encodeURIComponent(iiifId)}/full/${width},/0/default.jpg`;
 }
 
 function renderCardMetadata(c: SimilarCandidate, mode: string): string {

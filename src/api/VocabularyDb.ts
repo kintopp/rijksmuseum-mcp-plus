@@ -3083,8 +3083,8 @@ export class VocabularyDb {
         ...(r.record_modified && { datestamp: r.record_modified }),
         hasImage,
         ...(iiifId && {
-          imageUrl: `${VocabularyDb.IIIF_BASE}/${iiifId}/full/!1024,1024/0/default.jpg`,
-          iiifServiceUrl: `${VocabularyDb.IIIF_BASE}/${iiifId}/info.json`,
+          imageUrl: `${VocabularyDb.IIIF_BASE}/${encodeURIComponent(iiifId)}/full/!1024,1024/0/default.jpg`,
+          iiifServiceUrl: `${VocabularyDb.IIIF_BASE}/${encodeURIComponent(iiifId)}/info.json`,
         }),
         ...(hasImage && { edmType: "IMAGE" }),
         lodUri: `https://id.rijksmuseum.nl/${r.art_id}`,
