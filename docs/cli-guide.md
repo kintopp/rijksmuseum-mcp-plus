@@ -67,17 +67,18 @@ node scripts/cli.mjs search --query "tulip" --max 5          # now uses HTTP aut
 node scripts/cli.mjs search --query "tulip" --max 5
 ```
 
-### Cold-start cost (stdio only)
+### Cold-start cost
 
 The CLI's stdio transport sets `MCP_SKIP_STARTUP_WARM=1`, so a cold one-shot skips the server's
-~13 s eager warm-up. Caches instead build **lazily on first use**:
+eager warm-up. Caches instead build **lazily on first use**:
 
 - Plain vocab queries (`search`, `details`, `stats`, `persons`, `provenance`) → **~1 s**.
-- First `semantic` / `similar` call → relocates the ~8 s embeddings warm to that call.
+- First `semantic` / `similar` call → relocates the ~8 s embeddings page-in to that call.
 - First `list-sets` / `browse-set` call → builds the curated-sets cache (~9 s) on that call.
 
-Under `--http` against a warm server none of this recurs — which is why HTTP is the better choice
-for any repeated/agent use.
+An HTTP server pays the same embeddings and curated-sets costs on its own first such call — a
+completed boot no longer implies they are warm. Once a given server has served one of each, they
+don't recur for its lifetime, which is why HTTP is still the better choice for repeated/agent use.
 
 ---
 
@@ -652,7 +653,7 @@ count summary entirely.
 | `Connection failed … run npm run build …` | stdio path needs a built `dist/` and the DBs in `data/`. Build first, or use `--http <url>`. |
 | Empty stdout + an error on stderr | The strict schema rejected a flag (e.g. `--max` on `stats` — use `--topN`; or an unknown flag). Check `<verb> --help`. |
 | `Unknown command … (viewer/stateful tool — not available over the CLI)` | The viewer tools aren't exposed over the CLI by design. |
-| First `semantic`/`similar`/`list-sets` call is slow over stdio | Expected — those caches build lazily on first use (~8–9 s). Use a warm `--http` server to avoid it. |
+| First `semantic`/`similar`/`list-sets` call is slow | Expected on either transport — those build lazily on first use (~8–9 s). An `--http` server avoids it only once it has already served one such call. |
 | No `structuredContent` over `--http` | The target server has `STRUCTURED_CONTENT=false`. The CLI falls back to printing the text channel; re-enable structured output on the server for JSON. |
 
 ---
