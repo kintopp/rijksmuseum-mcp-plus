@@ -450,8 +450,9 @@ async function runHttp(): Promise<void> {
   // before it. (Pre-listen warming is what held a cold wake ~65s and lost
   // Claude Desktop's connect race — App Sleeping was disabled 2026-06-01 for it.)
   // /ready is an informational readiness flag: `warming` until the background
-  // warm-up (DB pages, find_similar caches, ONNX first inference, filtered-KNN
-  // path) completes, then `warm`. Railway is NOT configured to gate on /ready.
+  // warm-up (vocab core pages + ONNX first inference) completes, then `warm`.
+  // Railway is NOT configured to gate on /ready. `warm` does not imply the KNN
+  // paths have been exercised — RELEASE.md checks those with a real query.
 
   let ready = false;
 
@@ -496,19 +497,18 @@ async function runHttp(): Promise<void> {
     console.error(`  Ready:        GET  /ready`);
   });
 
-  // Background warm-up: only the CHEAP warms run here (core mmap pages, vec0
-  // index, ONNX first inference, filtered-KNN path — each well under ~0.5s).
+  // Background warm-up: cheap steps only — vocab core pages (~20ms) and the
+  // ONNX first inference (~140ms). Not awaited; listen() is already serving.
   //
-  // The EXPENSIVE builds are deliberately omitted: warmSimilarCaches() (~3-4s)
-  // and ensureCuratedSetsCache() (~9s, a single GROUP BY over the mappings
-  // table) are each one uninterruptible better-sqlite3 call — setImmediate
-  // can't preempt native C work, so warming them here would block /health and
-  // the MCP `initialize` handshake for their full duration and defeat fast wake.
-  // They build lazily on first find_similar / list_curated_sets call instead
-  // (one slow call per process, within the /mcp 30s safety net) — exactly how
-  // the stdio/CLI path already behaves under MCP_SKIP_STARTUP_WARM. The yieldTick
-  // between cheap steps keeps even those sub-second faults from starving a
-  // concurrent wake request. Not awaited — listen() is already serving traffic.
+  // Everything expensive stays lazy, including EmbeddingsDb.warmCorePages()
+  // (~8.6s) and the former warmFilteredPath() (~5.2s), alongside the long-
+  // standing warmSimilarCaches() (~3-4s) and ensureCuratedSetsCache() (~9s).
+  // Each is one uninterruptible better-sqlite3 call that setImmediate cannot
+  // preempt, so warming here blocks /health and `initialize` for its full
+  // duration and defeats fast wake — binding the socket early does not help.
+  // Do not re-add them. The embeddings ones in particular retain nothing
+  // (they only pre-fault mmap pages), so lazy costs one slower first query,
+  // not a deferred build. Stdio warms eagerly instead — see runStdio.
   const warmInBackground = async (): Promise<void> => {
     const yieldTick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
     const t0 = Date.now();
@@ -517,16 +517,8 @@ async function runHttp(): Promise<void> {
       if (vocabDb?.available) {
         vocabDb.warmCorePages(); await yieldTick();
       }
-      if (embeddingsDb?.available) {
-        embeddingsDb.warmCorePages(); await yieldTick();
-      }
-      let warmVec: Float32Array | undefined;
       if (embeddingModel?.available) {
-        warmVec = await embeddingModel.embed("warmup");
-      }
-      if (embeddingsDb?.available) {
-        const vec = warmVec ?? new Float32Array(embeddingsDb.vectorDimensions);
-        embeddingsDb.warmFilteredPath(vec);
+        await embeddingModel.embed("warmup");
       }
       ready = true;
       console.error(`  Background warmup complete in ${Date.now() - t0}ms — /ready now true`);

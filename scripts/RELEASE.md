@@ -33,7 +33,15 @@ A release combines code changes, DB updates, and a GitHub release tag. The full 
    curl https://rijksmuseum-mcp-plus-production.up.railway.app/health
    curl https://rijksmuseum-mcp-plus-production.up.railway.app/ready
    ```
-   `health` returning `{"status":"ok","version":"0.XX.0",...}` proves new code boots against the old DB — i.e. backward-compat guards hold. `/ready: warm` additionally proves the ONNX model + filtered-KNN paths load against the old schema (catches v0.XX-only column refs that would break warm-up).
+   `health` returning `{"status":"ok","version":"0.XX.0",...}` proves new code boots against the old DB — i.e. backward-compat guards hold. `/ready: warm` additionally proves the ONNX model loads against the old schema.
+
+   **`/ready: warm` no longer covers the KNN paths.** The embeddings page warms were removed from the startup path (2026-08-08) because they blocked the event loop for ~14s on every cold wake, so nothing exercises vec0 or filtered-KNN until a real query does. To keep the schema-compat check that `/ready` used to give you, call the semantic paths explicitly — this is a stronger test anyway, since it runs the production query rather than a synthetic warm:
+   ```bash
+   RIJKS=https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
+   npm run cli -- --http $RIJKS semantic "winter landscape" --max 3                  # pure vec0 KNN
+   npm run cli -- --http $RIJKS semantic "winter landscape" --type painting --max 3  # filtered KNN
+   ```
+   Both must return results, not an empty list or an error. A `no such column` failure here is the v0.XX-only column ref that the old warm-up used to catch. Expect the first call to take ~9s against a freshly booted container (cold page-in, once per process); subsequent calls are fast.
 
 ## Phase B: DB upgrade (destructive production action — always ask for confirmation)
 
