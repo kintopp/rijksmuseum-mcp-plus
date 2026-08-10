@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enrichment Review — 11 LLM-Assisted Results</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+  :root {
+    --bg: #f5f0e8; --surface: #fffdf8; --border: #d4c9b0;
+    --text: #2a2118; --text-muted: #7a6e5e; --accent: #8b4513;
+    --highlight: #fff3cd; --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: var(--accent); }
+  .subtitle { color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem; }
+
+  .summary { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .summary h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .summary-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .summary-item { font-family: var(--mono); font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; background: #eee8d8; }
+
+  .disclaimer { background: #fff3cd; border: 2px solid #e6c200; border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .disclaimer h2 { font-size: 1rem; margin-bottom: 0.5rem; color: #856404; }
+  .disclaimer p { font-size: 0.9rem; line-height: 1.6; color: #856404; }
+
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .toc h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .toc-grid { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .toc-link { font-family: var(--mono); font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; text-decoration: none; color: var(--accent); background: #f5ece0; }
+  .toc-link:hover { background: var(--highlight); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
+  .card-header { background: #eee8d8; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  .card-header h2 { font-size: 1rem; font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; font-family: var(--mono); }
+
+  .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 800px) { .card-body { grid-template-columns: 1fr; } .left { border-right: none !important; border-bottom: 1px solid var(--border); } }
+  .left, .right { padding: 1rem; }
+  .left { border-right: 1px solid var(--border); }
+
+  .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }
+
+  .event-list { list-style: none; font-size: 0.82rem; max-height: 400px; overflow-y: auto; }
+  .event-list li { padding: 4px 0; border-bottom: 1px solid #f0ebe0; }
+  .event-list li:last-child { border-bottom: none; }
+  .event-list .seq { color: var(--text-muted); font-family: var(--mono); font-size: 0.75rem; min-width: 1.5em; display: inline-block; }
+  .event-list .type-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--accent); }
+  .event-list .highlight { background: var(--highlight); padding: 2px 4px; border-radius: 3px; }
+  .event-list .context { opacity: 0.6; }
+
+  .resolution-summary { font-size: 0.8rem; color: var(--text-muted); font-family: var(--mono); margin-bottom: 0.75rem; padding: 4px 8px; background: #eee8d8; border-radius: 4px; }
+
+  .enrichment-item { margin-bottom: 1rem; }
+  .enrichment-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
+  .enrichment-target { font-size: 0.82rem; font-family: var(--mono); }
+  .enrichment-targets { list-style: none; margin: 0.25rem 0; font-size: 0.8rem; font-family: var(--mono); color: var(--text-muted); }
+  .enrichment-targets li { padding: 1px 0 1px 0.6rem; border-left: 2px solid var(--border); margin-bottom: 1px; }
+  .enrichment-targets code { color: var(--accent); }
+  .reasoning { font-family: var(--sans); font-style: italic; color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem; background: #faf8f2; border-radius: 4px; border-left: 3px solid var(--accent); }
+
+  .back-to-top { position: fixed; bottom: 1rem; right: 1rem; background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; opacity: 0.8; }
+  .back-to-top:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Enrichment Review — 11 LLM-Assisted Results</h1>
+<p class="subtitle">Query: <code>type=restitution</code>. Generated 2026-08-10.</p>
+
+<div class="disclaimer">
+  <h2>About this page</h2>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision. Methods include type/category classification, party disambiguation, validated deterministic rules, and structural corrections (location fixes, phantom event removal, event splitting).</p>
+  <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
+</div>
+
+<div class="summary">
+  <h2>Task description</h2>
+  <p style="font-size:0.9rem;line-height:1.6;">The provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
+</div>
+
+<div class="summary">
+  <h2>Distribution</h2>
+  <div class="summary-grid">
+    <span class="summary-item">Total events: 230</span>
+    <span class="summary-item">Deterministic: 225</span>
+    <span class="summary-item">LLM events: 5</span>
+    <span class="summary-item">LLM parties: 6</span>
+    <span class="summary-item">Artworks: 4</span>
+  </div>
+  <div class="summary-grid" style="margin-top:0.5rem">
+    <span class="summary-item"><span class="badge" style="background:#6b4c9a;color:white;font-size:0.7rem;vertical-align:middle">LLM classified</span> 4</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">LLM correction: missing receiver</span> 3</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">llm_structural</span> 3</span>
+    <span class="summary-item"><span class="badge" style="background:#6b4c9a;color:white;font-size:0.7rem;vertical-align:middle">LLM disambiguated</span> 1</span>
+  </div>
+</div>
+
+
+<div class="toc">
+  <h2>Jump to artwork</h2>
+  <div class="toc-grid">
+    <a class="toc-link" href="#card-0">BK-1964-5</a>
+    <a class="toc-link" href="#card-1">RP-T-1947-25</a>
+    <a class="toc-link" href="#card-2">RP-T-1964-44</a>
+    <a class="toc-link" href="#card-3">RP-T-1975-52</a>
+  </div>
+</div>
+
+
+<div class="card" id="card-0">
+  <div class="card-header">
+    <h2>BK-1964-5 — Zeven borden uit het servies van stadhouder Willem v</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Meissener Porzellan Manufaktur</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[gift]</span> donated to Willem V of Orange, Stadhouder of the United Provinces</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[collection]</span> collection William Beckford (1760-1844), Fonthill Abbey</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1823</span> {Den Blaauwen 2000, p.344.} sale, Mr Phillips at the Abbey, 1 October 1823, no. 7625-5</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[collection]</span> collection F. Hodges</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1868</span> {Den Blaauwen 2000, p.344.} his sale, London (Christie’s), 12 December 1868, no. 564-638</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1934</span> collection Herbert M. Gutmann (1879-1942), Berlin, before 1934</li>
+<li class="highlight"><span class="seq">7.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1934</span> {According to the catalogue for his sale.} his forced sale, Berlin (Paul Graupe), 12 (13) April 1934 sqq., no. 357, DM 790 (for the complete lot with 24 plates in total)</li>
+<li class="context"><span class="seq">8.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1962</span> {Copy RMA} anonymous sale, Stuttgart (F. Nagel), 12 October 1962, no. 85</li>
+<li class="context"><span class="seq">9.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1964</span> from the dealer A. van der Meer, Amsterdam, fl. 1,500, to the museum, 1964</li>
+<li class="context"><span class="seq">10.</span> <span class="type-tag">[restitution]</span> <span class="type-tag">2024</span> restituted to the Gutmann family, 2024</li>
+<li class="context"><span class="seq">11.</span> <span class="type-tag">[sale]</span> <span class="type-tag">2024</span> {Website Dutch Restitution Committee, RC. 1.157} from whom to the museum, 2024</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (0 events, 1 party)</div>
+      <div class="resolution-summary">10 of 11 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 7, "his forced sale" → <code>sender</code></span>
+          </div>
+          <div class="reasoning">'his forced sale' is an anaphoric reference where 'his' refers back to Herbert M. Gutmann from the previous event. In AAM convention, 'his sale' means the previous owner (Gutmann) is consigning the artwork - making him the sender in this forced sale event.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-1">
+  <div class="card-header">
+    <h2>RP-T-1947-25 — Twee vrouwenhoofden</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">attributed to Hans Pleydenwurff</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[collection]</span> collection Count Antoine-François Andréossy (1761-1828), Paris and Montauban</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[by_descent]</span> his heirs</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1864</span> their sale, Paris (Paul Navoit), 13 April 1864 sqq., no. 215, as Jean de Beer</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[collection]</span> collection Ambroise Firmin-Didot (1790-1876), Paris (L. 119)</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1877</span> his sale, Paris (Maurice Delestre), 16 April-12 May 1877, no. 51, as Lucas de Leyde</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[collection]</span> collection Freiherr Max von Heyl zu Herrnsheim (1844-1925), Darmstadt (L. 2879)</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1903</span> anonymous sale, Stuttgart (H. G. Gutekunst), 25-26 May 1903, no. 18, as Anonymer niederdeutscher Meister des XV. Jahrhunderts</li>
+<li class="context"><span class="seq">8.</span> <span class="type-tag">[collection]</span> collection Adalbert Freiherr von Lanna (1836-1909), Prague (L. 2773)</li>
+<li class="context"><span class="seq">9.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1911</span> his sale, Lepke, Berlin, 22 May 1911, no. 112, as Niederländische Meister</li>
+<li class="context"><span class="seq">10.</span> <span class="type-tag">[collection]</span> Arthur Feldmann (1877-1941), Brno</li>
+<li class="highlight"><span class="seq">11.</span> <span class="type-tag">[sale unsold]</span> <span class="type-tag">1934</span> Lucerne (Gilhofer &amp; Ranschburg), 28 June 1934, no. 177, as Mittelrheinischer Zeichner, aus dem Kreise des Hausbuchmeisters, um 1480, unsold and returned to owner</li>
+<li class="context"><span class="seq">12.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1939</span> from whom confiscated by the Gestapo, 15 March 1939</li>
+<li class="context"><span class="seq">13.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1946</span> ? anonymous sale, London (Sotheby’s), 16 October 1946 (lot number not known)</li>
+<li class="context"><span class="seq">14.</span> <span class="type-tag">[collection]</span> the dealer William Redford (1912-2004), London</li>
+<li class="context"><span class="seq">15.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1947</span> sold by dealer Hans M. Calmann (1899-1982), London, ? on behalf of William Redford, to the museum, 1947</li>
+<li class="context"><span class="seq">16.</span> <span class="type-tag">[restitution]</span> <span class="type-tag">2024</span> restituted to the Feldmann heirs, 2024</li>
+<li class="context"><span class="seq">17.</span> <span class="type-tag">[sale]</span> <span class="type-tag">2025</span> from whom purchased by the museum, in 2025.</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 1 party)</div>
+      <div class="resolution-summary">16 of 17 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 11 → <code>sale</code></span>
+          </div>
+          <div class="reasoning">Auction event at Gilhofer &amp; Ranschburg with lot number — sale context despite missing &quot;sale&quot; prefix.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 11, "Lucerne (Gilhofer &amp; Ranschburg)" → <code>agent</code></span>
+          </div>
+          <div class="reasoning">Gilhofer &amp; Ranschburg is an auction house conducting a sale. The text indicates the item was 'unsold and returned to owner' - this is a failed auction where the auction house acted as agent for the consigning owner (Arthur Feldmann from the previous event). The auction house is the facilitating agent, not a party acquiring the artwork.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-2">
+  <div class="card-header">
+    <h2>RP-T-1964-44 — The Marriage of Tobias and Sara</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Pieter Coecke van Aelst (I)</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[collection]</span> collection Arthur Feldmann (eighteen hundred seventy-seven - nineteen hundred forty-one) (1877-1941), Brno, Czechoslovakia, in or before nineteen hundred thirty-nine (1939)</li>
+<li class="highlight"><span class="seq">2.</span> <span class="type-tag">[sale]</span> from whom confiscated by the Gestapo, fifteen March nineteen hundred thirty-nine</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> sale, London (Christie’s), sixteen October nineteen hundred forty-six, number forty-two (42), with another former Feldmann drawing (Goltzius, standing woman with veil), to (possibly Alfred) Scharff</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[sale]</span> sale, Tableaux, dessins, estampes de maîtres anciens, meubles, objets d'art: collections de feu M.M. dr. Max J. Friedländer et al, Amsterdam (Paul Brandt), seventeen March nineteen hundred fifty-nine, number twenty-two (22), eight hundred and nine Dutch Guilders and forty cents (ƒ 809.40), with five (5) other drawings, to the museum</li>
+<li class="highlight"><span class="seq">5.</span> <span class="type-tag">[restitution]</span> restituted to the Feldmann heirs, two thousand and twenty-three (2023)</li>
+<li class="highlight"><span class="seq">6.</span> <span class="type-tag">[sale]</span> from whom purchased by the museum, in two thousand and twenty-three (2023).</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (3 events, 3 parties)</div>
+      <div class="resolution-summary">3 of 6 resolved deterministically, 3 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: missing receiver</span>
+            <span class="enrichment-target">2 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 2 → <code>sale</code></li><li>Event 2, "Gestapo" → <code>agent</code></li></ul>
+          </div>
+          <div class="reasoning">The parser extracted no parties for this confiscation event. The raw text clearly states 'confiscated by the Gestapo', which indicates the Gestapo is the agent/sender performing the confiscation. Arthur Feldmann (from the previous event) is the implicit sender, and the Gestapo is the party performing the action.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: missing receiver</span>
+            <span class="enrichment-target">2 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 5 → <code>restitution</code></li><li>Event 5, "museum" → <code>sender</code></li></ul>
+          </div>
+          <div class="reasoning">The parser extracted the Feldmann heirs as receiver (correct), but the restitution was performed by the museum (implicit sender from event 4). Event 5 represents a transfer from the museum to the Feldmann heirs.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: missing receiver</span>
+            <span class="enrichment-target">2 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 6 → <code>sale</code></li><li>Event 6, "the Feldmann heirs" → <code>sender</code></li></ul>
+          </div>
+          <div class="reasoning">'from whom' refers to the Feldmann heirs (from the previous event). The sentence means the artwork was purchased from the Feldmann heirs by the museum. The parser captured the museum as buyer/receiver but did not explicitly list the Feldmann heirs as the sender.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-3">
+  <div class="card-header">
+    <h2>RP-T-1975-52 — View of the Abbey of Grottaferrata</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Caspar van Wittel</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[collection]</span> collection Boguslaw Jolles (?-1912), Vienna and Dresden (L. 381)</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[sale unsold]</span> <span class="type-tag">1939</span> sale, Dr Michael Berolzheimer (1866-1942, Untergrainau (Bavaria) and Mount Vernon (NY)), Munich (A. Weinmüller), 9 March 1939 sqq., no. 111, as Jan Frans van Bloemen, bought in</li>
+<li class="highlight"><span class="seq">3.</span> <span class="type-tag">[sale]</span> {Copy (Protokollkatalog) Weinmüller, according to the Restitutions Committee, report Feitenoverzicht inzake Berolzheimer RC. 1.166, version 24 April 2017, p. 5, 12, 13; NARA, M1946, Records Concerning the Central Collecting Points (‘Ardelia Hall Collection’) Munich Central Collecting Point, 1945-1951, Restitution Claim Records, Jewish Claims, Numbered: 0043-0044 (via Fold3), list ‘Nicht verkaufte Nummern a/Auktion Nr. 16’, no. 111.} ‘zu den Aufrufpreis’ to Weinmüller, Munich</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1939</span> {Declaration Adolf Weinmüller, according to the Restitutions Committee, report Feitenoverzicht inzake Berolzheimer RC. 1.166, version 24 April 2017, p. 5.} by whom sold, 1939</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1973</span> collection Dr Einar Perman (1893-1976, Stockholm and Amsterdam), 1973</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1975</span> {A. Zwollo, _Hollandse en Vlaamse veduteschilders te Rome, 1675-1725_, Assen 1973, p. 154, fig. 190.} his sale, Amsterdam (Mak van Waay), 9 June 1975, no. 156, fl. 9,400, to the museum (L. 2228)</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[restitution]</span> <span class="type-tag">2017</span> restituted to the heirs of Dr Michael Berolzheimer (1866-1942, Untergrainau (Bavaria) and Mount Vernon (NY)), 2017</li>
+<li class="context"><span class="seq">8.</span> <span class="type-tag">[sale]</span> <span class="type-tag">2018</span> {Restitutions Committee, press release ‘Drawing in Rijksmuseum to go back to the heirs’, 26 September 2017.} from whom purchased by the museum, 2018</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 1 party)</div>
+      <div class="resolution-summary">7 of 8 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 3 → <code>sale</code></span>
+          </div>
+          <div class="reasoning">This follows immediately after a 1939 auction where the item was 'bought in' (failed to sell). The phrase 'zu den Aufrufpreis' (at the reserve price) indicates the auctioneer Weinmüller acquired it at the minimum bid, which is a post-auction sale transaction.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM disambiguated</span>
+            <span class="enrichment-target">Event 3, "Weinmüller" → <code>receiver</code></span>
+          </div>
+          <div class="reasoning">The phrase 'zu den Aufrufpreis' is German for 'at the reserve price' - a sale condition, not a party name. The actual party is Weinmüller (the auction house), who is receiving the artwork that was bought in at the previous auction. The preposition 'to' indicates Weinmüller is the receiver.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<a href="#" class="back-to-top">↑ Top</a>
+</body>
+</html>

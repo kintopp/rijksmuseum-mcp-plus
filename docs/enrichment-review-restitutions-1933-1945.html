@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enrichment Review — 16 LLM-Assisted Results</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+  :root {
+    --bg: #f5f0e8; --surface: #fffdf8; --border: #d4c9b0;
+    --text: #2a2118; --text-muted: #7a6e5e; --accent: #8b4513;
+    --highlight: #fff3cd; --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: var(--accent); }
+  .subtitle { color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem; }
+
+  .summary { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .summary h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .summary-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .summary-item { font-family: var(--mono); font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; background: #eee8d8; }
+
+  .disclaimer { background: #fff3cd; border: 2px solid #e6c200; border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .disclaimer h2 { font-size: 1rem; margin-bottom: 0.5rem; color: #856404; }
+  .disclaimer p { font-size: 0.9rem; line-height: 1.6; color: #856404; }
+
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .toc h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .toc-grid { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .toc-link { font-family: var(--mono); font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; text-decoration: none; color: var(--accent); background: #f5ece0; }
+  .toc-link:hover { background: var(--highlight); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
+  .card-header { background: #eee8d8; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  .card-header h2 { font-size: 1rem; font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; font-family: var(--mono); }
+
+  .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 800px) { .card-body { grid-template-columns: 1fr; } .left { border-right: none !important; border-bottom: 1px solid var(--border); } }
+  .left, .right { padding: 1rem; }
+  .left { border-right: 1px solid var(--border); }
+
+  .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }
+
+  .event-list { list-style: none; font-size: 0.82rem; max-height: 400px; overflow-y: auto; }
+  .event-list li { padding: 4px 0; border-bottom: 1px solid #f0ebe0; }
+  .event-list li:last-child { border-bottom: none; }
+  .event-list .seq { color: var(--text-muted); font-family: var(--mono); font-size: 0.75rem; min-width: 1.5em; display: inline-block; }
+  .event-list .type-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--accent); }
+  .event-list .highlight { background: var(--highlight); padding: 2px 4px; border-radius: 3px; }
+  .event-list .context { opacity: 0.6; }
+
+  .resolution-summary { font-size: 0.8rem; color: var(--text-muted); font-family: var(--mono); margin-bottom: 0.75rem; padding: 4px 8px; background: #eee8d8; border-radius: 4px; }
+
+  .enrichment-item { margin-bottom: 1rem; }
+  .enrichment-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
+  .enrichment-target { font-size: 0.82rem; font-family: var(--mono); }
+  .enrichment-targets { list-style: none; margin: 0.25rem 0; font-size: 0.8rem; font-family: var(--mono); color: var(--text-muted); }
+  .enrichment-targets li { padding: 1px 0 1px 0.6rem; border-left: 2px solid var(--border); margin-bottom: 1px; }
+  .enrichment-targets code { color: var(--accent); }
+  .reasoning { font-family: var(--sans); font-style: italic; color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem; background: #faf8f2; border-radius: 4px; border-left: 3px solid var(--accent); }
+
+  .back-to-top { position: fixed; bottom: 1rem; right: 1rem; background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; opacity: 0.8; }
+  .back-to-top:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Enrichment Review — 16 LLM-Assisted Results</h1>
+<p class="subtitle">Query: <code>type=restitution,looting,theft,recuperation, date=1933–1945</code>. Generated 2026-08-10.</p>
+
+<div class="disclaimer">
+  <h2>About this page</h2>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision. Methods include type/category classification, party disambiguation, validated deterministic rules, and structural corrections (location fixes, phantom event removal, event splitting).</p>
+  <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
+</div>
+
+<div class="summary">
+  <h2>Task description</h2>
+  <p style="font-size:0.9rem;line-height:1.6;">The provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
+</div>
+
+<div class="summary">
+  <h2>Distribution</h2>
+  <div class="summary-grid">
+    <span class="summary-item">Total events: 178</span>
+    <span class="summary-item">Deterministic: 171</span>
+    <span class="summary-item">LLM events: 7</span>
+    <span class="summary-item">LLM parties: 9</span>
+    <span class="summary-item">Artworks: 4</span>
+  </div>
+  <div class="summary-grid" style="margin-top:0.5rem">
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">llm_structural</span> 9</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">LLM correction: multi-transfer merge</span> 6</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">LLM correction: missing receiver</span> 1</span>
+  </div>
+</div>
+
+
+<div class="toc">
+  <h2>Jump to artwork</h2>
+  <div class="toc-grid">
+    <a class="toc-link" href="#card-0">BK-17139</a>
+    <a class="toc-link" href="#card-1">RP-T-1953-196</a>
+    <a class="toc-link" href="#card-2">RP-T-1953-199(V)</a>
+    <a class="toc-link" href="#card-3">RP-T-1953-198</a>
+  </div>
+</div>
+
+
+<div class="card" id="card-0">
+  <div class="card-header">
+    <h2>BK-17139 — (untitled)</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Barnabé Sageret</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">0.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1912</span> collection Eugen Gutmann (1840-1925), Munich, 1912</li>
+<li class="context"><span class="seq">1.</span> <span class="type-tag">[sale batch]</span> <span class="type-tag">1934</span> from Dr Fritz Mannheimer (1890-1939), Amsterdam and Paris, fl. 6,350,000, en bloc, to Artistic &amp; General Securities Ltd. as security for a loan from the Mendelssohn &amp; Co. Bank, but kept in usufruct, 1934</li>
+<li class="highlight"><span class="seq">2.</span> <span class="type-tag">[non_provenance]</span> {NHA, 476, RMA Archive, inv. no. 2142, Recapitulatie der geïnventariseerde kunstvoorwerpen van wijlen Dr F. Mannheimer, undated, p. 40, no. Pr 127, Artistic no. 22/60; NHA, 233, Arrondissementsrechtbank Amsterdam, inv. no. 1365, &quot;O.R. 256/1939, Faillissementsdossier: nalatenschap Dr. F. Mannheimer, 28 augustus 1939&quot;, image 3, page 2.}</li>
+<li class="highlight"><span class="seq">3.</span> <span class="type-tag">[looting]</span> <span class="type-tag">1940</span> purchased from Mendelssohn &amp; Co. Bank, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[recuperation]</span> <span class="type-tag">1945</span> {Korthals Altes 1974, pp. 21-22.} war recuperation, SNK, 1945</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[loan batch]</span> <span class="type-tag">1952</span> {HNA, SNK Archive, 2.08.42, inv. no. 548.} on loan, with 1,702 other objects, from the DRVK to the museum, 1952</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1960</span> {Note RMA.} transferred to the museum, 1960</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (2 events, 2 parties)</div>
+      <div class="resolution-summary">5 of 7 resolved deterministically, 2 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: multi-transfer merge</span>
+            <span class="enrichment-target">4 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 2 → <code>non_provenance</code></li><li>Event 3 → <code>looting</code></li><li>Event 3, "Mendelssohn &amp; Co. Bank" → <code>sender</code></li><li>Event 3, "Dienststelle Mühlmann" → <code>receiver</code></li></ul>
+          </div>
+          <div class="reasoning">The raw text describes two distinct transfers involving two different parties acting as sellers. First, the Mendelssohn &amp; Co. Bank — which held the collateral (Artistic &amp; General Securities Ltd. acted as security vehicle for the Bank's loan from event 2) — sold the objects en bloc to the Dienststelle Mühlmann. This is a forced/looting sale from the Bank (as the effective controlling creditor/secured party) to the Nazi acquisitions agency. The text 'purchased from Mendelssohn &amp; Co. Bank, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940' is itself a single atomic sale event. However, looking more carefully, the citation block preceding the substantive text belongs to the prior event (event 2) and bleeds into event 3 as parsed. The substantive content of event 3 — 'purchased from Mendelssohn &amp; Co. Bank, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940' — describes one sale transaction: Mendelssohn &amp; Co. Bank → Dienststelle Mühlmann (for the Führermuseum). This is a single atomic transfer (a looting/forced sale). The citation preamble is non-provenance metadata. Therefore, the event should be split into: (1) a non-provenance citation fragment, and (2) the atomic sale/looting event.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-1">
+  <div class="card-header">
+    <h2>RP-T-1953-196 — Study for Lélie unmasking Mascarille</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">François Boucher</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1812</span> collection Louis I, Grand Duke of Hesse (1753-1830), Darmstadt, 1812</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1830</span> {Coll. cat. Cordellier 2007, p. 526, no. V.25.} acquired by the state of Hesse and transferred to the Groβherzogliche Museum, Darmstadt, 1830</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1933</span> {Coll. Cat. Cordellier 2007, p. 20.} sold by the Hessisches Landesmuseum, Darmstadt, after 1933</li>
+<li class="highlight"><span class="seq">4.</span> <span class="type-tag">[sale batch]</span> <span class="type-tag">1940</span> purchased from the estate of Dr Fritz Mannheimer (1890-1939), Amsterdam and Paris, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[recuperation]</span> <span class="type-tag">1945</span> {Korthals Altes 1974, pp. 21-22.} war recuperation, SNK, 1945</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[loan batch]</span> <span class="type-tag">1952</span> {HNA, SNK Archive, 2.08.42, inv. no. 548.} on loan, with 1,702 other objects, from the DRVK to the museum, 1952</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1960</span> {Note RMA.} transferred to the museum, 1960</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 0 parties)</div>
+      <div class="resolution-summary">6 of 7 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: missing receiver</span>
+            <span class="enrichment-target">Event 4 → <code>sale</code></span>
+          </div>
+          <div class="reasoning">The raw text explicitly states 'Amsterdam and Paris' as the estate's locations. The parser truncated to only 'Amsterdam', capturing the first city. Both cities are part of the Mannheimer estate descriptor and should be preserved in the location field.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-2">
+  <div class="card-header">
+    <h2>RP-T-1953-199(V) — Studie voor een knielende jager</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">François Boucher</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">0.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1812</span> collection Louis I, Grand Duke of Hesse (1753-1830), Darmstadt, 1812</li>
+<li class="highlight"><span class="seq">1.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1830</span> acquired by the state of Hesse</li>
+<li class="highlight"><span class="seq">2.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1830</span> transferred to the Groβherzogliche Museum, Darmstadt, 1830</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1933</span> {Coll. Cat. Cordellier 2007, p. 20.} sold by the Hessisches Landesmuseum, Darmstadt, after 1933</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[sale batch]</span> <span class="type-tag">1940</span> purchased from the estate of Dr Fritz Mannheimer (1890-1939), Amsterdam and Paris, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[recuperation]</span> <span class="type-tag">1945</span> {Korthals Altes 1974, pp. 21-22.} war recuperation, SNK, 1945</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[loan batch]</span> <span class="type-tag">1952</span> {HNA, SNK Archive, 2.08.42, inv. no. 548.} on loan, with 1,702 other objects, from the DRVK to the museum, 1952</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1960</span> {Note RMA.} transferred to the museum, 1960</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (2 events, 4 parties)</div>
+      <div class="resolution-summary">6 of 8 resolved deterministically, 2 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: multi-transfer merge</span>
+            <span class="enrichment-target">6 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 1 → <code>transfer</code></li><li>Event 2 → <code>transfer</code></li><li>Event 1, "Louis I, Grand Duke of Hesse" → <code>sender</code></li><li>Event 1, "state of Hesse" → <code>receiver</code></li><li>Event 2, "state of Hesse" → <code>sender</code></li><li>Event 2, "Groβherzogliche Museum" → <code>receiver</code></li></ul>
+          </div>
+          <div class="reasoning">The text describes two distinct transfers joined by 'and': (1) 'acquired by the state of Hesse' — the state acquires/purchases the collection from Louis I's estate, and (2) 'transferred to the Groβherzogliche Museum, Darmstadt, 1830' — the state then transfers it to the museum. These are two separate changes of hands: first from the collection to the State of Hesse, then from the State of Hesse to the museum. This mirrors the canonical 'ceded to the State and transferred to the museum' pattern.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-3">
+  <div class="card-header">
+    <h2>RP-T-1953-198 — Mascarille sitting</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">François Boucher</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">0.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1812</span> collection Louis I, Grand Duke of Hesse (1753-1830), Darmstadt, 1812</li>
+<li class="highlight"><span class="seq">1.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1830</span> acquired by the state of Hesse</li>
+<li class="highlight"><span class="seq">2.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1830</span> transferred to the Groβherzogliche Museum, Darmstadt, 1830</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1933</span> {Coll. Cat. Cordellier 2007, p. 20.} sold by the Hessisches Landesmuseum, Darmstadt, after 1933</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[sale batch]</span> <span class="type-tag">1940</span> purchased from the estate of Dr Fritz Mannheimer (1890-1939), Amsterdam and Paris, en bloc, by the Dienststelle Mühlmann, The Hague, for Adolf Hitler's Führermuseum, Linz, 1940</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[recuperation]</span> <span class="type-tag">1945</span> {Korthals Altes 1974, pp. 21-22.} war recuperation, SNK, 1945</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[loan batch]</span> <span class="type-tag">1952</span> {HNA, SNK Archive, 2.08.42, inv. no. 548.} on loan, with 1,702 other objects, from the DRVK to the museum, 1952</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1960</span> {Note RMA.} transferred to the museum, 1960</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (2 events, 3 parties)</div>
+      <div class="resolution-summary">6 of 8 resolved deterministically, 2 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: multi-transfer merge</span>
+            <span class="enrichment-target">5 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 1 → <code>transfer</code></li><li>Event 2 → <code>transfer</code></li><li>Event 1, "state of Hesse" → <code>receiver</code></li><li>Event 2, "state of Hesse" → <code>sender</code></li><li>Event 2, "Groβherzogliche Museum" → <code>receiver</code></li></ul>
+          </div>
+          <div class="reasoning">The text describes two distinct transfers joined by 'and': (1) acquisition by the state of Hesse (a purchase/cession from Louis I's collection into state ownership), and (2) a subsequent institutional transfer from the state of Hesse to the Großherzogliche Museum in Darmstadt. These are two separate changes of hands: private collection → state, then state → museum.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<a href="#" class="back-to-top">↑ Top</a>
+</body>
+</html>
