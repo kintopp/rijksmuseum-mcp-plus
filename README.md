@@ -34,7 +34,7 @@ After you've connected the resource to your AI system, you can search, explore a
 - _What German artworks at the Rijksmuseum evoke vanitas and mortality?_
 - _Which artworks have a provenance linked to Emperor Bonaparte?_
 - _List all artworks which include the inscription, 'Amor vincit omnia'_
-- _Find artworks similar to SK-A-2350_
+- _Find artworks similar to SK-A-1115_
 
 For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). These demonstrate queries on a variety of topics including subject and iconographic search, curated sets, semantic search, provenance research, inscriptions and marks, and conservation. 
 
