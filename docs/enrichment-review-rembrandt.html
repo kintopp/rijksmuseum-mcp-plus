@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enrichment Review — 34 LLM-Assisted Results</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+  :root {
+    --bg: #f5f0e8; --surface: #fffdf8; --border: #d4c9b0;
+    --text: #2a2118; --text-muted: #7a6e5e; --accent: #8b4513;
+    --highlight: #fff3cd; --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: var(--accent); }
+  .subtitle { color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem; }
+
+  .summary { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .summary h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .summary-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .summary-item { font-family: var(--mono); font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; background: #eee8d8; }
+
+  .disclaimer { background: #fff3cd; border: 2px solid #e6c200; border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .disclaimer h2 { font-size: 1rem; margin-bottom: 0.5rem; color: #856404; }
+  .disclaimer p { font-size: 0.9rem; line-height: 1.6; color: #856404; }
+
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .toc h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .toc-grid { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .toc-link { font-family: var(--mono); font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; text-decoration: none; color: var(--accent); background: #f5ece0; }
+  .toc-link:hover { background: var(--highlight); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
+  .card-header { background: #eee8d8; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  .card-header h2 { font-size: 1rem; font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; font-family: var(--mono); }
+
+  .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 800px) { .card-body { grid-template-columns: 1fr; } .left { border-right: none !important; border-bottom: 1px solid var(--border); } }
+  .left, .right { padding: 1rem; }
+  .left { border-right: 1px solid var(--border); }
+
+  .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }
+
+  .event-list { list-style: none; font-size: 0.82rem; max-height: 400px; overflow-y: auto; }
+  .event-list li { padding: 4px 0; border-bottom: 1px solid #f0ebe0; }
+  .event-list li:last-child { border-bottom: none; }
+  .event-list .seq { color: var(--text-muted); font-family: var(--mono); font-size: 0.75rem; min-width: 1.5em; display: inline-block; }
+  .event-list .type-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--accent); }
+  .event-list .highlight { background: var(--highlight); padding: 2px 4px; border-radius: 3px; }
+  .event-list .context { opacity: 0.6; }
+
+  .resolution-summary { font-size: 0.8rem; color: var(--text-muted); font-family: var(--mono); margin-bottom: 0.75rem; padding: 4px 8px; background: #eee8d8; border-radius: 4px; }
+
+  .enrichment-item { margin-bottom: 1rem; }
+  .enrichment-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
+  .enrichment-target { font-size: 0.82rem; font-family: var(--mono); }
+  .enrichment-targets { list-style: none; margin: 0.25rem 0; font-size: 0.8rem; font-family: var(--mono); color: var(--text-muted); }
+  .enrichment-targets li { padding: 1px 0 1px 0.6rem; border-left: 2px solid var(--border); margin-bottom: 1px; }
+  .enrichment-targets code { color: var(--accent); }
+  .reasoning { font-family: var(--sans); font-style: italic; color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem; background: #faf8f2; border-radius: 4px; border-left: 3px solid var(--accent); }
+
+  .back-to-top { position: fixed; bottom: 1rem; right: 1rem; background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; opacity: 0.8; }
+  .back-to-top:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Enrichment Review — 34 LLM-Assisted Results</h1>
+<p class="subtitle">Query: <code>date=1795–?, creator=&quot;Rembrandt van Rijn&quot;</code>. Generated 2026-08-10.</p>
+
+<div class="disclaimer">
+  <h2>About this page</h2>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision. Methods include type/category classification, party disambiguation, validated deterministic rules, and structural corrections (location fixes, phantom event removal, event splitting).</p>
+  <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
+</div>
+
+<div class="summary">
+  <h2>Task description</h2>
+  <p style="font-size:0.9rem;line-height:1.6;">The provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
+</div>
+
+<div class="summary">
+  <h2>Distribution</h2>
+  <div class="summary-grid">
+    <span class="summary-item">Total events: 274</span>
+    <span class="summary-item">Deterministic: 261</span>
+    <span class="summary-item">LLM events: 13</span>
+    <span class="summary-item">LLM parties: 21</span>
+    <span class="summary-item">Artworks: 7</span>
+  </div>
+  <div class="summary-grid" style="margin-top:0.5rem">
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">llm_structural</span> 20</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">LLM correction: multi-transfer merge</span> 7</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">LLM correction missing_all_parties</span> 4</span>
+    <span class="summary-item"><span class="badge" style="background:#6b4c9a;color:white;font-size:0.7rem;vertical-align:middle">LLM classified</span> 1</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">LLM correction: missing receiver</span> 1</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">LLM correction: multi-city location</span> 1</span>
+  </div>
+</div>
+
+
+<div class="toc">
+  <h2>Jump to artwork</h2>
+  <div class="toc-grid">
+    <a class="toc-link" href="#card-0">SK-A-1935</a>
+    <a class="toc-link" href="#card-1">SK-A-4717</a>
+    <a class="toc-link" href="#card-2">SK-A-4096</a>
+    <a class="toc-link" href="#card-3">RP-T-1961-75</a>
+    <a class="toc-link" href="#card-4">RP-T-1930-22</a>
+    <a class="toc-link" href="#card-5">RP-T-1901-A-4520(V)</a>
+    <a class="toc-link" href="#card-6">RP-T-1984-119</a>
+  </div>
+</div>
+
+
+<div class="card" id="card-0">
+  <div class="card-header">
+    <h2>SK-A-1935 — Landschap met stenen brug</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Rembrandt van Rijn</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1817</span> ? sale, Aubert fils, Paris (A.J. Paillet), 17 April 1806, no. 38 ('Un charmant Point de vue de Paysage offrant un Massif d'arbres dans le milieu où sont groupées quelques Chaumières ; tout le premier Plan est occupé par une Rivière et un Pont rustique. Ce Tableau, d'une admirable harmonie de couleurs, présente un des Ouvrages du meilleur goût d'étude de ce grand coloriste'.), fr. 250, to the dealer B. Montigneul;{Copy BNP; GPI, no. F-101.} … ; sale, J.J.P.A. Lapeyrière (1779-1831, Paris), Paris (A.N. Pérignon), 14 April 1817 sqq., no. 46 ('Un charmant Paysage, d'une vérité, d'une force d'effet et de couleur réellement admirables. On y voit un canal qui part du premier plan, et se prolonge vers la gauche: il est traversée par un pont, et bordé à droite et à gauche par des prairies et quelques chaumières entourées d'arbres. On remarque quelques bateliers dans leurs barques, et un charriot sur un chemin à gauche. Le peintre a disposé son principal foyer de lumière sur une chaumière et un bouquet d'arbres placé au milieu, en plan reculé. Tout le reste du paysage est sacrifié dans une savante demi-teinte. Un ciel harmonieux et savamment dégradé, éclaire ce Tableau dont la rareté et la perfection font un objet très-marquant, malgré sa petite dimension. sur bois, Larg. 16 p., Haut. 11 p. [29.7 x 43.2 cm]'), fr. 1505, to C.W. Huybens for the dealer W. Buchanan</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1824</span> {Copy RKD. The catalogue text is on a label on the reverse of the painting.} by whom sold to Edward Gray (?-1838), Harringay House, Hornsey, Middlesex, by 1824</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1850</span> collection Henry Petty-Fitzmaurice (1780-1863), 3rd Marquess of Lansdowne, Bowood House, Calne, Wiltshire, by 1850</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[by_descent]</span> {Waagen1854, III, p. 164, who saw it there in 1850: 'Rembrandt - 2. A flat country in rainy weather, with the rays of the evening sun falling upon a bridge, and illuminating two houses and trees'.} his son, Henry Petty-Fitzmaurice (1816-66), 4th Marquess of Lansdowne, Bowood House, Calne, Wiltshire</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[by_descent]</span> his son, Henry Charles Keith Petty-Fitzmaurice (1845-1927), 5th Marquess of Lansdowne, Bowood House, Calne, Wiltshire</li>
+<li class="highlight"><span class="seq">6.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1883</span> by whom sold, 1883</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1900</span> sale, James Reiss (1812-99, Manchester and London), London (Christie's), 12 May 1900, no. 63, gns 2,200, to the museum with support from the Vereniging Rembrandt and Dr Abraham Bredius</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 1 party)</div>
+      <div class="resolution-summary">6 of 7 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction missing_all_parties</span>
+            <span class="enrichment-target">2 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 6 → <code>sale</code></li><li>Event 6, "Henry Charles Keith Petty-Fitzmaurice" → <code>sender</code></li></ul>
+          </div>
+          <div class="reasoning">The phrase 'by whom sold, 1883' is an oblique back-reference to the subject of the immediately preceding event (sequence 5): Henry Charles Keith Petty-Fitzmaurice (1845-1927), 5th Marquess of Lansdowne. In AAM convention, 'by whom' always refers to the last named holder, who is therefore the seller/sender in this transfer. No buyer is named in this event; the buyer appears only in the next sale event (sequence 7, James Reiss as consignor, implying the artwork passed through intermediary hands before 1900). The receiver cannot be identified from the text of this event.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-1">
+  <div class="card-header">
+    <h2>SK-A-4717 — Tobit en Anna met het bokje</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Rembrandt van Rijn</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">0.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1748</span> ? sale, Pieter van Buytene (Oude Koornmarkt, Delft), sold on the premises (A. de Groot), 29 October 1748, no. 91 ('De blinde Tobias met zyn Vrouw, door Rembrand'), fl. 28</li>
+<li class="context"><span class="seq">1.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1759</span> ? sale, Amsterdam (H. de Leth), 17 April 1759 sqq., no. 103 ('Tobias zyn Huisvrouw bestraffende, door Rembrand van Rhyn'), fl. 27, to Yver</li>
+<li class="highlight"><span class="seq">2.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1823</span> ? sale, Jeanne-Louise-Henriette Campan (1752-1822, Paris and Nantes), Paris (A. Coquille et al.), 10 March 1823, no. 76 ('Tobie aveugle et Anne, sa femme. ...')</li>
+<li class="highlight"><span class="seq">3.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1905</span> collection Dmitry Shchukin (1855-1932), Moscow, shortly after 1905</li>
+<li class="highlight"><span class="seq">4.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1917</span> dealer J. Goudstikker, Amsterdam, 1917</li>
+<li class="highlight"><span class="seq">5.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1937</span> collection Baron Heinrich Thyssen-Bornemisza (1875-1947), Schloss Rohoncz, Lugano, 1937</li>
+<li class="highlight"><span class="seq">6.</span> <span class="type-tag">[by_descent]</span> his daughter, Gabrielle W.H.M. Baroness Bentinck, née Thyssen-Bornemisza (1915-), Paris</li>
+<li class="highlight"><span class="seq">7.</span> <span class="type-tag">[loan]</span> <span class="type-tag">1956</span> on loan to the museum 1956-79, SK-C-1448</li>
+<li class="highlight"><span class="seq">8.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1979</span> from whom, fl. 3,000,000, to the museum, with support from the Vereniging Rembrandt, the Rijksmuseum Stichting and the State of the Netherlands, 1979</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (7 events, 14 parties)</div>
+      <div class="resolution-summary">2 of 9 resolved deterministically, 7 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: multi-transfer merge</span>
+            <span class="enrichment-target">21 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 2 → <code>sale</code></li><li>Event 3 → <code>collection</code></li><li>Event 4 → <code>transfer</code></li><li>Event 5 → <code>collection</code></li><li>Event 6 → <code>by_descent</code></li><li>Event 7 → <code>loan</code></li><li>Event 8 → <code>sale</code></li><li>Event 2, "Jeanne-Louise-Henriette Campan" → <code>sender</code></li><li>Event 2, "A. Coquille et al." → <code>agent</code></li><li>Event 3, "Dmitry Shchukin" → <code>receiver</code></li><li>Event 4, "J. Goudstikker" → <code>receiver</code></li><li>Event 5, "Baron Heinrich Thyssen-Bornemisza" → <code>receiver</code></li><li>Event 6, "Baron Heinrich Thyssen-Bornemisza" → <code>sender</code></li><li>Event 6, "Gabrielle W.H.M. Baroness Bentinck" → <code>receiver</code></li><li>Event 7, "Gabrielle W.H.M. Baroness Bentinck" → <code>sender</code></li><li>Event 7, "Rijksmuseum" → <code>receiver</code></li><li>Event 8, "Gabrielle W.H.M. Baroness Bentinck" → <code>sender</code></li><li>Event 8, "Rijksmuseum" → <code>receiver</code></li><li>Event 8, "Vereniging Rembrandt" → <code>agent</code></li><li>Event 8, "Rijksmuseum Stichting" → <code>agent</code></li><li>Event 8, "State of the Netherlands" → <code>agent</code></li></ul>
+          </div>
+          <div class="reasoning">The raw text for sequence 3 has been erroneously merged into a single event by the parser. It actually contains six distinct, sequential provenance events separated by ellipses and semicolons: (1) a sale from the collection of Jeanne-Louise-Henriette Campan, Paris, 1823; (2) collection of Dmitry Shchukin, Moscow, shortly after 1905; (3) dealer J. Goudstikker, Amsterdam, 1917; (4) collection of Baron Heinrich Thyssen-Bornemisza, Lugano, 1937; (5) inheritance by his daughter Gabrielle Baroness Bentinck with a subsequent loan to the museum 1956–79; (6) sale from Baroness Bentinck to the Rijksmuseum, 1979. The loan and the final sale to the museum from Bentinck also constitute two separate transfers (custody loan, then ownership purchase). These are clearly separated by '…' gap markers and semicolons in the original text.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-2">
+  <div class="card-header">
+    <h2>SK-A-4096 — Simson en Delila</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">attributed to Rembrandt van Rijn</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="highlight"><span class="seq">1.</span> <span class="type-tag">[collection]</span> private collection, England</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[collection]</span> the dealer Agnew &amp; Sons, London</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1956</span> collection Mrs Derek Fitzgerald, by 1956</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[gift]</span> <span class="type-tag">1963</span> {Stockholm 1956, p. 21, no. 3.} sale, Mrs Derek Fitzgerald et al., London (Sotheby's), 3 July 1963, no. 14, fl. 63,040, to the dealer P. de Boer for the museum, as a gift from the Commissie voor Fotoverkoop</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 1 party)</div>
+      <div class="resolution-summary">3 of 4 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction missing_all_parties</span>
+            <span class="enrichment-target">2 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 1 → <code>collection</code></li><li>Event 1, "private collection, England" → <code>receiver</code></li></ul>
+          </div>
+          <div class="reasoning">AAM convention: a bare descriptive phrase with no explicit name. The segment 'private collection, England' identifies an anonymous English private collector as the holder (receiver). No sender can be determined from this context — event sequence 1 is the earliest known record. The phrase explicitly describes a collector role, though the identity is anonymous. Confidence is moderate because no name is given, but the role and position are unambiguous within the convention.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-3">
+  <div class="card-header">
+    <h2>RP-T-1961-75 — Zelfportret met warrig haar</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Rembrandt van Rijn</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[collection]</span> ? collection Sir Joshua Reynolds (1723-92), London</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1794</span> {According to the catalogue for the sale, William Esdaile (1758-1837, London), London (Christie’s), 17 June 1840, possibly no. 58.} ? his sale, London (A.C. de Poggi), 26 May 1794, possibly one of the drawings by Rembrandt in Album QQ, nos. 960-85, or Album RR, nos. 987-1009 (drawings not specified)</li>
+<li class="highlight"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1798</span> or his sale, London (H. Phillips), 5 March 1798 sqq. (drawings not specified)</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[collection]</span> collection Sir Thomas Lawrence (1769-1830), London (L. 2445)</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[sale batch]</span> <span class="type-tag">1835</span> from whom, en bloc, £16,000, to the dealer Samuel Woodburn (1786-1853), London, 1835</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[sale batch]</span> <span class="type-tag">1835</span> {According to L. 2445; note RMA.} ? from whom, with 99 other drawings by Rembrandt, £1,500, to William Esdaile (1758-1837), London, 1835</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1840</span> {According to L. 2445; note RMA.} ? his sale, London (Christie’s), 17 June 1840, no. 58 (‘Rembrandt’s portrait, a slight sketch; from Sir Joshua Reynolds’s collection’), £0.13.0, to the dealer Samuel Woodburn, London</li>
+<li class="context"><span class="seq">8.</span> <span class="type-tag">[collection]</span> collection Rudolph Hirsch Kann (1845-1905), Paris</li>
+<li class="context"><span class="seq">9.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1924</span> purchased from Edith Louise Ida Mendelssohn Bartholdy (1882-1969), Leipzig, by Dr Cornelis Hofstede de Groot (1863-1930), The Hague (L. 561), 1924</li>
+<li class="context"><span class="seq">10.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1931</span> {Hofstede de Groot notes, KB.} his sale, Leipzig (C.G. Boerner), 4 November 1931, no. 160 (‘Jugendliches Selbstbildnis mit krausem Haar und kleinem Schnurrbart. Brustbild, leicht nach links, den Beschauer anblickend. 127:95. Feder in Braun und Pinsel in Schwarz. Aufgezogen.’), 7,000 DM, to the dealer Van Diemen &amp; Co., Berlin</li>
+<li class="context"><span class="seq">11.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1932</span> collection Isaac de Bruijn (1872-1953) and his wife, Johanna Geertruida de Bruijn-van der Leeuw (1877-1960), Spiez and Muri, near Bern, by 1932</li>
+<li class="context"><span class="seq">12.</span> <span class="type-tag">[gift]</span> <span class="type-tag">1949</span> {According to Amsterdam 1932, no. 223.} by whom donated to the museum, 1949, but kept in usufruct</li>
+<li class="context"><span class="seq">13.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1960</span> transferred to the museum (L. 2228), 1960</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (0 events, 1 party)</div>
+      <div class="resolution-summary">12 of 13 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 3, "or his sale" → <code>sender</code></span>
+          </div>
+          <div class="reasoning">'or his sale' is an anaphoric reference to the previous owner (Sir Joshua Reynolds) who is consigning the artwork at this alternative sale. Following AAM convention, 'his sale' means the previous holder is the consignor/sender.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-4">
+  <div class="card-header">
+    <h2>RP-T-1930-22 — One of the Three Kings Adoring the Virgin and Child</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Rembrandt van Rijn</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[collection]</span> collection Graaf Jan Pieter van Suchtelen (1751-1836), St Petersburg (L. 2332)</li>
+<li class="highlight"><span class="seq">2.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1862</span> ? his sale, Paris (Delbergue-Cormont), 4 June 1862, no. 132 (‘P. Rembrandt. Tête d’homme, etc. Très-jolis dessins à la pierre noire et lavis. (Même collection [Collection du comte Suchtelen]).’)</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[collection]</span> collection Remigius Adrianus Haanen [van Haanen] (1812-94), Vienna</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[collection]</span> {Note RMA.} ? his student Hermine Lang-Laris (1842-1913), Munich</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[sale batch]</span> <span class="type-tag">1900</span> from whom purchased, with nine other drawings, by Dr Cornelis Hofstede de Groot (1863-1930), The Hague, 1900</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[gift]</span> <span class="type-tag">1906</span> {Hofstede de Groot notes, KB.} by whom donated to the museum, 1906, but kept in usufruct</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1930</span> transferred to the museum (L. 2228), 1930</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 2 parties)</div>
+      <div class="resolution-summary">6 of 7 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction missing_all_parties</span>
+            <span class="enrichment-target">3 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 2 → <code>sale</code></li><li>Event 2, "Graaf Jan Pieter van Suchtelen" → <code>sender</code></li><li>Event 2, "Delbergue-Cormont" → <code>agent</code></li></ul>
+          </div>
+          <div class="reasoning">In AAM convention, '? his sale' means the previous holder (event 1: Graaf Jan Pieter van Suchtelen, 1751–1836) is the seller/sender at this auction. The '?' indicates uncertainty about whether this is indeed his sale, but 'his' unambiguously refers back to Van Suchtelen as the most recent named holder. The catalogue entry even confirms provenance via 'Même collection [Collection du comte Suchtelen]'. Delbergue-Cormont is named in parentheses as the Paris auction house, making them the agent. No buyer is named in the text, so no receiver can be extracted. The confidence is slightly reduced by the '?' qualifier indicating scholarly uncertainty, and because Van Suchtelen died in 1836 so the seller at the 1862 sale would technically be his estate/heirs — but the text uses 'his sale', pointing to him as the nominal sender.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-5">
+  <div class="card-header">
+    <h2>RP-T-1901-A-4520(V) — Boy Sleeping</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">follower of Rembrandt van Rijn</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[collection]</span> collection Jan van Rijmsdyck (c. 1730-88/90), London (L. 2167)</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[collection]</span> ? collection William Esdaile (1758-1837), London</li>
+<li class="highlight"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1885</span> {According to the catalogue for the sale, Edward Cheney (1803-84, London), London (Sotheby's), 29 April (4 May) 1885 sqq., no. 865.} ? his sale and Edward Cheney (1803-84, London), London (Sotheby's), 29 April (4 May) 1885 sqq., no. 865 (‘A child asleep; from the Esdaile collection’), £14, to the dealer Alphonse Wyatt Thibaudeau (c. 1840-92), London</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1889</span> sale, Ritter Alfred von Franck (1808-84, Graz), Frankfurt-am-Main (F.A.C. Prestel), 4 December 1889 sqq., no. 187 (‘Schlafendes Kind. […] Meisterhaft mit der Feder skizzirt und leicht getuscht. Auf der Rückseite die höchst flüchtige mit Roth-tein gezeichnete Skizze einer im Bett ruhenden Figur’), 131 DM</li>
+<li class="highlight"><span class="seq">5.</span> <span class="type-tag">[collection]</span> collection William Pitcairn Knowles (1820-94), Rotterdam and Wiesbaden (L. 2643)</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1895</span> his sale, Amsterdam (F. Muller &amp; Co.), 25 (26) June 1895 sqq., no. 525, fl. 180, to the dealer C.F. Roos, Amsterdam, for the Vereniging Rembrandt</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1901</span> {Copy RMA; note RMA.} from whom, fl. 207, to the museum (L. 2228), 1901</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (2 events, 0 parties)</div>
+      <div class="resolution-summary">5 of 7 resolved deterministically, 2 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: missing receiver</span>
+            <span class="enrichment-target">Event 3 → <code>sale</code></span>
+          </div>
+          <div class="reasoning">The phrase 'to the dealer Alphonse Wyatt Thibaudeau' clearly indicates the buyer/receiver. The parser captured only Edward Cheney but missed Thibaudeau as the actual recipient. The structure indicates Edward Cheney's sale, with the lot purchased by Thibaudeau.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction: multi-city location</span>
+            <span class="enrichment-target">Event 5 → <code>collection</code></span>
+          </div>
+          <div class="reasoning">Raw text explicitly states 'Rotterdam and Wiesbaden' as the locations where William Pitcairn Knowles held the collection. The parser truncated to the first city only.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="card-6">
+  <div class="card-header">
+    <h2>RP-T-1984-119 — Lopende jongen met een stok</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">Rembrandt van Rijn</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1784</span> ? sale, Simon Fokke (1712-84, Amsterdam), Amsterdam (Ph. van der Schley et al.), 6 December 1784 sqq., Album O, no. 981 (‘Een dito [studie] met een wandelend Mannetje met een Stok, als dito [met de pen gewasschen].’), with no. 982, fl. 2, to the dealer Yver</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[collection]</span> collection Comte Antoine-François Andréossy (1761-1828), Paris and Montauban</li>
+<li class="highlight"><span class="seq">3.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1864</span> {According to an inscription on the drawing.} ? his sale, Paris (P. Navoit), 13 April 1864 sqq., possibly no. 346 (‘Une Feuille contenant plusieurs croquis à la plume’), 23 frs</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[collection]</span> collection Jean-François Gigoux (1806-94), Paris (L. 1164)</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1984</span> anonymous sale, Amsterdam (Christie’s), 26 November 1984, no. 26, as school of Rembrandt, fl. 15,000, to the museum (L. 2228)</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 2 parties)</div>
+      <div class="resolution-summary">4 of 5 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction missing_all_parties</span>
+            <span class="enrichment-target">3 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 3 → <code>sale</code></li><li>Event 3, "Comte Antoine-François Andréossy" → <code>sender</code></li><li>Event 3, "P. Navoit" → <code>agent</code></li></ul>
+          </div>
+          <div class="reasoning">The pronoun 'his' in '? his sale' refers back to the most recent named holder in the provenance chain, which is Comte Antoine-François Andréossy (1761-1828) from event 2. Per AAM convention, the consignor/seller of a named sale is the preceding holder. The auctioneer/agent is explicitly named as P. Navoit. No buyer ('to X') is named in the text, so no receiver can be extracted. The next holder in the chain is Jean-François Gigoux (event 4), but there is no explicit link ('to Gigoux') in this event's text, so assigning him as receiver here would be speculative. The '?' flag and 'possibly' qualifier introduce uncertainty about whether this sale is correctly identified, hence confidence is 0.82 rather than higher.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<a href="#" class="back-to-top">↑ Top</a>
+</body>
+</html>
