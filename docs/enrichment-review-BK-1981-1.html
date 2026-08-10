@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enrichment Review — 2 LLM-Assisted Results</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+  :root {
+    --bg: #f5f0e8; --surface: #fffdf8; --border: #d4c9b0;
+    --text: #2a2118; --text-muted: #7a6e5e; --accent: #8b4513;
+    --highlight: #fff3cd; --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: var(--accent); }
+  .subtitle { color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem; }
+
+  .summary { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .summary h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .summary-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .summary-item { font-family: var(--mono); font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; background: #eee8d8; }
+
+  .disclaimer { background: #fff3cd; border: 2px solid #e6c200; border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .disclaimer h2 { font-size: 1rem; margin-bottom: 0.5rem; color: #856404; }
+  .disclaimer p { font-size: 0.9rem; line-height: 1.6; color: #856404; }
+
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .toc h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .toc-grid { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .toc-link { font-family: var(--mono); font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; text-decoration: none; color: var(--accent); background: #f5ece0; }
+  .toc-link:hover { background: var(--highlight); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
+  .card-header { background: #eee8d8; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  .card-header h2 { font-size: 1rem; font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; font-family: var(--mono); }
+
+  .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 800px) { .card-body { grid-template-columns: 1fr; } .left { border-right: none !important; border-bottom: 1px solid var(--border); } }
+  .left, .right { padding: 1rem; }
+  .left { border-right: 1px solid var(--border); }
+
+  .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }
+
+  .event-list { list-style: none; font-size: 0.82rem; max-height: 400px; overflow-y: auto; }
+  .event-list li { padding: 4px 0; border-bottom: 1px solid #f0ebe0; }
+  .event-list li:last-child { border-bottom: none; }
+  .event-list .seq { color: var(--text-muted); font-family: var(--mono); font-size: 0.75rem; min-width: 1.5em; display: inline-block; }
+  .event-list .type-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--accent); }
+  .event-list .highlight { background: var(--highlight); padding: 2px 4px; border-radius: 3px; }
+  .event-list .context { opacity: 0.6; }
+
+  .resolution-summary { font-size: 0.8rem; color: var(--text-muted); font-family: var(--mono); margin-bottom: 0.75rem; padding: 4px 8px; background: #eee8d8; border-radius: 4px; }
+
+  .enrichment-item { margin-bottom: 1rem; }
+  .enrichment-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
+  .enrichment-target { font-size: 0.82rem; font-family: var(--mono); }
+  .enrichment-targets { list-style: none; margin: 0.25rem 0; font-size: 0.8rem; font-family: var(--mono); color: var(--text-muted); }
+  .enrichment-targets li { padding: 1px 0 1px 0.6rem; border-left: 2px solid var(--border); margin-bottom: 1px; }
+  .enrichment-targets code { color: var(--accent); }
+  .reasoning { font-family: var(--sans); font-style: italic; color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem; background: #faf8f2; border-radius: 4px; border-left: 3px solid var(--accent); }
+
+  .back-to-top { position: fixed; bottom: 1rem; right: 1rem; background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; opacity: 0.8; }
+  .back-to-top:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Enrichment Review — 2 LLM-Assisted Results</h1>
+<p class="subtitle">Query: <code>objectNumber=BK-1981-1</code>. Generated 2026-08-10.</p>
+
+<div class="disclaimer">
+  <h2>About this page</h2>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision. Methods include type/category classification, party disambiguation, validated deterministic rules, and structural corrections (location fixes, phantom event removal, event splitting).</p>
+  <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
+</div>
+
+<div class="summary">
+  <h2>Task description</h2>
+  <p style="font-size:0.9rem;line-height:1.6;">The provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
+</div>
+
+<div class="summary">
+  <h2>Distribution</h2>
+  <div class="summary-grid">
+    <span class="summary-item">Total events: 15</span>
+    <span class="summary-item">Deterministic: 14</span>
+    <span class="summary-item">LLM events: 1</span>
+    <span class="summary-item">LLM parties: 1</span>
+    <span class="summary-item">Artworks: 1</span>
+  </div>
+  <div class="summary-grid" style="margin-top:0.5rem">
+    <span class="summary-item"><span class="badge" style="background:#6b4c9a;color:white;font-size:0.7rem;vertical-align:middle">LLM classified</span> 2</span>
+  </div>
+</div>
+
+
+<div class="toc">
+  <h2>Jump to artwork</h2>
+  <div class="toc-grid">
+    <a class="toc-link" href="#card-0">BK-1981-1</a>
+  </div>
+</div>
+
+
+<div class="card" id="card-0">
+  <div class="card-header">
+    <h2>BK-1981-1 — Prayer Nut with Original Case and Pouch</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">workshop of Adam Dircksz</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[commission]</span> <span class="type-tag">1500</span> Commissioned by Evert Jansz van Bleiswijck (1460-1531) and his wife Erkenraad van Groenewegen (1466-1544), Delft, c. 1500-31</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[by_descent]</span> {As stated on the object (name and coats of arms). The subsequent provenance is probable, but unconfirmed, up to the time the prayer nut comes into the possession of Mr Dirk (‘Theodorus’) van Bleyswijck (1655-1700), and again unconfirmed, until it entered into possession of Marcellus Emants (1854-1923). For the Van Bleiswijck genealogy, see H.K. Nagtegaal, ‘Het Delftse geslacht Van Bleyswijck’, _Ons Voorgeslacht, Maandblad van de Zuidhollandse Vereniging voor Genealogie_ 63 (2008), no. 603, pp. 261-95.} ? their son Dirck Evertsz van Bleiswijck (1495-1563), Delft, married to Maria Jacobsdr Fijck</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[by_descent]</span> ? their son Adriaen Dircksz Fijck van Bleyswijck (1555-1612), Delft, married to Claasje Hugedr van der Dussen (1559-1631)</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[by_descent]</span> their son Dirk Adriaansz van Bleyswijck (1577-1631), Delft, married to Liesbeth Damensdr van der Graft (1583-1662)</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[by_descent]</span> their son Hugo Dircksz van Bleyswijck (1615-1663), married to Maria Adriaensdr Beijes (1617-1675), Schiedam</li>
+<li class="context"><span class="seq">6.</span> <span class="type-tag">[by_descent]</span> their son Mr Dirk (‘Theodorus’) van Bleyswijck (1655-1700), Schiedam, married to Emmerentia van der Staal (1652-1692)</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[collection]</span> {A late 17th-century annotation in The Hague, Hoge Raad van Adel, Familiearchief Van Slingelandt, inv. no. 438 (unpaged), states that Mr Dirk (‘Theodorus’) van Bleyswijck was the owner of the prayer nut: _in een houten appel daer de passie of het lyden van Christus / konstigh in is gesneeden en van onse voorouders / van vader tot soon altyt is gerecommandeert dat dese / appel altyt aen geslacht most blyven alsoo se seer langh / in het geslacht van Bleyswijck is geweest en op eenigen / honderden_ [jaren] _altyt is geaestimeert geweest sy is tegenwoor= / digh berustende onder den heer Diederik van Bleys= / wyck Burgemeester der Stadt Schiedam en / hoogheemraedt van Schielandt buyten op den appel / staen gesneden dese twee wapenen_ [a drawing of the two escutcheons follows].} ? Dr Abraham Cornelisz van Bleyswijck (1686-1761), Delft, married to Maria Gribius</li>
+<li class="context"><span class="seq">8.</span> <span class="type-tag">[by_descent]</span> <span class="type-tag">1772</span> ? their son Pieter Abrahamsz van Bleiswijk (1724-1790), pensionary in Delft and between 1772 and 1787 Grand pensionary of Holland in The Hague</li>
+<li class="highlight"><span class="seq">9.</span> <span class="type-tag">[collection]</span> <span class="type-tag">1772</span> {He was married to Geertruida Antonia van Bleiswijk, in what was to remain a childless union. Perhaps this explains how the prayer nut eventually left the family, thereafter entering the Emants family’s possession. In that case, the piece would have been handed down from Pieter Abrahamsz van Bleiswijk, as Leeuwenberg proffered, to Guiljelmus (‘Guilliam’) Balthasar Emants (1737-?), who succeeded the former as pensionary of Delft in 1772. J. Leeuwenberg with the assistance of W. Halsema-Kubes, _Beeldhouwkunst in het Rijksmuseum_, coll. cat. Amsterdam 1973, p. 127.} ? Guiljelmus (‘Guilliam’) Balthasar Emants (1737-?), who succeeded Pieter Abrahamsz van Bleiswijck as pensionary of Delft in 1772</li>
+<li class="context"><span class="seq">10.</span> <span class="type-tag">[by_descent]</span> {J. Leeuwenberg with the assistance of W. Halsema-Kubes, _Beeldhouwkunst in het Rijksmuseum_, coll. cat. Amsterdam 1973, p. 127.} ? his son Marcellus Emants (1778-1854), The Hague, married to Henriette Isabella van der Feen (1786-1864)</li>
+<li class="context"><span class="seq">11.</span> <span class="type-tag">[by_descent]</span> ? their son Guilliam Balthasar Emants (1818-1870), The Hague, married to Anna Elisabeth Petronella Verwey Mejan (1824-1908)</li>
+<li class="context"><span class="seq">12.</span> <span class="type-tag">[by_descent]</span> their son, the author Marcellus Emants (1848-1923), Baden (Switzerland), married to Jenny Emma Gertrude Kühn (1877-1956)</li>
+<li class="context"><span class="seq">13.</span> <span class="type-tag">[by_descent]</span> <span class="type-tag">1956</span> their daughter Eva Clara Jenny (‘Lilith’) Emants (1909-1985), The Hague, 1956</li>
+<li class="context"><span class="seq">14.</span> <span class="type-tag">[loan]</span> <span class="type-tag">1970</span> from whom, on loan to the museum, 1959-81</li>
+<li class="context"><span class="seq">15.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1981</span> from whom,{According to the museum’s inventory book, acquired from ‘the heirs of Marcellus Emants in Velp’.} fl. 55,000, to the museum, 1981</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 1 party)</div>
+      <div class="resolution-summary">14 of 15 resolved deterministically, 1 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 9 → <code>collection</code></span>
+          </div>
+          <div class="reasoning">Despite the extensive citation discussing the transfer mechanism, the core event follows AAM bare-name convention: '? Guiljelmus Balthasar Emants (1737-?), who succeeded...'. The citation provides scholarly context about how the piece likely moved from the van Bleiswijck family to the Emants family, but the actual provenance statement is a standard ownership notation.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM classified</span>
+            <span class="enrichment-target">Event 9, "Guiljelmus (‘Guilliam’) Balthasar Emants (1737-?)" → <code>receiver</code></span>
+          </div>
+          <div class="reasoning">AAM bare-name convention: named party with biographical details is the holder/owner. The provenance text states he 'succeeded Pieter Abrahamsz van Bleiswijck as pensionary of Delft in 1772' and the citation discusses how the artwork 'would have been handed down from Pieter Abrahamsz van Bleiswijk...to Guiljelmus Balthasar Emants', making him the receiver.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<a href="#" class="back-to-top">↑ Top</a>
+</body>
+</html>
