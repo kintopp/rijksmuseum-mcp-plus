@@ -164,7 +164,7 @@
 
 ### 12. Reading Inscriptions and Examining Details with AI Vision
 
-*Open Utamaro's "Waitress at the Matsu Higashi House" (RP-P-1956-605) and read the Japanese text on the print — the catalogue has no transcribed inscriptions for this work. Highlight the text areas you find and tell me if you notice anything missing that you'd expect on a print of this period.*
+*Open Utamaro's "Waitress at the Matsu Higashi House" (RP-P-1956-605) and read the Japanese text I've highlighted on the print — the catalogue has no transcribed inscriptions for this work. Tell me if you notice anything missing that you'd expect on a print of this period.*
 
 **How the tools enable it:**
 - `get_artwork_details` confirms the inscriptions field is empty — the catalogue has not transcribed the Japanese text
