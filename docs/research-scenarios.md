@@ -18,7 +18,7 @@
 
 ### 1. Mapping an Artist's Output Across Media
 
-*What is the actual distribution of Rembrandt's works in the Rijksmuseum across painting, printmaking, and drawing — and how does this challenge popular perceptions of him as primarily a painter?*
+*What is the actual distribution of Rembrandt's works in the Rijksmuseum across painting, printmaking, and drawing — and how does this challenge popular perceptions of him as primarily a painter?* [Demo](https://claude.ai/share/e2070805-94a5-4e35-9aea-24b6274b641d)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `creator: "Rembrandt"` returns the full distribution across all media in a single call
@@ -29,7 +29,7 @@
 
 ### 2. Material Culture Beyond the Canon
 
-*What is the scope of the Rijksmuseum's non-European holdings? How are Indonesian, Japanese, Chinese, and Indian objects distributed across media, and where were they produced?*
+*What is the scope of the Rijksmuseum's non-European holdings? How are Indonesian, Japanese, Chinese, and Indian objects distributed across media, and where were they produced?* [Demo](https://claude.ai/share/6b70252c-7cd0-442f-8c6a-799b4697fd35)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `productionPlace: "Japan"` returns the full media distribution for Japanese-produced works in a single call — repeat for `"China"`, `"Java"`, `"India"`
@@ -41,7 +41,7 @@
 
 ### 3. Tracking the Adoption of Artistic Techniques
 
-*When did etching overtake engraving as the dominant printmaking technique in the Netherlands, and how do lesser-known techniques — mezzotint, aquatint, woodcut — appear in the Rijksmuseum collection over time?*
+*When did etching overtake engraving as the dominant printmaking technique in the Netherlands, and how do lesser-known techniques — mezzotint, aquatint, woodcut — appear in the Rijksmuseum collection over time?* [Demo](https://claude.ai/share/7e811300-8812-4811-a3ef-fe26353e5ff1)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "decade"`, `type: "print"`, `technique: "engraving"` returns the full chronological distribution of engravings — repeat with `technique: "etching"` to compare the two curves
@@ -58,7 +58,7 @@
 
 ### 4. Mapping the Visual Rhetoric of the Stadholders
 
-*How were the successive Princes of Orange visually represented across different media, and can we trace shifts in propaganda strategy from Maurice to William III?*
+*How were the successive Princes of Orange visually represented across different media, and can we trace shifts in propaganda strategy from Maurice to William III?* [Demo](https://claude.ai/share/74fb38be-1678-4d5f-a9bd-3aa47dc6c75a)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `depictedPerson: "Maurice"` returns the full media distribution in a single call — repeat for `"Frederick Henry"`, `"William II"`, `"William III"`
@@ -70,7 +70,7 @@
 
 ### 5. Production Geography and the Network of Printmaking Cities
 
-*Which cities dominate the Rijksmuseum's printmaking holdings, and how do the principal printmakers differ between Haarlem, Amsterdam, Leiden, and Antwerp?*
+*Which cities dominate the Rijksmuseum's printmaking holdings, and how do the principal printmakers differ between Haarlem, Amsterdam, Leiden, and Antwerp?* [Demo](https://claude.ai/share/ef894d91-86a5-4e5f-8680-b04fa9438f03)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "productionPlace"`, `type: "print"` returns the top print-producing cities ranked by count
@@ -83,7 +83,7 @@
 
 ### 6. Iconographic Traditions Across Media
 
-*How does the iconography of "vanitas" function differently in painting versus printmaking? Do the same symbolic conventions — skulls, hourglasses, extinguished candles, musical instruments — appear with equal frequency in both media?*
+*How does the iconography of "vanitas" function differently in painting versus printmaking? Do the same symbolic conventions — skulls, hourglasses, extinguished candles, musical instruments — appear with equal frequency in both media?* [Demo](https://claude.ai/share/68c0bfed-c2d3-4c17-b07c-89babf4fec43)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `subject: "vanitas"` to compare the distribution across painting, print, and drawing in a single call
@@ -102,7 +102,7 @@
 
 ### 7. Dimensions as Evidence for Workshop Practice
 
-*Were there standard panel sizes used in Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?*
+*Were there standard panel sizes used in Dutch workshops? Can we identify clusters of dimensions that suggest pre-prepared supports from panel makers?* [Demo](https://claude.ai/share/c7124784-4df9-447b-ab35-99f347bf292a)
 
 **How the tools enable it:**
 - `search_artwork` with `type: "painting"`, `material: "panel"`, and dimension ranges in centimetres (e.g. `heightRange: "40-50"`, `widthRange: "30-40"`) to find panels of a specific size cluster
@@ -113,7 +113,7 @@
 
 ### 8. Credit Lines and Acquisition Context
 
-*How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, or state allocation, and when?*
+*How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, or state allocation, and when?* [Demo](https://claude.ai/share/2a88ba35-52cd-4e87-998e-465b9f48d551), [LLM Enrichment Review](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-rembrandt.html)
 
 **How the tools enable it:**
 - `search_provenance` with `creator: "Rembrandt"` for the full parsed ownership chain of each work — filter by `transferType: "sale"` or `"bequest"` to trace specific acquisition modes, or sort by `sortBy: "price"` to rank by transaction value. This is where creator scoping holds, so make it the primary call
@@ -125,7 +125,7 @@
 
 ### 9. The Most Prolific Women Artists
 
-*Who are the most prolific women artists in the Rijksmuseum's collection, when were they active, and how do I move from a name to the works themselves?*
+*Who are the most prolific women artists in the Rijksmuseum's collection, when were they active, and how do I move from a name to the works themselves?* [Demo](https://claude.ai/share/074cc0fd-89a0-4438-af7d-1aa194add1d3)
 
 **How the tools enable it:**
 - `search_persons` with `gender: "female"` and `hasArtworks: true` returns every woman with attributed works — over 2,200 of them — ranked by output, led by Jeanne Bieruma Oosting (1,125 works), Eva Pennink-Boelen (766), and Maria Vos (557)
@@ -142,7 +142,7 @@
 
 ### 10. Technical Art History at the Brushstroke Level
 
-*What materials, technique, and support were used in Rembrandt's "The Night Watch", what are its exact dimensions, and what inscriptions does it carry? Open the high-resolution image for close examination of the paint surface.*
+*What materials, technique, and support were used in Rembrandt's "The Night Watch", what are its exact dimensions, and what inscriptions does it carry? Open the high-resolution image for close examination of the paint surface.* [Demo](https://claude.ai/share/836828c5-6882-463f-9261-714427258c0e)
 
 **How the tools enable it:**
 - `get_artwork_details` with `objectNumber: "SK-C-5"` returns materials, technique statement, structured dimensions, and inscriptions
@@ -153,7 +153,7 @@
 
 ### 11. Disambiguating an Artist Dynasty
 
-*The van Mieris family ran a Leiden painting workshop across three generations, several of them sharing the name Frans. Which van Mierises does the Rijksmuseum hold, how do I tell them apart, and can I compare the founder's fijnschilder touch with a son's at high magnification?*
+*The van Mieris family ran a Leiden painting workshop across three generations, several of them sharing the name Frans. Which van Mierises does the Rijksmuseum hold, how do I tell them apart, and can I compare the founder's fijnschilder touch with a son's at high magnification?* [Demo](https://claude.ai/share/fa85fd25-fc01-4f6e-bf4a-3f3c2ed0bad7)
 
 **How the tools enable it:**
 - `search_persons` with `name: "van Mieris"` returns the family disambiguated by life dates — Frans the Elder (1635–1681), his sons Jan (1660–1690) and Willem (1662–1747), and grandson Frans the Younger (1689–1763) — each with its own work count
@@ -164,7 +164,7 @@
 
 ### 12. Reading Inscriptions and Examining Details with AI Vision
 
-*Open Utamaro's "Waitress at the Matsu Higashi House" (RP-P-1956-605) and read the Japanese text I've highlighted on the print — the catalogue has no transcribed inscriptions for this work. Tell me if you notice anything missing that you'd expect on a print of this period.*
+*Open Utamaro's "Waitress at the Matsu Higashi House" (RP-P-1956-605) and read the Japanese text on the print — the catalogue has no transcribed inscriptions for this work. Tell me if you notice anything missing that you'd expect on a print of this period.* [Demo](https://claude.ai/share/600dc216-d9e9-463a-b384-1afc80268534)
 
 **How the tools enable it:**
 - `get_artwork_details` confirms the inscriptions field is empty — the catalogue has not transcribed the Japanese text
@@ -178,7 +178,7 @@
 
 ### 13. Reproductive Prints and Their Painted Sources
 
-*How faithfully do reproductive prints translate the compositions of their painted sources? Find prints made "after" a specific painting and compare the print with the original at high magnification.*
+*How faithfully do reproductive prints translate the compositions of their painted sources? Find prints made "after" a specific painting and compare the print with the original at high magnification.* [Demo](https://claude.ai/share/ddb2cdff-c1a1-42a6-86bc-5ca54519e224)
 
 **How the tools enable it:**
 - `search_artwork` with `productionRole: "after painting by"` and `creator: "Rembrandt"` to find reproductive prints based on Rembrandt's compositions
@@ -196,7 +196,7 @@
 
 ### 14. Tracing Career Evolution Through Subject and Place
 
-*Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?*
+*Jacob van Ruisdael's landscapes are said to evolve from flat dune scenes in his Haarlem years to dramatic waterfalls and panoramic views after his move to Amsterdam. Does the timeline of his works in the Rijksmuseum support this narrative?* [Demo](https://claude.ai/share/4285e365-9da9-4eff-8f4f-8f3f4f760d0a)
 
 **How the tools enable it:**
 - `search_artwork` with `creator: "Jacob van Ruisdael"`, then sort results by date
@@ -207,7 +207,7 @@
 
 ### 15. Medium Shifts Within a Career
 
-*George Hendrik Breitner worked as a painter, draughtsman, and photographer. Does the timeline of his works in the Rijksmuseum reveal a clear sequence — drawing first, then painting, then photography — or did he work across media simultaneously?*
+*George Hendrik Breitner worked as a painter, draughtsman, and photographer. Does the timeline of his works in the Rijksmuseum reveal a clear sequence — drawing first, then painting, then photography — or did he work across media simultaneously?* [Demo](https://claude.ai/share/106c8cee-4e3a-4f3a-8848-cd5864579dec)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "type"` and `creator: "Breitner"` confirms the multi-media practice at a glance — some 700 drawings, 160 photographs, and 50 paintings, alongside prints and studies
@@ -225,7 +225,7 @@
 
 ### 16. Reconstructing Past Exhibitions
 
-*What objects were included in Rijksmuseum exhibitions related to Rembrandt, and how did the curatorial selection construct a narrative?*
+*What objects were included in Rijksmuseum exhibitions related to Rembrandt, and how did the curatorial selection construct a narrative?* [Demo](https://claude.ai/share/053218fd-858e-4fee-a756-060e73138672)
 
 **How the tools enable it:**
 - `list_curated_sets` with a keyword filter to find the relevant set
@@ -236,7 +236,7 @@
 
 ### 17. Finding Thematic Connections Curators Have Already Made
 
-*Has the Rijksmuseum curated any groupings related to Dutch maritime trade, and what objects did they consider central to that story?*
+*Has the Rijksmuseum curated any groupings related to Dutch maritime trade, and what objects did they consider central to that story?* [Demo](https://claude.ai/share/2982b925-08d0-4231-b813-dbd458e9948b)
 
 **How the tools enable it:**
 - `list_curated_sets` with `query: "maritime"` or `query: "trade"` or `query: "VOC"`
@@ -246,7 +246,7 @@
 
 ### 18. Assessing Collection Depth for Grant Applications
 
-*How many Japanese prints does the Rijksmuseum hold, what curated sets relate to Japanese art, what date range do the holdings cover, and which artists are best represented?*
+*How many Japanese prints does the Rijksmuseum hold, what curated sets relate to Japanese art, what date range do the holdings cover, and which artists are best represented?* [Demo](https://claude.ai/share/9d384084-c67a-4987-9891-8dfa8a51d14e)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "creator"`, `productionPlace: "Japan"`, `type: "print"` to identify the most prominent printmakers and get the total count
@@ -264,13 +264,14 @@
 
 ### 19. Tracking New Acquisitions in a Research Area
 
-*Has the Rijksmuseum added any new 17th-century paintings to its collection in the past six months? If so, who are the artists and what are the subjects?*
+*Has the Rijksmuseum added any new 17th-century paintings to its collection in the past six months? If so, who are the artists and what are the subjects?* [Failure](https://claude.ai/share/3636ff90-e7d0-4cb6-902a-5f0b35d655ed) - the Rijksmuseum has changed how it represents changes to the collection. The `get_recent_changes` tool will need to be updated
 
+```
 **How the tools enable it:**
 - `get_recent_changes` with a date range covering the last six months
 - Use `identifiersOnly: true` for a fast scan of recently changed object numbers
 - `get_artwork_details` on results to filter for paintings from the 1600s and examine creator, date, and description
-
+```
 **Why it matters:** New acquisitions can fill gaps in the evidence or provide crucial comparisons for ongoing research. A date-scoped query surfaces recently added or modified records without requiring the researcher to monitor the museum's website.
 
 ---
@@ -281,7 +282,7 @@
 
 ### 20. Discovering Thematic Connections Beyond Formal Cataloguing
 
-*Which artworks in the Rijksmuseum engage with the theme of cultural exchange between Europe and Asia — not just objects "from" Asia or "depicting" Asia, but works where the mixing of cultures is the subject?*
+*Which artworks in the Rijksmuseum engage with the theme of cultural exchange between Europe and Asia — not just objects "from" Asia or "depicting" Asia, but works where the mixing of cultures is the subject?* [Demo](https://claude.ai/share/8282e02a-b787-45f1-adda-8c823a4ce3d9)
 
 **How the tools enable it:**
 - `semantic_search` with `query: "cultural exchange between East and West"` — returns artworks ranked by how closely their catalogued text relates to this concept
@@ -293,7 +294,7 @@
 
 ### 21. Atmospheric and Emotional Concepts in Art
 
-*Can we find artworks in the Rijksmuseum that evoke a sense of solitude or isolation — a single figure in an empty landscape, a lone ship on a vast sea, an abandoned building?*
+*Can we find artworks in the Rijksmuseum that evoke a sense of solitude or isolation — a single figure in an empty landscape, a lone ship on a vast sea, an abandoned building?* [Demo](https://claude.ai/share/96eff07a-d835-4f91-a2e6-6da11f91536f)
 
 **How the tools enable it:**
 - `semantic_search` with `query: "loneliness and isolation in a vast empty space"`
@@ -305,7 +306,7 @@
 
 ### 22. Cross-Language Conceptual Search
 
-*Ich suche Blumenstillleben — Gemälde von Blumensträußen in einer Vase, besonders aus dem 17. Jahrhundert. Welche Werke hat das Rijksmuseum?*
+*Ich suche Blumenstillleben — Gemälde von Blumensträußen in einer Vase, besonders aus dem 17. Jahrhundert. Welche Werke hat das Rijksmuseum?* [Demo](https://claude.ai/share/5cdca7c5-c37b-4c10-8a0e-1ff5889f6f43)
 
 **How the tools enable it:**
 - `semantic_search` with `query: "Blumenstrauß in einer Vase"` — the multilingual embedding model handles the German query against Dutch and English catalogue text
@@ -319,11 +320,18 @@
 
 ## Provenance Research
 
-`search_provenance` exposes parsed ownership chains for ~48,000 artworks — structured events with parties, transfer types, dates, locations, prices, and provenance gaps. Two data layers are available: raw events (Layer 1) and interpreted ownership periods with durations (Layer 2). `collection_stats` provides aggregate provenance distributions (transfer type, decade, location, party) for quantitative analysis.
+`search_provenance` exposes parsed ownership chains for ~48,000 artworks — structured events with parties, transfer types, dates, locations, prices, and provenance gaps. Two data layers are available: raw events (Layer 1) and interpreted ownership periods with durations (Layer 2). `collection_stats` provides aggregate provenance distributions (transfer type, decade, location, party) for quantitative analysis. N.B. The provenance results are made possible by an [experimental AAM parser](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-parser-visualization.html) that enables structured, [CMOA/PLOD-aligned queries](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html).
 
 ### 23. Wartime Transfers and Provenance Gaps
 
-*Find artworks that changed hands between 1933 and 1945 through confiscation or restitution, and show me their full ownership chains. Which ones have gaps in their provenance during this period?*
+*Find artworks that changed hands between 1933 and 1945 through confiscation or restitution, and show me their full ownership chains. Which ones have gaps in their provenance during this period?* [Demo](https://claude.ai/share/ae478fcf-f4a0-4cb3-ac1d-de00fcb9bbcf) - see also the links to the related review pages below:
+
+- [LLM Enrichment Review #1](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-confiscations-1933-1945.html)
+- [LLM Enrichment Review #2](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-restitutions-1933-1945.html)
+- [LLM Enrichment Review #3](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-restitutions-all.html)
+- [LLM Enrichment Review #4](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-BK-17040-A.html)
+- [LLM Enrichment Review #5](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-RP-T-1980-26.html)
+- [LLM Enrichment Review #6](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-RP-P-2023-55.html)
 
 **How the tools enable it:**
 - `search_provenance` with `transferType: "confiscation"`, `dateFrom: 1933`, `dateTo: 1945` to find wartime confiscations — repeat with `transferType: "restitution"` for post-war returns
@@ -336,7 +344,7 @@
 
 ### 24. Generational Ownership and Collection Dispersal
 
-*Find artworks that passed through four or more generations by descent within a single family, then were sold at auction. How long did these family collections typically survive before dispersal?*
+*Find artworks that passed through four or more generations by descent within a single family, then were sold at auction. How long did these family collections typically survive before dispersal?* [Demo](https://claude.ai/share/b5f71fad-fc05-46b0-a87d-1804f209d2f6), [LLM Enrichment Review](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-BK-1981-1.html)
 
 **How the tools enable it:**
 - `search_provenance` with `layer: "periods"`, `acquisitionMethod: "by_descent"`, `minDuration: 80`, `sortBy: "duration"`, `sortOrder: "desc"` to find the longest-held family collections (80+ years approximates four generations)
@@ -349,7 +357,11 @@
 
 ### 25. Art Dealers as Intermediaries
 
-*Which art dealers appear as both buyers and sellers in the Rijksmuseum provenance records? For each, show me what they sold to the museum versus what they bought from private collectors, and the price ranges involved.*
+*Which art dealers appear as both buyers and sellers in the Rijksmuseum provenance records? For each, show me what they sold to the museum versus what they bought from private collectors, and the price ranges involved.* [Demo](https://claude.ai/share/106002f1-60e1-4860-a954-576753821096) - see also the links to the related review pages below:
+
+- [LLM Enrichment Review #1](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-frederik-muller.html)
+- [LLM Enrichment Review #2](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-frederik-muller-BK-1958-2-A.html)
+- [LLM Enrichment Review #3](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-p-brandt.html)
 
 **How the tools enable it:**
 - `collection_stats` with `dimension: "party"`, `hasProvenance: true` to identify the most frequently appearing parties across all provenance records
@@ -369,7 +381,7 @@ The basic text filters of the `search_artwork` tool — `title`, `description`, 
 
 ### 26. The Beeldenstorm in Two Languages
 
-*Where in the Rijksmuseum's collection does the Beeldenstorm surface in the catalogue's own words? A cataloguer may have named it "beeldenstorm" in the Dutch object description, or a curator may have framed it in English as "iconoclasm" in the wall text. Find every work the catalogue text ties to the event, in either language.*
+*Where in the Rijksmuseum's collection does the Beeldenstorm surface in the catalogue's own words? A cataloguer may have named it "beeldenstorm" in the Dutch object description, or a curator may have framed it in English as "iconoclasm" in the wall text. Find every work the catalogue text ties to the event, in either language.* [Demo](https://claude.ai/share/bf3f534f-4b26-4f3b-8dcb-a82f97e9922a)
 
 **How the tools enable it:**
 - A `textQuery` with cross-column *either/or* logic — match `"beeldenstorm"` in the Dutch `description` **OR** `"iconoclasm"`/`"iconoclastic"` in the English `curatorialNarrative`
@@ -380,7 +392,7 @@ The basic text filters of the `search_artwork` tool — `title`, `description`, 
 
 ### 27. Reuniting Pendant Portraits
 
-*Dutch portraits were often painted as pendants — companion pieces made and hung as a pair, the husband on one panel and his wife on its mate — but such pairs were frequently split between heirs, dealers, and collections. Which works does the Rijksmuseum catalogue as pendant portraits, and do the descriptions name the other half?*
+*Dutch portraits were often painted as pendants — companion pieces made and hung as a pair, the husband on one panel and his wife on its mate — but such pairs were frequently split between heirs, dealers, and collections. Which works does the Rijksmuseum catalogue as pendant portraits, and do the descriptions name the other half?* [Demo](https://claude.ai/share/5d3f5e7e-f2a5-4914-88cf-bc492ebc203c)
 
 **How the tools enable it:**
 - A `textQuery` proximity clause requiring the Dutch terms `pendant` and `portret` within a few words of each other in the `description`
@@ -391,7 +403,7 @@ The basic text filters of the `search_artwork` tool — `title`, `description`, 
 
 ### 28. The Division of Labour on the Printed Plate
 
-*Dutch and Flemish prints record their production chain directly on the plate, in Latin: who designed the composition (`invenit`/`inventor`), who engraved it (`sculpsit`/`fecit`/`incidit`), and who published it (`excudit`). Find prints whose inscription documents all three — and list those cases where one person did two jobs, such as the engraver who was also his own publisher.*
+*Dutch and Flemish prints record their production chain directly on the plate, in Latin: who designed the composition (`invenit`/`inventor`), who engraved it (`sculpsit`/`fecit`/`incidit`), and who published it (`excudit`). Find prints whose inscription documents all three — and list those cases where one person did two jobs, such as the engraver who was also his own publisher.* [Demo](https://claude.ai/share/151ce7d1-2374-4788-9910-263e9b773d54)
 
 **How the tools enable it:**
 - A `textQuery` over the `inscription` field combining prefix matching (to absorb the abbreviated and agent-noun variants) with within-field OR and a multi-clause AND
@@ -410,7 +422,7 @@ The `search_inscriptions` tool sorts this field into recognised kinds of mark �
 
 ### 29. Provenance Written on the Sheet: Collectors' Marks as Physical Evidence
 
-*The collector François Gérard Waller (1867–1934) bequeathed his prints to the Rijksprentenkabinet and endowed a fund that still buys for it today. His own sheets bear his collector's mark — Lugt 2760 — stamped on the verso. Reconstruct what survives of Waller's personal collection from that mark, and check whether the museum's documentary provenance actually records his ownership or whether the stamp is the only trace.*
+*The collector François Gérard Waller (1867–1934) bequeathed his prints to the Rijksprentenkabinet and endowed a fund that still buys for it today. His own sheets bear his collector's mark — Lugt 2760 — stamped on the verso. Reconstruct what survives of Waller's personal collection from that mark, and check whether the museum's documentary provenance actually records his ownership or whether the stamp is the only trace.* [Demo](https://claude.ai/share/c4e8cea3-c6fe-407c-941e-c64d4aea23cd), [LLM Enrichment Review](https://kintopp.github.io/rijksmuseum-mcp-plus/enrichment-review-waller.html)
 
 **How the tools enable it:**
 - `search_inscriptions` with `collectorMark: "Lugt 2760"` (or just `"2760"`) returns the sheets bearing Waller's stamp — on the order of 33,000 of them — each `matchedInscriptions` entry confirming the mark sits on the `verso`, `stamped`: physical evidence located on the object, not inferred from a catalogue note
@@ -423,7 +435,7 @@ The `search_inscriptions` tool sorts this field into recognised kinds of mark �
 
 ### 30. Dating and Attributing Silver by Its Hallmarks
 
-*Wrought silver seldom carries a signature, but it is punched with a system of marks — a town mark, a date letter, a maker's mark, an assay mark for the alloy — that together fix where, when, and by whom it was made. Which objects in the Rijksmuseum carry these hallmarks, and can the maker's marks be tied to named silversmiths and cities?*
+*Wrought silver seldom carries a signature, but it is punched with a system of marks — a town mark, a date letter, a maker's mark, an assay mark for the alloy — that together fix where, when, and by whom it was made. Which objects in the Rijksmuseum carry these hallmarks, and can the maker's marks be tied to named silversmiths and cities?* [Demo](https://claude.ai/share/eb395410-a5de-455a-ae26-18092b45085c)
 
 **How the tools enable it:**
 - `search_inscriptions` with `inscriptionType: ["maker's mark", "town mark", "date letter"]` (OR-combined) gathers the hallmarked objects — on the order of 1,600 of them — each result listing the marks it bears: a `town mark` reading `"Leiden"`, a `maker's mark` such as `"VR in rechthoek"`, *struck* or *cast* rather than written
@@ -435,7 +447,7 @@ The `search_inscriptions` tool sorts this field into recognised kinds of mark �
 
 ### 31. The Artist's Mark Beneath the Owners' Stamps
 
-*Across the Rijksmuseum's prints and drawings, how many works did the artist sign by hand on the front with a full signature, and how many carry only a monogram of initials? Show a sample of each — and be sure these are the artist's own marks, not the ownership stamps that make up most of the inscription field.*
+*Across the Rijksmuseum's prints and drawings, how many works did the artist sign by hand on the front with a full signature, and how many carry only a monogram of initials? Show a sample of each — and be sure these are the artist's own marks, not the ownership stamps that make up most of the inscription field.* [Demo](https://claude.ai/share/05c702b6-4d19-4c4d-a7e1-e19e500514a9)
 
 **How the tools enable it:**
 - `search_inscriptions` with `inscriptionType: "signature"`, `placement: "recto"`, `technique: "handwritten"`, and `excludeCollectorMarkOnly: true` isolates works the artist signed by hand on the front — roughly 8,800 of them — stripping away the verso ownership boilerplate that makes up most of the field's bulk
@@ -453,7 +465,7 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 
 ### 32. Reconstructing an Exhibition Beyond the Museum's Own Sets
 
-*I'm trying to reconstruct which Rijksmuseum objects appeared in the 1936 Tentoonstelling van Aziatische Kunst — the landmark loan exhibition that gathered Asian art from Dutch public and private collections — a show that is not in the list of the museum's own curated sets. Start from a work that was likely in it, find the exhibition catalogue listed in that work's bibliography, then give me every Rijksmuseum object whose catalogue cites the same publication. Show me the checklist you assemble.* <draft>
+*I'm trying to reconstruct which Rijksmuseum objects appeared in the 1936 Tentoonstelling van Aziatische Kunst — the landmark loan exhibition that gathered Asian art from Dutch public and private collections — a show that is not in the list of the museum's own curated sets. Start from a work that was likely in it, find the exhibition catalogue listed in that work's bibliography, then give me every Rijksmuseum object whose catalogue cites the same publication.* [Demo](https://claude.ai/share/65872b37-2745-4712-82e4-f99b923f31c8)
 
 **How the tools enable it:**
 - Start from one object you know was shown — `search_artwork` for a candidate, then `get_artwork_bibliography` to read its references and find the exhibition catalogue entry; copy its `publicationUri`
@@ -461,29 +473,29 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 - `get_artwork_details` and `get_artwork_image` on each result to study the selection and how the works relate
 - Cross-check with `list_curated_sets` to confirm the exhibition is *not* already a Rijksmuseum grouping — establishing that the bibliographic route reaches what the curated-set tools cannot
 
-**Why it matters:** A show staged before the museum began building its digital groupings leaves no curated set to call up — the only trace it leaves behind is the citation each exhibited object's record still carries to that catalogue. Reading those citations in reverse rebuilds the checklist from the objects up, recovering the museum's contribution to a historical exhibition that no stored grouping preserves.
+**Why it matters:** A show staged before the museum began building its digital groupings leaves no curated set to call up. But we do have the citation each exhibited object's record still carries to that catalogue. Reading those citations in reverse rebuilds the checklist from the objects up, recovering the museum's contribution to a historical exhibition that no stored grouping preserves.
 
 ### 33. The Footprint of a Reference Catalogue
 
-*Hollstein's "Dutch and Flemish Etchings, Engravings and Woodcuts" is the standard catalogue of early Netherlandish printmaking, and a Rijksmuseum print's entry routinely cites its Hollstein volume and number. Take a print you know Hollstein covers, find the exact volume in its bibliography, then show me every Rijksmuseum print that cites that same volume. Then do the same for a single artist's catalogue raisonné, and tell me how much of that artist's work the collection treats as part of the recognised corpus.* <draft>
+*For early Netherlandish printmaking, the recognised corpus of an artist's prints is what Hollstein's Dutch and Flemish Etchings, Engravings and Woodcuts records, and a Rijksmuseum print's entry routinely cites its Hollstein volume and number. I want to gauge the collection's coverage of that literature. Start from any print citing Hollstein, identify the exact volume from its bibliography, and show me every print in the collection catalogued against it — the volume's full footprint. Then narrow the question to a single artist: using a catalogue raisonné, how much of that artist's recognised oeuvre does the collection hold?* [Demo](https://claude.ai/share/8fc69011-ff21-4b43-aa04-2ae5f95e262d)
 
 **How the tools enable it:**
-- Identify the reference: `get_artwork_bibliography` on a print you know it covers, then copy the volume's `publicationUri` from the results (the entry also carries `worldcatUri` and `libraryUrl`, so you can confirm exactly which publication you have)
+- Identify the reference: `get_artwork_bibliography` on the anchor print, then copy the volume's `publicationUri` from the results (the entry also carries `worldcatUri` and `libraryUrl`, so you can confirm exactly which publication you have)
 - `find_artworks_citing_publication` with that URI returns the reference's full footprint in the collection — e.g. the Hollstein *Heer–Kuyl* volume resolves to roughly 3,200 prints, *Boekhorst–Brueghel* to some 2,500; a single-artist catalogue raisonné such as Van Eeghen & Van der Kellen's *Het werk van Jan en Casper Luyken* to some 6,100 works
 - `get_artwork_details` on the results to triage by creator, date, or technique; and because the `publicationUri` carries the same identifier the museum's own library catalogue uses, the publication's full catalogue record is only a step away
-- The returned works are *bibliographically coupled* — connected by shared scholarship rather than by subject, creator, or visual similarity — so the set reads as the corpus the authority recognises within the collection
+- The returned works are *bibliographically coupled* — connected by shared scholarship rather than by subject, creator, or visual similarity — and the two halves of the task surface the two shapes such a set can take: a cross-oeuvre slice of a genre and technique, and a single artist's recognised corpus
 
-**Why it matters:** A catalogue raisonné or standard catalogue is the scholarly backbone for an artist, a genre, or a technique, and the print collection is catalogued densely against exactly these works — the references cited most often across the collection are Hollstein, Leblanc's *Manuel de l'amateur d'estampes*, the *Inventaire du fonds français*, and Frederik Muller's portrait catalogues, each binding together thousands of sheets. Turning one of these references back into the set of works that cite it converts a bibliographic shorthand into a finding aid and points to where the museum's impressions are dense and where they are missing.
+**Why it matters:** Turning a standard reference back into the set of works that cite it converts a bibliographic shorthand into a finding aid, showing where the museum's impressions are dense and where they are missing. The print collection is catalogued heavily against exactly these works — Hollstein, Leblanc's Manuel de l'amateur d'estampes, the Inventaire du fonds français, and Frederik Muller's portrait catalogues each bind together thousands of sheets.
 
 ---
 
 ## Conservation and Technical Examination
 
-`get_conservation_history` gathers, for a single artwork, the record of its physical life that a museum keeps but rarely publishes: the **technical examinations** it has undergone — X-radiography, infrared reflectography, dendrochronology, paint-sample and pigment analysis, and a dozen rarer methods — and the **conservation treatments** performed on it, from cleaning and revarnishing to relining and retouching. Each entry carries its date and, where recorded, the examiner or laboratory; the same call also counts any signature or inscription marks the work bears and returns a short provenance excerpt, so physical and documentary evidence sit side by side. Coverage is selective — on the order of 1,300 works carry examination records and about a thousand carry treatment histories, concentrated on paintings, above all early Netherlandish and Dutch panels and canvases — so most of the collection returns nothing. And the tool reports *that* an examination happened and of what kind, not the report's findings: it is a finding aid into the conservation archive, not the archive itself.
+`get_conservation_history` gathers, for a single artwork, the record of its physical life: the **technical examinations** it has undergone — X-radiography, infrared reflectography, dendrochronology, paint-sample and pigment analysis, and a dozen rarer methods — and the **conservation treatments** performed on it, from cleaning and revarnishing to relining and retouching. Each entry carries its date and, where recorded, the examiner or laboratory; the same call also counts any signature or inscription marks the work bears and returns a short provenance excerpt. Coverage is selective — on the order of 1,300 works carry examination records and about a thousand carry treatment histories, concentrated on paintings, above all early Netherlandish and Dutch panels and canvases. 
 
 ### 34. The Technical Biography of a Painting
 
-*Govert Flinck's "Isaac Blessing Jacob" (SK-A-110) has passed through the conservation studio many times. Pull its complete technical examination record — what kinds of examination it has had, when, and by whom — and tell me what the run of methods, from the first X-rays of the 1930s to the recent infrared and paint-sample campaigns, reveals about how the painting has been studied across the last century.* <draft>
+*Govert Flinck's "Isaac Blessing Jacob" (SK-A-110) has passed through the conservation studio many times. Pull its complete technical examination record — what kinds of examination it has had, when, and by whom — and tell me what the run of methods, from the first X-rays of the 1930s to the recent infrared and paint-sample campaigns, reveals about how the painting has been studied across the last century.* [Demo](https://claude.ai/share/453572ea-0df3-4ca5-995a-86d0a70d5ae3)
 
 **How the tools enable it:**
 - `get_conservation_history` with `objectNumber: "SK-A-110"` returns the full `examinations` array (most-recent first), each entry naming its method, its date, and the examiner or lab where recorded — here a record running from X-radiography in 1930 and again in 1953 to a dense modern campaign of paint samples, X-ray fluorescence, X-ray diffraction, infrared reflectography, and infrared photography between 1999 and 2010, with named conservation scientists (A. Wallert, G. Tauber, M. van Eikema Hommes)
@@ -491,11 +503,11 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 - the `conservationHistory` array, kept separate from the examinations, lists any cleaning or restoration the painting received, so analytical study and physical intervention can be read against one another
 - `get_artwork_details` supplies the catalogue frame the findings hang on (support, technique statement, dimensions); `get_artwork_image` opens the painting at deep zoom beside the record
 
-**Why it matters:** A much-studied painting accumulates a technical file normally scattered across decades of internal reports and reachable only on site; drawing it together in one call turns the work into a legible research object. The *sequence* of methods is itself evidence — each generation of instrument answered a question the previous one could not — so the record doubles as a history of how conservation science learned to look, though it names the examinations, not their conclusions.
+**Why it matters:** A much-studied painting accumulates a technical file normally scattered across decades of internal reports and reachable only on site; drawing it together in one call turns the work into a legible research object.
 
 ### 35. Reading a Surface Through Its Restoration History
 
-*Frans Hals and Pieter Codde's "The Meagre Company" (SK-C-374) is a large 17th-century militia canvas that has been worked on repeatedly since it entered the museum. Give me its full restoration history, and explain what the sequence of interventions — cleaning, revarnishing, retouching, a tear repair, a complete restoration with the canvas relined — means for how I should read the painting's surface today.* <draft>
+*Frans Hals and Pieter Codde's "The Meagre Company" (SK-C-374) is a large 17th-century militia canvas that has been worked on repeatedly since it entered the museum. Give me its full restoration history, and explain what this sequence of interventions means for how I should read the painting's surface today.* [Demo](https://claude.ai/share/ea8ae802-7c93-4d3e-95f9-05f81286f449)
 
 **How the tools enable it:**
 - `get_conservation_history` with `objectNumber: "SK-C-374"` returns the `conservationHistory` array, most-recent first, each treatment with its description and date — a century of work here, from a 1914 general restoration and revarnishing through cleanings in the 1930s to a 1984 tear repair and a 1988 complete restoration in which the canvas was relined
@@ -504,11 +516,11 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 - `provenanceTextSummary`, returned in the same call, lets you line treatment dates up against changes of ownership — a work is often restored when it is sold, bequeathed, or first enters a museum
 - `get_artwork_details` confirms the support (relining matters only because this is a canvas); `get_artwork_image` lets you inspect the much-treated surface at high zoom
 
-**Why it matters:** What a viewer sees in a centuries-old painting is never only the artist's hand but the cumulative product of every cleaning, varnish, and retouching the work has survived — a relined canvas reflects light differently, an old retouching discolours at its own rate. For any argument about colour, condition, or where original paint ends and restoration begins, the treatment history is indispensable context that a gallery label never carries; these terse cataloguer's summaries establish *what* was done and when, and point to the studio file for the rest.
+**Why it matters:** What a viewer sees in a centuries-old painting is never only the artist's hand but the cumulative product of every cleaning, varnish, and retouching the work has survived. For any argument about colour, condition, or where original paint ends and restoration begins, the treatment history is indispensable context: the terse cataloguer's summaries establish what was done and when, and point to the studio file for the rest.
 
 ### 36. Technical Evidence for a Contested Attribution
 
-*"The Dying Cleopatra" (SK-A-2843) is catalogued only as "attributed to Jan van Scorel" — the name is not secure. Before I take a position, show me what physical evidence already exists: what technical examinations the museum has carried out, whether any signature or inscription anchors the name, and what the provenance says.* <draft>
+*"The Dying Cleopatra" (SK-A-2843) is catalogued only as "attributed to Jan van Scorel" — the name is not secure. Show me what physical evidence already exists: what technical examinations the museum has carried out, whether any signature or inscription anchors the name, and what the provenance says.* [Demo](https://claude.ai/share/8f44f724-cf59-4d9d-affc-eed66272dcf7)
 
 **How the tools enable it:**
 - `get_conservation_history` with `objectNumber: "SK-A-2843"` returns the technical battery the panel has already undergone — paint samples (analysed in 1978 by J.R.J. van Asperen de Boer), X-radiography, dendrochronology (twice, by the panel-dating specialist P. Klein), a condition report, and infrared reflectography — the physical evidence on which an attribution argument is built; the dendrochronology in particular means the wood itself has been dated
@@ -516,4 +528,4 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 - `provenanceTextSummary` supplies a provenance excerpt for documentary cross-reference — for this panel, a 1920 bequest from Ridder de Stuers — early ownership that can corroborate or complicate the attribution
 - `inspect_artwork_image` / `get_artwork_image` let you examine the underdrawing- and pentimenti-revealing features the infrared and X-ray campaigns were after
 
-**Why it matters:** A modern attribution rests as much on technical evidence — the date of the wood, the underdrawing beneath the paint, the pigments in the layers — as on the trained eye, and the museum's instruments cluster on exactly the uncertain cases: well over a third of all technically-examined works are catalogued as anonymous, "workshop of", or "attributed to". The tool lets a researcher inventory the existing dossier for a contested work in one call — what has been done, so it need not be repeated, and what is missing, so it can be commissioned — reporting that the studies exist, not their verdicts.
+**Why it matters:** A modern attribution rests as much on technical evidence — the date of the wood, the underdrawing beneath the paint, the pigments in the layers — as on the trained eye, and the museum's instruments cluster on exactly the uncertain cases: well over a third of all technically-examined works are catalogued as anonymous, "workshop of", or "attributed to". A researcher can inventory the existing dossier for a contested work and review what physical technical evidence exists.
