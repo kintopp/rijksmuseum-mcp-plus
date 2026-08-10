@@ -11,7 +11,7 @@ The **rijksmuseum-mcp+** MCP server lets you explore the Rijksmuseum's artwork c
 
 This tool was developed as a technology demo by the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel. We are particularly interested in exploring the research opportunities, methodological risks, and technical challenges posed by retrieving and analysing data with LLMs. If you are interested in collaborating with us in this area, please [get in touch](mailto:rise@unibas.ch).
 
-<p align="center"><img src="docs/roermond-passion.jpg" alt="Roermond Passion with highlighted panels" width="500"></p>
+<p align="center"><img src="docs/van-der-Ast.jpg" alt="Stilleven met vruchten en bloemen (SK-A-2152) with highlighted detail containing three shells" width="600"></p>
 
 ## Quick Start
 
