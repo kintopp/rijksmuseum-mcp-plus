@@ -266,12 +266,9 @@
 
 *Has the Rijksmuseum added any new 17th-century paintings to its collection in the past six months? If so, who are the artists and what are the subjects?* [Failure](https://claude.ai/share/3636ff90-e7d0-4cb6-902a-5f0b35d655ed) - the Rijksmuseum has changed how it represents changes to the collection. The `get_recent_changes` tool will need to be updated
 
-```
 **How the tools enable it:**
-- `get_recent_changes` with a date range covering the last six months
-- Use `identifiersOnly: true` for a fast scan of recently changed object numbers
-- `get_artwork_details` on results to filter for paintings from the 1600s and examine creator, date, and description
-```
+TBA
+
 **Why it matters:** New acquisitions can fill gaps in the evidence or provide crucial comparisons for ongoing research. A date-scoped query surfaces recently added or modified records without requiring the researcher to monitor the museum's website.
 
 ---
