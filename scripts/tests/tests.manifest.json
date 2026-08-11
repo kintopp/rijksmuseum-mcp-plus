@@ -29,8 +29,7 @@
     "status": "promoted",
     "runtime": "node",
     "requires": [
-      "dist",
-      "vocabDb"
+      "dist"
     ],
     "purpose": "docs/ vs live-schema inventory: every registered tool has a doc section and vice versa, per-tool param sets match, no phantom MCP prompts"
   },

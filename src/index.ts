@@ -205,7 +205,8 @@ function createServer(httpPort?: number): McpServer {
         "Rijksmuseum collection explorer — circa 834,000 artworks from antiquity to the present day " +
         "spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.\n\n" +
 
-        "Search uses a vocabulary database. All filters combine freely; array values are AND-combined. " +
+        "Search uses a vocabulary database. Filters combine freely except proximity search (see Place filters); " +
+        "array values are AND-combined. " +
         "Vocabulary labels are bilingual (English/Dutch) — fall back to the Dutch term when an English query " +
         "returns nothing (e.g. 'fotograaf' for 'photographer').\n\n" +
 
@@ -217,8 +218,8 @@ function createServer(httpPort?: number): McpServer {
         "search_artwork({aboutActor}) — broader recall than depictedPerson because it searches both subject and " +
         "creator vocabularies and tolerates cross-language name forms.\n\n" +
 
-        "Place filters: depictedPlace and productionPlace. Most place entries lack coordinates — nearPlace " +
-        "works only for the authority-geocoded subset; nearLat/nearLon with explicit coordinates always works.\n\n" +
+        "Place filters: depictedPlace and productionPlace — a proximity search replaces them. Most place entries " +
+        "lack coordinates, so nearPlace works only for the authority-geocoded subset; nearLat/nearLon always works.\n\n" +
 
         "Use the Iconclass server to find notation codes by concept, then pass them to search_artwork for " +
         "precise iconographic filtering.\n\n" +

@@ -25,7 +25,7 @@ The primary search tool. Filters combine freely, with one exception: proximity s
 ### Vocabulary-based filters
 | Parameter | Description |
 |---|---|
-| `subject` | Primary concept/theme search — searches the whole collection via Iconclass vocabulary. Start here for thematic queries |
+| `subject` | Primary concept/theme search — covers roughly seven artworks in eight via Iconclass vocabulary. Start here for thematic queries; a miss is not proof of absence, so fall through to `semantic_search` |
 | `iconclass` | Exact Iconclass notation code (e.g. `34B11` for dogs). More precise than `subject` |
 | `description` | Full-text search on cataloguer descriptions (Dutch, roughly 60% coverage) |
 | `curatorialNarrative` | Full-text search on museum wall text (English, a small curated subset) |
@@ -248,7 +248,7 @@ These are rejected with an error when combined with `layer: 'periods'`.
 |---|---|
 | `transferType` | Type of ownership transfer (single value or array). Closed enum, 19 values: `collection`, `sale`, `by_descent`, `gift`, `transfer`, `loan`, `bequest`, `widowhood`, `recuperation`, `commission`, `deposit`, `restitution`, `confiscation`, `exchange`, `inventory`, `theft`, `looting`, `inheritance`, `unknown` |
 | `excludeTransferType` | Exclude artworks that have any event of this type (artwork-level negation). Same 19 values. |
-| `currency` | Price currency. Closed enum, 15 values: `guilders`, `euros`, `pounds`, `francs`, `dollars`, `livres`, `napoleons`, `deutschmarks`, `reichsmarks`, `swiss_francs`, `guineas`, `belgian_francs`, `yen`, `marks`, `louis_d_or`. Currency codes such as `NLG` or `fl` are rejected. |
+| `currency` | Price currency. Closed enum, 15 currencies (`napoléons` also accepts the ASCII spelling `napoleons`): `guilders`, `euros`, `pounds`, `francs`, `dollars`, `livres`, `napoléons`, `deutschmarks`, `reichsmarks`, `swiss_francs`, `guineas`, `belgian_francs`, `yen`, `marks`, `louis_d_or`. Currency codes such as `NLG` or `fl` are rejected. |
 | `hasPrice` | Only events with recorded prices |
 | `hasGap` | Only artworks with provenance gaps |
 | `relatedTo` | Reverse cross-reference: find artworks whose provenance references this object number |

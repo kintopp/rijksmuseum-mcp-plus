@@ -369,8 +369,13 @@ export function registerProvenanceTools(
             "tell the user the answer comes from unstructured credit-line text.",
           ),
           creator: optStr().describe("Artist name (partial match on creator, e.g. 'Rembrandt', 'Vermeer')."),
-          currency: z.preprocess(stripNull,
-            z.enum(["guilders", "euros", "pounds", "francs", "dollars", "livres", "napoléons", "deutschmarks", "reichsmarks", "swiss_francs", "guineas", "belgian_francs", "yen", "marks", "louis_d_or"]).optional(),
+          // The stored label is accented; callers reliably type the ASCII form,
+          // so both are advertised and the preprocessor folds to the stored one.
+          currency: z.preprocess((v) => {
+            const s = stripNull(v);
+            return s === "napoleons" ? "napoléons" : s;
+          },
+            z.enum(["guilders", "euros", "pounds", "francs", "dollars", "livres", "napoléons", "napoleons", "deutschmarks", "reichsmarks", "swiss_francs", "guineas", "belgian_francs", "yen", "marks", "louis_d_or"]).optional(),
           ).describe("Price currency filter (exact match). Only used with layer='events'."),
           hasPrice: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, only events with recorded prices. Only used with layer='events'."),
