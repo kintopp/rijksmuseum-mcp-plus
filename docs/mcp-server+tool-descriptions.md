@@ -6,21 +6,21 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 
 > Rijksmuseum collection explorer — circa 834,000 artworks from antiquity to the present day spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.
 >
-> Search uses a vocabulary database. All filters combine freely; array values are AND-combined. Vocabulary labels are bilingual (English/Dutch) — fall back to the Dutch term when an English query returns nothing (e.g. 'fotograaf' for 'photographer').
+> Search uses a vocabulary database. Filters combine freely except proximity search (see Place filters); array values are AND-combined. Vocabulary labels are bilingual (English/Dutch) — fall back to the Dutch term when an English query returns nothing (e.g. 'fotograaf' for 'photographer').
 >
-> Images are served via IIIF deep-zoom. Three viewer-family tools: get_artwork_image opens an interactive viewer for the user; inspect_artwork_image returns base64 bytes for the LLM's own visual analysis; navigate_viewer highlights regions in an already-open viewer.
+> Images are served via IIIF deep-zoom: get_artwork_image opens the user's interactive viewer; inspect_artwork_image returns bytes for the LLM's own visual analysis.
 >
 > For demographic person queries (gender, birth/death year/place, profession), use search_persons → feed the returned vocabId into search_artwork({creator}). For artworks depicting a known person, use search_artwork({aboutActor}) — broader recall than depictedPerson because it searches both subject and creator vocabularies and tolerates cross-language name forms.
 >
-> Place searches support depictedPlace and productionPlace as vocabulary filters. For proximity, most place vocabulary entries lack coordinates — nearPlace only works for the subset that has been authority-geocoded, but nearLat/nearLon with explicit coordinates always works for searching artworks near any point. Multi-word place names like 'Oude Kerk Amsterdam' still resolve to a single vocabulary entry regardless of coordinate coverage.
+> Place filters: depictedPlace and productionPlace — a proximity search replaces them. Most place entries lack coordinates, so nearPlace works only for the authority-geocoded subset; nearLat/nearLon always works.
 >
-> Iconclass covers ~39,800 base subject notations (1.3M+ including key-expanded variants). Use the Iconclass server's search tool to find notation codes by concept, then pass them to search_artwork for precise iconographic filtering.
+> Use the Iconclass server to find notation codes by concept, then pass them to search_artwork for precise iconographic filtering.
 >
 > Two free-text corpora are searchable through search_artwork: descriptions (Dutch, cataloguer-written, ~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the relevant language, prefer semantic_search.
 >
 > Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that resist structured metadata, find_similar for artwork-to-artwork similarity from a known objectNumber. For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.
 >
-> Specialised tools: search_provenance for ownership-history questions across the ~48K artworks with parsed provenance; get_artwork_bibliography for a single artwork's scholarly citations (linked publication, pages, ISBN), with find_artworks_citing_publication for the reverse lookup — which artworks cite a given publication; get_conservation_history for a single artwork's technical examinations (X-ray, dendrochronology, infrared, paint samples) and restoration/conservation treatments; list_curated_sets + browse_set for exhibition/thematic groupings curated by Rijksmuseum staff; get_recent_changes for OAI-PMH delta tracking against a harvest checkpoint.
+> Specialised tools cover provenance, bibliography, conservation, curated sets, and OAI-PMH deltas — see their descriptions for routing.
 
 ---
 
@@ -30,17 +30,17 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 
 ### 1. `search_artwork`
 
-Structured filter search — artworks matching ALL given filters (subject, material, technique, date, place, person). Returns artwork summaries with titles, creators, and dates; every response includes totalResults (exact match count, not just the returned page). Not for free-text concept queries — use semantic_search for those. Not for artwork-to-artwork similarity — use find_similar with an objectNumber. For demographic person queries (gender, born/died, profession, birth/death place), use search_persons first to get a vocabId, then pass it as creator here. For provenance text and ownership history, use search_provenance. For aggregate counts and distributions, prefer collection_stats — one call vs compact=true loops.
+Structured filter search — artworks matching ALL given filters. Filters cover subject, material, technique, date, place, person. Returns artwork summaries with titles, creators, and dates; every response includes totalResults (exact match count, not just the returned page). Not for free-text concept queries — use semantic_search for those. Not for artwork-to-artwork similarity — use find_similar with an objectNumber. For demographic person queries (gender, born/died, profession, birth/death place), use search_persons first to get a vocabId, then pass it as creator here. For provenance text and ownership history, use search_provenance. For aggregate counts and distributions, prefer collection_stats — one call vs compact=true loops.
 
 Ranking: relevance (BM25) when text search (description, title, etc.) or geographic proximity is used; otherwise importance (image availability, curatorial attention, metadata richness). For concept-ranked results, use semantic_search.
 
-At least one filter is required. There is no full-text search across all metadata. For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), ALWAYS start with subject — it searches ~832K artworks tagged with structured Iconclass vocabulary and has by far the highest recall for conceptual queries. Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. For broader concept discovery beyond structured vocabulary, use semantic_search — but combine it with search_artwork(type: 'painting', …) for painting queries since paintings are underrepresented there.
+At least one filter is required. There is no full-text search across all metadata. For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), ALWAYS start with subject — it searches the large majority of the collection via structured Iconclass vocabulary and has by far the highest recall for conceptual queries. Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. For broader concept discovery beyond structured vocabulary, use semantic_search — but combine it with search_artwork(type: 'painting', …) for painting queries since paintings are underrepresented there.
 
-Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; do not open the viewer for list/count/summary requests). All parameters combine freely. Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. For acquisition channel / donor analysis (gifts, bequests, fund names like 'Vereniging Rembrandt'), use search_provenance.
+Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; do not open the viewer for list/count/summary requests). Parameters combine freely, with one exception: proximity search overrides depictedPlace/productionPlace (see nearPlace). Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. For acquisition channel / donor analysis (gifts, bequests, fund names like 'Vereniging Rembrandt'), use search_provenance.
 
 ### 2. `search_persons`
 
-Demographic/structural lookup of persons by gender, birth/death year or place, or profession; returns vocab IDs. Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, or search_artwork({aboutActor: <name>}) for works depicting them. Two-step pattern: search_persons → search_artwork. Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.
+Find persons by gender, birth/death year or place, or profession. Returns vocab IDs. Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, or search_artwork({aboutActor: <name>}) for works depicting them. Two-step pattern: search_persons → search_artwork. Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.
 
 Not for free-text concept queries — use semantic_search. Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.
 
@@ -48,7 +48,7 @@ By default restricts to persons with ≥1 artwork in the collection (~60K of ~29
 
 ### 3. `get_artwork_details`
 
-Full metadata for ONE artwork by objectNumber: creator, dates, materials, provenance, inscriptions, related objects. Typically follows a search_artwork / semantic_search / find_similar result, or a user-named objectNumber. Provide exactly one of objectNumber (e.g. 'SK-C-5' for The Night Watch) or uri (a Linked Art URI from relatedObjects).
+Full metadata for ONE artwork by objectNumber. Covers creator, dates, materials, provenance, inscriptions, related objects. Typically follows a search_artwork / semantic_search / find_similar result, or a user-named objectNumber. Provide exactly one of objectNumber (e.g. 'SK-C-5' for The Night Watch) or uri (a Linked Art URI from relatedObjects).
 
 Returns metadata including titles (primary plus the full set of variants with language and qualifier — Dutch/English brief/full/display/former), creator, date, dateDisplay (free-text form), description, curatorial narrative, dimensions (text + structured: height/width/depth/weight/diameter where present), extentText, materials, object type, production details (with creator life dates, gender, and Wikidata ID where available), provenance, credit line, inscriptions, license, related objects (each carrying objectNumber + iiifId for in-viewer navigation), themes, exhibitions, attributionMarks (signature/inscription counts), externalIds (handle + other), location (museum room when on display, as { roomId, floor, roomName }), recordCreated/recordModified timestamps, plus collection sets and reference metadata. Authority IDs appear at two levels: work-level under externalIds (handle + other), and entity-level under equivalents[] arrays on objectTypes, materials, production entries, subjects.depictedPersons / subjects.depictedPlaces, collectionSetLabels and themes — each entry a { authority, id, uri } triple (VIAF/ULAN/RKD/Getty TGN+AAT/GeoNames/Wikidata), and one entity can carry several, so read every entry (iconclass terms have none). The relatedObjects field carries each peer's objectNumber (canonical handle) plus a Linked Art objectUri; pass either form back here, objectNumber preferred.
 
@@ -56,19 +56,19 @@ Not for filter-based discovery — use search_artwork. Not for similarity discov
 
 ### 4. `get_artwork_bibliography`
 
-Scholarly references for ONE artwork by objectNumber: citations, with linked publication, pages, ISBN where known. Follows a search_artwork / get_artwork_details result. By default returns the first 5 plus a total count; set full=true for all entries (major works can have 100+ — mind the context window). Not for general metadata — use get_artwork_details. Not for library-catalogue search.
+Scholarly references (citations) for ONE artwork by objectNumber. Includes linked publication, pages, ISBN where known. Follows a search_artwork / get_artwork_details result. By default returns the first 5 plus a total count; set full=true for all entries (major works can have 100+ — mind the context window). Not for general metadata — use get_artwork_details. Not for library-catalogue search.
 
 ### 5. `find_artworks_citing_publication`
 
-Reverse bibliography lookup: artworks whose references cite a given publication, by its URI or id. Use the publicationUri from get_artwork_bibliography (e.g. 'https://id.rijksmuseum.nl/301154354') or the bare id. Local and resolver-free. Not for topic search of the library catalogue.
+Reverse bibliography: artworks citing a given publication URI or id. Use the publicationUri from get_artwork_bibliography (e.g. 'https://id.rijksmuseum.nl/301154354') or the bare id. Local and resolver-free. Not for topic search of the library catalogue.
 
 ### 6. `get_conservation_history`
 
-Conservation/forensics record for ONE artwork: technical examinations and restoration treatment history. Follows get_artwork_details / a search result, by objectNumber. Returns technical examinations (X-ray, dendrochronology, paint samples, infrared), conservation/restoration treatment events, a count of recorded signature/inscription marks (use search_inscriptions for the actual transcriptions), and a short provenance excerpt. Not for general metadata — use get_artwork_details. Not for transcribed inscriptions — use search_inscriptions. Not for aggregate counts — use collection_stats.
+Technical examinations and restoration history for ONE artwork. Follows get_artwork_details / a search result, by objectNumber. Returns technical examinations (X-ray, dendrochronology, paint samples, infrared), conservation/restoration treatment events, a count of recorded signature/inscription marks (use search_inscriptions for the actual transcriptions), and a short provenance excerpt. Not for general metadata — use get_artwork_details. Not for transcribed inscriptions — use search_inscriptions. Not for aggregate counts — use collection_stats.
 
 ### 7. `get_artwork_image` *(app tool — user-facing)*
 
-Opens an interactive deep-zoom viewer for the user — only when they ask to see, show, or view an artwork. Call ONLY when the user explicitly wants to see, show, or view an artwork. Do NOT call for list, summary, count, or text-only requests. Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. Not all artworks have images available. Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl).
+Opens an interactive deep-zoom viewer for the user. Use only when they ask to see, show, or view an artwork. Call ONLY when the user explicitly wants to see, show, or view an artwork. Do NOT call for list, summary, count, or text-only requests. Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. Not all artworks have images available. Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl).
 
 ### 8. `remount_viewer` *(app tool — internal)*
 
@@ -76,7 +76,7 @@ Internal: switch the viewer to a different artwork while preserving the viewUUID
 
 ### 9. `inspect_artwork_image`
 
-Returns image bytes (base64) for the LLM's own visual analysis of an artwork or region — not for the user to view. The LLM can see and reason about the image immediately. Not for the user to view — use get_artwork_image for the interactive viewer. Not for listing or summarising artworks — use search_artwork.
+Returns image bytes (base64) for the LLM's own visual analysis. Covers a whole artwork or a region. The LLM can see and reason about the image immediately — not for the user to view (use get_artwork_image for the interactive viewer). Not for listing or summarising artworks — use search_artwork.
 
 Use with region 'full' (default) to inspect the complete artwork, or specify a region to zoom into details, read inscriptions, or examine specific areas. The response includes cropPixelWidth/cropPixelHeight: the actual pixel dimensions of the returned image.
 
@@ -87,17 +87,15 @@ Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), 'crop
 - Full image: full (default)
 - For multi-panel works: use physical dimensions from get_artwork_details to estimate panel percentages, then inspect individual panels with close-up crops.
 
-Iterative zoom: start with region 'full' to understand the layout, then use close-up crops (600–800px) to read specific features.
+Iterative zoom: start with region 'full' to understand the layout, then use close-up crops (600–800px) to read specific features. When a viewer is open for this artwork, it automatically zooms to the inspected region (navigateViewer defaults to true, no effect when region is 'full'), keeping the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom.
 
-Auto-navigation: when a viewer is open for this artwork, the viewer automatically zooms to the inspected region (navigateViewer defaults to true, no effect when region is 'full'). This keeps the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom.
-
-The response includes the active viewUUID (if any) for follow-up navigate_viewer calls. The structured response also carries the artwork title and creator. An out-of-bounds region is rejected with an `overlay_region_out_of_bounds` error whose structured payload includes `regionRecovery` (requested / clampedTo / validRange), so a structuredContent reader can retry with a corrected box.
+The response includes the active viewUUID (if any) for follow-up navigate_viewer calls.
 
 ### 10. `navigate_viewer`
 
-Zooms/pans an already-open viewer to a region — steer the user's view to a detail. Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image.
+Zooms/pans an already-open viewer to a region. Steer the user's view to a detail. Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image.
 
-In most cases you do NOT need this tool: inspect_artwork_image already auto-zooms the open viewer to whatever region it inspects. Call navigate_viewer only to move the user's view without fetching image bytes for your own analysis.
+In most cases you do NOT need this tool: inspect_artwork_image already auto-zooms the open viewer to whatever region it inspects. Call navigate_viewer only to move the user's view WITHOUT fetching image bytes for your own analysis.
 
 By default, region coordinates are in full-image space (percentages or pixels of the original image), not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image will target the identical area in the viewer. Exception: when a command includes relativeTo, region is interpreted in that inspected crop's local coordinate space.
 
@@ -107,7 +105,7 @@ Region formats:
 - 'x,y,w,h' — equivalent to crop_pixels: (legacy IIIF form, kept for compatibility).
 - 'full' | 'square' — whole image shortcuts.
 
-Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — correct the coordinates and retry. The error's structured response carries `regionRecovery` (requested / clampedTo / validRange) plus the session `objectNumber`. Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.
+Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — correct the coordinates and retry. Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.
 
 Coordinate shortcut: to zoom to a region of a prior inspect_artwork_image crop, use 'relativeTo' with the crop's region string and specify 'region' as coordinates within the crop's local space; the server projects to full-image space deterministically. Use pct:x,y,w,h for crop-local percentages, or crop_pixels:x,y,w,h plus relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from inspect_artwork_image for crop-local rendered pixels.
 
@@ -115,23 +113,23 @@ Response field deliveryState reports whether the iframe drained the commands imm
 
 ### 11. `poll_viewer_commands` *(app tool — internal)*
 
-Internal: poll for pending viewer navigation commands.
+Internal: poll for pending viewer navigation commands
 
 ### 12. `list_curated_sets`
 
-Browse thematic and sub-collection groupings curated by Rijksmuseum staff (drawings, paintings, iconographic sets). Each result carries memberCount, top dominantTypes, top dominantCenturies by membership, and a category heuristic (object_type / iconographic / album / sub_collection / umbrella) so you can pick the right scope. Use minMembers: 100, maxMembers: 200000 to avoid umbrella sets when the user wants a substantive subset. Pair with browse_set(setSpec) to enumerate members. Not for keyword search across artworks — use search_artwork. Not for aggregate counts — use collection_stats.
+Browse thematic sets curated by Rijksmuseum staff. Includes sub-collection groupings (drawings, paintings, iconographic sets). Each result carries memberCount, top dominantTypes, top dominantCenturies by membership, and a category heuristic (object_type / iconographic / album / sub_collection / umbrella) so you can pick the right scope. Use minMembers: 100, maxMembers: 200000 to avoid umbrella sets when the user wants a substantive subset. Pair with browse_set(setSpec) to enumerate members. Not for keyword search across artworks — use search_artwork. Not for aggregate counts — use collection_stats.
 
 ### 13. `browse_set`
 
-Enumerate the member artworks of one curated set by setSpec (from list_curated_sets). DB-backed (warm calls in tens of ms). Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. Supports pagination via resumptionToken (stateless base64; not portable across server upgrades). Not for set discovery — use list_curated_sets first.
+Enumerate the member artworks of one curated set by setSpec. Get setSpec values from list_curated_sets. DB-backed (warm calls in tens of ms). Returns DB-direct records with objectNumber, title, creator, date (display + earliest/latest), description, dimensions, datestamp, image/IIIF URLs, and a stable lodUri. For multi-row vocab (subjects, materials, type taxonomy, full set memberships), follow up with get_artwork_details on the returned objectNumber. Supports pagination via resumptionToken (stateless base64; not portable across server upgrades). Not for set discovery — use list_curated_sets first.
 
 ### 14. `get_recent_changes`
 
-OAI-PMH delta feed — records changed within a date range since a known harvest checkpoint, paginated. Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.
+OAI-PMH delta feed of records changed within a date range. Paginated; anchored to a known harvest checkpoint. Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.
 
 ### 15. `search_provenance`
 
-Ownership-history search across parsed provenance chains — collectors, sales, gifts, confiscations, restitutions. Returns full provenance chains grouped by artwork, with matching events flagged.
+Ownership-history search across parsed provenance chains. Covers collectors, sales, gifts, confiscations, restitutions. Returns full provenance chains grouped by artwork, with matching events flagged.
 
 Not for catalogue keyword search — use search_artwork. Not for aggregate provenance counts — use collection_stats with provenance dimensions/filters. periodLocation is a period-level location filter, preferred over location at layer='periods' for clarity.
 
@@ -145,7 +143,7 @@ IMPORTANT flags on events:
 
 Every record carries provenance-of-provenance metadata: parseMethod shows how the event was parsed (peg, regex_fallback, cross_ref, credit_line, llm_structural), categoryMethod/positionMethod show how classifications and party positions were determined (type_mapping, role_mapping, llm_enrichment, llm_disambiguation, rule:transfer_is_ownership), correctionMethod (llm_structural:#NNN) shows LLM structural corrections (location fixes, event reclassification, event splitting), and enrichmentReasoning provides the LLM's reasoning for any non-deterministic decision. Parties have position (sender/receiver/agent) indicating their role in the transfer.
 
-IMPORTANT: When results contain LLM-enriched records, the response text ends with a REVIEW_URL or REVIEW_FILE line. You MUST copy this URL or file path verbatim into your response as a clickable link or openable path. Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). The user cannot see tool output — if you do not include the path, they have no way to find the review page. The same link and an LLM-assisted-record count are also exposed in structuredContent as `enrichmentReview` ({ count, url | file }) for programmatic/CLI clients; the obligation to surface the link to the user is unchanged.
+IMPORTANT: When results contain LLM-enriched records, the response text ends with a REVIEW_URL or REVIEW_FILE line. You MUST copy this URL or file path verbatim into your response as a clickable link or openable path. Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). The user cannot see tool output — if you do not include the path, they have no way to find the review page.
 
 Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable. At least one filter is required.
 
@@ -153,7 +151,7 @@ FALLBACK — creditLineQuery: only ~48K artworks have parsed provenance, but man
 
 ### 16. `search_inscriptions`
 
-Structured search over artwork inscriptions — collector's marks, signatures, dates, numbers, transcribed text.
+Structured search over artwork inscriptions and collector's marks. Also signatures, dates, numbers, transcribed text.
 
 IMPORTANT — what this field is: catalogue-entered inscription/mark data, NOT OCR and NOT an exhaustive transcription of visible text. It is dominated by VERSO collector's-mark stamps (the Rijksprentenkabinet's own mark and former-owner stamps account for a large share of all records); genuine artist-/image-applied text (signatures, captions, addresses) is a real but MINORITY component. Coverage is uneven by object type: high for prints and drawings, low for coins, medals, and posters that are covered in legend text never entered here. An empty transcribedText does NOT mean the object bears no text.
 
@@ -165,7 +163,7 @@ Runtime parse with no derived index: a query must include at least one narrowing
 
 ### 17. `collection_stats`
 
-Group-by breakdown over one structured dimension (type, decade, place, creator) — counts, percentages, histograms. Covers totals, summaries, and group-by / count-by / distribution-of / statistics-over queries across the Rijksmuseum collection. Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.
+Group-by breakdown over one structured dimension — counts and histograms. Dimensions: type, decade, place, creator; includes percentages. Covers totals, summaries, and group-by / count-by / distribution-of / statistics-over queries across the Rijksmuseum collection. Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.
 
 Examples:
 - "Transfer type distribution for Rembrandt" → dimension='transferType', creator='Rembrandt'
@@ -181,7 +179,7 @@ Filters from both domains combine freely. Artwork filters narrow the artwork set
 
 ### 18. `find_similar`
 
-Given one artwork's objectNumber, finds others like it across 9 similarity channels plus a pooled consensus. Generates an HTML comparison page with IIIF thumbnails across all 9 channels: Visual (image-embedding nearest neighbours), Related Variant (creator-invariant curator-declared edges: pendants, production stadia, different examples), Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.
+Finds artworks like a given one across 9 similarity channels. Takes one objectNumber; adds a pooled consensus. Generates an HTML comparison page with IIIF thumbnails across all 9 channels: Visual (image-embedding nearest neighbours), Related Variant (creator-invariant curator-declared edges: pendants, production stadia, different examples), Related Object (other curator-declared edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights), Lineage (creator + assignment-qualifier overlap), Iconclass (subject-notation overlap), Description (Dutch-description embedding similarity), Theme (curatorial-theme set overlap, IDF-weighted), Depicted Person, and Depicted Place — plus a Pooled column blending all nine.
 
 Not for free-text concept queries — use semantic_search. Not for filter-based search — use search_artwork. Not for aggregate counts or distributions — use collection_stats.
 
@@ -189,13 +187,13 @@ IMPORTANT: The result is a file path or URL to an HTML page. Your ONLY job is to
 
 ### 19. `semantic_search`
 
-Free-text concept search by embedding similarity — for ideas like 'solitude' or 'vanitas' that resist metadata. Returns artworks ranked by Dutch-description embedding similarity to the query, with source text for grounding — use that text to explain why results are relevant or to flag false positives.
+Free-text concept search by embedding similarity. For ideas like 'solitude' or 'vanitas' that resist metadata. Ranks by multilingual embedding similarity over a composite of each artwork's title, inscriptions, description and curatorial narrative, and returns that source text for grounding — use it to explain why results are relevant or to flag false positives.
 
 Not for queries expressible as structured metadata (specific artists, dates, places, materials) — use search_artwork for those. Not for artwork-to-artwork similarity — use find_similar with an objectNumber. Not for aggregate counts or distributions — use collection_stats.
 
 Best for concepts that resist structured metadata: atmospheric qualities ('sense of loneliness'), compositional descriptions ('artist gazing directly at the viewer'), art-historical concepts ('cultural exchange under VOC trade'), or cross-language queries. Results are most reliable when the Rijksmuseum's curatorial narrative texts discuss the relevant concept explicitly; purely emotional or stylistic concepts (e.g. chiaroscuro, desolation) may yield lower precision because catalogue descriptions often do not use that language.
 
-Filter notes: supports pre-filtering by subject, depictedPerson, depictedPlace, productionPlace, collectionSet, aboutActor, iconclass, and imageAvailable in addition to type, material, technique, creator, and creationDate. Use type: 'painting' to restrict to the paintings collection. Do NOT use technique: 'painting' — it matches painted decoration on any object type (ceramics, textiles, frames) and will return unexpected results.
+Filter notes: supports pre-filtering by subject, depictedPerson, depictedPlace, productionPlace, collectionSet, aboutActor, iconclass, and imageAvailable in addition to type, material, technique, creator, and creationDate. Use type: 'painting' to restrict to the paintings collection. Do NOT use technique: 'painting' — it matches painted decoration on any object type (ceramics, textiles, frames) and will return unexpected results. A single very broad filter (e.g. type: 'print' or material: 'paper' alone) can exceed the internal candidate limit, so ranking then operates on a near-optimal subset rather than the full match set and may miss equally-relevant works — pair it with a narrower filter (e.g. type: 'print', subject: 'landscape') for exact ranking.
 
 Painting queries — two-step pattern: paintings are underrepresented (prints and drawings outnumber them ~77:1). For queries where paintings are the expected result type, ALWAYS combine semantic_search with a follow-up search_artwork(type: 'painting', subject: …) or search_artwork(type: 'painting', creator: …) — do not wait to observe skew, as the absence of key works is not visible in the returned results.
 

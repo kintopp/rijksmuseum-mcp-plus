@@ -317,7 +317,7 @@ export const ArtworkDetailOutput = {
     objectNumber: z.string(),
     title: z.string(),
   })).describe("Up to 25 child records, ordered by object_number. Use search_artwork to enumerate the full set."),
-  persistentId: z.string().nullable(),
+  persistentId: z.string().nullable().describe("Harvested handle.net URI for long-term citation; same value as externalIds.handle. Null for the minority of records with no handle."),
   // Enriched Group B
   objectTypes: z.array(ResolvedTermShape()),
   materials: z.array(ResolvedTermShape()),

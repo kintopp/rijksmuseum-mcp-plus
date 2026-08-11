@@ -1,6 +1,6 @@
 # License Values
 
-3 distinct license designations across ~833,000 artworks.
+3 distinct license designations across the whole collection.
 
 | Value | Rights URI | Artworks |
 |---|---|---|

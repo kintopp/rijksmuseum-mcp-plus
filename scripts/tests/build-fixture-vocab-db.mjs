@@ -21,7 +21,7 @@ const REAL_DB = path.join(PROJECT_ROOT, "data", "vocabulary.db");
 const FIXTURE_DIR = path.join(__dirname, "fixtures");
 const SCHEMA_SQL = path.join(FIXTURE_DIR, "vocab-schema.sql");
 const GENERATED_DIR = path.join(FIXTURE_DIR, ".generated");
-const FIXTURE_DB = path.join(GENERATED_DIR, "fixture-vocabulary.db");
+const FIXTURE_DB_NAME = "fixture-vocabulary.db";
 
 // FTS5 shadow tables belong to an already-captured virtual table — exclude them.
 const SHADOW_SUFFIX = /(_data|_idx|_docsize|_config|_content)$/;
@@ -161,13 +161,17 @@ const VERSION_INFO = [
 ];
 
 // ── Build: replay schema + seed into the generated fixture DB ─────────────────
-export function buildFixture() {
+// `filename` lets concurrent callers claim their own copy: run.mjs pools tests
+// four at a time, and the build unlinks before it seeds, so two tests sharing
+// one path can serve a half-seeded DB to whichever server opens mid-rebuild.
+export function buildFixture(filename = FIXTURE_DB_NAME) {
+  const dbPath = path.join(GENERATED_DIR, filename);
   if (!fs.existsSync(SCHEMA_SQL)) {
     console.error(`[build] ${path.relative(PROJECT_ROOT, SCHEMA_SQL)} missing — run --capture first (needs data/vocabulary.db).`);
     process.exit(2);
   }
   fs.mkdirSync(GENERATED_DIR, { recursive: true });
-  for (const f of [FIXTURE_DB, `${FIXTURE_DB}-wal`, `${FIXTURE_DB}-shm`]) {
+  for (const f of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
     fs.rmSync(f, { force: true });
   }
 
@@ -177,7 +181,7 @@ export function buildFixture() {
   const sqlText = raw.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
   const statements = sqlText.split(";").map((s) => s.trim()).filter(Boolean);
 
-  const db = new Database(FIXTURE_DB);
+  const db = new Database(dbPath);
   const skipped = [];
   for (const stmt of statements) {
     try {
@@ -258,6 +262,17 @@ export function buildFixture() {
     "INSERT INTO vocabulary_external_ids (vocab_id, authority, id, uri) VALUES (?, ?, ?, ?)",
     VOCAB_EXTERNAL_IDS
   );
+  // artwork_external_ids — handle suffixes are upstream ids unrelated to art_id
+  // (0 of 818,188 match in the real DB), so FX-1's suffix is deliberately NOT 1.
+  // FX-2 has a non-handle row only, FX-3 has none — both must yield persistentId null.
+  insertMany(
+    "INSERT INTO artwork_external_ids (art_id, authority, id, uri) VALUES (?, ?, ?, ?)",
+    [
+      [1, "handle", "RM0001.COLLECT.99001", "http://hdl.handle.net/10934/RM0001.COLLECT.99001"],
+      [2, "other", "OTHER-2", "urn:other:OTHER-2"],
+    ]
+  );
+
   // Three citation rows for FX-1 (art_id 1) covering all three shapes.
   // FX-2 intentionally has no rows — used for the empty-case test.
   // FX-3 (art_id 3) cites ONE publication (301999001) on TWO rows (different page
@@ -308,8 +323,8 @@ export function buildFixture() {
 
   const n = db.prepare("SELECT COUNT(*) AS n FROM artworks").get().n;
   db.close();
-  console.log(`[build] wrote ${path.relative(PROJECT_ROOT, FIXTURE_DB)} — ${n} artworks, ${VOCAB.length} vocab terms, ${MAPPINGS.length} mappings`);
-  return FIXTURE_DB;
+  console.log(`[build] wrote ${path.relative(PROJECT_ROOT, dbPath)} — ${n} artworks, ${VOCAB.length} vocab terms, ${MAPPINGS.length} mappings`);
+  return dbPath;
 }
 
 // CLI entry

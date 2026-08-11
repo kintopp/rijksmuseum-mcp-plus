@@ -259,6 +259,25 @@ check("getArtworksCitingPublication dedupes an artwork citing a publication on m
   assert.equal(d.artworks[0].objectNumber, "FX-3");
 });
 
+check("persistentId is the harvested handle, never synthesized from art_id", () => {
+  // Regression: persistentId used to be built as `...COLLECT.${art_id}`, which produced a
+  // well-formed URI resolving to a DIFFERENT artwork on every call (0/818,188 real handles
+  // match their art_id). FX-1 is art_id 1 but its handle suffix is 99001.
+  const d = db.getArtworkDetail("FX-1");
+  assert.ok(d, "FX-1 not found");
+  assert.equal(d.persistentId, "http://hdl.handle.net/10934/RM0001.COLLECT.99001");
+  assert.equal(d.persistentId, d.externalIds.handle, "persistentId must mirror externalIds.handle");
+  assert.equal(d.persistentId.endsWith(".1"), false, "persistentId must not be derived from art_id");
+});
+
+check("persistentId is null when the artwork has no handle row", () => {
+  const noHandle = db.getArtworkDetail("FX-2"); // has a non-handle external id only
+  assert.equal(noHandle.persistentId, null);
+  assert.deepEqual(noHandle.externalIds, { handle: null, other: ["urn:other:OTHER-2"] });
+  const noRows = db.getArtworkDetail("FX-3"); // no artwork_external_ids rows at all
+  assert.equal(noRows.persistentId, null);
+});
+
 check("getArtworkDetail surfaces equivalents[] from vocabulary_external_ids (allowlist applied)", () => {
   const d = db.getArtworkDetail("FX-1");
   assert.ok(d, "FX-1 not found");

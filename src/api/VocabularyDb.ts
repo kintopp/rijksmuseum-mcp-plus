@@ -2174,6 +2174,9 @@ export class VocabularyDb {
       ? (this.stmtCitationCount.get(row.art_id) as { n: number }).n
       : null;
 
+    // The handle suffix is an upstream identifier unrelated to art_id — never synthesize it.
+    const externalIds = this.fetchArtworkExternalIds(row.art_id);
+
     return {
       id: `https://id.rijksmuseum.nl/${row.art_id}`,
       objectNumber: row.object_number,
@@ -2190,7 +2193,7 @@ export class VocabularyDb {
       inscriptions: row.inscription_text ? row.inscription_text.split(" | ") : [],
       location: this.lookupMuseumRoom(row.current_location),
       collectionSets,
-      externalIds: this.fetchArtworkExternalIds(row.art_id),
+      externalIds,
       // Group A
       titles: this.fetchTitleVariants(row.art_id),
       ...this.fetchArtworkLineage(row.art_id),
@@ -2199,7 +2202,7 @@ export class VocabularyDb {
       dimensions,
       ...this.fetchRelatedObjects(row.art_id),
       ...this.fetchPhysicalRelations(row.art_id),
-      persistentId: row.art_id ? `http://hdl.handle.net/10934/RM0001.COLLECT.${row.art_id}` : null,
+      persistentId: externalIds.handle,
       // Group B
       objectTypes,
       materials,

@@ -1,6 +1,6 @@
 ## Semantic search
 
-The `semantic_search` tool finds artworks by meaning, concept, or theme using natural language. Unlike `search_artwork`, which matches against structured metadata fields (titles, vocabulary terms, Iconclass notations), semantic search ranks all ~832,000 artworks with embeddings by similarity to a free-text query.
+The `semantic_search` tool finds artworks by meaning, concept, or theme using natural language. Unlike `search_artwork`, which matches against structured metadata fields (titles, vocabulary terms, Iconclass notations), semantic search ranks the whole embedded corpus — about 830K artworks — by similarity to a free-text query. (`search_artwork` is not purely structured either: its `textQuery` DSL runs full-text search over descriptions and curatorial narrative. The distinction is exact matching versus vector similarity, not metadata versus text.)
 
 ### How it works
 
@@ -8,12 +8,12 @@ Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 38
 
 | Field | Source | Coverage |
 |-------|--------|----------|
-| Title | All title variants (brief, full, former × EN/NL) | ~99% |
+| Title | The primary title only — **not** the full brief/full/former × EN/NL variant set, which the non-deployed embedding strategies use | ~99% |
 | Inscriptions | Transcribed text on the work (signatures, captions, dates); verso collector's-mark stamps and placeholder rows are stripped, so only genuine transcribed text is embedded | ~29% (of the ~60% that carry any inscription field) |
 | Description | Cataloguer observations (Dutch) | ~61% |
 | Curatorial narrative | Museum wall text (English only — Dutch column always null) | ~2% (14K works) |
 
-Iconclass subject labels and creator names are deliberately excluded — benchmarking showed that including subject labels biased results toward tagged vocabulary matches rather than semantic meaning, reducing the number of paintings surfaced by 71% in painting-expected queries. Creator names are excluded because they duplicate the structured `creator` filter path (#72).
+Iconclass subject labels and creator names are deliberately excluded — benchmarking showed that including subject labels biased results toward tagged vocabulary matches rather than semantic meaning, sharply reducing the number of paintings surfaced in painting-expected queries. Creator names are excluded because they duplicate the structured `creator` filter path (#72).
 
 The composite text is assembled as `[Title] ... [Inscriptions] ... [Description] ... [Narrative] ...` (omitting empty fields) and embedded using [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small), a multilingual sentence embedding model. Embeddings are int8-quantized (384 dimensions) and stored in a SQLite database using [sqlite-vec](https://github.com/asg017/sqlite-vec).
 
@@ -60,7 +60,7 @@ Filters narrow the candidate set via the vocabulary database *before* semantic r
 ### Filter notes
 
 - Use `type: "painting"` to restrict to the paintings collection. Do **not** use `technique: "painting"` for this — it matches painted decoration on any object type (ceramics, textiles, frames) and will return unexpected results.
-- Filters require the vocabulary database. If the vocabulary database is not available, filters are silently ignored and a warning is included in the response.
+- Filters require the vocabulary database. If it is unavailable the filters are ignored and a warning is returned in the response.
 - When filters match zero artworks, the tool returns an explicit zero-result message rather than falling back to unfiltered search.
 
 ### Search modes
@@ -69,10 +69,13 @@ The tool uses two internal search paths:
 
 | Mode | When | How |
 |------|------|-----|
-| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of all ~832,000 vectors |
-| **Filtered KNN** | One or more filters specified | Vocabulary DB narrows candidates by metadata, then `vec_distance_cosine()` ranks the filtered set |
+| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of every vector |
+| **Filtered KNN (exact)** | Filters narrow the candidate set below the internal limit | Vocabulary DB narrows candidates by metadata, then `vec_distance_cosine()` ranks the filtered set exactly |
+| **Filtered KNN (approximate)** | Filters still match more candidates than `FILTER_ART_IDS_LIMIT` | Exact ranking is abandoned: a pure KNN pass is post-filtered instead, so ranking operates on a near-optimal subset and may miss equally relevant works. A warning says so. |
 
 The search mode (`semantic` or `semantic+filtered`) is reported in the response.
+
+The third path is easy to trigger by accident: a single very broad filter such as `type: "print"` or `material: "paper"` matches enough of the collection to exceed the limit on its own. Pair a broad filter with a narrower one (`type: "print", subject: "landscape"`) to stay on the exact path.
 
 ### Response format
 
@@ -94,11 +97,18 @@ Source text is not stored in the embeddings database (saving ~270 MB). It is rec
 
 ### Description embeddings (separate path)
 
-A second, description-only embedding set is stored alongside the main vectors and powers the Description signal in `find_similar`. It is not used by `semantic_search`. The model is [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) — a Dutch-tuned E5 variant — and the vectors are full 384-dimensional int8. Coverage is limited to artworks with a non-empty `description_text` field (~512K rows, ~61% of the collection); artworks without a description are absent from the `desc_embeddings` table, so Description-signal results for those objects simply return nothing rather than fabricating a nearest neighbour.
+A second, description-only embedding set is stored alongside the main vectors and powers the Description signal in `find_similar`. It is not used by `semantic_search`. The model is [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) — a Dutch-tuned E5 variant — and the vectors are full 384-dimensional int8. Coverage matches the `description_text` field exactly, one row per described artwork (~61% of the collection); artworks without a description are absent from the `desc_embeddings` table, so Description-signal results for those objects simply return nothing rather than fabricating a nearest neighbour.
 
 ### Technical details
 
 - **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The quantized ONNX model is sourced from the [Xenova mirror](https://huggingface.co/Xenova/multilingual-e5-small).
-- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) pinned to 0.1.9. Brute-force scan (no ANN index). ~832,000 × int8[384] ≈ 305 MB in the vec0 table, plus a regular `artwork_embeddings` table for filtered queries.
+- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) pinned to 0.1.9. Brute-force scan (no ANN index). At 384 int8 bytes per vector the vec0 table runs to roughly 300 MB, plus a regular `artwork_embeddings` table for filtered queries.
 - **Query embedding prefix:** The model uses the `query:` prefix for queries and `passage:` for documents, following the E5 instruction format.
-- **Database size:** ~1.1 GB uncompressed (includes `desc_embeddings` for description-based `find_similar`); ~595 MB gzipped for deployment. Auto-downloaded on first start when `EMBEDDINGS_DB_URL` is set.
+- **Database size:** ~1.11 GiB uncompressed (includes `desc_embeddings` for description-based `find_similar`); ~584 MiB gzipped for deployment. Downloaded on first start only when `EMBEDDINGS_DB_URL` is set.
+
+### Operational notes
+
+- **The tool is conditionally registered.** `semantic_search` appears in `tools/list` only when *both* the embeddings database and the embedding model loaded successfully. If the model fails to load, the tool silently disappears and calls return `-32602`, while every vocabulary-backed tool keeps working — so the failure looks like something else entirely.
+- **Set `HF_HOME`.** transformers.js does not honour `HF_HOME` itself; the server reads it and assigns it to the library's cache directory. Leave it unset and the model lands in an ephemeral cache, is re-fetched on every boot, and a busy startup can fail that fetch — which produces exactly the silent unregistration above.
+- **Results are cached.** Responses go through an LRU+TTL cache keyed on the embeddings build id, the model id, and the canonical arguments, with in-flight de-duplication. A database swap therefore invalidates the cache automatically.
+- **Warm-up is lazy.** The embeddings warm passes were removed from the HTTP startup path (they were single uninterruptible SQLite calls that blocked the event loop for seconds). The first `semantic_search` after a cold start pays the vec0 page-in cost instead.
