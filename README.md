@@ -11,17 +11,6 @@ The **rijksmuseum-mcp+** MCP server lets you explore the Rijksmuseum's artwork c
 
 This tool was developed as a technology demo by the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel. We are particularly interested in exploring the research opportunities, methodological risks, and technical challenges posed by retrieving and analysing data with LLMs. If you are interested in collaborating with us in this area, please [get in touch](mailto:rise@unibas.ch).
 
-## Sample Queries
-
-The system is designed to let you search, explore and ask questions about the Rijksmuseum's collections in natural language. For example:
-
-- _What German artworks at the Rijksmuseum evoke vanitas and mortality?_
-- _Which artworks have a provenance linked to Emperor Bonaparte?_
-- _List all artworks which include the inscription, 'Amor vincit omnia'_
-- _Find artworks similar to SK-A-1115_
-
-For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). These demonstrate queries on a variety of topics including subject and iconographic search, curated sets, semantic search, provenance research, inscriptions and marks, and conservation.
-
 ## Features
 
 - **Finding artworks**. You can search by keyword, by structured filters (artist, type, material, technique, date, physical dimensions, production place), or by meaning — a semantic search that handles interpretive queries like "melancholy winter scenes at dusk". There's also [iconographic search via Iconclass codes](https://kintopp.github.io/rijksmuseum-mcp-plus/iconclass-visualization), so you can ask for works depicting a specific scene or motif rather than just matching words in titles. 
@@ -34,6 +23,17 @@ For examples of more complex queries and sample responses, please browse the [re
 - **People and places**. You can search persons by profession, lifespan, or birthplace and then pull up their works, or run geospatial queries like "works depicting places within 20 km of Haarlem".
 - **Linked Open Data**. Works carry persistent handle.net URIs and other external IDs, and entities (creators, materials, depicted persons and places, themes) carry identifiers linking them to Wikidata, VIAF, ULAN, and RKD.
 - **Command-line interface.** The bundled `rijks-mcp` tool runs the same queries from the terminal — each tool exposed as a verb, with JSONL output for piping into tools such as `jq` so results are scriptable and reproducible.
+
+## Sample Queries
+
+The system is designed to let you search, explore and ask questions about the Rijksmuseum's collections in natural language. For example:
+
+- _What German artworks at the Rijksmuseum evoke vanitas and mortality?_
+- _Which artworks have a provenance linked to Emperor Bonaparte?_
+- _List all artworks which include the inscription, 'Amor vincit omnia'_
+- _Find artworks similar to SK-A-1115_
+
+For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). These demonstrate queries on a variety of topics including subject and iconographic search, curated sets, semantic search, provenance research, inscriptions and marks, and conservation.
 
 ## Quick Start
 
