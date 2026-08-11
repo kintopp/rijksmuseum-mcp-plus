@@ -186,12 +186,23 @@ function coerce(value, type, name) {
   return value;
 }
 
+// Schema params are camelCase but the CLI's own stderr hints (and habit) reach for
+// kebab-case. Accept both: resolve `--resumption-token` → `resumptionToken` only when the
+// camel form is a real schema property, so global flags like `show-call` are never rewritten.
+const kebabToCamel = (k) => k.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+const camelToKebab = (k) => k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+function resolveKey(key, props) {
+  if (key in props) return key;
+  const camel = kebabToCamel(key);
+  return camel in props ? camel : key;
+}
+
 // Build the boolean-flag set for a tool from its inputSchema + globals.
 function boolSetFor(schema) {
   const s = new Set(GLOBAL_BOOL);
   const props = schema?.properties ?? {};
   for (const [name, prop] of Object.entries(props)) {
-    if (propType(prop) === "boolean") s.add(name);
+    if (propType(prop) === "boolean") { s.add(name); s.add(camelToKebab(name)); }
   }
   return s;
 }
@@ -200,8 +211,9 @@ function boolSetFor(schema) {
 function buildToolArgs(verbCfg, schema, flags, positionals) {
   const props = schema?.properties ?? {};
   const args = {};
-  for (const [key, raw] of Object.entries(flags)) {
-    if (GLOBAL_BOOL.has(key) || GLOBAL_VALUE.has(key)) continue;
+  for (const [rawKey, raw] of Object.entries(flags)) {
+    if (GLOBAL_BOOL.has(rawKey) || GLOBAL_VALUE.has(rawKey)) continue;
+    const key = resolveKey(rawKey, props);
     args[key] = coerce(raw, propType(props[key]), key);
   }
   // First positional → the verb's primary param (if the flag wasn't already set).

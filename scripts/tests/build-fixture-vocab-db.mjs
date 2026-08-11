@@ -258,6 +258,17 @@ export function buildFixture() {
     "INSERT INTO vocabulary_external_ids (vocab_id, authority, id, uri) VALUES (?, ?, ?, ?)",
     VOCAB_EXTERNAL_IDS
   );
+  // artwork_external_ids — handle suffixes are upstream ids unrelated to art_id
+  // (0 of 818,188 match in the real DB), so FX-1's suffix is deliberately NOT 1.
+  // FX-2 has a non-handle row only, FX-3 has none — both must yield persistentId null.
+  insertMany(
+    "INSERT INTO artwork_external_ids (art_id, authority, id, uri) VALUES (?, ?, ?, ?)",
+    [
+      [1, "handle", "RM0001.COLLECT.99001", "http://hdl.handle.net/10934/RM0001.COLLECT.99001"],
+      [2, "other", "OTHER-2", "urn:other:OTHER-2"],
+    ]
+  );
+
   // Three citation rows for FX-1 (art_id 1) covering all three shapes.
   // FX-2 intentionally has no rows — used for the empty-case test.
   // FX-3 (art_id 3) cites ONE publication (301999001) on TWO rows (different page

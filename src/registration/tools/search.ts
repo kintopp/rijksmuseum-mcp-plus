@@ -84,14 +84,15 @@ export function registerSearchTools(
         "Ranking: relevance (BM25) when text search (description, title, etc.) or geographic proximity is used; otherwise importance (image availability, curatorial attention, metadata richness). " +
         "For concept-ranked results, use semantic_search.\n\n" +
         "At least one filter is required. There is no full-text search across all metadata. " +
-        "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), ALWAYS start with subject — it searches ~832K artworks tagged with structured Iconclass vocabulary and has by far the highest recall for conceptual queries. " +
+        "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), ALWAYS start with subject — it searches the large majority of the collection via structured Iconclass vocabulary and has by far the highest recall for conceptual queries. " +
         "Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. " +
         "For broader concept discovery beyond structured vocabulary, use semantic_search — but combine it with search_artwork(type: 'painting', …) for painting queries since paintings are underrepresented there.\n\n" +
         "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). " +
         "If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. " +
         "Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; do not open the viewer for list/count/summary requests)." +
         (vocabAvailable
-          ? " All parameters combine freely. Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
+          ? " Parameters combine freely, with one exception: proximity search overrides depictedPlace/productionPlace (see nearPlace). " +
+            "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
             "For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. " +
             "For acquisition channel / donor analysis (gifts, bequests, fund names like 'Vereniging Rembrandt'), use search_provenance."
           : ""),
@@ -100,7 +101,7 @@ export function registerSearchTools(
           .optional()
           .describe(
             "Search by artwork title — matches against all title variants (brief, full, former × EN/NL). " +
-            "Note: only ~4% of artworks have an English title (~35K of 833K). " +
+            "Note: fewer than one artwork in twenty has an English title. " +
             "For non-title text, use the specific field parameters (description, inscription, curatorialNarrative, creator, subject, etc.)."
           ),
         creator: stringOrArray()
@@ -165,7 +166,7 @@ export function registerSearchTools(
           ),
         hasProvenance: z.preprocess(stripNullCoerceBool, z.boolean().optional())
           .describe(
-            "If true, only return artworks that have parsed provenance records (~48K of 832K). " +
+            "If true, only return artworks that have parsed provenance records — roughly 48K, about 6% of the collection. " +
             "Combine with other filters for cross-domain queries (e.g. type='painting' + hasProvenance=true). " +
             "Cannot be used alone — combine with at least one other filter."
           ),
@@ -176,7 +177,7 @@ export function registerSearchTools(
                 .optional()
                 .describe(
                   "PRIMARY parameter for concept or thematic searches — use this first, before description or curatorialNarrative. " +
-                  "Searches ~832K artworks by subject matter (Iconclass themes, depicted scenes). " +
+                  "Searches subject matter (Iconclass themes, depicted scenes); tagged on roughly seven artworks in eight. " +
                   "Has basic English morphological expansion (singular/plural, -ing, -ed) as a fallback — " +
                   "'cat' matches 'cats' and 'painting' matches 'paint', but unrelated derivations like " +
                   "'crucifixion' vs 'crucified' are not linked. " +
@@ -313,7 +314,9 @@ export function registerSearchTools(
                 .describe(
                   "Search for artworks related to places near a named location (e.g. 'Leiden'). " +
                   "Supports multi-word place names with geo-disambiguation (e.g. 'Oude Kerk Amsterdam' resolves to the Oude Kerk in Amsterdam). " +
-                  "Searches both depicted and production places within the specified radius."
+                  "Matches depicted places and the spatial field, so it reaches most but not all production places. " +
+                  "Overrides depictedPlace/productionPlace: if either is also set it is dropped and a warning is returned. " +
+                  "Only the authority-geocoded subset of places carries coordinates; nearLat/nearLon always works."
                 ),
               nearLat: z
                 .number()

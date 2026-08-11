@@ -40,8 +40,9 @@ export function registerSemanticTools(
         description:
           "Free-text concept search by embedding similarity. " +
           "For ideas like 'solitude' or 'vanitas' that resist metadata. " +
-          "Returns artworks ranked by Dutch-description embedding similarity to the query, with source text for grounding — " +
-          "use that text to explain why results are relevant or to flag false positives.\n\n" +
+          "Ranks by multilingual embedding similarity over a composite of each artwork's title, inscriptions, " +
+          "description and curatorial narrative, and returns that source text for grounding — " +
+          "use it to explain why results are relevant or to flag false positives.\n\n" +
           "Not for queries expressible as structured metadata (specific artists, dates, places, materials) — use search_artwork for those. " +
           "Not for artwork-to-artwork similarity — use find_similar with an objectNumber. " +
           "Not for aggregate counts or distributions — use collection_stats.\n\n" +

@@ -9,7 +9,7 @@ LLM would get from the same tool, which makes it both a power-user/pipeline tool
 protocol regression harness. It is JSON-first, designed for shell pipelines and bash-capable agents.
 
 All examples below are real and were run against the production vocabulary database
-(~834K artworks). Counts and IDs are from a v0.40 harvest snapshot and may shift after a re-harvest.
+(roughly 830K artworks). Counts and IDs were re-verified against the current harvest and may shift after the next one.
 
 ---
 
@@ -106,6 +106,9 @@ Server diagnostics appear on stderr only in stdio mode (the subprocess inherits 
 | `--table` | Terse human-readable table (opt-in) |
 | `--fields a,b,c` | Project to these top-level keys on every emitted object — the biggest token saver |
 | `--quiet` | Suppress the stderr summary line |
+| `-o` / `-h` | Short aliases for `--out` and `--help` |
+
+**Flag spelling.** Tool parameters are camelCase, but you may write them in kebab-case: `--resumption-token` and `--resumptionToken` are equivalent, as are `--include-extent-text` and `--includeExtentText`. The kebab form is resolved only when the camelCase name is a real parameter of that command, so CLI-owned flags like `--show-call` are never mistaken for tool arguments.
 
 ```bash
 # Default: JSONL, one object per line
@@ -131,7 +134,7 @@ carte-de-visite        17979
 |---|---|
 | `0` | Success |
 | `1` | Tool error or connection failure (the server's prose error — e.g. "no results; try the Dutch term" — is written to stderr) |
-| `2` | Usage error (unknown command, an out-of-scope viewer tool, bad flags) |
+| `2` | Usage error — unknown command, an out-of-scope viewer tool, or a malformed flag *value* (e.g. invalid `--textQuery` JSON). A flag the schema rejects is a **tool** error, so it exits `1`, not `2`. |
 
 ### Batch mode (`--stdin`)
 
@@ -172,14 +175,16 @@ hanging on the keyboard).
 
 ### The `--max` alias caveat
 
-`--max` (and `-n`) is a convenience alias for `maxResults`, which **most** commands use. Two
-commands page differently — using `--max` there is rejected by the strict schema (you'll get an
-empty stdout + a tool error on stderr):
+`--max` (and `-n`) is a convenience alias for `maxResults`, which **most** commands use. Several
+commands cap differently — using `--max` there is rejected by the strict schema (you'll get an
+empty stdout + a tool error on stderr, exit 1):
 
 | Command | Use this for the result cap |
 |---|---|
 | `stats` | `--topN <n>` |
 | `list-sets` | `--minMembers` / `--maxMembers` (no direct cap) |
+| `bibliography`, `citing` | `--full` (first 5 / first 20 plus a total by default) |
+| `details`, `conservation`, `inspect` | no cap — single-object lookups |
 | everything else | `--max` / `--maxResults` |
 
 When in doubt, `node scripts/cli.mjs <command> --help` lists the real flags (generated from the
@@ -292,8 +297,12 @@ Output keys: `totalResults`, `results`, `source`. Each result: `objectNumber`, `
 
 ### `semantic` → `semantic_search`
 
-Meaning/concept search (natural language). Ranked by similarity; returns up to 15 (max 50). Same
-pre-filters as `search` (`--type`, `--material`, `--creator`, `--iconclass`, …).
+Meaning/concept search (natural language). Ranked by similarity; returns up to 15 (max 50). Accepts
+a *subset* of `search`'s pre-filters (`--type`, `--material`, `--technique`, `--creator`,
+`--creationDate`, `--subject`, `--iconclass`, `--depictedPerson`, `--depictedPlace`,
+`--productionPlace`, `--collectionSet`, `--aboutActor`, `--imageAvailable`) — notably **not**
+`--textQuery`, `--sort`, `--facets`, the dimension ranges, or the geo filters. Run
+`semantic --help` for the authoritative list.
 
 ```bash
 $ node scripts/cli.mjs semantic "ships in a stormy sea" --max 3 --fields objectNumber,title,similarityScore --table
@@ -311,8 +320,8 @@ Output keys: `searchMode`, `query`, `returnedCount`, `results`. Each result adds
 
 ### `persons` → `search_persons`
 
-Search the ~290K person + ~12K group authority records by name, gender, birth/death year/place, or
-profession. Returns `vocabId`s to feed into `search --creator <vocabId>` (works *by*) or
+Search the person and group authority records by name, gender, birth year, birth/death place, or
+profession (there is no death-year filter). Returns `vocabId`s to feed into `search --creator <vocabId>` (works *by*) or
 `search --aboutActor <vocabId>` (works *depicting*).
 
 ```bash
@@ -344,7 +353,7 @@ node scripts/cli.mjs provenance --party "Six" --max 3 --fields objectNumber,titl
 node scripts/cli.mjs provenance --transferType gift --layer periods --max 5
 ```
 
-Output keys: `totalArtworks`, `results`, plus `periods`/`facets`/`warnings` depending on layer.
+Output keys: `totalArtworks`, `results`, `facets`/`warnings` depending on layer, plus `totalArtworksCapped`, `creditLineResults` and `autoCompacted` where applicable. `periods` is nested inside each result, not top-level.
 When events contain LLM-assisted records, an `enrichmentReview` (`{ count, url | file }`) also
 rides the result — the review-page link, mirroring the `REVIEW_URL`/`REVIEW_FILE` text line.
 Each result: `objectNumber`, `title`, `creator`, `date`, `url`, `eventCount`, `matchedEventCount`,
@@ -383,8 +392,8 @@ default 20); page with `--offset`.
 
 ### `details` → `get_artwork_details`
 
-Full metadata for one object (34 categories). Single-object output. Pair with `--fields` to keep it
-small.
+Full metadata for one object — the complete record, 46 top-level fields. Single-object output. Pair
+with `--fields` to keep it small.
 
 ```bash
 $ node scripts/cli.mjs details SK-C-5 --fields objectNumber,title,creator,date,type
@@ -515,7 +524,7 @@ is large (~6 k tokens at `--max 20`); use `--fields` / `jq`.
 Enumerate the members of a curated set. Token pagination.
 
 ```bash
-$ node scripts/cli.mjs browse-set 2619 --max 2 --fields objectNumber,title,extentText
+$ node scripts/cli.mjs browse-set 2619 --max 2 --include-extent-text --fields objectNumber,title,extentText
 {"objectNumber":"...","title":"...","extentText":"..."}
 ...
 # stderr: 2 shown of 139; pass --resumption-token MjYxOQky for more
@@ -524,7 +533,7 @@ node scripts/cli.mjs browse-set 2619 --resumption-token MjYxOQky --max 2
 ```
 
 Output keys: `records`, `totalInSet`, `resumptionToken`. Each record: `objectNumber`, `title`,
-`creator`, `date`, `extentText` (was `dimensions`), `datestamp`, `hasImage`, `imageUrl`,
+`creator`, `date`, `extentText` (was `dimensions`; only when `--include-extent-text` is passed), `datestamp`, `hasImage`, `imageUrl`,
 `iiifServiceUrl`, `edmType`, `lodUri`, `url`.
 
 ---
