@@ -11,6 +11,30 @@ The **rijksmuseum-mcp+** MCP server lets you explore the Rijksmuseum's artwork c
 
 This tool was developed as a technology demo by the [Research and Infrastructure Support](https://rise.unibas.ch/en/) (RISE) group at the University of Basel. We are particularly interested in exploring the research opportunities, methodological risks, and technical challenges posed by retrieving and analysing data with LLMs. If you are interested in collaborating with us in this area, please [get in touch](mailto:rise@unibas.ch).
 
+## Sample Queries
+
+The system is designed to let you search, explore and ask questions about the Rijksmuseum's collections in natural language. For example:
+
+- _What German artworks at the Rijksmuseum evoke vanitas and mortality?_
+- _Which artworks have a provenance linked to Emperor Bonaparte?_
+- _List all artworks which include the inscription, 'Amor vincit omnia'_
+- _Find artworks similar to SK-A-1115_
+
+For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). These demonstrate queries on a variety of topics including subject and iconographic search, curated sets, semantic search, provenance research, inscriptions and marks, and conservation.
+
+## Features
+
+- **Finding artworks**. You can search by keyword, by structured filters (artist, type, material, technique, date, physical dimensions, production place), or by meaning — a semantic search that handles interpretive queries like "melancholy winter scenes at dusk". There's also [iconographic search via Iconclass codes](https://kintopp.github.io/rijksmuseum-mcp-plus/iconclass-visualization), so you can ask for works depicting a specific scene or motif rather than just matching words in titles. 
+- **Looking closely at works.** Any artwork can be opened in an interactive, inline viewer. You can instruct the AI-assistant to inspect image regions by itself — useful for analysing a specific area of the image you've highlighted for it in the viewer. If an artwork has curator defined related artworks (e.g. preparatory sketches, or different impressions of the same design) these can be accessed through the viewer as well — its < / > buttons step through them in place, without leaving the viewer.
+  <p align="center"><img src="docs/van-der-Ast.jpg" alt="Stilleven met vruchten en bloemen (SK-A-2152) with highlighted detail containing three shells" width="600"></p>
+- **Collection-level analysis**. You can ask for statistical breakdowns across the whole collection: top creators, distributions by decade, type, or theme, geographic spread, even demographic questions like how works by female artists are distributed across media or centuries.
+- **Provenance and ownership history**. Tracing who owned a work and when, which works passed through a particular collector or dealer, sales and confiscations in a given city or period, price histories, and how long families held their collections. Made possible by an [experimental AAM parser](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-parser-visualization.html) that enables structured, [CMOA/PLOD-aligned queries](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html).
+- **Scholarly apparatus**. Bibliographies for individual works, reverse lookups (which artworks cite a given publication), and conservation histories including technical examinations like X-rays, infrared, and dendrochronology.
+- **Relationships between works**. A similarity engine ("find images similar to..") [compares works across multiple dimensions](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-1115.html) — visual, thematic, lineage, shared subject — and surfaces pendants, pairs, copies, reproductive prints after paintings, and different impressions of one design.
+- **People and places**. You can search persons by profession, lifespan, or birthplace and then pull up their works, or run geospatial queries like "works depicting places within 20 km of Haarlem".
+- **Linked Open Data**. Works carry persistent handle.net URIs and other external IDs, and entities (creators, materials, depicted persons and places, themes) carry identifiers linking them to Wikidata, VIAF, ULAN, and RKD.
+- **Command-line interface.** The bundled `rijks-mcp` tool runs the same queries from the terminal — each tool exposed as a verb, with JSONL output for piping into tools such as `jq` so results are scriptable and reproducible.
+
 ## Quick Start
 
 The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding rijksmuseum-mcp+ to Claude as a *remotely hosted*, [custom 'Connector'](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) using the URL below. This is currently free for one connector – additional connectors require a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic.
@@ -26,30 +50,6 @@ Afterwards, follow the same procedure to install rijksmuseum-mcp+'s sibling reso
 ## Research skill
 
 The `rijksmuseum-mcp+` skill file ([.zip archive](docs/skills/rijksmuseum-mcp-plus.skill.zip)) gives the AI assistant detailed guidance in natural language on how to use rijksmuseum-mcp+ effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions and known limitations. The package also includes reference files with full description of the available provenance search patterns and the `find_similar` functionality. Skills were [originally developed by Anthropic](https://support.claude.com/en/articles/12512176-what-are-skills) for their Claude products but have since become an [open standard](https://agentskills.io/home). Making use of this skill is optional but will significantly improve the quality and efficiency of your AI assistant's responses when exploring the collection. The downloaded skill file can be installed in Claude by following [these instructions](https://claude.com/resources/tutorials/teach-claude-your-way-of-working-using-skills).
-
-## Sample Queries
-
-After you've connected the resource to your AI system, you can search, explore and ask questions about the Rijksmuseum's collections in natural language. For example:
-
-- _What German artworks at the Rijksmuseum evoke vanitas and mortality?_
-- _Which artworks have a provenance linked to Emperor Bonaparte?_
-- _List all artworks which include the inscription, 'Amor vincit omnia'_
-- _Find artworks similar to SK-A-1115_
-
-For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). These demonstrate queries on a variety of topics including subject and iconographic search, curated sets, semantic search, provenance research, inscriptions and marks, and conservation. 
-
-## Features
-
-- **Finding artworks**. You can search by keyword, by structured filters (artist, type, material, technique, date, physical dimensions, production place), or by meaning — a semantic search that handles interpretive queries like "melancholy winter scenes at dusk". There's also [iconographic search via Iconclass codes](https://kintopp.github.io/rijksmuseum-mcp-plus/iconclass-visualization), so you can ask for works depicting a specific scene or motif rather than just matching words in titles. 
-- **Looking closely at works.** Any artwork can be opened in an interactive, inline viewer. You can instruct the AI-assistant to inspect image regions by itself — useful for analysing a specific area of the image you've highlighted for it in the viewer. If an artwork has curator defined related artworks (e.g. preparatory sketches, or different impressions of the same design) these can be accessed through the viewer as well — its < / > buttons step through them in place, without leaving the viewer.
-  <p align="center"><img src="docs/van-der-Ast.jpg" alt="Stilleven met vruchten en bloemen (SK-A-2152) with highlighted detail containing three shells" width="600"></p>
-- **Collection-level analysis**. You can ask for statistical breakdowns across the whole collection: top creators, distributions by decade, type, or theme, geographic spread, even demographic questions like how works by female artists are distributed across media or centuries.
-- **Provenance and ownership history**. Tracing who owned a work and when, which works passed through a particular collector or dealer, sales and confiscations in a given city or period, price histories, and how long families held their collections. Made possible by an [experimental AAM parser](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-parser-visualization.html) that enables structured, [CMOA/PLOD-aligned queries](https://kintopp.github.io/rijksmuseum-mcp-plus/provenance-patterns.html).
-- **Scholarly apparatus**. Bibliographies for individual works, reverse lookups (which artworks cite a given publication), and conservation histories including technical examinations like X-rays, infrared, and dendrochronology.
-- **Relationships between works**. A similarity engine ("find images similar to..") [compares works across multiple dimensions](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-1115.html) — visual, thematic, lineage, shared subject — and surfaces pendants, pairs, copies, reproductive prints after paintings, and different impressions of one design.
-- **People and places**. You can search persons by profession, lifespan, or birthplace and then pull up their works, or run geospatial queries like "works depicting places within 20 km of Haarlem".
-- **Linked Open Data**. Works carry persistent handle.net URIs and other external IDs, and entities (creators, materials, depicted persons and places, themes) carry identifiers linking them to Wikidata, VIAF, ULAN, and RKD.
-- **Command-line interface.** The bundled `rijks-mcp` tool runs the same queries from the terminal — each tool exposed as a verb, with JSONL output for piping into tools such as `jq` — so results are scriptable and reproducible.
 
 ## How it works
 
