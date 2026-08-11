@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retrieving Scent Containers &mdash; rijksmuseum-mcp+</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #fafaf8; color: #1a1a1a; line-height: 1.6;
+  }
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
+  section { padding: 3.5rem 0 2.5rem; }
+  section + section { border-top: 1px solid #e5e5e0; }
+
+  /* ── Typography ───────────────────────────────────────────── */
+  h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+  p, li { font-size: 0.95rem; color: #333; }
+  .muted { color: #666; font-size: 0.85rem; }
+  .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+  .mono, code { font-family: 'Iosevka', 'JetBrains Mono', 'Fira Code', monospace; }
+  code {
+    font-size: 0.85em; background: #f0f0eb; border-radius: 3px;
+    padding: 0.08em 0.35em; color: #334155;
+  }
+  .lede { font-size: 1rem; color: #444; max-width: 700px; }
+
+  /* ── Chart tokens (validated: dataviz palette, light surface #fff) ── */
+  :root {
+    --series-object:    #2a78d6;  /* slot 1 blue   — object-type vocabulary */
+    --series-depiction: #eb6834;  /* slot 2 orange — subject / Iconclass index */
+    --series-text:      #1baf7a;  /* slot 3 aqua   — free-text description */
+    --seq-700: #0d366b; --seq-550: #1c5cab; --seq-450: #2a78d6;
+    --seq-350: #5598e7; --seq-250: #86b6ef; --seq-150: #b7d3f6;
+    --ink-muted: #898781;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --zero: #94a3b8;
+  }
+
+  /* ── Hero ──────────────────────────────────────────────────── */
+  .hero {
+    padding: 4rem 0 3rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+  }
+  .hero h1 { font-size: 2.2rem; margin-bottom: 0.5rem; color: #fff; }
+  .hero .subtitle { font-size: 1.1rem; color: #94a3b8; font-weight: 400; margin-bottom: 1.5rem; }
+  .hero p { color: #cbd5e1; font-size: 0.9rem; max-width: 700px; }
+  .hero code { background: rgba(255,255,255,.10); color: #fde68a; }
+  .hero .stats-row {
+    display: flex; gap: 2.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+  }
+  .hero .stat { text-align: left; }
+  .hero .stat .num { font-size: 1.8rem; font-weight: 700; color: #e2e8f0; line-height: 1.2; }
+  .hero .stat .desc { font-size: 0.78rem; color: #94a3b8; margin-top: 0.15rem; }
+
+  /* ── Cards ─────────────────────────────────────────────────── */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff; border: 1px solid #d4d4c8; border-radius: 8px;
+    padding: 1.1rem 1.25rem; position: relative;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card h3 { font-size: 0.95rem; }
+  .card p { font-size: 0.82rem; color: #555; margin-top: 0.3rem; }
+  .card .example {
+    margin-top: 0.6rem; padding: 0.5rem 0.7rem; background: #f8f8f5;
+    border-radius: 5px; font-family: 'Iosevka', monospace;
+    font-size: 0.76rem; color: #444; line-height: 1.7;
+  }
+
+  /* ── Legend ────────────────────────────────────────────────── */
+  .legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.3rem; margin: 0 0 1rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: #555; }
+  .legend-swatch { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+
+  /* ── Horizontal bar chart ──────────────────────────────────── */
+  .barchart { margin: 1.2rem 0 0.5rem; }
+  .bar-row { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 5px; }
+  .bar-key {
+    width: 216px; flex-shrink: 0; text-align: right;
+    font-family: 'Iosevka', 'JetBrains Mono', monospace;
+    font-size: 0.72rem; color: #444; line-height: 1.35;
+  }
+  .bar-track { flex: 1; height: 19px; position: relative; min-width: 0; }
+  .bar-fill {
+    height: 100%; border-radius: 0 4px 4px 0; min-width: 2px;
+    display: block;
+  }
+  .bar-val {
+    position: absolute; top: 0; height: 19px; line-height: 19px;
+    font-size: 0.72rem; font-weight: 600; color: #333;
+    padding-left: 6px; white-space: nowrap;
+  }
+  .bar-zero {
+    height: 19px; width: 22px; border: 1px dashed var(--zero);
+    border-radius: 0 4px 4px 0; background: repeating-linear-gradient(
+      45deg, transparent, transparent 3px, #eef0f2 3px, #eef0f2 6px);
+  }
+  .bar-axis {
+    display: flex; align-items: center; gap: 0.7rem;
+    margin-top: 0.35rem; font-size: 0.68rem; color: var(--ink-muted);
+  }
+  .bar-axis .bar-key { color: var(--ink-muted); }
+  .bar-axis .axis-line {
+    flex: 1; border-top: 1px solid var(--baseline);
+    display: flex; justify-content: space-between; padding-top: 2px;
+  }
+  .grp-head {
+    display: flex; align-items: baseline; gap: 0.6rem;
+    margin: 1.1rem 0 0.45rem; padding-left: 0;
+  }
+  .grp-head:first-child { margin-top: 0; }
+  .grp-head .grp-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.03em; }
+  .grp-head .grp-note { font-size: 0.74rem; color: #777; }
+
+  /* ── Paired / grouped column chart ─────────────────────────── */
+  .colchart { display: flex; align-items: flex-end; gap: 0.55rem; height: 190px; margin: 1.2rem 0 0; }
+  .col-group { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+  .col-bars { display: flex; align-items: flex-end; gap: 3px; height: 100%; }
+  .col-bar { flex: 1; border-radius: 4px 4px 0 0; position: relative; min-height: 2px; }
+  .col-bar .cv {
+    position: absolute; top: -17px; left: 50%; transform: translateX(-50%);
+    font-size: 0.68rem; font-weight: 600; color: #444; white-space: nowrap;
+  }
+  .col-axis { display: flex; gap: 0.55rem; border-top: 1px solid var(--baseline); padding-top: 4px; }
+  .col-axis div { flex: 1; text-align: center; font-size: 0.7rem; color: #555; }
+
+  /* ── Set-disjointness diagram ──────────────────────────────── */
+  .setfig { margin: 1.4rem 0 0.5rem; text-align: center; }
+  .setfig svg { max-width: 100%; height: auto; }
+
+  /* ── Divergence (three-part) bar ───────────────────────────── */
+  .split-bar {
+    display: flex; height: 40px; border-radius: 6px; overflow: hidden;
+    margin: 1rem 0 0.4rem; font-size: 0.72rem; font-weight: 600; color: #fff;
+  }
+  .split-bar > div {
+    display: flex; align-items: center; justify-content: center;
+    white-space: nowrap; padding: 0 0.5rem;
+  }
+
+  /* ── Tables ────────────────────────────────────────────────── */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 1rem 0; }
+  .tbl th {
+    text-align: left; font-size: 0.67rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: #94a3b8; padding: 0.5rem 0.7rem; border-bottom: 2px solid #e5e5e0;
+  }
+  .tbl td {
+    padding: 0.5rem 0.7rem; border-bottom: 1px solid #f0f0eb;
+    vertical-align: top; color: #333;
+  }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tbl td.zero { color: #b45309; }
+  .pill {
+    display: inline-block; font-size: 0.66rem; font-weight: 700;
+    padding: 1px 7px; border-radius: 10px; white-space: nowrap;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .p-object    { background: #dbeafe; color: #1e40af; }
+  .p-depiction { background: #ffe4d5; color: #9a3412; }
+  .p-text      { background: #d1fae5; color: #065f46; }
+
+  /* ── Small multiples ───────────────────────────────────────── */
+  .sm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem 1.6rem; margin: 1.2rem 0 0; }
+  @media (max-width: 700px) { .sm-grid { grid-template-columns: 1fr; } }
+  .sm h3 { font-size: 0.82rem; margin-bottom: 0.15rem; }
+  .sm .sm-sub { font-size: 0.72rem; color: #777; margin-bottom: 0.5rem; }
+  .sm .bar-key { width: 118px; font-size: 0.7rem; }
+
+  .callout {
+    background: #fff; border-left: 3px solid var(--series-object);
+    border-radius: 0 6px 6px 0; padding: 0.85rem 1.1rem; margin: 1.3rem 0;
+    font-size: 0.88rem; color: #444;
+  }
+  .callout strong { color: #1a1a1a; }
+
+  /* ── Footer ────────────────────────────────────────────────── */
+  footer {
+    padding: 2rem 0; border-top: 1px solid #e5e5e0;
+    text-align: center; color: #94a3b8; font-size: 0.78rem;
+  }
+  footer a { color: #64748b; }
+
+  @media (max-width: 700px) {
+    .bar-key { width: 130px; font-size: 0.66rem; }
+    .container { padding: 0 1.1rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  HERO                                                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="container">
+    <h1>Retrieving Scent Containers</h1>
+    <div class="subtitle">Why the Rijksmuseum's perfume and incense holdings are unreachable by subject index</div>
+    <p>
+      Iconclass <code>41C761</code> &mdash; <em>scent-box</em> &mdash; returns nothing at the Rijksmuseum.
+      Its sibling <code>41C762</code> &mdash; <em>incense-burner</em> &mdash; returns 157 works, but not a
+      single physical incense burner: they are all <em>pictures</em> of one. The museum's actual scent
+      containers live in a second, entirely separate index built from Dutch object-type vocabulary.
+      This page measures how far apart the two indexes sit, and how wide each retrieval channel is.
+    </p>
+    <div class="stats-row">
+      <div class="stat"><div class="num">0</div><div class="desc">works under <code style="font-size:.8em">41C761</code></div></div>
+      <div class="stat"><div class="num">157</div><div class="desc">under sibling <code style="font-size:.8em">41C762</code></div></div>
+      <div class="stat"><div class="num">96</div><div class="desc">objects via type vocabulary</div></div>
+      <div class="stat"><div class="num">0</div><div class="desc">records shared by the two</div></div>
+      <div class="stat"><div class="num">7</div><div class="desc">type labels that return objects</div></div>
+      <div class="stat"><div class="num">7</div><div class="desc">type labels that return nothing</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  1 · THE DEAD NOTATION                                      -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>1 &middot; A dead branch of the subject tree</h2>
+    <p class="lede">
+      <code>41C761</code> sits under <em>41C76 &mdash; scents, perfumes ~ stimulants, drugs</em>, itself under
+      <em>41C7 &mdash; drinks, stimulants, drugs</em>. Walking the immediate neighbourhood shows the notation is
+      not merely under-used: the whole <code>41C76</code> branch is empty at the Rijksmuseum except for one
+      sibling, which carries almost the entire signal.
+    </p>
+
+    <div class="barchart" role="img" aria-label="Rijksmuseum artwork counts for Iconclass notations in the 41C7 neighbourhood. 41C7 drinks stimulants drugs: 18. 41C76 scents perfumes: 0. 41C761 scent-box: 0. 41C762 incense-burner: 157. 41C763, 41C764, 41C765: not defined, 0.">
+      <div class="bar-row">
+        <div class="bar-key">41C7<br><span style="color:#888">drinks, stimulants, drugs</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:11.5%;background:var(--seq-250);"></div><span class="bar-val" style="left:11.5%">18</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">41C76<br><span style="color:#888">scents, perfumes (parent)</span></div>
+        <div class="bar-track"><div class="bar-zero"></div><span class="bar-val" style="left:22px;color:#b45309;">0</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key" style="color:#9a3412;font-weight:600;">41C761<br><span style="color:#b45309;font-weight:400;">scent-box</span></div>
+        <div class="bar-track"><div class="bar-zero"></div><span class="bar-val" style="left:22px;color:#b45309;">0</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">41C762<br><span style="color:#888">incense-burner</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--seq-550);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">157</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key" style="color:#999;">41C763 / 41C764 / 41C765<br><span style="color:#aaa">no label in Iconclass</span></div>
+        <div class="bar-track"><div class="bar-zero"></div><span class="bar-val" style="left:22px;color:#999;">0</span></div>
+      </div>
+      <div class="bar-axis"><div class="bar-key">artworks</div><div class="axis-line"><span>0</span><span>157</span></div></div>
+    </div>
+
+    <div class="callout">
+      The related notation <code>31A51451</code> (<em>pomander, musk ball</em>) sits in an unrelated
+      branch &mdash; human figure and adornment, not nutrition and stimulants &mdash; and returns
+      <strong>4</strong> works. So the collection's pomanders and its incense burners are indexed
+      under two subject trees that never meet, and its scent-<em>boxes</em> under neither.
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  2 · TWO DISJOINT UNIVERSES                                 -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>2 &middot; Depictions and objects are disjoint sets</h2>
+    <p class="lede">
+      The 157 works under <code>41C762</code> are overwhelmingly prints. The physical incense burners,
+      kogo and pomanders are reachable only through object-type vocabulary. Intersecting the subject
+      index against every object-type channel returns <strong>zero</strong> every time &mdash; these
+      are not overlapping views of one corpus, they are two corpora.
+    </p>
+
+    <div class="setfig">
+      <svg viewBox="0 0 720 210" role="img" aria-label="Diagram: the Iconclass 41C762 subject index holds 157 records, all depictions; the object-type vocabulary holds 96 records, all physical objects; the intersection between them is zero records.">
+        <!-- left set -->
+        <rect x="8" y="26" width="286" height="120" rx="10" fill="#fff5f0" stroke="#eb6834" stroke-width="1.5"/>
+        <text x="151" y="16" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#9a3412" letter-spacing=".05em">DEPICTION INDEX</text>
+        <text x="151" y="66" text-anchor="middle" font-family="system-ui,sans-serif" font-size="40" font-weight="700" fill="#9a3412">157</text>
+        <text x="151" y="86" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11.5" fill="#7c2d12">works under iconclass: 41C762</text>
+        <text x="151" y="106" text-anchor="middle" font-family="Iosevka,monospace" font-size="10.5" fill="#9a3412">131 prints &middot; 10 photographs</text>
+        <text x="151" y="122" text-anchor="middle" font-family="Iosevka,monospace" font-size="10.5" fill="#9a3412">4 photomech. &middot; 1 drawing &middot; 1 poster</text>
+        <text x="151" y="138" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#a16207">83.4% are prints</text>
+
+        <!-- intersection -->
+        <rect x="306" y="56" width="108" height="60" rx="8" fill="#fff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="360" y="86" text-anchor="middle" font-family="system-ui,sans-serif" font-size="30" font-weight="700" fill="#64748b">0</text>
+        <text x="360" y="103" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#64748b">shared records</text>
+        <text x="360" y="132" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" fill="#94a3b8">tested against all 5</text>
+        <text x="360" y="144" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" fill="#94a3b8">object-type channels</text>
+
+        <!-- right set -->
+        <rect x="426" y="26" width="286" height="120" rx="10" fill="#f2f7fd" stroke="#2a78d6" stroke-width="1.5"/>
+        <text x="569" y="16" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#1e40af" letter-spacing=".05em">OBJECT INDEX</text>
+        <text x="569" y="66" text-anchor="middle" font-family="system-ui,sans-serif" font-size="40" font-weight="700" fill="#1e40af">96</text>
+        <text x="569" y="86" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11.5" fill="#1e3a8a">objects across 7 type labels</text>
+        <text x="569" y="106" text-anchor="middle" font-family="Iosevka,monospace" font-size="10.5" fill="#1e40af">wierookbrander &middot; wierookdoos &middot; kogo</text>
+        <text x="569" y="122" text-anchor="middle" font-family="Iosevka,monospace" font-size="10.5" fill="#1e40af">reukfles &middot; reukbal &middot; hibachi</text>
+        <text x="569" y="138" text-anchor="middle" font-family="Iosevka,monospace" font-size="10.5" fill="#1e40af">parfumbrander</text>
+
+        <!-- bridge note -->
+        <line x1="151" y1="160" x2="151" y2="176" stroke="#1baf7a" stroke-width="1.5"/>
+        <line x1="569" y1="160" x2="569" y2="176" stroke="#1baf7a" stroke-width="1.5"/>
+        <line x1="151" y1="176" x2="569" y2="176" stroke="#1baf7a" stroke-width="1.5"/>
+        <rect x="272" y="164" width="176" height="24" rx="6" fill="#ecfdf5" stroke="#1baf7a" stroke-width="1.2"/>
+        <text x="360" y="180" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10.5" fill="#065f46">only bridge: 2 records via free text</text>
+        <text x="360" y="203" text-anchor="middle" font-family="Iosevka,monospace" font-size="10" fill="#6b7280">iconclass: 41C762 &nbsp;&cap;&nbsp; description: wierookbrander &nbsp;=&nbsp; 2</text>
+      </svg>
+    </div>
+
+    <h3 style="margin-top:1.8rem;">The two universes are also differently dated</h3>
+    <p class="muted" style="margin-bottom:0.2rem;">
+      Share of each corpus by century of production. Depictions cluster hard in the 18th century
+      (Japanese printmaking, largely); the objects themselves stretch back to Han-dynasty and Song-dynasty
+      ceramics that no print records.
+    </p>
+    <div class="legend" style="margin-top:0.7rem;">
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--series-object);"></div> Objects &mdash; <code>type: wierookbrander</code> (n&nbsp;=&nbsp;45)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--series-depiction);"></div> Depictions &mdash; <code>iconclass: 41C762</code> (n&nbsp;=&nbsp;157)</div>
+    </div>
+
+    <div class="colchart" role="img" aria-label="Grouped column chart comparing share by century. Objects: pre-1500 15.6 percent, 1500s 0, 1600s 33.3, 1700s 24.4, 1800s 24.4, 1900s 2.2. Depictions: pre-1500 0, 1500s 3.8, 1600s 11.5, 1700s 51.6, 1800s 18.5, 1900s 14.6.">
+      <div class="col-group"><div class="col-bars">
+        <div class="col-bar" style="height:30.2%;background:var(--series-object);"><span class="cv">16%</span></div>
+        <div class="col-bar" style="height:1px;background:var(--zero);"><span class="cv" style="color:#94a3b8">0</span></div>
+      </div></div>
+      <div class="col-group"><div class="col-bars">
+        <div class="col-bar" style="height:1px;background:var(--zero);"><span class="cv" style="color:#94a3b8">0</span></div>
+        <div class="col-bar" style="height:7.4%;background:var(--series-depiction);"><span class="cv">4%</span></div>
+      </div></div>
+      <div class="col-group"><div class="col-bars">
+        <div class="col-bar" style="height:64.5%;background:var(--series-object);"><span class="cv">33%</span></div>
+        <div class="col-bar" style="height:22.3%;background:var(--series-depiction);"><span class="cv">12%</span></div>
+      </div></div>
+      <div class="col-group"><div class="col-bars">
+        <div class="col-bar" style="height:47.3%;background:var(--series-object);"><span class="cv">24%</span></div>
+        <div class="col-bar" style="height:100%;background:var(--series-depiction);"><span class="cv">52%</span></div>
+      </div></div>
+      <div class="col-group"><div class="col-bars">
+        <div class="col-bar" style="height:47.3%;background:var(--series-object);"><span class="cv">24%</span></div>
+        <div class="col-bar" style="height:35.9%;background:var(--series-depiction);"><span class="cv">19%</span></div>
+      </div></div>
+      <div class="col-group"><div class="col-bars">
+        <div class="col-bar" style="height:4.3%;background:var(--series-object);"><span class="cv">2%</span></div>
+        <div class="col-bar" style="height:28.3%;background:var(--series-depiction);"><span class="cv">15%</span></div>
+      </div></div>
+    </div>
+    <div class="col-axis">
+      <div>pre-1500</div><div>1500s</div><div>1600s</div><div>1700s</div><div>1800s</div><div>1900s</div>
+    </div>
+    <p class="muted" style="margin-top:0.6rem;">
+      The pre-1500 object bucket is 7 works: three dated to the 2nd century, two Song-period Chinese
+      stonewares (<code>AK-MAK-600</code>, Cizhou, 1115&ndash;1234; <code>AK-MAK-1724</code>, Longquan celadon,
+      1100&ndash;1300), and one each from the 14th and 15th centuries.
+      Both distributions use <code>collection_stats(dimension: 'century')</code>, which assigns each work
+      to exactly one bucket.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  3 · CHANNEL WIDTHS                                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>3 &middot; How much each retrieval channel actually returns</h2>
+    <p class="lede">
+      Sixteen queries against the same material class, on one scale. The channel that names the concept
+      most precisely (<code>iconclass: 41C761</code>) returns nothing; the channel with no controlled
+      vocabulary at all &mdash; free-text search of Dutch cataloguer descriptions &mdash; returns the most
+      physical objects.
+    </p>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--series-depiction);"></div> Subject / Iconclass index &mdash; finds <em>depictions</em></div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--series-object);"></div> Object-type vocabulary &mdash; finds <em>objects</em></div>
+      <div class="legend-item"><div class="legend-swatch" style="background:var(--series-text);"></div> Free-text description &mdash; finds <em>both</em></div>
+      <div class="legend-item"><div class="legend-swatch" style="border:1px dashed var(--zero);background:#eef0f2;"></div> returns nothing</div>
+    </div>
+
+    <div class="barchart" role="img" aria-label="Horizontal bar chart of artwork counts per retrieval channel, scale 0 to 229. Full values are listed in the reproducible query table in section 7.">
+
+      <div class="grp-head"><span class="grp-title" style="color:#9a3412;">SUBJECT / ICONCLASS</span><span class="grp-note">returns depictions of scent containers</span></div>
+      <div class="bar-row">
+        <div class="bar-key">subject: incense</div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--series-depiction);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">229</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">iconclass: 41C762</div>
+        <div class="bar-track"><div class="bar-fill" style="width:68.6%;background:var(--series-depiction);"></div><span class="bar-val" style="left:68.6%">157</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">iconclass: 31A51451</div>
+        <div class="bar-track"><div class="bar-fill" style="width:1.7%;background:var(--series-depiction);"></div><span class="bar-val" style="left:1.7%">4</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">subject: scent-box</div>
+        <div class="bar-track"><div class="bar-fill" style="width:0.44%;background:var(--series-depiction);"></div><span class="bar-val" style="left:0.44%">1</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key" style="color:#9a3412;">iconclass: 41C761</div>
+        <div class="bar-track"><div class="bar-zero"></div><span class="bar-val" style="left:22px;color:#b45309;">0</span></div>
+      </div>
+
+      <div class="grp-head"><span class="grp-title" style="color:#1e40af;">OBJECT TYPE (DUTCH)</span><span class="grp-note">returns the physical containers</span></div>
+      <div class="bar-row">
+        <div class="bar-key">type: wierookbrander</div>
+        <div class="bar-track"><div class="bar-fill" style="width:19.7%;background:var(--series-object);"></div><span class="bar-val" style="left:19.7%">45</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">type: wierookdoos</div>
+        <div class="bar-track"><div class="bar-fill" style="width:8.7%;background:var(--series-object);"></div><span class="bar-val" style="left:8.7%">20</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">type: reukfles</div>
+        <div class="bar-track"><div class="bar-fill" style="width:7.0%;background:var(--series-object);"></div><span class="bar-val" style="left:7.0%">16</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">type: kogo</div>
+        <div class="bar-track"><div class="bar-fill" style="width:5.2%;background:var(--series-object);"></div><span class="bar-val" style="left:5.2%">12</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">type: reukbal</div>
+        <div class="bar-track"><div class="bar-fill" style="width:3.9%;background:var(--series-object);"></div><span class="bar-val" style="left:3.9%">9</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">type: hibachi</div>
+        <div class="bar-track"><div class="bar-fill" style="width:3.9%;background:var(--series-object);"></div><span class="bar-val" style="left:3.9%">9</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">type: parfumbrander</div>
+        <div class="bar-track"><div class="bar-fill" style="width:1.3%;background:var(--series-object);"></div><span class="bar-val" style="left:1.3%">3</span></div>
+      </div>
+
+      <div class="grp-head"><span class="grp-title" style="color:#065f46;">FREE TEXT (DUTCH DESCRIPTIONS)</span><span class="grp-note">no controlled vocabulary &mdash; widest object recall</span></div>
+      <div class="bar-row">
+        <div class="bar-key">description: wierookbrander</div>
+        <div class="bar-track"><div class="bar-fill" style="width:65.5%;background:var(--series-text);"></div><span class="bar-val" style="left:65.5%">150</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">description: wierook</div>
+        <div class="bar-track"><div class="bar-fill" style="width:22.7%;background:var(--series-text);"></div><span class="bar-val" style="left:22.7%">52</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">description: reukwerk</div>
+        <div class="bar-track"><div class="bar-fill" style="width:3.1%;background:var(--series-text);"></div><span class="bar-val" style="left:3.1%">7</span></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-key">description: pomander</div>
+        <div class="bar-track"><div class="bar-fill" style="width:2.6%;background:var(--series-text);"></div><span class="bar-val" style="left:2.6%">6</span></div>
+      </div>
+
+      <div class="bar-axis"><div class="bar-key">artworks</div><div class="axis-line"><span>0</span><span>229</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  4 · TYPE VS DESCRIPTION DIVERGENCE                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>4 &middot; What the type field misses</h2>
+    <p class="lede">
+      The clearest measure of cataloguing coverage is to run the same Dutch word through the controlled
+      type field and through free-text description. For <em>wierookbrander</em> the two disagree about
+      four times out of five.
+    </p>
+
+    <div class="split-bar" role="img" aria-label="Divergence bar: 7 works are typed wierookbrander but never say so in the description; 38 works are both typed and described; 112 works are described as wierookbrander but carry a different object type.">
+      <div style="width:4.46%;background:var(--seq-700);" title="typed only: 7">7</div>
+      <div style="width:24.20%;background:var(--series-object);" title="both: 38">38 both</div>
+      <div style="width:71.34%;background:var(--series-text);" title="described only: 112">112 described but not typed</div>
+    </div>
+    <div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:0.78rem;color:#555;margin-bottom:1rem;">
+      <span><strong style="color:#0d366b;">7</strong> typed <code>wierookbrander</code>, description never says it</span>
+      <span><strong style="color:#2a78d6;">38</strong> agree</span>
+      <span><strong style="color:#1baf7a;">112</strong> described as one, typed as something else</span>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Objects hidden behind form-words</h3>
+        <p>
+          The 112 works the type field misses are largely catalogued by physical form rather than
+          function &mdash; <code>hibachi</code>, <code>lid</code>, <code>box</code> &mdash; or as components of a
+          parent object. Semantic search surfaces them because it reads the description, not the type.
+        </p>
+        <div class="example">
+          AK-MAK-768-2 &nbsp;<span class="muted">&ldquo;Incense burner with a metal cover&rdquo;</span><br>
+          type: <strong>hibachi</strong>, <strong>lid</strong><br>
+          iconclass: <span style="color:#b45309;">&mdash; none at all &mdash;</span><br>
+          description: &ldquo;&hellip;deksel van <strong>wierookbrander</strong>&hellip;&rdquo;
+        </div>
+      </div>
+      <div class="card">
+        <h3>The one scent-box isn't typed as one</h3>
+        <p>
+          The single work whose title is literally <em>Reukdoos</em> carries the object type
+          <code>miniature</code>. <code>type: reukdoos</code> returns zero &mdash; the label does not exist in
+          the type vocabulary. Its three Iconclass codes describe the scenes chased into the silver,
+          not the vessel.
+        </p>
+        <div class="example">
+          BK-NM-11177-107 &nbsp;<span class="muted">&ldquo;Reukdoos&rdquo;, silver, 1781&ndash;1800</span><br>
+          type: <strong>miniature</strong><br>
+          iconclass: 73C72212, 61B2, 44A51<br>
+          <span style="color:#b45309;">not 41C761</span>
+        </div>
+      </div>
+      <div class="card wide">
+        <h3>One type label is fully contained in another</h3>
+        <p style="margin-bottom:0.5rem;">
+          All 12 works typed <code>kogo</code> are also typed <code>wierookdoos</code> &mdash; a strict subset,
+          not an overlap. Querying <code>kogo</code> after <code>wierookdoos</code> adds nothing; the reverse
+          adds 8. Where two labels nest like this, only the broader one is worth issuing.
+        </p>
+        <div class="example">
+          <code>type: kogo</code> &rarr; 12 &nbsp;&sub;&nbsp; <code>type: wierookdoos</code> &rarr; 20
+          &nbsp;&nbsp;|&nbsp;&nbsp; union = 20, added by kogo = 0
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  5 · BILINGUAL RETRIEVAL                                    -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>5 &middot; Every English type term returns zero</h2>
+    <p class="lede">
+      Object-type vocabulary in this collection is Dutch. Seven plausible English labels for scent
+      containers return nothing at all; their Dutch equivalents return the whole corpus. This is not a
+      ranking penalty &mdash; it is an empty result set, indistinguishable from &ldquo;the museum owns none.&rdquo;
+    </p>
+
+    <div style="overflow-x:auto;">
+    <table class="tbl">
+      <thead>
+        <tr><th>English query</th><th style="text-align:right">Hits</th><th>Dutch equivalent</th><th style="text-align:right">Hits</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">type: incense burner</td><td class="num zero">0</td>
+          <td class="mono">type: wierookbrander</td><td class="num">45</td>
+        </tr>
+        <tr>
+          <td class="mono">type: censer</td><td class="num zero">0</td>
+          <td class="mono">type: wierookdoos</td><td class="num">20</td>
+        </tr>
+        <tr>
+          <td class="mono">type: perfume bottle</td><td class="num zero">0</td>
+          <td class="mono">type: reukfles</td><td class="num">16</td>
+        </tr>
+        <tr>
+          <td class="mono">type: pomander</td><td class="num zero">0</td>
+          <td class="mono">type: reukbal</td><td class="num">9</td>
+        </tr>
+        <tr>
+          <td class="mono">type: reukdoos <span class="muted">(Dutch, but absent)</span></td><td class="num zero">0</td>
+          <td class="mono">query: reukdoos <span class="muted">(title)</span></td><td class="num">1</td>
+        </tr>
+        <tr>
+          <td class="mono">type: geurdoos <span class="muted">(Dutch, but absent)</span></td><td class="num zero">0</td>
+          <td class="mono">type: kogo <span class="muted">(Japanese loanword)</span></td><td class="num">12</td>
+        </tr>
+        <tr>
+          <td class="mono">type: reukwater <span class="muted">(Dutch, but absent)</span></td><td class="num zero">0</td>
+          <td class="mono">type: parfumbrander</td><td class="num">3</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="callout">
+      Three of the seven zero-results are <em>Dutch</em> words &mdash; <code>reukdoos</code>,
+      <code>geurdoos</code>, <code>reukwater</code>. Speaking the right language is necessary but not
+      sufficient: the term also has to have been adopted into the type authority. The working labels
+      are a mix of Dutch (<code>wierookbrander</code>, <code>reukfles</code>, <code>reukbal</code>),
+      Japanese loanwords (<code>kogo</code>, <code>hibachi</code>), and French-derived Dutch
+      (<code>parfumbrander</code>).
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  6 · WHAT THE OBJECTS ACTUALLY ARE                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>6 &middot; Where the objects come from, and what they are made of</h2>
+    <p class="lede">
+      Once reached, the corpus splits cleanly by geography. The incense material is East Asian; the
+      perfume material is European. The two halves share almost no vocabulary, no material, and no shelf.
+    </p>
+
+    <div class="sm-grid">
+      <div class="sm">
+        <h3>Production place &mdash; <code>type: wierookbrander</code></h3>
+        <div class="sm-sub">n = 45 &middot; 41 with a place, 4 without &middot; places are multi-valued</div>
+        <div class="barchart">
+          <div class="bar-row"><div class="bar-key">Japan</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--seq-450);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">19</span></div></div>
+          <div class="bar-row"><div class="bar-key">China</div><div class="bar-track"><div class="bar-fill" style="width:84.2%;background:var(--seq-350);"></div><span class="bar-val" style="left:84.2%">16</span></div></div>
+          <div class="bar-row"><div class="bar-key">The Hague</div><div class="bar-track"><div class="bar-fill" style="width:26.3%;background:var(--seq-250);"></div><span class="bar-val" style="left:26.3%">5</span></div></div>
+          <div class="bar-row"><div class="bar-key">Kyoto</div><div class="bar-track"><div class="bar-fill" style="width:5.3%;background:var(--seq-150);"></div><span class="bar-val" style="left:5.3%">1</span></div></div>
+        </div>
+      </div>
+
+      <div class="sm">
+        <h3>Production place &mdash; <code>type: wierookdoos</code></h3>
+        <div class="sm-sub">n = 20 &middot; all 20 placed &middot; Kyoto nests inside Japan</div>
+        <div class="barchart">
+          <div class="bar-row"><div class="bar-key">Japan</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--seq-450);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">19</span></div></div>
+          <div class="bar-row"><div class="bar-key">Kyoto</div><div class="bar-track"><div class="bar-fill" style="width:36.8%;background:var(--seq-250);"></div><span class="bar-val" style="left:36.8%">7</span></div></div>
+        </div>
+        <p class="muted" style="margin-top:0.4rem;font-size:0.74rem;">
+          95% Japanese &mdash; the most geographically concentrated channel in the corpus.
+        </p>
+      </div>
+
+      <div class="sm">
+        <h3>Production place &mdash; <code>type: reukbal</code></h3>
+        <div class="sm-sub">n = 9 &middot; 8 with a place, 1 without</div>
+        <div class="barchart">
+          <div class="bar-row"><div class="bar-key">China</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--seq-450);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">6</span></div></div>
+          <div class="bar-row"><div class="bar-key">Netherlands</div><div class="bar-track"><div class="bar-fill" style="width:16.7%;background:var(--seq-250);"></div><span class="bar-val" style="left:16.7%">1</span></div></div>
+          <div class="bar-row"><div class="bar-key">Amsterdam</div><div class="bar-track"><div class="bar-fill" style="width:16.7%;background:var(--seq-250);"></div><span class="bar-val" style="left:16.7%">1</span></div></div>
+        </div>
+      </div>
+
+      <div class="sm">
+        <h3>Production place &mdash; <code>type: reukfles</code></h3>
+        <div class="sm-sub">n = 16 &middot; only 10 placed, 6 without &mdash; the thinnest geo coverage</div>
+        <div class="barchart">
+          <div class="bar-row"><div class="bar-key">Paris</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--seq-450);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">3</span></div></div>
+          <div class="bar-row"><div class="bar-key">London</div><div class="bar-track"><div class="bar-fill" style="width:33.3%;background:var(--seq-250);"></div><span class="bar-val" style="left:33.3%">1</span></div></div>
+          <div class="bar-row"><div class="bar-key">Birmingham</div><div class="bar-track"><div class="bar-fill" style="width:33.3%;background:var(--seq-250);"></div><span class="bar-val" style="left:33.3%">1</span></div></div>
+          <div class="bar-row"><div class="bar-key">Delft</div><div class="bar-track"><div class="bar-fill" style="width:33.3%;background:var(--seq-250);"></div><span class="bar-val" style="left:33.3%">1</span></div></div>
+          <div class="bar-row"><div class="bar-key">China</div><div class="bar-track"><div class="bar-fill" style="width:33.3%;background:var(--seq-250);"></div><span class="bar-val" style="left:33.3%">1</span></div></div>
+          <div class="bar-row"><div class="bar-key" style="color:#888">England / Netherlands<br>Europe / unknown</div><div class="bar-track"><div class="bar-fill" style="width:33.3%;background:var(--seq-150);"></div><span class="bar-val" style="left:33.3%">1 each</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:2rem;">Material profiles separate the three groups cleanly</h3>
+    <p class="muted" style="margin-bottom:0.2rem;">
+      Materials are multi-valued, so shares sum past 100%. Percentages are of the channel's own total.
+    </p>
+
+    <div class="sm-grid">
+      <div class="sm">
+        <h3>Incense burners <span class="muted" style="font-weight:400;">&mdash; ceramic</span></h3>
+        <div class="sm-sub"><code>type: wierookbrander</code> &middot; n = 45 &middot; 12 materials</div>
+        <div class="barchart">
+          <div class="bar-row"><div class="bar-key">glaze</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--seq-450);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">30</span></div></div>
+          <div class="bar-row"><div class="bar-key">porcelain</div><div class="bar-track"><div class="bar-fill" style="width:70%;background:var(--seq-350);"></div><span class="bar-val" style="left:70%">21</span></div></div>
+          <div class="bar-row"><div class="bar-key">stoneware</div><div class="bar-track"><div class="bar-fill" style="width:40%;background:var(--seq-250);"></div><span class="bar-val" style="left:40%">12</span></div></div>
+          <div class="bar-row"><div class="bar-key">metal</div><div class="bar-track"><div class="bar-fill" style="width:30%;background:var(--seq-250);"></div><span class="bar-val" style="left:30%">9</span></div></div>
+          <div class="bar-row"><div class="bar-key">gold / cobalt</div><div class="bar-track"><div class="bar-fill" style="width:16.7%;background:var(--seq-150);"></div><span class="bar-val" style="left:16.7%">5 each</span></div></div>
+        </div>
+      </div>
+
+      <div class="sm">
+        <h3>Incense boxes <span class="muted" style="font-weight:400;">&mdash; lacquer &amp; wood</span></h3>
+        <div class="sm-sub"><code>type: wierookdoos</code> &middot; n = 20 &middot; 12 materials</div>
+        <div class="barchart">
+          <div class="bar-row"><div class="bar-key">glaze</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--seq-450);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">11</span></div></div>
+          <div class="bar-row"><div class="bar-key">stoneware</div><div class="bar-track"><div class="bar-fill" style="width:81.8%;background:var(--seq-350);"></div><span class="bar-val" style="left:81.8%">9</span></div></div>
+          <div class="bar-row"><div class="bar-key">lacquer</div><div class="bar-track"><div class="bar-fill" style="width:72.7%;background:var(--seq-350);"></div><span class="bar-val" style="left:72.7%">8</span></div></div>
+          <div class="bar-row"><div class="bar-key">wood</div><div class="bar-track"><div class="bar-fill" style="width:63.6%;background:var(--seq-250);"></div><span class="bar-val" style="left:63.6%">7</span></div></div>
+          <div class="bar-row"><div class="bar-key">tin</div><div class="bar-track"><div class="bar-fill" style="width:36.4%;background:var(--seq-150);"></div><span class="bar-val" style="left:36.4%">4</span></div></div>
+        </div>
+      </div>
+
+      <div class="sm" style="grid-column:1/-1;">
+        <h3>Pomanders <span class="muted" style="font-weight:400;">&mdash; textile and precious stone, a different world entirely</span></h3>
+        <div class="sm-sub"><code>type: reukbal</code> &middot; n = 9 &middot; 9 materials, every one of them distinct from the incense groups except glaze</div>
+        <div class="barchart">
+          <div class="bar-row"><div class="bar-key">silk</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--seq-450);"></div><span class="bar-val" style="left:auto;right:6px;color:#fff;">7</span></div></div>
+          <div class="bar-row"><div class="bar-key">porcelain</div><div class="bar-track"><div class="bar-fill" style="width:85.7%;background:var(--seq-350);"></div><span class="bar-val" style="left:85.7%">6</span></div></div>
+          <div class="bar-row"><div class="bar-key">glaze</div><div class="bar-track"><div class="bar-fill" style="width:85.7%;background:var(--seq-350);"></div><span class="bar-val" style="left:85.7%">6</span></div></div>
+          <div class="bar-row"><div class="bar-key">gold / diamond</div><div class="bar-track"><div class="bar-fill" style="width:28.6%;background:var(--seq-250);"></div><span class="bar-val" style="left:28.6%">2 each</span></div></div>
+          <div class="bar-row"><div class="bar-key">silver / ruby / emerald<br>precious stone</div><div class="bar-track"><div class="bar-fill" style="width:14.3%;background:var(--seq-150);"></div><span class="bar-val" style="left:14.3%">1 each</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  7 · REPRODUCIBLE QUERY TABLE                               -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="container">
+    <h2>7 &middot; Every figure on this page, with its query</h2>
+    <p class="lede">
+      All counts are <code>totalResults</code> from the <code>rijksmuseum-mcp+</code> tools against the
+      deployed collection, re-verified on 11 August 2026. Iconclass presence is from the companion
+      Iconclass server's <code>find_artworks</code>.
+    </p>
+
+    <div style="overflow-x:auto;">
+    <table class="tbl">
+      <thead>
+        <tr><th>Channel</th><th>Query</th><th style="text-align:right">Result</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="pill p-depiction">depiction</span></td><td class="mono">iconclass: 41C761</td><td class="num zero">0</td><td class="muted">scent-box &mdash; the notation this material class should carry</td></tr>
+        <tr><td><span class="pill p-depiction">depiction</span></td><td class="mono">iconclass: 41C76</td><td class="num zero">0</td><td class="muted">parent branch, also empty</td></tr>
+        <tr><td><span class="pill p-depiction">depiction</span></td><td class="mono">iconclass: 41C762</td><td class="num">157</td><td class="muted">incense-burner &mdash; 131 prints, 10 photographs, 4 photomech., 1 drawing, 1 poster, 1 binding study, 1 article; 11 untyped</td></tr>
+        <tr><td><span class="pill p-depiction">depiction</span></td><td class="mono">iconclass: 41C7</td><td class="num">18</td><td class="muted">grandparent &mdash; drinks, stimulants, drugs</td></tr>
+        <tr><td><span class="pill p-depiction">depiction</span></td><td class="mono">iconclass: 31A51451</td><td class="num">4</td><td class="muted">pomander, musk ball &mdash; all prints/drawings</td></tr>
+        <tr><td><span class="pill p-depiction">depiction</span></td><td class="mono">subject: scent-box</td><td class="num">1</td><td class="muted">BK-NM-11177-107, typed <code>miniature</code></td></tr>
+        <tr><td><span class="pill p-depiction">depiction</span></td><td class="mono">subject: incense</td><td class="num">229</td><td class="muted">broadest subject-label channel</td></tr>
+
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: wierookbrander</td><td class="num">45</td><td class="muted">incense burner</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: wierookdoos</td><td class="num">20</td><td class="muted">incense box; strictly contains all 12 <code>kogo</code></td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: reukfles</td><td class="num">16</td><td class="muted">scent bottle</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: kogo</td><td class="num">12</td><td class="muted">Japanese incense container</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: reukbal</td><td class="num">9</td><td class="muted">pomander</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: hibachi</td><td class="num">9</td><td class="muted">brazier; 6 also typed <code>wierookbrander</code>, 3 not</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: parfumbrander</td><td class="num">3</td><td class="muted">perfume burner</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: reukdoos</td><td class="num zero">0</td><td class="muted">Dutch, but not in the type authority</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: geurdoos</td><td class="num zero">0</td><td class="muted">Dutch, not in the type authority</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: reukwater</td><td class="num zero">0</td><td class="muted">Dutch, not in the type authority</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: incense burner</td><td class="num zero">0</td><td class="muted">English</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: censer</td><td class="num zero">0</td><td class="muted">English</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: perfume bottle</td><td class="num zero">0</td><td class="muted">English</td></tr>
+        <tr><td><span class="pill p-object">object</span></td><td class="mono">type: pomander</td><td class="num zero">0</td><td class="muted">English</td></tr>
+
+        <tr><td><span class="pill p-text">text</span></td><td class="mono">description: wierookbrander</td><td class="num">150</td><td class="muted">112 of these carry a different object type</td></tr>
+        <tr><td><span class="pill p-text">text</span></td><td class="mono">description: wierook</td><td class="num">52</td><td class="muted">mixed objects and depictions</td></tr>
+        <tr><td><span class="pill p-text">text</span></td><td class="mono">description: reukwerk</td><td class="num">7</td><td class="muted">all works on paper (RP-P print-room numbers)</td></tr>
+        <tr><td><span class="pill p-text">text</span></td><td class="mono">description: pomander</td><td class="num">6</td><td class="muted">2 objects + 4 works on paper</td></tr>
+        <tr><td><span class="pill p-text">text</span></td><td class="mono">query: reukdoos</td><td class="num">1</td><td class="muted">title search &mdash; the lone scent-box</td></tr>
+
+        <tr style="background:#f8f8f5;"><td colspan="4" style="font-weight:600;font-size:0.78rem;padding-top:0.7rem;">Set operations</td></tr>
+        <tr><td class="muted">intersection</td><td class="mono">iconclass: 41C762 &cap; type: wierookbrander</td><td class="num zero">0</td><td class="muted">also 0 against wierookdoos, hibachi, reukbal, reukfles</td></tr>
+        <tr><td class="muted">intersection</td><td class="mono">iconclass: 41C762 &cap; description: wierookbrander</td><td class="num">2</td><td class="muted">RP-P-1991-457, RP-P-1991-488 &mdash; both prints</td></tr>
+        <tr><td class="muted">intersection</td><td class="mono">type: wierookbrander &cap; description: wierookbrander</td><td class="num">38</td><td class="muted">7 typed-only, 112 described-only</td></tr>
+        <tr><td class="muted">subset</td><td class="mono">type: kogo &sub; type: wierookdoos</td><td class="num">12</td><td class="muted">strict subset &mdash; kogo adds 0 to the union</td></tr>
+        <tr><td class="muted">union</td><td class="mono">7 object-type channels</td><td class="num">96</td><td class="muted">reukbal, kogo, wierookdoos, reukfles, wierookbrander, hibachi, parfumbrander</td></tr>
+        <tr><td class="muted">union</td><td class="mono">7 type channels &cup; description: wierookbrander</td><td class="num">205</td><td class="muted">free text adds 109 beyond every type label combined</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="callout" style="border-left-color:var(--series-text);">
+      <strong>Reading this as a retrieval strategy.</strong> For this material class the subject index is
+      not a weak handle, it is the wrong handle: it answers &ldquo;what is pictured&rdquo; when the question is
+      &ldquo;what is held.&rdquo; Object-type vocabulary answers the right question but only in Dutch, only for
+      labels that made it into the authority, and it still misses roughly three in four works that the
+      cataloguer described as incense burners. The widest single channel is free-text Dutch description;
+      the most complete is the union of all three, plus semantic search to catch objects filed under
+      form-words like <code>lid</code> and <code>box</code>.
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--  FOOTER                                                     -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="container">
+    <a href="https://github.com/kintopp/rijksmuseum-mcp-plus">rijksmuseum-mcp+</a>
+    &nbsp;&middot;&nbsp;
+    Data: <a href="https://data.rijksmuseum.nl">Rijksmuseum Data API</a>
+    &nbsp;&middot;&nbsp;
+    Counts re-verified 11 August 2026
+  </div>
+</footer>
+
+</body>
+</html>
