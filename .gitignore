@@ -21,6 +21,7 @@ npm-debug.log*
 Thumbs.db
 
 # Local files
+plans/
 offline/
 .claude/
 .codex/
