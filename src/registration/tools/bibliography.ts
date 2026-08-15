@@ -12,6 +12,9 @@ function formatBibliographySummary(d: BibliographyFromDb): string {
   d.entries.forEach((e, i) => {
     let line = `${i + 1}. ${truncate(e.citation, 100)}`;
     if (e.pages) line += ` ${e.pages}`;
+    // The publication id is the only handle for find_artworks_citing_publication;
+    // text-only hosts never see structuredContent, so it has to ride on the line.
+    if (e.publicationId != null) line += ` [pub ${e.publicationId}]`;
     lines.push(line);
   });
   return lines.join("\n");
@@ -31,6 +34,7 @@ export function registerBibliographyTools(
       description:
         "Scholarly references (citations) for ONE artwork by objectNumber. " +
         "Includes linked publication, pages, ISBN where known. " +
+        "Entries with a linked publication carry a [pub NNN] handle — pass it to find_artworks_citing_publication. " +
         "Follows a search_artwork / get_artwork_details result. By default returns the first 5 plus a total count; " +
         "set full=true for all entries (major works can have 100+ — mind the context window). " +
         "Not for general metadata — use get_artwork_details. Not for library-catalogue search.",

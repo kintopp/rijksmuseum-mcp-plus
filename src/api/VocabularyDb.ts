@@ -172,6 +172,7 @@ export interface BibliographyFromDb {
     sequence: number | null;
     citation: string;
     publicationUri: string | null;
+    publicationId: number | null;
     pages: string | null;
     isbn: string | null;
     worldcatUri: string | null;
@@ -2535,6 +2536,7 @@ export class VocabularyDb {
         citation: r.citation_text,
         publicationUri: r.publication_id != null
           ? `https://id.rijksmuseum.nl/${r.publication_id}` : null,
+        publicationId: r.publication_id ?? null,
         pages: r.pages,
         isbn: r.isbn,
         worldcatUri: r.worldcat_uri,
@@ -3607,6 +3609,15 @@ export class VocabularyDb {
     };
   }
 
+  /** Bucket a numeric column by a caller-supplied bin width. The CAST must sit INSIDE the
+   *  division: better-sqlite3 binds JS numbers as REAL, so an uncast `x / ?` divides in
+   *  floating point and `(x/w)*w === x` — every value becomes its own bucket. A literal
+   *  divisor in the sqlite3 CLI uses integer division and hides this. Emits TWO
+   *  placeholders: bind binWidth twice, in SQL position order. */
+  private binnedLabel(col: string): string {
+    return `CAST(${col} / ? AS INTEGER) * ?`;
+  }
+
   /** Artwork-domain dimensions: count artworks grouped by a vocab field or date.
    *  `ordering` selects ORDER BY: "count_desc" → cnt DESC, "label_asc" → label. */
   private artworkDimensionSql(
@@ -3657,7 +3668,7 @@ export class VocabularyDb {
       const where = `FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
           WHERE a.date_earliest IS NOT NULL`;
       return {
-        sql: `SELECT (a.date_earliest / ?) * ? AS label, COUNT(*) AS cnt
+        sql: `SELECT ${this.binnedLabel("a.date_earliest")} AS label, COUNT(*) AS cnt
           ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, topN, offset],
@@ -3672,7 +3683,7 @@ export class VocabularyDb {
       const where = `FROM _stats_artworks sa JOIN artworks a ON a.art_id = sa.art_id
           WHERE ${dimCol} > 0`;
       return {
-        sql: `SELECT CAST((${dimCol} / ?) * ? AS INTEGER) AS label, COUNT(*) AS cnt
+        sql: `SELECT ${this.binnedLabel(dimCol)} AS label, COUNT(*) AS cnt
           ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, topN, offset],
@@ -3761,7 +3772,7 @@ export class VocabularyDb {
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
           WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}`;
       return {
-        sql: `SELECT (v.birth_year / ?) * ? AS label, COUNT(DISTINCT m.artwork_id) AS cnt
+        sql: `SELECT ${this.binnedLabel("v.birth_year")} AS label, COUNT(DISTINCT m.artwork_id) AS cnt
           ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, fieldId, topN, offset],
@@ -3846,7 +3857,7 @@ export class VocabularyDb {
       const where = `FROM provenance_events pe
           WHERE ${membership}pe.date_year IS NOT NULL${evExtra}`;
       return {
-        sql: `SELECT (pe.date_year / ?) * ? AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
+        sql: `SELECT ${this.binnedLabel("pe.date_year")} AS label, COUNT(DISTINCT pe.artwork_id) AS cnt
           ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
         extraBindings: [binWidth, binWidth, ...evBindings, topN, offset],

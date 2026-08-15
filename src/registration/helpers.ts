@@ -345,6 +345,64 @@ export function provenanceMatchedEvents(art: ProvenanceArtworkResult) {
   }));
 }
 
+/** Period-layer twin of provenanceCompactSummary. A layer='periods' result carries its
+ *  data in `periods` and leaves `events` empty, so the event-shaped rollup above would
+ *  report an all-zero chain for a perfectly good ownership history. */
+export function provenancePeriodCompactSummary(art: ProvenanceArtworkResult) {
+  const periods = art.periods ?? [];
+  const begins = periods.map(p => p.beginYear).filter((y): y is number => y != null);
+  const ends = periods.map(p => p.endYear).filter((y): y is number => y != null);
+  const owners = periods.map(p => p.ownerName).filter((n): n is string => !!n);
+  const durations = periods.map(p => p.duration).filter((d): d is number => d != null);
+  return {
+    periodCount: periods.length,
+    matchedPeriodCount: periods.filter(p => p.matched).length,
+    yearSpan: [begins.length ? Math.min(...begins) : null, ends.length ? Math.max(...ends) : null] as (number | null)[],
+    acquisitionMethods: [...new Set(
+      periods.map(p => p.acquisitionMethod).filter((m): m is string => !!m && m !== "unknown"),
+    )],
+    firstOwner: owners[0] ?? null,
+    lastOwner: owners.length ? owners[owners.length - 1] : null,
+    longestDuration: durations.length ? Math.max(...durations) : null,
+    hasUncertain: periods.some(p => p.uncertain),
+  };
+}
+
+/** Ownership-period one-liner body, shared by the compact and full text renderers so the
+ *  two cannot drift. Typed on the fields it reads, so both a full ProvenancePeriodRow and
+ *  a projected matchedPeriods element satisfy it. */
+export function formatPeriodParts(p: {
+  ownerName: string | null;
+  acquisitionMethod: string | null;
+  beginYear: number | null;
+  endYear: number | null;
+  duration: number | null;
+  location: string | null;
+}): string {
+  const parts: string[] = [];
+  if (p.ownerName) parts.push(p.ownerName);
+  if (p.acquisitionMethod) parts.push(p.acquisitionMethod);
+  if (p.beginYear != null || p.endYear != null) {
+    parts.push(`${p.beginYear ?? "?"}–${p.endYear ?? "?"}${p.duration != null ? ` (${p.duration} yrs)` : ""}`);
+  }
+  if (p.location) parts.push(p.location);
+  return parts.join(" | ");
+}
+
+/** Lean matched-period one-liners for compact mode (period-layer twin of provenanceMatchedEvents). */
+export function provenanceMatchedPeriods(art: ProvenanceArtworkResult) {
+  return (art.periods ?? []).filter(p => p.matched).map(p => ({
+    sequence: p.sequence,
+    ownerName: p.ownerName,
+    ownerDates: p.ownerDates,
+    location: p.location,
+    acquisitionMethod: p.acquisitionMethod,
+    beginYear: p.beginYear,
+    endYear: p.endYear,
+    duration: p.duration,
+  }));
+}
+
 /** Format a curated set as a compact one-liner (Tier 2). */
 export function formatSetLine(
   s: {

@@ -32,6 +32,9 @@ import {
   compactMethodTag,
   provenanceCompactSummary,
   provenanceMatchedEvents,
+  provenancePeriodCompactSummary,
+  provenanceMatchedPeriods,
+  formatPeriodParts,
   createLogger,
   paginatedResponse,
   drainOaiBuffer,
@@ -123,7 +126,7 @@ const ProvenanceSearchOutput = {
       lastOwner: z.string().nullable(),
       hasGap: z.boolean(),
       hasPrice: z.boolean(),
-    }).optional().describe("Compact-mode fixed-size rollup of the full chain (present only when compact=true)."),
+    }).optional().describe("Compact-mode fixed-size rollup of the event chain (present only when compact=true at layer='events')."),
     matchedEvents: z.array(z.object({
       sequence: z.number().int(),
       transferType: z.string(),
@@ -132,7 +135,28 @@ const ProvenanceSearchOutput = {
       location: z.string().nullable(),
       price: z.object({ amount: z.number(), currency: z.string() }).nullable(),
       rawText: z.string().describe("Trimmed 'why it matched' phrase for this event."),
-    })).optional().describe("Compact-mode matched-event one-liners (present only when compact=true)."),
+    })).optional().describe("Compact-mode matched-event one-liners (present only when compact=true at layer='events')."),
+    periodSummary: z.object({
+      periodCount: z.number().int(),
+      matchedPeriodCount: z.number().int(),
+      yearSpan: z.array(z.number().int().nullable())
+        .describe("[earliest begin, latest end] across the ownership chain; either element may be null."),
+      acquisitionMethods: z.array(z.string()).describe("Distinct acquisition methods in the chain, excluding unknown."),
+      firstOwner: z.string().nullable(),
+      lastOwner: z.string().nullable(),
+      longestDuration: z.number().int().nullable().describe("Longest single ownership period in years, null if no period is datable."),
+      hasUncertain: z.boolean(),
+    }).optional().describe("Compact-mode fixed-size rollup of the ownership chain (present only when compact=true at layer='periods')."),
+    matchedPeriods: z.array(z.object({
+      sequence: z.number().int(),
+      ownerName: z.string().nullable(),
+      ownerDates: z.string().nullable(),
+      location: z.string().nullable(),
+      acquisitionMethod: z.string().nullable(),
+      beginYear: z.number().int().nullable(),
+      endYear: z.number().int().nullable(),
+      duration: z.number().int().nullable(),
+    })).optional().describe("Compact-mode matched-period one-liners (present only when compact=true at layer='periods')."),
     periods: z.array(z.object({
       sequence: z.number().int(),
       ownerName: z.string().nullable(),
@@ -208,7 +232,8 @@ export function registerProvenanceTools(
         "OAI-PMH delta feed of records changed within a date range. " +
         "Paginated; anchored to a known harvest checkpoint. " +
         "Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). " +
-        "Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. " +
+        "Full-mode records include an objectNumber for follow-up calls to get_artwork_details or get_artwork_image; " +
+        "identifiersOnly records carry only a LOD URI, so re-run without it to act on a change. " +
         "Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.",
       inputSchema: z.object({
         from: optStr()
@@ -413,7 +438,7 @@ export function registerProvenanceTools(
           facets: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, compute provenance facets: transferType, decade, location, transferCategory, partyPosition."),
           compact: z.preprocess(stripNullCoerceBool, z.boolean().default(false))
-            .describe("Compact per-artwork comparison mode: omit the full event/period arrays; return a fixed-size summary rollup plus matched-event one-liners per artwork. Use to compare a collector/dealer across many works in one call (full mode overflows the result cap past ~1 artwork). Raises the default maxResults to 12."),
+            .describe("Compact per-artwork comparison mode: omit the full event/period arrays; return a fixed-size summary rollup plus matched one-liners per artwork. The rollup follows the layer — summary/matchedEvents at layer='events', periodSummary/matchedPeriods (owners, durations, acquisition methods) at layer='periods'. Use to compare a collector/dealer across many works in one call (full mode overflows the result cap past ~1 artwork). Raises the default maxResults to 12."),
         }).strict(),
         ...withOutputSchema(ProvenanceSearchOutput),
       },
@@ -542,6 +567,9 @@ export function registerProvenanceTools(
         // by structuredContent (which claude.ai meters but never reads). Measure
         // the would-be non-compact structuredContent exactly; if it + the reserved
         // text budget would breach SAFE_RESULT_BUDGET, return compact instead.
+        // Still events-only now that the periods projection exists: the size audit behind
+        // this guard measured only the events layer, and periods results omit the `events`
+        // array that drove the breach. Extending it needs a measurement first.
         if (!requestedCompact && EMIT_STRUCTURED && layer === "events") {
           const structuredBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
           if (structuredBytes > SAFE_RESULT_BUDGET - PROVENANCE_TEXT_RESERVE) {
@@ -551,8 +579,10 @@ export function registerProvenanceTools(
         }
 
         // #386: in compact mode, project each artwork to header + fixed-size summary +
-        // matched-event one-liners (omit the full event/period arrays). Computed once and
-        // shared by the structured and text channels.
+        // matched one-liners (omit the full event/period arrays). Computed once and
+        // shared by the structured and text channels. The rollup is layer-shaped:
+        // eventCount/matchedEventCount stay on every record (schema-required) but read
+        // 0 at layer='periods', where periodSummary carries the real chain.
         const compactResults = effectiveCompact
           ? result.results.map(art => ({
               objectNumber: art.objectNumber,
@@ -562,8 +592,17 @@ export function registerProvenanceTools(
               url: art.url,
               eventCount: art.eventCount,
               matchedEventCount: art.matchedEventCount,
-              summary: provenanceCompactSummary(art),
-              matchedEvents: provenanceMatchedEvents(art),
+              ...(layer === "periods"
+                ? {
+                    periodCount: art.periodCount ?? 0,
+                    matchedPeriodCount: art.matchedPeriodCount ?? 0,
+                    periodSummary: provenancePeriodCompactSummary(art),
+                    matchedPeriods: provenanceMatchedPeriods(art),
+                  }
+                : {
+                    summary: provenanceCompactSummary(art),
+                    matchedEvents: provenanceMatchedEvents(art),
+                  }),
             }))
           : null;
 
@@ -581,39 +620,45 @@ export function registerProvenanceTools(
 
           if (effectiveCompact) {
             // Reuse the projection already built for the structured channel.
-            const { summary: s, matchedEvents } = compactResults![i];
-            const rollup: string[] = [`${s.matchedEventCount}/${s.eventCount} events matched`];
-            if (s.yearSpan[0] != null || s.yearSpan[1] != null) rollup.push(`${s.yearSpan[0] ?? "?"}–${s.yearSpan[1] ?? "?"}`);
-            if (s.transferTypes.length) rollup.push(s.transferTypes.join(", "));
-            if (s.firstOwner) rollup.push(`owners: ${s.firstOwner}${s.lastOwner && s.lastOwner !== s.firstOwner ? ` … ${s.lastOwner}` : ""}`);
-            if (s.hasGap) rollup.push("has gap");
-            if (s.hasPrice) rollup.push("has price");
-            lines.push(`  ${rollup.join(" | ")}`);
-            for (const e of matchedEvents) {
-              const parts: string[] = [];
-              if (e.transferType !== "unknown") parts.push(e.transferType);
-              if (e.parties.length) parts.push(e.parties.join(", "));
-              if (e.dateExpression) parts.push(e.dateExpression);
-              if (e.location) parts.push(e.location);
-              if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}`);
-              lines.push(`  >>> ${e.sequence}. ${parts.length ? parts.join(" | ") : e.rawText}`);
+            // periodSummary is present iff layer === "periods"; the `in` check is what
+            // narrows the union — `layer` is in scope but doesn't narrow `c`.
+            const c = compactResults![i];
+            if ("periodSummary" in c) {
+              const s = c.periodSummary;
+              const rollup: string[] = [`${s.matchedPeriodCount}/${s.periodCount} periods matched`];
+              if (s.yearSpan[0] != null || s.yearSpan[1] != null) rollup.push(`${s.yearSpan[0] ?? "?"}–${s.yearSpan[1] ?? "?"}`);
+              if (s.longestDuration != null) rollup.push(`longest ${s.longestDuration} yrs`);
+              if (s.acquisitionMethods.length) rollup.push(s.acquisitionMethods.join(", "));
+              if (s.firstOwner) rollup.push(`owners: ${s.firstOwner}${s.lastOwner && s.lastOwner !== s.firstOwner ? ` … ${s.lastOwner}` : ""}`);
+              if (s.hasUncertain) rollup.push("has uncertain");
+              lines.push(`  ${rollup.join(" | ")}`);
+              for (const p of c.matchedPeriods) {
+                lines.push(`  >>> ${p.sequence}. ${formatPeriodParts(p)}`);
+              }
+            } else {
+              const s = c.summary;
+              const rollup: string[] = [`${s.matchedEventCount}/${s.eventCount} events matched`];
+              if (s.yearSpan[0] != null || s.yearSpan[1] != null) rollup.push(`${s.yearSpan[0] ?? "?"}–${s.yearSpan[1] ?? "?"}`);
+              if (s.transferTypes.length) rollup.push(s.transferTypes.join(", "));
+              if (s.firstOwner) rollup.push(`owners: ${s.firstOwner}${s.lastOwner && s.lastOwner !== s.firstOwner ? ` … ${s.lastOwner}` : ""}`);
+              if (s.hasGap) rollup.push("has gap");
+              if (s.hasPrice) rollup.push("has price");
+              lines.push(`  ${rollup.join(" | ")}`);
+              for (const e of c.matchedEvents) {
+                const parts: string[] = [];
+                if (e.transferType !== "unknown") parts.push(e.transferType);
+                if (e.parties.length) parts.push(e.parties.join(", "));
+                if (e.dateExpression) parts.push(e.dateExpression);
+                if (e.location) parts.push(e.location);
+                if (e.price) parts.push(`${e.price.currency} ${e.price.amount.toLocaleString()}`);
+                lines.push(`  >>> ${e.sequence}. ${parts.length ? parts.join(" | ") : e.rawText}`);
+              }
             }
           } else if (layer === "periods" && artwork.periods) {
             // Format periods
             for (const p of artwork.periods) {
               const marker = p.matched ? ">>>" : "   ";
-              const parts: string[] = [];
-              if (p.ownerName) parts.push(p.ownerName);
-              if (p.acquisitionMethod) parts.push(p.acquisitionMethod);
-              const yearRange = p.beginYear != null || p.endYear != null
-                ? `${p.beginYear ?? "?"}–${p.endYear ?? "?"}`
-                : null;
-              if (yearRange) {
-                const durStr = p.duration != null ? ` (${p.duration} yrs)` : "";
-                parts.push(yearRange + durStr);
-              }
-              if (p.location) parts.push(p.location);
-              lines.push(`  ${marker} ${p.sequence}. ${parts.join(" | ")}`);
+              lines.push(`  ${marker} ${p.sequence}. ${formatPeriodParts(p)}`);
             }
           } else {
             // Format events

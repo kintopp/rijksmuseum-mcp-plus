@@ -56,7 +56,7 @@ Not for filter-based discovery — use search_artwork. Not for similarity discov
 
 ### 4. `get_artwork_bibliography`
 
-Scholarly references (citations) for ONE artwork by objectNumber. Includes linked publication, pages, ISBN where known. Follows a search_artwork / get_artwork_details result. By default returns the first 5 plus a total count; set full=true for all entries (major works can have 100+ — mind the context window). Not for general metadata — use get_artwork_details. Not for library-catalogue search.
+Scholarly references (citations) for ONE artwork by objectNumber. Includes linked publication, pages, ISBN where known. Entries with a linked publication carry a [pub NNN] handle — pass it to find_artworks_citing_publication. Follows a search_artwork / get_artwork_details result. By default returns the first 5 plus a total count; set full=true for all entries (major works can have 100+ — mind the context window). Not for general metadata — use get_artwork_details. Not for library-catalogue search.
 
 ### 5. `find_artworks_citing_publication`
 
@@ -125,7 +125,7 @@ Enumerate the member artworks of one curated set by setSpec. Get setSpec values 
 
 ### 14. `get_recent_changes`
 
-OAI-PMH delta feed of records changed within a date range. Paginated; anchored to a known harvest checkpoint. Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). Each record includes an objectNumber for follow-up calls to get_artwork_details or get_artwork_image. Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.
+OAI-PMH delta feed of records changed within a date range. Paginated; anchored to a known harvest checkpoint. Use identifiersOnly=true for a lightweight listing (headers only, no full metadata). Full-mode records include an objectNumber for follow-up calls to get_artwork_details or get_artwork_image; identifiersOnly records carry only a LOD URI, so re-run without it to act on a change. Deleted records are flagged with deleted:true (marked [DELETED] in the listing) and carry only a LOD URI + datestamp, no metadata.
 
 ### 15. `search_provenance`
 
