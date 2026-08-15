@@ -14,6 +14,8 @@ const check = (name, cond, detail) => {
   console.log(`${cond ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
   if (!cond) failures++;
 };
+const warned = (r, s) => (r.warnings ?? []).some(w => w.includes(s));
+const warnText = r => (r.warnings ?? []).join(" | ");
 
 // ── S-1 repro: creatorBirthCentury × gender=female, created 1600–1900 ──
 const r1 = db.computeCollectionStats({
@@ -22,9 +24,8 @@ const r1 = db.computeCollectionStats({
 });
 console.log(`total=${r1.total}  buckets=${r1.entries.map(e => `${e.label}:${e.count}`).join(" ")}`);
 const labels = r1.entries.map(e => Number(e.label));
-check("S-1: no birth century before 1500 (was 1300/1400 leakage)", labels.every(l => l >= 1500),
-  `min bucket ${Math.min(...labels)}`);
-check("S-1: pool total unchanged by binding (still counts any-female-creator works)", r1.total > 0, `total ${r1.total}`);
+check("S-1: no birth century before 1500 (was 1300/1400 leakage)",
+  labels.length > 0 && labels.every(l => l >= 1500), `buckets ${labels.join(",")}`);
 
 // Baseline: same call WITHOUT gender must still show early centuries (male creators exist there)
 const r1b = db.computeCollectionStats({
@@ -41,31 +42,29 @@ check("S-1: gender dim under gender=female shows only 'female'",
   r2.entries.map(e => e.label).join(","));
 
 // ── warning matrix ──
-check("S-1: cross-tab warning absent when gender is bound (single demographic predicate)",
-  !(r1.warnings ?? []).some(w => w.includes("Creator-domain")), (r1.warnings ?? []).join(" | "));
 const r3 = db.computeCollectionStats({ dimension: "creatorBirthCentury", profession: "painter", topN: 5 });
-check("S-1: cross-tab warning fires for profession filter × cohort dim",
-  (r3.warnings ?? []).some(w => w.includes("Creator-domain")));
 const r4 = db.computeCollectionStats({ dimension: "type", gender: "female", profession: "painter", topN: 5 });
-check("S-1: cross-tab warning fires for two demographic filters",
-  (r4.warnings ?? []).some(w => w.includes("Creator-domain")));
+for (const [name, r, expect] of [
+  ["absent when gender is bound (single demographic predicate)", r1, false],
+  ["fires for profession filter × cohort dim", r3, true],
+  ["fires for two demographic filters", r4, true],
+]) check(`S-1: cross-tab warning ${name}`, warned(r, "Creator-domain") === expect, warnText(r));
 
-// ── S-2: inert sameRowMatching draws a warning; effective one does not ──
+// ── S-2: inert sameRowMatching draws a warning + drops out of appliedFilters ──
 const r5 = db.computeCollectionStats({
   dimension: "creatorBirthCentury", gender: "female",
   creationDateFrom: 1600, creationDateTo: 1900, sameRowMatching: true, topN: 5,
 });
-check("S-2: inert sameRowMatching warns", (r5.warnings ?? []).some(w => w.includes("sameRowMatching: true was ignored")),
-  (r5.warnings ?? []).join(" | "));
+check("S-2: inert sameRowMatching warns", warned(r5, "sameRowMatching: true was ignored"), warnText(r5));
+check("S-2: inert flag stripped from appliedFilters", r5.appliedFilters.sameRowMatching === undefined);
 const r6 = db.computeCollectionStats({
   dimension: "type", creator: "Rembrandt van Rijn", productionRole: "print maker", sameRowMatching: true, topN: 5,
 });
-check("S-2: effective sameRowMatching does not warn",
-  !(r6.warnings ?? []).some(w => w.includes("sameRowMatching")), (r6.warnings ?? []).join(" | "));
+check("S-2: effective sameRowMatching does not warn", !warned(r6, "sameRowMatching"), warnText(r6));
+check("S-2: effective flag stays in appliedFilters", r6.appliedFilters.sameRowMatching === true);
 
 // search_artwork path shares the intercept — inert flag must warn there too
-const r7 = db.search({ gender: undefined, type: "painting", sameRowMatching: true, maxResults: 1 });
-check("S-2: search path warns on inert flag too",
-  (r7.warnings ?? []).some(w => w.includes("sameRowMatching: true was ignored")), (r7.warnings ?? []).join(" | "));
+const r7 = db.search({ type: "painting", sameRowMatching: true, maxResults: 1 });
+check("S-2: search path warns on inert flag too", warned(r7, "sameRowMatching: true was ignored"), warnText(r7));
 
 process.exit(failures ? 1 : 0);

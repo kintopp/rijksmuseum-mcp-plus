@@ -785,14 +785,7 @@ export interface BrowseSetRecord {
  *  end because Railway's slower vCPU degrades the per-row PK-probe faster than the index scan. */
 const STATS_INDEX_THRESHOLD = 50_000;
 
-/** Dims whose vocabulary JOIN lands on the creator's person row, where the gender
- *  filter can be bound to the SAME person as the bucket (see artworkDimensionSql).
- *  profession/birthPlace/deathPlace dims join artwork-level mappings that lose the
- *  person linkage, so they cannot be bound and fall under the cross-tab warning. */
-const GENDER_BOUND_STATS_DIMS = new Set(["creator", "gender", "creatorBirthDecade", "creatorBirthCentury"]);
-
-/** Creator-domain predicates that resolve against ANY creator of a multi-creator work. */
-const CREATOR_DOMAIN_STATS_DIMS = new Set([...GENDER_BOUND_STATS_DIMS, "profession", "birthPlace", "deathPlace"]);
+/** Creator-domain filter keys that resolve against ANY creator of a multi-creator work. */
 const CREATOR_DOMAIN_STATS_FILTERS = ["gender", "profession", "birthPlace", "deathPlace"] as const;
 
 /** Vocab dimension → DB field + optional type filter. Shared by computeFacets and artworkDimensionSql. */
@@ -865,6 +858,12 @@ interface StatsDimensionMeta {
   /** Fixed bucket width. Omit on binned dims that use the caller-supplied `binWidth`. */
   bucketWidth?: number;
   bucketDomain?: { min?: number; maxExclusive?: number };
+  /** Creator-domain dims resolve against ANY creator of a multi-creator work.
+   *  "person-row" = the dimension JOIN lands on the creator's person row, so the
+   *  gender filter can be bound to the SAME person as the bucket (artworkDimensionSql).
+   *  "artwork-level" = the JOIN goes through artwork-level mappings that lose the
+   *  person linkage — unbindable, covered by the cross-tab warning instead. */
+  creatorDomain?: "person-row" | "artwork-level";
 }
 
 const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
@@ -883,7 +882,7 @@ const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
   type:            { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
   material:        { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
   technique:       { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
-  creator:         { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  creator:         { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc", creatorDomain: "person-row" },
   depictedPerson:  { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
   depictedPlace:   { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
   productionPlace: { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
@@ -893,13 +892,13 @@ const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
   exhibition:      { multiValued: true,  groupingKey: "entity",          defaultOrdering: "count_desc" },
   // Tier 1 additions (#320)
   productionRole:      { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
-  profession:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
-  birthPlace:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
-  deathPlace:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
+  profession:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc", creatorDomain: "artwork-level" },
+  birthPlace:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc", creatorDomain: "artwork-level" },
+  deathPlace:          { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc", creatorDomain: "artwork-level" },
   // Tier 2 special-case dims (#320)
-  gender:              { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
-  creatorBirthDecade:  { multiValued: true,  groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year" },
-  creatorBirthCentury: { multiValued: true,  groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year", bucketWidth: 100 },
+  gender:              { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc", creatorDomain: "person-row" },
+  creatorBirthDecade:  { multiValued: true,  groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year", creatorDomain: "person-row" },
+  creatorBirthCentury: { multiValued: true,  groupingKey: "computed_bucket", defaultOrdering: "label_asc", bucketUnit: "year", bucketWidth: 100, creatorDomain: "person-row" },
   // Tier 3 special-case dim (#320)
   placeType:           { multiValued: true,  groupingKey: "label",           defaultOrdering: "count_desc" },
   // Provenance dimensions — count = distinct artworks with ≥1 event/party matching this bucket.
@@ -926,6 +925,15 @@ const STATS_DIMENSION_META: Record<string, StatsDimensionMeta> = {
  *  of truth (a new single-valued dim gets the fast path automatically). */
 const SINGLE_VALUED_STATS_DIMS = new Set(
   Object.entries(STATS_DIMENSION_META).filter(([, meta]) => !meta.multiValued).map(([dim]) => dim),
+);
+
+/** Derived from `creatorDomain` above, same single-source-of-truth pattern as
+ *  SINGLE_VALUED_STATS_DIMS — a new creator dim gets binding/warning automatically. */
+const GENDER_BOUND_STATS_DIMS = new Set(
+  Object.entries(STATS_DIMENSION_META).filter(([, meta]) => meta.creatorDomain === "person-row").map(([dim]) => dim),
+);
+const CREATOR_DOMAIN_STATS_DIMS = new Set(
+  Object.entries(STATS_DIMENSION_META).filter(([, meta]) => meta.creatorDomain !== undefined).map(([dim]) => dim),
 );
 
 // ─── Filter definitions ─────────────────────────────────────────────
@@ -3639,10 +3647,8 @@ export class VocabularyDb {
   ): DimQuery | null {
     const orderBy = ordering === "count_desc" ? "cnt DESC" : "label";
     const { fieldFrom, fieldPred, statsMembership } = this.statsFieldShape(filtered, useIndexedField);
-    // Same-person binding for the gender filter: gender + birth_year live on the same
-    // vocabulary person row, so pushing the filter into the dimension JOIN buckets each
-    // artwork by the matching creator(s) only — a multi-creator work no longer lands in a
-    // co-creator's birth cohort when filtered by another creator's gender.
+    // gender + birth_year live on the same vocabulary person row, so pushing the gender
+    // filter into the dimension JOIN buckets each artwork by its matching creator(s) only.
     const genderBind = creatorGender != null && GENDER_BOUND_STATS_DIMS.has(dim);
     const genderCond = genderBind ? " AND v.gender = ?" : "";
     const genderBindings: unknown[] = genderBind ? [creatorGender] : [];
@@ -4010,6 +4016,13 @@ export class VocabularyDb {
     conditions.push(...intercept.conditions);
     bindings.push(...intercept.bindings);
     const interceptSkip = intercept.skipParams;
+
+    // sameRowMatching is the one filter with an "ignored" mode: keep it in appliedFilters
+    // only when the role intercept actually bound it. The tool header renders from this
+    // echo, so text, structured output, and the inert-flag warning cannot disagree.
+    if (appliedFilters.sameRowMatching === true && !interceptSkip.has("productionRole")) {
+      delete appliedFilters.sameRowMatching;
+    }
 
     // Artwork vocab filters — data-driven to avoid copy-paste.
     // Uses FTS5 when available (50-100x faster than LIKE '%...%' on 194K vocab terms).
@@ -5233,8 +5246,7 @@ export class VocabularyDb {
 
     const creatorRaw = effective.creator;
 
-    // Inert-flag guard: sameRowMatching only ever binds creator + productionRole. Without
-    // both, say so instead of silently accepting a flag the caller set as a mitigation.
+    // Inert-flag guard — warn rather than silently accept a mitigation that isn't active.
     if (effective.sameRowMatching === true && (creatorRaw === undefined || effective.productionRole === undefined)) {
       warnings?.push(
         "sameRowMatching: true was ignored — it applies only when both creator and productionRole are supplied. " +

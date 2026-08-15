@@ -55,7 +55,8 @@ const CollectionStatsOutput = {
     percentage: z.number().optional(),
   })),
   appliedFilters: z.record(z.string(), z.unknown())
-    .describe("Round-trip echo of accepted filter args (excludes control params like topN/offset/binWidth/sortBy/dimension)."),
+    .describe("Round-trip echo of accepted filter args (excludes control params like topN/offset/binWidth/sortBy/dimension). " +
+      "Exception: sameRowMatching is echoed only when it actually bound creator + productionRole — an ignored flag is dropped and warned about instead."),
   warnings: z.array(z.string()).optional(),
 };
 
@@ -296,10 +297,9 @@ export function registerStatsTools(
         if (params.sourceType) filterParts.push(`sourceType=${params.sourceType}`);
         if (params.attributionQualifier) filterParts.push(`attributionQualifier=${params.attributionQualifier}`);
         if (params.productionRole) filterParts.push(`productionRole=${params.productionRole}`);
-        // Only assert same-row matching in the header when the flag can actually bind
-        // (creator + productionRole) — an inert echo is a decoy for callers who set it
-        // to avoid cross-creator leakage (it also draws a warning from the DB layer).
-        if (params.sameRowMatching && params.creator && params.productionRole) filterParts.push("sameRowMatching");
+        // The DB layer strips sameRowMatching from appliedFilters when the flag didn't
+        // bind — an inert header echo is a decoy for callers who set it as a mitigation.
+        if (result.appliedFilters.sameRowMatching) filterParts.push("sameRowMatching");
         if (params.imageAvailable != null) filterParts.push(`imageAvailable=${params.imageAvailable}`);
         if (params.creationDateFrom != null || params.creationDateTo != null) {
           filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);
