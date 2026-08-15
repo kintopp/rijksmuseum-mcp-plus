@@ -178,7 +178,7 @@ export function registerStatsTools(
           birthPlace: optStr().describe("Filter to artworks by a creator born in this place (partial match)."),
           deathPlace: optStr().describe("Filter to artworks by a creator who died in this place (partial match)."),
           // Tier 2 (#320): gender + cohort
-          gender: optStr().describe("Filter by creator gender (e.g. 'female', 'male', 'unknown'). Restricts to artworks with ≥1 creator-mapped person of that gender."),
+          gender: optStr().describe("Filter by creator gender (e.g. 'female', 'male', 'unknown'). Restricts to artworks with ≥1 creator-mapped person of that gender. With a creator-bucketed dimension (creator/gender/creatorBirthDecade/creatorBirthCentury) the buckets count only the matching-gender creators — same-person binding, no cross-creator leakage."),
           // Tier 3 (#320): production place type
           placeType: optStr().describe("Filter to artworks whose production place has this placetype. Accepts a human label exactly as shown in the placeType dimension breakdown (e.g. 'city', 'inhabited places', 'countries (sovereign states)') or a raw authority URI (Getty AAT / Wikidata)."),
           // has* boolean predicates (#320)
@@ -296,7 +296,10 @@ export function registerStatsTools(
         if (params.sourceType) filterParts.push(`sourceType=${params.sourceType}`);
         if (params.attributionQualifier) filterParts.push(`attributionQualifier=${params.attributionQualifier}`);
         if (params.productionRole) filterParts.push(`productionRole=${params.productionRole}`);
-        if (params.sameRowMatching) filterParts.push("sameRowMatching");
+        // Only assert same-row matching in the header when the flag can actually bind
+        // (creator + productionRole) — an inert echo is a decoy for callers who set it
+        // to avoid cross-creator leakage (it also draws a warning from the DB layer).
+        if (params.sameRowMatching && params.creator && params.productionRole) filterParts.push("sameRowMatching");
         if (params.imageAvailable != null) filterParts.push(`imageAvailable=${params.imageAvailable}`);
         if (params.creationDateFrom != null || params.creationDateTo != null) {
           filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);

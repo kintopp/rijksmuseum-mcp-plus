@@ -251,7 +251,7 @@ export function registerProvenanceTools(
           .describe("Restrict to changes within a specific set"),
         identifiersOnly: z.preprocess(stripNullCoerceBool, z.boolean().default(false))
           .describe(
-            "If true, returns only record headers (identifier, datestamp, set memberships) — much faster. Preserved automatically across continuation pages."
+            "If true, returns only record headers (identifier = LOD URI, not objectNumber; datestamp; set memberships) — much faster. Preserved automatically across continuation pages."
           ),
         maxResults: z
           .number()

@@ -897,5 +897,16 @@
       "manual"
     ],
     "purpose": "DEPRECATED v0.19-era feature tests kept for historical reference"
+  },
+  "test-stats-crosstab-binding.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "collection_stats creator-domain cross-tab: gender filter same-person binding + inert sameRowMatching warning (S-1/S-2, 2026-08-15 report)"
   }
 }

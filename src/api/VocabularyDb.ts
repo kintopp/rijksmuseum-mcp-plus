@@ -785,6 +785,16 @@ export interface BrowseSetRecord {
  *  end because Railway's slower vCPU degrades the per-row PK-probe faster than the index scan. */
 const STATS_INDEX_THRESHOLD = 50_000;
 
+/** Dims whose vocabulary JOIN lands on the creator's person row, where the gender
+ *  filter can be bound to the SAME person as the bucket (see artworkDimensionSql).
+ *  profession/birthPlace/deathPlace dims join artwork-level mappings that lose the
+ *  person linkage, so they cannot be bound and fall under the cross-tab warning. */
+const GENDER_BOUND_STATS_DIMS = new Set(["creator", "gender", "creatorBirthDecade", "creatorBirthCentury"]);
+
+/** Creator-domain predicates that resolve against ANY creator of a multi-creator work. */
+const CREATOR_DOMAIN_STATS_DIMS = new Set([...GENDER_BOUND_STATS_DIMS, "profession", "birthPlace", "deathPlace"]);
+const CREATOR_DOMAIN_STATS_FILTERS = ["gender", "profession", "birthPlace", "deathPlace"] as const;
+
 /** Vocab dimension → DB field + optional type filter. Shared by computeFacets and artworkDimensionSql. */
 const VOCAB_DIMENSION_DEFS: ReadonlyArray<{ label: string; field: string; vocabType?: string }> = [
   { label: "type",           field: "type" },
@@ -3625,9 +3635,17 @@ export class VocabularyDb {
     ordering: "count_desc" | "label_asc",
     filtered = true,
     useIndexedField = false,
+    creatorGender?: string,
   ): DimQuery | null {
     const orderBy = ordering === "count_desc" ? "cnt DESC" : "label";
     const { fieldFrom, fieldPred, statsMembership } = this.statsFieldShape(filtered, useIndexedField);
+    // Same-person binding for the gender filter: gender + birth_year live on the same
+    // vocabulary person row, so pushing the filter into the dimension JOIN buckets each
+    // artwork by the matching creator(s) only — a multi-creator work no longer lands in a
+    // co-creator's birth cohort when filtered by another creator's gender.
+    const genderBind = creatorGender != null && GENDER_BOUND_STATS_DIMS.has(dim);
+    const genderCond = genderBind ? " AND v.gender = ?" : "";
+    const genderBindings: unknown[] = genderBind ? [creatorGender] : [];
     const vocabDef = VOCAB_DIMENSION_DEFS.find(d => d.label === dim);
     if (vocabDef) {
       const fieldId = this.fieldIdMap.get(vocabDef.field);
@@ -3638,14 +3656,14 @@ export class VocabularyDb {
       const arealFilter = vocabDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
       const where = `FROM ${fieldFrom}
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.label_en IS NOT NULL${typeFilter}${arealFilter}${statsMembership}`;
+          WHERE ${fieldPred} AND v.label_en IS NOT NULL${typeFilter}${arealFilter}${genderCond}${statsMembership}`;
       return {
         sql: `SELECT COALESCE(v.label_en, v.label_nl) AS label, COUNT(DISTINCT m.artwork_id) AS cnt
           ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
-        extraBindings: [fieldId, topN, offset],
+        extraBindings: [fieldId, ...genderBindings, topN, offset],
         coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
-        coverageBindings: [fieldId],
+        coverageBindings: [fieldId, ...genderBindings],
       };
     }
 
@@ -3751,14 +3769,14 @@ export class VocabularyDb {
       if (fieldId === undefined) return null;
       const where = `FROM ${fieldFrom}
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.type = 'person' AND v.gender IS NOT NULL${statsMembership}`;
+          WHERE ${fieldPred} AND v.type = 'person' AND v.gender IS NOT NULL${genderCond}${statsMembership}`;
       return {
         sql: `SELECT v.gender AS label, COUNT(DISTINCT m.artwork_id) AS cnt
           ${where}
           GROUP BY v.gender ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
-        extraBindings: [fieldId, topN, offset],
+        extraBindings: [fieldId, ...genderBindings, topN, offset],
         coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
-        coverageBindings: [fieldId],
+        coverageBindings: [fieldId, ...genderBindings],
       };
     }
 
@@ -3770,14 +3788,14 @@ export class VocabularyDb {
       if (fieldId === undefined) return null;
       const where = `FROM ${fieldFrom}
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}`;
+          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${genderCond}${statsMembership}`;
       return {
         sql: `SELECT ${this.binnedLabel("v.birth_year")} AS label, COUNT(DISTINCT m.artwork_id) AS cnt
           ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
-        extraBindings: [binWidth, binWidth, fieldId, topN, offset],
+        extraBindings: [binWidth, binWidth, fieldId, ...genderBindings, topN, offset],
         coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
-        coverageBindings: [fieldId],
+        coverageBindings: [fieldId, ...genderBindings],
       };
     }
 
@@ -3787,16 +3805,16 @@ export class VocabularyDb {
       if (fieldId === undefined) return null;
       const where = `FROM ${fieldFrom}
           JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
-          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${statsMembership}`;
+          WHERE ${fieldPred} AND v.type = 'person' AND v.birth_year IS NOT NULL${genderCond}${statsMembership}`;
       return {
         sql: `SELECT (CASE WHEN v.birth_year >= 0 THEN (v.birth_year / 100 + 1) * 100 - 100
                 ELSE -((-v.birth_year - 1) / 100 + 1) * 100 END) AS label,
               COUNT(DISTINCT m.artwork_id) AS cnt
           ${where}
           GROUP BY label ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
-        extraBindings: [fieldId, topN, offset],
+        extraBindings: [fieldId, ...genderBindings, topN, offset],
         coverageSql: `SELECT COUNT(DISTINCT m.artwork_id) AS cnt ${where}`,
-        coverageBindings: [fieldId],
+        coverageBindings: [fieldId, ...genderBindings],
       };
     }
 
@@ -3958,6 +3976,22 @@ export class VocabularyDb {
     const offset = params.offset ?? 0;
     const binWidth = params.binWidth ?? 10;
     const warnings: string[] = [];
+
+    // Cross-creator contamination guard: creator-domain predicates each resolve against
+    // ANY creator of a multi-creator work, so combining two can match different creators
+    // on one artwork. Exception: the gender filter is bound to the same person row as the
+    // creator-bucketed dims (artworkDimensionSql), so that pair needs no warning.
+    const demoFilters = CREATOR_DOMAIN_STATS_FILTERS.filter(k => params[k] != null);
+    const genderBoundToDim = params.gender != null && GENDER_BOUND_STATS_DIMS.has(params.dimension);
+    const unboundDemoFilters = demoFilters.filter(k => !(k === "gender" && genderBoundToDim));
+    if ((CREATOR_DOMAIN_STATS_DIMS.has(params.dimension) && unboundDemoFilters.length > 0) || demoFilters.length >= 2) {
+      warnings.push(
+        "Creator-domain predicates (gender/profession/birthPlace/deathPlace filters and creator-bucketed dimensions) " +
+        "resolve independently against any creator of a multi-creator artwork, so combined predicates can match " +
+        "different creators on the same work. Exception: the gender filter is bound to the same person as the " +
+        "creator/gender/creatorBirthDecade/creatorBirthCentury dimensions."
+      );
+    }
 
     // Build artwork filter conditions
     const conditions: string[] = [];
@@ -4228,7 +4262,7 @@ export class VocabularyDb {
       ? `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM "${tableId}"`
       : `CREATE TEMP VIEW _stats_artworks AS SELECT art_id FROM artworks`);
     try {
-      const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth, ordering, filtered, useIndexedField)
+      const dimQuery = this.artworkDimensionSql(params.dimension, topN, offset, binWidth, ordering, filtered, useIndexedField, params.gender)
         || this.provenanceDimensionSql(params.dimension, topN, offset, binWidth, ordering, provEventConds, provPartyConds, filtered);
 
       if (!dimQuery) {
@@ -5198,6 +5232,16 @@ export class VocabularyDb {
     const bindings: unknown[] = [];
 
     const creatorRaw = effective.creator;
+
+    // Inert-flag guard: sameRowMatching only ever binds creator + productionRole. Without
+    // both, say so instead of silently accepting a flag the caller set as a mitigation.
+    if (effective.sameRowMatching === true && (creatorRaw === undefined || effective.productionRole === undefined)) {
+      warnings?.push(
+        "sameRowMatching: true was ignored — it applies only when both creator and productionRole are supplied. " +
+        "It does not bind demographic filters (gender/profession/birthPlace/deathPlace) or dimensions."
+      );
+    }
+
     if (creatorRaw === undefined) return { skipParams, conditions, bindings };
 
     const qualifierRaw = effective.attributionQualifier;
