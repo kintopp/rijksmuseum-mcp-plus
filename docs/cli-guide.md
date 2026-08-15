@@ -426,7 +426,8 @@ node scripts/cli.mjs bibliography SK-C-5 --full --json | jq -r '.entries[].publi
 
 Output keys: `objectNumber`, `total` (e.g. 111 for SK-C-5), `entries`. Each entry: `sequence`,
 `citation`, `publicationUri` (the linked publication record, or null for inline-only citations),
-`pages`, `isbn`, `worldcatUri`, `libraryUrl`.
+`publicationId` (the bare id from that URI, ready for `citing`), `pages`, `isbn`, `worldcatUri`,
+`libraryUrl`.
 
 ---
 

@@ -365,6 +365,17 @@
     ],
     "purpose": "collection_stats Tier-1 dims/filters (role/profession/place/gender) over stdio"
   },
+  "test-binned-dims-period-compact.mjs": {
+    "category": "track2",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "vocabDb"
+    ],
+    "purpose": "binWidth actually bins on every binned dimension; compact=true rolls up periods (not empty events) at layer='periods'"
+  },
   "test-collection-stats-tier2.mjs": {
     "category": "track2",
     "class": "smoke",

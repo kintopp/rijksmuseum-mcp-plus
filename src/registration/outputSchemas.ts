@@ -409,6 +409,8 @@ export const BibliographyOutput = {
       .describe("Human-readable reference: an inline citation string, or 'author, title, journal, volume(year) pages, locus' composed at harvest time from the linked publication's creditText/name/isPartOf/pagination fields."),
     publicationUri: z.string().nullable()
       .describe("Linked publication record URI (https://id.rijksmuseum.nl/301{biblionumber}); null for inline-only citations. The 301{biblionumber} matches the library catalogue's SRU rijkspid."),
+    publicationId: z.number().int().nullable()
+      .describe("Bare publication id from the URI above — pass it to find_artworks_citing_publication. Rendered as [pub NNN] in the text channel."),
     pages: z.string().nullable(),
     isbn: z.string().nullable(),
     worldcatUri: z.string().nullable(),
