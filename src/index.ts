@@ -526,7 +526,7 @@ async function runHttp(): Promise<void> {
       logInfo(`  Background warmup complete in ${Date.now() - t0}ms — /ready now true`, { warmupMs: Date.now() - t0 });
       logInfo(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));
     } catch (err) {
-      logError("  Background warmup failed", err);
+      logWarn("  Background warmup failed", err);
       ready = true; // don't leave /ready stuck — failure is logged
     }
   };
@@ -551,7 +551,7 @@ function shutdown() {
 
   // Backstop: force exit before SIGKILL if a connection never closes.
   const forceExit = setTimeout(() => {
-    logError("Drain timed out; forcing exit.");
+    logWarn("Drain timed out; forcing exit.");
     process.exit(0);
   }, SHUTDOWN_TIMEOUT_MS);
   forceExit.unref();

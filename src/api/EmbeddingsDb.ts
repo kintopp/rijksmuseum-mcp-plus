@@ -149,7 +149,7 @@ export class EmbeddingsDb {
       this.stmtKnn.all(quantized.v, 1);
       logInfo(`  Embeddings vec0 pages warmed in ${Date.now() - t0}ms`);
     } catch (err) {
-      logError("  Embeddings warmup failed", err);
+      logWarn("  Embeddings warmup failed", err);
     }
   }
 

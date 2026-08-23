@@ -2853,7 +2853,7 @@ export class VocabularyDb {
       this.db.prepare("SELECT art_id FROM artworks LIMIT 1").get();
       logInfo(`  Vocab DB core pages warmed in ${Date.now() - t0}ms`);
     } catch (err) {
-      logError("  Vocab DB warmup failed", err);
+      logWarn("  Vocab DB warmup failed", err);
     }
   }
 
