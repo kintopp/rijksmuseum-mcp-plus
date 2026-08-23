@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { SORT_COLUMNS, type SortColumn, type BrowseSetRecord, type ProvenanceArtworkResult } from "../api/VocabularyDb.js";
 import { UsageStats } from "../utils/UsageStats.js";
 import { buildContentBlocks, mirrorWarningsToText, type JsonTextOptions, type TextBlock } from "../utils/responseShape.js";
+import { logInfo, logError } from "../utils/log.js";
 
 export const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
@@ -500,18 +501,23 @@ export function createLogger(stats?: UsageStats) {
       // Log tool input params (args[0]); skip args[1] which is MCP session metadata
       const input = args[0] && typeof args[0] === "object" ? args[0] : undefined;
       const start = performance.now();
+      // `tool`/`ms`/`ok`/`input` are emitted as fields, not folded into the
+      // message, so they stay filterable (@tool:, @ms:>500) and so
+      // scripts/analyse-railway-logs.py keeps keying off `tool`.
       try {
         const result = await fn(...args);
         const ms = Math.round(performance.now() - start);
         const ok = !(result && typeof result === "object" && "isError" in result && (result as Record<string, unknown>).isError);
-        console.error(JSON.stringify({ tool: toolName, ms, ok, ...(input && { input }) }));
+        const fields = { tool: toolName, ms, ok, ...(input && { input }) };
+        if (ok) logInfo(toolName, fields);
+        else logError(toolName, undefined, fields);
         stats?.record(toolName, ms, ok);
         stats?.recordInput(toolName, canonicalInputKey(input, 300), ms);
         return result;
       } catch (err) {
         const ms = Math.round(performance.now() - start);
         const error = err instanceof Error ? err.message : String(err);
-        console.error(JSON.stringify({ tool: toolName, ms, ok: false, error, ...(input && { input }) }));
+        logError(toolName, err, { tool: toolName, ms, ok: false, ...(input && { input }) });
         stats?.record(toolName, ms, false);
         stats?.recordInput(toolName, canonicalInputKey(input, 300), ms);
         // Do NOT emit structuredContent here — a bare { error } fails SDK
