@@ -27,9 +27,15 @@ import {
   type DeliveryState,
   computeDeliveryState,
   projectToFullImage,
+  regionPixelDims,
+} from "./registration/geometry.js";
+import {
+  VISION_MAX_EDGE,
+  VISION_MAX_TOKENS,
+  padToPatch,
   visualTokens,
   maxInspectWidth,
-} from "./registration/geometry.js";
+} from "./registration/visionSizing.js";
 import {
   ARTWORK_VIEWER_RESOURCE_URI,
   stripNullCoerceBool,
@@ -64,6 +70,15 @@ export {
   type DeliveryState,
   computeDeliveryState,
   projectToFullImage,
+  regionPixelDims,
+};
+
+// Vision-tier sizing lives in ./registration/visionSizing.ts; re-exported on the
+// same path for the pure-function tests.
+export {
+  VISION_MAX_EDGE,
+  VISION_MAX_TOKENS,
+  padToPatch,
   visualTokens,
   maxInspectWidth,
 };

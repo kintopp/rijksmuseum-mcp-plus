@@ -19,9 +19,15 @@ import {
   checkRegionBounds,
   computeDeliveryState,
   projectToFullImage,
-  maxInspectWidth,
+  regionPixelDims,
   type OobWarning,
 } from "../geometry.js";
+import {
+  VISION_PATCH,
+  VISION_MAX_EDGE,
+  maxInspectWidth,
+} from "../visionSizing.js";
+import { mirrorWarningsToText } from "../../utils/responseShape.js";
 import {
   ARTWORK_VIEWER_RESOURCE_URI,
   ANN_READ_OPEN,
@@ -277,9 +283,9 @@ export function registerViewerTools(
           .number()
           .int()
           .min(200)
-          .max(1988)
+          .max(VISION_MAX_EDGE)
           .default(1568)
-          .describe("Width of returned image in pixels (200–1988, default 1568). Vision models bill images in 28×28 patches, so 1988 (71×28) is the largest width that clears both the per-image patch budget and the stricter per-image limit that applies once a conversation has accumulated many images. Tall and square regions clamp below that automatically — the response reports the width actually delivered."),
+          .describe(`Width of returned image in pixels (200–${VISION_MAX_EDGE}, default 1568). Vision models bill images in ${VISION_PATCH}×${VISION_PATCH} patches, and that ceiling is the largest width clearing both the per-image patch budget and the stricter per-image limit that applies once a conversation has accumulated many images. Tall and square regions clamp below that automatically — the response reports the width actually delivered.`),
         rotation: z
           .union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)])
           .default(0)
@@ -375,33 +381,24 @@ export function registerViewerTools(
         // Two ceilings, both "don't pay for pixels the model won't see": never
         // upscale past the region's own resolution (interpolated pixels add no
         // real detail), and never exceed what the vision tier accepts before it
-        // downscales server-side. pct regions suffer from server-side rounding
-        // that can yield up to 3px less than the ideal pixel dimension, so we
-        // subtract 3 to stay inside the boundary.
+        // downscales server-side.
         let effectiveSize = args.size;
-        let clampReason: "vision" | "upscale" | null = null;
+        let clampMessage = "";
         if (imageInfo.width) {
-          const nativeHeight = imageInfo.height ?? imageInfo.width;
-          let regionWidth = imageInfo.width;
-          let regionHeight = nativeHeight;
-          const pctMatch = iiifRegion.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
-          const pxMatch = iiifRegion.match(/^(\d+),(\d+),(\d+),(\d+)$/);
-          if (pctMatch) {
-            regionWidth = Math.max(1, Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 3);
-            regionHeight = Math.max(1, Math.floor(nativeHeight * parseFloat(pctMatch[4]) / 100) - 3);
-          } else if (pxMatch) {
-            regionWidth = parseInt(pxMatch[3]);
-            regionHeight = parseInt(pxMatch[4]);
-          } else if (iiifRegion === "square") {
-            regionWidth = Math.min(imageInfo.width, nativeHeight);
-            regionHeight = regionWidth;
-          }
-          // region === "full" keeps the native dimensions
+          const { width: regionWidth, height: regionHeight } = regionPixelDims(
+            iiifRegion,
+            imageInfo.width,
+            imageInfo.height ?? imageInfo.width,
+          );
           const visionMax = maxInspectWidth(regionWidth, regionHeight);
           const ceiling = Math.min(regionWidth, visionMax);
           if (effectiveSize > ceiling) {
+            clampMessage = `size clamped from ${args.size}px to ${ceiling}px — ${
+              visionMax <= regionWidth
+                ? "anything larger is downscaled before the model sees it"
+                : "upscaling not supported"
+            }`;
             effectiveSize = ceiling;
-            clampReason = visionMax <= regionWidth ? "vision" : "upscale";
           }
         }
 
@@ -436,13 +433,7 @@ export function registerViewerTools(
         } catch { /* keep dims undefined */ }
 
         const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
-        const clampNote = clampReason === "vision"
-          ? `anything larger is downscaled before the model sees it`
-          : `upscaling not supported`;
-        const sizeNote = clampReason ? ` (clamped from ${args.size}px — ${clampNote})` : "";
-        const warnings = clampReason
-          ? [`size ${args.size}px reduced to ${effectiveSize}px — ${clampNote}.`]
-          : undefined;
+        const warnings = clampMessage ? [clampMessage] : undefined;
 
         // Auto-navigate viewer to inspected region (non-full only)
         let viewerNavigated = false;
@@ -457,7 +448,7 @@ export function registerViewerTools(
 
         const captionParts = [
           `"${artwork.title}" by ${artwork.creator} — ${args.objectNumber}`,
-          `(${regionLabel}, ${effectiveSize}px${sizeNote}, ${fetchTimeMs}ms)`,
+          `(${regionLabel}, ${effectiveSize}px, ${fetchTimeMs}ms)`,
         ];
         if (imageInfo.width && imageInfo.height) {
           captionParts.push(`| native ${imageInfo.width}×${imageInfo.height}px`);
@@ -467,7 +458,11 @@ export function registerViewerTools(
         }
         if (viewerNavigated) captionParts.push("| viewer navigated");
         else if (activeViewUUID) captionParts.push(`| viewer open (${activeViewUUID.slice(0, 8)})`);
-        const caption = captionParts.join(" ");
+        // This handler hand-builds `content` (structuredResponse emits text blocks
+        // only and cannot carry the image block), so it calls the shared warnings
+        // renderer directly rather than re-implementing one. Runs regardless of
+        // EMIT_STRUCTURED — the caption is the only channel when it is off.
+        const caption = mirrorWarningsToText({ warnings }, captionParts.join(" ")) ?? "";
 
         const content = [
           { type: "image" as const, data: base64, mimeType },
@@ -491,8 +486,6 @@ export function registerViewerTools(
           fetchTimeMs,
           viewUUID: activeViewUUID,
           viewerNavigated: viewerNavigated || undefined,
-          // The caption already carries this in the text channel (sizeNote), so
-          // there is nothing for mirrorWarningsToText to add on this path.
           warnings,
         };
         return {

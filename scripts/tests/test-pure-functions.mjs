@@ -30,6 +30,10 @@ import {
   parseDimRange,
   parseSortParam,
   stripNullCoerceBool,
+  regionPixelDims,
+  VISION_MAX_EDGE,
+  VISION_MAX_TOKENS,
+  padToPatch,
   visualTokens,
   maxInspectWidth,
 } from "../../dist/registration.js";
@@ -516,17 +520,28 @@ assertEq(stripNullCoerceBool("yes"),        "yes",     "'yes' NOT coerced — on
 assertEq(stripNullCoerceBool(1),            1,         "1 falls through unchanged (Zod will reject)");
 assertEq(stripNullCoerceBool(0),            0,         "0 falls through unchanged (Zod will reject)");
 
-// ── visualTokens / maxInspectWidth ───────────────────────────────
+section("visualTokens");
 
-console.log("\nvisualTokens:");
 assertEq(visualTokens(28, 28),       1,    "one exact patch → 1 token");
 assertEq(visualTokens(29, 28),       2,    "one pixel over → next patch column (ceil, not round)");
 assertEq(visualTokens(1000, 1000),  1296,  "1000×1000 → 1296 (documented example)");
 assertEq(visualTokens(2576, 1449),  4784,  "2576×1449 → exactly the 4784 budget (documented example)");
 
-console.log("\nmaxInspectWidth — every result must fit the budget:");
+section("maxInspectWidth");
+
+// The contract, stated once, from the exported constants — so a change to
+// either budget can't leave the test asserting the old one.
+const fitsBudget = (w, regionW, regionH) => {
+  const h = Math.max(1, Math.ceil(w * regionH / regionW));
+  return padToPatch(w) <= VISION_MAX_EDGE
+    && padToPatch(h) <= VISION_MAX_EDGE
+    && visualTokens(w, h) <= VISION_MAX_TOKENS;
+};
+
 // Shapes chosen so the two limits take turns binding: elongated regions are
-// edge-bound, square ones are token-bound well below the edge cap.
+// edge-bound, square ones are token-bound well below the edge cap. Each shape
+// asserts both halves of "largest that fits" — fit AND maximality, since fit
+// alone would pass for any conservative implementation.
 for (const [label, w, h] of [
   ["16:9 landscape", 1920, 1080],
   ["3:2 landscape",  3000, 2000],
@@ -536,34 +551,34 @@ for (const [label, w, h] of [
   ["9:16 portrait",  1080, 1920],
   ["A4 portrait",    1000, 1414],
   ["VOC scan",       3148, 4179],
+  ["degenerate 1×1", 1, 1],
 ]) {
   const got = maxInspectWidth(w, h);
-  const gotH = Math.max(1, Math.ceil(got * h / w));
-  const ok = got <= 1988 && gotH <= 1988 && visualTokens(got, gotH) <= 4784;
-  assert(ok, `${label} → ${got}×${gotH} = ${visualTokens(got, gotH)} tok (≤1988px, ≤4784 tok)`);
+  assert(fitsBudget(got, w, h),      `${label}: ${got}px fits the budget`);
+  assert(!fitsBudget(got + 1, w, h), `${label}: ${got + 1}px does not — ${got} is the ceiling`);
 }
 
-console.log("\nmaxInspectWidth — the returned width is maximal:");
-for (const [label, w, h] of [["16:9", 1920, 1080], ["square", 5000, 5000], ["3:4", 3000, 4000]]) {
-  const got = maxInspectWidth(w, h);
-  const next = got + 1;
-  const nextH = Math.max(1, Math.ceil(next * h / w));
-  const nextFits = next <= 1988
-    && Math.ceil(next / 28) * 28 <= 1988
-    && Math.ceil(nextH / 28) * 28 <= 1988
-    && visualTokens(next, nextH) <= 4784;
-  assert(!nextFits, `${label}: ${next}px would NOT fit — ${got} is the ceiling`);
-}
+// Exact values the loop cannot pin. Regression guard for the bug this replaced:
+// the old cap was 2016, the first patch multiple ABOVE the ~2000px many-image
+// limit, silently downscaled for anything squarer than ~1.09:1.
+assertEq(maxInspectWidth(1920, 1080), VISION_MAX_EDGE, "wide regions reach the edge cap");
+assert(maxInspectWidth(5000, 5000) < VISION_MAX_EDGE,  "square regions are token-bound BELOW the edge cap");
+assert(maxInspectWidth(3000, 4000) < VISION_MAX_EDGE,  "portrait regions are clamped below the edge cap");
+assertEq(maxInspectWidth(0, 0),   VISION_MAX_EDGE, "zero dimensions fall back to the edge cap");
+assertEq(maxInspectWidth(100, 0), VISION_MAX_EDGE, "zero height falls back to the edge cap");
+assertEq(VISION_MAX_EDGE % 28,    0,               "the edge cap sits on a patch boundary");
 
-// Regression guard for the bug this replaced: the old cap was 2016, the first
-// ×28 multiple ABOVE 2000, which is over the many-image per-side limit and got
-// silently downscaled for anything squarer than ~1.09:1.
-assertEq(maxInspectWidth(1920, 1080), 1988, "wide regions reach the 1988 edge cap");
-assert(maxInspectWidth(5000, 5000) < 1988,  "square regions are token-bound BELOW the edge cap");
-assert(maxInspectWidth(3000, 4000) < 1988,  "portrait regions are clamped below the edge cap");
-assert(maxInspectWidth(1, 1) <= 1988,       "degenerate 1×1 region stays within the cap");
-assertEq(maxInspectWidth(0, 0),       1988,  "zero dimensions fall back to the edge cap");
-assertEq(maxInspectWidth(100, 0),     1988,  "zero height falls back to the edge cap");
+section("regionPixelDims");
+
+assertDeepEq(regionPixelDims("full", 4000, 3000),        { width: 4000, height: 3000 }, "full → native dimensions");
+assertDeepEq(regionPixelDims("square", 4000, 3000),      { width: 3000, height: 3000 }, "square → shorter side both ways");
+assertDeepEq(regionPixelDims("1,2,300,400", 4000, 3000), { width: 300,  height: 400 },  "plain IIIF pixels → w,h");
+assertDeepEq(regionPixelDims("crop_pixels:1,2,300,400", 4000, 3000), { width: 300, height: 400 },
+  "crop_pixels: accepted unnormalized — callers need not strip the prefix first");
+// pct carries a 3px inset for server-side rounding.
+assertDeepEq(regionPixelDims("pct:0,0,50,50", 4000, 3000), { width: 1997, height: 1497 }, "pct → percentage minus the 3px rounding inset");
+assertDeepEq(regionPixelDims("pct:0,0,0.01,0.01", 4000, 3000), { width: 1, height: 1 }, "tiny pct clamps to 1px, never 0 or negative");
+assertDeepEq(regionPixelDims("nonsense", 4000, 3000),    { width: 4000, height: 3000 }, "unrecognized → native dimensions");
 
 // ── Summary ──────────────────────────────────────────────────────
 

@@ -128,60 +128,41 @@ export function checkRegionBounds(
   };
 }
 
-// ─── Vision-tier sizing ──────────────────────────────────────────────
-
-// Vision models bill an image in 28×28-pixel patches — ⌈w/28⌉ × ⌈h/28⌉ visual
-// tokens — and downscale anything over budget before the model sees it, so an
-// oversized crop costs a fetch and a transfer for pixels that get thrown away.
-//
-// The edge cap is 1988 (71×28) rather than the high-resolution tier's 2576
-// because a request carrying more than 20 image blocks — counting images
-// resent from earlier turns — drops every image in it to a ~2000px per-side
-// limit. Breaching that rejects the whole request, and since the history is
-// resent, every later turn fails identically until the conversation is
-// abandoned. Don't raise this to 2016 to "round up to a ×28 boundary": 2016 is
-// over the limit, and the edge check runs on the padded width, so no width
-// between 1989 and 2016 is reachable anyway.
-export const VISION_MAX_EDGE = 1988;
-export const VISION_MAX_TOKENS = 4784;
-
-// Exported for testing
-/** Visual-token cost of a w×h image: one token per 28×28 patch. */
-export function visualTokens(width: number, height: number): number {
-  return Math.ceil(width / 28) * Math.ceil(height / 28);
-}
-
 // Exported for testing
 /**
- * Largest delivery width for a region of this shape that arrives untouched.
+ * Pixel dimensions a region string denotes, given the image's native size.
  *
- * IIIF is asked for `{width},` and derives the height, so the height is
- * predicted with ceil() — over-estimating the patch count wastes a few pixels,
- * under-estimating invites the silent server-side downscale this exists to
- * avoid.
+ * Accepts every form the tools do — `full`, `square`, `pct:`, `crop_pixels:`,
+ * and plain IIIF pixels — so callers need not normalize first. Returns the
+ * native dimensions for anything unrecognized, which is the right default for
+ * `full` and a harmless one elsewhere.
  */
-export function maxInspectWidth(regionWidth: number, regionHeight: number): number {
-  if (!(regionWidth > 0) || !(regionHeight > 0)) return VISION_MAX_EDGE;
-
-  const fits = (w: number): boolean => {
-    const h = Math.max(1, Math.ceil(w * regionHeight / regionWidth));
-    return Math.ceil(w / 28) * 28 <= VISION_MAX_EDGE
-      && Math.ceil(h / 28) * 28 <= VISION_MAX_EDGE
-      && visualTokens(w, h) <= VISION_MAX_TOKENS;
-  };
-
-  if (fits(VISION_MAX_EDGE)) return VISION_MAX_EDGE;
-  if (!fits(1)) return 1; // region taller than the edge cap even one pixel wide
-
-  // Binary search the width: lo always fits, hi never does.
-  let lo = 1;
-  let hi = VISION_MAX_EDGE;
-  while (lo + 1 < hi) {
-    const mid = (lo + hi) >> 1;
-    if (fits(mid)) lo = mid;
-    else hi = mid;
+export function regionPixelDims(
+  region: string,
+  nativeWidth: number,
+  nativeHeight: number,
+): { width: number; height: number } {
+  const pct = parsePctRegion(region);
+  if (pct) {
+    // pct regions suffer from server-side rounding that can yield up to 3px
+    // less than the ideal pixel dimension; subtract 3 to stay inside it.
+    return {
+      width: Math.max(1, Math.floor(nativeWidth * pct[2] / 100) - 3),
+      height: Math.max(1, Math.floor(nativeHeight * pct[3] / 100) - 3),
+    };
   }
-  return lo;
+
+  const cp = parseCropPixelsRegion(region);
+  const plain = cp ? null : region.match(/^(\d+),(\d+),(\d+),(\d+)$/);
+  if (cp) return { width: cp[2], height: cp[3] };
+  if (plain) return { width: parseInt(plain[3], 10), height: parseInt(plain[4], 10) };
+
+  if (region === "square") {
+    const side = Math.min(nativeWidth, nativeHeight);
+    return { width: side, height: side };
+  }
+
+  return { width: nativeWidth, height: nativeHeight };
 }
 
 /**
