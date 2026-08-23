@@ -27,6 +27,7 @@ export {
   LINEAGE_QUALIFIERS,
   RELATED_VARIANT_LABELS,
 } from "./vocab-format.js";
+import { logInfo, logWarn, logError } from "../utils/log.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -1389,7 +1390,7 @@ export class VocabularyDb {
   constructor() {
     const dbPath = resolveDbPath("VOCAB_DB_PATH", "vocabulary.db");
     if (!dbPath) {
-      console.error("Vocabulary DB not found — vocabulary search disabled");
+      logWarn("Vocabulary DB not found — vocabulary search disabled");
       return;
     }
 
@@ -1796,9 +1797,9 @@ export class VocabularyDb {
         this.hasPartyPosition_ && "partyPosition",
         this.hasTransferCategory_ && "transferCategory",
       ].filter(Boolean).join(", ");
-      console.error(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
+      logInfo(`Vocabulary DB loaded: ${dbPath} (${count.toLocaleString()} artworks, ${features || "basic"})`);
     } catch (err) {
-      console.error(`Failed to open vocabulary DB: ${err instanceof Error ? err.message : err}`);
+      logError("Failed to open vocabulary DB", err);
       this.db = null;
     }
   }
@@ -1856,7 +1857,7 @@ export class VocabularyDb {
       const exists = this.db.prepare(
         "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?"
       ).get(indexName);
-      if (!exists) console.error(`Warning: ${indexName} index missing — ${context}`);
+      if (!exists) logWarn(`Warning: ${indexName} index missing — ${context}`);
     } catch { /* ignore */ }
   }
 
@@ -1870,7 +1871,7 @@ export class VocabularyDb {
     if (!stampedBuild) return; // unstamped backfill — can't verify, don't cry wolf
     const currentBuild = this.buildId;
     if (currentBuild !== "unknown" && stampedBuild !== currentBuild) {
-      console.error(
+      logWarn(
         `Warning: production_role_pairs was backfilled against vocab build "${stampedBuild}" ` +
         `but this DB is build "${currentBuild}" — art_ids may be misaligned (creator+productionRole ` +
         `sameRowMatching unreliable). Re-run scripts/backfill-production-role-pairs.py.`
@@ -2850,9 +2851,9 @@ export class VocabularyDb {
       ).get();
       // Artworks table — a single row fetch
       this.db.prepare("SELECT art_id FROM artworks LIMIT 1").get();
-      console.error(`  Vocab DB core pages warmed in ${Date.now() - t0}ms`);
+      logInfo(`  Vocab DB core pages warmed in ${Date.now() - t0}ms`);
     } catch (err) {
-      console.error(`  Vocab DB warmup failed: ${err instanceof Error ? err.message : err}`);
+      logError("  Vocab DB warmup failed", err);
     }
   }
 
@@ -2996,7 +2997,7 @@ export class VocabularyDb {
         category,
       });
     }
-    console.error(`  Curated sets cache: ${this.curatedSetsCache.size} sets in ${Date.now() - t0}ms`);
+    logInfo(`  Curated sets cache: ${this.curatedSetsCache.size} sets in ${Date.now() - t0}ms`);
   }
 
   listCuratedSets(opts: CuratedSetsQuery = {}): {

@@ -26,6 +26,7 @@ import {
 } from "./utils/MemoryStats.js";
 import { registerAll, similarPages, enrichmentReviewPages } from "./registration.js";
 import { isAllowedOrigin, parseMcpAllowedOrigins } from "./utils/origin.js";
+import { logInfo, logWarn, logError } from "./utils/log.js";
 
 const SERVER_NAME = "rijksmuseum-mcp+";
 
@@ -111,14 +112,14 @@ async function ensureDb(spec: DbSpec): Promise<void> {
       db.close();
       return;
     } catch {
-      console.error(`${spec.name} DB invalid or outdated — will re-download`);
+      logWarn(`${spec.name} DB invalid or outdated — will re-download`);
     }
   }
 
   const url = process.env[spec.urlEnvVar];
   if (!url) return;
 
-  console.error(`Downloading ${spec.name} DB...`);
+  logInfo(`Downloading ${spec.name} DB...`);
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -139,9 +140,9 @@ async function ensureDb(spec: DbSpec): Promise<void> {
     }
 
     fs.renameSync(tmpPath, dbPath);
-    console.error(`${spec.name} DB ready: ${dbPath}`);
+    logInfo(`${spec.name} DB ready: ${dbPath}`);
   } catch (err) {
-    console.error(`Failed to download ${spec.name} DB: ${err instanceof Error ? err.message : err}`);
+    logError(`Failed to download ${spec.name} DB`, err, { db: spec.name });
     if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
   } finally {
     clearTimeout(downloadTimer);
@@ -257,7 +258,7 @@ async function runStdio(): Promise<void> {
   }
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Rijksmuseum MCP server running on stdio");
+  logInfo("Rijksmuseum MCP server running on stdio");
 }
 
 // ─── HTTP mode ───────────────────────────────────────────────────────
@@ -313,7 +314,7 @@ async function runHttp(): Promise<void> {
       .filter(Boolean)
   );
   if (mcpBlockedIps.size > 0) {
-    console.error(`[mcp-block] denying /mcp for ${mcpBlockedIps.size} IP(s): ${[...mcpBlockedIps].join(", ")}`);
+    logInfo(`[mcp-block] denying /mcp for ${mcpBlockedIps.size} IP(s): ${[...mcpBlockedIps].join(", ")}`);
   }
   const recentIpRejections = new Map<string, number>();
   app.use("/mcp", (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -398,7 +399,7 @@ async function runHttp(): Promise<void> {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
-      console.error("MCP endpoint error:", err);
+      logError("MCP endpoint error", err);
       if (!res.headersSent) {
         res.status(500).json({ error: "Internal server error" });
       }
@@ -492,10 +493,10 @@ async function runHttp(): Promise<void> {
   // find_similar caches build lazily on first use regardless.
 
   httpServer = app.listen(port, () => {
-    console.error(`Rijksmuseum MCP server listening on http://localhost:${port}`);
-    console.error(`  MCP endpoint: POST /mcp`);
-    console.error(`  Health:       GET  /health`);
-    console.error(`  Ready:        GET  /ready`);
+    logInfo(`Rijksmuseum MCP server listening on http://localhost:${port}`);
+    logInfo(`  MCP endpoint: POST /mcp`);
+    logInfo(`  Health:       GET  /health`);
+    logInfo(`  Ready:        GET  /ready`);
   });
 
   // Background warm-up: cheap steps only — vocab core pages (~20ms) and the
@@ -522,10 +523,10 @@ async function runHttp(): Promise<void> {
         await embeddingModel.embed("warmup");
       }
       ready = true;
-      console.error(`  Background warmup complete in ${Date.now() - t0}ms — /ready now true`);
-      console.error(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));
+      logInfo(`  Background warmup complete in ${Date.now() - t0}ms — /ready now true`, { warmupMs: Date.now() - t0 });
+      logInfo(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));
     } catch (err) {
-      console.error(`  Background warmup failed: ${err instanceof Error ? err.message : err}`);
+      logError("  Background warmup failed", err);
       ready = true; // don't leave /ready stuck — failure is logged
     }
   };
@@ -541,7 +542,7 @@ let httpServer: import("node:http").Server | undefined;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 function shutdown() {
-  console.error("Shutting down...");
+  logInfo("Shutting down...");
   usageStats?.flush();
 
   if (!httpServer) {
@@ -550,7 +551,7 @@ function shutdown() {
 
   // Backstop: force exit before SIGKILL if a connection never closes.
   const forceExit = setTimeout(() => {
-    console.error("Drain timed out; forcing exit.");
+    logError("Drain timed out; forcing exit.");
     process.exit(0);
   }, SHUTDOWN_TIMEOUT_MS);
   forceExit.unref();
@@ -559,7 +560,7 @@ function shutdown() {
   httpServer.close(() => {
     // wait only on in-flight requests
     clearTimeout(forceExit);
-    console.error("All connections closed.");
+    logInfo("All connections closed.");
     process.exit(0);
   });
 }
@@ -571,12 +572,12 @@ process.on("SIGINT", shutdown);
 
 if (shouldUseHttp()) {
   runHttp().catch((err) => {
-    console.error("Failed to start HTTP server:", err);
+    logError("Failed to start HTTP server", err);
     process.exit(1);
   });
 } else {
   runStdio().catch((err) => {
-    console.error("Failed to start stdio server:", err);
+    logError("Failed to start stdio server", err);
     process.exit(1);
   });
 }

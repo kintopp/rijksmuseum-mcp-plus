@@ -12,6 +12,7 @@ import type {
   SharedMotif,
   SharedLineage,
 } from "./VocabularyDb.js";
+import { logInfo } from "../utils/log.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // find_similar similarity cluster, extracted from VocabularyDb (plan 047).
@@ -151,7 +152,7 @@ export class SimilarityQueries {
     `).get(subjectFieldId) as { n: number };
     this.iconclassN = countRow.n;
     this.ensureMappingsStmt();
-    console.error(`[find_similar] Iconclass IDF cache: ${this.notationDf.size} notations, ${this.iconclassN.toLocaleString()} artworks`);
+    logInfo(`[find_similar] Iconclass IDF cache: ${this.notationDf.size} notations, ${this.iconclassN.toLocaleString()} artworks`);
   }
 
   /**
@@ -310,7 +311,7 @@ export class SimilarityQueries {
       SELECT artwork_id FROM assignment_pairs
       WHERE qualifier_id = ? AND creator_id = ?
     `);
-    console.error(`[find_similar] Lineage IDF cache: ${this.lineageCreatorDf.size} creators, ${this.lineageN.toLocaleString()} artworks`);
+    logInfo(`[find_similar] Lineage IDF cache: ${this.lineageCreatorDf.size} creators, ${this.lineageN.toLocaleString()} artworks`);
   }
 
   /**
@@ -475,7 +476,7 @@ export class SimilarityQueries {
     `).get(subjectFieldId) as { n: number };
     this.personN = countRow.n;
     this.ensureMappingsStmt();
-    console.error(`[find_similar] Person IDF cache: ${this.personDf.size} persons, ${this.personN.toLocaleString()} artworks`);
+    logInfo(`[find_similar] Person IDF cache: ${this.personDf.size} persons, ${this.personN.toLocaleString()} artworks`);
   }
 
   /**
@@ -646,7 +647,7 @@ export class SimilarityQueries {
     this.db.exec("DROP TABLE IF EXISTS _place_vocab_ids");
 
     this.ensureMappingsStmt();
-    console.error(`[find_similar] Place IDF cache: ${this.placeDf.size} places (${this.placeExcluded.size} excluded), ${this.placeN.toLocaleString()} artworks`);
+    logInfo(`[find_similar] Place IDF cache: ${this.placeDf.size} places (${this.placeExcluded.size} excluded), ${this.placeN.toLocaleString()} artworks`);
   }
 
   /**
@@ -707,7 +708,7 @@ export class SimilarityQueries {
     ).get(themeFieldId) as { n: number };
     this.themeN = countRow.n;
     this.ensureMappingsStmt();
-    console.error(`[find_similar] Theme IDF cache: ${this.themeDf.size} themes, ${this.themeN.toLocaleString()} artworks`);
+    logInfo(`[find_similar] Theme IDF cache: ${this.themeDf.size} themes, ${this.themeN.toLocaleString()} artworks`);
   }
 
   /**
@@ -844,7 +845,7 @@ export class SimilarityQueries {
       list.push({ peerArtId: r.related_art_id, label: r.relationship_en });
       cache.set(r.art_id, list);
     }
-    console.error(`[find_similar] ${logName} cache: ${cache.size} seeds, ${rows.length} edges`);
+    logInfo(`[find_similar] ${logName} cache: ${cache.size} seeds, ${rows.length} edges`);
     return cache;
   }
 

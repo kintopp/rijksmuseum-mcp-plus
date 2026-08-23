@@ -4,6 +4,7 @@
  * Uses intfloat/multilingual-e5-small by default — a compact multilingual
  * model (384d) with E5 query/passage prefix conventions.
  */
+import { logInfo, logError } from "../utils/log.js";
 
 // ─── EmbeddingModel ──────────────────────────────────────────────────
 
@@ -47,9 +48,9 @@ export class EmbeddingModel {
       this.pipe = await pipeline("feature-extraction", modelId, {
         dtype: "q8",   // int8 quantized ONNX
       });
-      console.error(`Embedding model loaded: ${modelId}${targetDim > 0 ? ` (MRL ${targetDim}d)` : ""}`);
+      logInfo(`Embedding model loaded: ${modelId}${targetDim > 0 ? ` (MRL ${targetDim}d)` : ""}`);
     } catch (err) {
-      console.error(`Failed to load embedding model: ${err instanceof Error ? err.message : err}`);
+      logError("Failed to load embedding model", err, { modelId });
       this.pipe = null;
     }
   }

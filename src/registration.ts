@@ -43,6 +43,7 @@ import {
   parseSortParam,
   createLogger,
 } from "./registration/helpers.js";
+import { logInfo } from "./utils/log.js";
 
 // Re-export the pure helpers that scripts/tests/test-pure-functions.mjs imports
 // from dist/registration.js (that path must keep working). They live in
@@ -225,7 +226,7 @@ export function registerAll(
     const clientCaps = server.server.getClientCapabilities();
     const uiCap = getUiCapability(clientCaps);
     if (uiCap) {
-      console.error(`[mcp] Client supports MCP Apps (mimeTypes: ${uiCap.mimeTypes?.join(', ') ?? 'none'})`);
+      logInfo(`[mcp] Client supports MCP Apps (mimeTypes: ${uiCap.mimeTypes?.join(', ') ?? 'none'})`);
     }
   };
 }

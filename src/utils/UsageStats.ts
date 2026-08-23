@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PROJECT_ROOT } from "./db.js";
 import { lruGetOrCreate } from "./lru.js";
+import { logError } from "./log.js";
 
 interface ToolStats {
   calls: number;
@@ -160,7 +161,7 @@ export class UsageStats {
       fs.renameSync(tmp, this.filePath);
       this.dirty = false;
     } catch (err) {
-      console.error("[UsageStats] flush failed:", err);
+      logError("[UsageStats] flush failed", err);
     }
   }
 

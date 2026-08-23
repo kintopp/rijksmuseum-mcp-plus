@@ -3,6 +3,7 @@ import https from "node:https";
 import { ResponseCache } from "../utils/ResponseCache.js";
 import { USER_AGENT } from "../utils/userAgent.js";
 import { ArtworkImageInfo, IIIFInfoResponse } from "../types.js";
+import { logError } from "../utils/log.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export class RijksmuseumApiClient {
     try {
       return await this.buildImageInfo(iiifId, thumbnailWidth);
     } catch (err) {
-      console.error("Fast image info failed:", err instanceof Error ? err.message : err);
+      logError("Fast image info failed", err);
       return null;
     }
   }

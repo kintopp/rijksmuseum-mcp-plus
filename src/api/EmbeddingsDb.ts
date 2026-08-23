@@ -2,6 +2,7 @@ import Database, { type Database as DatabaseType, type Statement } from "better-
 import { createRequire } from "node:module";
 import { resolveDbPath } from "../utils/db.js";
 import { FILTER_ART_IDS_LIMIT } from "./VocabularyDb.js";
+import { logInfo, logWarn, logError } from "../utils/log.js";
 
 const require = createRequire(import.meta.url);
 
@@ -59,7 +60,7 @@ export class EmbeddingsDb {
   constructor() {
     const dbPath = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db");
     if (!dbPath) {
-      console.error("Embeddings DB not found — semantic_search disabled");
+      logWarn("Embeddings DB not found — semantic_search disabled");
       return;
     }
 
@@ -98,7 +99,7 @@ export class EmbeddingsDb {
         "SELECT art_id, object_number FROM artwork_embeddings WHERE art_id = ?"
       );
 
-      console.error(`Embeddings DB: ${this.artworkCount.toLocaleString()} vectors (${this.dimensions}d)`);
+      logInfo(`Embeddings DB: ${this.artworkCount.toLocaleString()} vectors (${this.dimensions}d)`);
 
       // Description embedding tables (optional — added by generate-description-embeddings-modal.py)
       try {
@@ -117,12 +118,12 @@ export class EmbeddingsDb {
           ORDER BY distance
         `);
         this.descAvailable_ = true;
-        console.error(`  Description embeddings: ${this.descArtworkCount.toLocaleString()} vectors (${this.descDimensions}d)`);
+        logInfo(`  Description embeddings: ${this.descArtworkCount.toLocaleString()} vectors (${this.descDimensions}d)`);
       } catch {
         // desc tables not present — description similarity disabled
       }
     } catch (err) {
-      console.error(`Failed to open embeddings DB: ${err instanceof Error ? err.message : err}`);
+      logError("Failed to open embeddings DB", err);
       this.db = null;
     }
   }
@@ -146,9 +147,9 @@ export class EmbeddingsDb {
       const zeros = new Float32Array(this.dimensions);
       const quantized = this.stmtQuantize.get(zeros) as { v: Buffer };
       this.stmtKnn.all(quantized.v, 1);
-      console.error(`  Embeddings vec0 pages warmed in ${Date.now() - t0}ms`);
+      logInfo(`  Embeddings vec0 pages warmed in ${Date.now() - t0}ms`);
     } catch (err) {
-      console.error(`  Embeddings warmup failed: ${err instanceof Error ? err.message : err}`);
+      logError("  Embeddings warmup failed", err);
     }
   }
 
