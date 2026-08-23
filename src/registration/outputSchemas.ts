@@ -475,6 +475,7 @@ export const InspectImageOutput = {
   fetchTimeMs: z.number().int().optional().describe("Time spent fetching from IIIF server (ms)"),
   viewUUID: z.string().optional().describe("Active viewer session ID (if a viewer is open for this artwork)"),
   viewerNavigated: z.boolean().optional().describe("Whether the viewer was auto-navigated to the inspected region"),
+  warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 };
 

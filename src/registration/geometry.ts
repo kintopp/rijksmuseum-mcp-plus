@@ -128,6 +128,62 @@ export function checkRegionBounds(
   };
 }
 
+// ─── Vision-tier sizing ──────────────────────────────────────────────
+
+// Vision models bill an image in 28×28-pixel patches — ⌈w/28⌉ × ⌈h/28⌉ visual
+// tokens — and downscale anything over budget before the model sees it, so an
+// oversized crop costs a fetch and a transfer for pixels that get thrown away.
+//
+// The edge cap is 1988 (71×28) rather than the high-resolution tier's 2576
+// because a request carrying more than 20 image blocks — counting images
+// resent from earlier turns — drops every image in it to a ~2000px per-side
+// limit. Breaching that rejects the whole request, and since the history is
+// resent, every later turn fails identically until the conversation is
+// abandoned. Don't raise this to 2016 to "round up to a ×28 boundary": 2016 is
+// over the limit, and the edge check runs on the padded width, so no width
+// between 1989 and 2016 is reachable anyway.
+export const VISION_MAX_EDGE = 1988;
+export const VISION_MAX_TOKENS = 4784;
+
+// Exported for testing
+/** Visual-token cost of a w×h image: one token per 28×28 patch. */
+export function visualTokens(width: number, height: number): number {
+  return Math.ceil(width / 28) * Math.ceil(height / 28);
+}
+
+// Exported for testing
+/**
+ * Largest delivery width for a region of this shape that arrives untouched.
+ *
+ * IIIF is asked for `{width},` and derives the height, so the height is
+ * predicted with ceil() — over-estimating the patch count wastes a few pixels,
+ * under-estimating invites the silent server-side downscale this exists to
+ * avoid.
+ */
+export function maxInspectWidth(regionWidth: number, regionHeight: number): number {
+  if (!(regionWidth > 0) || !(regionHeight > 0)) return VISION_MAX_EDGE;
+
+  const fits = (w: number): boolean => {
+    const h = Math.max(1, Math.ceil(w * regionHeight / regionWidth));
+    return Math.ceil(w / 28) * 28 <= VISION_MAX_EDGE
+      && Math.ceil(h / 28) * 28 <= VISION_MAX_EDGE
+      && visualTokens(w, h) <= VISION_MAX_TOKENS;
+  };
+
+  if (fits(VISION_MAX_EDGE)) return VISION_MAX_EDGE;
+  if (!fits(1)) return 1; // region taller than the edge cap even one pixel wide
+
+  // Binary search the width: lo always fits, hi never does.
+  let lo = 1;
+  let hi = VISION_MAX_EDGE;
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1;
+    if (fits(mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
 /**
  * Classify how a navigate_viewer call's commands will reach the iframe,
  * given the queue's last-poll timestamp. Pure for unit testing.

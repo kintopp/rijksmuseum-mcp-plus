@@ -19,6 +19,7 @@ import {
   checkRegionBounds,
   computeDeliveryState,
   projectToFullImage,
+  maxInspectWidth,
   type OobWarning,
 } from "../geometry.js";
 import {
@@ -276,9 +277,9 @@ export function registerViewerTools(
           .number()
           .int()
           .min(200)
-          .max(2016)
+          .max(1988)
           .default(1568)
-          .describe("Width of returned image in pixels (200–2016, default 1568). Defaults align to multiples of 28 for clean LLM coordinate handling: 1568 is Sonnet 4.6's native resolution cap, 2016 is the highest ×28 multiple that stays within Opus 4.7's per-image token budget across common aspect ratios."),
+          .describe("Width of returned image in pixels (200–1988, default 1568). Vision models bill images in 28×28 patches, so 1988 (71×28) is the largest width that clears both the per-image patch budget and the stricter per-image limit that applies once a conversation has accumulated many images. Tall and square regions clamp below that automatically — the response reports the width actually delivered."),
         rotation: z
           .union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)])
           .default(0)
@@ -371,24 +372,37 @@ export function registerViewerTools(
           ? (cropPixelsToIiifPixels(args.region) ?? args.region)
           : args.region;
 
-        // Policy: never upscale — interpolated pixels add no real detail for LLM
-        // inspection. pct regions suffer from server-side rounding that can yield
-        // up to 3px less than the ideal pixel width, so we subtract 3 to stay
-        // inside the boundary.
+        // Two ceilings, both "don't pay for pixels the model won't see": never
+        // upscale past the region's own resolution (interpolated pixels add no
+        // real detail), and never exceed what the vision tier accepts before it
+        // downscales server-side. pct regions suffer from server-side rounding
+        // that can yield up to 3px less than the ideal pixel dimension, so we
+        // subtract 3 to stay inside the boundary.
         let effectiveSize = args.size;
+        let clampReason: "vision" | "upscale" | null = null;
         if (imageInfo.width) {
+          const nativeHeight = imageInfo.height ?? imageInfo.width;
           let regionWidth = imageInfo.width;
+          let regionHeight = nativeHeight;
           const pctMatch = iiifRegion.match(/^pct:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$/);
           const pxMatch = iiifRegion.match(/^(\d+),(\d+),(\d+),(\d+)$/);
           if (pctMatch) {
             regionWidth = Math.max(1, Math.floor(imageInfo.width * parseFloat(pctMatch[3]) / 100) - 3);
+            regionHeight = Math.max(1, Math.floor(nativeHeight * parseFloat(pctMatch[4]) / 100) - 3);
           } else if (pxMatch) {
             regionWidth = parseInt(pxMatch[3]);
+            regionHeight = parseInt(pxMatch[4]);
           } else if (iiifRegion === "square") {
-            regionWidth = Math.min(imageInfo.width, imageInfo.height ?? imageInfo.width);
+            regionWidth = Math.min(imageInfo.width, nativeHeight);
+            regionHeight = regionWidth;
           }
-          // region === "full" keeps regionWidth = imageInfo.width
-          if (effectiveSize > regionWidth) effectiveSize = regionWidth;
+          // region === "full" keeps the native dimensions
+          const visionMax = maxInspectWidth(regionWidth, regionHeight);
+          const ceiling = Math.min(regionWidth, visionMax);
+          if (effectiveSize > ceiling) {
+            effectiveSize = ceiling;
+            clampReason = visionMax <= regionWidth ? "vision" : "upscale";
+          }
         }
 
         let base64: string;
@@ -422,7 +436,13 @@ export function registerViewerTools(
         } catch { /* keep dims undefined */ }
 
         const regionLabel = args.region === "full" ? "full image" : `region ${args.region}`;
-        const sizeNote = effectiveSize < args.size ? ` (clamped from ${args.size}px — upscaling not supported)` : "";
+        const clampNote = clampReason === "vision"
+          ? `anything larger is downscaled before the model sees it`
+          : `upscaling not supported`;
+        const sizeNote = clampReason ? ` (clamped from ${args.size}px — ${clampNote})` : "";
+        const warnings = clampReason
+          ? [`size ${args.size}px reduced to ${effectiveSize}px — ${clampNote}.`]
+          : undefined;
 
         // Auto-navigate viewer to inspected region (non-full only)
         let viewerNavigated = false;
@@ -471,6 +491,9 @@ export function registerViewerTools(
           fetchTimeMs,
           viewUUID: activeViewUUID,
           viewerNavigated: viewerNavigated || undefined,
+          // The caption already carries this in the text channel (sizeNote), so
+          // there is nothing for mirrorWarningsToText to add on this path.
+          warnings,
         };
         return {
           content,

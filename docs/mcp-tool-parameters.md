@@ -361,7 +361,7 @@ Fetch an artwork image or region as base64 for direct visual analysis by the LLM
 |---|---|
 | `objectNumber` | **Required.** Object identifier, e.g. `SK-C-5` |
 | `region` | IIIF region: `full` (default), `square`, `pct:x,y,w,h` (percentage), `crop_pixels:x,y,w,h` (pixels of the full image; use with `nativeWidth`/`nativeHeight` from a prior response), or `x,y,w,h` (legacy IIIF pixels) |
-| `size` | Width of returned image in pixels (200–2016, default 1568). Defaults align to multiples of 28 for clean LLM coordinate handling (1568 = Sonnet 4.6's native cap; 2016 = max for Opus 4.7 per-image token budget). |
+| `size` | Width of returned image in pixels (200–1988, default 1568). Vision models bill images in 28×28 patches, so 1988 (71×28) is the largest width that clears both the per-image patch budget and the stricter per-image limit that applies once a conversation has accumulated many images. Tall and square regions clamp below that automatically — the response reports the width actually delivered. |
 | `rotation` | Clockwise rotation: `0`, `90`, `180`, or `270` |
 | `quality` | `default` or `gray` (can help read inscriptions) |
 | `navigateViewer` | Auto-navigate open viewer to inspected region (default `true`) |

@@ -30,6 +30,8 @@ import {
   parseDimRange,
   parseSortParam,
   stripNullCoerceBool,
+  visualTokens,
+  maxInspectWidth,
 } from "../../dist/registration.js";
 
 import { escapeFts5, escapeFts5Token, generateMorphVariants, expandFtsQuery } from "../../dist/utils/db.js";
@@ -513,6 +515,55 @@ assertEq(stripNullCoerceBool("yes"),        "yes",     "'yes' NOT coerced — on
 // Non-string non-bool falls through to Zod for type-checking
 assertEq(stripNullCoerceBool(1),            1,         "1 falls through unchanged (Zod will reject)");
 assertEq(stripNullCoerceBool(0),            0,         "0 falls through unchanged (Zod will reject)");
+
+// ── visualTokens / maxInspectWidth ───────────────────────────────
+
+console.log("\nvisualTokens:");
+assertEq(visualTokens(28, 28),       1,    "one exact patch → 1 token");
+assertEq(visualTokens(29, 28),       2,    "one pixel over → next patch column (ceil, not round)");
+assertEq(visualTokens(1000, 1000),  1296,  "1000×1000 → 1296 (documented example)");
+assertEq(visualTokens(2576, 1449),  4784,  "2576×1449 → exactly the 4784 budget (documented example)");
+
+console.log("\nmaxInspectWidth — every result must fit the budget:");
+// Shapes chosen so the two limits take turns binding: elongated regions are
+// edge-bound, square ones are token-bound well below the edge cap.
+for (const [label, w, h] of [
+  ["16:9 landscape", 1920, 1080],
+  ["3:2 landscape",  3000, 2000],
+  ["4:3 landscape",  4000, 3000],
+  ["square",         5000, 5000],
+  ["3:4 portrait",   3000, 4000],
+  ["9:16 portrait",  1080, 1920],
+  ["A4 portrait",    1000, 1414],
+  ["VOC scan",       3148, 4179],
+]) {
+  const got = maxInspectWidth(w, h);
+  const gotH = Math.max(1, Math.ceil(got * h / w));
+  const ok = got <= 1988 && gotH <= 1988 && visualTokens(got, gotH) <= 4784;
+  assert(ok, `${label} → ${got}×${gotH} = ${visualTokens(got, gotH)} tok (≤1988px, ≤4784 tok)`);
+}
+
+console.log("\nmaxInspectWidth — the returned width is maximal:");
+for (const [label, w, h] of [["16:9", 1920, 1080], ["square", 5000, 5000], ["3:4", 3000, 4000]]) {
+  const got = maxInspectWidth(w, h);
+  const next = got + 1;
+  const nextH = Math.max(1, Math.ceil(next * h / w));
+  const nextFits = next <= 1988
+    && Math.ceil(next / 28) * 28 <= 1988
+    && Math.ceil(nextH / 28) * 28 <= 1988
+    && visualTokens(next, nextH) <= 4784;
+  assert(!nextFits, `${label}: ${next}px would NOT fit — ${got} is the ceiling`);
+}
+
+// Regression guard for the bug this replaced: the old cap was 2016, the first
+// ×28 multiple ABOVE 2000, which is over the many-image per-side limit and got
+// silently downscaled for anything squarer than ~1.09:1.
+assertEq(maxInspectWidth(1920, 1080), 1988, "wide regions reach the 1988 edge cap");
+assert(maxInspectWidth(5000, 5000) < 1988,  "square regions are token-bound BELOW the edge cap");
+assert(maxInspectWidth(3000, 4000) < 1988,  "portrait regions are clamped below the edge cap");
+assert(maxInspectWidth(1, 1) <= 1988,       "degenerate 1×1 region stays within the cap");
+assertEq(maxInspectWidth(0, 0),       1988,  "zero dimensions fall back to the edge cap");
+assertEq(maxInspectWidth(100, 0),     1988,  "zero height falls back to the edge cap");
 
 // ── Summary ──────────────────────────────────────────────────────
 

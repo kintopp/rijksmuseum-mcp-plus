@@ -27,6 +27,8 @@ import {
   type DeliveryState,
   computeDeliveryState,
   projectToFullImage,
+  visualTokens,
+  maxInspectWidth,
 } from "./registration/geometry.js";
 import {
   ARTWORK_VIEWER_RESOURCE_URI,
@@ -62,6 +64,8 @@ export {
   type DeliveryState,
   computeDeliveryState,
   projectToFullImage,
+  visualTokens,
+  maxInspectWidth,
 };
 
 // ─── Tool family registrars (Phase 4 split) ─────────────────────────────────
