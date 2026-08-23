@@ -3,8 +3,8 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.91"
-  last_updated: "2026-08-15"
+  version: "0.92"
+  last_updated: "2026-08-23"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -374,7 +374,7 @@ or German query returns unexpected results, reformulate in English.
 
 ### 5. Image Inspection
 
-When the user wants a region examined, or an inscription or signature read, follow the pixel-geometry recipe: check `get_artwork_details`' `description`/`curatorialNarrative` first for a catalogued location, survey with `region:"full"`, then `inspect_artwork_image` at a tight `pct:` crop to read the detail. Two tools, different audiences — `get_artwork_image` opens the viewer for the **user**; `inspect_artwork_image` returns bytes for the **model** (and auto-zooms the open viewer to whatever you inspect, so the user follows along — no separate `navigate_viewer` call needed for basic zoom). When the user draws a highlight box in the viewer, its `pct:` region arrives in the chat — you **must** pass that exact `pct:` region to `inspect_artwork_image` and answer from the returned crop before acting on their instruction (the reliable way to bind a viewer location to a request, since the user names the exact box). Full recipe — catalogue-first localization, survey-before-drilling, magnify-before-measuring, and the user-highlight direction — in [`references/specialist-workflows.md`](references/specialist-workflows.md#5-image-inspection).
+When the user wants a region examined, or an inscription or signature read, follow the pixel-geometry recipe: check `get_artwork_details`' `description`/`curatorialNarrative` first for a catalogued location, survey with `region:"full"`, then `inspect_artwork_image` at a tight `pct:` crop to read the detail. Two tools, different audiences — `get_artwork_image` opens the viewer for the **user**; `inspect_artwork_image` returns bytes for the **model** (and auto-zooms the open viewer to whatever you inspect, so the user follows along — no separate `navigate_viewer` call needed for basic zoom; `region:"full"` is the exception and never moves their view). When the user draws a highlight box in the viewer, its `pct:` region arrives in the chat — you **must** pass that exact `pct:` region to `inspect_artwork_image` and answer from the returned crop before acting on their instruction (the reliable way to bind a viewer location to a request, since the user names the exact box). Full recipe — catalogue-first localization, survey-before-drilling, magnify-before-measuring, and the user-highlight direction — in [`references/specialist-workflows.md`](references/specialist-workflows.md#5-image-inspection).
 
 ### 6. Provenance and Acquisition Research
 
