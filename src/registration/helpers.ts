@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { SORT_COLUMNS, type SortColumn, type BrowseSetRecord, type ProvenanceArtworkResult } from "../api/VocabularyDb.js";
 import { UsageStats } from "../utils/UsageStats.js";
 import { buildContentBlocks, mirrorWarningsToText, type JsonTextOptions, type TextBlock } from "../utils/responseShape.js";
-import { logInfo, logError } from "../utils/log.js";
+import { logInfo, logWarn, logError } from "../utils/log.js";
 
 export const ARTWORK_VIEWER_RESOURCE_URI = "ui://rijksmuseum/artwork-viewer.html";
 
@@ -510,7 +510,10 @@ export function createLogger(stats?: UsageStats) {
         const ok = !(result && typeof result === "object" && "isError" in result && (result as Record<string, unknown>).isError);
         const fields = { tool: toolName, ms, ok, ...(input && { input }) };
         if (ok) logInfo(toolName, fields);
-        else logError(toolName, undefined, fields);
+        // No exception reached here, so !ok means an isError result — a rejected
+        // input (bad filter combo, unknown vocabulary term), not a server
+        // failure. At error it would swamp @level:error with client typos.
+        else logWarn(toolName, undefined, fields);
         stats?.record(toolName, ms, ok);
         stats?.recordInput(toolName, canonicalInputKey(input, 300), ms);
         return result;
