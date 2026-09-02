@@ -3,7 +3,7 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.92"
+  version: "0.93"
   last_updated: "2026-08-23"
 ---
 
@@ -128,7 +128,7 @@ The three attribution-scoping filters (`attributionQualifier`, `productionRole`,
 
 **Scope qualifier filters to a specific source artist by combining with `creator`.** Standalone, `attributionQualifier: "follower of"` returns every follower-of-anyone work in the collection. Combined with `creator: "X"`, it returns just the follower-of-X subset — the source artist is recorded on the same production row as the qualifier (and the same-row fix surfaces that linkage), even though the work's display `creator` field is typically `Unknown [painter]` or `anonymous`.
 
-**Canonical name form matters.** The Rijksmuseum catalogue uses historical Dutch/Latin spellings for some artists. Bosch is catalogued as **"Jheronimus Bosch"**, not "Hieronymus Bosch". Always check `get_artwork_details` on a known work to confirm the canonical form before filtering.
+**Canonical name form matters.** The Rijksmuseum catalogue uses historical Dutch/Latin spellings for some artists. Bosch is catalogued as **"Jheronimus Bosch"**, not "Hieronymus Bosch". If a known artist returns no results, confirm the canonical form via `get_artwork_details` on a known work.
 
 ### `creator` vs `aboutActor` vs `depictedPerson`
 
@@ -292,7 +292,7 @@ Use `compact: true` on `search_artwork` only when you need the actual object num
 
 The **Creator** dimensions bucket each artwork by its maker's enriched person record (`gender` → male/female/unknown; `creatorBirthDecade`/`creatorBirthCentury` by birth year). They count artworks, not persons — a multi-creator work counts under each maker, and works whose creator has no enriched person record fall in the coverage residual; treat the result as a distribution of *works*, not a census of artists. Cross-tabbing with the `gender` filter **is** bound to the same person: `dimension="creatorBirthCentury", gender="female"` buckets only by the matching-gender creators' birth years (the total still counts every work with ≥1 matching creator). The other creator-domain predicates (`profession`, `birthPlace`, `deathPlace`) are **not** bound — filter and bucket each resolve against *any* creator on the work, so a print engraved by one maker after another's design lands in both; the server emits a warning whenever such an unbound pair is combined. For a genuine per-person cohort, run `search_persons` and pass the returned vocabIds to `search_artwork(creator=…)`. `placeType` buckets by the kind of place a work was made or depicts (city / region / nation, resolved to human labels). Most of these names also work as **filters** (e.g. `dimension="type", gender="female"` or `placeType="nations"`). A parallel family of presence filters narrows any breakdown to works that carry a given attribute: `hasInscription`, `hasNarrative`, `hasDimensions`, `hasExhibitions`, `hasExternalIds`, `hasParent`, `hasExaminations`, `hasModifications`, `hasWikidataCreator`, `hasAltNames`, plus the event flags `uncertain`, `unsold`, `gap`, `crossRef`.
 
-Filters from both domains combine freely; one call replaces N iterations. An aggregate **gender** (or `profession` / `creatorBirthCentury` / `birthPlace` / `deathPlace`) breakdown is now a single `collection_stats(dimension="gender")` call (see the Creator-dimension note above). To list the actual *works* by a demographic cohort you still need the two-step `search_persons` → `search_artwork(creator=<vocabId>)` pattern (§9) — `search_artwork` has no demographic filters, and `creator` takes a single vocab ID (an array is AND-combined, not a cohort).
+Filters from both domains combine freely; one call replaces N iterations. An aggregate **gender** (or `profession` / `creatorBirthCentury` / `birthPlace` / `deathPlace`) breakdown is a single `collection_stats(dimension="gender")` call (see the Creator-dimension note above). To list the actual *works* by a demographic cohort, use the two-step `search_persons` → `search_artwork(creator=<vocabId>)` pattern (§9) — `search_artwork` has no demographic filters, and `creator` takes a single vocab ID (an array is AND-combined, not a cohort).
 
 ### 2. Iconclass Research
 
@@ -348,9 +348,9 @@ Supported patterns: `"1642"` (exact year), `"164*"` (decade), `"16*"` (century),
 ### 4. Semantic Search + Structured Verification
 
 Use `semantic_search` for concepts with no vocabulary term or Iconclass code —
-atmosphere, emotion, cultural interpretation. Always follow up with a
-structured `search_artwork` to test whether the same works are reachable
-through controlled vocabulary.
+atmosphere, emotion, cultural interpretation. A follow-up structured
+`search_artwork` shows which of the same works are reachable through
+controlled vocabulary; works reachable only semantically are the gap cases.
 
 ```
 semantic_search(query="loneliness and isolation in a vast empty space", type="painting")
@@ -394,7 +394,7 @@ For an **aggregate** breakdown, `collection_stats` carries the demographic dimen
 
 ### 10. Similarity Research
 
-`find_similar(objectNumber)` renders an HTML comparison page across 9 channels plus a Pooled column (only `objectNumber` + `maxResults`, default 20 / max 50 per channel; no `signal` parameter). **Behavioural rule: surface the URL/path to the user — do not fetch, summarise, or paraphrase the page.** For which channel answers which question, see [`references/find-similar-channels.md`](references/find-similar-channels.md).
+`find_similar(objectNumber)` renders an HTML comparison page across 9 channels plus a Pooled column (only `objectNumber` + `maxResults`, default 20 / max 50 per channel; no `signal` parameter). **Surface the URL/path to the user as a link; the response text also carries a trimmed per-channel summary you can answer from — never fetch the page.** For which channel answers which question, see [`references/find-similar-channels.md`](references/find-similar-channels.md).
 
 ---
 

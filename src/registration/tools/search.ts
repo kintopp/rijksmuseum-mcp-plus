@@ -84,12 +84,12 @@ export function registerSearchTools(
         "Ranking: relevance (BM25) when text search (description, title, etc.) or geographic proximity is used; otherwise importance (image availability, curatorial attention, metadata richness). " +
         "For concept-ranked results, use semantic_search.\n\n" +
         "At least one filter is required. There is no full-text search across all metadata. " +
-        "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), ALWAYS start with subject — it searches the large majority of the collection via structured Iconclass vocabulary and has by far the highest recall for conceptual queries. " +
+        "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), subject has the highest recall — it searches the large majority of the collection via structured Iconclass vocabulary. " +
         "Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. " +
         "For broader concept discovery beyond structured vocabulary, use semantic_search — but combine it with search_artwork(type: 'painting', …) for painting queries since paintings are underrepresented there.\n\n" +
         "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). " +
         "If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. " +
-        "Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer — only when the user asks to see, show, or view an artwork; do not open the viewer for list/count/summary requests)." +
+        "Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer for the user)." +
         (vocabAvailable
           ? " Parameters combine freely, with one exception: proximity search overrides depictedPlace/productionPlace (see nearPlace). " +
             "Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). " +
@@ -176,7 +176,7 @@ export function registerSearchTools(
               subject: stringOrArray()
                 .optional()
                 .describe(
-                  "PRIMARY parameter for concept or thematic searches — use this first, before description or curatorialNarrative. " +
+                  "Highest-recall parameter for concept or thematic searches; description and curatorialNarrative are complementary corpora. " +
                   "Searches subject matter (Iconclass themes, depicted scenes); tagged on roughly seven artworks in eight. " +
                   "Has basic English morphological expansion (singular/plural, -ing, -ed) as a fallback — " +
                   "'cat' matches 'cats' and 'painting' matches 'paint', but unrelated derivations like " +
@@ -382,7 +382,7 @@ export function registerSearchTools(
             "When 'parent' is set, any child record that appears in the result alongside its parent is dropped, " +
             "and the parent gains a `groupedChildCount`. Only collapses when both child and parent match the query " +
             "— children whose parent isn't a hit remain in the result. Applied after the BM25 page is selected, " +
-            "so a parent that ranks below the maxResults cutoff won't pull its children in. Closes #28.",
+            "so a parent that ranks below the maxResults cutoff won't pull its children in.",
           ),
         sort: optMinStr()
           .optional()

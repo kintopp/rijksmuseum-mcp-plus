@@ -2,7 +2,7 @@
 
 `find_similar(objectNumber)` renders an HTML comparison page at `${PUBLIC_URL}/similar/:uuid` (cached 30 min) showing the source work alongside nearest neighbours across **9 independent similarity channels** plus a pooled column. The tool takes only `objectNumber` and `maxResults` (default 20, max 50, per channel); there is no `signal` parameter.
 
-**Behavioural rule (also stated in SKILL.md):** your job is to surface the URL/path to the user — don't fetch, summarise, or paraphrase the page.
+**Presentation (also stated in SKILL.md):** surface the URL/path to the user as a link; answer questions about the comparison from the trimmed summary in the response text — never fetch the page.
 
 ## Channels
 

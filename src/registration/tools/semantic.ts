@@ -57,10 +57,9 @@ export function registerSemanticTools(
           "(ceramics, textiles, frames) and will return unexpected results. " +
           "A single very broad filter (e.g. type: 'print' or material: 'paper' alone) can exceed the internal candidate limit, so ranking then operates on a near-optimal subset " +
           "rather than the full match set and may miss equally-relevant works — pair it with a narrower filter (e.g. type: 'print', subject: 'landscape') for exact ranking.\n\n" +
-          "Painting queries — two-step pattern: paintings are underrepresented (prints and drawings outnumber them ~77:1). " +
-          "For queries where paintings are the expected result type, ALWAYS combine semantic_search with a follow-up " +
-          "search_artwork(type: 'painting', subject: …) or search_artwork(type: 'painting', creator: …) — do not wait to observe skew, " +
-          "as the absence of key works is not visible in the returned results.\n\n" +
+          "Painting queries: paintings are underrepresented (prints and drawings outnumber them ~77:1), and missing key works are not visible in the returned list. " +
+          "When paintings are the expected result type, pre-filter with type: 'painting' here or pair this with " +
+          "search_artwork(type: 'painting', subject: …) / search_artwork(type: 'painting', creator: …).\n\n" +
           "Multilingual: queries in Dutch, German, French and other languages are supported but may benefit from a wider result window " +
           "or English reformulation if canonical works are missing.",
         inputSchema: z.object({

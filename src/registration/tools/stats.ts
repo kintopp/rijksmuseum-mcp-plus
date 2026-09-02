@@ -84,12 +84,6 @@ export function registerStatsTools(
           "Covers totals, summaries, and group-by / count-by / distribution-of / statistics-over queries across the Rijksmuseum collection. " +
           "Returns formatted text tables + structured output mirroring the same data (denominator/grouping/coverage semantics disclosed in the schema). " +
           "Not for individual artwork lookup — use get_artwork_details. Not for similarity — use find_similar.\n\n" +
-          "Examples:\n" +
-          "- \"Transfer type distribution for Rembrandt\" → dimension='transferType', creator='Rembrandt'\n" +
-          "- \"Sales by decade 1600–1900\" → dimension='provenanceDecade', transferType='sale', provenanceDateFrom=1600, provenanceDateTo=1900\n" +
-          "- \"How many artworks have LLM-mediated interpretations?\" → dimension='categoryMethod'\n" +
-          "- \"Type breakdown of Rembrandt's autograph paintings\" → dimension='type', creator='Rembrandt van Rijn', productionRole='painter', sameRowMatching=true\n" +
-          "- \"Workshop-of-Rembrandt works by type\" → dimension='type', creator='Rembrandt van Rijn', attributionQualifier='workshop of'\n\n" +
           "Artwork dimensions: type, material, technique, creator, productionRole (making/reproductive role), profession, depictedPerson, depictedPlace, " +
           "productionPlace, birthPlace (creator birth place), deathPlace (creator death place), century, decade, height, width, " +
           "gender (creator gender: female/male/unknown — groups artworks by creator gender via creator-mapping join), " +
@@ -164,7 +158,7 @@ export function registerStatsTools(
           // Provenance filters — names mirror their dimension counterparts. All filters tagged
           // [events] compose on the same event row; [parties] filters compose on the same party row.
           hasProvenance: z.preprocess(stripNullCoerceBool, z.boolean().optional())
-            .describe("If true, restrict to artworks with provenance records (~48K of 832K)."),
+            .describe("If true, restrict to artworks with parsed provenance records (roughly 6% of the collection)."),
           transferType: optStr().describe("[events] Filter to artworks with at least one provenance event of this transfer type (e.g. 'sale', 'confiscation')."),
           provenanceLocation: optStr().describe("[events] Filter to artworks with at least one provenance event in this location (partial match)."),
           party: optStr().describe("[parties] Filter to artworks involving this party/collector (partial match)."),

@@ -172,7 +172,7 @@ The one-off cross-walk / dump-quality / gazetteer-suitability probes (`compare-i
 | Script | Lang | Description |
 |--------|------|-------------|
 | `batch-parse-provenance.mjs` | Node | Batch parse provenance records from vocab DB. Runs Layer 1 (PEG parser) + Layer 2 (interpretation), populates `provenance_events` + `provenance_periods`. Supports `--dry-run`, `--limit`, `--layer1-only`. |
-| `audit-provenance-batch.mjs` | Node | Automated parser audit via Anthropic Batches API. Six modes: `silent-errors`, `pattern-mining`, `semantic-catalogue`, `position-enrichment`, `structural-signals`, `type-classification`. Supports `--resume`, `--dry-run`, `--stratify`, `--model`, `--thinking`, `--records`. |
+| `audit-provenance-batch.mjs` | Node | Automated parser audit via Anthropic Batches API. Six modes: `silent-errors`, `pattern-mining`, `semantic-catalogue`, `position-enrichment`, `structural-signals`, `type-classification`. Supports `--resume`, `--dry-run`, `--stratify`, `--model`, `--effort`, `--records`. |
 | `audit-disambiguate-parties.mjs` | Node | LLM-based party disambiguation: decomposes merged party text (213+ records) into structured sender/receiver/agent names. Outputs audit JSON. |
 | `recompute-periods.mjs` | Node | Re-derives `provenance_periods` (Layer 2) from `provenance_events` (Layer 1) via `interpretPeriods()`. Use after event splits/reclassifications make the periods stale. `--all`/`--artwork-ids`/`--dry-run`. |
 

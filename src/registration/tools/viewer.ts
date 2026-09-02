@@ -116,9 +116,7 @@ export function registerViewerTools(
       annotations: { ...ANN_VIEWER, openWorldHint: true },
       description:
         "Opens an interactive deep-zoom viewer for the user. " +
-        "Use only when they ask to see, show, or view an artwork. " +
-        "Call ONLY when the user explicitly wants to see, show, or view an artwork. " +
-        "Do NOT call for list, summary, count, or text-only requests. " +
+        "Use only when they ask to see, show, or view an artwork — not for list, summary, count, or text-only requests. " +
         "Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. " +
         "Not all artworks have images available. " +
         "Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl).",
@@ -256,16 +254,10 @@ export function registerViewerTools(
         "Region coordinates: 'pct:x,y,w,h' (percentage of full image, recommended), " +
         "'crop_pixels:x,y,w,h' (pixel coordinates of the full image — use with " +
         "nativeWidth/nativeHeight from a prior response), or 'x,y,w,h' (legacy IIIF " +
-        "pixels, equivalent to crop_pixels). Quick reference:\n" +
-        "- Top-left quarter: pct:0,0,50,50\n" +
-        "- Bottom-right quarter: pct:50,50,50,50\n" +
-        "- Center strip: pct:25,25,50,50\n" +
-        "- Full image: full (default)\n" +
-        "- For multi-panel works: use physical dimensions from get_artwork_details to estimate panel percentages, then inspect individual panels with close-up crops.\n\n" +
-        "Iterative zoom: start with region 'full' to understand the layout, then use close-up crops " +
-        "(600–800px) to read specific features. When a viewer is open for this artwork, it automatically " +
-        "zooms to the inspected region (navigateViewer defaults to true, no effect when region is 'full'), " +
-        "keeping the viewer in sync with your analysis — no separate navigate_viewer call needed for basic zoom.\n\n" +
+        "pixels, equivalent to crop_pixels). A tight region returns more real detail than a larger size — the server never upscales past the region's own pixels. " +
+        "For multi-panel works, estimate panel percentages from the physical dimensions in get_artwork_details.\n\n" +
+        "When a viewer is open for this artwork, it automatically zooms to the inspected region " +
+        "(navigateViewer defaults to true, no effect when region is 'full'), so no separate navigate_viewer call is needed for basic zoom.\n\n" +
         "The response includes the active viewUUID (if any) for follow-up navigate_viewer calls.",
       inputSchema: z.object({
         objectNumber: z

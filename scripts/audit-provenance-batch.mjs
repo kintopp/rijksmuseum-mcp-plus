@@ -72,7 +72,7 @@ const resumeBatchId = opt("--resume", null);
 const dryRun = flag("--dry-run");
 const stratify = flag("--stratify");
 const eraFilter = opt("--era", null); // e.g. "pre1800" — limits sampling to artworks with earliest event before this year
-const thinkingBudget = parseInt(opt("--thinking", "0"), 10); // extended thinking token budget (0 = disabled)
+const effort = opt("--effort", null); // adaptive-thinking effort (low|medium|high); omit for no thinking
 const recordsList = opt("--records", null); // comma-separated object numbers for targeted runs
 const verbose = flag("--verbose");
 
@@ -102,7 +102,7 @@ console.log(`  Output:      ${outputPath}`);
 console.log(`  Dry run:     ${dryRun}`);
 if (stratify) console.log(`  Stratify:    yes`);
 if (eraFilter) console.log(`  Era filter:  ${eraFilter}`);
-if (thinkingBudget) console.log(`  Thinking:    ${thinkingBudget} tokens`);
+if (effort) console.log(`  Effort:      ${effort}`);
 if (recordsList) console.log(`  Records:     ${recordsList}`);
 if (resumeBatchId) console.log(`  Resume:      ${resumeBatchId}`);
 console.log();
@@ -2439,15 +2439,15 @@ function buildBatchRequests(records) {
 
     const params = {
       model,
-      max_tokens: 4096,
+      max_tokens: effort ? 16000 : 4096,
       tools: [toolDef],
-      tool_choice: thinkingBudget > 0 ? { type: "auto" } : { type: "any" },
+      // Thinking is incompatible with forced tool_choice; each prompt names the tool to call.
+      tool_choice: effort ? { type: "auto" } : { type: "any" },
       messages: [{ role: "user", content: prompt }],
     };
-    // Extended thinking support — requires tool_choice: "auto" (not "any")
-    if (thinkingBudget > 0) {
-      params.thinking = { type: "enabled", budget_tokens: thinkingBudget };
-      params.max_tokens = thinkingBudget + 4096;
+    if (effort) {
+      params.thinking = { type: "adaptive" };
+      params.output_config = { effort };
     }
     requests.push({
       custom_id: `${mode}-${i}-${record.artworkId}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64),

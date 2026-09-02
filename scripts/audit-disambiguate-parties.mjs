@@ -16,7 +16,7 @@ import Anthropic from "@anthropic-ai/sdk";
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const dbPath = args.includes("--db") ? args[args.indexOf("--db") + 1] : "data/vocabulary.db";
-const model = args.includes("--model") ? args[args.indexOf("--model") + 1] : "claude-sonnet-4-20250514";
+const model = args.includes("--model") ? args[args.indexOf("--model") + 1] : "claude-sonnet-4-6";
 const outputPath = "data/audit-party-disambiguation-2026-03-22.json";
 
 // ─── Load targets ───────────────────────────────────────────────────
@@ -336,7 +336,8 @@ console.log(`  Succeeded: ${succeeded}, Failed: ${failed}`);
 
 // ─── Estimate cost ──────────────────────────────────────────────────
 
-const RATES = { "claude-sonnet-4-20250514": { input: 1.50, output: 7.50 } };
+// Batch API pricing (50% of standard)
+const RATES = { "claude-sonnet-4-6": { input: 1.50, output: 7.50 } };
 const rate = RATES[model] || { input: 1.50, output: 7.50 };
 const cost = ((inputTokens / 1_000_000) * rate.input + (outputTokens / 1_000_000) * rate.output).toFixed(2);
 

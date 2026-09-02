@@ -78,9 +78,9 @@ search_artwork(productionPlace="Japan", type="print", maxResults=10)  # sample w
 
 ### 9. Gender and Demographic Analysis
 
-**For an aggregate breakdown**, `collection_stats` now carries the demographic dimensions directly — `dimension="gender"` (also `profession`, `creatorBirthDecade`, `creatorBirthCentury`, `birthPlace`, `deathPlace`), each usable as a filter too (e.g. `dimension="type", gender="female"`). These bucket *artworks* by their maker's enriched person record, so read them as distributions of works, not artist head-counts (see the Creator-dimension caveat in `SKILL.md` §1, *Scope Before You Browse*).
+**For an aggregate breakdown**, `collection_stats` carries the demographic dimensions directly — `dimension="gender"` (also `profession`, `creatorBirthDecade`, `creatorBirthCentury`, `birthPlace`, `deathPlace`), each usable as a filter too (e.g. `dimension="type", gender="female"`). These bucket *artworks* by their maker's enriched person record, so read them as distributions of works, not artist head-counts (see the Creator-dimension caveat in `SKILL.md` §1, *Scope Before You Browse*).
 
-**For the actual works by a demographic cohort, the two-step pattern via `search_persons` is still required.** `search_artwork` has no `gender` / `bornAfter` / `bornBefore` / `profession` filters, so demographic predicates reach individual works only through `search_persons` (which returns vocab IDs) → `search_artwork(creator=…)`.
+**For the actual works by a demographic cohort, use the two-step pattern via `search_persons`.** `search_artwork` has no `gender` / `bornAfter` / `bornBefore` / `profession` filters, so demographic predicates reach individual works only through `search_persons` (which returns vocab IDs) → `search_artwork(creator=…)`.
 
 ```
 # Step 1 — find the persons matching the demographic profile

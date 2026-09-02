@@ -62,11 +62,11 @@ export function registerInscriptionsTools(
         description:
           "Structured search over artwork inscriptions and collector's marks. " +
           "Also signatures, dates, numbers, transcribed text.\n\n" +
-          "IMPORTANT — what this field is: catalogue-entered inscription/mark data, NOT OCR and NOT an exhaustive transcription of " +
-          "visible text. It is dominated by VERSO collector's-mark stamps (the Rijksprentenkabinet's own mark and former-owner stamps " +
+          "What this field is: catalogue-entered inscription/mark data — not OCR and not an exhaustive transcription of " +
+          "visible text. It is dominated by verso collector's-mark stamps (the Rijksprentenkabinet's own mark and former-owner stamps " +
           "account for a large share of all records); genuine artist-/image-applied text (signatures, captions, addresses) is a real but " +
-          "MINORITY component. Coverage is uneven by object type: high for prints and drawings, low for coins, medals, and posters that are " +
-          "covered in legend text never entered here. An empty transcribedText does NOT mean the object bears no text.\n\n" +
+          "minority component. Coverage is uneven by object type: high for prints and drawings, low for coins, medals, and posters that are " +
+          "covered in legend text never entered here. An empty transcribedText does not mean the object bears no text.\n\n" +
           "Use transcribedText to find what is actually written ON the work (matched against the quoted strings only). " +
           "Use collectorMark to find works bearing a given Lugt number (e.g. 'Lugt 240' or '240'). " +
           "Combine inscriptionType / placement / technique for facet queries (e.g. a handwritten signature on the recto). " +

@@ -58,13 +58,9 @@ export function registerSimilarTools(
           "Not for free-text concept queries — use semantic_search. " +
           "Not for filter-based search — use search_artwork. " +
           "Not for aggregate counts or distributions — use collection_stats.\n\n" +
-          "IMPORTANT: The result is a file path or URL to an HTML page. " +
-          "Your ONLY job is to show the user the path/URL so they can open it in a browser. " +
-          "Do NOT attempt to open, read, fetch, summarise, or characterise the page contents. " +
-          "Do NOT make additional tool calls to look up the same artworks. " +
-          "Simply present the link and explain that it contains a visual comparison page. " +
-          "(The full per-channel results are also returned as structuredContent for programmatic/CLI clients; " +
-          "chat hosts should ignore that payload and present only the link.)",
+          "The result is a URL or file path to an HTML comparison page built for the user to open in a browser — present it as a link. " +
+          "The page itself is not fetchable by the model; the response text carries a trimmed per-channel summary (and structuredContent the full per-channel data) " +
+          "so questions about the comparison can be answered from the response rather than by re-querying each artwork.",
         inputSchema: z.object({
           objectNumber: z.string().describe("Object number of the artwork to find similar works for (e.g. 'SK-A-1718')."),
           maxResults: z.preprocess(stripNull, z.number().int().min(1).max(TOOL_LIMITS.find_similar.max).default(TOOL_LIMITS.find_similar.default).optional())

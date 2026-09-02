@@ -190,11 +190,10 @@ const ProvenanceSearchOutput = {
     url: z.string(),
     creditLine: z.string(),
   })).optional().describe(
-    "UNSTRUCTURED fallback matches from the artwork credit-line field (acquisition/funding statements), " +
-    "returned only when creditLineQuery is used, and only for artworks that have NO parsed provenance. " +
-    "These are NOT curated provenance chains — they describe how the museum acquired the work (often just a " +
-    "funding body), with no parsed parties, dates, or transfer types. When presenting these to the user you " +
-    "MUST state that the answer derives from unstructured credit-line text, not parsed provenance.",
+    "Unstructured fallback matches from the artwork credit-line field (acquisition/funding statements), " +
+    "returned only when creditLineQuery is used, and only for artworks that have no parsed provenance. " +
+    "Not curated provenance chains — they describe how the museum acquired the work (often just a " +
+    "funding body), with no parsed parties, dates, or transfer types; say so when presenting them.",
   ),
   warnings: z.array(z.string()).optional(),
   autoCompacted: z.boolean().optional()
@@ -329,7 +328,7 @@ export function registerProvenanceTools(
           "(pendants, album sheets, dollhouse contents). " +
           "Combine transferType, dateFrom/dateTo, location for pattern discovery " +
           "(e.g. confiscations 1940–1945, sales in Paris).\n\n" +
-          "IMPORTANT flags on events:\n" +
+          "Event flags:\n" +
           "- unsold: true means this sale event was unsold/bought-in/withdrawn at auction — no ownership transfer occurred. " +
           "Filter these when analysing actual sales.\n" +
           "- batchPrice: true means the price is an en bloc/batch total for multiple artworks, not an individual price. " +
@@ -340,20 +339,15 @@ export function registerProvenanceTools(
           "rule:transfer_is_ownership), correctionMethod (llm_structural:#NNN) shows LLM structural corrections " +
           "(location fixes, event reclassification, event splitting), and enrichmentReasoning provides the LLM's reasoning " +
           "for any non-deterministic decision. Parties have position (sender/receiver/agent) indicating their role in the transfer.\n\n" +
-          "IMPORTANT: When results contain LLM-enriched records, the response text ends with a REVIEW_URL or REVIEW_FILE line. " +
-          "You MUST copy this URL or file path verbatim into your response as a clickable link or openable path. " +
-          "Do NOT omit it, paraphrase it, summarise it, or refer to it indirectly (e.g. 'see the link above'). " +
-          "The user cannot see tool output — if you do not include the path, they have no way to find the review page.\n\n" +
+          "When results contain LLM-enriched records, the response ends with a REVIEW_URL or REVIEW_FILE line pointing at a human-review page for those decisions. " +
+          "Include that URL or path verbatim as a link in your reply — the user cannot see tool output, so it is their only route to the page.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "Only the parsed provenance fields exposed below are searchable. " +
           "At least one filter is required.\n\n" +
-          "FALLBACK — creditLineQuery: only ~48K artworks have parsed provenance, but many more carry an unstructured " +
-          "credit-line field (acquisition/funding statements). Use creditLineQuery as a SECOND step: run a normal structured " +
-          "search first; if the relevant artworks turn out to have no parsed provenance, offer to extend the search with " +
-          "creditLineQuery. It runs a standalone free-text search over credit lines of artworks lacking parsed provenance, " +
-          "returns matches in creditLineResults (not results), and ignores all other filters. Credit-line data is a weaker, " +
-          "less reliable source (the museum's terminal acquisition channel, not prior ownership) — when you present these " +
-          "results you MUST tell the user the answer derives from unstructured credit-line text, not structured provenance.",
+          "creditLineQuery — unstructured fallback: only ~48K artworks have parsed provenance, but many more carry a credit-line field " +
+          "(acquisition/funding statements). It is a standalone mode for artworks lacking parsed provenance — a free-text search over credit lines that " +
+          "ignores all other filters and returns matches in creditLineResults (not results). Credit lines record the museum's own acquisition, not prior ownership, " +
+          "so present those results as coming from unstructured credit-line text, not parsed provenance.",
         inputSchema: z.object({
           layer: z.preprocess(stripNull,
             z.enum(["events", "periods"]).default("events").optional(),
@@ -384,14 +378,12 @@ export function registerProvenanceTools(
             .describe("Latest year (inclusive) for provenance event/period dates."),
           objectNumber: optStr().describe("Get full provenance chain for a specific artwork (e.g. 'SK-A-2344'). Fast local lookup."),
           creditLineQuery: optStr().describe(
-            "UNSTRUCTURED fallback search. Free-text query against the artwork credit-line field (acquisition/funding " +
+            "Unstructured fallback search. Free-text query against the artwork credit-line field (acquisition/funding " +
             "statements like 'Gift of F.G. Waller, Amsterdam' or 'Purchased with the support of the Mondriaan Fonds'), " +
-            "restricted to artworks that have NO parsed provenance. Use this ONLY as a second step: run a normal " +
-            "structured search first, and if relevant artworks turn out to have no parsed provenance, extend the search " +
-            "here. The query is tokenized on whitespace and AND-combined (e.g. 'Waller Amsterdam' matches credit lines " +
-            "containing both terms in any order). This is a standalone mode — when set, all other provenance filters are " +
-            "ignored. Results are returned in creditLineResults (not results) and are NOT curated provenance; you MUST " +
-            "tell the user the answer comes from unstructured credit-line text.",
+            "restricted to artworks that have no parsed provenance. " +
+            "The query is tokenized on whitespace and AND-combined (e.g. 'Waller Amsterdam' matches credit lines " +
+            "containing both terms in any order). Standalone mode — when set, all other provenance filters are " +
+            "ignored and results arrive in creditLineResults (not results).",
           ),
           creator: optStr().describe("Artist name (partial match on creator, e.g. 'Rembrandt', 'Vermeer')."),
           // The stored label is accented; callers reliably type the ASCII form,
@@ -481,10 +473,9 @@ export function registerProvenanceTools(
             clLines.push(`${pluralize(clResult.totalArtworks, "artwork")} matched on UNSTRUCTURED credit-line text`);
           }
           clLines.push(
-            "SOURCE: artwork credit-line / acquisition-credit field — NOT curated provenance. " +
+            "SOURCE: artwork credit-line / acquisition-credit field, not curated provenance. " +
             "These artworks have no parsed provenance; credit lines record how the museum acquired the work " +
-            "(often just a funding body), not prior ownership. You MUST tell the user this answer comes from " +
-            "unstructured credit-line text, not structured provenance.",
+            "(often just a funding body), not prior ownership. Present them as credit-line data, not provenance.",
           );
           for (const r of clResult.results) {
             clLines.push("");
@@ -768,7 +759,7 @@ export function registerProvenanceTools(
               lines.push("");
               lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);
               lines.push(`REVIEW_URL: ${reviewUrl}`);
-              lines.push("INSTRUCTION: You MUST include the REVIEW_URL above as a clickable link in your response. Do NOT omit it, summarize it, or refer to it indirectly. Copy the full URL verbatim.");
+              lines.push("Include the REVIEW_URL above verbatim as a link in your reply — it is the user's only route to the review page.");
             } else {
               const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
               fs.writeFileSync(filePath, html, "utf-8");
@@ -776,7 +767,7 @@ export function registerProvenanceTools(
               lines.push("");
               lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);
               lines.push(`REVIEW_FILE: ${filePath}`);
-              lines.push("INSTRUCTION: You MUST include the REVIEW_FILE path above in your response so the user can open it. Do NOT omit it, summarize it, or refer to it indirectly. Copy the full path verbatim.");
+              lines.push("Include the REVIEW_FILE path above verbatim in your reply so the user can open it.");
             }
           }
         }
