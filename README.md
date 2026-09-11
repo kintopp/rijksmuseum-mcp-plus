@@ -23,7 +23,7 @@ This tool was developed as a technology demo by the [Research and Infrastructure
 - **Relationships between works**. A similarity engine ("find images similar to..") [compares works across multiple dimensions](https://kintopp.github.io/rijksmuseum-mcp-plus/similar-to-SK-A-1115.html) — visual, thematic, lineage, shared subject — and surfaces pendants, pairs, copies, reproductive prints after paintings, and different impressions of one design.
 - **People and places**. You can search persons by profession, lifespan, or birthplace and then view their works, or run geospatial queries (e.g. "works depicting places within 20 km of Haarlem").
 - **Linked Open Data**. Works carry persistent handle.net URIs and other external IDs, and entities (creators, materials, depicted persons and places, themes) carry identifiers linking them to Wikidata, VIAF, ULAN, and RKD.
-- **Command-line interface.** The bundled `rijks-mcp` tool runs the same queries from the terminal — each tool exposed as a verb, with JSONL output for piping into tools such as `jq` so that results are scriptable and reproducible.
+- **Command-line interface.** The [bundled `rijks-mcp` tool](https://github.com/kintopp/rijksmuseum-mcp-plus/blob/main/docs/technical-guide.md#cli) runs the same queries from the terminal — each tool exposed as a verb, with JSONL output for piping into tools such as `jq` so that results are scriptable and reproducible.
 
 ## Sample Queries
 
