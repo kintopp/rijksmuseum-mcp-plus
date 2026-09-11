@@ -13,6 +13,7 @@
 - [Inscriptions and Marks](#inscriptions-and-marks)
 - [Bibliography and Citations](#bibliography-and-citations)
 - [Conservation and Technical Examination](#conservation-and-technical-examination)
+- [Working with the CLI](#working-with-the-cli)
 
 ## Searching the Collection
 
@@ -526,3 +527,45 @@ Citations in the catalogue are extensive — on the order of 378,000 works carry
 - `inspect_artwork_image` / `get_artwork_image` let you examine the underdrawing- and pentimenti-revealing features the infrared and X-ray campaigns were after
 
 **Why it matters:** A modern attribution rests as much on technical evidence — the date of the wood, the underdrawing beneath the paint, the pigments in the layers — as on the trained eye, and the museum's instruments cluster on exactly the uncertain cases: well over a third of all technically-examined works are catalogued as anonymous, "workshop of", or "attributed to". A researcher can inventory the existing dossier for a contested work and review what physical technical evidence exists.
+
+---
+
+## Working with the CLI
+
+The final example is a command-line pipeline for technical users. The CLI (`rijks-mcp`, or `node scripts/cli.mjs`; see the [CLI guide](cli-guide.md)) is a headless MCP client that drives the same server and returns the same `structuredContent` JSON an AI assistant would in claude.ai or Claude Desktop.
+
+### 37. Two Legacies, One Stamp: Waller's Mark from the Shell
+
+Scenario 29 asks whether Lugt 2760 reconstructs Waller's personal collection. Answering that means joining every stamped sheet to its credit line, but the mark sits on some 33,000 sheets: far beyond what any chat session can handle.
+
+```bash
+export RIJKS_MCP_HTTP=http://localhost:3000/mcp        # a warm server (npm run serve); stdio would spawn per call
+
+# 1. every sheet bearing the mark → one object number per line (100 per page, 200 pages)
+for off in $(seq 0 100 19900); do
+  rijks-mcp inscriptions --collectorMark 2760 --max 100 --offset $off --fields objectNumber
+done | jq -r .objectNumber > waller-marked.txt
+
+# 2. the join: one details call per sheet, projected to the credit line
+rijks-mcp details --stdin --fields objectNumber,creditLine < waller-marked.txt > waller-credit.jsonl
+
+# 3. who each stamped sheet actually came from
+jq -r '.creditLine // "" |
+  if   test("Waller-?Fonds|Waller Fund")                          then "Waller Fund purchase (post-1934)"
+  elif test("Legaat|Bequest")                                      then "Waller bequest (1934)"
+  elif test("Schenking van de heer F.G. Waller|Gift of F.G. Waller") then "Waller gift (lifetime)"
+  elif . == ""                                                     then "no credit line"
+  else "other donor" end' waller-credit.jsonl | sort | uniq -c | sort -nr
+```
+
+```
+13278 Waller Fund purchase (post-1934)
+ 2980 Waller bequest (1934)
+ 2442 Waller gift (lifetime)
+ 1078 no credit line
+  222 other donor
+```
+
+The tally answers the question in scenario 29. Only about a quarter of the stamped sheets came from Waller himself, as his 1934 bequest or as gifts made in his lifetime. Two-thirds were bought by the Waller Fund after his death. The Rijksprentenkabinet applied his stamp to those purchases too, so Lugt 2760 marks everything that entered through Waller's name, not just what he owned. The sheets that carry the stamp have no parsed provenance, and the works whose provenance names Waller do not carry the stamp (`rijks-mcp provenance --party Waller` paged to 124 artworks, then `comm -12` against `waller-marked.txt`). To recover his personal collection, the mark has to be read together with the credit line.
+
+**Why it matters:** The CLI is an MCP client, not a second query path: it uses the same `callTool` and the same rows the AI assistant sees. What the shell adds is scale and set algebra: paging a 20,000-row result, applying a details call to every row, and joining two result sets by object number are all defined in one pipeline. Two caveats: `search_inscriptions` parses at most 20,000 candidates (`candidatesCapped: true` on the first page), so the tally describes about 60 percent of the marked sheets, ordered by the index; and `--fields` projects top-level keys only, so nested values are unpacked in `jq`, not in the CLI.
