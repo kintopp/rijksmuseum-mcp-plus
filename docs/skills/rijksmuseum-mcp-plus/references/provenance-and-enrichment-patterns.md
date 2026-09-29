@@ -123,8 +123,9 @@ Each party in a provenance event has a **role** (what they did) and a
 The table above lists the canonical role values. LLM enrichment also introduces
 granular variants (`his widow`, `his son`, `his daughter`, `seller/consignor`,
 `dealer/intermediary`, etc.) — dozens of them, each with small counts. When
-filtering by role, a broad `party=` search or a `LIKE` match on the canonical
-stem catches more than an exact role match.
+filtering by role, note that `collection_stats`' `partyRole` filter is an exact
+match and misses these variants; a `party=` name search on `search_provenance`
+does not depend on role labels.
 
 Positions (`sender`/`receiver`/`agent`) are derived from roles via deterministic
 mapping, with LLM enrichment for ambiguous cases. The `positionMethod` field

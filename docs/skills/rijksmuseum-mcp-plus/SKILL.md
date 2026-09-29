@@ -3,12 +3,13 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.93"
-  last_updated: "2026-08-23"
+  version: "0.94"
+  last_updated: "2026-09-29"
 ---
 
 # Rijksmuseum MCP+ Research Skill
 
+Answer questions about the collection from the tools, not from memory: check attributions, dates, object numbers, and counts against the catalogue even for well-known works, because recollections of a collection are often wrong in exactly those details.
 
 ## Tool Selection Guide
 
@@ -308,7 +309,7 @@ it expects exact notation codes. Use the **Rijksmuseum Iconclass MCP server** to
 - `expand_keys` / `search_prefix` — key variants and subtree enumeration
 - `find_artworks(notation=...)` — exact per-collection artwork counts + link-outs (the count-check handoff)
 
-**Before handing off**, gauge curatorial depth: each `search` result's `collections` array tells you *which* loaded collections have artworks for a notation (presence only — an empty array means none). For the exact figure — whether a code is backed by 2,000 artworks or 3 — pass the notation to `find_artworks`. **Never truncate Iconclass discovery queries** — use the default `maxResults` (25) or higher so you can evaluate all returned notations before deciding which codes to hand off.
+**Before handing off**, gauge curatorial depth: each `search` result's `collections` array tells you *which* loaded collections have artworks for a notation (presence only — an empty array means none). For the exact figure — whether a code is backed by 2,000 artworks or 3 — pass the notation to `find_artworks`. Keep Iconclass discovery queries at the default `maxResults` or higher, so you can compare the candidate notations before choosing which codes to hand off.
 
 **Searching with codes on this server:**
 
@@ -374,7 +375,7 @@ or German query returns unexpected results, reformulate in English.
 
 ### 5. Image Inspection
 
-When the user wants a region examined, or an inscription or signature read, follow the pixel-geometry recipe: check `get_artwork_details`' `description`/`curatorialNarrative` first for a catalogued location, survey with `region:"full"`, then `inspect_artwork_image` at a tight `pct:` crop to read the detail. Two tools, different audiences — `get_artwork_image` opens the viewer for the **user**; `inspect_artwork_image` returns bytes for the **model** (and auto-zooms the open viewer to whatever you inspect, so the user follows along — no separate `navigate_viewer` call needed for basic zoom; `region:"full"` is the exception and never moves their view). When the user draws a highlight box in the viewer, its `pct:` region arrives in the chat — you **must** pass that exact `pct:` region to `inspect_artwork_image` and answer from the returned crop before acting on their instruction (the reliable way to bind a viewer location to a request, since the user names the exact box). Full recipe — catalogue-first localization, survey-before-drilling, magnify-before-measuring, and the user-highlight direction — in [`references/specialist-workflows.md`](references/specialist-workflows.md#5-image-inspection).
+When the user wants a region examined, or an inscription or signature read, follow the pixel-geometry recipe: check `get_artwork_details`' `description`/`curatorialNarrative` first for a catalogued location, survey with `region:"full"`, then `inspect_artwork_image` at a tight `pct:` crop to read the detail. Two tools, different audiences — `get_artwork_image` opens the viewer for the **user**; `inspect_artwork_image` returns bytes for the **model** (and auto-zooms the open viewer to whatever you inspect, so the user follows along — no separate `navigate_viewer` call needed for basic zoom; `region:"full"` is the exception and never moves their view). When the user draws a highlight box in the viewer, its `pct:` region arrives in the chat as coordinates only, not pixels — so pass that exact `pct:` region to `inspect_artwork_image` and answer from the returned crop before acting on their instruction. Full recipe — catalogue-first localization, survey-before-drilling, magnify-before-measuring, and the user-highlight direction — in [`references/specialist-workflows.md`](references/specialist-workflows.md#5-image-inspection).
 
 ### 6. Provenance and Acquisition Research
 
@@ -394,7 +395,7 @@ For an **aggregate** breakdown, `collection_stats` carries the demographic dimen
 
 ### 10. Similarity Research
 
-`find_similar(objectNumber)` renders an HTML comparison page across 9 channels plus a Pooled column (only `objectNumber` + `maxResults`, default 20 / max 50 per channel; no `signal` parameter). **Surface the URL/path to the user as a link; the response text also carries a trimmed per-channel summary you can answer from — never fetch the page.** For which channel answers which question, see [`references/find-similar-channels.md`](references/find-similar-channels.md).
+`find_similar(objectNumber)` renders an HTML comparison page across 9 channels plus a Pooled column (only `objectNumber` + `maxResults`, default 20 / max 50 per channel). **Surface the URL/path to the user as a link; the response text also carries a trimmed per-channel summary you can answer from — never fetch the page.** For which channel answers which question, see [`references/find-similar-channels.md`](references/find-similar-channels.md).
 
 ---
 
@@ -403,7 +404,7 @@ For an **aggregate** breakdown, `collection_stats` carries the demographic dimen
 
 | Issue | Workaround |
 | --- | --- |
-| `navigate_viewer` `deliveryState` field | Three values: `delivered_recently` (iframe polled within 5s — commands flowed through), `queued_waiting_for_viewer` (iframe exists but is paused/offscreen — the command is preserved server-side and applied when polling resumes; **do NOT narrate this as a delivery failure** to the user), `no_live_viewer_seen` (no iframe has connected yet — likely a host-mount failure across multiple fresh `get_artwork_image` calls; surface this to the user rather than silently falling back to `inspect_artwork_image`). Pair with `recentlyPolledByViewer` (bool) for the "is the viewer live right now" check. |
+| `navigate_viewer` `deliveryState` field | Three values: `delivered_recently` (iframe polled within 5s — commands flowed through), `queued_waiting_for_viewer` (iframe exists but is paused/offscreen — the command is preserved server-side and applied when polling resumes, so report it as pending rather than failed), `no_live_viewer_seen` (no iframe has connected yet — likely a host-mount failure across multiple fresh `get_artwork_image` calls; surface this to the user rather than silently falling back to `inspect_artwork_image`). Pair with `recentlyPolledByViewer` (bool) for the "is the viewer live right now" check. |
 | No `subject` results in English | Try the Dutch term — vocabulary is bilingual ("fotograaf" not "photographer") |
 | `semantic_search` skews toward prints/drawings | Filter with `type: "painting"` — prints and drawings outnumber paintings ~77:1 |
 | `semantic_search` with very broad filter | Single broad filters (`type: "print"`, `material: "paper"`) exceed the candidate limit — results are good but not exhaustive. Combine filters for better coverage. |

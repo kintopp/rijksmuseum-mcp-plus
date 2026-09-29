@@ -35,7 +35,7 @@ inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
 
 **Edge rule.** If the target touches any edge of the inspected crop, re-center the crop before drilling further — a feature straddling an edge is a sign the crop needs adjusting.
 
-`inspect_artwork_image` can surface content **absent from structured metadata** — unsigned Japanese prints often have readable artist signatures, publisher seals, and poem cartouches that the catalogue has not transcribed. Use `region="full"` for an initial composition overview before cropping to details.
+`inspect_artwork_image` can surface content **absent from structured metadata** — unsigned Japanese prints often have readable artist signatures, publisher seals, and poem cartouches that the catalogue has not transcribed.
 
 **User-drawn highlights.** The user can draw a highlight box directly in the open viewer; its `pct:` region arrives in the chat as a message (`[Highlight: region pct:… on "<title>" (<objectNumber>)]`). This reliably binds a viewer location to the request — the user names the exact box, so there is no *coordinate* guesswork. The message carries the coordinates only, not the pixels, so before answering you **must** call `inspect_artwork_image` with that exact `pct:` region and base your response on the returned crop. Then act on it per the user's instruction — describe what the crop contains, or answer their question about it.
 
