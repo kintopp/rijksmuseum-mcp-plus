@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { VocabularyDb, pluralize, type InscriptionSearchParams } from "../../api/VocabularyDb.js";
 import { UsageStats } from "../../utils/UsageStats.js";

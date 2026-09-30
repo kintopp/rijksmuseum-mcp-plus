@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import express from "express";
 import compression from "compression";
 import cors from "cors";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { createGunzip } from "node:zlib";
@@ -248,7 +248,6 @@ async function runStdio(): Promise<void> {
   await initDatabases();
   initSharedClients();
   initUsageStats();
-  const server = createServer();
   // Eager warm-up (~13s) is load-bearing for Claude Desktop's first-query latency but
   // pure waste for a short-lived CLI one-shot (caches build lazily on first use anyway).
   // The CLI's stdio transport sets MCP_SKIP_STARTUP_WARM=1; default stays eager.
@@ -256,8 +255,10 @@ async function runStdio(): Promise<void> {
     if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); vocabDb.ensureCuratedSetsCache(); }
     if (embeddingsDb?.available) embeddingsDb.warmCorePages();
   }
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // Factory runs once per connection; the opening exchange pins the protocol era.
+  serveStdio(() => createServer(), {
+    onerror: (err) => logError("stdio transport error", err),
+  });
   logInfo("Rijksmuseum MCP server running on stdio");
 }
 
@@ -282,14 +283,12 @@ async function runHttp(): Promise<void> {
 
   // ── MCP endpoint (stateless — no sessions, no SSE streams) ─────
   //
-  // Each POST creates a fresh transport+server, processes the request, responds,
-  // and closes both. A single shared McpServer cannot be used here: Protocol.connect()
-  // requires _transport to be unset, so two overlapping requests would collide
-  // ("Already connected to a transport") — and the ChatGPT app bridge fires
-  // concurrent call_mcp requests (in-viewer related-variant nav + the poll loop).
-  // No long-lived connections to time out (#41). createServer() is cheap — the DBs,
-  // API clients, and embedding model are module-scope singletons; only tool/Zod
-  // registration runs per request.
+  // Every POST gets a fresh McpServer (via createMcpHandler's factory). Never share
+  // one: a server binds a single transport, so overlapping requests collide — and
+  // the ChatGPT app bridge fires concurrent call_mcp requests (in-viewer
+  // related-variant nav + the poll loop). No long-lived connections to time out
+  // (#41). createServer() is cheap — the DBs, API clients, and embedding model are
+  // module-scope singletons; only tool/Zod registration runs per request.
 
   // 30s safety net — respond 504 before Railway's proxy kills the connection silently
   app.use("/mcp", (_req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -390,22 +389,46 @@ async function runHttp(): Promise<void> {
     });
   });
 
+  // createMcpHandler invokes the factory per request, so every POST still gets
+  // a fresh McpServer. 2026-07-28 requests are served statelessly; 2025-era
+  // clients fall back to the SDK's `sessionIdGenerator: undefined` idiom.
+  const mcpHandler = createMcpHandler(() => createServer(port), {
+    onerror: (err) => logWarn("MCP handler error", err),
+  });
+
   app.post("/mcp", async (req: express.Request, res: express.Response) => {
-    const server = createServer(port);
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
     try {
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(req.headers)) {
+        // express.json() already consumed and decoded the raw stream; its framing
+        // headers would misdescribe the re-serialised body.
+        if (key === "content-length" || key === "content-encoding") continue;
+        if (typeof value === "string") headers.set(key, value);
+        else if (Array.isArray(value)) for (const v of value) headers.append(key, v);
+      }
+      const response = await mcpHandler.fetch(
+        new Request(`http://${req.headers.host ?? "localhost"}/mcp`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(req.body),
+        }),
+        { parsedBody: req.body }
+      );
+      res.status(response.status);
+      response.headers.forEach((value, key) => {
+        if (key === "content-length") return; // compression may rewrite the body
+        res.setHeader(key, value);
+      });
+      if (response.body) {
+        Readable.fromWeb(response.body as import("node:stream/web").ReadableStream).pipe(res);
+      } else {
+        res.end();
+      }
     } catch (err) {
       logError("MCP endpoint error", err);
       if (!res.headersSent) {
         res.status(500).json({ error: "Internal server error" });
       }
-    } finally {
-      await transport.close();
-      await server.close();
     }
   });
 

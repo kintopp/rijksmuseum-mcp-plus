@@ -13,16 +13,31 @@ import path from 'node:path';
 // synchronously eliminates the CSP-violation event entirely, forcing Zod into
 // its interpreter fallback. The JIT compile() method is gated by this probe
 // (`o = g && Cu.value`) so it stays unreachable. See conversation 2026-05-14.
+// Zod's source form and ext-apps' pre-minified copy (whose catch-variable
+// name and quote style shift between releases) both need matching; the build
+// fails if any probe survives, since a silent miss re-breaks ChatGPT-Chrome
+// with a green build.
+const ZOD_EVAL_PROBES: [RegExp, string][] = [
+  [/try\s*\{\s*return\s+(?:new\s+)?Function\(\s*(?:""|''|``)\s*\)\s*,\s*!0\s*\}\s*catch\s*(?:\(\s*[\w$]+\s*\))?\s*\{\s*return\s*!1\s*\}/g, 'return!1'],
+  [/const\s+F\s*=\s*Function;\s*new\s+F\(\s*(?:""|'')\s*\);\s*return\s+true;/g, 'return false;'],
+];
+const ANY_EVAL_PROBE = /(?:Function|new\s+[\w$]+)\(\s*(?:""|''|``)\s*\)/;
+
 function stripZodEvalProbe(): Plugin {
-  const PROBE = 'try{return new Function(""),!0}catch(r){return!1}';
-  const REPLACEMENT = 'return!1';
   return {
     name: 'rijksmuseum:strip-zod-eval-probe',
     enforce: 'pre',
     transform(code, id) {
-      if (!id.includes('@modelcontextprotocol/ext-apps')) return null;
-      if (!code.includes(PROBE)) return null;
-      return { code: code.split(PROBE).join(REPLACEMENT), map: null };
+      if (!/node_modules\/(@modelcontextprotocol|zod)\//.test(id)) return null;
+      let out = code;
+      for (const [re, replacement] of ZOD_EVAL_PROBES) out = out.replace(re, replacement);
+      return out === code ? null : { code: out, map: null };
+    },
+    generateBundle(_opts, bundle) {
+      for (const [name, chunk] of Object.entries(bundle)) {
+        const text = chunk.type === 'chunk' ? chunk.code : String(chunk.source);
+        if (ANY_EVAL_PROBE.test(text)) this.error(`Zod eval probe survived in ${name}; update ZOD_EVAL_PROBES`);
+      }
     },
   };
 }

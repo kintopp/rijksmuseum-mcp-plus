@@ -19,7 +19,7 @@ import {
   applyDocumentTheme,
   applyHostStyleVariables,
   applyHostFonts,
-} from '@modelcontextprotocol/ext-apps/app-with-deps';
+} from '@modelcontextprotocol/ext-apps';
 
 import OpenSeadragon from 'openseadragon';
 

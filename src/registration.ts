@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import {
   registerAppResource,
   getUiCapability,
@@ -173,7 +173,7 @@ const ARTWORK_VIEWER_UI_META = {
     clipboardWrite: {},
   },
   prefersBorder: false,
-} as const;
+};
 
 function registerAppViewerResource(server: McpServer): void {
   registerAppResource(

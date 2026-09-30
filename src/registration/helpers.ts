@@ -195,9 +195,11 @@ export function structuredResponse(
   return { content, structuredContent: data as Record<string, unknown> };
 }
 
-/** Conditionally attach an outputSchema when structured content is enabled. */
-export function withOutputSchema<T>(schema: T): { outputSchema: T } | Record<never, never> {
-  return EMIT_STRUCTURED ? { outputSchema: schema } : {};
+/** Conditionally attach an outputSchema when structured content is enabled.
+ *  SDK v2 needs a Standard Schema, not a raw shape; non-strict z.object matches
+ *  what v1 did internally, so the emitted JSON Schema is unchanged. */
+export function withOutputSchema<T extends z.ZodRawShape>(schema: T): { outputSchema: z.ZodObject<T> } | Record<never, never> {
+  return EMIT_STRUCTURED ? { outputSchema: z.object(schema) } : {};
 }
 
 /** Format a search result as a compact one-liner for LLM content. */

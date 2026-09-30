@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { VocabularyDb, formatDateRange, FILTER_ART_IDS_KEYS, type ArtworkMeta } from "../../api/VocabularyDb.js";
 import { EmbeddingsDb, type SemanticSearchResult } from "../../api/EmbeddingsDb.js";
