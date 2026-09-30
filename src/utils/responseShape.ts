@@ -28,8 +28,11 @@ export type TextBlock = {
    * two-block results so a host can tell the primary human summary from the
    * secondary JSON/marker block without relying on block order. Single-block
    * results carry no annotations (default path stays byte-identical).
+   * No `priority`: the rmcp client bundled in ChatGPT/Codex rejects the whole
+   * tool result as "Unexpected response type" when it is present
+   * (openai/codex#38979) — don't re-add it.
    */
-  annotations?: { audience?: ("user" | "assistant")[]; priority?: number };
+  annotations?: { audience?: ("user" | "assistant")[] };
 };
 
 /** Per-call options exposed to tool handlers via structuredResponse. */
@@ -94,10 +97,8 @@ export interface BuildBlocksOptions {
  *   projected total result stays under SAFE_RESULT_BUDGET. Otherwise a tiny
  *   marker block is appended instead (never an oversized copy).
  *
- * Two-block results carry MCP content annotations so spec-conformant hosts can
- * route without relying on order: block[0] (human) is marked primary
- * (priority 1, audience user+assistant); the JSON/marker block is marked
- * secondary (priority 0, NO audience — see the inversion footgun in the body).
+ * Two-block results mark block[0] (human) with audience user+assistant; the
+ * JSON/marker block carries no annotations (see the inversion footgun in the body).
  *
  * The two are always SEPARATE blocks — JSON is never concatenated into the
  * human block.
@@ -114,12 +115,11 @@ export function buildContentBlocks(
   const blocks: TextBlock[] = [{ type: "text", text: humanText }];
   if (!opts.jsonText) return blocks;
 
-  // Two-block result: annotate so spec-conformant hosts route without relying on
-  // block order — human block is primary, JSON/marker block is secondary.
+  // Two-block result: mark the human block for both audiences.
   // FOOTGUN: do NOT set audience:["assistant"] on the JSON block. A host that
   // routes assistant-audience to the model and user-audience to display would
   // then feed the model JSON and show the user prose — inverting the intent.
-  blocks[0].annotations = { audience: ["user", "assistant"], priority: 1 };
+  blocks[0].annotations = { audience: ["user", "assistant"] };
 
   const serialized = JSON.stringify(data);
   const copyBytes = Buffer.byteLength(serialized, "utf8");
@@ -135,7 +135,7 @@ export function buildContentBlocks(
   const projectedTotal = humanBytes + copyBytes + structuredBytes;
 
   if (copyBytes <= perCopyCap && projectedTotal <= SAFE_RESULT_BUDGET) {
-    blocks.push({ type: "text", text: serialized, annotations: { priority: 0 } });
+    blocks.push({ type: "text", text: serialized });
   } else {
     // Do NOT duplicate. Emit a marker so a text-only client knows schema-conformant
     // data exists (in structuredContent) but was elided to respect size limits.
@@ -149,7 +149,6 @@ export function buildContentBlocks(
         projectedResultBytes: projectedTotal,
         resultBudget: SAFE_RESULT_BUDGET,
       }),
-      annotations: { priority: 0 },
     });
   }
 

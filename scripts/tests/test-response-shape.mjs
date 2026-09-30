@@ -267,8 +267,8 @@ section("Case 9: Spec annotations on two-block results");
 {
   // Case 3 result (already computed as case3Blocks)
   assert(
-    case3Blocks[0].annotations?.priority === 1,
-    "case3: blocks[0].annotations.priority === 1",
+    case3Blocks[0].annotations?.priority === undefined,
+    "case3: blocks[0] carries no priority (Codex rmcp rejects it, openai/codex#38979)",
   );
   assert(
     Array.isArray(case3Blocks[0].annotations?.audience) &&
@@ -276,12 +276,8 @@ section("Case 9: Spec annotations on two-block results");
     "case3: blocks[0].annotations.audience includes 'assistant'",
   );
   assert(
-    case3Blocks[1].annotations?.priority === 0,
-    "case3: blocks[1].annotations.priority === 0",
-  );
-  assert(
-    case3Blocks[1].annotations?.audience === undefined,
-    "case3: blocks[1].annotations.audience is undefined (inversion-footgun guard)",
+    case3Blocks[1].annotations === undefined,
+    "case3: blocks[1] has no annotations (no priority; no audience — inversion-footgun guard)",
   );
 
   // Single-block results (cases 1 and 2) must have no annotations
