@@ -574,7 +574,14 @@ async function sendSelectionToChat(region: string): Promise<void> {
   } catch {
     // sendMessage may not be supported — update model context as fallback
     app.updateModelContext({
-      content: [{ type: 'text', text: `Highlight: region ${region} on ${objectNumber}` }],
+      content: [
+        artworkContextBlock(currentData),
+        {
+          type: 'text',
+          text: `Highlight: region ${region} on ${objectNumber}`,
+          _meta: { 'openai/title': `Highlight ${region}` },
+        },
+      ],
     });
     app.sendLog({ level: 'info', data: `Highlight added to context: ${region}` });
   }
@@ -865,18 +872,31 @@ function setupVisibilityObserver(): void {
   visibilityObserver.observe(mainEl);
 }
 
-function updateModelContext(data: ArtworkImageData): void {
-  const contextText = [
+// `openai/title` + `openai/thumbnail` label the composer chip ChatGPT renders
+// for each block (openai/mcp-extensions spec); other hosts ignore them.
+function artworkContextBlock(data: ArtworkImageData) {
+  const text = [
     `Viewing artwork: ${data.title}`,
     `Creator: ${data.creator}`,
     `Date: ${data.date}`,
     `Object number: ${data.objectNumber}`,
     `Image size: ${data.width}x${data.height}`,
   ].join('. ');
+  return {
+    type: 'text' as const,
+    text,
+    _meta: {
+      'openai/title': `${data.title} · ${data.objectNumber}`,
+      // thumbnailUrl is stripped from the payload server-side; derive a square crop.
+      'openai/thumbnail': { src: data.iiifInfoUrl.replace(/\/info\.json$/, '/square/256,/0/default.jpg') },
+    },
+  };
+}
 
-  app.updateModelContext({
-    content: [{ type: 'text', text: contextText }],
-  });
+// Each call replaces the app's previous model context, so every caller must
+// resend the artwork block alongside anything it adds.
+function updateModelContext(data: ArtworkImageData): void {
+  app.updateModelContext({ content: [artworkContextBlock(data)] });
 }
 
 // ── Viewer navigation (polling + user highlight) ────────────────
