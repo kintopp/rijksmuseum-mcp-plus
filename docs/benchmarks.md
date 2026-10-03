@@ -4,7 +4,7 @@
 
 Every question you put to Claude is paid for in *tokens*: the text the model reads (your question, its instructions, and everything its tools send back) and the text it writes. Connecting an MCP server adds a fixed entry cost, because Claude has to read the descriptions of all its tools before it can use any of them. But it can potentially also make research cheaper, because one precise database query can replace many rounds of searching the web, reading pages and guessing.
 
-These benchmarks measure which of those effects wins, question by question. We ask Claude the same set of research questions in three ways: with rijksmuseum-mcp+ connected, with rijksmuseum-mcp+ plus its [research skill](../README.md#research-skill), and with no MCP server at all, only ordinary web search. Each answer is checked for a known fact (an object number, a name, a date), so a run that is cheap but wrong doesn't count as a win. In short, the benchmarks are designed to answer the question: *what does using the MCP server cost, what does it save, and does it get the answer right?*
+In these benchmarks we ask Claude the same set of research questions three ways: with rijksmuseum-mcp+ connected, with rijksmuseum-mcp+ plus its [research skill](../README.md#research-skill), and with no MCP server at all, only ordinary web search. Each answer is checked for a known fact (an object number, a name, a date), so a run that is cheap but wrong doesn't count as a win.
 
 ### What is measured
 
@@ -16,7 +16,7 @@ Each question runs in up to three set-ups, called *arms*:
 | **mcp+skill** | rijksmuseum-mcp+ and the research skill | Whether the skill's guidance saves steps on harder questions |
 | **baseline** | web search and web fetch only, no server | What Claude would do without the server, for comparison |
 
-The baseline is what turns the other numbers into a verdict. Without it you can see what the server costs, but not whether it is worth it. With it you can see, for example, that the server is more expensive than the baseline on a question as famous as *"what is the object number of The Milkmaid?"* (which Claude can answer from memory), yet far cheaper and more accurate on a question that only the collection data can answer, such as ranking the collection's most prolific women artists.
+Without a baseline you can see what the server costs, but not whether it is worth it using. With it you can see, for example, that the server is more expensive than the baseline on a question as famous as *"what is the object number of Vermeer's Milkmaid?"* (which Claude can answer from memory), yet far cheaper and more accurate on a question that only the collection data can answer, such as ranking the collection's most prolific women artists.
 
 For every run the benchmark reports:
 
@@ -74,7 +74,7 @@ The questions live in [`scripts/bench/prompts.json`](../scripts/bench/prompts.js
 | `wartime-provenance` | complex | Works confiscated or restituted 1933–1945, with gaps ([scenario 23](research-scenarios.md#23-wartime-transfers-and-provenance-gaps)) | confiscation, restitution, a matching object number |
 | `rembrandt-acquisition` | complex | How the Rembrandt collection was acquired ([scenario 8](research-scenarios.md#8-credit-lines-and-acquisition-context)) | bequest, purchase, Rembrandt object numbers |
 
-An answer check is a simple text match, which is enough to tell whether the right facts came back; it isn't a judgment of the answer's overall quality.
+An answer check is a simple text match, which is enough to tell whether the right facts came back.
 
 ### Results
 
@@ -92,7 +92,7 @@ Average cost per question at API list price, with the average number of steps (t
 | `wartime-provenance` | complex | $0.200 (13) · 3/3 | $0.286 (12) · 3/3 | $1.520 (60) · **1/3** | 0.13× |
 | `rembrandt-acquisition` | complex | $0.589 (40) · 3/3 | $0.608 (32) · 3/3 | $0.800 (36) · 3/3 | 0.74× |
 
-The whole set (63 sessions) came to $15.52 at list price. What the numbers show:
+The whole set (63 sessions) came to $15.52 (!) at the API list price. What the numbers show:
 
 - **The server is cheaper on everything except the most famous facts.** Claude answers *The Milkmaid*'s object number from memory, so the baseline costs half a cent; with the server connected, reading its tool descriptions alone costs more than that. On every other question the server costs between 4% and 74% of the baseline.
 - **It is also more accurate.** All 42 runs with the server passed. The baseline failed every run of the women-artists question (the ranking exists only in the collection's person index; web search can't reconstruct it) and two of three runs of the wartime provenance question, after an average of 60 steps and over six minutes.
@@ -107,7 +107,7 @@ The benchmark above measures complete conversations, so its numbers include Clau
 - **response sizes**: how much text typical tool calls send back to the model;
 - **the research skill**: its always-visible description, the main body loaded when the skill is used, and each reference file.
 
-No model is involved, so it costs nothing to run. With an Anthropic API key in `ANTHROPIC_API_KEY` (or in the project's `.env`) the counts come from Anthropic's free token-counting endpoint; without one, the script prints an estimate and says so.
+No model is involved, so it costs nothing to run. With an Anthropic API key in `ANTHROPIC_API_KEY` (or in the project's `.env`) the counts come from Anthropic's free token-counting endpoint; without one, the script prints an estimate.
 
 ```bash
 node scripts/bench/footprint.mjs            # public server
