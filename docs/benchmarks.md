@@ -2,9 +2,9 @@
 
 ### Overview
 
-Every question you put to Claude is paid for in *tokens*: the text the model reads (your question, its instructions, and everything its tools send back) and the text it writes. Connecting an MCP server changes that bill in two directions. The server adds a fixed entry cost, because Claude has to read the descriptions of all its tools before it can use any of them. And it can also make research dramatically cheaper, because one precise database query replaces many rounds of searching the web, reading pages and guessing.
+Every question you put to Claude is paid for in *tokens*: the text the model reads (your question, its instructions, and everything its tools send back) and the text it writes. Connecting an MCP server adds a fixed entry cost, because Claude has to read the descriptions of all its tools before it can use any of them. But it can potentially also make research cheaper, because one precise database query can replace many rounds of searching the web, reading pages and guessing.
 
-These benchmarks measure which of those effects wins, question by question. We ask Claude the same set of research questions in three ways: with rijksmuseum-mcp+ connected, with rijksmuseum-mcp+ plus its [research skill](../README.md#research-skill), and with no server at all, only ordinary web search. Each answer is checked for a known fact (an object number, a name, a date), so a run that is cheap but wrong doesn't count as a win. In short, the benchmarks are designed to answer the question: *what does using the MCP server cost, what does it save, and does it get the answer right?*
+These benchmarks measure which of those effects wins, question by question. We ask Claude the same set of research questions in three ways: with rijksmuseum-mcp+ connected, with rijksmuseum-mcp+ plus its [research skill](../README.md#research-skill), and with no MCP server at all, only ordinary web search. Each answer is checked for a known fact (an object number, a name, a date), so a run that is cheap but wrong doesn't count as a win. In short, the benchmarks are designed to answer the question: *what does using the MCP server cost, what does it save, and does it get the answer right?*
 
 ### What is measured
 
