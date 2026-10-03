@@ -1,0 +1,135 @@
+[
+  {
+    "id": "milkmaid-id",
+    "tier": "simple",
+    "prompt": "What is the Rijksmuseum object number of Vermeer's The Milkmaid?",
+    "expect": [
+      "SK-A-2344"
+    ],
+    "probes": [
+      {
+        "tool": "get_artwork_details",
+        "args": {
+          "objectNumber": "SK-A-2344"
+        }
+      }
+    ]
+  },
+  {
+    "id": "nightwatch-dims",
+    "tier": "simple",
+    "prompt": "What are the exact dimensions (height and width in cm) of Rembrandt's The Night Watch as recorded by the Rijksmuseum?",
+    "expect": [
+      "379[.,]5",
+      "453[.,]5"
+    ],
+    "probes": [
+      {
+        "tool": "get_artwork_details",
+        "args": {
+          "objectNumber": "SK-C-5"
+        }
+      }
+    ]
+  },
+  {
+    "id": "avercamp-skaters",
+    "tier": "medium",
+    "prompt": "Find Hendrick Avercamp's painting of a winter landscape with ice skaters in the Rijksmuseum and give its object number and Dutch title.",
+    "expect": [
+      "SK-A-1718"
+    ],
+    "probes": [
+      {
+        "tool": "search_artwork",
+        "args": {
+          "creator": "Hendrick Avercamp",
+          "type": "painting"
+        }
+      },
+      {
+        "tool": "semantic_search",
+        "args": {
+          "query": "winter landscape with ice skaters"
+        }
+      }
+    ]
+  },
+  {
+    "id": "women-artists",
+    "tier": "medium",
+    "prompt": "Who are the three most prolific women artists in the Rijksmuseum collection, measured by number of attributed works? Give approximate work counts.",
+    "expect": [
+      "Bieruma Oosting",
+      "Pennink",
+      "Vos"
+    ],
+    "probes": [
+      {
+        "tool": "search_persons",
+        "args": {
+          "gender": "female"
+        }
+      }
+    ]
+  },
+  {
+    "id": "flinck-examinations",
+    "tier": "medium",
+    "prompt": "Govert Flinck's \"Isaac Blessing Jacob\" (SK-A-110) has passed through the conservation studio many times. Pull its technical examination record: which examination methods were used, when, and by whom? Summarise how the methods changed from the earliest X-rays to the recent campaigns.",
+    "expect": [
+      "1930",
+      "infra-?red",
+      "X-?ray|radiograph"
+    ],
+    "probes": [
+      {
+        "tool": "get_conservation_history",
+        "args": {
+          "objectNumber": "SK-A-110"
+        }
+      }
+    ]
+  },
+  {
+    "id": "wartime-provenance",
+    "tier": "complex",
+    "source": "docs/research-scenarios.md #23",
+    "prompt": "Find Rijksmuseum artworks that changed hands between 1933 and 1945 through confiscation or restitution, and show their ownership chains. Which of them were confiscated but never restituted, and which have gaps in their provenance during this period? Cite object numbers.",
+    "expect": [
+      "confiscat",
+      "restitut",
+      "BK-17040-A|SK-A-3739|SK-A-4779"
+    ],
+    "probes": [
+      {
+        "tool": "search_provenance",
+        "args": {
+          "transferType": "confiscation",
+          "dateFrom": 1933,
+          "dateTo": 1945
+        }
+      }
+    ]
+  },
+  {
+    "id": "rembrandt-acquisition",
+    "tier": "complex",
+    "source": "docs/research-scenarios.md #8",
+    "prompt": "How did the Rijksmuseum acquire its core Rembrandt collection? What proportion came through purchase, bequest, gift or state allocation, and when? Cite object numbers for representative examples.",
+    "expect": [
+      "bequest|legaat",
+      "purchase|aankoop|bought",
+      "SK-[AC]-\\d+"
+    ],
+    "probes": [
+      {
+        "tool": "collection_stats",
+        "args": {
+          "dimension": "transferType",
+          "creator": "Rembrandt"
+        }
+      }
+    ]
+  }
+]

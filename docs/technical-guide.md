@@ -95,6 +95,18 @@ Smoke test: `npm run test:cli` (needs a built `dist/` + the DBs; hits live IIIF,
 
 See the [CLI guide](cli-guide.md) for the full command reference, output model, and pipeline recipes.
 
+#### Benchmarking
+
+`scripts/bench/mcp-bench.mjs` measures what the server costs and saves in practice. It asks headless Claude Code a fixed set of research questions with the server connected, with the server plus the research skill, and with only web search, then reports tokens, API-price cost, turns, time and whether each answer contained the expected facts. Every run is a real Claude session.
+
+```bash
+node scripts/bench/mcp-bench.mjs --skill --runs 3
+```
+
+`scripts/bench/footprint.mjs` complements it without running a model: it reports the token size of the tool catalogue, of typical tool responses and of the skill package.
+
+See [Token and Cost Benchmarks](benchmarks.md) for the methodology, flags, question set and latest results.
+
 #### Tools
 
 See [mcp-tool-parameters.md](mcp-tool-parameters.md) for the full parameter reference.

@@ -116,7 +116,7 @@ flowchart LR
 
 ## Technical notes
 
-For local setup (stdio or HTTP, also via cli), deployment, architecture, data sources, and configuration, please see the [technical guide](/docs/technical-guide.md).
+For local setup (stdio or HTTP, also via cli), deployment, architecture, data sources, and configuration, please see the [technical guide](/docs/technical-guide.md). For measurements of what the server costs and saves in tokens compared with plain web search, see the [benchmarks](/docs/benchmarks.md).
 
 ## Roadmap
 
