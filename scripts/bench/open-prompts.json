@@ -1,0 +1,26 @@
+[
+  {
+    "id": "smell",
+    "prompt": "What can the Rijksmuseum's collection tell us about the history of smell in the early modern Netherlands? I'm after unexpected angles, not just the obvious genre scenes."
+  },
+  {
+    "id": "verso-stories",
+    "prompt": "I'm curious about the backs of things: what kinds of stories does the Rijksmuseum's catalogue preserve about the reverse sides, mounts and former owners of its works on paper? Show me a few telling examples."
+  },
+  {
+    "id": "overlooked-woman",
+    "prompt": "Suggest an under-studied woman artist represented in the Rijksmuseum who would make a good subject for a master's thesis, and make the case from what the collection actually holds."
+  },
+  {
+    "id": "japan-traces",
+    "prompt": "How did Japan enter the visual world of the Dutch Republic? Use the Rijksmuseum's holdings to sketch an answer from several directions."
+  },
+  {
+    "id": "copies-and-originals",
+    "prompt": "Pick one famous painting in the Rijksmuseum and reconstruct its afterlife inside the collection: copies, prints after it, related objects, how it travelled. What does that afterlife tell us?"
+  },
+  {
+    "id": "weather",
+    "prompt": "Can the Rijksmuseum's collection be used as evidence for historical weather or climate? Explore what kinds of evidence it offers and how reliable they are."
+  }
+]

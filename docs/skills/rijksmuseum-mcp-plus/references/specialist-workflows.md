@@ -1,24 +1,8 @@
 # Specialist Workflows
 
-Low-frequency, multi-step recipes that only some research paths reach. Each is
-summarised by a pointer stub under `## Key Workflows` in `SKILL.md`; the full
-worked detail lives here. Load this file when a task matches one of the
-sections below.
+Practical mechanics for two tasks where the tools' own descriptions leave out hard-won detail: reading fine detail from images, and turning a demographic profile into a list of works.
 
-## Contents
-
-1. [Image Inspection](#5-image-inspection)
-2. [Source–Copy and Related-Object Navigation](#7-sourcecopy-and-related-object-navigation)
-3. [Collection Depth Assessment](#8-collection-depth-assessment)
-4. [Gender and Demographic Analysis](#9-gender-and-demographic-analysis)
-
-(Numbers match the `SKILL.md` workflow they expand — §6 Provenance and §10
-Similarity are disclosed to `provenance-and-enrichment-patterns.md` and
-`find-similar-channels.md` respectively.)
-
----
-
-### 5. Image Inspection
+## Image inspection
 
 **Two image tools, different purposes.** `get_artwork_image` opens the inline IIIF deep-zoom viewer for the **user** to see. `inspect_artwork_image` returns image bytes for the **model** to analyse directly. They compose: open with `get_artwork_image`, then `inspect_artwork_image` auto-navigates the open viewer to whatever region you inspect, so the user sees what you're looking at — no separate `navigate_viewer` call needed for basic zoom. **Exception: `region: "full"` never moves the viewer** (it would reset a zoom the user may have set by hand), so a survey inspect leaves their view untouched — don't tell them it moved. Use `navigate_viewer` only to move the user's view without fetching bytes for your own analysis.
 
@@ -41,44 +25,9 @@ inspect_artwork_image(objectNumber="SK-C-5", region="pct:70,60,20,20")
 
 ---
 
-### 7. Source–Copy and Related-Object Navigation
+## Demographic cohorts
 
-Three complementary paths connect a work to its peers, copies, sources, pendants, components, or derivatives:
-
-1. **Curator-declared edges via `find_similar`** — the most direct path. `find_similar(objectNumber)` returns one HTML page that includes a **Related Variant** column (creator-invariant edges: pendants, production stadia, different examples of one design) and a **Related Object** column (derivative + grouping edges: pairs, sets, recto/verso, reproductions, general related-object links — tiered weights). Surface the link to the user; they read off the channel column relevant to their question.
-2. **Direct cross-references on the work itself** — `get_artwork_details` returns a `relatedObjects[]` field, scoped to the three creator-invariant relationships (`different example`, `production stadia`, `pendant`). Each entry always carries a Linked Art `objectUri` (the reliable handle) plus an `objectNumber` that is populated only when the peer URI resolves to a row in our DB — it is `null` for unresolved URIs. Pass the `objectUri` to `get_artwork_details({uri: …})` to navigate (or `objectNumber` to `get_artwork_details({objectNumber: …})` when it is present). For pairs, sets, recto/verso, reproductions, and general related-object links, read off `find_similar`'s Related Object column instead — these are not exposed on `relatedObjects[]`. A work's **physical companions** — its frame(s) and pedestal (labels `object | current frame`, `object | former frame`, `object | pedestal`) — are surfaced separately as `physicalRelations[]` (same `{ relationship, objectNumber, title, objectUri, iiifId }` shape, capped with `physicalRelationsTotalCount`), kept distinct from `relatedObjects[]` because they are attached objects, not creator-invariant variants.
-3. **Reproductive-print keyword path** — when curator-declared edges are absent, `productionRole` traces reproductive prints to their painted sources:
-
-```
-search_artwork(productionRole="after painting by", creator="Rembrandt van Rijn")
-# → get_artwork_details on a result to read its description (often names the source)
-# → search_artwork(creator="Rembrandt van Rijn", type="painting", query="...") to find the source
-# → get_artwork_image on both for side-by-side comparison
-```
-
----
-
-### 8. Collection Depth Assessment
-
-For grant applications or scoping a research site:
-
-```
-collection_stats(dimension="creator", type="print", productionPlace="Japan", topN=20)
-# → top 20 print artists from Japan + total count, in one call
-
-collection_stats(dimension="decade", type="print", productionPlace="Japan")
-# → temporal distribution
-
-list_curated_sets(query="Japan")                                       # curatorial groupings
-browse_set(setSpec="...")                                               # range of artists/dates
-search_artwork(productionPlace="Japan", type="print", maxResults=10)  # sample works for closer inspection
-```
-
----
-
-### 9. Gender and Demographic Analysis
-
-**For an aggregate breakdown**, `collection_stats` carries the demographic dimensions directly — `dimension="gender"` (also `profession`, `creatorBirthDecade`, `creatorBirthCentury`, `birthPlace`, `deathPlace`), each usable as a filter too (e.g. `dimension="type", gender="female"`). These bucket *artworks* by their maker's enriched person record, so read them as distributions of works, not artist head-counts (see the Creator-dimension caveat in `SKILL.md` §1, *Scope Before You Browse*).
+**For an aggregate breakdown**, `collection_stats` carries the demographic dimensions directly — `dimension="gender"` (also `profession`, `creatorBirthDecade`, `creatorBirthCentury`, `birthPlace`, `deathPlace`), each usable as a filter too (e.g. `dimension="type", gender="female"`). These bucket *artworks* by their maker's enriched person record, so read them as distributions of works, not artist head-counts.
 
 **For the actual works by a demographic cohort, use the two-step pattern via `search_persons`.** `search_artwork` has no `gender` / `bornAfter` / `bornBefore` / `profession` filters, so demographic predicates reach individual works only through `search_persons` (which returns vocab IDs) → `search_artwork(creator=…)`.
 
