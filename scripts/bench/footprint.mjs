@@ -9,9 +9,8 @@
 //   node scripts/bench/footprint.mjs [--local | --server <url>] [--model <id>] [--json]
 
 import Anthropic from "@anthropic-ai/sdk";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -64,7 +63,9 @@ async function connect(opts) {
   const transport = opts.local
     ? new StdioClientTransport({ ...LOCAL_SERVER, env: { ...process.env, ...LOCAL_SERVER.env }, stderr: "ignore" })
     : new StreamableHTTPClientTransport(new URL(opts.server));
-  const client = new Client({ name: "rijks-footprint", version: "0.1" });
+  // Pinned so a server that stops offering 2026-07-28 fails loudly instead of
+  // silently falling back to the legacy initialize handshake (the v2 default).
+  const client = new Client({ name: "rijks-footprint", version: "0.1" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
   await client.connect(transport);
   return client;
 }
