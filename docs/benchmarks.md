@@ -78,26 +78,28 @@ An answer check is a simple text match, which is enough to tell whether the righ
 
 ### Results
 
-**2026-10-03 · Claude Sonnet 5.5 (effort `high`) · server v0.94.0 · 3 runs per question and arm · no cache warm-up (`--cold`)**
+**2026-10-04 · Claude Sonnet 5.5 (effort `high`) · server v0.94.0 · skill 0.95 · 3 runs per question and arm · no cache warm-up (`--cold`)**
 
-Average cost per question at API list price, with the average number of steps (turns) in brackets. *Passed* counts the runs whose answer contained the expected facts.
+Average cost per question at API list price, with the average number of steps (turns) in brackets. *Passed* counts the runs whose answer contained the expected facts. The baseline column is from the 2026-10-03 run; it doesn't use the server or the skill, so it was not repeated.
 
 | Question | Tier | mcp | mcp+skill | baseline | mcp vs baseline |
 |---|---|---|---|---|---|
-| `milkmaid-id` | simple | $0.030 (3) · 3/3 | $0.036 (3) · 3/3 | $0.005 (1) · 3/3 | 6.7× more |
-| `nightwatch-dims` | simple | $0.039 (2) · 3/3 | $0.044 (2) · 3/3 | $0.071 (3) · 3/3 | 0.56× |
-| `avercamp-skaters` | medium | $0.021 (2) · 3/3 | $0.025 (2) · 3/3 | $0.070 (2) · 3/3 | 0.30× |
-| `women-artists` | medium | $0.021 (2) · 3/3 | $0.026 (2) · 3/3 | $0.550 (61) · **0/3** | 0.04× |
+| `milkmaid-id` | simple | $0.075 (3) · 3/3 \* | $0.072 (3) · 3/3 \* | $0.005 (1) · 3/3 | 15× more \* |
+| `nightwatch-dims` | simple | $0.039 (2) · 3/3 | $0.044 (2) · 3/3 | $0.071 (3) · 3/3 | 0.55× |
+| `avercamp-skaters` | medium | $0.024 (2) · 3/3 | $0.025 (2) · 3/3 | $0.070 (2) · 3/3 | 0.34× |
+| `women-artists` | medium | $0.022 (2) · 3/3 | $0.026 (2) · 3/3 | $0.550 (61) · **0/3** | 0.04× |
 | `flinck-examinations` | medium | $0.035 (2) · 3/3 | $0.039 (2) · 3/3 | $0.158 (5) · 3/3 | 0.22× |
-| `wartime-provenance` | complex | $0.200 (13) · 3/3 | $0.286 (12) · 3/3 | $1.520 (60) · **1/3** | 0.13× |
-| `rembrandt-acquisition` | complex | $0.589 (40) · 3/3 | $0.608 (32) · 3/3 | $0.800 (36) · 3/3 | 0.74× |
+| `wartime-provenance` | complex | $0.204 (13) · 3/3 | $0.242 (16) · 3/3 | $1.520 (60) · **1/3** | 0.13× |
+| `rembrandt-acquisition` | complex | $0.593 (36) · 3/3 | $0.616 (36) · 3/3 | $0.800 (36) · 3/3 | 0.74× |
 
-The whole set (63 sessions) came to $15.52 (!) at the API list price. What the numbers show:
+\* `milkmaid-id` runs first, so with `--cold` its first run in each arm pays the entry cost (about $0.15). Runs 2 and 3 averaged $0.036 (mcp) and $0.029 (mcp+skill), roughly 6–7× the baseline.
+
+The 42 server sessions came to $6.17 at the API list price; with the 21 baseline sessions the whole set is about $15.70. What the numbers show:
 
 - **The server is cheaper on everything except the most famous facts.** Claude answers *The Milkmaid*'s object number from memory, so the baseline costs half a cent; with the server connected, reading its tool descriptions alone costs more than that. On every other question the server costs between 4% and 74% of the baseline.
 - **It is also more accurate.** All 42 runs with the server passed. The baseline failed every run of the women-artists question (the ranking exists only in the collection's person index; web search can't reconstruct it) and two of three runs of the wartime provenance question, after an average of 60 steps and over six minutes.
-- **The skill pays off only where it is used.** Claude loaded the skill on the two complex questions and skipped it on the rest. There it cost 3–43% more than the server alone, although it cut the Rembrandt question from 40 steps to 32; on the simpler questions the extra 10–20% is the overhead described under *Caveats*. The skill's value lies in the quality of its answers to open research questions, which these text checks don't capture.
-- **Open-ended research remains expensive.** The Rembrandt acquisition question took about 40 steps with or without the server, because answering it means going through many individual works. The server still made it cheaper and faster (77 s against 132 s), but this is the kind of question where the tools themselves have the most room to improve.
+- **The slimmer skill costs less when it is used.** Claude again loaded the skill only on the two complex questions. Its body is now about 2,900 tokens instead of 18,400, and the extra cost over the server alone on the wartime provenance question fell from 43% to 19%; on the Rembrandt question it stayed at about 4%. It didn't save steps on either question. On the simpler questions the extra 2–17% is the overhead described under *Caveats*. The skill's value lies in the quality of its answers to open research questions, which these text checks don't capture.
+- **Open-ended research remains expensive.** The Rembrandt acquisition question took about 36 steps with or without the server, because answering it means going through many individual works. The server still made it cheaper and faster (74 s against 132 s), but this is the kind of question where the tools themselves have the most room to improve.
 
 ### Server footprint
 
@@ -115,19 +117,19 @@ node scripts/bench/footprint.mjs --local    # local build over stdio
 node scripts/bench/footprint.mjs --json     # machine-readable output
 ```
 
-**2026-10-03 · server v0.94.0 · Claude Sonnet 5.5 token counter**
+**2026-10-04 · server v0.94.0 · skill 0.95 · Claude Sonnet 5.5 token counter**
 
 | Part | Tokens | When a model reads it |
 |---|---|---|
-| Full tool descriptions (17 tools) | 30,686 | Up front, in apps that load all tools at once (such as Claude Code) |
+| Full tool descriptions (17 tools) | 30,630 | Up front, in apps that load all tools at once (such as Claude Code) |
 | Tool names and one-line summaries | 487 | Up front, in apps that load tools on demand (such as claude.ai) |
-| Largest single tool (`search_artwork`) | 8,823 | When the tool is first needed, in on-demand apps |
+| Largest single tool (`search_artwork`) | 8,766 | When the tool is first needed, in on-demand apps |
 | Typical tool response | 240–3,223 | After each call (an object's full details ≈ 1,900–3,200; a semantic search ≈ 2,800) |
 | Skill description | 287 | Always, once the skill is installed |
-| Skill body | 18,440 | When Claude decides the skill is relevant |
+| Skill body | 2,860 | When Claude decides the skill is relevant |
 | Skill reference files | 792–7,103 each | Only when a reference is opened |
 
-The full tool descriptions account for almost all of the entry cost seen in the benchmark, and the skill body for most of the extra cost of the mcp+skill arm on the complex questions. Individual responses, by contrast, are small; the expensive conversations are the ones that need many calls.
+The full tool descriptions account for almost all of the entry cost seen in the benchmark. The skill body is now small; most of the mcp+skill arm's remaining overhead is Claude Code's listing of its built-in skills (see *Caveats*). Individual responses, by contrast, are small; the expensive conversations are the ones that need many calls.
 
 ### Caveats
 
