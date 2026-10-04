@@ -3166,7 +3166,7 @@ export class VocabularyDb {
    * Search persons (artists, depicted figures, donors, …) by demographic and
    * structural criteria. Returns vocab IDs that can be passed to
    * search_artwork({creator: <vocabId>}) for works by them, or to
-   * search_artwork({aboutActor: <name>}) for works depicting them.
+   * search_artwork({depictedPerson: <name>}) for works depicting them.
    *
    * Filter behaviour:
    *  - `name`: phrase match on person_names_fts, with token-AND fallback (BM25 ranked).

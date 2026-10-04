@@ -216,8 +216,8 @@ function createServer(httpPort?: number): McpServer {
 
         "For demographic person queries (gender, birth/death year/place, profession), use search_persons → feed " +
         "the returned vocabId into search_artwork({creator}). For artworks depicting a known person, use " +
-        "search_artwork({aboutActor}) — broader recall than depictedPerson because it searches both subject and " +
-        "creator vocabularies and tolerates cross-language name forms.\n\n" +
+        "search_artwork({depictedPerson}); aboutActor widens this to subject + creator vocabularies, so for an " +
+        "artist it also returns works by them.\n\n" +
 
         "Place filters: depictedPlace and productionPlace — a proximity search replaces them. Most place entries " +
         "lack coordinates, so nearPlace works only for the authority-geocoded subset; nearLat/nearLon always works.\n\n" +

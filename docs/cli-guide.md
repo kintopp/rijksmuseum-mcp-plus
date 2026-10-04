@@ -322,7 +322,7 @@ Output keys: `searchMode`, `query`, `returnedCount`, `results`. Each result adds
 
 Search the person and group authority records by name, gender, birth year, birth/death place, or
 profession (there is no death-year filter). Returns `vocabId`s to feed into `search --creator <vocabId>` (works *by*) or
-`search --aboutActor <vocabId>` (works *depicting*).
+`search --depictedPerson <name>` (works *depicting*; this filter takes a name, not a vocabId).
 
 ```bash
 $ node scripts/cli.mjs persons "Rembrandt" --max 2 --fields vocabId,label,birthYear,deathYear,artworkCount --table

@@ -34,7 +34,7 @@ The primary search tool. Filters combine freely, with one exception: proximity s
 | `depictedPerson` | Artworks depicting a named person |
 | `depictedPlace` | Artworks depicting a named place |
 | `productionPlace` | Place where the work was made |
-| `productionRole` | e.g. `painter`, `printmaker`, `attributed to` |
+| `productionRole` | e.g. `painter`, `print maker`, `attributed to` |
 | `theme` | Curatorial thematic tag (e.g. `overzeese geschiedenis`, `costume`). Distinct from `subject`/Iconclass. ~7% coverage, mostly Dutch labels. |
 | `sourceType` | Source-channel classification (6 values: `designs`, `drawings`, `paintings`, `prints (visual works)`, `sculpture (visual works)`, `photographs`). Distinct from `type`. |
 | `collectionSet` | Named curated collection set (use `list_curated_sets` to discover) |
@@ -63,7 +63,7 @@ The primary search tool. Filters combine freely, with one exception: proximity s
 ### Other filters
 | Parameter | Description |
 |---|---|
-| `aboutActor` | Artworks about a person — broader recall than `depictedPerson`, searches both subject and creator vocabulary |
+| `aboutActor` | Artworks about a person — broader than `depictedPerson`, searches both subject and creator vocabulary (for an artist, includes works they made) |
 | `imageAvailable` | `true` = only works with a digital image; `false` = only those without one |
 | `hasProvenance` | `true` to return only works with parsed provenance records (roughly 48K) |
 | `sameRowMatching` | Constrain `creator` + `productionRole` to the *same* production row (autograph detection). For "making" roles only — leave default off for "after X by" relational roles. Requires both `creator` and `productionRole`. |
@@ -93,7 +93,7 @@ So `{ imageAvailable: true }` is an error, while `{ type: "painting", imageAvail
 
 ## search_persons
 
-Search the person and group authority records by name (variant-aware, several hundred thousand variants), demographic (gender, birth/death year) or structural (birth/death place, profession) criteria. Returns vocab IDs to feed into `search_artwork({creator: <vocabId>})` for works *by* them, or `search_artwork({aboutActor: <name>})` for works *depicting* them. Each result also carries `nameVariants[]` (deduplicated alternate/inverted name forms) and `equivalents[]` (external authority crosswalks — VIAF, ULAN, RKD, Wikidata — each a `{ authority, id, uri }` triple); both are omitted when empty.
+Search the person and group authority records by name (variant-aware, several hundred thousand variants), demographic (gender, birth/death year) or structural (birth/death place, profession) criteria. Returns vocab IDs to feed into `search_artwork({creator: <vocabId>})` for works *by* them, or `search_artwork({depictedPerson: <name>})` for works *depicting* them. Each result also carries `nameVariants[]` (deduplicated alternate/inverted name forms) and `equivalents[]` (external authority crosswalks — VIAF, ULAN, RKD, Wikidata — each a `{ authority, id, uri }` triple); both are omitted when empty.
 
 | Parameter | Description |
 |---|---|

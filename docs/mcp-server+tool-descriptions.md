@@ -10,7 +10,7 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 >
 > Images are served via IIIF deep-zoom: get_artwork_image opens the user's interactive viewer; inspect_artwork_image returns bytes for the LLM's own visual analysis.
 >
-> For demographic person queries (gender, birth/death year/place, profession), use search_persons → feed the returned vocabId into search_artwork({creator}). For artworks depicting a known person, use search_artwork({aboutActor}) — broader recall than depictedPerson because it searches both subject and creator vocabularies and tolerates cross-language name forms.
+> For demographic person queries (gender, birth/death year/place, profession), use search_persons → feed the returned vocabId into search_artwork({creator}). For artworks depicting a known person, use search_artwork({depictedPerson}); aboutActor widens this to subject + creator vocabularies, so for an artist it also returns works by them.
 >
 > Place filters: depictedPlace and productionPlace — a proximity search replaces them. Most place entries lack coordinates, so nearPlace works only for the authority-geocoded subset; nearLat/nearLon always works.
 >
@@ -40,7 +40,7 @@ Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds art
 
 ### 2. `search_persons`
 
-Find persons by gender, birth/death year or place, or profession. Returns vocab IDs. Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, or search_artwork({aboutActor: <name>}) for works depicting them. Two-step pattern: search_persons → search_artwork. Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.
+Find persons by gender, birth/death year or place, or profession. Returns vocab IDs. Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, or search_artwork({depictedPerson: <name>}) for works depicting them. Two-step pattern: search_persons → search_artwork. Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.
 
 Not for free-text concept queries — use semantic_search. Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.
 

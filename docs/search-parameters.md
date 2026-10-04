@@ -66,7 +66,7 @@ Match against the controlled-term vocabulary. Labels are bilingual (English and 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `creator` | string **[]** | Artist or maker name — present on the large majority of artworks, across roughly 70K distinct creator terms. Uses canonical name forms (e.g. "Rembrandt van Rijn"). | `"Rembrandt van Rijn"` |
-| `aboutActor` | string | Broader person search across depicted persons *and* creators. More tolerant of cross-language name forms than `depictedPerson` (e.g. "Louis XIV" finds "Lodewijk XIV"). | `"Louis XIV"` |
+| `aboutActor` | string | Broader person search across depicted persons *and* creators (substring match). For an artist, it also returns works they made — use `depictedPerson` for "works depicting X". | `"Lodewijk XIV"` |
 | `productionPlace` | string **[]** | Where the artwork was made — roughly 10K distinct places. Supports multi-word names with geo-disambiguation. | `"Delft"` |
 | `productionRole` | string **[]** | Role an actor played in creating *this specific work* — distinct from the person's profession (which lives on `search_persons`). See the [production-role vocabulary](vocabulary-production-roles.md) for the full list and current counts. Key terms: "print maker", "publisher", "after painting by". | `"after painting by"` |
 | `attributionQualifier` | string **[]** | Attribution qualifier. 13 values (ordered by DB frequency): "primary", "undetermined", "after", "secondary", "possibly", "attributed to", "circle of", "workshop of", "copyist of", "manner of", "follower of", "falsification", "free-form". Mixes connoisseurship terms (workshop/circle/manner/follower/copyist of), editorial-confidence terms (attributed to, possibly, undetermined), and structural markers (primary, secondary, after, falsification, free-form). Combine with `creator` to narrow attribution. | `"workshop of"` |
@@ -171,7 +171,7 @@ All values in centimeters. Both range parameters accept the same shape: `'10-50'
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `sameRowMatching` | boolean | Constrain `creator` + `productionRole` to the *same* production row of the artwork (autograph detection). Without this flag the two filters evaluate independently across production rows, so reproductive prints and 19th-c. photographs catalogued under a master's name still match. Set true for "making" roles (painter, printmaker, etcher, …) when narrowing to autograph works; leave false (default) for relational roles like `"after painting by"`. Requires both `creator` and `productionRole`. The `creator` + `attributionQualifier` same-row conjunction is always on and doesn't need this flag. *Modifier.* | `true` |
+| `sameRowMatching` | boolean | Constrain `creator` + `productionRole` to the *same* production row of the artwork (autograph detection). Without this flag the two filters evaluate independently across production rows, so reproductive prints and 19th-c. photographs catalogued under a master's name still match. Set true for "making" roles (painter, print maker, draughtsman, …) when narrowing to autograph works; leave false (default) for relational roles like `"after painting by"`. Requires both `creator` and `productionRole`. The `creator` + `attributionQualifier` same-row conjunction is always on and doesn't need this flag. *Modifier.* | `true` |
 
 ### Geographic proximity
 

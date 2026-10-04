@@ -114,11 +114,10 @@ export function registerSearchTools(
         aboutActor: optStr()
           .optional()
           .describe(
-            "Search for artworks depicting or about a person (not the creator). E.g. 'Willem van Oranje'. " +
-            "Broader recall than depictedPerson — searches both subject and creator vocabulary, tolerant of " +
-            "cross-language name forms (e.g. 'Louis XIV' finds 'Lodewijk XIV'). Combinable with all other filters. " +
-            "depictedPerson is usually the better first choice (precise, depicted persons only); " +
-            "use aboutActor for broader person matching across depicted persons and creators."
+            "Search for artworks about a person, matching person labels in both the subject and creator vocabularies " +
+            "(substring match). E.g. 'Willem van Oranje'. Broader than depictedPerson, which is the better first " +
+            "choice for 'works depicting X': for an artist, aboutActor also returns the works they made. " +
+            "Combinable with all other filters."
           ),
         type: stringOrArray()
           .optional()
@@ -262,7 +261,7 @@ export function registerSearchTools(
               productionRole: stringOrArray()
                 .optional()
                 .describe(
-                  "Search by production role (e.g. 'painter', 'printmaker', 'after painting by'). " +
+                  "Search by production role (e.g. 'painter', 'print maker', 'after painting by'). " +
                   "Covers craft roles and relational attribution terms. " +
                   "For attribution qualifiers (workshop of, follower of, circle of), use attributionQualifier instead. " +
                   "Array values AND-combine — a work must carry every named role on the same production row, which is rarely satisfied (most works carry one role per part). " +
@@ -581,7 +580,7 @@ export function registerSearchTools(
           "Find persons by gender, birth/death year or place, or profession. " +
           "Returns vocab IDs. " +
           "Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, " +
-          "or search_artwork({aboutActor: <name>}) for works depicting them. " +
+          "or search_artwork({depictedPerson: <name>}) for works depicting them. " +
           "Two-step pattern: search_persons → search_artwork. " +
           "Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.\n\n" +
           "Not for free-text concept queries — use semantic_search. " +
