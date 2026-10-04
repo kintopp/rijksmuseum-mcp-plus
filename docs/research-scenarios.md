@@ -26,7 +26,7 @@
 - Follow up with `search_artwork` using `creator: "Rembrandt"` and `type: "painting"` (or `"print"`, `"drawing"`) to browse specific categories
 - `get_artwork_details` on selected works from each category for full metadata
 
-**Why it matters:** The Rijksmuseum holds ~30 Rembrandt paintings but over 1,000 prints and hundreds of drawings. Most students encounter Rembrandt through a handful of iconic canvases. Seeing the actual proportions reframes his practice as fundamentally graphic.
+**Why it matters:** The Rijksmuseum holds 28 Rembrandt paintings but circa 1400 prints and 75 drawings. Most students encounter Rembrandt through a handful of iconic canvases. Seeing the actual proportions reframes his practice as fundamentally graphic.
 
 ### 2. Material Culture Beyond the Canon
 
