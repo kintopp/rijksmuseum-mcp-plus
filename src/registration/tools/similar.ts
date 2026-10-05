@@ -1,8 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { VocabularyDb, formatDateRange } from "../../api/VocabularyDb.js";
 import { EmbeddingsDb } from "../../api/EmbeddingsDb.js";
@@ -28,7 +25,7 @@ import {
   fetchVisualSimilar,
 } from "../visualSearch.js";
 import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "../../similarHtml.js";
-import { similarPages, storeHtmlPage, tempPageFiles } from "../state.js";
+import { similarPages, writeTempPage } from "../state.js";
 import type { DepictedSimilarResult } from "../../api/VocabularyDb.js";
 
 export function registerSimilarTools(
@@ -258,14 +255,11 @@ export function registerSimilarTools(
         const pageUUID = randomUUID();
         if (publicBaseUrl) {
           // HTTP mode — store in memory, serve at /similar/:uuid
-          storeHtmlPage(similarPages, pageUUID, html);
+          similarPages.set(pageUUID, html);
           pageLocation = `${publicBaseUrl}/similar/${pageUUID}`;
         } else {
           // stdio mode — write to OS temp directory (no HTTP server to serve from)
-          const filePath = path.join(os.tmpdir(), `rijksmuseum-similar-${pageUUID}.html`);
-          fs.writeFileSync(filePath, html, "utf-8");
-          tempPageFiles.set(filePath, Date.now());
-          pageLocation = filePath;
+          pageLocation = writeTempPage("rijksmuseum-similar", pageUUID, html);
         }
 
         // Summary counts

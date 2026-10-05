@@ -1,8 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { OaiPmhClient } from "../../api/OaiPmhClient.js";
 import { VocabularyDb, pluralize, type ProvenanceSearchParams } from "../../api/VocabularyDb.js";
@@ -44,7 +41,7 @@ import {
   RecentChangesOutput,
 } from "../outputSchemas.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "../../enrichmentReviewHtml.js";
-import { enrichmentReviewPages, storeHtmlPage, tempPageFiles } from "../state.js";
+import { enrichmentReviewPages, writeTempPage } from "../state.js";
 
 const PROVENANCE_TRANSFER_TYPES = [
   "sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
@@ -753,7 +750,7 @@ export function registerProvenanceTools(
             const uuid = randomUUID();
 
             if (publicBaseUrl) {
-              storeHtmlPage(enrichmentReviewPages, uuid, html);
+              enrichmentReviewPages.set(uuid, html);
               const reviewUrl = `${publicBaseUrl}/enrichment-review/${uuid}`;
               enrichmentReview = { count: llmEvents + llmParties, url: reviewUrl };
               lines.push("");
@@ -761,9 +758,7 @@ export function registerProvenanceTools(
               lines.push(`REVIEW_URL: ${reviewUrl}`);
               lines.push("Include the REVIEW_URL above verbatim as a link in your reply — it is the user's only route to the review page.");
             } else {
-              const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
-              fs.writeFileSync(filePath, html, "utf-8");
-              tempPageFiles.set(filePath, Date.now());
+              const filePath = writeTempPage("rijksmuseum-enrichment-review", uuid, html);
               enrichmentReview = { count: llmEvents + llmParties, file: filePath };
               lines.push("");
               lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);

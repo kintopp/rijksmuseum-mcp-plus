@@ -446,25 +446,18 @@ async function runHttp(): Promise<void> {
 
   // ── Similar artworks comparison page ────────────────────────────
 
-  app.get("/similar/:uuid", (req: express.Request, res: express.Response) => {
-    const page = similarPages.get(req.params.uuid as string);
-    if (!page) {
+  const servePage = (pages: typeof similarPages) => (req: express.Request, res: express.Response) => {
+    const id = req.params.uuid as string;
+    const html = pages.get(id);
+    if (html === undefined) {
       res.status(404).json({ error: "Page not found or expired (30 min TTL)" });
       return;
     }
-    page.lastAccess = Date.now();
-    res.type("html").send(page.html);
-  });
-
-  app.get("/enrichment-review/:uuid", (req: express.Request, res: express.Response) => {
-    const page = enrichmentReviewPages.get(req.params.uuid as string);
-    if (!page) {
-      res.status(404).json({ error: "Page not found or expired (30 min TTL)" });
-      return;
-    }
-    page.lastAccess = Date.now();
-    res.type("html").send(page.html);
-  });
+    pages.set(id, html); // slide the TTL while the page is in use
+    res.type("html").send(html);
+  };
+  app.get("/similar/:uuid", servePage(similarPages));
+  app.get("/enrichment-review/:uuid", servePage(enrichmentReviewPages));
 
   // ── Health + readiness ──────────────────────────────────────────
   //

@@ -5,6 +5,8 @@ export const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+
 // ─── Viewer command queue (module-scoped — survives across HTTP requests) ─
 
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { ResponseCache } from "../utils/ResponseCache.js";
 import { logWarn } from "../utils/log.js";
 import { type CollectionStatsResult } from "../api/VocabularyDb.js";
@@ -48,26 +50,13 @@ export function sweepTtlMap<T extends { lastAccess: number }>(map: Map<string, T
 export const viewerQueues = new Map<string, ViewerQueue>();
 sweepTtlMap(viewerQueues);
 
-type HtmlPage = { html: string; lastAccess: number };
-
-export const similarPages = new Map<string, HtmlPage>();
-sweepTtlMap(similarPages);
-
-export const enrichmentReviewPages = new Map<string, HtmlPage>();
-sweepTtlMap(enrichmentReviewPages);
-
-/** Per-map cap: the TTL sweep alone lets a burst of public calls grow these without bound. */
-export const MAX_HTML_PAGES = 500;
-
-/** Store a generated page, evicting the oldest-inserted entries once the map is at the cap. */
-export function storeHtmlPage(map: Map<string, HtmlPage>, id: string, html: string): void {
-  while (map.size >= MAX_HTML_PAGES) {
-    const oldest = map.keys().next().value;
-    if (oldest === undefined) break;
-    map.delete(oldest);
-  }
-  map.set(id, { html, lastAccess: Date.now() });
-}
+// Generated HTML pages served at /similar/:uuid and /enrichment-review/:uuid. Capped because
+// pages run to hundreds of KB and any public caller can mint them; the route re-sets on each
+// view so the 30-min TTL slides with use.
+const HTML_PAGE_CAP = 100;
+const HTML_PAGE_TTL_MS = 1_800_000;
+export const similarPages = new ResponseCache<string>(HTML_PAGE_CAP, HTML_PAGE_TTL_MS);
+export const enrichmentReviewPages = new ResponseCache<string>(HTML_PAGE_CAP, HTML_PAGE_TTL_MS);
 
 // #378 Step 4: module-scope result caches (must survive the per-request server rebuild in
 // HTTP mode, like viewerQueues). Keyed on DB build-id so a deploy/DB-swap can't serve stale
@@ -84,7 +73,16 @@ export const semanticSearchCache = new ResponseCache<ToolResponse | StructuredTo
 export const semanticInflight = new Map<string, Promise<ToolResponse | StructuredToolResponse>>();
 
 /** Stdio-mode temp HTML files (find_similar, enrichment review). Swept on same 30-min TTL. */
-export const tempPageFiles = new Map<string, number>(); // path → createdAt
+const tempPageFiles = new Map<string, number>(); // path → createdAt
+
+/** Write a stdio-mode HTML page to the OS temp dir and register it for the sweep; returns the path. */
+export function writeTempPage(prefix: string, id: string, html: string): string {
+  const filePath = path.join(os.tmpdir(), `${prefix}-${id}.html`);
+  fs.writeFileSync(filePath, html, "utf-8");
+  tempPageFiles.set(filePath, Date.now());
+  return filePath;
+}
+
 setInterval(() => {
   const now = Date.now();
   for (const [filePath, createdAt] of tempPageFiles) {
