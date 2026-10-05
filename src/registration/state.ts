@@ -6,6 +6,7 @@ export const IIIF_REGION_RE = /^(full|square|\d+,\d+,\d+,\d+|pct:[0-9.]+,[0-9.]+
 
 import fs from "node:fs";
 import { ResponseCache } from "../utils/ResponseCache.js";
+import { logWarn } from "../utils/log.js";
 import { type CollectionStatsResult } from "../api/VocabularyDb.js";
 import { type TextBlock } from "../utils/responseShape.js";
 
@@ -47,11 +48,26 @@ export function sweepTtlMap<T extends { lastAccess: number }>(map: Map<string, T
 export const viewerQueues = new Map<string, ViewerQueue>();
 sweepTtlMap(viewerQueues);
 
-export const similarPages = new Map<string, { html: string; lastAccess: number }>();
+type HtmlPage = { html: string; lastAccess: number };
+
+export const similarPages = new Map<string, HtmlPage>();
 sweepTtlMap(similarPages);
 
-export const enrichmentReviewPages = new Map<string, { html: string; lastAccess: number }>();
+export const enrichmentReviewPages = new Map<string, HtmlPage>();
 sweepTtlMap(enrichmentReviewPages);
+
+/** Per-map cap: the TTL sweep alone lets a burst of public calls grow these without bound. */
+export const MAX_HTML_PAGES = 500;
+
+/** Store a generated page, evicting the oldest-inserted entries once the map is at the cap. */
+export function storeHtmlPage(map: Map<string, HtmlPage>, id: string, html: string): void {
+  while (map.size >= MAX_HTML_PAGES) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+  map.set(id, { html, lastAccess: Date.now() });
+}
 
 // #378 Step 4: module-scope result caches (must survive the per-request server rebuild in
 // HTTP mode, like viewerQueues). Keyed on DB build-id so a deploy/DB-swap can't serve stale
@@ -67,20 +83,20 @@ export const collectionStatsCache = new ResponseCache<CollectionStatsResult>(300
 export const semanticSearchCache = new ResponseCache<ToolResponse | StructuredToolResponse>(500, CACHE_TTL_MS);
 export const semanticInflight = new Map<string, Promise<ToolResponse | StructuredToolResponse>>();
 
-/** Stdio-mode temp files for find_similar. Swept on same 30-min TTL. */
-export const similarTempFiles = new Map<string, number>(); // path → createdAt
+/** Stdio-mode temp HTML files (find_similar, enrichment review). Swept on same 30-min TTL. */
+export const tempPageFiles = new Map<string, number>(); // path → createdAt
 setInterval(() => {
   const now = Date.now();
-  for (const [filePath, createdAt] of similarTempFiles) {
+  for (const [filePath, createdAt] of tempPageFiles) {
     if (now - createdAt > 1_800_000) {
       try {
         fs.unlinkSync(filePath);
       } catch (err) {
         if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
-          console.warn(`[similar-sweeper] failed to unlink ${filePath}:`, err);
+          logWarn(`[temp-page-sweeper] failed to unlink ${filePath}`, err);
         }
       }
-      similarTempFiles.delete(filePath);
+      tempPageFiles.delete(filePath);
     }
   }
 }, 60_000).unref();

@@ -28,7 +28,7 @@ import {
   fetchVisualSimilar,
 } from "../visualSearch.js";
 import { generateSimilarHtml, computePooled, type SimilarCandidate, type SimilarPageData } from "../../similarHtml.js";
-import { similarPages, similarTempFiles } from "../state.js";
+import { similarPages, storeHtmlPage, tempPageFiles } from "../state.js";
 import type { DepictedSimilarResult } from "../../api/VocabularyDb.js";
 
 export function registerSimilarTools(
@@ -258,13 +258,13 @@ export function registerSimilarTools(
         const pageUUID = randomUUID();
         if (publicBaseUrl) {
           // HTTP mode — store in memory, serve at /similar/:uuid
-          similarPages.set(pageUUID, { html, lastAccess: Date.now() });
+          storeHtmlPage(similarPages, pageUUID, html);
           pageLocation = `${publicBaseUrl}/similar/${pageUUID}`;
         } else {
           // stdio mode — write to OS temp directory (no HTTP server to serve from)
           const filePath = path.join(os.tmpdir(), `rijksmuseum-similar-${pageUUID}.html`);
           fs.writeFileSync(filePath, html, "utf-8");
-          similarTempFiles.set(filePath, Date.now());
+          tempPageFiles.set(filePath, Date.now());
           pageLocation = filePath;
         }
 

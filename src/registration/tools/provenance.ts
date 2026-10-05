@@ -44,7 +44,7 @@ import {
   RecentChangesOutput,
 } from "../outputSchemas.js";
 import { generateEnrichmentReviewHtml, isLlmEnrichedEvent, isLlmEnrichedParty, type EnrichmentReviewData } from "../../enrichmentReviewHtml.js";
-import { enrichmentReviewPages } from "../state.js";
+import { enrichmentReviewPages, storeHtmlPage, tempPageFiles } from "../state.js";
 
 const PROVENANCE_TRANSFER_TYPES = [
   "sale", "inheritance", "by_descent", "widowhood", "bequest", "commission",
@@ -753,7 +753,7 @@ export function registerProvenanceTools(
             const uuid = randomUUID();
 
             if (publicBaseUrl) {
-              enrichmentReviewPages.set(uuid, { html, lastAccess: Date.now() });
+              storeHtmlPage(enrichmentReviewPages, uuid, html);
               const reviewUrl = `${publicBaseUrl}/enrichment-review/${uuid}`;
               enrichmentReview = { count: llmEvents + llmParties, url: reviewUrl };
               lines.push("");
@@ -763,6 +763,7 @@ export function registerProvenanceTools(
             } else {
               const filePath = path.join(os.tmpdir(), `rijksmuseum-enrichment-review-${uuid}.html`);
               fs.writeFileSync(filePath, html, "utf-8");
+              tempPageFiles.set(filePath, Date.now());
               enrichmentReview = { count: llmEvents + llmParties, file: filePath };
               lines.push("");
               lines.push(`ENRICHMENT REVIEW: ${llmEvents + llmParties} LLM-assisted result${(llmEvents + llmParties) !== 1 ? "s" : ""}.`);
