@@ -37,7 +37,7 @@ if (!vocabDb.available) {
 
 console.log("Loading embedding model...");
 await embeddingModel.init(
-  process.env.EMBEDDING_MODEL_ID || "Xenova/multilingual-e5-small",
+  process.env.EMBEDDING_MODEL_ID || "kintopp/multilingual-e5-small-rijksmuseum",
   embeddingsDb.vectorDimensions,
 );
 

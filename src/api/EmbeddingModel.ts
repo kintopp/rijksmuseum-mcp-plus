@@ -1,8 +1,10 @@
 /**
  * Query-time embedding model using @huggingface/transformers (ONNX/WASM).
  *
- * Uses intfloat/multilingual-e5-small by default — a compact multilingual
- * model (384d) with E5 query/passage prefix conventions.
+ * Uses a vocabulary-trimmed intfloat/multilingual-e5-small by default — a compact
+ * multilingual model (384d) with E5 query/passage prefix conventions. Trimming
+ * (scripts/trim-embedding-vocab.py) keeps every piece the corpus uses, so stored
+ * vectors stay compatible with the untrimmed model.
  */
 import { logInfo, logError } from "../utils/log.js";
 
@@ -26,7 +28,7 @@ export class EmbeddingModel {
    *                    Pass embeddingsDb.vectorDimensions so the query-time
    *                    vector matches what was stored during harvest.
    */
-  async init(modelId: string = "Xenova/multilingual-e5-small", targetDim = 0): Promise<void> {
+  async init(modelId: string = "kintopp/multilingual-e5-small-rijksmuseum", targetDim = 0): Promise<void> {
     this._modelId = modelId;
     this.targetDim = targetDim;
 

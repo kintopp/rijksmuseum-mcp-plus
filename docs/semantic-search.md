@@ -101,7 +101,7 @@ A second, description-only embedding set is stored alongside the main vectors an
 
 ### Technical details
 
-- **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The quantized ONNX model is sourced from the [Xenova mirror](https://huggingface.co/Xenova/multilingual-e5-small).
+- **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The query encoder is [`kintopp/multilingual-e5-small-rijksmuseum`](https://huggingface.co/kintopp/multilingual-e5-small-rijksmuseum), the [Xenova](https://huggingface.co/Xenova/multilingual-e5-small) int8 ONNX export with its 250K-piece vocabulary trimmed to the pieces the collection and common query languages use, which roughly halves its memory without changing the vectors.
 - **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) pinned to 0.1.9. Brute-force scan (no ANN index). At 384 int8 bytes per vector the vec0 table runs to roughly 300 MB, plus a regular `artwork_embeddings` table for filtered queries.
 - **Query embedding prefix:** The model uses the `query:` prefix for queries and `passage:` for documents, following the E5 instruction format.
 - **Database size:** ~1.11 GiB uncompressed (includes `desc_embeddings` for description-based `find_similar`); ~584 MiB gzipped for deployment. Downloaded on first start only when `EMBEDDINGS_DB_URL` is set.

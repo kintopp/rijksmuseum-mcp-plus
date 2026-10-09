@@ -163,7 +163,7 @@ async function initDatabases(): Promise<void> {
   const needsModel = embeddingsDb.available;
   if (needsModel) {
     embeddingModel = new EmbeddingModel();
-    const modelId = process.env.EMBEDDING_MODEL_ID ?? "Xenova/multilingual-e5-small";
+    const modelId = process.env.EMBEDDING_MODEL_ID ?? "kintopp/multilingual-e5-small-rijksmuseum";
     const targetDim = embeddingsDb.available ? embeddingsDb.vectorDimensions : 0;
     await embeddingModel.init(modelId, targetDim);
   }

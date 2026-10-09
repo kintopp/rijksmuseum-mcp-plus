@@ -232,7 +232,7 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
 | `EMBEDDINGS_DB_PATH` | Path to embeddings SQLite database | `data/embeddings.db` |
 | `EMBEDDINGS_DB_URL` | URL to download embeddings DB on first start; gzip supported | *(none)* |
-| `EMBEDDING_MODEL_ID` | HuggingFace model ID for query embedding | `Xenova/multilingual-e5-small` |
+| `EMBEDDING_MODEL_ID` | HuggingFace model ID for query embedding | `kintopp/multilingual-e5-small-rijksmuseum` |
 | `HF_HOME` | HuggingFace cache directory (useful for persistent volumes in deployment) | *(system default)* |
 | `ENABLE_FIND_SIMILAR` | Set to `"false"` to disable the `find_similar` tool | `true` |
 | `ENABLE_THEME_SIMILAR` | Set to `"false"` to disable just the Theme channel inside `find_similar` (other channels keep working) | `true` |
