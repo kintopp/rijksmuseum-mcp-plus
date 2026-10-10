@@ -91,7 +91,8 @@ const EMBEDDINGS_DB_SPEC: DbSpec = {
   pathEnvVar: "EMBEDDINGS_DB_PATH",
   urlEnvVar: "EMBEDDINGS_DB_URL",
   defaultFile: "embeddings.db",
-  validationQuery: "SELECT 1 FROM artwork_embeddings LIMIT 1",
+  // vec0's plain shadow table: present in full and slim layouts, readable without sqlite-vec loaded.
+  validationQuery: "SELECT 1 FROM vec_artworks_rowids LIMIT 1",
 };
 
 function resolveDbPathForSpec(spec: DbSpec): string {
