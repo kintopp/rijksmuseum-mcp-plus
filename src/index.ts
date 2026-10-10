@@ -27,6 +27,7 @@ import {
 import { registerAll, similarPages, enrichmentReviewPages } from "./registration.js";
 import { isAllowedOrigin, parseMcpAllowedOrigins } from "./utils/origin.js";
 import { logInfo, logWarn, logError } from "./utils/log.js";
+import { startIdleReclaim } from "./utils/idleReclaim.js";
 
 const SERVER_NAME = "rijksmuseum-mcp+";
 
@@ -396,6 +397,17 @@ async function runHttp(): Promise<void> {
     onerror: (err) => logWarn("MCP handler error", err),
   });
 
+  // ── Idle page-cache release (MEMORY_RELEASE_IDLE_MINUTES, 0 = off) ──
+  //
+  // Registered after the blocklist/origin gates so rejected clients don't count
+  // as activity; probes (/health, /ready, /debug/*) don't either.
+  const idleMinutes = Number(process.env.MEMORY_RELEASE_IDLE_MINUTES ?? 60);
+  const idleReclaim = idleMinutes > 0 ? startIdleReclaim(idleMinutes * 60_000) : null;
+  app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    if (!/^\/(health|ready|debug)(\/|$)/.test(req.path)) idleReclaim?.touch();
+    next();
+  });
+
   app.post("/mcp", async (req: express.Request, res: express.Response) => {
     try {
       const headers = new Headers();
@@ -489,7 +501,7 @@ async function runHttp(): Promise<void> {
   // is operational signal, not sensitive.
 
   app.get("/debug/memory", (_req: express.Request, res: express.Response) => {
-    res.json(captureMemorySnapshot(buildMemoryDbHandles()));
+    res.json({ ...captureMemorySnapshot(buildMemoryDbHandles()), idleReclaim: idleReclaim?.status() ?? null });
   });
 
   // /debug/slow-queries surfaces per-input p50/p90/max + repeat counts and the

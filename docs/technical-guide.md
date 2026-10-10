@@ -227,6 +227,7 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `*` |
 | `MCP_ALLOWED_ORIGINS` | Server-side Origin allowlist for `/mcp` (DNS-rebinding mitigation, spec MUST). Comma-separated exact origins or hostname globs (`*.foo.example`); replaces defaults. Set to `*` to disable. Missing Origin / non-web schemes / localhost are always allowed. | `claude.ai`, `*.claude.ai`, `chatgpt.com`, `*.chatgpt.com`, `*.openai.com`, `mistral.ai`, `*.mistral.ai`, `unibas.ch`, `*.unibas.ch` |
 | `MCP_BLOCKED_IPS` | Comma-separated client IPs denied on `/mcp` with 403 (abusive clients, sleep-defeating pingers). Proxy-aware — matches the whole forwarded chain, not just `req.ip`. Not a security boundary. | *(none)* |
+| `MEMORY_RELEASE_IDLE_MINUTES` | After this many minutes without requests (`/health`, `/ready`, `/debug/*` excluded), ask the kernel to drop the container's cached database pages via cgroup v2 `memory.reclaim`. Lowers billed memory after bursts; the next query runs cold. `0` disables; no-op where the cgroup file isn't writable (status in `/debug/memory`). | `60` |
 | `PUBLIC_URL` | Base URL for `/similar/:uuid` and `/enrichment-review/:uuid` links in HTTP mode (e.g. `https://example.up.railway.app`) | `http://localhost:$PORT` |
 | `VOCAB_DB_PATH` | Path to vocabulary SQLite database | `data/vocabulary.db` |
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
