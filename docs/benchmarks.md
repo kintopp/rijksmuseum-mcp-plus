@@ -30,12 +30,14 @@ For every run the benchmark reports:
 
 The benchmark drives [Claude Code](https://claude.com/claude-code) in headless mode (`claude -p`), so you need Claude Code installed and signed in, either with a Claude subscription or an API key. **Every run is a real Claude session**: it counts against your subscription's usage limits or is billed to your API account. The full set (7 questions × 3 arms × 3 runs) is 63 sessions.
 
+By default the benchmark runs the server from your local build (`npm run build`, plus the databases in `data/`) over stdio, so its bursts of calls don't load the public server. Pass `--server <url>` to measure a remote endpoint instead.
+
 ```bash
 node scripts/bench/mcp-bench.mjs                        # mcp + baseline, Sonnet, 1 run each
 node scripts/bench/mcp-bench.mjs --skill --runs 3       # add the mcp+skill arm, 3 runs each
 node scripts/bench/mcp-bench.mjs --model opus           # or --model both
 node scripts/bench/mcp-bench.mjs --only women-artists,wartime-provenance
-node scripts/bench/mcp-bench.mjs --local                # test a local build over stdio
+node scripts/bench/mcp-bench.mjs --server <url>        # test a remote /mcp endpoint instead
 node scripts/bench/mcp-bench.mjs --dry-run              # print the sessions without running them
 ```
 
@@ -46,7 +48,7 @@ node scripts/bench/mcp-bench.mjs --dry-run              # print the sessions wit
 | `--runs N` | `1` | Repetitions per question and arm. Use 3 or more before comparing results |
 | `--arms mcp,baseline,mcp+skill` | `mcp,baseline` | Which arms to run; `--skill` is shorthand for adding `mcp+skill` |
 | `--only id,id` | all | Restrict to questions by id (see below) |
-| `--server <url>` / `--local` | public server | Target another `/mcp` endpoint, or spawn `dist/index.js` over stdio |
+| `--server <url>` | local build | Target a remote `/mcp` endpoint instead of spawning `dist/index.js` over stdio |
 | `--concurrency N` | `1` | Sessions run in parallel |
 | `--budget <usd>` | `3` | Per-session spending cap (at API list price) |
 | `--cold` | off | Skip the cache warm-up (see below) |
@@ -112,8 +114,8 @@ The benchmark above measures complete conversations, so its numbers include Clau
 No model is involved, so it costs nothing to run. With an Anthropic API key in `ANTHROPIC_API_KEY` (or in the project's `.env`) the counts come from Anthropic's free token-counting endpoint; without one, the script prints an estimate.
 
 ```bash
-node scripts/bench/footprint.mjs            # public server
-node scripts/bench/footprint.mjs --local    # local build over stdio
+node scripts/bench/footprint.mjs                  # local build over stdio
+node scripts/bench/footprint.mjs --server <url>   # a remote /mcp endpoint
 node scripts/bench/footprint.mjs --json     # machine-readable output
 ```
 

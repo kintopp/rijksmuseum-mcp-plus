@@ -6,7 +6,9 @@
 // token-counting endpoint when ANTHROPIC_API_KEY is set (env or the project .env),
 // else from a chars/4 estimate.
 //
-//   node scripts/bench/footprint.mjs [--local | --server <url>] [--model <id>] [--json]
+//   node scripts/bench/footprint.mjs [--server <url>] [--model <id>] [--json]
+//
+// Targets the local dist/ build over stdio unless --server is given.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
@@ -17,10 +19,10 @@ import { fileURLToPath } from "node:url";
 import { DEFAULT_SERVER, headerHelp, loadPrompts, LOCAL_SERVER, projectRoot, serverLabel, SKILL_DIR } from "./common.mjs";
 
 function parseArgs(argv) {
-  const opts = { server: DEFAULT_SERVER, local: false, model: "claude-sonnet-5-5", json: false };
+  const opts = { server: DEFAULT_SERVER, local: true, model: "claude-sonnet-5-5", json: false };
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
-      case "--server": opts.server = argv[++i]; break;
+      case "--server": opts.server = argv[++i]; opts.local = false; break;
       case "--local": opts.local = true; break;
       case "--model": opts.model = argv[++i]; break;
       case "--json": opts.json = true; break;

@@ -6,8 +6,11 @@
 // even when the session itself is billed to a subscription.
 //
 //   node scripts/bench/mcp-bench.mjs [--model sonnet|opus|both] [--runs N]
-//        [--only id,id] [--arms mcp,baseline,mcp+skill] [--skill] [--local | --server <url>]
+//        [--only id,id] [--arms mcp,baseline,mcp+skill] [--skill] [--server <url>]
 //        [--effort <level>] [--concurrency N] [--budget <usd>] [--cold] [--dry-run]
+//
+// Targets the local dist/ build over stdio unless --server is given, so benchmark
+// bursts don't load the production server.
 //
 // Before measuring, one trivial session per arm and model warms the prompt cache with
 // that arm's system prompt and tool descriptions, so measured sessions don't depend on
@@ -42,7 +45,7 @@ const SYSTEM_NOTE =
 function parseArgs(argv) {
   const opts = {
     model: "sonnet", runs: 1, only: null, arms: ["mcp", "baseline"], server: DEFAULT_SERVER,
-    local: false, effort: null, concurrency: 1, budget: 3, timeoutSec: 900, dryRun: false, cold: false,
+    local: true, effort: null, concurrency: 1, budget: 3, timeoutSec: 900, dryRun: false, cold: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -53,7 +56,7 @@ function parseArgs(argv) {
       case "--only": opts.only = next().split(","); break;
       case "--arms": opts.arms = next().split(","); break;
       case "--skill": if (!opts.arms.includes("mcp+skill")) opts.arms.push("mcp+skill"); break;
-      case "--server": opts.server = next(); break;
+      case "--server": opts.server = next(); opts.local = false; break;
       case "--local": opts.local = true; break;
       case "--effort": opts.effort = next(); break;
       case "--concurrency": opts.concurrency = Number(next()); break;
