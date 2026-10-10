@@ -105,12 +105,6 @@ flowchart LR
     generation"| EmbeddingsDB
 ```
 
-## Tips and Limitations
-
-- **If something fails unexpectedly, try disconnecting and reconnecting the connector.** Because this is a hosted remote MCP server, changes to its configuration from recent updates can leave your connection in an incorrect state — symptoms include queries never being answered, generic error messages, or the AI assistant reporting that a tool is unavailable. If connecting/disconnecting does not resolve the issue, remove the custom connector (MCP server) entirely and re-add it.
-- **Ask the assistant to explain which tools and filters it used.** Because rijksmuseum-mcp+ exposes many overlapping search patterns (e.g. keyword filters, semantic search, spatial queries), the AI assistant sometimes picks a narrower or broader strategy than you intended. If a result seems incomplete or suspiciously tidy, ask follow-ups like _"let me see the remaining artworks for this query as well"_, or _"explain how you reached this result"_. Being explicit in your prompt about whether you want a structured search (e.g. "all paintings by X made in Y") versus an exploratory search (e.g. "list a few...") will help the AI assistant to interpret your question.
-- **Add the optional research skill** to help the AI-assistant improve the quality of its responses.
-
 ## Technical notes
 
 For local setup (stdio or HTTP, also via cli), deployment, architecture, data sources, and configuration, please see the [technical guide](/docs/technical-guide.md). For measurements of what the server costs and saves in tokens compared with plain web search, see the (still early and experimental) [benchmarks](/docs/benchmarks.md).
@@ -120,20 +114,19 @@ For local setup (stdio or HTTP, also via cli), deployment, architecture, data so
 Ongoing:
 
 - fix bugs and fine-tune queries and tool descriptions
-- update README and other documentation
 
 Later:
 
 - paper/presentation
-- investigate DINOv3 image retrieval
-- investigate OCR/HTR of artwork images
+- investigate text based image retrieval
 
 Maybe:
 
-- incorporating historical exhibition data
-- integration with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
-- supporting inferred geolocation data
-- improving the `description` signal for *find_similar* (e.g. via a LLM re-ranker)
+- OCR/HTR of appropriate images in the collection
+- incorporate historical exhibition data
+- integrate with other Linked Open Data resources (e.g. [Colonial Collections](https://data.colonialcollections.nl))
+- support inferred geolocation data
+- improve the `description` signal for *find_similar* (e.g. via a LLM re-ranker)
 
 ## Authors
 
