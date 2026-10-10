@@ -41,7 +41,7 @@ A release combines code changes, DB updates, and a GitHub release tag. The full 
    npm run cli -- --http $RIJKS semantic "winter landscape" --max 3                  # pure vec0 KNN
    npm run cli -- --http $RIJKS semantic "winter landscape" --type painting --max 3  # filtered KNN
    ```
-   Both must return results. Expect ~8s on the first call and a few seconds on the second (cold page-in, once per process each). A broad filter (`--type print`, ≥400K candidates) takes the pure-KNN fallback and is the slowest cold path — watch it against the `/mcp` 30s timeout.
+   Both must return results. Expect ~8s on the first call and a few seconds on the second (cold page-in, once per process each). A broad filter (`--type print`, ~420K candidates) is the slowest cold filtered path — watch it against the `/mcp` 30s timeout.
 
 ## Phase B: DB upgrade (destructive production action — always ask for confirmation)
 
@@ -191,6 +191,13 @@ python3 scripts/assemble-embeddings-release.py \
   --desc-source data/embeddings.db \   # the CURRENTLY-DEPLOYED DB (its desc index is authoritative)
   --out data/embeddings-<rel>.db
 ```
+Then slim it for deploy — drops the plain `artwork_embeddings`/`desc_embeddings` copies (the runtime
+reads only vec0 + `artwork_object_numbers`), roughly halving the DB:
+```bash
+~/miniconda3/envs/embeddings/bin/python scripts/slim-embeddings-db.py \
+  --in data/embeddings-<rel>.db --out data/embeddings-<rel>-slim.db
+```
+`--desc-source` may be a full or a slim DB; the assemble script reads the description vectors from either.
 
 **Completeness gate (BLOCKS deploy — run before compressing any DB).** A regenerated DB must match
 the *shape* of the one it replaces, not just look internally valid:
@@ -198,7 +205,7 @@ the *shape* of the one it replaces, not just look internally valid:
   v0.70 main-only DB was 383 MB gz vs ~595 historical) is a **STOP** — diff the table inventory, do
   not rationalize it.
 - **Table inventory + row counts.** `sqlite_master` table list and per-table `COUNT(*)` must match the
-  deployed DB (embeddings: `artwork_embeddings`==`vec_artworks`, `desc_embeddings`==`vec_desc_artworks`).
+  deployed DB (slim embeddings: `vec_artworks`==`artwork_object_numbers`==`version_info.artwork_count`, `vec_desc_artworks`==`desc_artwork_count`).
 - **`version_info` keys.** Must carry every key the deployed DB has (embeddings: both the artwork keys
   AND the `desc_*` block — a missing `desc_*` block means the desc half is absent).
 - **Provenance alignment.** `vocab_db_built_at` must equal the deployed `vocabulary.db` `version_info.built_at`

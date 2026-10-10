@@ -919,5 +919,18 @@
       "vocabDb"
     ],
     "purpose": "2026-07-28 wire over HTTP + stdio (server/discover, envelope headers, tools/resources, Origin/405, concurrency) plus legacy-handshake regression; raw fetch because the v1 client cannot reach this wire"
+  },
+  "test-embeddings-slim-parity.mjs": {
+    "category": "db",
+    "class": "smoke",
+    "status": "manual",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "embeddingsDb",
+      "vocabDb",
+      "manual"
+    ],
+    "purpose": "vec0-only EmbeddingsDb parity vs the plain-table SQL, on full and slimmed embeddings DBs (needs data/embeddings-slim.db from slim-embeddings-db.py)"
   }
 }

@@ -70,12 +70,9 @@ The tool uses two internal search paths:
 | Mode | When | How |
 |------|------|-----|
 | **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of every vector |
-| **Filtered KNN (exact)** | Filters narrow the candidate set below the internal limit | Vocabulary DB narrows candidates by metadata, then `vec_distance_cosine()` ranks the filtered set exactly |
-| **Filtered KNN (approximate)** | Filters still match more candidates than `FILTER_ART_IDS_LIMIT` | Exact ranking is abandoned: a pure KNN pass is post-filtered instead, so ranking operates on a near-optimal subset and may miss equally relevant works. A warning says so. |
+| **Filtered KNN** | Any metadata filter | Vocabulary DB narrows candidates by metadata; the vec0 scan is then restricted to that ID list and ranks it exactly, however broad the filter |
 
 The search mode (`semantic` or `semantic+filtered`) is reported in the response.
-
-The third path is easy to trigger by accident: a single very broad filter such as `type: "print"` or `material: "paper"` matches enough of the collection to exceed the limit on its own. Pair a broad filter with a narrower one (`type: "print", subject: "landscape"`) to stay on the exact path.
 
 ### Response format
 
@@ -97,14 +94,14 @@ Source text is not stored in the embeddings database (saving ~270 MB). It is rec
 
 ### Description embeddings (separate path)
 
-A second, description-only embedding set is stored alongside the main vectors and powers the Description signal in `find_similar`. It is not used by `semantic_search`. The model is [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) — a Dutch-tuned E5 variant — and the vectors are full 384-dimensional int8. Coverage matches the `description_text` field exactly, one row per described artwork (~61% of the collection); artworks without a description are absent from the `desc_embeddings` table, so Description-signal results for those objects simply return nothing rather than fabricating a nearest neighbour.
+A second, description-only embedding set is stored alongside the main vectors and powers the Description signal in `find_similar`. It is not used by `semantic_search`. The model is [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) — a Dutch-tuned E5 variant — and the vectors are full 384-dimensional int8. Coverage matches the `description_text` field exactly, one row per described artwork (~61% of the collection); artworks without a description are absent from the description index, so Description-signal results for those objects simply return nothing rather than fabricating a nearest neighbour.
 
 ### Technical details
 
 - **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The query encoder is [`kintopp/multilingual-e5-small-rijksmuseum`](https://huggingface.co/kintopp/multilingual-e5-small-rijksmuseum), the [Xenova](https://huggingface.co/Xenova/multilingual-e5-small) int8 ONNX export with its 250K-piece vocabulary trimmed to the pieces the collection and common query languages use, which roughly halves its memory without changing the vectors.
-- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) pinned to 0.1.9. Brute-force scan (no ANN index). At 384 int8 bytes per vector the vec0 table runs to roughly 300 MB, plus a regular `artwork_embeddings` table for filtered queries.
+- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) pinned to 0.1.9. Brute-force scan (no ANN index). At 384 int8 bytes per vector the main vec0 table runs to roughly 300 MB; vec0 serves both pure and filtered KNN, so each vector is stored once.
 - **Query embedding prefix:** The model uses the `query:` prefix for queries and `passage:` for documents, following the E5 instruction format.
-- **Database size:** ~1.11 GiB uncompressed (includes `desc_embeddings` for description-based `find_similar`); ~584 MiB gzipped for deployment. Downloaded on first start only when `EMBEDDINGS_DB_URL` is set.
+- **Database size:** ~0.53 GiB uncompressed (both vec0 indexes plus an art_id → object number table); older releases also carried plain-table copies of every vector (~1.11 GiB). Downloaded on first start only when `EMBEDDINGS_DB_URL` is set.
 
 ### Operational notes
 

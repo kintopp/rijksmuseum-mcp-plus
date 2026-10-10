@@ -135,7 +135,6 @@ export function registerSemanticTools(
             const filtered = embeddingsDb!.searchFiltered(queryVec, candidateArtIds, fetchLimit);
             candidates = filtered.results;
             filtersApplied = true;
-            if (filtered.warning) warnings.push(filtered.warning);
           }
         } else {
           // PURE KNN PATH: vec0 virtual table

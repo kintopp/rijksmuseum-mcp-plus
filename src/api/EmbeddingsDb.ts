@@ -1,7 +1,6 @@
 import Database, { type Database as DatabaseType, type Statement } from "better-sqlite3";
 import { createRequire } from "node:module";
 import { resolveDbPath } from "../utils/db.js";
-import { FILTER_ART_IDS_LIMIT } from "./VocabularyDb.js";
 import { logInfo, logWarn, logError } from "../utils/log.js";
 
 const require = createRequire(import.meta.url);
@@ -16,7 +15,6 @@ export interface SemanticSearchResult {
 
 export interface FilteredSearchResponse {
   results: SemanticSearchResult[];
-  warning?: string;
 }
 
 export interface DescriptionSearchResult {
@@ -30,10 +28,14 @@ export interface DescriptionSearchResult {
 /**
  * Read-only wrapper around the embeddings SQLite database.
  *
- * Dual-path query architecture (see sqlite-vec issue #196):
- * - `search()` → vec0 virtual table for pure KNN (2-3x faster brute-force)
- * - `searchFiltered()` → regular table + vec_distance_cosine() for pre-filtered queries
- *   (vec0 pre-filtering is O(n²) internally — the maintainer recommends avoiding it)
+ * All KNN runs on the vec0 tables. Filtered search passes the candidate art_ids
+ * as one JSON array (`artwork_id IN (SELECT value FROM json_each(?))`), which
+ * scales roughly linearly and ranks exactly. Don't switch to per-id point
+ * lookups or a JOIN against vec0: both hit sqlite-vec's slow paths (#74).
+ *
+ * Object numbers come from `artwork_object_numbers` in a slimmed DB
+ * (scripts/slim-embeddings-db.py) or from the plain `artwork_embeddings` /
+ * `desc_embeddings` tables in a full one.
  */
 export class EmbeddingsDb {
   private db: DatabaseType | null = null;
@@ -45,8 +47,9 @@ export class EmbeddingsDb {
   private stmtQuantize: Statement | null = null;
   private stmtKnn: Statement | null = null;
   private stmtArtwork: Statement | null = null;
-  private stmtFilteredKnn = new Map<number, Statement>(); // keyed by chunk size
+  private stmtFilteredKnn: Statement | null = null;
   private stmtDescObjLookup = new Map<number, Statement>(); // keyed by placeholder count
+  private objectNumberSource = "artwork_embeddings";
 
   // Description embedding statements (null if desc tables not present)
   private stmtDescLookup: Statement | null = null;
@@ -86,31 +89,39 @@ export class EmbeddingsDb {
         "SELECT vec_quantize_int8(vec_normalize(?), 'unit') as v"
       );
 
-      // Pure KNN path (vec0) — vec_int8() wrapper required so sqlite-vec
-      // interprets the BLOB as int8 (default assumption is float32)
+      // vec_int8() wrapper required so sqlite-vec interprets the BLOB as int8
+      // (default assumption is float32)
       this.stmtKnn = this.db.prepare(`
         SELECT artwork_id, distance FROM vec_artworks
         WHERE embedding MATCH vec_int8(?) AND k = ?
         ORDER BY distance
       `);
+      this.stmtFilteredKnn = this.db.prepare(`
+        SELECT artwork_id, distance FROM vec_artworks
+        WHERE embedding MATCH vec_int8(?) AND k = ?
+          AND artwork_id IN (SELECT value FROM json_each(?))
+        ORDER BY distance
+      `);
 
-      // Artwork detail lookup by art_id
+      const slim = this.db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'artwork_object_numbers'"
+      ).get();
+      this.objectNumberSource = slim ? "artwork_object_numbers" : "artwork_embeddings";
       this.stmtArtwork = this.db.prepare(
-        "SELECT art_id, object_number FROM artwork_embeddings WHERE art_id = ?"
+        `SELECT art_id, object_number FROM ${this.objectNumberSource} WHERE art_id = ?`
       );
 
       logInfo(`Embeddings DB: ${this.artworkCount.toLocaleString()} vectors (${this.dimensions}d)`);
 
       // Description embedding tables (optional — added by generate-description-embeddings-modal.py)
       try {
-        this.db.prepare("SELECT 1 FROM desc_embeddings LIMIT 1").get();
         this.db.prepare("SELECT 1 FROM vec_desc_artworks LIMIT 1").get();
 
         this.descDimensions = parseInt(metaMap.desc_dimensions ?? "384", 10);
         this.descArtworkCount = parseInt(metaMap.desc_artwork_count ?? "0", 10);
 
         this.stmtDescLookup = this.db.prepare(
-          "SELECT embedding FROM desc_embeddings WHERE art_id = ?"
+          "SELECT embedding FROM vec_desc_artworks WHERE artwork_id = ?"
         );
         this.stmtDescKnn = this.db.prepare(`
           SELECT artwork_id, distance FROM vec_desc_artworks
@@ -179,65 +190,25 @@ export class EmbeddingsDb {
   }
 
   /**
-   * Filtered KNN search — pre-filter by art_id set, then compute distances.
-   * Uses regular table + vec_distance_cosine() per sqlite-vec maintainer recommendation.
-   * Chunked path scales linearly (~1.9ms/1K candidates, warm) up to FILTER_ART_IDS_LIMIT;
-   * at/above that, falls back to pure KNN + post-filter (~1.5s full scan).
+   * Filtered KNN search — exact top-k among the candidate art_ids. Results
+   * keep the `artId`/`objectNumber`/`distance` shape of `search()`.
    */
   searchFiltered(queryEmbedding: Float32Array, candidateArtIds: number[], k: number): FilteredSearchResponse {
-    if (!this.db || !this.stmtQuantize || candidateArtIds.length === 0) return { results: [] };
+    if (!this.db || !this.stmtQuantize || !this.stmtFilteredKnn || !this.stmtArtwork || candidateArtIds.length === 0) {
+      return { results: [] };
+    }
 
     const quantized = this.stmtQuantize.get(queryEmbedding) as { v: Buffer };
+    const rows = this.stmtFilteredKnn.all(
+      quantized.v, Math.min(k, 4096), JSON.stringify(candidateArtIds),
+    ) as { artwork_id: number; distance: number }[];
 
-    // For very large candidate sets (≥ FILTER_ART_IDS_LIMIT), fall back to pure
-    // KNN + post-filter. The chunked vec_distance_cosine path scales linearly
-    // (~1.9ms/1K candidates, warm) and stays faster than the ~1.5s flat fallback
-    // up to ~750K candidates; the 400K limit keeps the exact path's worst case
-    // (~760ms) well under the fallback. (issue #74)
-    if (candidateArtIds.length >= FILTER_ART_IDS_LIMIT) {
-      const allResults = this.search(queryEmbedding, 4096);
-      const idSet = new Set(candidateArtIds);
-      const filtered = allResults.filter(r => idSet.has(r.artId)).slice(0, k);
-      const warning = filtered.length < k
-        ? `Filter matched ${candidateArtIds.length.toLocaleString()} artworks (too many for precise ranking). Results are approximate — consider adding more filters to narrow the search.`
-        : undefined;
-      return { results: filtered, warning };
-    }
-
-    // Build parameterized IN list — batch in chunks to avoid SQLite variable limit.
-    // Statements cached by chunk size (only 2 shapes: full 999 and remainder).
-    const CHUNK_SIZE = 998; // SQLite max 999 variables; 1 reserved for query embedding
-    const allResults: SemanticSearchResult[] = [];
-
-    for (let i = 0; i < candidateArtIds.length; i += CHUNK_SIZE) {
-      const chunk = candidateArtIds.slice(i, i + CHUNK_SIZE);
-      const stmt = this.getFilteredKnnStmt(chunk.length);
-      const rows = stmt.all(quantized.v, ...chunk) as SemanticSearchResult[];
-      allResults.push(...rows);
-    }
-
-    // Sort all chunks by distance and take top k
-    allResults.sort((a, b) => a.distance - b.distance);
-    return { results: allResults.slice(0, k) };
-  }
-
-  /** Get or create a cached prepared statement for filtered KNN with a given chunk size. */
-  private getFilteredKnnStmt(chunkSize: number): Statement {
-    let stmt = this.stmtFilteredKnn.get(chunkSize);
-    if (!stmt) {
-      const placeholders = Array.from({ length: chunkSize }, () => "?").join(", ");
-      stmt = this.db!.prepare(`
-        SELECT
-          art_id AS artId,
-          object_number AS objectNumber,
-          vec_distance_cosine(vec_int8(embedding), vec_int8(?)) AS distance
-        FROM artwork_embeddings
-        WHERE art_id IN (${placeholders})
-        ORDER BY distance
-      `);
-      this.stmtFilteredKnn.set(chunkSize, stmt);
-    }
-    return stmt;
+    const stmtArtwork = this.stmtArtwork;
+    const results = rows.map(row => {
+      const artwork = stmtArtwork.get(row.artwork_id) as { art_id: number; object_number: string } | undefined;
+      return artwork ? { artId: artwork.art_id, objectNumber: artwork.object_number, distance: row.distance } : null;
+    }).filter((r): r is SemanticSearchResult => r !== null);
+    return { results };
   }
 
   // ── Description similarity ──────────────────────────────────────────
@@ -271,7 +242,7 @@ export class EmbeddingsDb {
     if (!objStmt) {
       const placeholders = artIds.map(() => "?").join(", ");
       objStmt = this.db.prepare(
-        `SELECT art_id, object_number FROM desc_embeddings WHERE art_id IN (${placeholders})`
+        `SELECT art_id, object_number FROM ${this.objectNumberSource} WHERE art_id IN (${placeholders})`
       );
       this.stmtDescObjLookup.set(artIds.length, objStmt);
     }

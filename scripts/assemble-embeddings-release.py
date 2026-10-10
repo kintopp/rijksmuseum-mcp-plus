@@ -67,7 +67,19 @@ def main():
         "SELECT COUNT(*) FROM sqlite_master WHERE name='desc_embeddings'"
     ).fetchone()[0]
     assert has_desc == 0, "out already has desc_embeddings — unexpected"
-    src_desc_n = desc.execute("SELECT COUNT(*) FROM desc_embeddings").fetchone()[0]
+    # A slim desc source (slim-embeddings-db.py) keeps the vectors only in vec0.
+    src_is_slim = desc.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE name='desc_embeddings'"
+    ).fetchone()[0] == 0
+    desc_rows_sql = (
+        "SELECT v.artwork_id, o.object_number, v.embedding FROM vec_desc_artworks v "
+        "JOIN artwork_object_numbers o ON o.art_id = v.artwork_id"
+        if src_is_slim else
+        "SELECT art_id, object_number, embedding FROM desc_embeddings"
+    )
+    src_desc_n = desc.execute(
+        "SELECT COUNT(*) FROM vec_desc_artworks" if src_is_slim else "SELECT COUNT(*) FROM desc_embeddings"
+    ).fetchone()[0]
     print(f"  MAIN: {main_n:,} artwork vectors")
     print(f"  DESC to carry over: {src_desc_n:,} description vectors")
 
@@ -80,7 +92,8 @@ def main():
             embedding     BLOB NOT NULL
         )
     """)
-    rows = desc.execute("SELECT art_id, object_number, embedding FROM desc_embeddings").fetchall()
+    rows = desc.execute(desc_rows_sql).fetchall()
+    assert len(rows) == src_desc_n, f"desc rows {len(rows)} != {src_desc_n} (object numbers missing?)"
     dst.executemany(
         "INSERT INTO desc_embeddings (art_id, object_number, embedding) VALUES (?, ?, ?)", rows
     )
