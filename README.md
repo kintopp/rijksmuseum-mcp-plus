@@ -29,10 +29,7 @@ This tool was developed as a technology demo by the [Research and Infrastructure
 
 The system is designed to let you search, explore and ask questions about the Rijksmuseum's collections in natural language. For example:
 
-- _What German artworks at the Rijksmuseum evoke vanitas and mortality?_
-- _Which artworks have a provenance linked to Emperor Bonaparte?_
-- _List all artworks which include the inscription, 'Amor vincit omnia'_
-- _Find artworks similar to SK-A-1115_
+*What is the actual distribution of Rembrandt's works in the Rijksmuseum across painting, printmaking, and drawing — and how does this challenge popular perceptions of him as primarily a painter?* [Demo](https://claude.ai/share/e2070805-94a5-4e35-9aea-24b6274b641d) 
 
 For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). These demonstrate queries on a variety of topics including subject and iconographic search, curated sets, semantic search, provenance research, inscriptions and marks, and conservation.
 
