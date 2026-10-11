@@ -797,11 +797,18 @@ export function runStructuralExtractor(db, { dryRun, seenPK = new Set(), auditFi
         // (its `.filter(rc => rc.confidence >= minConfidence)` drops undefined).
         if (!(r.confidence >= MIN_STRUCTURAL_CONFIDENCE)) continue;
         if (isReverted(objectNumber, r.event_sequence, r.issue_type)) { counts.denied++; continue; }
+        // Content-address the merge target too, so re-apply can find it after drift.
+        let payload = r;
+        if (r.merge_target_sequence != null) {
+          const target = resolveParent(orc, objectNumber, r.merge_target_sequence);
+          if (!target) { counts.unresolved++; continue; }
+          payload = { ...r, merge_target: { raw_text_hash: target.hash, dup_ordinal: target.dup_ordinal, dup_count: target.dup_count } };
+        }
         emitStructural({
           objectNumber,
           sequence: r.event_sequence,
           field: "event.reclassify",
-          payload: r, // verbatim reclassifications[] entry
+          payload, // the reclassifications[] entry, plus merge_target
           issueType: r.issue_type,
           reasoning: r.reasoning ?? null,
           confidence: r.confidence ?? null,

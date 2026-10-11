@@ -237,6 +237,16 @@ function cleanTmp(p) {
   try { fs.unlinkSync(p); } catch (_) {}
 }
 
+/** Run the manual-CSV extractor on the given data rows (header added). */
+function migrateManualCsv(db, rows, opts = {}) {
+  const p = writeTmpCsv(["table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning", ...rows].join("\n"));
+  try {
+    return migrate(db, { manual: true, csvPath: p, ...opts });
+  } finally {
+    cleanTmp(p);
+  }
+}
+
 function writeTmpJson(content) {
   const p = path.join(os.tmpdir(), `prov-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
   fs.writeFileSync(p, content, "utf-8");
@@ -535,25 +545,11 @@ function writeTmpJson(content) {
         (91,1,'Owner Name',NULL,NULL,NULL,NULL,1346,NULL,NULL,NULL,0,NULL,'[1]');
     `);
 
-    const csvText = [
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,91,SK-A-0091,1,,begin_year,1346,,Lot number parsed as year",
-    ].join("\n");
-    const tmpPath = writeTmpCsv(csvText);
-    try {
-      migrate(db, { manual: true, csvPath: tmpPath });
-      assertEq(getStore(db, "period.manual").length, 1, "case9: 1 period.manual store row");
-
-      const result = reapply(db);
-      assertEq(result.applied.period_manual, 1, "case9: period_manual applied=1");
-
-      const period = db.prepare(
-        "SELECT begin_year FROM provenance_periods WHERE artwork_id=91 AND sequence=1"
-      ).get();
-      assertEq(period?.begin_year, null, "case9: begin_year cleared to null");
-    } finally {
-      cleanTmp(tmpPath);
-    }
+    migrateManualCsv(db, ["provenance_periods,91,SK-A-0091,1,,begin_year,1346,,Lot number parsed as year"]);
+    assertEq(getStore(db, "period.manual").length, 1, "case9: 1 period.manual store row");
+    const result = reapply(db);
+    assertEq(result.applied.period_manual, 1, "case9: period_manual applied=1");
+    assertDeepEq(periodYears(db, 91), [[1, null]], "case9: begin_year cleared to null");
 
     // Sub-case: no matching period → unmatched.period_not_found
     const db2 = makeDb();
@@ -562,23 +558,10 @@ function writeTmpJson(content) {
       INSERT INTO provenance_events VALUES
         (92,1,'Another period event',0,'sale',0,0,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
     `);
-    const csvText2 = [
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,92,SK-A-0092,1,,begin_year,1346,,",
-    ].join("\n");
-    const tmpPath2 = writeTmpCsv(csvText2);
-    try {
-      migrate(db2, { manual: true, csvPath: tmpPath2 });
-      const result2 = reapply(db2);
-      assertEq(result2.unmatched.period_not_found, 1, "case9: period_not_found=1 when period missing");
-      assertEq(
-        result2.unmatched_object_numbers[0],
-        "SK-A-0092",
-        "case9: unmatched object_number reported"
-      );
-    } finally {
-      cleanTmp(tmpPath2);
-    }
+    migrateManualCsv(db2, ["provenance_periods,92,SK-A-0092,1,,begin_year,1346,,"]);
+    const result2 = reapply(db2);
+    assertEq(result2.unmatched.period_not_found, 1, "case9: period_not_found=1 when period missing");
+    assertEq(result2.unmatched_object_numbers[0], "SK-A-0092", "case9: unmatched object_number reported");
 
     // Sub-case: a re-parse adds a preamble, so the corrected event moves 1 → 2
     // and the periods are re-derived. The correction follows the event's content.
@@ -586,15 +569,7 @@ function writeTmpJson(content) {
     db3.exec("INSERT INTO artworks VALUES (93, 'SK-A-0093')");
     insertEvent(db3, 93, 1, "Drifting period event");
     insertPeriod(db3, 93, 1, "[1]", 1346);
-    const tmpPath3 = writeTmpCsv([
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,93,SK-A-0093,1,,begin_year,1346,,Lot number parsed as year",
-    ].join("\n"));
-    try {
-      migrate(db3, { manual: true, csvPath: tmpPath3 });
-    } finally {
-      cleanTmp(tmpPath3);
-    }
+    migrateManualCsv(db3, ["provenance_periods,93,SK-A-0093,1,,begin_year,1346,,Lot number parsed as year"]);
     db3.exec("DELETE FROM provenance_events; DELETE FROM provenance_periods;");
     insertEvent(db3, 93, 1, "New preamble event");
     insertEvent(db3, 93, 2, "Drifting period event");
@@ -611,15 +586,7 @@ function writeTmpJson(content) {
     insertEvent(db4, 94, 1, "Event one");
     insertPeriod(db4, 94, 1, "[10]", 1500);
     insertPeriod(db4, 94, 2, "[1]", 1346);
-    const tmpPath4 = writeTmpCsv([
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,94,SK-A-0094,1,,begin_year,1346,,Lot number parsed as year",
-    ].join("\n"));
-    try {
-      migrate(db4, { manual: true, csvPath: tmpPath4 });
-    } finally {
-      cleanTmp(tmpPath4);
-    }
+    migrateManualCsv(db4, ["provenance_periods,94,SK-A-0094,1,,begin_year,1346,,Lot number parsed as year"]);
     reapply(db4);
     assertDeepEq(periodYears(db4, 94), [[1, 1500], [2, null]],
       "case9: source_events '[10]' is not matched as event 1");
@@ -687,20 +654,13 @@ function writeTmpJson(content) {
         (200,1,'Some event text',0,'sale',0,0,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
     `);
 
-    const badCsv = [
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "bad_table,200,SK-A-0200,1,,some_col,old,new,reason",
-    ].join("\n");
-    const tmpPath = writeTmpCsv(badCsv);
     let threw = false;
     let throwMsg = "";
     try {
-      migrate(db, { manual: true, csvPath: tmpPath });
+      migrateManualCsv(db, ["bad_table,200,SK-A-0200,1,,some_col,old,new,reason"]);
     } catch (e) {
       threw = true;
       throwMsg = e.message;
-    } finally {
-      cleanTmp(tmpPath);
     }
     assert(threw, "D2: unknown table causes migrate to throw");
     assert(throwMsg.includes("bad_table"), `D2: error mentions bad_table — got: ${throwMsg}`);
@@ -712,20 +672,13 @@ function writeTmpJson(content) {
     const db = makeDb();
     // No artworks seeded
 
-    const csv = [
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_events,9999,SK-A-9999,1,,transfer_type,unknown,sale,",
-    ].join("\n");
-    const tmpPath = writeTmpCsv(csv);
     let threw = false;
     let throwMsg = "";
     try {
-      migrate(db, { manual: true, csvPath: tmpPath });
+      migrateManualCsv(db, ["provenance_events,9999,SK-A-9999,1,,transfer_type,unknown,sale,"]);
     } catch (e) {
       threw = true;
       throwMsg = e.message;
-    } finally {
-      cleanTmp(tmpPath);
     }
     assert(threw, "D3: unresolvable artwork_id causes migrate to throw");
     assert(throwMsg.includes("9999"), `D3: error mentions object_number 9999 — got: ${throwMsg}`);
@@ -743,18 +696,11 @@ function writeTmpJson(content) {
         (300,1,0,'Real Buyer',NULL,'buyer','London','${M.LLM_ENRICHMENT}',0,'enriched');
     `);
     // CSV: a provenance_parties DELETE row targeting the SAME (artwork,seq) → manual snapshot
-    const csv = [
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_parties,300,SK-A-0300,1,*,DELETE,,,Charter-room cleanup",
-    ].join("\n");
-    const tmp = writeTmpCsv(csv);
     let threw = false;
     try {
-      migrate(db, { value: true, manual: true, csvPath: tmp });
-    } catch (e) {
+      migrateManualCsv(db, ["provenance_parties,300,SK-A-0300,1,*,DELETE,,,Charter-room cleanup"], { value: true });
+    } catch {
       threw = true;
-    } finally {
-      cleanTmp(tmp);
     }
     assert(!threw, "E1: value+manual on the same event does NOT throw (shared seenPK dedupes)");
     const snaps = getStore(db, "event.parties");
@@ -771,19 +717,10 @@ function writeTmpJson(content) {
       INSERT INTO provenance_events VALUES
         (301,1,'Periodless event text',0,'sale',0,0,NULL,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
     `);
-    const csv = [
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,301,SK-A-0301,1,,begin_year,1346,,",
-    ].join("\n");
-    const tmp = writeTmpCsv(csv);
-    try {
-      migrate(db, { manual: true, csvPath: tmp });
-      const dry = reapply(db, { dryRun: true });
-      assertEq(dry.unmatched.period_not_found, 1, "E2: dry-run reports period_not_found=1");
-      assertEq(dry.applied.period_manual, 0, "E2: dry-run applied.period_manual=0 when period missing");
-    } finally {
-      cleanTmp(tmp);
-    }
+    migrateManualCsv(db, ["provenance_periods,301,SK-A-0301,1,,begin_year,1346,,"]);
+    const dry = reapply(db, { dryRun: true });
+    assertEq(dry.unmatched.period_not_found, 1, "E2: dry-run reports period_not_found=1");
+    assertEq(dry.applied.period_manual, 0, "E2: dry-run applied.period_manual=0 when period missing");
 
     // B2: present period → dry-run counts applied but does NOT mutate the row
     const db2 = makeDb();
@@ -794,20 +731,10 @@ function writeTmpJson(content) {
       INSERT INTO provenance_periods VALUES
         (302,1,'Owner',NULL,NULL,NULL,NULL,1346,NULL,NULL,NULL,0,NULL,'[1]');
     `);
-    const csv2 = [
-      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
-      "provenance_periods,302,SK-A-0302,1,,begin_year,1346,,",
-    ].join("\n");
-    const tmp2 = writeTmpCsv(csv2);
-    try {
-      migrate(db2, { manual: true, csvPath: tmp2 });
-      const dry = reapply(db2, { dryRun: true });
-      assertEq(dry.applied.period_manual, 1, "E2: dry-run counts applied.period_manual=1 when period present");
-      const row = db2.prepare("SELECT begin_year FROM provenance_periods WHERE artwork_id=302 AND sequence=1").get();
-      assertEq(row.begin_year, 1346, "E2: dry-run did NOT write (begin_year still 1346)");
-    } finally {
-      cleanTmp(tmp2);
-    }
+    migrateManualCsv(db2, ["provenance_periods,302,SK-A-0302,1,,begin_year,1346,,"]);
+    const dry2 = reapply(db2, { dryRun: true });
+    assertEq(dry2.applied.period_manual, 1, "E2: dry-run counts applied.period_manual=1 when period present");
+    assertDeepEq(periodYears(db2, 302), [[1, 1346]], "E2: dry-run did NOT write (begin_year still 1346)");
   }
 
   // ── Case 10: Split survives renumber (structural) ──────────────────────────
@@ -1478,44 +1405,55 @@ function writeTmpJson(content) {
   }
 
   // ── Case 17: Reclassifications re-apply after sequence drift ──────────────
-  // The audit numbered the events 1–5; the re-parse added a preamble, so every
-  // event moved down one. Merge targets must move with their sources.
+  // The audit numbered the events 1–5. The re-parse added a preamble (every
+  // event moves down one) and a note between the last merge source and its
+  // target (the source moves two), so targets must be found by content.
   section("Case 17: Reclassifications re-apply after sequence drift");
   {
     const db = makeDb();
     const OBJ = "SK-A-0017";
+    const AUDIT_TEXTS = ["collection of X, Paris", "in the Paris house", "see the note above",
+      "collection of Z", "or perhaps collection of W"];
     db.exec(`INSERT INTO artworks VALUES (17, '${OBJ}')`);
-    insertEvent(db, 17, 1, "New preamble event");
-    insertEvent(db, 17, 2, "collection of X, Paris");
-    insertEvent(db, 17, 3, "in the Paris house");
-    insertEvent(db, 17, 4, "see the note above");
-    insertEvent(db, 17, 5, "collection of Z");
-    insertEvent(db, 17, 6, "or perhaps collection of W");
+    const reclassPath = writeTmpJson(JSON.stringify({ meta: { batchId: "audit:case17" }, results: [{ data: {
+      object_number: OBJ,
+      reclassifications: [
+        { event_sequence: 2, issue_type: "location_as_event", action: "merge_with_adjacent",
+          merge_target_sequence: 1, merge_field_updates: { location: "Paris" } },
+        { event_sequence: 3, issue_type: "phantom_event", action: "mark_non_provenance" },
+        { event_sequence: 5, issue_type: "alternative_acquisition", action: "merge_alternatives", merge_target_sequence: 4 },
+      ].map((r) => ({ confidence: 0.9, reasoning: `${r.action} reasoning`, ...r })),
+    } }] }));
+    const oracle = {
+      byObjSeq: new Map(AUDIT_TEXTS.map((t, i) => [`${OBJ}|${i + 1}`, t])),
+      groupsByObj: new Map([[OBJ, buildDupOrdinals(AUDIT_TEXTS.map((t, i) => ({ sequence: i + 1, raw_text: t })))]]),
+    };
+    try {
+      runStructuralExtractor(db, {
+        dryRun: false, seenPK: new Set(), oracle, denylist: new Set(),
+        auditFiles: { split: "/nonexistent/split.json", reclassify: reclassPath, fieldcorrection: "/nonexistent/fc.json" },
+      });
+    } finally {
+      cleanTmp(reclassPath);
+    }
+
+    ["New preamble event", "collection of X, Paris", "in the Paris house", "see the note above",
+      "collection of Z", "an inserted note", "or perhaps collection of W"]
+      .forEach((t, i) => insertEvent(db, 17, i + 1, t));
     db.exec(`
       INSERT INTO provenance_parties (artwork_id, sequence, party_idx, party_name) VALUES
-        (17, 1, 0, 'Preamble Owner'), (17, 2, 0, 'X'), (17, 3, 0, 'House'), (17, 6, 0, 'W');
+        (17, 1, 0, 'Preamble Owner'), (17, 2, 0, 'X'), (17, 3, 0, 'House'), (17, 7, 0, 'W');
     `);
-    const reclass = (parentRawText, payload) => insertStructuralRow(db, {
-      objectNumber: OBJ, parentRawText, field: "event.reclassify",
-      method: `${M.LLM_STRUCTURAL_PREFIX}${payload.issue_type}`,
-      payload: { confidence: 0.9, reasoning: `${payload.action} reasoning`, ...payload },
-    });
-    reclass("in the Paris house", {
-      event_sequence: 2, issue_type: "location_as_event", action: "merge_with_adjacent",
-      merge_target_sequence: 1, merge_field_updates: { location: "Paris" },
-    });
-    reclass("see the note above", { event_sequence: 3, issue_type: "phantom_event", action: "mark_non_provenance" });
-    reclass("or perhaps collection of W", {
-      event_sequence: 5, issue_type: "alternative_acquisition", action: "merge_alternatives", merge_target_sequence: 4,
-    });
 
     const result = reapply(db);
     assertEq(result.applied.event_reclassify, 3, "case17: 3 reclassifications applied");
     const events = getAllEvents(db, 17);
-    assertDeepEq(events.map((e) => e.sequence), [1, 2, 4, 5], "case17: both merged sources deleted, nothing else");
+    assertDeepEq(events.map((e) => e.sequence), [1, 2, 4, 5, 6], "case17: both merged sources deleted, nothing else");
     const bySeq = Object.fromEntries(events.map((e) => [e.sequence, e]));
-    assertDeepEq([bySeq[1].location, bySeq[1].uncertain, bySeq[1].correction_method], [null, 0, null],
-      "case17: the preamble is untouched");
+    for (const s of [1, 6]) {
+      assertDeepEq([bySeq[s].location, bySeq[s].uncertain, bySeq[s].correction_method], [null, 0, null],
+        `case17: event ${s} (not in the audit) is untouched`);
+    }
     assertEq(bySeq[2].location, "Paris", "case17: merge_with_adjacent updates the drifted target's location");
     assertEq(bySeq[4].transfer_type, "non_provenance", "case17: mark_non_provenance rewrites the type");
     assertEq(bySeq[5].uncertain, 1, "case17: merge_alternatives marks the drifted target uncertain");
@@ -1523,6 +1461,22 @@ function writeTmpJson(content) {
       .all().map((p) => [p.sequence, p.party_name]);
     assertDeepEq(parties, [[1, "Preamble Owner"], [2, "X"]], "case17: merged sources' parties deleted, the rest kept");
     assertHardInvariants(db, 17, "case17");
+
+    // A target whose text changed is not guessed at: the merge is skipped whole.
+    const db2 = makeDb();
+    db2.exec(`INSERT INTO artworks VALUES (18, 'SK-A-0018')`);
+    insertStructuralRow(db2, {
+      objectNumber: "SK-A-0018", parentRawText: "or perhaps collection of W", field: "event.reclassify",
+      method: `${M.LLM_STRUCTURAL_PREFIX}alternative_acquisition`,
+      payload: { event_sequence: 2, action: "merge_alternatives", merge_target_sequence: 1, reasoning: "alt",
+        merge_target: { raw_text_hash: rawTextHash("collection of Z"), dup_ordinal: 0, dup_count: 1 } },
+    });
+    insertEvent(db2, 18, 1, "collection of Z, re-worded");
+    insertEvent(db2, 18, 2, "or perhaps collection of W");
+    const result2 = reapply(db2);
+    assertEq(result2.unmatched.structural_text_changed, 1, "case17: changed target text → structural_text_changed");
+    assertDeepEq(getAllEvents(db2, 18).map((e) => [e.sequence, e.uncertain]), [[1, 0], [2, 0]],
+      "case17: with its target unmatched, the source is kept and nothing is marked");
   }
 
   // ─── Summary ───────────────────────────────────────────────────────────────

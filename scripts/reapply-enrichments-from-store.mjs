@@ -516,8 +516,18 @@ export function reapply(db, { dryRun = false } = {}) {
         }
         const seq = located.seq;
         const r = JSON.parse(row.payload);
-        // Merge targets are audit-time sequences; shift them by the source's drift.
-        const target = r.merge_target_sequence == null ? null : r.merge_target_sequence + (seq - r.event_sequence);
+        let target = null;
+        if (r.action !== "mark_non_provenance") {
+          // A store built before merge targets were content-addressed has no
+          // merge_target: it lands in text_changed until migrate is re-run.
+          const t = locateSeq(groups, r.merge_target ?? {}, "structural_");
+          if (t.unmatched) {
+            unmatched[t.unmatched]++;
+            unmatchedObjectNumbers.add(objectNumber);
+            continue;
+          }
+          target = t.seq;
+        }
         const method = RECLASS_ISSUE_TO_METHOD[r.issue_type] ?? `${M.LLM_STRUCTURAL_PREFIX}${r.issue_type}`;
         applied.event_reclassify++;
         if (dryRun) continue;
