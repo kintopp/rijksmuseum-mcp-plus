@@ -756,15 +756,14 @@
     "purpose": "search_artwork sort columns + tiebreaker (#198) over stdio (needs dist/ + DB)"
   },
   "test-tool-descriptions.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
     "runtime": "node",
     "requires": [
-      "dist",
-      "manual"
+      "dist"
     ],
-    "purpose": "tool-description regression over stdio tools/list (#297/#392; needs built dist/)"
+    "purpose": "model-facing tool descriptions: ≤79-char self-contained lead, cross-links, required contract wording, no stale params (fixture DB)"
   },
   "test-stats-crosstab-binding.mjs": {
     "category": "track2",

@@ -2,6 +2,8 @@
  * Tool-description regression test (cluster E / #297; front-loading / #392).
  *
  * Boots the server in stdio mode, lists tools, and asserts each description:
+ *   - Opens with a self-contained first sentence of ≤79 characters — the
+ *     deferred-tool catalogue cuts there, and it is all some clients show.
  *   - Front-loads a self-contained summary (no "Use …" boilerplate prefix,
  *     and the clipped ~70-char catalogue prefix doesn't restate the title) —
  *     so deferred-loading clients that show only name + clipped prefix can
@@ -20,6 +22,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { buildFixture } from "./build-fixture-vocab-db.mjs";
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -46,7 +49,13 @@ const transport = new StdioClientTransport({
   command: "node",
   args: ["dist/index.js"],
   cwd: PROJECT_DIR,
-  env: { ...process.env, STRUCTURED_CONTENT: "true" },
+  env: {
+    ...process.env,
+    STRUCTURED_CONTENT: "true",
+    MCP_SKIP_STARTUP_WARM: "1",
+    VOCAB_DB_PATH: buildFixture("fixture-tool-descriptions.db"),
+  },
+  stderr: "ignore",
 });
 const client = new Client({ name: "test-tool-descriptions", version: "0.1" });
 await client.connect(transport);
@@ -80,15 +89,20 @@ function descOf(name) {
 
 section("Front-loaded, title-independent leads (#392)");
 
-// App-only internal tools (visibility ["app"]) are hidden from the model and
-// intentionally terse ("Internal: …") — out of scope per #392.
+// App-only tools (visibility ["app"]) are hidden from the model, so their
+// catalogue preview is never shown.
 const MODEL_VISIBLE = tools
-  .map((t) => t.name)
-  .filter((n) => n !== "remount_viewer" && n !== "poll_viewer_commands");
+  .filter((t) => !t._meta?.ui?.visibility?.every((v) => v === "app"))
+  .map((t) => t.name);
+assert(MODEL_VISIBLE.length === tools.length - 2, `exactly two app-only tools (got ${tools.length - MODEL_VISIBLE.length})`);
 
 for (const name of MODEL_VISIBLE) {
   const tool = expect(name);
   const desc = tool.description ?? "";
+  // Code points, not UTF-16 units: clients count a "—" or "…" as one character.
+  const firstSentence = desc.match(/^.*?[.!?](?=\s|$)/s)?.[0];
+  assert(firstSentence && [...firstSentence].length <= 79,
+    `${name}: first sentence ends within 79 characters (${firstSentence ? [...firstSentence].length : "no sentence end"})`);
   const clip = desc.slice(0, 70);
   assert(!desc.startsWith("Use "),
     `${name}: description does not open with "Use …" boilerplate`);
