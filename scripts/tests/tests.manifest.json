@@ -717,17 +717,6 @@
     ],
     "purpose": "verifies search_artwork({provenance}) is Zod-rejected (#304; needs built dist/)"
   },
-  "test-schema-2020-12.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
-    "runtime": "node",
-    "requires": [
-      "dist",
-      "manual"
-    ],
-    "purpose": "JSON Schema 2020-12 conformance over stdio tools/list (SEP-2106; needs built dist/)"
-  },
   "test-search-org-aliases.mjs": {
     "category": "db",
     "class": "scratch",
@@ -833,5 +822,15 @@
       "manual"
     ],
     "purpose": "vec0-only EmbeddingsDb parity vs the plain-table SQL, on full and slimmed embeddings DBs (needs data/embeddings-slim.db from slim-embeddings-db.py)"
+  },
+  "test-tool-schemas.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "tools/list contract: every schema is clean JSON Schema 2020-12 and $ref-free; every tool carries the expected annotations (fixture DB)"
   }
 }
