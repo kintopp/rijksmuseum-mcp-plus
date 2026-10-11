@@ -7,6 +7,10 @@
  * Every call should either return results or a clean "no results" — any error
  * fails, because FTS5's own messages (e.g. "unterminated string") don't all
  * name FTS5. Runs on the fixture DB, so empty results are expected and fine.
+ *
+ * escapeFts5 also strips . * ^ ( ) : { } [ ] \ but removing that strip passes
+ * here: every call site wraps the value in a quoted phrase, where those
+ * characters are inert. Only the quote doubling is load-bearing.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
