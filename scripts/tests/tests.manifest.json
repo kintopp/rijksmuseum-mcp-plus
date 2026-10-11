@@ -777,15 +777,14 @@
     "purpose": "collection_stats creator-domain cross-tab: gender filter same-person binding + inert sameRowMatching warning (S-1/S-2, 2026-08-15 report)"
   },
   "test-modern-wire.mjs": {
-    "category": "track2",
-    "class": "smoke",
+    "category": "ci",
+    "class": "gate",
     "status": "promoted",
     "runtime": "node",
     "requires": [
-      "dist",
-      "vocabDb"
+      "dist"
     ],
-    "purpose": "2026-07-28 wire over HTTP + stdio (server/discover, envelope headers, tools/resources, Origin/405, concurrency) plus legacy-handshake regression; raw fetch because the v1 client cannot reach this wire"
+    "purpose": "2026-07-28 wire over HTTP + stdio (server/discover, envelope headers, tools/resources, Origin/405, concurrency) plus legacy-handshake regression, on the fixture DB; raw fetch because the v1 client cannot reach this wire"
   },
   "test-embeddings-slim-parity.mjs": {
     "category": "db",

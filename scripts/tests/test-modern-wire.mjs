@@ -7,10 +7,13 @@
  * tools/call) headers and a params._meta envelope; there is no initialize.
  *
  * Run:  node scripts/tests/test-modern-wire.mjs
- * Requires: npm run build, data/vocabulary.db
+ * Requires: npm run build (runs against the fixture vocab DB)
  */
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
+import { buildFixture } from "./build-fixture-vocab-db.mjs";
+
+const VOCAB_DB_PATH = buildFixture("fixture-modern-wire.db");
 
 const PORT = process.env.TEST_PORT ?? "31339";
 const MODERN = "2026-07-28";
@@ -27,7 +30,7 @@ const parse = (text) => { try { return JSON.parse(text.replace(/^event:.*\ndata:
 
 // ── HTTP ──────────────────────────────────────────────────────────
 const child = spawn("node", ["dist/index.js"], {
-  env: { ...process.env, PORT, ENABLE_FIND_SIMILAR: "true" },
+  env: { ...process.env, PORT, ENABLE_FIND_SIMILAR: "true", MCP_SKIP_STARTUP_WARM: "1", VOCAB_DB_PATH },
   stdio: ["ignore", "ignore", "pipe"],
 });
 await new Promise((resolve, reject) => {
@@ -64,10 +67,10 @@ try {
   const s = await call("search_artwork", { creator: "Rembrandt van Rijn", type: "painting", maxResults: 3 });
   check(!s.body?.result?.isError && s.body?.result?.structuredContent?.results?.length > 0, "search_artwork returns structuredContent");
 
-  const det = await call("get_artwork_details", { objectNumber: "SK-C-5" });
-  check(det.body?.result?.structuredContent?.objectNumber === "SK-C-5", "get_artwork_details over modern wire");
+  const det = await call("get_artwork_details", { objectNumber: "FX-1" });
+  check(det.body?.result?.structuredContent?.objectNumber === "FX-1", "get_artwork_details over modern wire");
 
-  const bad = await call("get_artwork_details", { objectNumber: "SK-C-5", bogus: 1 });
+  const bad = await call("get_artwork_details", { objectNumber: "FX-1", bogus: 1 });
   check(bad.body?.result?.isError || bad.body?.error, "strict schemas still reject unknown params");
 
   const res = await modern("resources/read", { uri: "ui://rijksmuseum/artwork-viewer.html" },
@@ -103,7 +106,7 @@ try {
 // ── stdio ─────────────────────────────────────────────────────────
 console.log("stdio, modern wire");
 const sp = spawn("node", ["dist/index.js"], {
-  env: { ...process.env, ENABLE_FIND_SIMILAR: "true", MCP_SKIP_STARTUP_WARM: "1" },
+  env: { ...process.env, ENABLE_FIND_SIMILAR: "true", MCP_SKIP_STARTUP_WARM: "1", VOCAB_DB_PATH },
   stdio: ["pipe", "pipe", "ignore"],
 });
 const pending = new Map();
@@ -116,8 +119,8 @@ try {
   check(d.result?.supportedVersions?.includes(MODERN), "stdio server/discover pins 2026-07-28");
   const l = await req({ jsonrpc: "2.0", id: 2, method: "tools/list", params: { _meta: envelope() } });
   check(l.result?.tools?.length === 19, "stdio modern tools/list returns 19 tools");
-  const c = await req({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_artwork_details", arguments: { objectNumber: "SK-C-5" }, _meta: envelope() } });
-  check(c.result?.structuredContent?.objectNumber === "SK-C-5", "stdio modern tools/call returns structuredContent");
+  const c = await req({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_artwork_details", arguments: { objectNumber: "FX-1" }, _meta: envelope() } });
+  check(c.result?.structuredContent?.objectNumber === "FX-1", "stdio modern tools/call returns structuredContent");
 } finally {
   sp.kill();
 }
