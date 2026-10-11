@@ -322,7 +322,8 @@ export function parseProvenanceRaw(
       event = astToRawEvent(ast, sequence, rawText, segment.gap, citations);
       stats.peg++;
     } catch {
-      // PEG failed — fall back to regex parser
+      // The grammar is total (GenericOwnerEvent catch-all), so this only catches
+      // a throw in an action or astToRawEvent.
       event = regexFallbackToRawEvent(segment, sequence, citations);
       stats.fallback++;
     }

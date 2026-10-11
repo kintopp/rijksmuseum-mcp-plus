@@ -61,7 +61,7 @@ const RANGE_BOUNDS_RE = /^\s*(\d{4})\s*[-–/]\s*(\d{2,4})\b/;
  * | "before 1800"    | null     | 1800   |
  * | "16 May 1696"    | 1696     | 1696   |
  */
-export function parseTemporalBounds(
+function parseTemporalBounds(
   expr: string | null,
   year: number | null,
   qualifier: string | null

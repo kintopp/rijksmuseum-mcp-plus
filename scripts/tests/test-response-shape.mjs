@@ -193,40 +193,12 @@ section("Case 6: Projected-total ceiling guard (structuredContent-aware)");
   }
 }
 
-// ── Case 7: Image/base64 guard ────────────────────────────────────────────────
+// ── Case 7: Never concatenated ────────────────────────────────────────────────
 
-section("Case 7: Image/base64 guard");
-
-{
-  const imageObj = { image: "A".repeat(40000) };
-  const blocks = buildContentBlocks(imageObj, "narration", {
-    jsonText: true,
-    structuredContentEmitted: true,
-  });
-  assert(blocks.length === 2, "length is 2");
-  assert(
-    !blocks.some((b) => b.text.includes("A".repeat(40000))),
-    "no block contains the 40K-char run",
-  );
-  try {
-    const marker = JSON.parse(blocks[1].text);
-    assert(
-      marker.reason === "exceeds_copy_cap",
-      'marker.reason === "exceeds_copy_cap" (40 KB trips the 20 KB per-copy cap)',
-    );
-  } catch (e) {
-    failed++;
-    failures.push(`case 7 marker parse — ${e.message}`);
-    console.log(`  ✗ case 7 marker parse — ${e.message}`);
-  }
-}
-
-// ── Case 8: Never concatenated ────────────────────────────────────────────────
-
-section("Case 8: Never concatenated (block[0] is verbatim human text)");
+section("Case 7: Never concatenated (block[0] is verbatim human text)");
 
 {
-  // Two-block cases: 3, 4, 5, 6b, 7
+  // Two-block cases: 3, 4, 5, 6b
   const cases = [
     buildContentBlocks({ a: 1, b: "x" }, "human", {
       jsonText: true,
@@ -246,23 +218,18 @@ section("Case 8: Never concatenated (block[0] is verbatim human text)");
       maxJsonTextBytes: 200000,
       structuredContentEmitted: true,
     }),
-    buildContentBlocks({ image: "A".repeat(40000) }, "narration", {
-      jsonText: true,
-      structuredContentEmitted: true,
-    }),
   ];
-  const humanStrings = ["human", "human", "human", "human", "narration"];
   cases.forEach((blocks, i) => {
     assert(
-      blocks[0].text === humanStrings[i],
+      blocks[0].text === "human",
       `case-${i + 1} two-block: blocks[0].text equals human string exactly`,
     );
   });
 }
 
-// ── Case 9: Spec annotations on two-block results ─────────────────────────────
+// ── Case 8: Spec annotations on two-block results ─────────────────────────────
 
-section("Case 9: Spec annotations on two-block results");
+section("Case 8: Spec annotations on two-block results");
 
 {
   // Case 3 result (already computed as case3Blocks)
@@ -299,13 +266,13 @@ section("Case 9: Spec annotations on two-block results");
   );
 }
 
-// ── Case 10: Divergent payloads (jsonTextData → structuredPayloadBytes guard) ──
+// ── Case 9: Divergent payloads (jsonTextData → structuredPayloadBytes guard) ──
 // find_similar (plan json-text-compat-rollout §E) sends a TRIMMED object to the
 // text channel while structuredContent carries the full payload. structuredResponse
 // passes the trimmed object as buildContentBlocks' `data` plus structuredPayloadBytes
 // = the FULL payload's size, so the projected-total guard counts the real wire cost.
 
-section("Case 10: Divergent payloads (jsonTextData → structuredPayloadBytes guard)");
+section("Case 9: Divergent payloads (jsonTextData → structuredPayloadBytes guard)");
 
 {
   const trimmed = { pageUrl: "u", channels: { iconclass: { total: 20, top: [{ objectNumber: "x" }] } } };

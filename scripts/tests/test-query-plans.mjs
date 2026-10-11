@@ -108,6 +108,10 @@ function attempt(fn) {
   try { fn(); } catch { /* OK — SQL was still captured */ }
 }
 
+function runAll(queries, method = "search", allowed = KNOWN_SEARCH_KEYS) {
+  for (const args of queries) attempt(() => vocabDb[method](checked(args, allowed)));
+}
+
 const ALL_FACETS = [...FACET_DIMENSIONS];
 
 // ──── A. Single-field vocab filters (15 params × ~1-2 each = ~20) ──────
@@ -145,7 +149,7 @@ const singleFieldQueries = [
   { attributionQualifier: "workshop of" },
   { attributionQualifier: "circle of" },
 ];
-for (const args of singleFieldQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(singleFieldQueries);
 
 // ──── B. Multi-field vocab combos (different WHERE clause shapes) ───────
 
@@ -177,7 +181,7 @@ const multiFieldQueries = [
   { creator: "Rembrandt", type: "print", technique: "etching", creationDate: "164*" },
   { productionPlace: "Amsterdam", type: "print", material: "paper", technique: "etching" },
 ];
-for (const args of multiFieldQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(multiFieldQueries);
 
 // ──── C. Text FTS filters (each triggers FTS JOIN + BM25 ranking) ──────
 
@@ -209,7 +213,7 @@ const textFtsQueries = [
   { curatorialNarrative: "dune" },
   { curatorialNarrative: "bleaching" },
 ];
-for (const args of textFtsQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(textFtsQueries);
 
 // ──── D. Mixed FTS + vocab (exercises both JOIN paths simultaneously) ──
 
@@ -230,7 +234,7 @@ const mixedFtsVocabQueries = [
   { title: "portret", inscription: "pinxit" },
   { description: "landscape", curatorialNarrative: "restoration" },
 ];
-for (const args of mixedFtsVocabQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(mixedFtsVocabQueries);
 
 // ──── E. Faceted queries (exercises computeFacets JOINs) ────────────────
 
@@ -270,7 +274,7 @@ const facetQueries = [
   { material: "paper", facets: ["rights"], maxResults: 50 },
   { technique: "etching", facets: ["imageAvailable"], maxResults: 50 },
 ];
-for (const args of facetQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(facetQueries);
 
 // ──── F. Geo proximity (exercises haversine JOIN through mappings) ──────
 
@@ -285,7 +289,7 @@ const geoQueries = [
   { nearPlace: "Dordrecht", nearPlaceRadius: 15, maxResults: 25 },
   { nearLat: 51.92, nearLon: 4.48, nearPlaceRadius: 5, type: "drawing", maxResults: 25 },
 ];
-for (const args of geoQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(geoQueries);
 
 // ──── G. Compact mode (exercises searchCompact — lookupTypes skipped) ──
 
@@ -300,7 +304,7 @@ const compactQueries = [
   { type: "painting", creationDate: "17*" },
   { creator: "Vermeer", type: "painting" },
 ];
-for (const args of compactQueries) attempt(() => vocabDb.searchCompact(checked(args)));
+runAll(compactQueries, "searchCompact");
 
 // ──── H. Creator demographics (search_persons: person filters + artwork join) ──
 
@@ -319,7 +323,7 @@ const demographicQueries = [
   { bornAfter: 1400, bornBefore: 1500, hasArtworks: true },
   { name: "Rembrandt", hasArtworks: true },
 ];
-for (const args of demographicQueries) attempt(() => vocabDb.searchPersons(checked(args, PERSON_KEYS)));
+runAll(demographicQueries, "searchPersons", PERSON_KEYS);
 
 // ──── I. Place hierarchy expansion (exercises recursive CTE) ────────────
 
@@ -332,7 +336,7 @@ const hierarchyQueries = [
   { productionPlace: "Italy", expandPlaceHierarchy: true, maxResults: 25 },
   { productionPlace: "Netherlands", expandPlaceHierarchy: true, productionRole: "printmaker", maxResults: 25 },
 ];
-for (const args of hierarchyQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(hierarchyQueries);
 
 // ──── J. aboutActor (exercises multi-field [subject, creator] filter) ───
 
@@ -345,7 +349,7 @@ const actorQueries = [
   { aboutActor: "Willem", maxResults: 25 },
   { aboutActor: "Amalia van Solms", maxResults: 25 },
 ];
-for (const args of actorQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(actorQueries);
 
 // ──── K. Date filters (different dateMatch modes) ───────────────────────
 
@@ -367,7 +371,7 @@ const dateQueries = [
   { creator: "Rembrandt", type: "print", creationDate: "164*" },
   { productionPlace: "Amsterdam", creationDate: "16*", type: "painting" },
 ];
-for (const args of dateQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(dateQueries);
 
 // ──── L. Dimension filters ──────────────────────────────────────────────
 
@@ -379,7 +383,7 @@ const dimensionQueries = [
   { type: "painting", material: "canvas", minHeight: 200, minWidth: 200 },
   { type: "drawing", maxHeight: 15, maxWidth: 15 },
 ];
-for (const args of dimensionQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(dimensionQueries);
 
 // ──── N. imageAvailable modifier ────────────────────────────────────────
 
@@ -390,7 +394,7 @@ const imageQueries = [
   { productionPlace: "Japan", imageAvailable: true },
   { subject: "landscape", type: "painting", imageAvailable: true },
 ];
-for (const args of imageQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(imageQueries);
 
 // ──── O. Array params (multi-value AND) ─────────────────────────────────
 
@@ -402,7 +406,7 @@ const arrayParamQueries = [
   { productionPlace: ["Amsterdam", "Haarlem"], type: "print" },
   { subject: ["landscape", "winter"], type: "painting" },
 ];
-for (const args of arrayParamQueries) attempt(() => vocabDb.search(checked(args)));
+runAll(arrayParamQueries);
 
 // ──── P. findSimilar methods (cache init + per-query lookups) ───────────
 // Use well-known artworks likely to have rich metadata.
@@ -436,7 +440,7 @@ const filterArtIdQueries = [
   { productionPlace: "Amsterdam" },
   { theme: "slavery", imageAvailable: true },
 ];
-for (const args of filterArtIdQueries) attempt(() => vocabDb.filterArtIds(checked(args, FILTER_ART_IDS_KEYS)));
+runAll(filterArtIdQueries, "filterArtIds", FILTER_ART_IDS_KEYS);
 
 console.error(`  → ${queryCount} queries executed.\n`);
 assert.deepEqual(unknownArgs, [], "queries pass params search() does not accept");
@@ -525,27 +529,15 @@ for (const sql of mappingsSql) {
 
     const drivesFromVocab = FACET_SQL.test(sql) && /^(SCAN|SEARCH) v\b/.test(firstTopLevelAccess(planRows, subqueryNodeIds));
 
-    if (drivesFromVocab) {
+    const isCacheInit = CACHE_INIT_MARKERS.some((marker) => sql.includes(marker));
+    if (drivesFromVocab || (dangerousTopLevel.length > 0 && !isCacheInit)) {
       failed++;
       failures.push({
         sql: sql.substring(0, 200),
         plan: planRows.map((r) => ({ detail: r.detail, inSubquery: subqueryNodeIds.has(r.id) })),
       });
     } else if (dangerousTopLevel.length > 0) {
-      // Check if this is an allowlisted cache-init query
-      const isCacheInit = CACHE_INIT_MARKERS.some((marker) => sql.includes(marker));
-      if (isCacheInit) {
-        cacheInitAllowed++;
-      } else {
-        failed++;
-        failures.push({
-          sql: sql.substring(0, 200),
-          plan: planRows.map((r) => ({
-            detail: r.detail,
-            inSubquery: subqueryNodeIds.has(r.id),
-          })),
-        });
-      }
+      cacheInitAllowed++;
     } else {
       passed++;
     }

@@ -6,7 +6,7 @@
  */
 
 import { parseProvenanceRaw } from "../../dist/provenance-peg.js";
-import { interpretPeriods, parseTemporalBounds } from "../../dist/provenance-interpret.js";
+import { interpretPeriods } from "../../dist/provenance-interpret.js";
 
 // ── Test helpers ─────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ const PROV_SKA2344 = `? Pieter Claesz van Ruijven (1624-1674) and Maria Simonsdr
 const PROV_SKA3981 = `…; ? estate inventory, Clara de Valaer (1584-1660), widow successfully of Eduart van Domselaer (1568-1624) and Hendrick van Domselaer (1580/81-1652), Amsterdam, 16 October 1660, as security ('een stuk synde twee pauwen ende een kint van Rembrant');{Bredius 1908, p. 223; Strauss <em>et al.</em> 1979, p. 461, doc. no. 1660/15 } ? estate inventory of her son, Tobias van Domselaer (1611-85), Amsterdam, September 1685 ('een groot schilderij met twee paeuwen van Rembrandt'); {Hofstede de Groot 1906, p. 419, doc. no. 359.} …; ? collection John Blackwood (?-1777), Soho Square, London;{The collector and dealer John Blackwood is known to have imported paintings from the Dutch Republic. His collection is mentioned in his 1777 will, but without specification of the individual works; London, The National Archives, Prerogative Court of Canterbury, inv. no. PROB 11/1036, 19 November 1777, Codicil p. 12.} ? his son, Colonel John Blackwood (?-1780), Cheshunt Nunnery, Hertfordshire;{According to his father's 1777 will, he was to inherit the 'pictures and bronzes and marble busts' in the 'for room up two pair of stairs'.} ? his widow, Catherine Ann Blackwood (? - 1804), Cheshunt Nunnery, Hertfordshire; ? her nephew, William Ralph Cartwright (1771-1850), Aynhoe Park, Northampton;{The collection of paintings and bronzes owned by Catherine Ann Blackwood were bequeathed to her nephew; London, The National Archives, Prerogative Court of Canterbury, inv. no. PROB 11/1405, 29 March 1804. According to The Gentleman's Magazine, XCV (1804), p. 431, the collection inherited by William Ralph Cartwright from his aunt Catherine Ann Blackwood had been formed by John Blackwood (?-1777).} first recorded in his collection in 1819;{Lent in that year to the British Institution's annual exhibition; see British Institution 1824, p. 162, no. 33.} his son, Sir Thomas Cartwright (1795-1850), Aynhoe Park, Northampton; his son, William Cornwallis Cartwright (1825-1915), Aynhoe Park, Northampton; last recorded in his collection in 1915;{Hofstede de Groot VI, 1915, p. 403, no. 968.} from whom purchased by the dealer Frederik Muller, Amsterdam, c. 1915;{Schmidt-Degener 1918, p. 3.} from whom purchased by Jean Joseph Marie Chabot (1857-1944), Rotterdam, Montreux, Brussels and Wassenaar, 1918 (on loan to the museum, November 1923 to 27 July 1942, SK-C-1124-I);{Schmidt-Degener 1918, p. 3.} from whom, with two other paintings, fl. 800,000, to Dr. Erhard Göpel, The Hague, for Adolf Hitler's Führermuseum, Linz, 21 July 1942 (inv. no. 2418);{Schwarz 2004, p. 146, no. XXII/10.} war recuperation, SNK, 9 November 1945 (inv. no. NK 2346);{Schwarz 2004, p. 146, no. XXII/10; MCCP website, no. 4299.} on loan from the SNK to the museum, June 1948 - 1960 (SK-C-1396); transferred to the museum, 1960`;
 
 // ══════════════════════════════════════════════════════════════════
-//  Phase A: Compatibility gate — PEG output matches regex on fixtures
+//  Phase A: Golden fixtures — whole provenance texts
 // ══════════════════════════════════════════════════════════════════
 
 section("Phase A: Golden fixtures");
@@ -82,12 +82,10 @@ section("Phase A: Golden fixtures");
 
   assertEq(raw.events.length, 16, "SK-A-3981: 16 events");
 
-  // Confiscation: regex parser classified "from whom...Führermuseum" as confiscation via keyword;
-  // PEG correctly classifies it as "sale" (structural: "from whom, to X"). Both are valid —
-  // the confiscation semantic is a Layer 2 concern. Accept either.
-  const confEvent = raw.events.find(e => e.transferType === "confiscation" ||
-    (e.transferType === "sale" && e.rawText?.includes("Führermuseum")));
-  assert(confEvent !== undefined, "SK-A-3981: Führermuseum event found (sale or confiscation)");
+  // Structurally "from whom, … to X" is a sale; confiscation is a Layer 2 reading.
+  const fuhrer = raw.events.find(e => e.rawText?.includes("Führermuseum"));
+  assertEq(fuhrer?.sequence, 13, "SK-A-3981: Führermuseum event is event 13");
+  assertEq(fuhrer?.transferType, "sale", "SK-A-3981: Führermuseum event is a sale");
 
   // War recuperation
   const recupEvent = raw.events.find(e => e.transferType === "recuperation");
@@ -136,8 +134,6 @@ section("Phase B: Layer 1 — PEG-specific");
 }
 
 {
-  // PEG parse failure → regex fallback
-  // Deliberately malformed to trigger fallback
   const raw = parseProvenanceRaw("");
   assertEq(raw.events.length, 0, "empty input → no events");
 }
@@ -239,7 +235,16 @@ section("Phase B: Layer 1 — PEG-specific");
 section("Phase C: Layer 2 — interpretation");
 
 {
-  // Temporal bound parsing
+  // Temporal bounds, read back through a one-event interpretPeriods.
+  const parseTemporalBounds = (dateExpression, dateYear, dateQualifier) => {
+    const [p] = interpretPeriods([{
+      sequence: 1, rawText: "", gap: false, transferType: "unknown", unsold: false, batchPrice: false,
+      uncertain: false, parties: [], dateExpression, dateYear, dateQualifier, location: null,
+      price: null, saleDetails: null, citations: [], isCrossRef: false, crossRefTarget: null, parseMethod: "peg",
+    }]);
+    return { earliest: p.beginYear, latest: p.beginYearLatest, rule: p.derivation.begin_year };
+  };
+
   const t1 = parseTemporalBounds("1808", 1808, null);
   assertEq(t1.earliest, 1808, "exact: earliest=1808");
   assertEq(t1.latest, 1808, "exact: latest=1808");
