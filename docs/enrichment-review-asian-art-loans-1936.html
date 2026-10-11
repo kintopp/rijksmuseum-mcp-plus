@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enrichment Review — 6 LLM-Assisted Results</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+  :root {
+    --bg: #f5f0e8; --surface: #fffdf8; --border: #d4c9b0;
+    --text: #2a2118; --text-muted: #7a6e5e; --accent: #8b4513;
+    --highlight: #fff3cd; --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: var(--accent); }
+  .subtitle { color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem; }
+
+  .summary { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .summary h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .summary-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .summary-item { font-family: var(--mono); font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; background: #eee8d8; }
+
+  .disclaimer { background: #fff3cd; border: 2px solid #e6c200; border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .disclaimer h2 { font-size: 1rem; margin-bottom: 0.5rem; color: #856404; }
+  .disclaimer p { font-size: 0.9rem; line-height: 1.6; color: #856404; }
+
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; }
+  .toc h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .toc-grid { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .toc-link { font-family: var(--mono); font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; text-decoration: none; color: var(--accent); background: #f5ece0; }
+  .toc-link:hover { background: var(--highlight); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
+  .card-header { background: #eee8d8; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  .card-header h2 { font-size: 1rem; font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; font-family: var(--mono); }
+
+  .card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 800px) { .card-body { grid-template-columns: 1fr; } .left { border-right: none !important; border-bottom: 1px solid var(--border); } }
+  .left, .right { padding: 1rem; }
+  .left { border-right: 1px solid var(--border); }
+
+  .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 500; }
+
+  .event-list { list-style: none; font-size: 0.82rem; max-height: 400px; overflow-y: auto; }
+  .event-list li { padding: 4px 0; border-bottom: 1px solid #f0ebe0; }
+  .event-list li:last-child { border-bottom: none; }
+  .event-list .seq { color: var(--text-muted); font-family: var(--mono); font-size: 0.75rem; min-width: 1.5em; display: inline-block; }
+  .event-list .type-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--accent); }
+  .event-list .highlight { background: var(--highlight); padding: 2px 4px; border-radius: 3px; }
+  .event-list .context { opacity: 0.6; }
+
+  .resolution-summary { font-size: 0.8rem; color: var(--text-muted); font-family: var(--mono); margin-bottom: 0.75rem; padding: 4px 8px; background: #eee8d8; border-radius: 4px; }
+
+  .enrichment-item { margin-bottom: 1rem; }
+  .enrichment-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
+  .enrichment-target { font-size: 0.82rem; font-family: var(--mono); }
+  .enrichment-targets { list-style: none; margin: 0.25rem 0; font-size: 0.8rem; font-family: var(--mono); color: var(--text-muted); }
+  .enrichment-targets li { padding: 1px 0 1px 0.6rem; border-left: 2px solid var(--border); margin-bottom: 1px; }
+  .enrichment-targets code { color: var(--accent); }
+  .reasoning { font-family: var(--sans); font-style: italic; color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem; background: #faf8f2; border-radius: 4px; border-left: 3px solid var(--accent); }
+
+  .back-to-top { position: fixed; bottom: 1rem; right: 1rem; background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; opacity: 0.8; }
+  .back-to-top:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Enrichment Review — 6 LLM-Assisted Results</h1>
+<p class="subtitle">Query: <code>type=loan, date=1936–1936</code>. Generated 2026-10-11.</p>
+
+<div class="disclaimer">
+  <h2>About this page</h2>
+  <p>Some provenance records in these results were enriched or classified by an LLM (large language model) because the provenance parser could not resolve them from text alone. Each enrichment below shows the method used and the LLM's reasoning for its decision. Methods include type/category classification, party disambiguation, validated deterministic rules, and structural corrections (location fixes, phantom event removal, event splitting).</p>
+  <p style="margin-top:0.5rem;">These classifications are automated and have <strong>not</strong> been individually verified or endorsed by the Rijksmuseum. The reasoning is provided for transparency so you can assess the quality of each decision.</p>
+</div>
+
+<div class="summary">
+  <h2>Task description</h2>
+  <p style="font-size:0.9rem;line-height:1.6;">The provenance parser automatically extracts structured ownership events from free-text provenance records written in the AAM (American Alliance of Museums) standard. It uses rule-based pattern matching to identify transfer types, parties, dates, locations, and prices. When the rules cannot resolve an event — for example, a bare name with no transfer keyword, or a merged party text that needs decomposition — an LLM (large language model) is used with art-historical domain context to make the classification. Every LLM decision is recorded with its method and reasoning for full traceability.</p>
+</div>
+
+<div class="summary">
+  <h2>Distribution</h2>
+  <div class="summary-grid">
+    <span class="summary-item">Total events: 78</span>
+    <span class="summary-item">Deterministic: 77</span>
+    <span class="summary-item">LLM events: 1</span>
+    <span class="summary-item">LLM parties: 5</span>
+    <span class="summary-item">Artworks: 1</span>
+  </div>
+  <div class="summary-grid" style="margin-top:0.5rem">
+    <span class="summary-item"><span class="badge" style="background:#6b4c9a;color:white;font-size:0.7rem;vertical-align:middle">LLM disambiguated</span> 3</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">llm_structural</span> 2</span>
+    <span class="summary-item"><span class="badge" style="background:#b85c00;color:white;font-size:0.7rem;vertical-align:middle">LLM correction missing_all_parties</span> 1</span>
+  </div>
+</div>
+
+
+<div class="toc">
+  <h2>Jump to artwork</h2>
+  <div class="toc-grid">
+    <a class="toc-link" href="#card-0">SK-A-2336</a>
+  </div>
+</div>
+
+
+<div class="card" id="card-0">
+  <div class="card-header">
+    <h2>SK-A-2336 — Christ Appearing to Mary Magdalen as a Gardener (Noli me Tangere)</h2>
+    <span style="font-size:0.8rem;color:var(--text-muted)">workshop of Peter Paul Rubens</span>
+  </div>
+  <div class="card-body">
+    <div class="left">
+      <div class="section-label">Provenance chain (LLM-enriched events highlighted)</div>
+      <ul class="event-list"><li class="context"><span class="seq">1.</span> <span class="type-tag">[collection]</span> collection Louis Bernard Coclers (1741-1817)</li>
+<li class="context"><span class="seq">2.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1808</span> from whom, fl. 5,000, to the dealer Jan Spaan, The Hague, by 1808</li>
+<li class="context"><span class="seq">3.</span> <span class="type-tag">[sale]</span> {L. Meerman, ‘An Unwritten Chapter of Dutch Collecting History: The Painting Collection of Pieter Smeth van Alphen (1753-1809)’, _Simiolus_ 40 (2018), p. 82.} from whom to Pieter de Smeth (1753-1809), Lord of Alphen and Rietveld, Amsterdam</li>
+<li class="context"><span class="seq">4.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1810</span> his sale, and Vollenhoven in De Bilt near Utrecht, Amsterdam (P. van der Schley et al.), 1 August 1810 _sqq_., no. 83 (‘Rubbens (Petrus Paulus) In een Landschap ziet men den Zaligmaker, in de gedaante van een Hovenier, zich aan Maria Magdelena vertoonen, welke voor hem in eene eerbiedige houding nederknielt op doek hoog 78, breed 69 duimen [204 x 180.5 cm]’), fl. 2,700, to the dealer Jeronimo de Vries for Lucretia Johanna van Winter (1785-1845), Amsterdam</li>
+<li class="context"><span class="seq">5.</span> <span class="type-tag">[by_descent]</span> {L. Meerman, ‘An Unwritten Chapter of Dutch Collecting History: The Painting Collection of Pieter Smeth van Alphen (1753-1809)’, _Simiolus_ 40 (2018), p. 50.} her husband, Jonkheer Hendrik Six, Lord of Hillegom (1790-1847), Amsterdam</li>
+<li class="highlight"><span class="seq">6.</span> <span class="type-tag">[sale unsold]</span> <span class="type-tag">1851</span> anonymous sale [Hendrik Six], Amsterdam (J. de Vries et al.), 25 November 1851, no. 43 (‘Petrus Paulus Rubbens. Maria Magdalena voor Jezus. De uit het graf verrezen Christus wordt door Maria herkend; zij is in aanbidding aan zijne voete gezonken. […] hoog 2 el, breed 1 d 75 d. Doeck), bought in at fl. 4,950</li>
+<li class="context"><span class="seq">7.</span> <span class="type-tag">[by_descent]</span> {Copy RKD.} his sons Jan Pieter Six (1824-99), Lord of Hillegom, and Pieter Hendrik Six (1827-1905), Lord of Vromade</li>
+<li class="highlight"><span class="seq">8.</span> <span class="type-tag">[sale]</span> <span class="type-tag">1908</span> from the latter’s heirs purchased by the museum with support from the Vereniging Rembrandt, 1908</li>
+<li class="context"><span class="seq">9.</span> <span class="type-tag">[loan]</span> <span class="type-tag">1936</span> on loan to the Dutch embassy, Brussels, from 1936</li>
+<li class="context"><span class="seq">10.</span> <span class="type-tag">[transfer]</span> <span class="type-tag">1953</span> transferred to the DRVK, 1953</li>
+<li class="context"><span class="seq">11.</span> <span class="type-tag">[loan]</span> <span class="type-tag">1982</span> on loan to the St Lambertuskerk, Etten-Leur, near Breda, since 1982</li></ul>
+    </div>
+    <div class="right">
+      <div class="section-label">Enrichments (1 event, 5 parties)</div>
+      <div class="resolution-summary">9 of 11 resolved deterministically, 2 with LLM enrichment</div>
+      
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#b85c00;color:white">LLM correction missing_all_parties</span>
+            <span class="enrichment-target">3 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 6 → <code>sale</code></li><li>Event 6, "Hendrik Six" → <code>sender</code></li><li>Event 6, "J. de Vries et al." → <code>agent</code></li></ul>
+          </div>
+          <div class="reasoning">The sale is attributed in brackets to [Hendrik Six], who was identified as the holder in event 5 (Jonkheer Hendrik Six, Lord of Hillegom, 1790-1847). He is therefore the sender/seller. The auction house 'J. de Vries et al.' is named explicitly and acts as agent. The lot was 'bought in' (i.e., not sold — the reserve was not met and the work was returned to the consignor), so there is no distinct buyer/receiver to identify. No receiver can be assigned beyond the implicit return to the seller. The bracket notation '[Hendrik Six]' is a standard anonymous-sale disclosure, confirming his identity with high confidence. The agent is explicitly named in the text.</div>
+        </div>
+
+        <div class="enrichment-item">
+          <div class="enrichment-header">
+            <span class="badge" style="background:#6b4c9a;color:white">LLM disambiguated</span>
+            <span class="enrichment-target">3 enrichments (one shared explanation)</span>
+            <ul class="enrichment-targets"><li>Event 8, "Pieter Hendrik Six's heirs" → <code>sender</code></li><li>Event 8, "Rijksmuseum" → <code>receiver</code></li><li>Event 8, "Vereniging Rembrandt" → <code>agent</code></li></ul>
+          </div>
+          <div class="reasoning">This is a complex 'from X purchased by Y with support from Z' pattern. The anaphoric reference 'the latter's heirs' refers to Pieter Hendrik Six (from event 7). The museum is the Rijksmuseum (based on object number SK-A prefix). Vereniging Rembrandt provided financial support, making them an agent in the transaction.</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<a href="#" class="back-to-top">↑ Top</a>
+</body>
+</html>

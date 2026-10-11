@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Similar to: Gallant Conversation, Known as ‘The Paternal Admonition’</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         margin: 0 auto; padding: 20px; background: #fafafa; color: #222; }
+  h1 { font-size: 1.4em; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 0.85em; margin-bottom: 20px; }
+
+  .query-header { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                  padding: 20px; margin-bottom: 24px;
+                  display: flex; align-items: flex-start; gap: 20px; }
+  .query-thumb { width: 300px; max-height: 420px; object-fit: contain; border-radius: 4px;
+                 flex-shrink: 0; background: #eee; }
+  .query-thumb.no-image { height: 200px; display: flex; align-items: center;
+                          justify-content: center; color: #bbb; font-size: 0.9em; }
+  .query-info { flex: 1; min-width: 0; }
+  .query-info h2 { font-size: 1.2em; margin-bottom: 4px; }
+  .query-info .obj-num { font-size: 0.85em; color: #0066cc; text-decoration: none; }
+  .query-info .obj-num:hover { text-decoration: underline; }
+  .query-info .creator { font-size: 0.9em; color: #555; margin-top: 2px; }
+  .type-badge { display: inline-block; font-size: 0.7em; background: #e8e8e8;
+                padding: 1px 6px; border-radius: 3px; margin-left: 6px; color: #555; }
+
+  .query-metadata { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .meta-section { font-size: 0.8em; line-height: 1.5; }
+  .meta-section-label { font-weight: 600; font-size: 0.75em; text-transform: uppercase;
+                        letter-spacing: 0.03em; margin-bottom: 3px; }
+  .meta-section-label.iconclass { color: #1565c0; }
+  .meta-section-label.lineage { color: #6a1b9a; }
+  .meta-section-label.description { color: #e65100; }
+  .meta-section-label.depicted-person { color: #2e7d32; }
+  .meta-section-label.depicted-place { color: #4e342e; }
+  .meta-section-label.theme { color: #5d4037; }
+  .meta-section-label.related-variant { color: #7b1fa2; }
+  .meta-section-label.related-object { color: #ad1457; }
+  .meta-section .meta-content { color: #555; }
+  .meta-section .meta-content a { text-decoration: none; }
+  .meta-section .meta-content a:hover code { text-decoration: underline; }
+  .meta-section .meta-content code { font-family: "SF Mono", "Menlo", monospace;
+                                      font-size: 0.88em; background: #f0f4f8;
+                                      padding: 1px 5px; border-radius: 3px; color: #1565c0; }
+  .meta-section .meta-content .qualifier { background: #f3e5f5; color: #6a1b9a; }
+  .meta-section .meta-content a:hover .qualifier { text-decoration: underline; }
+  .meta-desc { color: #555; font-size: 1em; line-height: 1.45; }
+
+  .signal-rows { display: flex; flex-direction: column; gap: 20px; }
+
+  .signal-row { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                padding: 16px; overflow: hidden; }
+  .row-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .row-label { font-size: 0.95em; font-weight: 600; }
+  .row-count { font-size: 0.75em; color: #888; }
+  .row-method { font-size: 0.72em; color: #888; line-height: 1.3; margin-bottom: 12px;
+                max-width: 80ch; }
+  .row-method a { color: #0066cc; }
+  .row-method strong { font-weight: 600; color: #666; }
+  .empty-row { font-size: 0.85em; color: #999; font-style: italic; padding: 12px 0; }
+
+  .strip-container { position: relative; }
+  .strip-container::after { content: ''; position: absolute; top: 0; right: 0;
+                            width: 40px; height: 100%; pointer-events: none;
+                            background: linear-gradient(to right, transparent, rgba(255,255,255,0.8)); }
+  .cards-strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px;
+                 scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .cards-strip::-webkit-scrollbar { height: 6px; }
+  .cards-strip::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 3px; }
+  .cards-strip::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  .cards-strip::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+  .result-card { flex: 0 0 200px; scroll-snap-align: start; display: flex;
+                 flex-direction: column; gap: 6px; padding: 10px;
+                 border-radius: 6px; border: 1px solid #f0f0f0; }
+  .result-card:hover { border-color: #ddd; background: #fafafa; }
+  .result-thumb { width: 100%; aspect-ratio: 3/4; object-fit: contain; border-radius: 4px;
+                  background: #f5f5f5; }
+  .result-thumb.no-image { display: flex; align-items: center; justify-content: center;
+                           background: #f0f0f0; color: #bbb; font-size: 0.8em; }
+  .result-thumb-link { display: block; }
+  .result-info { font-size: 0.78em; }
+  .result-info .rank-sim { font-weight: 600; color: #333; }
+  .result-info .title { margin-top: 2px; color: #444; display: -webkit-box;
+                        -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .result-info .creator { color: #666; margin-top: 1px; white-space: nowrap;
+                          overflow: hidden; text-overflow: ellipsis; }
+  .result-info .obj-link { font-size: 0.85em; color: #0066cc; text-decoration: none; }
+  .result-info .obj-link:hover { text-decoration: underline; }
+
+  .card-detail { font-size: 0.7em; margin-top: 4px; padding-top: 4px;
+                 border-top: 1px solid #f0f0f0; color: #888; line-height: 1.35; }
+  .card-detail a { text-decoration: none; }
+  .card-detail a:hover code { text-decoration: underline; }
+  .card-detail code { font-family: "SF Mono", "Menlo", monospace; font-size: 0.9em;
+                      background: #f0f4f8; padding: 0px 3px; border-radius: 2px; color: #1565c0; }
+  .card-detail .qualifier { background: #f3e5f5; color: #6a1b9a; }
+  .card-detail a:hover .qualifier { text-decoration: underline; }
+  .card-detail .desc-snippet { color: #777; display: -webkit-box;
+                               -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+                               overflow: hidden; font-style: italic; }
+
+  .see-all-card { flex: 0 0 160px; scroll-snap-align: start; display: flex;
+                  align-items: center; justify-content: center; padding: 20px;
+                  border-radius: 6px; border: 1px dashed #ccc; background: #f8f8f8;
+                  text-decoration: none; color: #0066cc; font-size: 0.85em;
+                  text-align: center; line-height: 1.4; min-height: 200px; }
+  .see-all-card:hover { background: #f0f0f0; border-color: #aaa; }
+
+  .mode-badge { display: inline-block; font-size: 0.55em; color: #fff; padding: 1px 4px;
+                border-radius: 3px; margin-left: 2px; vertical-align: middle; }
+
+  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0;
+            font-size: 0.75em; color: #999; }
+  .footer a { color: #999; text-decoration: underline; }
+  .footer a:hover { color: #666; }
+
+  @media (max-width: 700px) {
+    .query-header { flex-direction: column; }
+    .query-thumb { width: 100%; max-height: 300px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Find Similar: Gallant Conversation, Known as ‘The Paternal Admonition’</h1>
+<p class="subtitle">Visual: 30 | Iconclass: 30 | Description: 30 | Related Object: 2 | 89 unique | pooled: 4+ forms | 2026-10-11 07:16</p>
+
+<div class="query-header">
+  <img class="query-thumb" src="https://iiif.micr.io/RxOuM/full/300,/0/default.jpg" alt="" loading="lazy"
+           onerror="this.style.display='none'">
+  <div class="query-info">
+    <h2>Gallant Conversation, Known as ‘The Paternal Admonition’<span class="type-badge">painting</span></h2>
+    <div class="creator">Gerard ter Borch (II) (1654)</div>
+    <a class="obj-num" href="https://www.rijksmuseum.nl/en/collection/SK-A-404" target="_blank">SK-A-404</a>
+    <div class="query-metadata"><div class="meta-section">
+      <div class="meta-section-label description">Description</div>
+      <div class="meta-desc">Galante konversatie; bekend als 'De vaderlijke vermaning'. Interieur met een staande vrouw die wordt toegesproken door een zittende officier. Naast hem een zittende vrouw die uit een glas drinkt. Rechts een hond. Op de tafel een kandelaar met kaars en een opengeklapte spiegel.</div>
+    </div><div class="meta-section">
+      <div class="meta-section-label iconclass">Iconclass</div>
+      <div class="meta-content"><a href="https://iconclass.org/33A35" target="_blank"><code>33A35</code></a> conversation, dialogue; conversation piece &middot; <a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> drinking &middot; <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a> dog &middot; <a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> officer</div>
+    </div><div class="meta-section">
+      <div class="meta-section-label related-object">Related Object</div>
+      <div class="meta-content"><em>related object</em></div>
+    </div></div>
+  </div>
+</div>
+
+<div class="signal-rows">
+  <div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#00838f">Visual</span>
+      <span class="row-count">30 of 31+ results</span>
+    </div>
+    <div class="row-method">The Rijksmuseum&rsquo;s own image-based visual similarity model. Most artworks have digital images.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-721" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/EcLEs/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1</div>
+      <div class="title">A Musical Company</div>
+      <div class="creator">Jan Verkolje (I)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-721" target="_blank">SK-A-721</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1989" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hwQyC/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2</div>
+      <div class="title">Zelfportret van Wybrand Hendriks (1744-1831), met zijn vrouw Agatha Ketel (1736-1802)</div>
+      <div class="creator">Wybrand Hendriks</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1989" target="_blank">SK-A-1989</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4701" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/tkrHY/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3</div>
+      <div class="title">The Princess of Orange Visiting the Work-shop of Bartholomeus van der Helst</div>
+      <div class="creator">Hendrik Jacobus Scholten</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4701" target="_blank">SK-A-4701</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-249" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/LkLSS/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4</div>
+      <div class="title">Man and Woman at the Breakfast Table</div>
+      <div class="creator">Gabriël Metsu</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-249" target="_blank">SK-A-249</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1360" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/CVQmG/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5</div>
+      <div class="title">Portrait of Pieter Cornelis Hasselaer, Adviser to the Dutch East India Company and Burgomaster of Amsterdam, with his Family</div>
+      <div class="creator">George van der Mijn</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1360" target="_blank">SK-A-1360</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3877" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/kQRLY/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6</div>
+      <div class="title">Historical Scene with William the Silent?</div>
+      <div class="creator">Nicolaas Pieneman (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3877" target="_blank">SK-A-3877</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1851" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ggzwI/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7</div>
+      <div class="title">Merry Company</div>
+      <div class="creator">Jan Josef Horemans (II)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1851" target="_blank">SK-A-1851</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2418" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/LyMwd/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8</div>
+      <div class="title">Portret van Aletta Pancras (1649-1707)</div>
+      <div class="creator">Gerard ter Borch (II)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2418" target="_blank">SK-A-2418</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-230" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/PMpOJ/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9</div>
+      <div class="title">The Sick Woman</div>
+      <div class="creator">Jan Havicksz. Steen</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-230" target="_blank">SK-C-230</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-1475" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/KlkJz/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10</div>
+      <div class="title">Portrait of Petrus Bliek, Remonstrant Minister in Amsterdam, with his Wife Cornelia Drost</div>
+      <div class="creator">Hendrik Pothoven</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-1475" target="_blank">SK-C-1475</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1695" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/DnXHP/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11</div>
+      <div class="title">Reyer Reyersz van der Burch (1630-1695), Ammunition Officer attached to the Arsenal of the States-General, Delft, with his Wife Geertruid Graswinckel and their Children Frank, Cornelis, Reyer, Maria and Alida</div>
+      <div class="creator">attributed to Cornelis de Man</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1695" target="_blank">SK-A-1695</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-291" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/NvhUL/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12</div>
+      <div class="title">Seventeenth-century Interior</div>
+      <div class="creator">Henri Leys (baron)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-291" target="_blank">SK-C-291</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1892-A-2540" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/NiUeJ/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#13</div>
+      <div class="title">Twee jonge vrouwen aan een tafel</div>
+      <div class="creator">David Bles</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1892-A-2540" target="_blank">RP-T-1892-A-2540</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1130" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ZyHOq/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#14</div>
+      <div class="title">Sunday Morning</div>
+      <div class="creator">Hendrik Jacobus Scholten</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1130" target="_blank">SK-A-1130</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-388" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ShYnc/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#15</div>
+      <div class="title">Peasant wedding</div>
+      <div class="creator">Jan Havicksz. Steen</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-388" target="_blank">SK-A-388</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3335" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/LPHdQ/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#16</div>
+      <div class="title">Distinguished Company in a Room</div>
+      <div class="creator">manner of Anthonie Palamedesz</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3335" target="_blank">SK-A-3335</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1501" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/OUYYD/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#17</div>
+      <div class="title">The Soldier's Farewell</div>
+      <div class="creator">Charles van Beveren</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1501" target="_blank">SK-A-1501</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3405" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/KhcGE/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#18</div>
+      <div class="title">The Casino</div>
+      <div class="creator">follower of Pietro Longhi</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3405" target="_blank">SK-A-3405</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2574" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/pWxcX/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#19</div>
+      <div class="title">The Draughts Players</div>
+      <div class="creator">Michael Sweerts</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2574" target="_blank">SK-A-2574</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2320-A" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/bfhQE/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#20</div>
+      <div class="title">Triptych: Allegory of Art Training</div>
+      <div class="creator">copy after Gerrit Dou</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2320-A" target="_blank">SK-A-2320-A</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2419" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/bMqKW/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#21</div>
+      <div class="title">Portrait of Suzanna Cornelia Mogge and her Daughter Johanna Ferdinanda van Collen</div>
+      <div class="creator">Hermanus Numan</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2419" target="_blank">SK-A-2419</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2836" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/szfbn/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#22</div>
+      <div class="title">Family Group</div>
+      <div class="creator">Pieter Codde (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2836" target="_blank">SK-A-2836</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-294" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/aozNk/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#23</div>
+      <div class="title">Magdalena Moons Begging her Fiancé to Postpone the Storming of Leiden, 1574</div>
+      <div class="creator">Simon Opzoomer</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-C-294" target="_blank">SK-C-294</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-00-1963" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/YzbQX/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#24</div>
+      <div class="title">Familiegroep in interieur</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-00-1963" target="_blank">RP-T-00-1963</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-386" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/qYUHU/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#25</div>
+      <div class="title">Interior with a Woman Feeding a Parrot, Known as ‘The Parrot Cage’</div>
+      <div class="creator">Jan Havicksz. Steen</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-386" target="_blank">SK-A-386</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1912" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/UYGuL/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#26</div>
+      <div class="title">Portrait of a Woman and a Man in an Interior</div>
+      <div class="creator">Matthias Wulfraet</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1912" target="_blank">SK-A-1912</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-293" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/keTFT/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#27</div>
+      <div class="title">Interior with a Mother Combing Her Child’s Hair, Known as ‘Maternal Care’</div>
+      <div class="creator">Caspar Netscher</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-293" target="_blank">SK-A-293</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-673" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/CYwJo/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#28</div>
+      <div class="title">Interior with Lace-Worker and a Visitor</div>
+      <div class="creator">Quiringh Gerritsz. van Brekelenkam</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-673" target="_blank">SK-A-673</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3745" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/FlHnr/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#29</div>
+      <div class="title">De landschapschilder Dirk Dalens III (1688-1753) met zijn tweede echtgenote Maria Schaack (gest. 1766) en de kinderen Anna (geb 1725), Willem (1737-60) en Jacobus (1741-63)</div>
+      <div class="creator">Cornelis Troost (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-3745" target="_blank">SK-A-3745</a>
+    </div>
+    
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2260" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/pbpXa/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#30</div>
+      <div class="title">Two Ladies at their Sewing</div>
+      <div class="creator">Alexander Hugo Bakker Korff</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-2260" target="_blank">SK-A-2260</a>
+    </div>
+    
+  </div>
+        <a class="see-all-card" href="https://www.rijksmuseum.nl/en/collection/visual/search?objectNodeId=c7e6ee5e46db1ef891d311eff9f9b27e" target="_blank">
+         See all 31+<br>visual matches<br>on rijksmuseum.nl &rarr;
+       </a>
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#1565c0">Iconclass</span>
+      <span class="row-count">30 results</span>
+    </div>
+    <div class="row-method">Artworks sharing the same <a href='https://iconclass.org' target='_blank'>Iconclass</a> subject codes. Deeper codes (more specific scenes) that appear on fewer artworks contribute more. Single shallow matches are pruned.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-2405" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/goewK/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 139.80</div>
+      <div class="title">Galante conversatie</div>
+      <div class="creator">Willem de Koning (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-2405" target="_blank">RP-P-1905-2405</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/33A35" target="_blank"><code>33A35</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-54.978" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/KaZdp/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 139.80</div>
+      <div class="title">Interieur met drie figuren die met elkaar in gesprek zijn</div>
+      <div class="creator">William Unger (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-54.978" target="_blank">RP-P-OB-54.978</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/33A35" target="_blank"><code>33A35</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1661" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/VAgzp/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 72.10</div>
+      <div class="title">Jan van Gelder (1647-73), Naval Captain, Stepson of Michiel Adriaensz de Ruyter</div>
+      <div class="creator">Jan Andrea Lievens</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-1661" target="_blank">SK-A-1661</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1953-226" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/uxogu/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Cornelis Troost (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-1953-226" target="_blank">RP-T-1953-226</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.072" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/HDBCG/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Jan Punt</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.072" target="_blank">RP-P-OB-70.072</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.074" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/qNWIM/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Jan Punt (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.074" target="_blank">RP-P-OB-70.074</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.073" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/CRyAx/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Jan Punt (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.073" target="_blank">RP-P-OB-70.073</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.181" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/qykqv/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Pieter Tanjé</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.181" target="_blank">RP-P-OB-70.181</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.182" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/nWFqd/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Pieter Tanjé (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-70.182" target="_blank">RP-P-OB-70.182</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1918-1759" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/MRFYg/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Pieter Tanjé (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1918-1759" target="_blank">RP-P-1918-1759</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/BI-1924-384-1(V)" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 72.10</div>
+      <div class="title">Twee officieren in een mensenmenigte</div>
+      <div class="creator">Alexander Ver Huell</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/BI-1924-384-1(V)" target="_blank">BI-1924-384-1(V)</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-4-153" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/PvkFX/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 72.10</div>
+      <div class="title">Corps de Garde van Hollandsche Officiers / Corps de Garde des Officiers Hollandois</div>
+      <div class="creator">Pieter Tanjé (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-1-4-153" target="_blank">KOG-ZG-1-4-153</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-133" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/zKvcP/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#13 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Jan Punt (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-133" target="_blank">KOG-ZG-2-133</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-138" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/DtXQc/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#14 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Jean Benoit Winckler (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-138" target="_blank">KOG-ZG-2-138</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-139" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/Fpkzg/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#15 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Charles Corbutt (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-139" target="_blank">KOG-ZG-2-139</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-140" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/qQsyB/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#16 &mdash; 72.10</div>
+      <div class="title">Wachtlokaal met lezende, rokende en kaartspelende officieren</div>
+      <div class="creator">Jan Punt (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/KOG-ZG-2-140" target="_blank">KOG-ZG-2-140</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/45D322" target="_blank"><code>45D322</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-164" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/ZYqoP/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#17 &mdash; 67.70</div>
+      <div class="title">Gesprek temidden van grafmonumenten</div>
+      <div class="creator">Jan van Somer (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-164" target="_blank">RP-P-1909-164</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/33A35" target="_blank"><code>33A35</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.325" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/YbnCr/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#18 &mdash; 67.70</div>
+      <div class="title">Gesprek temidden van grafmonumenten</div>
+      <div class="creator">Jan van Somer (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.325" target="_blank">RP-P-OB-17.325</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/33A35" target="_blank"><code>33A35</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-2003-84" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#19 &mdash; 67.70</div>
+      <div class="title">Man en een vrouw in een Parijs café</div>
+      <div class="creator">Cor Hund (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-2003-84" target="_blank">RP-T-2003-84</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/33A35" target="_blank"><code>33A35</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-12641-2" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#20 &mdash; 67.70</div>
+      <div class="title">Fotoreproductie van het schilderij 'Galante conversatie', bekend als ‘De vaderlijke vermaning’, door Gerard ter Borch (II)</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-F-00-12641-2" target="_blank">RP-F-00-12641-2</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/33A35" target="_blank"><code>33A35</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1960-523" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/LCNAK/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#21 &mdash; 57.10</div>
+      <div class="title">Rokende man en drinkende vrouw in een prieel</div>
+      <div class="creator">Cornelis Dusart (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1960-523" target="_blank">RP-P-1960-523</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1890-A-15451" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/yMnsO/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#22 &mdash; 57.10</div>
+      <div class="title">Drinkende dame</div>
+      <div class="creator">Jan van Somer</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1890-A-15451" target="_blank">RP-P-1890-A-15451</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1890-A-15448" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/thvPw/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#23 &mdash; 57.10</div>
+      <div class="title">Herberg met drinkende mannen</div>
+      <div class="creator">Jan van Somer (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1890-A-15448" target="_blank">RP-P-1890-A-15448</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1910-1492" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/noiSp/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#24 &mdash; 57.10</div>
+      <div class="title">Mannen en een jongen aan een tafel</div>
+      <div class="creator">Jan Thomas (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1910-1492" target="_blank">RP-P-1910-1492</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-H-1097" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/diSMo/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#25 &mdash; 57.10</div>
+      <div class="title">Drinkende dame</div>
+      <div class="creator">Wallerant Vaillant</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-H-1097" target="_blank">RP-P-H-1097</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1911-108" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/AaVPF/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#26 &mdash; 57.10</div>
+      <div class="title">Drinkende dame</div>
+      <div class="creator">Wallerant Vaillant (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1911-108" target="_blank">RP-P-1911-108</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.463" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/dGnoa/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#27 &mdash; 57.10</div>
+      <div class="title">Drinkende dame</div>
+      <div class="creator">Wallerant Vaillant (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.463" target="_blank">RP-P-OB-17.463</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.589" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/oisqR/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#28 &mdash; 57.10</div>
+      <div class="title">Vrolijk gezelschap op een terras</div>
+      <div class="creator">Nicolaas Verkolje (mentioned on object), Nicolaas Verkolje (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.589" target="_blank">RP-P-OB-17.589</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1937-340" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/bIIkD/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#29 &mdash; 57.10</div>
+      <div class="title">Vrolijk gezelschap op een terras</div>
+      <div class="creator">Nicolaas Verkolje</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1937-340" target="_blank">RP-P-1937-340</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.590" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/HdCZu/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#30 &mdash; 57.10</div>
+      <div class="title">Vrolijk gezelschap op een terras</div>
+      <div class="creator">Nicolaas Verkolje (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.590" target="_blank">RP-P-OB-17.590</a>
+    </div>
+    <div class="card-detail"><a href="https://iconclass.org/41C12" target="_blank"><code>41C12</code></a> <a href="https://iconclass.org/34B11" target="_blank"><code>34B11</code></a></div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#e65100">Description</span>
+      <span class="row-count">30 results</span>
+    </div>
+    <div class="row-method">Artworks with semantically similar Dutch catalogue descriptions. Shared generic structural phrases, (&ldquo;Links een X, rechts een Y&rdquo;) can artificially inflate scores for visually dissimilar works.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-2405" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/goewK/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 0.87</div>
+      <div class="title">Galante conversatie</div>
+      <div class="creator">Willem de Koning (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-2405" target="_blank">RP-P-1905-2405</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Interieur met een staande vrouw die wordt toegesproken door een zittende officier. Naast hem een zittende vrouw die uit een glas drinkt. Rechts een hond. Op de […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4844" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/CwtnX/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 0.69</div>
+      <div class="title">Gallant Company</div>
+      <div class="creator">Pieter Codde (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4844" target="_blank">SK-A-4844</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Galant Gezelschap of De terugkeer van de jagers. Interieur waarin twee mannen van de jacht terugkeren met geschoten wild: een haas en twee patrijzen. Een […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2015-26-530" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/lrRFA/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#3 &mdash; 0.68</div>
+      <div class="title">Visitekaartje van prenthandelaar Edmond Sagot te Parijs</div>
+      <div class="creator">Alexandre Lunois (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2015-26-530" target="_blank">RP-P-2015-26-530</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Interieur met een zittende man en vrouw, samen bekijken ze een prent die de vrouw uit een prentstandaard heeft gehaald. Rechtsvoor een tafeltje met bloemen en […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-H-1096" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/axGfU/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#4 &mdash; 0.67</div>
+      <div class="title">Herberginterieur</div>
+      <div class="creator">Wallerant Vaillant (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-H-1096" target="_blank">RP-P-H-1096</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Herberginterieur met twee mannen die onder het genot van een pijp en een flesje drank een gesprek voeren. Op de achtergrond een man en een vrouw.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1911-107" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/vJidk/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#5 &mdash; 0.67</div>
+      <div class="title">Herberginterieur</div>
+      <div class="creator">Wallerant Vaillant (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1911-107" target="_blank">RP-P-1911-107</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Herberginterieur met twee mannen die onder het genot van een pijp en een flesje drank een gesprek voeren. Op de achtergrond een man en een vrouw.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.462" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/QDMVR/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#6 &mdash; 0.67</div>
+      <div class="title">Herberginterieur</div>
+      <div class="creator">Wallerant Vaillant (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-17.462" target="_blank">RP-P-OB-17.462</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Herberginterieur met twee mannen die onder het genot van een pijp en een flesje drank een gesprek voeren. Op de achtergrond een man en een vrouw.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-5291" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/vnvbO/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#7 &mdash; 0.67</div>
+      <div class="title">Elegant gezelschap in een interieur</div>
+      <div class="creator">Jan Lamsvelt (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-5291" target="_blank">RP-P-1905-5291</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">In een gedecoreerd interieur zitten en staan elegant geklede figuren rond een tafel druk te converseren. Op de voorgrond wordt een vrouw het hof gemaakt. Prent […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-61.653" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/NSRwc/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#8 &mdash; 0.66</div>
+      <div class="title">Zes boeren en herbergierster in herberg</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-61.653" target="_blank">RP-P-OB-61.653</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Interieur van een herberg met boeren die in gesprek zijn. Achter de tafel staat een de herbergierster met een kan in de hand. Rechts op de voorgrond een hond.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-2015-41-466" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/vuGqr/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#9 &mdash; 0.66</div>
+      <div class="title">Meisje met een kan</div>
+      <div class="creator">Nelly Spoor (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-T-2015-41-466" target="_blank">RP-T-2015-41-466</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">In een interieur zit een meisje op de grond naast een tafel. Voor haar staat een mand met het deksel open. Het meisje houdt een glazen kan vast. Naast haar […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1894-A-18310" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/wXIZF/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#10 &mdash; 0.66</div>
+      <div class="title">Man en vrouw met een kan</div>
+      <div class="creator">Johannes de Groot (II)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1894-A-18310" target="_blank">RP-P-1894-A-18310</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Bij een tafel houden een vrouw en een man beiden een kan vast. De vrouw heeft een fluitglas in de hand, waar de man op wijst.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1953-160" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hIMTt/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#11 &mdash; 0.66</div>
+      <div class="title">Gezelschap in een herberg</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1953-160" target="_blank">RP-P-1953-160</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Interieur van een herberg met mannen en vrouwen die roken en drinken. De herbergierster zet een kan drank op tafel. Rechts op de achtergrond staan twee mannen […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1885-A-9890" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/AjqmM/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#12 &mdash; 0.66</div>
+      <div class="title">Gezelschap in een herberg</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1885-A-9890" target="_blank">RP-P-1885-A-9890</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Interieur van een herberg met mannen en vrouwen die roken en drinken. De herbergierster zet een kan drank op tafel. Rechts op de achtergrond staan twee mannen […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1892-A-17381" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/oOtSn/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#13 &mdash; 0.66</div>
+      <div class="title">Gezelschap in een herberg</div>
+      <div class="creator">Cornelis de Wael</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1892-A-17381" target="_blank">RP-P-1892-A-17381</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Interieur van een herberg met mannen en vrouwen die roken en drinken. De herbergierster zet een kan drank op tafel. Rechts op de achtergrond staan twee mannen […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2014-66-2" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/HzEla/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#14 &mdash; 0.66</div>
+      <div class="title">Kroegscène</div>
+      <div class="creator">Justus van den Nijpoort (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2014-66-2" target="_blank">RP-P-2014-66-2</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Interieur van een herberg. Een jonge vrouw drait zich om naar een man met een glas die achter haar staat. Links een kind met een kruik aan de mond, rechts een […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2010-221-676" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#15 &mdash; 0.66</div>
+      <div class="title">Gezelschap om tafel</div>
+      <div class="creator">Metten Teunis Koornstra (signed by artist)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-2010-221-676" target="_blank">RP-P-2010-221-676</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Gezelschap om tafel waarop een wijnglas staat, waar de vrouw onder hen naar reikt.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-62.367" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/bEaaG/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#16 &mdash; 0.66</div>
+      <div class="title">Man in gesprek met een vrouw bij een volière</div>
+      <div class="creator">Vincent Laurensz. van der Vinne (II) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-62.367" target="_blank">RP-P-OB-62.367</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Een man is in gesprek met een vrouw, die met en lege mand bij het hek staat van een volière. Links op het hek een pauw. Zinnebeeld op het vertrouwen dat men […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-1873" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/eUmvG/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#17 &mdash; 0.66</div>
+      <div class="title">Man toont priester een prent met Napoleon Bonaparte</div>
+      <div class="creator">Hippolyte Bellangé (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1909-1873" target="_blank">RP-P-1909-1873</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">In een interieur wijst een arme vader van twee kinderen op een prent met Napoleon Bonaparte, die naast de haard hangt. Hij zegt tegen de priester in de stoel […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.010" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/rzwMI/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#18 &mdash; 0.66</div>
+      <div class="title">Conversatie tussen een man en een vrouw</div>
+      <div class="creator">Daniel Nikolaus Chodowiecki</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.010" target="_blank">RP-P-OB-14.010</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Een man en een vrouw converseren op 'geaffecteerde' wijze met elkaar. Ze zijn deftig gekleed en praten met veel ingestudeerde gebaren. Rechtsboven genummerd: 3.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1887-A-11656" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/hjyJL/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#19 &mdash; 0.66</div>
+      <div class="title">Interieur met lezende man</div>
+      <div class="creator">Jan Chalon</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1887-A-11656" target="_blank">RP-P-1887-A-11656</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Interieur van een huis. Een man zit op een stoel onder een wandklok en leest. Twee vrouwen praten met elkaar door een open raam. Een hond op de voorgrond.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1968-154" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/wuTSN/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#20 &mdash; 0.65</div>
+      <div class="title">Twee mannen flirten met een jonge vrouw</div>
+      <div class="creator">Nicolas de Larmessin (III) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1968-154" target="_blank">RP-P-1968-154</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Scène uit een vertelling van La Fontaine, waarin twee mannen aanvankelijk beweren de vader van een meisje te zijn, maar die bewering laten varen als zij […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-34.519" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/oMAwV/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#21 &mdash; 0.65</div>
+      <div class="title">Soldaten bij een kanon</div>
+      <div class="creator">Stefano della Bella (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-34.519" target="_blank">RP-P-OB-34.519</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Twee zittende soldaten praten met een staande soldaat achter een kanon. Voor het kanon zit een geknielde man met gebogen hoofd. Op de achtergrond een […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4464" target="_blank">
+         <div class="result-thumb no-image">No image</div>
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#22 &mdash; 0.65</div>
+      <div class="title">Het kantoor van een ontvanger</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/SK-A-4464" target="_blank">SK-A-4464</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Het kantoor van een ontvanger. Rechts zit een klerk aan een tafel achter een opengeslagen boek en ontvangt van een staande vrouw geldstukken. Op een bankje […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/BK-1973-4" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/WvIde/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#23 &mdash; 0.65</div>
+      <div class="title">Schaal met clematis</div>
+      <div class="creator">workshop of Émile Gallé</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/BK-1973-4" target="_blank">BK-1973-4</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Licht concave bodem, ovaal, geschulpt lichaam van kleurloos glas. Dubbele Überfang in paars en blauw. Het decor, een clematis, in twee etsgangen aangebracht, […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-H-R-10" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/BMXfM/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#24 &mdash; 0.65</div>
+      <div class="title">Boerenpaar bij een tafel</div>
+      <div class="creator">Jonas Suyderhoef (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-H-R-10" target="_blank">RP-P-H-R-10</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Een boerenvrouw zit aan een tafel met een glas in de hand. Naast haar een boer die op haar glas wijst en met de kan in zijn handen aanstalten maakt om bij te […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-60.668" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/dxBqS/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#25 &mdash; 0.65</div>
+      <div class="title">Boerenpaar bij een tafel</div>
+      <div class="creator">Jonas Suyderhoef (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-60.668" target="_blank">RP-P-OB-60.668</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Een boerenvrouw zit aan een tafel met een glas in de hand. Naast haar een boer die op haar glas wijst en met de kan in zijn handen aanstalten maakt om bij te […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.022" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/SwYKJ/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#26 &mdash; 0.65</div>
+      <div class="title">Conversatie tussen een man en een vrouw</div>
+      <div class="creator">Daniel Nikolaus Chodowiecki</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-14.022" target="_blank">RP-P-OB-14.022</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Een man en een vrouw converseren op 'geaffecteerd' wijze met elkaar. Ze zijn deftig gekleed en praten met veel ingestudeerde gebaren. Rechtsboven genummerd: 3.</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-65.470" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/TmopM/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#27 &mdash; 0.65</div>
+      <div class="title">Man en vrouw in gesprek</div>
+      <div class="creator">Reinier Vinkeles (I)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-65.470" target="_blank">RP-P-OB-65.470</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Aan een tafel voeren een man en een vrouw een gesprek. De man wijst op een afbeelding in een boek. In de deuropening staat een vrouw met een opengeslagen boek […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-65.471" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/sILur/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#28 &mdash; 0.65</div>
+      <div class="title">Man en vrouw in gesprek</div>
+      <div class="creator">Reinier Vinkeles (I) (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-65.471" target="_blank">RP-P-OB-65.471</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Aan een tafel voeren een man en een vrouw een gesprek. De man wijst op een afbeelding in een boek. In de deuropening staat een vrouw met een opengeslagen boek […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1882-A-5462" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/BXNuN/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#29 &mdash; 0.65</div>
+      <div class="title">Scène uit het treurspel Karel de IX</div>
+      <div class="creator">Jan Gerard Waldorp (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1882-A-5462" target="_blank">RP-P-1882-A-5462</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Koning Karel de IX van Frankrijk in gesprek met een priester. Tegelijkertijd wordt hij door een vrouw vermanend toegesproken. Een soldaat kijkt toe. Op de […]</div></div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/BK-NM-3334-T" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/EMmhB/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#30 &mdash; 0.65</div>
+      <div class="title">Vijf episodes uit een liefdesverhaal</div>
+      <div class="creator">anonymous</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/BK-NM-3334-T" target="_blank">BK-NM-3334-T</a>
+    </div>
+    <div class="card-detail"><div class="desc-snippet">Vijf glaasjes met episodes uit een liefdesverhaal in een houten vatting. Uiterst links: op de voorgrond een schrijvende man, op de achtergrond een tafel met […]</div></div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#ad1457">Related Object</span>
+      <span class="row-count">2 results</span>
+    </div>
+    <div class="row-method">Curator-defined assertions linking other related works, weighted by the specificity of the relationship: <em>pair</em> / <em>set</em> / <em>recto | verso</em> / <em>product line</em> (named, well-defined groupings) carry the most weight; <em>original | reproduction</em> (a defined derivative relationship) less; the catch-all <em>related object</em> the least.</div>
+    
+    <div class="strip-container">
+      <div class="cards-strip">
+        <div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-2405" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/goewK/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#1 &mdash; 2.00</div>
+      <div class="title">Galante conversatie</div>
+      <div class="creator">Willem de Koning (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-1905-2405" target="_blank">RP-P-1905-2405</a>
+    </div>
+    <div class="card-detail">related object</div>
+  </div>
+<div class="result-card">
+    <a class="result-thumb-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-54.978" target="_blank">
+         <img class="result-thumb" src="https://iiif.micr.io/KaZdp/full/250,/0/default.jpg" alt="" loading="lazy"
+              onerror="this.style.display='none'">
+       </a>
+    <div class="result-info">
+      <div class="rank-sim">#2 &mdash; 2.00</div>
+      <div class="title">Interieur met drie figuren die met elkaar in gesprek zijn</div>
+      <div class="creator">William Unger (mentioned on object)</div>
+      <a class="obj-link" href="https://www.rijksmuseum.nl/en/collection/RP-P-OB-54.978" target="_blank">RP-P-OB-54.978</a>
+    </div>
+    <div class="card-detail">related object</div>
+  </div>
+        
+      </div>
+    </div>
+  </div>
+<div class="signal-row">
+    <div class="row-header">
+      <span class="row-label" style="color:#37474f">Pooled</span>
+      <span class="row-count">0 results</span>
+    </div>
+    <div class="row-method">Artworks appearing in <strong>4+</strong> of the 4 forms of similarity above. The scores and icons show which and how many forms agree.</div>
+    <div class="empty-row">No results for this form of similarity.</div>
+    <div class="strip-container">
+      <div class="cards-strip">
+        
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Generated by <a href="https://github.com/kintopp/rijksmuseum-mcp-plus" target="_blank">rijksmuseum-mcp+</a> find_similar | 2026-10-11 07:16
+</div>
+
+</body>
+</html>
