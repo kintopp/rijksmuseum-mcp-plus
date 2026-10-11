@@ -382,11 +382,14 @@ function writeTmpJson(content) {
     const c2 = storeCount(db);
     assertEq(c1, c2, "case5: migrate twice → same store count");
 
+    const snapshot = () => JSON.stringify([
+      db.prepare("SELECT * FROM provenance_events ORDER BY artwork_id, sequence").all(),
+      db.prepare("SELECT * FROM provenance_parties ORDER BY artwork_id, sequence, party_idx").all(),
+    ]);
     reapply(db);
-    const r1 = reapply(db);
+    const s1 = snapshot();
     reapply(db);
-    const r2 = reapply(db);
-    assertDeepEq(r1, r2, "case5: reapply twice → identical reconcile object");
+    assertEq(snapshot(), s1, "case5: a second reapply leaves events and parties unchanged");
   }
 
   // ── Case 6: Party snapshot survives drift ──────────────────────────────────
@@ -800,6 +803,12 @@ function writeTmpJson(content) {
         (10,1,'Preamble event text',0,'unknown',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
       INSERT INTO provenance_events VALUES
         (10,2,'New middle event',0,'unknown',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_parties VALUES
+        (10,1,0,'Preamble Owner',NULL,'collector',NULL,NULL,0,NULL);
+      INSERT INTO provenance_parties VALUES
+        (10,2,0,'Middle Seller',NULL,'seller',NULL,NULL,0,NULL);
+      INSERT INTO provenance_parties VALUES
+        (10,2,1,'Middle Buyer',NULL,'buyer',NULL,NULL,0,NULL);
       INSERT INTO provenance_events VALUES
         (10,3,'${parentText}',0,'sale',0,0,NULL,NULL,0,'[]',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
       INSERT INTO provenance_periods VALUES
@@ -833,6 +842,16 @@ function writeTmpJson(content) {
     assertEq(p0[0].party_name, "Auction House", "case10: child 0 party name");
     assertEq(p1.length, 1, "case10: child 1 has 1 party");
     assertEq(p1[0].party_name, "Heir Family", "case10: child 1 party name");
+
+    // The rebuild deletes every party of the artwork, so kept events' parties
+    // must come back at their events' new sequences.
+    const keptParties = (rawText) => {
+      const e = events.find((x) => x.raw_text === rawText);
+      return getParties(db, 10, e.sequence).map((p) => [p.party_name, p.party_role]);
+    };
+    assertDeepEq(keptParties("Preamble event text"), [["Preamble Owner", "collector"]], "case10: preamble keeps its party");
+    assertDeepEq(keptParties("New middle event"), [["Middle Seller", "seller"], ["Middle Buyer", "buyer"]],
+      "case10: middle event keeps both parties, in order");
 
     // period source_events remapped: old [2] (the parent) → children's new seqs.
     const period = db.prepare("SELECT source_events FROM provenance_periods WHERE artwork_id=10 AND sequence=1").get();
@@ -1226,7 +1245,7 @@ function writeTmpJson(content) {
       meta: { batchId: "audit:case15", model: "test" },
       results: [
         { data: { object_number: "SK-A-9201", classifications: [
-          { event_sequence: 1, raw_text: "Recat event text 1850", transfer_type: "transfer", transfer_category: "ambiguous", confidence: 0.9, reasoning: "recovered: 1a classified, 1b recategorized" } ] } },
+          { event_sequence: 1, raw_text: "Recat event text 1850", transfer_type: "transfer", transfer_category: "auction", confidence: 0.9, reasoning: "recovered: 1a classified, 1b recategorized" } ] } },
         { data: { object_number: "SK-A-9202", classifications: [
           { event_sequence: 1, raw_text: "Still llm event 1860", transfer_type: "gift", confidence: 0.9, reasoning: "orig" } ] } },
         { data: { object_number: "SK-A-9204", classifications: [
@@ -1251,7 +1270,7 @@ function writeTmpJson(content) {
       if (r9201[0]) {
         const p = JSON.parse(r9201[0].payload);
         assertEq(p.transfer_type, "transfer", "case15: recovered payload transfer_type=transfer");
-        assertEq(p.transfer_category, "ambiguous", "case15: category derived (TRANSFER_TYPE_TO_CATEGORY['transfer']='ambiguous')");
+        assertEq(p.transfer_category, "ambiguous", "case15: category derived from transfer_type, not the audit's 'auction'");
         assertEq(r9201[0].source, "audit:type-classification", "case15: recovered row source tagged");
         assertEq(r9201[0].method, M.LLM_ENRICHMENT, "case15: recovered row method=llm_enrichment");
       }
@@ -1354,6 +1373,13 @@ function writeTmpJson(content) {
     catch { denyThrew = true; }
     assert(!denyThrew, "case16: loadRevertDenylist does NOT throw on a missing file");
     assert(emptySet instanceof Set && emptySet.size === 0, "case16: missing denylist file → empty Set (no denials)");
+
+    // migrate() reads the committed denylist by default, and a missing or
+    // reshaped file degrades silently to no denials — so check the real one.
+    const shipped = loadRevertDenylist();
+    assert(shipped.size > 0, `case16: the committed revert denylist loads entries (${shipped.size})`);
+    assertDeepEq([...shipped].filter((k) => !/^[^|]+\|\d+\|[a-z_]+$/.test(k)), [],
+      "case16: every denylist key is object|sequence|issue_type");
   }
 
   // ─── Summary ───────────────────────────────────────────────────────────────
