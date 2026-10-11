@@ -109,7 +109,7 @@ const COT_MARKERS: RegExp[] = [
   /\bLet me reconsider\b/i,
 ];
 
-export function looksLikeChainOfThought(text: string): boolean {
+function looksLikeChainOfThought(text: string): boolean {
   return COT_MARKERS.some(re => re.test(text));
 }
 
@@ -121,12 +121,12 @@ function guardChainOfThought(reasoning: string): string {
 }
 
 /** Any non-default enrichment (LLM, rule-based, or structural correction) — used for page content. */
-export function isEnrichedEvent(e: { categoryMethod?: string | null; correctionMethod?: string | null }): boolean {
+function isEnrichedEvent(e: { categoryMethod?: string | null; correctionMethod?: string | null }): boolean {
   return (!!e.categoryMethod && e.categoryMethod !== "type_mapping") || !!e.correctionMethod;
 }
 
 /** Any non-default enrichment (LLM or rule-based) — used for page content. */
-export function isEnrichedParty(p: { positionMethod?: string | null }): boolean {
+function isEnrichedParty(p: { positionMethod?: string | null }): boolean {
   return !!p.positionMethod && p.positionMethod !== "role_mapping";
 }
 

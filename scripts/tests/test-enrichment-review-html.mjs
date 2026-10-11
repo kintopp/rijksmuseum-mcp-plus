@@ -6,10 +6,12 @@
  *      suppressed, while clean reasoning passes through verbatim.
  *   3. Structural corrections (#125 splits etc.) stamp ONE explanation onto every child event
  *      AND its parties; the page must show that explanation once, not ~20×.
+ *   Escaping: the page is served over HTTP and renders catalogue text, which can carry
+ *      stray markup; every interpolated field must be HTML-escaped.
  *
  * Run: node scripts/tests/test-enrichment-review-html.mjs  (needs `npx tsc` / `npm run build` first)
  */
-import { generateEnrichmentReviewHtml, looksLikeChainOfThought } from "../../dist/enrichmentReviewHtml.js";
+import { generateEnrichmentReviewHtml } from "../../dist/enrichmentReviewHtml.js";
 
 let failures = 0;
 function check(name, cond) {
@@ -65,6 +67,14 @@ const data = {
         ev(2, "gift", "llm_structural:#116", null),
       ],
     },
+    {
+      objectNumber: "ESC-1", title: "<i>Title</i>", creator: "anon",
+      events: [{
+        ...ev(1, "sale", "llm_structural:#116", "reason <img src=x onerror=alert(1)>",
+          [{ name: 'Dealer "Quoted" <b>', role: null, position: "receiver", positionMethod: "llm_structural", enrichmentReasoning: "party <script>p</script>" }]),
+        rawText: "Sold <script>alert(1)</script> 1900",
+      }],
+    },
   ],
 };
 
@@ -88,10 +98,12 @@ check("clean split reasoning NOT flagged", html.includes("It actually contains s
 console.log("No false-collapse — independent null-reasoning enrichments stay separate:");
 check("two '(no reasoning recorded)' blocks", count(html, "(no reasoning recorded)") === 2);
 
-console.log("Unit — looksLikeChainOfThought:");
-check("clean reasoning → false", looksLikeChainOfThought(SPLIT_REASONING) === false);
-check("CoT reasoning → true", looksLikeChainOfThought(COT_REASONING) === true);
-check("'actually contains' not a false trigger", looksLikeChainOfThought("It actually contains six distinct events.") === false);
+console.log("Escaping — catalogue and model text cannot inject markup:");
+check("raw text escaped", html.includes("Sold &lt;script&gt;alert(1)&lt;/script&gt; 1900"));
+check("title escaped", html.includes("&lt;i&gt;Title&lt;/i&gt;"));
+check("party name escaped, quotes included", html.includes("Dealer &quot;Quoted&quot; &lt;b&gt;"));
+check("reasoning escaped", html.includes("reason &lt;img src=x onerror=alert(1)&gt;"));
+check("no injected tag survives", !/<script>(alert|p)|<img src=x|<i>Title|<b>"/.test(html));
 
 if (failures) { console.error(`\n${failures} check(s) failed.`); process.exit(1); }
 console.log("\nAll enrichment-review-html checks passed.");
