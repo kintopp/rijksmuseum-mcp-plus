@@ -468,18 +468,6 @@
     ],
     "purpose": "MCP Apps viewer metadata/conformance over stdio: CSP, visibility, real bundle not the fallback (needs built dist/; in test:viewer-app)"
   },
-  "test-324-concurrent-mcp.mjs": {
-    "category": "live",
-    "class": "smoke",
-    "status": "manual",
-    "runtime": "node",
-    "requires": [
-      "manual",
-      "network",
-      "server"
-    ],
-    "purpose": "concurrent POST /mcp probe (#324); hits a running HTTP server / production URL"
-  },
   "test-http-viewer-queues.mjs": {
     "category": "live",
     "class": "smoke",
@@ -561,19 +549,6 @@
       "vocabDb"
     ],
     "purpose": "search_provenance creditLineQuery fallback over stdio (needs dist/ + DB)"
-  },
-  "test-description-similarity.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
-    "runtime": "node",
-    "requires": [
-      "dist",
-      "embeddingsDb",
-      "manual",
-      "vocabDb"
-    ],
-    "purpose": "find_similar Description channel smoke (needs dist/ + embeddings DB)"
   },
   "test-facet-warning.mjs": {
     "category": "db",
@@ -823,59 +798,6 @@
       "manual"
     ],
     "purpose": "tool-description regression over stdio tools/list (#297/#392; needs built dist/)"
-  },
-  "test-totalcount.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
-    "runtime": "node",
-    "requires": [
-      "manual",
-      "vocabDb"
-    ],
-    "purpose": "totalResults + facets directly via VocabularyDb (needs vocab DB)"
-  },
-  "test-url-rename-smoke.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
-    "runtime": "node",
-    "requires": [
-      "dist",
-      "manual",
-      "vocabDb"
-    ],
-    "purpose": "url-field rename smoke (#341) over stdio (needs built dist/ + DB)"
-  },
-  "test-artwork-details-v027.mjs": {
-    "category": "exploratory",
-    "class": "scratch",
-    "status": "deprecated",
-    "runtime": "node",
-    "requires": [
-      "manual"
-    ],
-    "purpose": "v0.27-era get_artwork_details smoke; superseded (asserts removal of conservation/examinations re-added in v0.90)"
-  },
-  "test-peg-modified-by.mjs": {
-    "category": "exploratory",
-    "class": "scratch",
-    "status": "scratch",
-    "runtime": "node",
-    "requires": [
-      "manual"
-    ],
-    "purpose": "modified_by[] PEG fold categorisation probe over a samples fixture (analysis, not pass/fail gate)"
-  },
-  "test-v019-features-deprecated.mjs": {
-    "category": "exploratory",
-    "class": "scratch",
-    "status": "deprecated",
-    "runtime": "node",
-    "requires": [
-      "manual"
-    ],
-    "purpose": "DEPRECATED v0.19-era feature tests kept for historical reference"
   },
   "test-stats-crosstab-binding.mjs": {
     "category": "track2",

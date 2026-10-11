@@ -355,14 +355,11 @@ Uniform summaries and shared harness cleanup should apply to `gate` tests and ne
 | `bench-thread-count-low.py` | — | Same benchmark at 1–8 threads — checks whether the ~10 req/s server cap holds at lower concurrency. |
 | `bench-iiif-download.py` | — | Benchmarks `iiif.micr.io` download throughput at concurrency N=1/4/8/16 over 400 random 1568px JPEGs split into 4 disjoint batches (disjoint avoids edge-cache inflation). Needs the vocab DB; run via `uv run --with requests …`. |
 | `iiif-pct-check.py` | — | Probes whether `iiif.micr.io` honours `pct:` region requests by decoding each crop's actual JPEG dimensions — distinguishes correct-crop / silently-returned-full / 400. Resolves a real image via `--id` or `objectNumber`→`iiif_id` from the vocab DB (default `SK-C-5`). Stdlib-only; hits live IIIF; exit 0/1 on a PASS/FAIL verdict. Also measures the server's unadvertised `/max/` size cap. Guards `inspect_artwork_image`'s reliance on `pct:` cropping. |
-| `test-description-similarity.mjs` | ~4 | Smoke test for find_similar description mode. Requires `ENABLE_FIND_SIMILAR=true`. |
 | `test-attribution-qualifiers.mjs` | ~5 | Verifies `attributionQualifier` extraction from Linked Art `assigned_by[].classified_as`. |
 | `test-provenance-parser.mjs` | ~39 | Unit tests for Layer 1 provenance parser functions (splitEvents, classifyTransfer, parseDate, parsePrice, etc.) |
 | `test-provenance-peg.mjs` | ~45 | Tests for PEG parser (Layer 1) + interpretation (Layer 2) + temporal bounds. |
 | `test-provenance-search.mjs` | ~76 | Integration tests for `search_provenance` tool: party lookup, transfer type filters, date ranges, cross-references, parse audit. |
 | `test-query-plans.mjs` | 200+ | EXPLAIN QUERY PLAN validation — asserts the optimizer never uses `idx_mappings_field_vocab` as a covering-scan driver. |
-| `test-totalcount.mjs` | ~16 | Smoke test: totalResults always present + selective/compact facets. |
-| `test-v019-features-deprecated.mjs` | — | **DEPRECATED.** Targeted tests for v0.19 features; predates v0.27 clusters A–F. Kept for reference. |
 | `test-viewer-build.mjs` | — | Validates bundled viewer HTML is self-contained (no CDN dependencies) and within size budget. |
 | `audit-schemas.mjs` | — | Schema audit: checks all outputSchemas for structural risk factors (anyOf/oneOf, $ref/$defs, nesting depth). |
 | `validate-vocab-db.mjs` | — | Comprehensive vocab DB structure & integrity validation (13 checks: integrity, tables, FTS5, FK integrity, importance, server compat, etc.) |
@@ -428,15 +425,5 @@ Live-LA-API probe scripts used during the 2026-04-26 v0.25 schema-decisions sess
 |--------|------|-------------|
 | `probe-motivated-by.py` | Python | Fetches Linked Art records and dumps `produced_by.part[].assigned_by[].motivated_by[]` payloads (S5 evidence-type characterisation). Pass object numbers as args. |
 | `aggregate-probe.py` | Python | Aggregator for `probe-motivated-by.py` output: counts per object type, per AAT classification code, per bare-string variant. |
-| `probe-modified-by.py` | Python | Fetches `modified_by[]` payloads (S4 conservation-events characterisation). Persists to `modified-by-samples.json` for re-use by `test-peg-modified-by.mjs`. |
-| `test-peg-modified-by.mjs` | Node | PEG grammar feasibility test for `modified_by[]` payloads: categorises samples as A (clean fold) / B (partial) / C (fail). Verdict from the 2026-04-26 spike: 12.5% clean << 80% threshold → new table, not grammar fold. |
-| `test-peg-modified-by.js` | Node | Earlier .js variant of the PEG feasibility test, kept for reference. |
 | `inspect-suspicious-paths.py` | Python | Characterises the audit's suspicious IGNORED paths (notation as multilingual labels, `used_specific_object` as catalogues raisonnés AAT 300026061, `equivalent[]` as authority IDs). Handy for any future audit-output triage. |
 
-Companion data + report artefacts in this directory (not scripts):
-
-| File | Description |
-|------|-------------|
-| `modified-by-samples.json` | Captured `modified_by[]` payloads from the S4 spike (8 events, 5 artworks). |
-| `peg-modified-by-results.json` | Per-sample A/B/C categorisation from `test-peg-modified-by.mjs`. |
-| `S4-feasibility-report.md` | Full S4 spike report — sample inventory, vocabulary observed, recommendation, proposed table schema. |
