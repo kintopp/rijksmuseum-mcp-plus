@@ -19,6 +19,7 @@
  * Run:  node scripts/tests/test-tool-descriptions.mjs
  */
 import { connectFixtureClient } from "./fixture-client.mjs";
+import { resolveDbPath } from "../../dist/utils/db.js";
 
 
 let passed = 0;
@@ -93,7 +94,6 @@ for (const name of MODEL_VISIBLE) {
 }
 
 const sa = descOf("search_artwork");
-const ss = descOf("semantic_search");
 const fs = descOf("find_similar");
 
 // ══════════════════════════════════════════════════════════════════
@@ -105,8 +105,12 @@ section("Cross-links between retrieval tools");
 assert(sa.includes("semantic_search") && sa.includes("find_similar") && sa.includes("search_persons"),
   "search_artwork cross-links to semantic_search, find_similar, search_persons");
 
-assert(ss.includes("search_artwork") && ss.includes("find_similar"),
-  "semantic_search cross-links to search_artwork and find_similar");
+// semantic_search registers only where an embeddings DB exists (not in CI).
+if (resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db")) {
+  const ss = descOf("semantic_search");
+  assert(ss.includes("search_artwork") && ss.includes("find_similar"),
+    "semantic_search cross-links to search_artwork and find_similar");
+}
 
 assert(fs.includes("semantic_search") && fs.includes("search_artwork"),
   "find_similar cross-links to semantic_search and search_artwork");

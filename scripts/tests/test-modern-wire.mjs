@@ -12,8 +12,11 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { buildFixture } from "./build-fixture-vocab-db.mjs";
+import { resolveDbPath } from "../../dist/utils/db.js";
 
 const VOCAB_DB_PATH = buildFixture("fixture-modern-wire.db");
+// semantic_search registers only where an embeddings DB exists (not in CI).
+const TOOL_COUNT = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db") ? 19 : 18;
 
 const PORT = process.env.TEST_PORT ?? "31339";
 const MODERN = "2026-07-28";
@@ -59,7 +62,7 @@ try {
 
   const list = await modern("tools/list", {});
   const names = list.body?.result?.tools?.map((t) => t.name) ?? [];
-  check(list.status === 200 && names.length === 19, `tools/list returns 19 tools (got ${names.length})`);
+  check(list.status === 200 && names.length === TOOL_COUNT, `tools/list returns ${TOOL_COUNT} tools (got ${names.length})`);
   check(!JSON.stringify(list.body?.result ?? {}).includes("$ref"), "schemas stay $ref-free");
   const img = list.body?.result?.tools?.find((t) => t.name === "get_artwork_image");
   check(img?._meta?.ui?.resourceUri === "ui://rijksmuseum/artwork-viewer.html", "get_artwork_image keeps its ui.resourceUri");
@@ -98,7 +101,7 @@ try {
     params: { protocolVersion: LEGACY, capabilities: {}, clientInfo: { name: "t", version: "0" } } });
   check(init.body?.result?.protocolVersion === LEGACY, "legacy initialize negotiates 2025-11-25");
   const ll = await post({ "mcp-protocol-version": LEGACY }, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-  check(ll.body?.result?.tools?.length === 19, "legacy tools/list returns 19 tools");
+  check(ll.body?.result?.tools?.length === TOOL_COUNT, `legacy tools/list returns ${TOOL_COUNT} tools`);
 } finally {
   child.kill();
 }
@@ -118,7 +121,7 @@ try {
   const d = await req({ jsonrpc: "2.0", id: 1, method: "server/discover", params: { supportedVersions: [MODERN], _meta: envelope() } });
   check(d.result?.supportedVersions?.includes(MODERN), "stdio server/discover pins 2026-07-28");
   const l = await req({ jsonrpc: "2.0", id: 2, method: "tools/list", params: { _meta: envelope() } });
-  check(l.result?.tools?.length === 19, "stdio modern tools/list returns 19 tools");
+  check(l.result?.tools?.length === TOOL_COUNT, `stdio modern tools/list returns ${TOOL_COUNT} tools`);
   const c = await req({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_artwork_details", arguments: { objectNumber: "FX-1" }, _meta: envelope() } });
   check(c.result?.structuredContent?.objectNumber === "FX-1", "stdio modern tools/call returns structuredContent");
 } finally {
