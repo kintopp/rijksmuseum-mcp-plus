@@ -2,7 +2,7 @@
 
 Reference material for `search_provenance`. Consult this file when you need to
 interpret raw provenance text, understand the data model, or construct
-specialised query patterns beyond the examples in the main skill.
+specialised query patterns.
 
 ## Contents
 

@@ -3,11 +3,32 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.95"
-  last_updated: "2026-10-04"
+  version: "0.96"
+  last_updated: "2026-10-11"
 ---
 
 # Rijksmuseum MCP+ Research Skill
+
+## Where the data comes from
+
+The server answers from a snapshot of the Rijksmuseum's open data harvested in May 2026, not from the museum's live APIs. Records the museum has added, corrected or withdrawn since then are not reflected; `get_recent_changes` reads the live change feed, and the [collection website](https://www.rijksmuseum.nl/en/collection) is the current reference.
+
+- **OAI-PMH** (`https://data.rijksmuseum.nl/oai`): one EDM metadata record per object, the backbone of the harvest.
+- **Linked Art** (`https://id.rijksmuseum.nl/`): JSON-LD object records and vocabulary terms.
+- **Data dumps** (`https://data.rijksmuseum.nl/dumps/`): person, group, place and concept authorities, the source of creator demographics and of links to Wikidata, VIAF, ULAN and RKD.
+
+The museum publishes these under its [information and data policy](https://data.rijksmuseum.nl/policy/information-and-data-policy): CC0 1.0 or the Public Domain Mark, with CC BY 4.0 where it exercises its own copyright; it asks for a credit line either way. Each object's `license` field gives the rights for the work and its image: Public Domain Mark for most, In Copyright for roughly one work in eight, CC0 for a few.
+
+This project enriched parts of the museum's data; the Rijksmuseum has not reviewed or endorsed any of it:
+- **Provenance texts and credit lines**: parsed by a grammar into events, parties and ownership periods aligned with the AAM/CMOA standard. A few hundred ambiguous decisions out of many thousands were made by an LLM; these carry `categoryMethod`/`positionMethod`/`correctionMethod` flags, the model's reasoning, and a review page.
+- **Inscription field**: split at query time, by rules, into individual marks, collector's marks and transcribed text.
+- **Place authorities**: coordinates from Getty TGN (ODC-By 1.0), Wikidata (CC0) and GeoNames (CC BY 4.0), added only where a museum-supplied authority ID resolves them.
+- **Production records**: each maker paired with their own role and attribution qualifier, which is what makes same-row attribution filters possible.
+- **Titles, descriptions, inscriptions and curatorial narratives**: encoded as embeddings for semantic search and for `find_similar`'s Description channel.
+
+Only images (IIIF, `iiif.micr.io`), `get_recent_changes` and `find_similar`'s Visual channel are fetched live, so an image can be current while its metadata is not.
+
+## Working with the catalogue
 
 Answer from the tools, not from memory: check attributions, dates, object numbers and counts against the catalogue even for famous works, because recollections of a collection are often wrong in exactly those details.
 
@@ -19,7 +40,7 @@ The tool descriptions already document every parameter and say which tool does w
 - `get_artwork_details` → `attributionMarks: 0` does not mean unsigned. The mark rows and the inscription field are independent datasets: The Night Watch reports 0 marks yet carries "Rembrandt f 1642" in `parsedInscriptions`. Check `parsedInscriptions` before reporting that a work has no signature.
 - `get_conservation_history` covers a small fraction of a percent of the collection, and famous paintings are not favoured (The Night Watch and The Milkmaid both return nothing). An empty result means no examination record was harvested, not that the work was never examined.
 - The inscription field is a mark-and-annotation log dominated by verso collector's stamps, not a transcription of visible text. Coins, medals and posters covered in legends often have nothing entered. `placement` (recto/verso) is almost never recorded for paintings, so adding it zeroes a painting query.
-- Parsed provenance exists for only about one artwork in sixteen. Credit lines reach much further but record how the *museum* acquired a work, not earlier ownership. They are templated boilerplate, so search them on distinctive donor or fund names, not words like "gift" or "purchase".
+- Parsed provenance exists for only about one artwork in sixteen. Credit lines reach much further but record how the *museum* acquired a work, not earlier ownership. They are templated boilerplate, so search them on distinctive donor or fund names, not words like "gift" or "purchase". A credit-line search (`creditLineQuery`) covers only works *without* parsed provenance, so a complete answer for a donor or fund needs it plus a `party` search of the parsed chains; the two sets do not overlap.
 
 **Language and naming.**
 - Most titles are Dutch only; English titles exist mainly for prominent works. Report the title that exists rather than inventing a translation. Descriptions are Dutch; curatorial narratives (far fewer) are English. Some vocabulary only matches in Dutch (`fotograaf`, `Tweede Wereldoorlog`, theme labels, curated-set names).
@@ -58,8 +79,8 @@ The tool descriptions already document every parameter and say which tool does w
 Draw on whichever of these fit, combine them, or ignore them.
 
 - **Triangulate across independent corpora.** One concept can be reached through subject/Iconclass vocabulary, Dutch cataloguer descriptions, English curatorial narratives, inscriptions, provenance text and embedding search. Each was written by different people for different purposes; works found by one route but not another show where the cataloguing thinks differently.
-- **Follow the people.** Makers, sitters, copyists, owners, dealers and donors are separate indexes into the same objects. A painting's afterlife may be clearer through its copyist, its sitter's other portraits, or the collector who owned it than through the painting itself.
-- **Follow the object outward.** Related and physical companions on the record, `find_similar`'s channels, prints made after it, works cited in the same publication, and other works in its provenance (`relatedTo`).
+- **Follow the people.** Makers, sitters, copyists, owners, dealers and donors are separate indexes into the same objects. A painting's afterlife may be clearer through its copyist, its sitter's other portraits, or the collector who owned it than through the painting itself. Owners of prints and drawings also left collector's marks (Lugt numbers, via `search_inscriptions`); many are the print room's own stamp, but former owners' marks reach more than twice as many works as the parsed provenance covers, almost all of them outside it.
+- **Follow the object outward.** Related and physical companions on the record, `find_similar`'s channels, prints made after it, works cited in the same publication, and other works in its provenance (`relatedTo`). Object numbers encode department and, for many objects, accession year, so a wildcard (`RP-P-1906-*`) can rebuild an acquisition batch.
 - **Use counts as arguments.** A distribution can test a claim (when a motif rises and falls, which cities dominate a medium, who collected what) and turn an anecdote into a pattern, or show that it isn't one.
 - **Look.** `inspect_artwork_image` can read what the catalogue never recorded: signatures, seals, cartouches, inscriptions, details in the background. Keep what the catalogue says separate from what you see in the image.
 - **Read the negative space.** What is undigitised (`imageAvailable: false`), uncatalogued, missing from a provenance chain (`hasGap`), or orphaned in the authority files (`search_persons` `unused`) can be as telling as what is present.
