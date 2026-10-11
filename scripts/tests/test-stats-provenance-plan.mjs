@@ -30,11 +30,10 @@ import path from "node:path";
 import { captureSql, explainPlan } from "./query-plan-utils.mjs";
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const VOCAB_DB_PATH = process.env.VOCAB_DB_PATH || path.join(PROJECT_DIR, "data/vocabulary.db");
 const { VocabularyDb } = await import(path.join(PROJECT_DIR, "dist/api/VocabularyDb.js"));
 
 const db = new VocabularyDb();
-let passed = 0, failed = 0, skipped = 0;
+let passed = 0, failed = 0;
 
 function captureStatsSql(args) {
   // The temp-table build is the only `... FROM artworks a WHERE ...` we restrict on.
@@ -42,13 +41,13 @@ function captureStatsSql(args) {
     .find((s) => /CREATE TEMP TABLE.*FROM artworks a WHERE/s.test(s));
 }
 
-// Feature-detect: provenance tables present in this DB?
-const probe = captureStatsSql({ dimension: "type", hasProvenance: true });
-if (!probe) {
-  console.log("  ⚠ skipped — no provenance-filtered temp-table build captured (provenance tables absent or hasProvenance ignored)");
-  console.log(`\n${passed} passed, ${skipped + 1} skipped`);
+if (!db.available) {
+  console.log("  ⚠ skipped — vocab DB not found");
   process.exit(0);
 }
+// From here a missing capture means the emitted SQL changed shape, which is
+// exactly what these checks guard, so it fails rather than skips.
+const VOCAB_DB_PATH = db.dbPath;
 
 const DRIVING_IN = /a\.art_id IN \(SELECT artwork_id FROM provenance_events\)/;
 const CORRELATED_EXISTS = /EXISTS \(SELECT 1 FROM provenance_events WHERE artwork_id = a\.art_id\)/;
@@ -58,24 +57,29 @@ const HAS_IMAGE_0 = /a\.has_image = 0/;
 // ── 1. Sole hasProvenance → driving IN, plan drives from provenance ──
 console.log("── 1. hasProvenance as sole filter → drives from provenance_events ──");
 {
-  const sql = probe;
-  const usesDrivingIn = DRIVING_IN.test(sql);
-  const usesCorrelated = CORRELATED_EXISTS.test(sql);
+  const sql = captureStatsSql({ dimension: "type", hasProvenance: true });
+  if (!sql) {
+    console.log("  ✗ no provenance-filtered temp-table build captured");
+    failed++;
+  } else {
+    const usesDrivingIn = DRIVING_IN.test(sql);
+    const usesCorrelated = CORRELATED_EXISTS.test(sql);
 
-  const innerSelect = sql.replace(/^.*?AS\s+/s, "");
-  const planText = explainPlan(VOCAB_DB_PATH, innerSelect).map((r) => r.detail).join("\n");
-  // Pathology marker: a full artworks scan that probes provenance via correlated EXISTS PK lookup.
-  const fullScanProbe = /SCAN a\b/.test(planText) && /provenance_events EXISTS/.test(planText);
+    const innerSelect = sql.replace(/^.*?AS\s+/s, "");
+    const planText = explainPlan(VOCAB_DB_PATH, innerSelect).map((r) => r.detail).join("\n");
+    // Pathology marker: a full artworks scan that probes provenance via correlated EXISTS PK lookup.
+    const fullScanProbe = /SCAN a\b/.test(planText) && /provenance_events EXISTS/.test(planText);
 
-  console.log("  Plan:");
-  for (const line of planText.split("\n")) console.log(`    ${line}`);
+    console.log("  Plan:");
+    for (const line of planText.split("\n")) console.log(`    ${line}`);
 
-  let ok = true;
-  if (!usesDrivingIn) { console.log("  ✗ emitted SQL does not drive from provenance_events (driving IN missing)"); ok = false; }
-  if (usesCorrelated) { console.log("  ✗ emitted SQL still uses the correlated EXISTS for the sole-filter case"); ok = false; }
-  if (fullScanProbe)  { console.log("  ✗ plan does full SCAN a + per-row provenance EXISTS probe — the slow path is back"); ok = false; }
-  if (ok) { console.log("  ✓ sole hasProvenance drives from provenance_events, no full-artworks scan"); passed++; }
-  else failed++;
+    let ok = true;
+    if (!usesDrivingIn) { console.log("  ✗ emitted SQL does not drive from provenance_events (driving IN missing)"); ok = false; }
+    if (usesCorrelated) { console.log("  ✗ emitted SQL still uses the correlated EXISTS for the sole-filter case"); ok = false; }
+    if (fullScanProbe)  { console.log("  ✗ plan does full SCAN a + per-row provenance EXISTS probe — the slow path is back"); ok = false; }
+    if (ok) { console.log("  ✓ sole hasProvenance drives from provenance_events, no full-artworks scan"); passed++; }
+    else failed++;
+  }
 }
 
 // ── 2. hasProvenance + a vocab filter → keep correlated EXISTS (no eager provenance IN) ──
@@ -83,8 +87,8 @@ console.log("\n── 2. hasProvenance + creator filter → keeps correlated EXI
 {
   const sql = captureStatsSql({ dimension: "type", hasProvenance: true, creator: "Rembrandt" });
   if (!sql) {
-    console.log("  ⚠ skipped — could not capture co-filter temp-table build");
-    skipped++;
+    console.log("  ✗ no co-filter temp-table build captured");
+    failed++;
   } else {
     const usesDrivingIn = DRIVING_IN.test(sql);
     const usesCorrelated = CORRELATED_EXISTS.test(sql);
@@ -103,8 +107,8 @@ console.log("\n── 3. hasProvenance + imageAvailable:true → driving IN (ima
 {
   const sql = captureStatsSql({ dimension: "type", hasProvenance: true, imageAvailable: true });
   if (!sql) {
-    console.log("  ⚠ skipped — could not capture imageAvailable temp-table build");
-    skipped++;
+    console.log("  ✗ no imageAvailable temp-table build captured");
+    failed++;
   } else {
     let ok = true;
     if (!DRIVING_IN.test(sql)) { console.log("  ✗ does not drive from provenance despite image being the only co-filter"); ok = false; }
@@ -120,8 +124,8 @@ console.log("\n── 4. hasProvenance + imageAvailable:false → driving IN + h
 {
   const sql = captureStatsSql({ dimension: "type", hasProvenance: true, imageAvailable: false });
   if (!sql) {
-    console.log("  ⚠ skipped — could not capture imageAvailable:false temp-table build");
-    skipped++;
+    console.log("  ✗ no imageAvailable:false temp-table build captured");
+    failed++;
   } else {
     let ok = true;
     if (!DRIVING_IN.test(sql)) { console.log("  ✗ does not drive from provenance"); ok = false; }
@@ -146,5 +150,5 @@ console.log("\n── 5. imageAvailable:false partitions a vocab result set (wit
   else failed++;
 }
 
-console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ""}${skipped ? `, ${skipped} skipped` : ""}`);
+console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ""}`);
 process.exit(failed ? 1 : 0);

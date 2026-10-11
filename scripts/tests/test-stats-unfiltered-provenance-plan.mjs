@@ -23,11 +23,10 @@ import path from "node:path";
 import { captureSql, explainPlan } from "./query-plan-utils.mjs";
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const VOCAB_DB_PATH = process.env.VOCAB_DB_PATH || path.join(PROJECT_DIR, "data/vocabulary.db");
 const { VocabularyDb } = await import(path.join(PROJECT_DIR, "dist/api/VocabularyDb.js"));
 
 const db = new VocabularyDb();
-let passed = 0, failed = 0, skipped = 0;
+let passed = 0, failed = 0;
 
 const MEMBERSHIP = /_stats_artworks/;
 const PK_PROBE = /PRIMARY KEY \(artwork_id/;
@@ -46,16 +45,16 @@ const findDimSql = (sqls) =>
 const findCoverageSql = (sqls) =>
   sqls.find((s) => /SELECT COUNT\(DISTINCT pe\.artwork_id\) AS cnt\s+FROM provenance_events pe/.test(s) && !/GROUP BY/.test(s));
 
-// Feature-detect: provenance tables present in this DB?
-const probe = captureStatsSqls({ dimension: "transferType" });
-if (!findDimSql(probe)) {
-  console.log("  ⚠ skipped — no provenance dimension SQL captured (provenance tables absent?)");
-  console.log(`\n${passed} passed, ${skipped + 1} skipped`);
+if (!db.available) {
+  console.log("  ⚠ skipped — vocab DB not found");
   process.exit(0);
 }
+// From here a missing capture means the emitted SQL changed shape, which is
+// exactly what these checks guard, so it fails rather than skips.
+const VOCAB_DB_PATH = db.dbPath;
 
 function checkUnfilteredScan(label, sql) {
-  if (!sql) { console.log(`  ⚠ ${label}: could not capture SQL`); skipped++; return; }
+  if (!sql) { console.log(`  ✗ ${label}: no SQL captured`); failed++; return; }
   const plan = explainPlan(VOCAB_DB_PATH, sql).map((r) => r.detail).join("\n");
   let ok = true;
   if (MEMBERSHIP.test(sql)) { console.log(`  ✗ ${label}: still references _stats_artworks (membership not dropped)`); ok = false; }
@@ -82,7 +81,7 @@ console.log("\n── 3. unfiltered provenanceDecade → dimension drops members
 {
   const sqls = captureStatsSqls({ dimension: "provenanceDecade" });
   const dim = sqls.find((s) => /FROM provenance_events pe/.test(s) && /date_year/.test(s) && /GROUP BY/.test(s));
-  if (!dim) { console.log("  ⚠ skipped — no provenanceDecade dimension SQL captured"); skipped++; }
+  if (!dim) { console.log("  ✗ no provenanceDecade dimension SQL captured"); failed++; }
   else if (MEMBERSHIP.test(dim)) { console.log("  ✗ provenanceDecade dimension still references _stats_artworks"); failed++; }
   else { console.log("  ✓ provenanceDecade dimension has no _stats_artworks membership"); passed++; }
 }
@@ -99,5 +98,5 @@ console.log("\n── 4. FILTERED transferType (creationDateFrom:1600) → membe
   else failed++;
 }
 
-console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ""}${skipped ? `, ${skipped} skipped` : ""}`);
+console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ""}`);
 process.exit(failed ? 1 : 0);

@@ -18,11 +18,10 @@ import path from "node:path";
 import { captureSql, explainPlan } from "./query-plan-utils.mjs";
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const VOCAB_DB_PATH = process.env.VOCAB_DB_PATH || path.join(PROJECT_DIR, "data/vocabulary.db");
 const { VocabularyDb } = await import(path.join(PROJECT_DIR, "dist/api/VocabularyDb.js"));
 
 const db = new VocabularyDb();
-let passed = 0, failed = 0, skipped = 0;
+let passed = 0, failed = 0;
 
 const INDEXED = /INDEXED BY idx_mappings_field_vocab/;
 const PLUS_PK = /\+m\.field_id/;
@@ -37,17 +36,18 @@ function shapes(args) {
   };
 }
 
-// Feature-detect: mappings-backed dim SQL emitted?
-if (!shapes({ dimension: "type" }).dim) {
-  console.log("  ⚠ skipped — no mappings dimension SQL captured");
-  console.log(`\n${passed} passed, ${skipped + 1} skipped`);
+if (!db.available) {
+  console.log("  ⚠ skipped — vocab DB not found");
   process.exit(0);
 }
+// From here a missing capture means the emitted SQL changed shape, which is
+// exactly what these checks guard, so it fails rather than skips.
+const VOCAB_DB_PATH = db.dbPath;
 
 console.log("── 1. unfiltered type → indexed, no membership, covering-index plan ──");
 {
-  const { dim, cov } = shapes({ dimension: "type" });
-  const plan = explainPlan(VOCAB_DB_PATH, dim).map(r => r.detail).join("\n");
+  const { dim = "", cov } = shapes({ dimension: "type" });
+  const plan = dim ? explainPlan(VOCAB_DB_PATH, dim).map(r => r.detail).join("\n") : "(no dimension SQL captured)";
   let ok = true;
   if (!INDEXED.test(dim)) { console.log("  ✗ dimension not using INDEXED BY"); ok = false; }
   if (PLUS_PK.test(dim)) { console.log("  ✗ dimension still uses +m.field_id"); ok = false; }
@@ -69,7 +69,7 @@ console.log("\n── 2. broad type:\"print\" (productionPlace dim, ≥50K) → 
 console.log("\n── 3. narrow creator:\"Rembrandt van Rijn\" (<50K) → +m.field_id PK + membership ──");
 {
   const { dim, cov } = shapes({ dimension: "type", creator: "Rembrandt van Rijn", topN: 30 });
-  if (!dim) { console.log("  ⚠ skipped — creator filter matched no vocab (DB without person enrichment?)"); skipped++; }
+  if (!dim) { console.log("  ✗ no dimension SQL captured for the creator filter"); failed++; }
   else {
     let ok = true;
     if (!PLUS_PK.test(dim)) { console.log("  ✗ narrow dimension lost +m.field_id (would regress small-set PK-probe up to ~250×)"); ok = false; }
@@ -80,5 +80,5 @@ console.log("\n── 3. narrow creator:\"Rembrandt van Rijn\" (<50K) → +m.fie
   }
 }
 
-console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ""}${skipped ? `, ${skipped} skipped` : ""}`);
+console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ""}`);
 process.exit(failed ? 1 : 0);
