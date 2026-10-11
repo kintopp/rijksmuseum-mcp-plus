@@ -3445,7 +3445,9 @@ export class VocabularyDb {
       if (!requestedFields.has(facetDef.label)) continue;
       const fieldId = this.fieldIdMap.get(facetDef.field);
       if (fieldId === undefined) continue;
-      const typeFilter = facetDef.vocabType ? ` AND v.type = '${facetDef.vocabType}'` : "";
+      // Unary + blocks idx_vocab_type: otherwise the planner drives from every person/place
+      // vocab row and PK-probes the result set per row (minutes on a creator or type filter).
+      const typeFilter = facetDef.vocabType ? ` AND +v.type = '${facetDef.vocabType}'` : "";
       // Suppress areal regions (continents, oceans, empires) from place-typed facets — their
       // recorded coordinates are meaningless centroids and they pollute "what places appear" rollups.
       const arealFilter = facetDef.vocabType === "place" ? " AND v.is_areal IS NOT 1" : "";
