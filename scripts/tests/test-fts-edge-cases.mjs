@@ -4,17 +4,25 @@
  *
  * Tests that punctuation, FTS5 operators, diacritics, and degenerate inputs
  * don't cause syntax errors or crashes in search_artwork.
- * Every call should either return results or a clean "no results" — never
- * an FTS5 syntax error.
+ * Every call should either return results or a clean "no results" — any error
+ * fails, because FTS5's own messages (e.g. "unterminated string") don't all
+ * name FTS5. Runs on the fixture DB, so empty results are expected and fine.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { buildFixture } from "./build-fixture-vocab-db.mjs";
 
 const transport = new StdioClientTransport({
   command: "node",
   args: ["dist/index.js"],
   cwd: process.cwd(),
-  env: { ...process.env, STRUCTURED_CONTENT: "true" },
+  env: {
+    ...process.env,
+    STRUCTURED_CONTENT: "true",
+    MCP_SKIP_STARTUP_WARM: "1",
+    VOCAB_DB_PATH: buildFixture("fixture-fts-edge-cases.db"),
+  },
+  stderr: "ignore",
 });
 
 const client = new Client({ name: "fts-edge-test", version: "1.0" });
@@ -40,120 +48,127 @@ async function call(name, args) {
   }
 }
 
-function noFtsError(result) {
-  if (!result?._error) return true;
-  return !result._error.includes("fts5") && !result._error.includes("syntax error");
+function noError(result) {
+  if (result?._error) console.log(`     error: ${result._error.slice(0, 160)}`);
+  return !result?._error;
 }
 
 // ── Periods in names ──────────────────────────────────────────────────
 console.log("1. Periods in creator names");
 let r = await call("search_artwork", { creator: "Pieter Jansz. Saenredam", type: "painting" });
-check("Jansz. — no FTS error", noFtsError(r));
-check("Jansz. — has results", (r.results?.length ?? 0) > 0);
+check("Jansz. — no error", noError(r));
 
 r = await call("search_artwork", { creator: "Jan van der Heyden Jr." });
-check("Trailing period — no FTS error", noFtsError(r));
+check("Trailing period — no error", noError(r));
 
 r = await call("search_artwork", { creator: "R.P. Bonington" });
-check("Initials with periods — no FTS error", noFtsError(r));
+check("Initials with periods — no error", noError(r));
 
 // ── Commas and semicolons ─────────────────────────────────────────────
 console.log("\n2. Commas and semicolons");
 r = await call("search_artwork", { inscription: "fecit, anno 1642" });
-check("Comma in inscription — no FTS error", noFtsError(r));
+check("Comma in inscription — no error", noError(r));
 
 r = await call("search_artwork", { description: "oil; canvas" });
-check("Semicolon in description — no FTS error", noFtsError(r));
+check("Semicolon in description — no error", noError(r));
 
 // ── Apostrophes and hyphens ───────────────────────────────────────────
 console.log("\n3. Apostrophes and hyphens");
 r = await call("search_artwork", { subject: "shepherd's crook" });
-check("Apostrophe in subject — no FTS error", noFtsError(r));
+check("Apostrophe in subject — no error", noError(r));
 
 r = await call("search_artwork", { creator: "Henri de Toulouse-Lautrec" });
-check("Hyphen in creator — no FTS error", noFtsError(r));
+check("Hyphen in creator — no error", noError(r));
 
 r = await call("search_artwork", { subject: "self-portrait" });
-check("Hyphenated subject — no FTS error", noFtsError(r));
+check("Hyphenated subject — no error", noError(r));
 
 // ── FTS5 operator keywords as search terms ────────────────────────────
 console.log("\n4. FTS5 operator keywords as values");
 r = await call("search_artwork", { subject: "AND" });
-check("Literal 'AND' — no FTS error", noFtsError(r));
+check("Literal 'AND' — no error", noError(r));
 
 r = await call("search_artwork", { subject: "OR" });
-check("Literal 'OR' — no FTS error", noFtsError(r));
+check("Literal 'OR' — no error", noError(r));
 
 r = await call("search_artwork", { subject: "NOT" });
-check("Literal 'NOT' — no FTS error", noFtsError(r));
+check("Literal 'NOT' — no error", noError(r));
 
 r = await call("search_artwork", { inscription: "NEAR" });
-check("Literal 'NEAR' — no FTS error", noFtsError(r));
+check("Literal 'NEAR' — no error", noError(r));
 
 // ── FTS5 special syntax injection ─────────────────────────────────────
 console.log("\n5. FTS5 syntax injection attempts");
 r = await call("search_artwork", { subject: 'dog OR cat' });
-check("OR injection — no FTS error", noFtsError(r));
+check("OR injection — no error", noError(r));
 
 r = await call("search_artwork", { subject: 'dog NOT cat' });
-check("NOT injection — no FTS error", noFtsError(r));
+check("NOT injection — no error", noError(r));
 
 r = await call("search_artwork", { subject: 'dog NEAR/3 cat' });
-check("NEAR/N injection — no FTS error", noFtsError(r));
+check("NEAR/N injection — no error", noError(r));
 
 r = await call("search_artwork", { inscription: '"quoted phrase"' });
-check("Embedded quotes — no FTS error", noFtsError(r));
+check("Embedded quotes — no error", noError(r));
+
+// An unbalanced quote inside the phrase only survives if escaping doubles it.
+for (const field of ["inscription", "description", "curatorialNarrative", "subject", "creator"]) {
+  r = await call("search_artwork", { [field]: 'the "night watch' });
+  check(`Unbalanced quote in ${field} — no error`, noError(r));
+}
 
 r = await call("search_artwork", { subject: "landscape*" });
-check("Trailing asterisk — no FTS error", noFtsError(r));
+check("Trailing asterisk — no error", noError(r));
 
 r = await call("search_artwork", { subject: "^painting" });
-check("Caret prefix — no FTS error", noFtsError(r));
+check("Caret prefix — no error", noError(r));
 
 r = await call("search_artwork", { subject: "{landscape}" });
-check("Curly braces — no FTS error", noFtsError(r));
+check("Curly braces — no error", noError(r));
 
 r = await call("search_artwork", { subject: "(dog)" });
-check("Parentheses — no FTS error", noFtsError(r));
+check("Parentheses — no error", noError(r));
 
 // ── Diacritics and Unicode ────────────────────────────────────────────
 console.log("\n6. Diacritics and Unicode");
 r = await call("search_artwork", { creator: "Albrecht Dürer" });
-check("Umlaut — no FTS error", noFtsError(r));
+check("Umlaut — no error", noError(r));
 
 r = await call("search_artwork", { depictedPerson: "François" });
-check("Cedilla — no FTS error", noFtsError(r));
+check("Cedilla — no error", noError(r));
 
 r = await call("search_artwork", { creator: "Katsushika Hokusai" });
-check("Romanized Japanese — no FTS error", noFtsError(r));
+check("Romanized Japanese — no error", noError(r));
 
 // ── Degenerate and boundary inputs ────────────────────────────────────
 console.log("\n7. Degenerate inputs");
 r = await call("search_artwork", { subject: "." });
-check("Just a period — no FTS error", noFtsError(r));
+check("Just a period — no error", noError(r));
 
 r = await call("search_artwork", { subject: "..." });
-check("Ellipsis — no FTS error", noFtsError(r));
+check("Ellipsis — no error", noError(r));
 
 r = await call("search_artwork", { subject: "***" });
-check("Only asterisks — no FTS error", noFtsError(r));
+check("Only asterisks — no error", noError(r));
 
 r = await call("search_artwork", { inscription: '""' });
-check("Only quotes — no FTS error", noFtsError(r));
+check("Only quotes — no error", noError(r));
 
+// Whitespace leaves no filter at all, which the tool rejects up front.
 r = await call("search_artwork", { subject: " " });
-check("Only whitespace — no FTS error", noFtsError(r));
+check("Only whitespace — rejected as no filter, not an FTS error",
+  r?._error?.startsWith("At least one search filter is required") === true);
 
 r = await call("search_artwork", { subject: "a" });
-check("Single char — no FTS error", noFtsError(r));
+check("Single char — no error", noError(r));
 
 // ── Mixed filters with tricky text ────────────────────────────────────
 console.log("\n9. Tricky text combined with vocab filters");
 r = await call("search_artwork", { creator: "Jansz.", type: "painting", subject: "church" });
-check("Period creator + vocab filters — no FTS error", noFtsError(r));
+check("Period creator + vocab filters — no error", noError(r));
 
-r = await call("search_artwork", { title: "De N.V. ...", subject: "factory" });
-check("Periods and ellipsis in title + subject — no FTS error", noFtsError(r));
+r = await call("search_artwork", { description: "De N.V. ...", subject: "factory" });
+check("Periods and ellipsis in description + subject — no error", noError(r));
 
 console.log(`\n${"=".repeat(50)}`);
 console.log(`  Passed: ${passed}  Failed: ${failed}`);

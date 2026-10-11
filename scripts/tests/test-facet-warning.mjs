@@ -2,11 +2,15 @@
  * Verifies that requesting a facet on a dimension that is already a filter
  * emits a `warnings` entry naming the dropped facet (#351).
  *
+ * Runs on the fixture DB; maxResults: 1 keeps the fixture's small matches above
+ * the result page so facets are computed at all.
  * Run:  npm run build  &&  node scripts/tests/test-facet-warning.mjs
  */
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { buildFixture } from "./build-fixture-vocab-db.mjs";
 
+process.env.VOCAB_DB_PATH = buildFixture("fixture-facet-warning.db");
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const { VocabularyDb } = await import(path.join(PROJECT_DIR, "dist/api/VocabularyDb.js"));
 
@@ -33,14 +37,11 @@ console.log("== #351: facet dropped when dimension is already filtered ==");
   const r = await db.search({
     creator: "Rembrandt van Rijn",
     facets: ["creator", "type"],
-    compact: true,
-    maxResults: 5,
+    maxResults: 1,
   });
   const w = r.warnings ?? [];
-  const hit = w.find((s) => /omitted because already filtered/i.test(s) && s.includes("creator"));
-  check("warning emitted when filtered dimension is requested as facet", !!hit, JSON.stringify(w));
-  check("warning lists 'creator' specifically", hit?.includes("creator") === true);
-  check("warning does not list 'type' (still computable)", hit && !hit.includes(" type"));
+  check("warning names exactly the dropped creator facet",
+    w.includes("Facet omitted because already filtered on the same dimension: creator"), JSON.stringify(w));
   check("type facet still returned", r.facets && Object.keys(r.facets).includes("type"));
   check("creator facet NOT returned", !(r.facets && Object.keys(r.facets).includes("creator")));
 }
@@ -51,15 +52,11 @@ console.log("== #351: facet dropped when dimension is already filtered ==");
     creator: "Rembrandt van Rijn",
     type: "painting",
     facets: ["creator", "type", "century"],
-    compact: true,
-    maxResults: 5,
+    maxResults: 1,
   });
   const w = r.warnings ?? [];
-  const hit = w.find((s) => /omitted because already filtered/i.test(s));
-  check("multi-drop warning emitted", !!hit, JSON.stringify(w));
-  check("multi-drop names creator", hit?.includes("creator") === true);
-  check("multi-drop names type", hit?.includes("type") === true);
-  check("plural 'Facets' used", hit?.startsWith("Facets ") === true, hit);
+  check("plural warning names both dropped facets, century kept",
+    w.includes("Facets omitted because already filtered on the same dimension: creator, type"), JSON.stringify(w));
 }
 
 // Case 3: no overlap → no warning
@@ -67,8 +64,7 @@ console.log("== #351: facet dropped when dimension is already filtered ==");
   const r = await db.search({
     creator: "Rembrandt van Rijn",
     facets: ["type", "century"],
-    compact: true,
-    maxResults: 5,
+    maxResults: 1,
   });
   const w = r.warnings ?? [];
   const hit = w.find((s) => /omitted because already filtered/i.test(s));

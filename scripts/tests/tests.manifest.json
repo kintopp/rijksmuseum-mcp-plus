@@ -551,15 +551,14 @@
     "purpose": "search_provenance creditLineQuery fallback over stdio (needs dist/ + DB)"
   },
   "test-facet-warning.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
     "runtime": "node",
     "requires": [
-      "manual",
-      "vocabDb"
+      "dist"
     ],
-    "purpose": "facet-on-filtered-dimension warning (#351) via VocabularyDb (needs DB)"
+    "purpose": "search facets on an already-filtered dimension are dropped with an exact warning (fixture DB)"
   },
   "test-find-similar-channels.mjs": {
     "category": "db",
@@ -599,16 +598,14 @@
     "purpose": "find_similar HTML page across all channels (needs vocab+embeddings+iconclass DBs, net for Visual)"
   },
   "test-fts-edge-cases.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
     "runtime": "node",
     "requires": [
-      "dist",
-      "manual",
-      "vocabDb"
+      "dist"
     ],
-    "purpose": "FTS5 escaping edge cases via search_artwork over stdio (needs dist/ + DB)"
+    "purpose": "search_artwork never errors on punctuation, FTS5 operators, unbalanced quotes, diacritics or degenerate text (fixture DB)"
   },
   "test-inspect-navigate.mjs": {
     "category": "db",
