@@ -119,7 +119,8 @@ export function reapply(db, { dryRun = false } = {}) {
 
   const getPeriodBySourceEvent = db.prepare(`
     SELECT sequence FROM provenance_periods
-    WHERE artwork_id = ? AND source_events LIKE ?
+    WHERE artwork_id = ? AND EXISTS (SELECT 1 FROM json_each(source_events) WHERE value = ?)
+    ORDER BY sequence
   `);
 
   const deleteParties = dryRun ? null : db.prepare(`
@@ -143,6 +144,11 @@ export function reapply(db, { dryRun = false } = {}) {
     UPDATE provenance_events
     SET location = ?, correction_method = ?, enrichment_reasoning = ?
     WHERE artwork_id = ? AND sequence = ? AND location = ?
+  `);
+  // A name can recur on one event in another role, so match all three.
+  const hasParty = db.prepare(`
+    SELECT 1 FROM provenance_parties WHERE artwork_id = ? AND sequence = ?
+      AND party_name = ? AND party_role IS ? AND party_position IS ?
   `);
   const getMaxPartyIdx = db.prepare(
     "SELECT COALESCE(MAX(party_idx), -1) AS max_idx FROM provenance_parties WHERE artwork_id = ? AND sequence = ?"
@@ -399,9 +405,9 @@ export function reapply(db, { dryRun = false } = {}) {
               }
             }
           } else if (row.field === "period.manual") {
-            // Resolve period via source_events (read happens in dry-run too)
-            const eventSeq = payload.period_sequence;
-            const periodRow = getPeriodBySourceEvent.get(artworkId, `%${eventSeq}%`);
+            // Resolve the period via the event's current sequence (read happens in
+            // dry-run too); payload.period_sequence is pre-re-parse numbering.
+            const periodRow = getPeriodBySourceEvent.get(artworkId, seq);
             if (!periodRow) {
               unmatched.period_not_found++;
               unmatchedObjectNumbers.add(objectNumber);
@@ -479,6 +485,7 @@ export function reapply(db, { dryRun = false } = {}) {
               updateLocation.run(c.corrected_value, method, row.reasoning ?? null, artworkId, seq, c.current_value);
             }
           } else if (c.field === "parties" && c.new_party) {
+            if (hasParty.get(artworkId, seq, c.new_party.name, c.new_party.role ?? null, c.new_party.position ?? null)) continue;
             applied.event_fieldcorrection++;
             if (!dryRun) {
               const { max_idx } = getMaxPartyIdx.get(artworkId, seq);
@@ -509,6 +516,8 @@ export function reapply(db, { dryRun = false } = {}) {
         }
         const seq = located.seq;
         const r = JSON.parse(row.payload);
+        // Merge targets are audit-time sequences; shift them by the source's drift.
+        const target = r.merge_target_sequence == null ? null : r.merge_target_sequence + (seq - r.event_sequence);
         const method = RECLASS_ISSUE_TO_METHOD[r.issue_type] ?? `${M.LLM_STRUCTURAL_PREFIX}${r.issue_type}`;
         applied.event_reclassify++;
         if (dryRun) continue;
@@ -516,12 +525,12 @@ export function reapply(db, { dryRun = false } = {}) {
           markNonProv.run(method, r.reasoning ?? null, artworkId, seq);
         } else if (r.action === "merge_with_adjacent") {
           if (r.merge_field_updates?.location != null) {
-            updateTargetLocation.run(r.merge_field_updates.location, method, r.reasoning ?? null, artworkId, r.merge_target_sequence);
+            updateTargetLocation.run(r.merge_field_updates.location, method, r.reasoning ?? null, artworkId, target);
           }
           deletePartiesAt.run(artworkId, seq);
           deleteEventAt.run(artworkId, seq);
         } else if (r.action === "merge_alternatives") {
-          setUncertain.run(method, r.reasoning ?? null, artworkId, r.merge_target_sequence);
+          setUncertain.run(method, r.reasoning ?? null, artworkId, target);
           deletePartiesAt.run(artworkId, seq);
           deleteEventAt.run(artworkId, seq);
         }

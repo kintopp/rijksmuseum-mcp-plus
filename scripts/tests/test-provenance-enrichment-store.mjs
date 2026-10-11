@@ -206,6 +206,25 @@ function assertHardInvariants(db, artworkId, label) {
   assertEq(correctedNoReasoning, 0, `${label}: 0 corrected events without enrichment_reasoning`);
 }
 
+function insertEvent(db, artworkId, sequence, rawText, { location = null, parties = null } = {}) {
+  db.prepare(`
+    INSERT INTO provenance_events (artwork_id, sequence, raw_text, transfer_type, location, parties)
+    VALUES (?, ?, ?, 'sale', ?, ?)
+  `).run(artworkId, sequence, rawText, location, parties);
+}
+
+function insertPeriod(db, artworkId, sequence, sourceEvents, beginYear) {
+  db.prepare(`
+    INSERT INTO provenance_periods (artwork_id, sequence, begin_year, source_events)
+    VALUES (?, ?, ?, ?)
+  `).run(artworkId, sequence, beginYear, sourceEvents);
+}
+
+function periodYears(db, artworkId) {
+  return db.prepare("SELECT sequence, begin_year FROM provenance_periods WHERE artwork_id = ? ORDER BY sequence")
+    .all(artworkId).map((p) => [p.sequence, p.begin_year]);
+}
+
 // ─── Temp CSV helper ──────────────────────────────────────────────────────────
 
 function writeTmpCsv(content) {
@@ -560,6 +579,50 @@ function writeTmpJson(content) {
     } finally {
       cleanTmp(tmpPath2);
     }
+
+    // Sub-case: a re-parse adds a preamble, so the corrected event moves 1 → 2
+    // and the periods are re-derived. The correction follows the event's content.
+    const db3 = makeDb();
+    db3.exec("INSERT INTO artworks VALUES (93, 'SK-A-0093')");
+    insertEvent(db3, 93, 1, "Drifting period event");
+    insertPeriod(db3, 93, 1, "[1]", 1346);
+    const tmpPath3 = writeTmpCsv([
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_periods,93,SK-A-0093,1,,begin_year,1346,,Lot number parsed as year",
+    ].join("\n"));
+    try {
+      migrate(db3, { manual: true, csvPath: tmpPath3 });
+    } finally {
+      cleanTmp(tmpPath3);
+    }
+    db3.exec("DELETE FROM provenance_events; DELETE FROM provenance_periods;");
+    insertEvent(db3, 93, 1, "New preamble event");
+    insertEvent(db3, 93, 2, "Drifting period event");
+    insertPeriod(db3, 93, 1, "[1]", 1200);
+    insertPeriod(db3, 93, 2, "[2]", 1346);
+    const result3 = reapply(db3);
+    assertEq(result3.applied.period_manual, 1, "case9: drifted period.manual applied");
+    assertDeepEq(periodYears(db3, 93), [[1, 1200], [2, null]],
+      "case9: drift — the period sourced from the moved event is cleared, the preamble's is untouched");
+
+    // Sub-case: '[10]' contains '1' as a substring but is a different event.
+    const db4 = makeDb();
+    db4.exec("INSERT INTO artworks VALUES (94, 'SK-A-0094')");
+    insertEvent(db4, 94, 1, "Event one");
+    insertPeriod(db4, 94, 1, "[10]", 1500);
+    insertPeriod(db4, 94, 2, "[1]", 1346);
+    const tmpPath4 = writeTmpCsv([
+      "table,artwork_id,object_number,sequence,party_idx,field,old_value,new_value,reasoning",
+      "provenance_periods,94,SK-A-0094,1,,begin_year,1346,,Lot number parsed as year",
+    ].join("\n"));
+    try {
+      migrate(db4, { manual: true, csvPath: tmpPath4 });
+    } finally {
+      cleanTmp(tmpPath4);
+    }
+    reapply(db4);
+    assertDeepEq(periodYears(db4, 94), [[1, 1500], [2, null]],
+      "case9: source_events '[10]' is not matched as event 1");
   }
 
   // ── Addendum D1: Manual CSV — all tables, merge, DELETE→snapshot ───────────
@@ -604,6 +667,14 @@ function writeTmpJson(content) {
     const partyPayload = JSON.parse(partyRows[0].payload);
     assertEq(partyPayload.parties.length, 1, "D1: snapshot has 1 current party");
     assertEq(partyPayload.parties[0].party_name, "Party Alice", "D1: snapshot party name correct");
+
+    // A re-parse restores the wrong date; re-apply clears both columns again.
+    db.exec("UPDATE provenance_events SET date_year = 1346, date_expression = '1346' WHERE artwork_id = 101");
+    const result = reapply(db);
+    assertEq(result.applied.event_manual, 1, "D1: event.manual applied");
+    const evt = getEvent(db, 101, 1);
+    assertDeepEq([evt.date_year, evt.date_expression], [null, null], "D1: re-apply clears date_year and date_expression");
+    assertEq(evt.enrichment_reasoning, "Same lot number not a date", "D1: re-apply records the CSV reasoning");
   }
 
   // ── Addendum D2: STOP condition — unknown table throws ────────────────────
@@ -1139,6 +1210,30 @@ function writeTmpJson(content) {
     try { jsonParties = JSON.parse(evt.parties || "[]"); } catch { jsonParties = []; }
     const jsonNew = jsonParties.find((p) => p.name === "City of Amsterdam");
     assert(jsonNew != null, "case13: new party mirrored into event.parties JSON");
+
+    // A second run must not append the receiver again.
+    reapply(db);
+    const partyNames = getParties(db, 13, 3).map((p) => p.party_name);
+    assertDeepEq(partyNames, ["Original Owner", "City of Amsterdam"], "case13: second re-apply adds no duplicate party");
+    const jsonNames = JSON.parse(getEvent(db, 13, 3).parties).map((p) => p.name);
+    assertDeepEq(jsonNames, ["Original Owner", "City of Amsterdam"], "case13: second re-apply adds no duplicate JSON party");
+
+    // The same name in another role is a different party and is still added.
+    const db2 = makeDb();
+    db2.exec("INSERT INTO artworks VALUES (14, 'RP-T-1980-53')");
+    insertEvent(db2, 14, 1, "from the dealer Weigel to himself");
+    db2.exec("INSERT INTO provenance_parties (artwork_id, sequence, party_idx, party_name, party_role, party_position) VALUES (14, 1, 0, 'Weigel', 'seller', 'sender')");
+    insertStructuralRow(db2, {
+      objectNumber: "RP-T-1980-53", parentRawText: "from the dealer Weigel to himself",
+      field: "event.fieldcorrection", method: M.LLM_STRUCTURAL,
+      payload: { reasoning: "receiver omitted", corrections: [{
+        field: "parties", issue_type: "missing_receiver",
+        new_party: { name: "Weigel", role: "buyer", position: "receiver" },
+      }] },
+    });
+    reapply(db2);
+    assertDeepEq(getParties(db2, 14, 1).map((p) => [p.party_name, p.party_role]), [["Weigel", "seller"], ["Weigel", "buyer"]],
+      "case13: a same-name party in a different role is added");
   }
 
   // ── Case 14: Structural confidence/length filter ──────────────────────────
@@ -1380,6 +1475,54 @@ function writeTmpJson(content) {
     assert(shipped.size > 0, `case16: the committed revert denylist loads entries (${shipped.size})`);
     assertDeepEq([...shipped].filter((k) => !/^[^|]+\|\d+\|[a-z_]+$/.test(k)), [],
       "case16: every denylist key is object|sequence|issue_type");
+  }
+
+  // ── Case 17: Reclassifications re-apply after sequence drift ──────────────
+  // The audit numbered the events 1–5; the re-parse added a preamble, so every
+  // event moved down one. Merge targets must move with their sources.
+  section("Case 17: Reclassifications re-apply after sequence drift");
+  {
+    const db = makeDb();
+    const OBJ = "SK-A-0017";
+    db.exec(`INSERT INTO artworks VALUES (17, '${OBJ}')`);
+    insertEvent(db, 17, 1, "New preamble event");
+    insertEvent(db, 17, 2, "collection of X, Paris");
+    insertEvent(db, 17, 3, "in the Paris house");
+    insertEvent(db, 17, 4, "see the note above");
+    insertEvent(db, 17, 5, "collection of Z");
+    insertEvent(db, 17, 6, "or perhaps collection of W");
+    db.exec(`
+      INSERT INTO provenance_parties (artwork_id, sequence, party_idx, party_name) VALUES
+        (17, 1, 0, 'Preamble Owner'), (17, 2, 0, 'X'), (17, 3, 0, 'House'), (17, 6, 0, 'W');
+    `);
+    const reclass = (parentRawText, payload) => insertStructuralRow(db, {
+      objectNumber: OBJ, parentRawText, field: "event.reclassify",
+      method: `${M.LLM_STRUCTURAL_PREFIX}${payload.issue_type}`,
+      payload: { confidence: 0.9, reasoning: `${payload.action} reasoning`, ...payload },
+    });
+    reclass("in the Paris house", {
+      event_sequence: 2, issue_type: "location_as_event", action: "merge_with_adjacent",
+      merge_target_sequence: 1, merge_field_updates: { location: "Paris" },
+    });
+    reclass("see the note above", { event_sequence: 3, issue_type: "phantom_event", action: "mark_non_provenance" });
+    reclass("or perhaps collection of W", {
+      event_sequence: 5, issue_type: "alternative_acquisition", action: "merge_alternatives", merge_target_sequence: 4,
+    });
+
+    const result = reapply(db);
+    assertEq(result.applied.event_reclassify, 3, "case17: 3 reclassifications applied");
+    const events = getAllEvents(db, 17);
+    assertDeepEq(events.map((e) => e.sequence), [1, 2, 4, 5], "case17: both merged sources deleted, nothing else");
+    const bySeq = Object.fromEntries(events.map((e) => [e.sequence, e]));
+    assertDeepEq([bySeq[1].location, bySeq[1].uncertain, bySeq[1].correction_method], [null, 0, null],
+      "case17: the preamble is untouched");
+    assertEq(bySeq[2].location, "Paris", "case17: merge_with_adjacent updates the drifted target's location");
+    assertEq(bySeq[4].transfer_type, "non_provenance", "case17: mark_non_provenance rewrites the type");
+    assertEq(bySeq[5].uncertain, 1, "case17: merge_alternatives marks the drifted target uncertain");
+    const parties = db.prepare("SELECT sequence, party_name FROM provenance_parties WHERE artwork_id = 17 ORDER BY sequence")
+      .all().map((p) => [p.sequence, p.party_name]);
+    assertDeepEq(parties, [[1, "Preamble Owner"], [2, "X"]], "case17: merged sources' parties deleted, the rest kept");
+    assertHardInvariants(db, 17, "case17");
   }
 
   // ─── Summary ───────────────────────────────────────────────────────────────
