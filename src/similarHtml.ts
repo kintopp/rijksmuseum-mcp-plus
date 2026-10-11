@@ -220,8 +220,9 @@ function renderOptionalLink(label: string, uri: string | undefined): string {
     : escHtml(label);
 }
 
-function iiifThumbUrl(iiifId: string, width = 250): string {
-  return `https://iiif.micr.io/${encodeURIComponent(iiifId)}/full/${width},/0/default.jpg`;
+// Bounding box at 2× the CSS box (.result-thumb 180×240, .query-thumb 300×420) so HiDPI screens don't upscale.
+function iiifThumbUrl(iiifId: string, boxW: number, boxH: number): string {
+  return `https://iiif.micr.io/${encodeURIComponent(iiifId)}/full/!${boxW},${boxH}/0/default.jpg`;
 }
 
 function renderCardMetadata(c: SimilarCandidate, mode: string): string {
@@ -251,7 +252,7 @@ function renderCardMetadata(c: SimilarCandidate, mode: string): string {
 function renderCard(c: SimilarCandidate, rank: number, mode: string, modeSources?: string[]): string {
   const thumbHtml = c.iiifId
     ? `<a class="result-thumb-link" href="${escHtml(c.url)}" target="_blank">
-         <img class="result-thumb" src="${escHtml(iiifThumbUrl(c.iiifId))}" alt="" loading="lazy"
+         <img class="result-thumb" src="${escHtml(iiifThumbUrl(c.iiifId, 360, 480))}" alt="" loading="lazy"
               onerror="this.style.display='none'">
        </a>`
     : `<a class="result-thumb-link" href="${escHtml(c.url)}" target="_blank">
@@ -387,7 +388,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
 
   // Query artwork header
   const queryThumb = query.iiifId
-    ? `<img class="query-thumb" src="${escHtml(iiifThumbUrl(query.iiifId, 300))}" alt="" loading="lazy"
+    ? `<img class="query-thumb" src="${escHtml(iiifThumbUrl(query.iiifId, 600, 840))}" alt="" loading="lazy"
            onerror="this.style.display='none'">`
     : `<div class="query-thumb no-image">No image available</div>`;
 
