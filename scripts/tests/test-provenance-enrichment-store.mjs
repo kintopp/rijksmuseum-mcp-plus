@@ -707,6 +707,36 @@ function writeTmpJson(content) {
     assertEq(snaps.length, 1, "E1: exactly one event.parties row (deduped, not double-inserted)");
   }
 
+  section("Addendum E3: a single-mode migrate leaves the other modes' rows alone");
+  {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO artworks VALUES (303, 'SK-A-0303');
+      INSERT INTO provenance_events VALUES
+        (303,1,'Single mode event text',0,'sale',0,0,NULL,NULL,0,NULL,1346,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'peg',NULL,NULL);
+      INSERT INTO provenance_parties VALUES
+        (303,1,0,'Real Buyer',NULL,'buyer','London','${M.LLM_ENRICHMENT}',0,'enriched');
+    `);
+    const csv = [
+      "provenance_events,303,SK-A-0303,1,,date_year,1346,,Lot number",
+      "provenance_parties,303,SK-A-0303,1,*,DELETE,,,Overlaps the value snapshot",
+    ];
+    migrateManualCsv(db, csv, { value: true });
+    const before = getStore(db, "event.parties");
+    assertDeepEq(before.map((r) => r.source), ["migration:db"], "E3: full run — value path owns the snapshot");
+
+    // The live DB drifts after the store was built.
+    db.exec("DELETE FROM provenance_parties WHERE artwork_id = 303");
+    let threw = false;
+    try { migrateManualCsv(db, csv); } catch { threw = true; }
+    assert(!threw, "E3: manual-only run does not collide with the surviving value snapshot");
+    assertDeepEq(getStore(db, "event.parties"), before, "E3: manual-only run keeps the value snapshot as captured");
+    assertEq(getStore(db, "event.manual").length, 1, "E3: manual-only run rebuilds its own event.manual row");
+
+    migrate(db, { value: true });
+    assertEq(getStore(db, "event.manual").length, 1, "E3: value-only run keeps the manual-csv row");
+  }
+
   // ── Addendum E2: period.manual dry-run is accurate (reads, no writes) ──
   section("Addendum E2: period.manual dry-run surfaces period_not_found and writes nothing");
   {

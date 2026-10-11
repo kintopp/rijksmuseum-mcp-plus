@@ -897,20 +897,25 @@ export function migrate(db, { value = false, manual = false, structural = false,
   const allCounts = { party_snapshot: 0 };
   const seenPK = new Set();
 
+  // Each mode replaces only the rows it owns: value and manual re-capture from the
+  // live DB, so rebuilding a mode that wasn't asked for would import DB drift.
+  // Structural rows carry the audit batchId as source, so they're owned by op_kind.
+  const owned = [
+    value && "source IN ('migration:db', 'audit:type-classification')",
+    manual && "source = 'manual-csv'",
+    structural && "op_kind = 'structural'",
+  ].filter(Boolean).join(" OR ");
+
+  if (!owned) return allCounts;
+
   const run = db.transaction(() => {
-    if (!dryRun) {
-      // Idempotent: clear previous value/manual migration rows before re-inserting.
-      // 'audit:type-classification' is the 1a-recovery source (option A) — must be
-      // cleared too, else a re-run collides on its PKs.
-      db.prepare(
-        "DELETE FROM provenance_enrichments WHERE source IN ('migration:db', 'manual-csv', 'audit:type-classification')"
-      ).run();
-      // Structural rows carry the audit batchId as source, so clear them by op_kind.
-      if (structural) {
-        db.prepare(
-          "DELETE FROM provenance_enrichments WHERE op_kind = 'structural'"
-        ).run();
-      }
+    if (!dryRun) db.prepare(`DELETE FROM provenance_enrichments WHERE ${owned}`).run();
+    // Surviving rows dedupe the re-captured ones, e.g. a manual-only run must not
+    // re-insert a party snapshot the value path already holds.
+    for (const r of db.prepare(
+      `SELECT object_number, raw_text_hash, dup_ordinal, field, party_idx FROM provenance_enrichments WHERE NOT (${owned})`
+    ).all()) {
+      seenPK.add(`${r.object_number}|${r.raw_text_hash}|${r.dup_ordinal}|${r.field}|${r.party_idx}`);
     }
 
     if (value) {

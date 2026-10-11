@@ -53,7 +53,9 @@ node scripts/tests/verify-enrichment-store-parity.mjs --db data/vocabulary.db   
 ```
 
 Rebuild it only when the audit JSONs or the migrate extractor change (e.g. the plan-015 structural
-confidence fix). Ordinary re-parses re-apply from the surviving store; no rebuild needed.
+confidence fix), and only the affected mode — each mode replaces just its own rows. `--value` and
+`--manual` re-capture from the current DB, so re-running them after it has drifted imports the
+drift. Ordinary re-parses re-apply from the surviving store; no rebuild needed.
 
 **#397/#408 revert guard:** `--structural` consults `scripts/provenance-revert-denylist.json` and
 skips the structural ops the v0.81 audit reverted (60 phantom suppressions, 18 bad bequest splits,
