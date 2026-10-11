@@ -22,6 +22,7 @@ All examples below are real and were run against the production vocabulary datab
 - [Discovery & introspection](#discovery--introspection)
 - [Command reference](#command-reference)
 - [Pipeline recipes](#pipeline-recipes)
+- [Worked example: Waller's collector's mark](#worked-example-wallers-collectors-mark)
 - [Using the CLI from an agent](#using-the-cli-from-an-agent)
 - [Troubleshooting](#troubleshooting)
 
@@ -637,6 +638,44 @@ node scripts/cli.mjs search --creator 2103429 --type painting --max 50 --fields 
 
 Errors and counts go to stderr, so they never corrupt a `| jq` pipe. Add `--quiet` to silence the
 count summary entirely.
+
+---
+
+## Worked example: Waller's collector's mark
+
+[Research scenario 7](research-scenarios.md#7-fg-wallers-collectors-mark-lugt-2760) asks whether the collector's mark of F.G. Waller (Lugt 2760) identifies his personal collection. Answering it properly means joining every stamped sheet to its credit line, but the mark sits on some 33,000 sheets, far more than a chat session can handle. The shell can do the join:
+
+```bash
+export RIJKS_MCP_HTTP=http://localhost:3000/mcp        # a warm server (npm run serve); stdio would spawn per call
+
+# 1. every sheet bearing the mark → one object number per line (100 per page, 200 pages)
+for off in $(seq 0 100 19900); do
+  rijks-mcp inscriptions --collectorMark 2760 --max 100 --offset $off --fields objectNumber
+done | jq -r .objectNumber > waller-marked.txt
+
+# 2. the join: one details call per sheet, projected to the credit line
+rijks-mcp details --stdin --fields objectNumber,creditLine < waller-marked.txt > waller-credit.jsonl
+
+# 3. who each stamped sheet actually came from
+jq -r '.creditLine // "" |
+  if   test("Waller-?Fonds|Waller Fund")                          then "Waller Fund purchase (post-1934)"
+  elif test("Legaat|Bequest")                                      then "Waller bequest (1934)"
+  elif test("Schenking van de heer F.G. Waller|Gift of F.G. Waller") then "Waller gift (lifetime)"
+  elif . == ""                                                     then "no credit line"
+  else "other donor" end' waller-credit.jsonl | sort | uniq -c | sort -nr
+```
+
+```
+13278 Waller Fund purchase (post-1934)
+ 2980 Waller bequest (1934)
+ 2442 Waller gift (lifetime)
+ 1078 no credit line
+  222 other donor
+```
+
+Only about a quarter of the stamped sheets came from Waller himself, as his 1934 bequest or as gifts made in his lifetime. Two-thirds were bought by the Waller Fund after his death. The Rijksprentenkabinet applied his stamp to those purchases too, so Lugt 2760 marks everything that entered through Waller's name, not only what he owned. The sheets that carry the stamp have no parsed provenance, and the works whose provenance names Waller do not carry the stamp (`rijks-mcp provenance --party Waller` paged to 124 artworks, then `comm -12` against `waller-marked.txt`). To recover his personal collection, the mark has to be read together with the credit line.
+
+The CLI uses the same `callTool` and returns the same rows the AI assistant sees; what the shell adds is scale and set operations: paging a 20,000-row result, running a details call for every row, and joining two result sets by object number. Two caveats: `search_inscriptions` parses at most 20,000 candidates (`candidatesCapped: true` on the first page), so the tally covers about 60 percent of the marked sheets, in index order; and `--fields` projects top-level keys only, so nested values are unpacked in `jq`.
 
 ---
 

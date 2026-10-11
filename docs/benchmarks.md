@@ -64,7 +64,7 @@ Each session runs in an empty scratch directory with the user's own settings, ho
 
 ### The questions
 
-The questions live in [`scripts/bench/prompts.json`](../scripts/bench/prompts.json). They range from single facts to open research tasks; the complex ones are taken from the [research scenarios](research-scenarios.md).
+The questions live in [`scripts/bench/prompts.json`](../scripts/bench/prompts.json). They range from single facts to open research tasks; the complex ones are taken from an earlier, longer version of the [research scenarios](research-scenarios.md).
 
 | Id | Tier | Question (abridged) | Answer check |
 |---|---|---|---|
@@ -72,9 +72,9 @@ The questions live in [`scripts/bench/prompts.json`](../scripts/bench/prompts.js
 | `nightwatch-dims` | simple | Recorded dimensions of *The Night Watch* | 379.5 × 453.5 cm |
 | `avercamp-skaters` | medium | Avercamp's winter landscape with skaters: object number and Dutch title | `SK-A-1718` |
 | `women-artists` | medium | The three most prolific women artists in the collection | Bieruma Oosting, Pennink-Boelen, Vos |
-| `flinck-examinations` | medium | Technical examination record of Flinck's *Isaac Blessing Jacob* ([scenario 34](research-scenarios.md#34-the-technical-biography-of-a-painting)) | 1930, infrared, X-ray |
-| `wartime-provenance` | complex | Works confiscated or restituted 1933–1945, with gaps ([scenario 23](research-scenarios.md#23-wartime-transfers-and-provenance-gaps)) | confiscation, restitution, a matching object number |
-| `rembrandt-acquisition` | complex | How the Rembrandt collection was acquired ([scenario 8](research-scenarios.md#8-credit-lines-and-acquisition-context)) | bequest, purchase, Rembrandt object numbers |
+| `flinck-examinations` | medium | Technical examination record of Flinck's *Isaac Blessing Jacob* (former research scenario 34) | 1930, infrared, X-ray |
+| `wartime-provenance` | complex | Works confiscated or restituted 1933–1945, with gaps (former research scenario 23) | confiscation, restitution, a matching object number |
+| `rembrandt-acquisition` | complex | How the Rembrandt collection was acquired (former research scenario 8) | bequest, purchase, Rembrandt object numbers |
 
 An answer check is a simple text match, which is enough to tell whether the right facts came back.
 
