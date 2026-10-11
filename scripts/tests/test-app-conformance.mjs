@@ -8,6 +8,8 @@
  *
  *   - UI resource: ui:// URI, text/html;profile=mcp-app mime, _meta.ui.csp
  *     (resourceDomains + connectDomains), prefersBorder:false
+ *   - resources/read serves the built bundle, not loadViewerHtml()'s
+ *     "Viewer Not Built" fallback (a wrong dist/ path fails silently)
  *   - Render tool (get_artwork_image): _meta.ui.resourceUri points at the resource
  *   - App-only tools (remount_viewer, poll_viewer_commands): visibility:["app"],
  *     no ui.resourceUri (no template bound to a hidden tool)
@@ -56,7 +58,7 @@ const transport = new StdioClientTransport({
   command: "node",
   args: ["dist/index.js"],
   cwd: PROJECT_DIR,
-  env: { ...process.env, STRUCTURED_CONTENT: "true" },
+  env: { ...process.env, STRUCTURED_CONTENT: "true", MCP_SKIP_STARTUP_WARM: "1" },
 });
 const client = new Client({ name: "test-app-conformance", version: "0.1" });
 await client.connect(transport);
@@ -83,13 +85,17 @@ const listUi = uiMeta(listEntry._meta);
 check("resources/list entry carries _meta.ui (so hosts can review CSP pre-connect)", () => {
   assert.ok(listUi, `_meta = ${JSON.stringify(listEntry._meta)}`);
 });
-check("resource _meta.ui.csp.resourceDomains is a non-empty array", () => {
-  assert.ok(Array.isArray(listUi.csp?.resourceDomains) && listUi.csp.resourceDomains.length > 0,
-    JSON.stringify(listUi.csp));
+// The viewer loads tiles (img-src) and info.json (connect-src) from IIIF; a
+// missing entry in either list renders a blank viewer with no error.
+check("resource _meta.ui.csp.resourceDomains admits the IIIF image host", () => {
+  assert.ok(listUi.csp?.resourceDomains?.includes("https://iiif.micr.io"), JSON.stringify(listUi.csp));
 });
-check("resource _meta.ui.csp.connectDomains is a non-empty array", () => {
-  assert.ok(Array.isArray(listUi.csp?.connectDomains) && listUi.csp.connectDomains.length > 0,
-    JSON.stringify(listUi.csp));
+check("resource _meta.ui.csp.connectDomains admits the IIIF image host", () => {
+  assert.ok(listUi.csp?.connectDomains?.includes("https://iiif.micr.io"), JSON.stringify(listUi.csp));
+});
+check("resource CSP admits no script CDN (the bundle is self-contained)", () => {
+  const all = [...(listUi.csp?.resourceDomains ?? []), ...(listUi.csp?.connectDomains ?? [])];
+  assert.deepEqual(all.filter((d) => /jsdelivr|unpkg|cdnjs/.test(d)), []);
 });
 check("resource _meta.ui.prefersBorder === false", () => {
   assert.equal(listUi.prefersBorder, false);
@@ -110,8 +116,9 @@ check(`resources/read content mimeType is ${RESOURCE_MIME_TYPE}`, () => {
 check("resources/read content carries _meta.ui (authoritative copy)", () => {
   assert.ok(uiMeta(content._meta), JSON.stringify(content._meta));
 });
-check("resources/read content is a non-empty HTML document", () => {
-  assert.ok(typeof content.text === "string" && content.text.includes("<html"), `len=${content.text?.length}`);
+check("resources/read serves the built viewer bundle, not the \"Viewer Not Built\" fallback", () => {
+  assert.ok(typeof content.text === "string" && !content.text.includes("Viewer Not Built"), "fallback page served");
+  assert.ok(content.text.includes("callServerTool"), `no ext-apps code in the served page (len=${content.text.length})`);
 });
 
 // ── 2. Viewer-family tools ────────────────────────────────────────

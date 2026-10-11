@@ -469,14 +469,14 @@
     "purpose": "search_provenance enrichment-review channel parity (needs dist/ + vocab DB; in test:provenance-review)"
   },
   "test-app-conformance.mjs": {
-    "category": "db",
-    "class": "smoke",
+    "category": "ci",
+    "class": "gate",
     "status": "promoted",
     "runtime": "node",
     "requires": [
       "dist"
     ],
-    "purpose": "MCP Apps viewer metadata/conformance over stdio (needs built dist/; in test:viewer-app)"
+    "purpose": "MCP Apps viewer metadata/conformance over stdio: CSP, visibility, real bundle not the fallback (needs built dist/; in test:viewer-app)"
   },
   "test-324-concurrent-mcp.mjs": {
     "category": "live",
@@ -856,17 +856,6 @@
       "vocabDb"
     ],
     "purpose": "url-field rename smoke (#341) over stdio (needs built dist/ + DB)"
-  },
-  "test-viewer-resource-load.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
-    "runtime": "node",
-    "requires": [
-      "dist",
-      "manual"
-    ],
-    "purpose": "loadViewerHtml serves the real bundle not the 'Viewer Not Built' fallback over stdio (needs built dist/)"
   },
   "test-artwork-details-v027.mjs": {
     "category": "exploratory",

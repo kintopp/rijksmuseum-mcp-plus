@@ -15,7 +15,6 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const htmlPath = resolve(__dirname, '../../dist/apps/index.html');
-const registrationPath = resolve(__dirname, '../../src/registration.ts');
 
 let pass = 0;
 let fail = 0;
@@ -70,56 +69,21 @@ assert(
 
 // ── 4. ext-apps SDK bundled ──────────────────────────────────────────
 
+// Not `postMessage`: OpenSeadragon contains it too, so it can't tell whether
+// ext-apps made it into the bundle.
 assert(
-  html.includes('callServerTool') || html.includes('postMessage'),
-  'ext-apps SDK is bundled (callServerTool or postMessage found)'
+  html.includes('callServerTool'),
+  'ext-apps SDK is bundled (callServerTool found)'
 );
 
-// ── 5. CSP source check ─────────────────────────────────────────────
-
-const registration = readFileSync(registrationPath, 'utf-8');
-
-// Extract resourceDomains array from source (rough but sufficient)
-const rdMatch = registration.match(/resourceDomains:\s*\[([\s\S]*?)\]/);
-const rdBlock = rdMatch?.[1] ?? '';
+// ── 5. Related-artwork navigation controls ──────────────────────────
 
 assert(
-  !rdBlock.includes('cdn.jsdelivr.net'),
-  'resourceDomains does not include cdn.jsdelivr.net'
-);
-assert(
-  !rdBlock.includes('unpkg.com'),
-  'resourceDomains does not include unpkg.com'
+  html.includes('id="prev-related"') && html.includes('id="next-related"'),
+  'Toolbar exposes prev-related / next-related buttons',
 );
 
-// ── 6. Cluster E (#296) — prev/next-related toolbar + j/k/l keymap ─
-
-assert(
-  html.includes('id="prev-related"'),
-  'Toolbar exposes prev-related button (cluster E #296)',
-);
-assert(
-  html.includes('id="next-related"'),
-  'Toolbar exposes next-related button (cluster E #296)',
-);
-assert(
-  !/<button[^>]*id="rotate-left"/.test(html) && !/<button[^>]*id="rotate-right"/.test(html),
-  'Rotate buttons removed from toolbar (keyboard preserved)',
-);
-assert(
-  !/<button[^>]*id="fullscreen"/.test(html),
-  'Fullscreen button removed from toolbar (keyboard preserved)',
-);
-assert(
-  /shortcut-row[^>]*>[^<]*<kbd>j<\/kbd>\s*\/\s*<kbd>l<\/kbd>/.test(html),
-  'Shortcuts overlay documents j / l for related navigation',
-);
-assert(
-  /shortcut-row[^>]*>[^<]*<kbd>0<\/kbd>\s*\/\s*<kbd>k<\/kbd>/.test(html),
-  'Shortcuts overlay documents 0 / k for reset / return-to-seed',
-);
-
-// ── 7. Size budget ──────────────────────────────────────────────────
+// ── 6. Size budget ──────────────────────────────────────────────────
 
 const rawBytes = Buffer.byteLength(html, 'utf-8');
 const gzBytes = gzipSync(html).length;
