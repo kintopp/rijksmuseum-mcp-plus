@@ -12,25 +12,9 @@
  * here: every call site wraps the value in a quoted phrase, where those
  * characters are inert. Only the quote doubling is load-bearing.
  */
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { buildFixture } from "./build-fixture-vocab-db.mjs";
+import { connectFixtureClient } from "./fixture-client.mjs";
 
-const transport = new StdioClientTransport({
-  command: "node",
-  args: ["dist/index.js"],
-  cwd: process.cwd(),
-  env: {
-    ...process.env,
-    STRUCTURED_CONTENT: "true",
-    MCP_SKIP_STARTUP_WARM: "1",
-    VOCAB_DB_PATH: buildFixture("fixture-fts-edge-cases.db"),
-  },
-  stderr: "ignore",
-});
-
-const client = new Client({ name: "fts-edge-test", version: "1.0" });
-await client.connect(transport);
+const client = await connectFixtureClient("fts-edge-cases");
 console.log("Connected\n");
 
 let passed = 0, failed = 0;

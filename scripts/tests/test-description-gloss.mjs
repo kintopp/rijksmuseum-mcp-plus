@@ -14,34 +14,17 @@
  * registration is gated on DB availability, and this gate can only budget the
  * descriptions of tools that registered.
  */
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { buildFixture } from "./build-fixture-vocab-db.mjs";
+import { connectFixtureClient } from "./fixture-client.mjs";
 import { resolveDbPath } from "../../dist/utils/db.js";
 
 const GLOSS_BUDGET = 79;
 const INSTRUCTIONS_BUDGET = 2048;
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // Bump when a tool is added. The docs-side roster is gated by test-docs-drift;
 // this count exists so a SHRINKING roster can't quietly shrink the gate with it.
 const TOOL_COUNT = 19;
 
-const transport = new StdioClientTransport({
-  command: process.execPath,
-  args: [join(ROOT, "dist", "index.js")],
-  env: {
-    ...process.env,
-    MCP_SKIP_STARTUP_WARM: "1",
-    ENABLE_FIND_SIMILAR: "true",
-    VOCAB_DB_PATH: buildFixture("fixture-gloss.db"),
-  },
-  stderr: "ignore",
-});
-const client = new Client({ name: "gloss-test", version: "0.0.0" });
-await client.connect(transport);
+const client = await connectFixtureClient("gloss");
 
 let failures = 0;
 function fail(msg) {

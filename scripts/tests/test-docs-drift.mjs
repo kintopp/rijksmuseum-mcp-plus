@@ -22,12 +22,10 @@
  * registration is gated on DB availability, so without it CI would see a
  * partial registry and report every unregistered tool as a doc phantom.
  */
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { readFileSync } from "node:fs";
-import { buildFixture } from "./build-fixture-vocab-db.mjs";
+import { connectFixtureClient } from "./fixture-client.mjs";
 import { resolveDbPath } from "../../dist/utils/db.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -49,19 +47,7 @@ const OPTIONAL_BACKEND_TOOLS = new Map([
   }],
 ]);
 
-const transport = new StdioClientTransport({
-  command: process.execPath,
-  args: [join(ROOT, "dist", "index.js")],
-  env: {
-    ...process.env,
-    MCP_SKIP_STARTUP_WARM: "1",
-    ENABLE_FIND_SIMILAR: "true",
-    VOCAB_DB_PATH: buildFixture("fixture-docs-drift.db"),
-  },
-  stderr: "ignore",
-});
-const client = new Client({ name: "docs-drift-test", version: "0.0.0" });
-await client.connect(transport);
+const client = await connectFixtureClient("docs-drift");
 
 let failures = 0;
 let unverified = 0;

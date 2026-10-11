@@ -18,13 +18,8 @@
  *
  * Run:  node scripts/tests/test-tool-descriptions.mjs
  */
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-import { buildFixture } from "./build-fixture-vocab-db.mjs";
+import { connectFixtureClient } from "./fixture-client.mjs";
 
-const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 let passed = 0;
 let failed = 0;
@@ -45,20 +40,7 @@ function section(name) {
   console.log(`\n${"═".repeat(60)}\n  ${name}\n${"═".repeat(60)}`);
 }
 
-const transport = new StdioClientTransport({
-  command: "node",
-  args: ["dist/index.js"],
-  cwd: PROJECT_DIR,
-  env: {
-    ...process.env,
-    STRUCTURED_CONTENT: "true",
-    MCP_SKIP_STARTUP_WARM: "1",
-    VOCAB_DB_PATH: buildFixture("fixture-tool-descriptions.db"),
-  },
-  stderr: "ignore",
-});
-const client = new Client({ name: "test-tool-descriptions", version: "0.1" });
-await client.connect(transport);
+const client = await connectFixtureClient("tool-descriptions");
 console.log("Connected to server via stdio\n");
 
 const { tools } = await client.listTools();
