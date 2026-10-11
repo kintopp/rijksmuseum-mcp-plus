@@ -65,12 +65,17 @@ console.log("\n── 4. recordPhase aggregates per (tool, phase) ──");
   check("facets dominates main (p50)", ph.facets.p50 > ph.main.p50);
 }
 
-console.log("\n── 5. topPerTool slices by max desc ──");
+console.log("\n── 5. topPerTool keeps the slowest inputs ──");
 {
-  const snap = stats.slowQueries(5);
-  check("lru_tool sliced to 5", snap.perInput["lru_tool"].length === 5);
-  const maxes = snap.perInput["lru_tool"].map(r => r.max);
-  check("sorted by max desc", maxes.every((m, i) => i === 0 || maxes[i - 1] >= m));
+  // Record the slowest inputs first so insertion order can't stand in for the sort.
+  for (let i = 0; i < 20; i++) stats.recordInput("top_tool", `t${i}`, 1000 - i * 10);
+  const top = stats.slowQueries(5).perInput["top_tool"].map(r => r.input);
+  check("top_tool sliced to the 5 slowest, slowest first",
+    JSON.stringify(top) === JSON.stringify(["t0", "t1", "t2", "t3", "t4"]));
+  for (let i = 0; i < 20; i++) stats.recordInput("rev_tool", `r${i}`, 10 + i * 10);
+  const rev = stats.slowQueries(3).perInput["rev_tool"].map(r => r.input);
+  check("slowest-first holds when the slowest arrive last",
+    JSON.stringify(rev) === JSON.stringify(["r19", "r18", "r17"]));
 }
 
 console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ""}`);

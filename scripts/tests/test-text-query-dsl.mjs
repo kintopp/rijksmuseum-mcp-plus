@@ -8,7 +8,7 @@
  */
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
-import { compileTextQuery, TEXT_QUERY_MAX_TERMS } from "../../dist/utils/db.js";
+import { compileTextQuery } from "../../dist/utils/db.js";
 
 const ok = (dsl) => {
   const r = compileTextQuery(dsl);
@@ -115,10 +115,16 @@ err({ must: [{ near: { terms: ["only-one"], distance: 4 } }] }); // near needs �
 err({ must: [{ near: { terms: ["a", "b"], distance: 0 } }] });   // non-positive distance
 // All-punctuation positive terms escape to empty → no usable terms.
 err({ must: [{ field: "title", phrase: "()" }] });
-// Cap: build a near whose cartesian product exceeds the cap.
+// Cap, per NEAR clause: its cartesian product is rejected before expansion.
 const big = Array.from({ length: 7 }, () => ["x1", "x2", "x3"]); // 3^7 = 2187 combos
-err({ must: [{ field: "title", near: { terms: big, distance: 3 } }] });
-assert.ok(TEXT_QUERY_MAX_TERMS >= 8, "cap is a sane constant");
+assert.match(err({ must: [{ field: "title", near: { terms: big, distance: 3 } }] }), /^near clause expands to/);
+// Cap, query-wide: clauses that each compile alone are rejected together.
+const words = (tag) => Array.from({ length: 20 }, (_, i) => `${tag}${i}`);
+const mustAny = { field: "title", any: words("m") };
+const shouldAny = { field: "description", any: words("s") };
+ok({ must: [mustAny] });
+ok({ should: [shouldAny] });
+assert.match(err({ must: [mustAny], should: [shouldAny] }), /^textQuery expands to 40 terms/);
 
 // ── 6. Live-DB smoke: compiled strings run and return expected counts ────
 const DB_PATH = "data/vocabulary.db";

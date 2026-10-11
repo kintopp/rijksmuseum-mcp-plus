@@ -4,7 +4,7 @@
  * Run:  node scripts/tests/test-lru-cache.mjs
  * Requires: npm run build (imports from dist/)
  */
-import { lruGetOrCreate } from "../../dist/api/VocabularyDb.js";
+import { lruGetOrCreate } from "../../dist/utils/lru.js";
 
 let passed = 0;
 let failed = 0;

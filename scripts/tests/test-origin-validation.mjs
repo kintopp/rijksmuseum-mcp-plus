@@ -14,7 +14,6 @@
 import {
   isAllowedOrigin,
   parseMcpAllowedOrigins,
-  DEFAULT_WEB_HOST_PATTERNS,
 } from "../../dist/utils/origin.js";
 
 let passed = 0;
@@ -41,7 +40,8 @@ function section(name) {
 // ══════════════════════════════════════════════════════════════════
 section("1. Default allowlist — category rules");
 
-const defaults = [...DEFAULT_WEB_HOST_PATTERNS];
+// What src/index.ts builds when MCP_ALLOWED_ORIGINS is unset.
+const defaults = parseMcpAllowedOrigins(undefined);
 
 const cases = [
   // [label, origin, expected]
@@ -61,6 +61,11 @@ const cases = [
   ["non-web scheme (chrome-extension://)",   "chrome-extension://abcdef123",         true],
   ["sandboxed-iframe literal null",          "null",                                 true],
   ["unknown web host",                       "https://evil.example",                 false],
+  // A pattern missing its ^/$ anchor would let an attacker-controlled host
+  // that merely contains an allowlisted name through.
+  ["allowlisted name as a prefix",           "https://claude.ai.evil.example",       false],
+  ["allowlisted subdomain as a prefix",      "https://www.claude.ai.evil.example",   false],
+  ["allowlisted name as a suffix",           "https://evilclaude.ai",                false],
   ["malformed Origin",                       "not a url",                            false],
 ];
 
@@ -82,17 +87,13 @@ assert(
 // ══════════════════════════════════════════════════════════════════
 section("3. parseMcpAllowedOrigins — env var handling");
 
-assert(
-  JSON.stringify(parseMcpAllowedOrigins(undefined).map(r => r.source)) ===
-    JSON.stringify(DEFAULT_WEB_HOST_PATTERNS.map(r => r.source)),
-  "unset → defaults",
-);
-
-assert(
-  JSON.stringify(parseMcpAllowedOrigins("").map(r => r.source)) ===
-    JSON.stringify(DEFAULT_WEB_HOST_PATTERNS.map(r => r.source)),
-  "empty string → defaults",
-);
+for (const [label, raw] of [["unset", undefined], ["empty string", ""], ["whitespace", "  "]]) {
+  const list = parseMcpAllowedOrigins(raw);
+  assert(
+    isAllowedOrigin("https://claude.ai", list) && !isAllowedOrigin("https://evil.example", list),
+    `${label} → the default allowlist`,
+  );
+}
 
 assert(parseMcpAllowedOrigins("*") === "*", '"*" → "*" sentinel');
 
@@ -113,6 +114,11 @@ assert(
   isAllowedOrigin("https://claude.ai", custom) === false,
   "custom list REPLACES defaults (claude.ai no longer allowed)",
 );
+// Entry dots are literal: an unescaped "." would match any character.
+assert(isAllowedOrigin("https://fooXexample", custom) === false, "custom: '.' in an entry is literal");
+assert(isAllowedOrigin("https://foo.example.evil", custom) === false, "custom: exact entry is anchored at the end");
+assert(isAllowedOrigin("https://evil-foo.example", custom) === false, "custom: exact entry is anchored at the start");
+assert(isAllowedOrigin("https://api.bar.example.evil", custom) === false, "custom: glob entry is anchored at the end");
 
 // ══════════════════════════════════════════════════════════════════
 section('4. "*" disables web-host validation but keeps category rules');

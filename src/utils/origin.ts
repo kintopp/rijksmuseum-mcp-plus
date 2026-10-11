@@ -15,7 +15,7 @@
  *   - http(s) Origin       → allowed only if hostname matches an allowlist entry
  */
 
-export const DEFAULT_WEB_HOST_PATTERNS: readonly RegExp[] = [
+const DEFAULT_WEB_HOST_PATTERNS: readonly RegExp[] = [
   /^claude\.ai$/i,
   /^.+\.claude\.ai$/i,
   /^chatgpt\.com$/i,

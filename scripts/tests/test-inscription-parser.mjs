@@ -284,21 +284,24 @@ section("R6a — distinct physical marks sharing text stay distinct");
 
 section("Inverse maps and closed bucket vocabulary (R2)");
 {
-  assertDeepEq(
-    INSCRIPTION_TYPE_TOKENS.get("collector's mark"),
-    ["verzamelaarsmerk", "collector's mark"],
-    "type inverse map expands to {nl, en} surface tokens",
-  );
-  assertDeepEq(
-    INSCRIPTION_TECHNIQUE_TOKENS.get("stamped"),
-    ["gestempeld", "stamped"],
-    "technique inverse map expands stamped",
-  );
-  assertDeepEq(
-    INSCRIPTION_PLACEMENT_TOKENS.get("verso"),
-    ["verso", "achterzijde", "keerzijde", "reverse"],
-    "placement inverse map expands verso surfaces (incl. numismatic 'reverse')",
-  );
+  // Token order is irrelevant to the consumers (OR-joined FTS terms), so compare sorted.
+  const tokens = (map, bucket) => [...(map.get(bucket) ?? [])].sort();
+  assertDeepEq(tokens(INSCRIPTION_TYPE_TOKENS, "collector's mark"), ["collector's mark", "verzamelaarsmerk"],
+    "type inverse map expands to {nl, en} surface tokens");
+  assertDeepEq(tokens(INSCRIPTION_TECHNIQUE_TOKENS, "stamped"), ["gestempeld", "stamped"],
+    "technique inverse map expands stamped");
+  assertDeepEq(tokens(INSCRIPTION_PLACEMENT_TOKENS, "verso"), ["achterzijde", "keerzijde", "reverse", "verso"],
+    "placement inverse map expands verso surfaces (incl. numismatic 'reverse')");
+
+  // Search expands a bucket to these tokens, so every one must parse back to it.
+  const roundTrip = [];
+  for (const [bucket, toks] of INSCRIPTION_TYPE_TOKENS) for (const t of toks)
+    if (parseInscriptions(`${t}: x`)[0]?.normalizedType !== bucket) roundTrip.push(`type ${t}`);
+  for (const [bucket, toks] of INSCRIPTION_TECHNIQUE_TOKENS) for (const t of toks)
+    if (parseInscriptions(`opschrift, ${t}: x`)[0]?.normalizedTechnique !== bucket) roundTrip.push(`technique ${t}`);
+  for (const [bucket, toks] of INSCRIPTION_PLACEMENT_TOKENS) for (const t of toks)
+    if (parseInscriptions(`opschrift, ${t}: x`)[0]?.normalizedPlacement !== bucket) roundTrip.push(`placement ${t}`);
+  assertDeepEq(roundTrip, [], "every inverse-map token parses back to its own bucket");
   assert(INSCRIPTION_TYPES.includes("collector's mark"), "INSCRIPTION_TYPES exports the closed contract");
 }
 

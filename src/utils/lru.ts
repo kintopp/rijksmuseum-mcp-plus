@@ -2,7 +2,7 @@
  * Get-or-create with insertion-order LRU eviction. Re-inserts an existing entry
  * to bump it to most-recent; evicts the least-recently-used (first) entry once
  * size exceeds `cap`. Used by VocabularyDb.filterArtIds (#79) and
- * UsageStats.recordInput (#378). Exported for tests (test-lru-cache.mjs).
+ * UsageStats.recordInput (#378).
  */
 export function lruGetOrCreate<K, V>(
   map: Map<K, V>,

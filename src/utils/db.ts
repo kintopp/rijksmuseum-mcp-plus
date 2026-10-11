@@ -118,7 +118,7 @@ const DEFAULT_TEXT_QUERY_COLUMNS = Object.values(TEXT_QUERY_FIELD_COLUMNS);
  *  Higher than expandFtsQuery's auto-expansion cap of 8 — this is an explicit
  *  power feature — but still bounds query blow-up. Exceeding it is an error,
  *  never a silent truncation. */
-export const TEXT_QUERY_MAX_TERMS = 32;
+const TEXT_QUERY_MAX_TERMS = 32;
 
 interface TextQueryNear {
   terms: (string | string[])[];

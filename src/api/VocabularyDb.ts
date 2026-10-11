@@ -1083,11 +1083,6 @@ export const FILTER_ART_IDS_KEYS: ReadonlySet<string> = new Set([
   "dateMatch",
 ]);
 
-// lruGetOrCreate moved to ../utils/lru.js (shared with UsageStats, #378); imported
-// at the top for internal use and re-exported here for backward compat
-// (filterArtIds usage + test-lru-cache.mjs import).
-export { lruGetOrCreate };
-
 /** Row shape returned by place-candidate queries (findPlaceCandidates, resolveMultiWordPlace). */
 type PlaceCandidateRow = {
   id: string;
