@@ -7,6 +7,9 @@
  *     boolean exclusive bounds, `dependencies`, `definitions`).
  *   - A schema contains a `$ref`: claude.ai fails to resolve them, so every
  *     shape must be inlined.
+ *   - A tool silently ignores an unknown argument instead of rejecting it, so a
+ *     removed or misspelt param (e.g. search_artwork's old creatorGender or
+ *     provenance) would run as an unfiltered query; the error must name the key.
  *   - A tool's annotations drift: `destructiveHint` defaults to true when absent,
  *     so hosts would prompt before read-only calls; `openWorldHint` must be true
  *     exactly for tools that reach a live external service at call time.
@@ -61,7 +64,6 @@ const transport = new StdioClientTransport({
 const client = new Client({ name: "test-tool-schemas", version: "0.0.0" });
 await client.connect(transport);
 const { tools } = await client.listTools();
-await client.close();
 
 // ── 1. JSON Schema 2020-12 ──────────────────────────────────────────
 console.log("1. Every input/output schema is clean JSON Schema 2020-12");
@@ -116,6 +118,21 @@ for (const t of tools) {
 // semantic_search needs the embeddings DB + model, which CI does not have.
 const missing = Object.keys(EXPECTED).filter((n) => n !== "semantic_search" && !tools.some((t) => t.name === n));
 check(missing.length === 0, `tools not registered: ${missing.join(", ")}`);
+
+// ── 3. Unknown arguments are rejected ───────────────────────────────
+console.log("3. Every tool rejects an unknown argument, naming it");
+for (const t of tools) {
+  let text;
+  try {
+    const r = await client.callTool({ name: t.name, arguments: { notAParam: 1 } });
+    text = r.isError ? (r.content?.[0]?.text ?? "") : null;
+  } catch (e) {
+    text = e.message;
+  }
+  check(text !== null, `${t.name} accepted an unknown argument`);
+  check(text === null || /Unrecognized key.*notAParam/s.test(text), `${t.name} error does not name the unknown key: ${text?.slice(0, 120)}`);
+}
+await client.close();
 
 console.log(`\n${passed} passed, ${failures.length} failed (${tools.length} tools)`);
 process.exit(failures.length ? 1 : 0);

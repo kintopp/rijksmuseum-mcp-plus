@@ -6,7 +6,7 @@
  *
  * (Pre-v0.27 this file tested creatorGender / creatorBornAfter / creatorBornBefore /
  * expandPlaceHierarchy. Those filters are removed in #305 and replaced by
- * search_persons; see test-search-persons.mjs and test-removed-demographic-filters.mjs.
+ * search_persons; see test-search-persons.mjs.
  * modifiedAfter / modifiedBefore removed in the v0.50 schema-trim pass — use
  * get_recent_changes for catalogue-modified-since queries.)
  */

@@ -695,28 +695,6 @@
     ],
     "purpose": "remount_viewer viewUUID-preservation (#310) over stdio (needs dist/ + DB)"
   },
-  "test-removed-demographic-filters.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
-    "runtime": "node",
-    "requires": [
-      "dist",
-      "manual"
-    ],
-    "purpose": "verifies removed demographic filters are Zod-rejected (#305; needs built dist/)"
-  },
-  "test-removed-provenance-filter.mjs": {
-    "category": "db",
-    "class": "scratch",
-    "status": "scratch",
-    "runtime": "node",
-    "requires": [
-      "dist",
-      "manual"
-    ],
-    "purpose": "verifies search_artwork({provenance}) is Zod-rejected (#304; needs built dist/)"
-  },
   "test-search-org-aliases.mjs": {
     "category": "db",
     "class": "scratch",
@@ -831,6 +809,6 @@
     "requires": [
       "dist"
     ],
-    "purpose": "tools/list contract: every schema is clean JSON Schema 2020-12 and $ref-free; every tool carries the expected annotations (fixture DB)"
+    "purpose": "tools/list contract: every schema is clean JSON Schema 2020-12 and $ref-free, every tool rejects unknown args by name, annotations match (fixture DB)"
   }
 }
