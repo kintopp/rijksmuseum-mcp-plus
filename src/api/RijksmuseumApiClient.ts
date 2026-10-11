@@ -5,54 +5,6 @@ import { USER_AGENT } from "../utils/userAgent.js";
 import { ArtworkImageInfo, IIIFInfoResponse } from "../types.js";
 import { logError } from "../utils/log.js";
 
-// ─── Helpers ────────────────────────────────────────────────────────
-
-// Exported for testing
-/** Check if a classified_as array contains a given AAT URI */
-export function hasClassification(
-  classifiedAs: ({ id?: string } | string)[] | undefined,
-  aatUri: string
-): boolean {
-  if (!classifiedAs) return false;
-  return classifiedAs.some((c) =>
-    typeof c === "string" ? c === aatUri : c.id === aatUri
-  );
-}
-
-// Exported for testing
-/** Normalize a Linked Art field that may be a single object or an array.
- *  JSON-LD allows any relationship to be singular or plural — this guards against it. */
-export function ensureArray<T>(value: T | T[] | undefined | null): T[] {
-  if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
-// Exported for testing
-/** Normalize content that may be a string or array (~34 artworks return arrays) */
-export function extractContent(content: string | string[] | undefined): string {
-  if (content == null) return "";
-  return Array.isArray(content) ? content.join("; ") : content;
-}
-
-// Exported for testing
-/** Extract IIIF identifier from a full IIIF URL */
-export function extractIiifId(url: string): string | null {
-  const match = url.match(/iiif\.micr\.io\/([^/]+)/);
-  return match ? match[1] : null;
-}
-
-// Exported for testing
-/** Extract the pageToken query parameter from a next-page URL */
-export function extractPageToken(nextRef: { id: string } | undefined): string | undefined {
-  if (!nextRef?.id) return undefined;
-  try {
-    const url = new URL(nextRef.id);
-    return url.searchParams.get("pageToken") ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 // ─── Client ─────────────────────────────────────────────────────────
 
 /**

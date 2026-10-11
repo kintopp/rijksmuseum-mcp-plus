@@ -7,13 +7,6 @@
 // ── Imports from compiled dist/ ──────────────────────────────────
 
 import {
-  hasClassification,
-  extractContent,
-  extractIiifId,
-  extractPageToken,
-} from "../../dist/api/RijksmuseumApiClient.js";
-
-import {
   haversineKm,
   pluralize,
   buildMultiWordPlaceWarning,
@@ -72,63 +65,6 @@ function section(name) {
   console.log(`  ${name}`);
   console.log(`${"═".repeat(60)}`);
 }
-
-// ── extractContent ───────────────────────────────────────────────
-
-section("extractContent");
-
-assertEq(extractContent("hello"), "hello", "string passthrough");
-assertEq(extractContent(["a", "b", "c"]), "a; b; c", "array join");
-assertEq(extractContent(null), "", "null → empty string");
-assertEq(extractContent(undefined), "", "undefined → empty string");
-
-// ── extractIiifId ────────────────────────────────────────────────
-
-section("extractIiifId");
-
-assertEq(
-  extractIiifId("https://iiif.micr.io/AbCdE/info.json"),
-  "AbCdE",
-  "valid IIIF URL"
-);
-assertEq(extractIiifId("https://example.com/image.jpg"), null, "non-IIIF URL → null");
-assertEq(extractIiifId(""), null, "empty string → null");
-
-// ── extractPageToken ─────────────────────────────────────────────
-
-section("extractPageToken");
-
-assertEq(
-  extractPageToken({ id: "https://example.com/search?pageToken=abc123" }),
-  "abc123",
-  "URL with pageToken"
-);
-assertEq(
-  extractPageToken({ id: "https://example.com/search?foo=bar" }),
-  undefined,
-  "URL without pageToken → undefined"
-);
-assertEq(extractPageToken(undefined), undefined, "undefined → undefined");
-assertEq(extractPageToken({ id: "" }), undefined, "empty id → undefined");
-
-// ── hasClassification ────────────────────────────────────────────
-
-section("hasClassification");
-
-assert(
-  hasClassification([{ id: "http://vocab.getty.edu/aat/300015045" }], "http://vocab.getty.edu/aat/300015045"),
-  "match by {id} object"
-);
-assert(
-  hasClassification(["http://vocab.getty.edu/aat/300015045"], "http://vocab.getty.edu/aat/300015045"),
-  "match by string"
-);
-assert(
-  !hasClassification([{ id: "http://vocab.getty.edu/aat/999" }], "http://vocab.getty.edu/aat/300015045"),
-  "no match → false"
-);
-assert(!hasClassification(undefined, "http://vocab.getty.edu/aat/300015045"), "undefined input → false");
-assert(!hasClassification([], "http://vocab.getty.edu/aat/300015045"), "empty array → false");
 
 // ── escapeFts5 ───────────────────────────────────────────────────
 
@@ -386,15 +322,9 @@ section("generateMorphVariants");
   assert(v.includes("watch"), "watches → watch (ches rule)");
 }
 
-// Minimum stem guard
-{
-  const v = generateMorphVariants("is");
-  assertDeepEq(v, [], "is → [] (too short)");
-}
-{
-  const v = generateMorphVariants("ass");
-  assert(!v.includes("as"), "ass does not produce 'as' (min stem 3)");
-}
+// Minimum stem guard — "axes" is the input whose suffix rule (xes → ax) yields a
+// 2-char stem; shorter words never reach a stripping rule at all.
+assertDeepEq(generateMorphVariants("axes"), [], "axes → [] (stem 'ax' is below the 3-char minimum)");
 
 // No self-reference
 {
@@ -433,15 +363,14 @@ assert(expandFtsQuery("wild forest cat") !== null, "3 tokens → non-null");
 // Empty
 assertEq(expandFtsQuery(""), null, "empty → null");
 
-// Cap enforcement: total terms ≤ 8
+// Cap enforcement: three expandable tokens produce more than 8 terms before the cap.
 {
-  const q = expandFtsQuery("painting skating");
-  if (q) {
-    const terms = q.replace(/[()]/g, "").split(/\s+(?:AND|OR)\s+/).length;
-    // Count actual terms by splitting on spaces and filtering out operators
-    const allTerms = q.replace(/[()]/g, "").split(/\s+/).filter(t => t !== "AND" && t !== "OR");
-    assert(allTerms.length <= 8, `cap enforcement: ${allTerms.length} terms ≤ 8`);
-  }
+  const q = expandFtsQuery("painting skating cats");
+  assert(q !== null, "painting skating cats → non-null");
+  const groups = q.split(" AND ").map((g) => g.replace(/[()]/g, "").split(" OR "));
+  const total = groups.reduce((n, g) => n + g.length, 0);
+  assertEq(total, 8, "cap enforcement: trimmed to exactly 8 terms");
+  assertDeepEq(groups.map((g) => g[0]), ['"painting"', '"skating"', '"cats"'], "every original token survives the trim");
 }
 
 // No expansion possible (no variants) → null
@@ -567,6 +496,11 @@ assert(maxInspectWidth(3000, 4000) < VISION_MAX_EDGE,  "portrait regions are cla
 assertEq(maxInspectWidth(0, 0),   VISION_MAX_EDGE, "zero dimensions fall back to the edge cap");
 assertEq(maxInspectWidth(100, 0), VISION_MAX_EDGE, "zero height falls back to the edge cap");
 assertEq(VISION_MAX_EDGE % 28,    0,               "the edge cap sits on a patch boundary");
+// The constants are the spec the loop above reads from, so pin them to the
+// external limits they must respect: a request carrying >20 images drops every
+// image to a ~2000px per-side limit, and 4784 is the high-resolution token budget.
+assert(VISION_MAX_EDGE <= 2000,   "the edge cap stays within the ~2000px many-image limit");
+assert(VISION_MAX_TOKENS <= 4784, "the token budget stays within the high-resolution tier's 4784");
 
 section("regionPixelDims");
 
