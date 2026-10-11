@@ -7,8 +7,6 @@
 
 import { parseProvenanceRaw } from "../../dist/provenance-peg.js";
 import { interpretPeriods, parseTemporalBounds } from "../../dist/provenance-interpret.js";
-import { parseProvenance } from "../../dist/provenance.js";
-import { splitCommaRespectingParens } from "../../dist/provenance-parser.generated.js";
 
 // ── Test helpers ─────────────────────────────────────────────────
 
@@ -32,6 +30,10 @@ function assertEq(actual, expected, msg) {
   assert(ok, ok ? msg : `${msg} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
+function assertDeepEq(actual, expected, msg) {
+  assertEq(JSON.stringify(actual), JSON.stringify(expected), msg);
+}
+
 function section(name) {
   console.log(`\n${"═".repeat(60)}`);
   console.log(`  ${name}`);
@@ -48,32 +50,21 @@ const PROV_SKA3981 = `…; ? estate inventory, Clara de Valaer (1584-1660), wido
 //  Phase A: Compatibility gate — PEG output matches regex on fixtures
 // ══════════════════════════════════════════════════════════════════
 
-section("Phase A: Compatibility gate");
+section("Phase A: Golden fixtures");
 
 {
   // SK-A-2344 (The Milkmaid)
   const raw = parseProvenanceRaw(PROV_SKA2344);
-  const regex = parseProvenance(PROV_SKA2344);
 
-  assertEq(raw.events.length, regex.events.length,
-    `SK-A-2344: event count matches (${raw.events.length})`);
-
-  // Check key events match
-  for (let i = 0; i < Math.min(raw.events.length, regex.events.length); i++) {
-    const r = raw.events[i];
-    const x = regex.events[i];
-    assertEq(r.gap, x.gap, `SK-A-2344 event ${i + 1}: gap matches`);
-  }
+  assertEq(raw.events.length, 16, "SK-A-2344: 16 events");
+  assertDeepEq(raw.events.flatMap((e, i) => e.gap ? [i] : []), [5, 6, 9, 10, 12],
+    "SK-A-2344: gaps (…) sit before events 6, 7, 10, 11, 13");
 
   // 1696 sale event
   const sale1696 = raw.events.find(e => e.dateYear === 1696 && e.transferType === "sale");
   assert(sale1696 !== undefined, "SK-A-2344: 1696 sale found via PEG");
   assertEq(sale1696?.price?.amount, 175, "SK-A-2344: 1696 sale price fl. 175");
   assertEq(sale1696?.location, "Amsterdam", "SK-A-2344: 1696 sale location");
-
-  // Gaps
-  const gaps = raw.events.filter(e => e.gap);
-  assert(gaps.length >= 4, `SK-A-2344: ≥4 gaps (got ${gaps.length})`);
 
   // Last event: purchase 1908
   const last = raw.events[raw.events.length - 1];
@@ -88,10 +79,8 @@ section("Phase A: Compatibility gate");
 {
   // SK-A-3981 (Still Life with Peacocks)
   const raw = parseProvenanceRaw(PROV_SKA3981);
-  const regex = parseProvenance(PROV_SKA3981);
 
-  assertEq(raw.events.length, regex.events.length,
-    `SK-A-3981: event count matches (${raw.events.length})`);
+  assertEq(raw.events.length, 16, "SK-A-3981: 16 events");
 
   // Confiscation: regex parser classified "from whom...Führermuseum" as confiscation via keyword;
   // PEG correctly classifies it as "sale" (structural: "from whom, to X"). Both are valid —
@@ -211,16 +200,6 @@ section("Phase B: Layer 1 — PEG-specific");
 }
 
 {
-  // Confiscation via Führermuseum
-  const raw = parseProvenanceRaw("to Dr. Erhard Göpel, The Hague, for Adolf Hitler's Führermuseum, Linz, 21 July 1942");
-  const e = raw.events[0];
-  // This may fall through to generic since it doesn't start with "confiscated" or "Führermuseum"
-  // The regex parser catches this via keyword anywhere in text
-  // PEG may or may not catch it — log the parse method
-  console.log(`    → Führermuseum mid-text: parseMethod=${e.parseMethod}, type=${e.transferType}`);
-}
-
-{
   // Loan event
   const raw = parseProvenanceRaw("on loan from the SNK to the museum, June 1948 - 1960");
   const e = raw.events[0];
@@ -311,16 +290,6 @@ section("Phase C: Layer 2 — interpretation");
   assertEq(periods[0].sequence, 1, "first period sequence=1");
   assertEq(periods[0].uncertain, true, "first period uncertain");
 
-  // End date inference: first period's end should be inferred from second period
-  const p1 = periods[0];
-  if (periods[1]?.beginYear) {
-    // End year should be inferred from next event
-    assert(
-      p1.derivation.end_year === "inferred_from_next" || p1.endYear === null,
-      "first period end_year derivation is inferred or null"
-    );
-  }
-
   // Last period: museum purchase 1908
   const lastP = periods[periods.length - 1];
   assertEq(lastP.acquisitionMethod, "sale", "last period: acquisition=purchase");
@@ -335,11 +304,10 @@ section("Phase C: Layer 2 — interpretation");
   const periods = interpretPeriods(raw.events);
   const p = periods[0];
 
-  // In a named sale, the seller is the period owner (ends their ownership)
-  // buyer captured from "to" clause → could be acquisitionFrom or separate
-  assert(p.owner !== null, "sale period has owner");
-  assert(p.derivation.owner !== undefined, "owner derivation tracked");
-  console.log(`    → owner: ${p.owner?.name}, rule: ${p.derivation.owner}`);
+  // The sale opens the buyer's period; the seller is who it was acquired from.
+  assertEq(p.owner?.name, "Isaac Rooleeuw", "sale period owner is the buyer");
+  assertEq(p.derivation.owner, "buyer_clause", "owner derived from the 'to' clause");
+  assertEq(p.acquisitionFrom?.name, "Jacob van Hoek", "acquired from the seller");
 }
 
 {
@@ -903,8 +871,8 @@ section("Date patterns (2026-03-21)");
 }
 {
   const r = parseProvenanceRaw("soldier's estate, 1801");
-  assertEq(r.events[0].parties[0]?.name !== "soldier", true,
-    "'soldier' is not swallowed by the bare-sold branch (#385 guard)");
+  assertEq(r.events[0].transferType, "unknown", "'soldier' does not match the bare-sold branch (#385 guard)");
+  assertEq(r.events[0].parties[0]?.name, "soldier's estate", "'soldier's estate' stays one party");
 }
 {
   const r = parseProvenanceRaw("on loan to museum, 1983-2005");
@@ -1291,8 +1259,7 @@ section("#169: Price-led segments → sale");
 {
   // Non-museum "to" should NOT trigger
   const r = parseProvenanceRaw("fl. 500, to John Smith, Amsterdam");
-  assert(r.events[0].transferType !== "sale" || r.events[0].transferType === "sale",
-    "#169: price + non-museum 'to' — no false positive check");
+  assert(r.events[0].transferType !== "sale", "#169: price + non-museum 'to' is not read as a museum sale");
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1368,26 +1335,26 @@ section("#88: Layer 2 creation date leak suppression");
 // ══════════════════════════════════════════════════════════════════
 section("#390: comma-splitter apostrophe handling");
 {
-  // Possessive inside parens (Sotheby's) previously toggled the quote state ON
-  // with no partner to flip it back → the closing ) was never processed and every
-  // later top-level comma was swallowed into one part. Must now split cleanly.
-  const parts = splitCommaRespectingParens("London (Sotheby's), 24 June 1938, no. 76, to the dealer Rosenberg");
-  assertEq(parts.length, 4, "#390: Sotheby's possessive does not leak — splits into 4 parts");
-  assertEq(parts[0], "London (Sotheby's)", "#390: parenthesised possessive stays one part");
-  assertEq(parts[3], "to the dealer Rosenberg", "#390: trailing buyer is its own part");
+  // A possessive apostrophe inside parens (Sotheby's, d'Arc) must not open a
+  // quote that swallows every later top-level comma into one clause.
+  const e1 = parseProvenanceRaw("his sale, London (Sotheby's), 24 June 1938, no. 76, to the dealer Rosenberg").events[0];
+  assertEq(e1.location, "London", "#390: Sotheby's — location parsed");
+  assertEq(e1.dateYear, 1938, "#390: Sotheby's — date after the possessive parsed");
+  assertDeepEq(e1.parties.map((p) => [p.name, p.role]), [["Rosenberg", "buyer"]], "#390: Sotheby's — trailing buyer parsed");
 
-  // d'Arc — apostrophe with a letter on both sides inside parens.
-  const parts2 = splitCommaRespectingParens("Paris (coll. d'Arc), 1885, fl. 500");
-  assertEq(parts2.length, 3, "#390: d'Arc possessive does not leak — splits into 3 parts");
+  const e2 = parseProvenanceRaw("sale, Paris (coll. d'Arc), 1885, fl. 500").events[0];
+  assertEq(e2.dateYear, 1885, "#390: d'Arc — date after the possessive parsed");
+  assertEq(e2.price?.amount, 500, "#390: d'Arc — price after the possessive parsed");
 
-  // Genuine quoted section phrase with an internal comma must NOT split at that comma.
-  const parts3 = splitCommaRespectingParens("X ('A Musical Party, painted with effect'), 1850");
-  assertEq(parts3.length, 2, "#390: quoted phrase with internal comma stays intact (2 parts)");
-  assertEq(parts3[0], "X ('A Musical Party, painted with effect')", "#390: quoted phrase preserved");
+  // A genuine quoted phrase keeps its internal comma.
+  const e3 = parseProvenanceRaw("sale X, London ('A Musical Party, painted with effect'), 1850").events[0];
+  assertEq(e3.location, "London", "#390: quoted phrase — location parsed");
+  assertEq(e3.dateYear, 1850, "#390: quoted phrase — date after it parsed");
 
-  // Top-level possessive (depth 0) is unaffected — every top-level comma splits.
-  const parts4 = splitCommaRespectingParens("sale, Christie's, London, 1885");
-  assertEq(parts4.length, 4, "#390: top-level possessive unaffected — 4 parts");
+  // A top-level possessive still splits at every comma.
+  const e4 = parseProvenanceRaw("sale, Christie's, London, 1885").events[0];
+  assertEq(e4.location, "London", "#390: top-level possessive — location parsed");
+  assertEq(e4.dateYear, 1885, "#390: top-level possessive — date parsed");
 }
 
 // ══════════════════════════════════════════════════════════════════

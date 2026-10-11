@@ -405,7 +405,7 @@ const RE_MONTH_YEAR = new RegExp(`(${MONTHS})\\s+(\\d{4})`);
  * Extract the most prominent date from a provenance segment.
  * Priority: exact date > qualified year > approximate year > bare year.
  */
-export function parseDate(text: string): ProvenanceDate | null {
+function parseDate(text: string): ProvenanceDate | null {
   // Exact date: "16 May 1696" or "8 July 1992"
   const exactMatch = text.match(RE_EXACT_DATE);
   if (exactMatch) {
@@ -498,7 +498,7 @@ const PRICE_RULES: [RegExp, string][] = [
  * Extract price/currency from a provenance segment.
  * Handles: fl., £, frs., livres, Napoléons.
  */
-export function parsePrice(text: string): ProvenancePrice | null {
+function parsePrice(text: string): ProvenancePrice | null {
   for (const [pattern, currency] of PRICE_RULES) {
     const result = matchPrice(text, pattern, currency);
     if (result) return result;
@@ -528,7 +528,7 @@ function tryKeywordParty(
  * Extract the owner/party from a provenance segment.
  * Handles: direct name, anaphoric references, life dates, uncertainty.
  */
-export function parseParty(text: string): ProvenanceParty | null {
+function parseParty(text: string): ProvenanceParty | null {
   if (!text.trim()) return null;
 
   let uncertain = false;
@@ -649,7 +649,7 @@ const placesSet: Set<string> = new Set(placesJson as string[]);
  * Extract location from a provenance segment.
  * Checks comma-separated parts against the places Set.
  */
-export function parseLocation(text: string): string | null {
+function parseLocation(text: string): string | null {
   // Split on comma and "and" to handle "London and New York"
   const parts = text.split(/,|\band\b/).map(p => p.trim()).filter(Boolean);
   for (const p of parts) {

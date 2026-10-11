@@ -83,7 +83,7 @@ function parsePrice(raw) {
 // unwinds and every later top-level comma is swallowed — under-splitting the event.
 const LETTER_RE = /\p{L}/u;
 
-export function splitCommaRespectingParens(str) {
+function splitCommaRespectingParens(str) {
   // Split on commas, but not inside matched parentheses or single-quoted strings.
   // Handles ('...'), ('[...]'), (YYYY-YYYY, City), and nested parens.
   const result = [];

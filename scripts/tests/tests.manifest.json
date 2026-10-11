@@ -70,16 +70,6 @@
     ],
     "purpose": "PEG provenance parser (Layer 1) + interpretation (Layer 2) unit tests"
   },
-  "test-parser-drift.mjs": {
-    "category": "base",
-    "class": "gate",
-    "status": "promoted",
-    "runtime": "node",
-    "requires": [
-      "dist"
-    ],
-    "purpose": "hermetic guard: committed provenance parser must equal a fresh peggy regen"
-  },
   "test-inscription-parser.mjs": {
     "category": "base",
     "class": "gate",

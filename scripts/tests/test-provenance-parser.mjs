@@ -10,13 +10,17 @@ import {
   splitEvents,
   stripHtml,
   classifyTransfer,
-  parseDate,
-  parsePrice,
-  parseParty,
-  parseLocation,
   parseEvent,
   parseProvenance,
 } from "../../dist/provenance.js";
+
+// The field parsers are private to provenance.ts; each event field is exactly
+// one of them applied to the segment text, so reach them through parseEvent.
+const ev = (text) => parseEvent({ text, gap: false }, 1, new Map());
+const parseDate = (text) => ev(text).date;
+const parsePrice = (text) => ev(text).price;
+const parseParty = (text) => ev(text).party;
+const parseLocation = (text) => ev(text).location;
 
 // ── Test helpers ─────────────────────────────────────────────────
 
@@ -317,7 +321,7 @@ section("8. parseProvenance — SK-A-2344 (The Milkmaid)");
 
 {
   const chain = parseProvenance(PROV_SKA2344);
-  assert(chain.events.length >= 14, `event count ≥14 (got ${chain.events.length})`);
+  assertEq(chain.events.length, 16, "16 events");
 
   // First event: uncertain Pieter Claesz van Ruijven
   const e1 = chain.events[0];
@@ -358,7 +362,7 @@ section("9. parseProvenance — SK-A-3981 (Still Life with Peacocks)");
 
 {
   const chain = parseProvenance(PROV_SKA3981);
-  assert(chain.events.length >= 12, `event count ≥12 (got ${chain.events.length})`);
+  assertEq(chain.events.length, 16, "16 events");
 
   // Confiscation event (Führermuseum)
   const confEvent = chain.events.find(e => e.transferType === "confiscation");
@@ -396,7 +400,7 @@ section("10. parseProvenance — SK-A-4885 (Johannes Wtenbogaert)");
 
 {
   const chain = parseProvenance(PROV_SKA4885);
-  assert(chain.events.length >= 10, `event count ≥10 (got ${chain.events.length})`);
+  assertEq(chain.events.length, 13, "13 events");
 
   // Commission origin
   const commEvent = chain.events.find(e => e.transferType === "commission");
