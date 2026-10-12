@@ -25,8 +25,7 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { readFileSync } from "node:fs";
-import { connectFixtureClient } from "./fixture-client.mjs";
-import { resolveDbPath } from "../../dist/utils/db.js";
+import { connectFixtureClient, HAS_EMBEDDINGS_DB } from "./fixture-client.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PARAM_DOC = join(ROOT, "docs", "mcp-tool-parameters.md");
@@ -43,7 +42,7 @@ const NESTED_KEYS = new Set(["action", "region", "relativeTo", "relativeToSize"]
 const OPTIONAL_BACKEND_TOOLS = new Map([
   ["semantic_search", {
     backend: "embeddings DB + embedding model",
-    absent: () => resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db") === null,
+    absent: () => !HAS_EMBEDDINGS_DB,
   }],
 ]);
 

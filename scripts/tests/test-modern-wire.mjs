@@ -12,11 +12,9 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { buildFixture } from "./build-fixture-vocab-db.mjs";
-import { resolveDbPath } from "../../dist/utils/db.js";
+import { EXPECTED_TOOL_COUNT as TOOL_COUNT } from "./fixture-client.mjs";
 
 const VOCAB_DB_PATH = buildFixture("fixture-modern-wire.db");
-// semantic_search registers only where an embeddings DB exists (not in CI).
-const TOOL_COUNT = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db") ? 19 : 18;
 
 const PORT = process.env.TEST_PORT ?? "31339";
 const MODERN = "2026-07-28";

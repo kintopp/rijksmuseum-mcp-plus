@@ -11,8 +11,18 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildFixture } from "./build-fixture-vocab-db.mjs";
+import { resolveDbPath } from "../../dist/utils/db.js";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
+// Full roster with ENABLE_FIND_SIMILAR=true. Bump when a tool is added; it is
+// pinned so a SHRINKING roster can't quietly shrink the gates that count it.
+export const TOOL_COUNT = 19;
+
+// No fixture stands in for the embeddings DB, so semantic_search registers
+// only where a real one exists (not in CI).
+export const HAS_EMBEDDINGS_DB = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db") !== null;
+export const EXPECTED_TOOL_COUNT = HAS_EMBEDDINGS_DB ? TOOL_COUNT : TOOL_COUNT - 1;
 
 export async function connectFixtureClient(name, env = {}) {
   const transport = new StdioClientTransport({

@@ -14,15 +14,10 @@
  * registration is gated on DB availability, and this gate can only budget the
  * descriptions of tools that registered.
  */
-import { connectFixtureClient } from "./fixture-client.mjs";
-import { resolveDbPath } from "../../dist/utils/db.js";
+import { connectFixtureClient, EXPECTED_TOOL_COUNT } from "./fixture-client.mjs";
 
 const GLOSS_BUDGET = 79;
 const INSTRUCTIONS_BUDGET = 2048;
-
-// Bump when a tool is added. The docs-side roster is gated by test-docs-drift;
-// this count exists so a SHRINKING roster can't quietly shrink the gate with it.
-const TOOL_COUNT = 19;
 
 const client = await connectFixtureClient("gloss");
 
@@ -41,12 +36,9 @@ if (instrLen >= INSTRUCTIONS_BUDGET) {
 }
 
 const { tools } = await client.listTools();
-// No fixture stands in for the embeddings DB, so semantic_search is absent
-// wherever it is. Every other tool must be present: a partial roster would
-// silently drop the longest descriptions from this budget check.
-const expected = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db") ? TOOL_COUNT : TOOL_COUNT - 1;
-if (tools.length !== expected) {
-  fail(`tools/list returned ${tools.length} tools, expected ${expected} — the gloss budget went unchecked for the rest`);
+// A partial roster would silently drop the longest descriptions from this budget check.
+if (tools.length !== EXPECTED_TOOL_COUNT) {
+  fail(`tools/list returned ${tools.length} tools, expected ${EXPECTED_TOOL_COUNT} — the gloss budget went unchecked for the rest`);
 }
 
 for (const tool of tools) {

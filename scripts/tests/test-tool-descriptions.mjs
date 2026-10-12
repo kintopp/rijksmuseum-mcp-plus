@@ -18,8 +18,7 @@
  *
  * Run:  node scripts/tests/test-tool-descriptions.mjs
  */
-import { connectFixtureClient } from "./fixture-client.mjs";
-import { resolveDbPath } from "../../dist/utils/db.js";
+import { connectFixtureClient, HAS_EMBEDDINGS_DB } from "./fixture-client.mjs";
 
 
 let passed = 0;
@@ -105,8 +104,7 @@ section("Cross-links between retrieval tools");
 assert(sa.includes("semantic_search") && sa.includes("find_similar") && sa.includes("search_persons"),
   "search_artwork cross-links to semantic_search, find_similar, search_persons");
 
-// semantic_search registers only where an embeddings DB exists (not in CI).
-if (resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db")) {
+if (HAS_EMBEDDINGS_DB) {
   const ss = descOf("semantic_search");
   assert(ss.includes("search_artwork") && ss.includes("find_similar"),
     "semantic_search cross-links to search_artwork and find_similar");
