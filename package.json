@@ -42,7 +42,7 @@
     "test:manifest-check": "node scripts/tests/run.mjs --check-manifest"
   },
   "dependencies": {
-    "@huggingface/transformers": "4.2.0",
+    "@huggingface/transformers": "4.3.1",
     "@modelcontextprotocol/ext-apps": "^2.0.3",
     "@modelcontextprotocol/server": "^2.2.0",
     "axios": "^1.7.9",
@@ -76,5 +76,8 @@
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.0",
     "vite-plugin-singlefile": "^2.3.0"
+  },
+  "overrides": {
+    "onnxruntime-node": "1.24.3"
   }
 }
