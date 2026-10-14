@@ -47,6 +47,7 @@ class UsageError extends Error {}
 const VERBS = {
   search:       { tool: "search_artwork",        pos: "query",        list: "results",  total: "totalResults",  page: "offset" },
   semantic:     { tool: "semantic_search",       pos: "query",        list: "results",  total: "returnedCount", page: "offset" },
+  multimodal:   { tool: "multimodal_search",     pos: "query",        list: "results",  total: "returnedCount", page: "offset" },
   persons:      { tool: "search_persons",        pos: "name",         list: "persons",  total: "totalResults",  page: "offset" },
   provenance:   { tool: "search_provenance",     pos: "party",        list: "results",  total: "totalArtworks", page: "offset" },
   inscriptions: { tool: "search_inscriptions",   pos: "text",         list: "results",  total: "totalConfirmed", page: "offset" },
@@ -75,6 +76,8 @@ const VERB_HELP = {
                   example: `rijks-mcp search --creator "Rembrandt van Rijn" --type painting --max 5 --fields objectNumber,title` },
   semantic:     { summary: "Free-text concept search by embedding similarity; natural-language queries ranked over reconstructed text.",
                   example: `rijks-mcp semantic "ships in a stormy sea" --max 5 --fields objectNumber,title,similarityScore` },
+  multimodal:   { summary: "Find artworks by what they show — metadata, image and Iconclass channels fused, with per-channel ranks.",
+                  example: `rijks-mcp multimodal "red umbrella in the rain" --max 5 --fields objectNumber,title,matchedBy` },
   persons:      { summary: "Demographic/structural lookup of people/groups; returns vocabIds to feed search --creator (by) or --aboutActor (depicting).",
                   example: `rijks-mcp persons "Vermeer" --max 3 --fields vocabId,label,artworkCount` },
   provenance:   { summary: "Ownership-history search across parsed provenance — party, transfer type, location, date/price range, gaps.",

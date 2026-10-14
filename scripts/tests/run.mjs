@@ -88,6 +88,7 @@ const ALLOWED_REQUIRES = new Set([
   "apiKey",
   "dist",
   "embeddingsDb",
+  "gemmaDb",
   "manual",
   "network",
   "server",

@@ -71,6 +71,8 @@ const CACHE_TTL_MS = 1_800_000; // 30 min
 export const collectionStatsCache = new ResponseCache<CollectionStatsResult>(300, CACHE_TTL_MS);
 export const semanticSearchCache = new ResponseCache<ToolResponse | StructuredToolResponse>(500, CACHE_TTL_MS);
 export const semanticInflight = new Map<string, Promise<ToolResponse | StructuredToolResponse>>();
+export const multimodalSearchCache = new ResponseCache<ToolResponse | StructuredToolResponse>(500, CACHE_TTL_MS);
+export const multimodalInflight = new Map<string, Promise<ToolResponse | StructuredToolResponse>>();
 
 /** Stdio-mode temp HTML files (find_similar, enrichment review). Swept on same 30-min TTL. */
 const tempPageFiles = new Map<string, number>(); // path → createdAt

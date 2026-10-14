@@ -12,6 +12,8 @@ import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
 import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
+import { GemmaDb } from "./api/GemmaDb.js";
+import { GemmaModel } from "./api/GemmaModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import {
   similarPages,
@@ -99,8 +101,14 @@ import { registerInscriptionsTools } from "./registration/tools/inscriptions.js"
 import { registerStatsTools } from "./registration/tools/stats.js";
 import { registerSimilarTools } from "./registration/tools/similar.js";
 import { registerSemanticTools } from "./registration/tools/semantic.js";
+import { registerMultimodalTools } from "./registration/tools/multimodal.js";
 
 // ─── Tools ──────────────────────────────────────────────────────────
+
+export interface GemmaHandles {
+  db: GemmaDb | null;
+  model: GemmaModel | null;
+}
 
 function registerTools(
   server: McpServer,
@@ -111,7 +119,8 @@ function registerTools(
   embeddingModel: EmbeddingModel | null,
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>,
-  stats?: UsageStats
+  stats?: UsageStats,
+  gemma?: GemmaHandles
 ): void {
   const publicBaseUrl = resolvePublicUrl(httpPort);
 
@@ -126,6 +135,7 @@ function registerTools(
   registerStatsTools(server, vocabDb, embeddingsDb, embeddingModel, withLogging, stats);
   registerSimilarTools(server, vocabDb, embeddingsDb, publicBaseUrl, withLogging, stats);
   registerSemanticTools(server, embeddingsDb, embeddingModel, vocabDb, withLogging, stats);
+  registerMultimodalTools(server, gemma?.db ?? null, gemma?.model ?? null, vocabDb, withLogging, stats);
 }
 
 // ─── MCP App Resource ────────────────────────────────────────────────
@@ -215,9 +225,10 @@ export function registerAll(
   embeddingsDb: EmbeddingsDb | null,
   embeddingModel: EmbeddingModel | null,
   httpPort?: number,
-  stats?: UsageStats
+  stats?: UsageStats,
+  gemma?: GemmaHandles
 ): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats), stats);
+  registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, createLogger(stats), stats, gemma);
   // The only MCP resource is the artwork viewer UI, registered next.
   registerAppViewerResource(server);
 

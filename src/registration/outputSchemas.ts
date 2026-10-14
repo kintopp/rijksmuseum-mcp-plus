@@ -534,6 +534,36 @@ export const SemanticSearchOutput = {
   error: z.string().optional(),
 };
 
+// A factory, not a shared instance: a reused schema object can be emitted as a $ref.
+const channelHit = () => z.object({ rank: z.number().int(), similarity: z.number() });
+
+export const MultimodalSearchOutput = {
+  searchMode: z.enum(["multimodal", "multimodal+filtered"]),
+  query: z.string(),
+  channels: z.array(z.enum(["metadata", "image", "iconclass"])),
+  returnedCount: z.number().int(),
+  iconclassNotations: z.array(z.object({
+    notation: z.string(),
+    label: z.string(),
+    similarity: z.number(),
+  })).optional(),
+  results: z.array(z.object({
+    rank: z.number().int(),
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    date: z.string().optional(),
+    type: z.string().optional(),
+    matchedBy: z.array(z.enum(["metadata", "image", "iconclass"])),
+    metadata: channelHit().optional(),
+    image: channelHit().optional(),
+    iconclass: channelHit().extend({ notation: z.string() }).optional(),
+    url: z.string(),
+  })),
+  warnings: z.array(z.string()).optional(),
+  error: z.string().optional(),
+};
+
 export const CuratedSetsOutput = {
   totalSets: z.number().int(),
   filteredFrom: z.number().int().optional(),

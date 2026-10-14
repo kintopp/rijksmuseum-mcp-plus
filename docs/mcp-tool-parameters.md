@@ -139,6 +139,35 @@ Filters are applied *before* semantic ranking. A single very broad filter (`type
 
 ---
 
+## multimodal_search
+
+Finds artworks by what they show. One query is ranked in three channels of a shared EmbeddingGemma 2 space: catalogue metadata, the artwork images themselves, and the artworks tagged with the nearest Iconclass notations. The channels are fused by reciprocal rank. Each result reports its rank and similarity in every channel that found it. Registered only when `gemma.db` is present.
+
+| Parameter | Description |
+|---|---|
+| `query` | **Required.** What the artwork shows or is about, e.g. `children playing outside on the street` |
+| `channels` | Channels to run and fuse: any of `metadata`, `image`, `iconclass` (default all three). A single channel returns that channel's own ranking |
+| `type` | Object type filter, e.g. `painting` (string or array) |
+| `material` | Filter by material (string or array) |
+| `technique` | Filter by technique (string or array) |
+| `creator` | Filter by artist name (string or array) |
+| `creationDate` | Exact year or wildcard |
+| `dateMatch` | Date matching mode: `overlaps`, `within`, or `midpoint` |
+| `subject` | Pre-filter by subject (string or array) |
+| `iconclass` | Pre-filter by Iconclass notation (string or array) |
+| `depictedPerson` | Pre-filter by depicted person (string or array) |
+| `depictedPlace` | Pre-filter by depicted place (string or array) |
+| `productionPlace` | Pre-filter by production place (string or array) |
+| `collectionSet` | Pre-filter by collection set (string or array) |
+| `aboutActor` | Pre-filter by person (depicted or creator) |
+| `imageAvailable` | `true` to restrict to artworks with images |
+| `maxResults` | 1–50 (default 15) |
+| `offset` | Skip this many fused results (for pagination) |
+
+Filters are applied before ranking, in every channel. Each channel ranks up to 250 candidates before fusion, so paging works within that fused list. Similarities can only be compared within one channel, because text→image scores run lower than text→text scores.
+
+---
+
 ## collection_stats
 
 Aggregate statistics, counts, and distributions across the collection. Returns text tables plus a structured payload (denominator/grouping/coverage semantics disclosed in the output schema). Artwork filters and provenance filters combine freely; event-level provenance filters compose on the same event row, party-level filters on the same party row.
