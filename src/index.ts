@@ -150,7 +150,8 @@ async function ensureDb(spec: DbSpec): Promise<void> {
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
     const dest = fs.createWriteStream(tmpPath);
-    const isGzip = url.endsWith(".gz") || res.headers.get("content-type")?.includes("gzip");
+    // pathname, not the raw URL: a presigned link ends in its query string.
+    const isGzip = new URL(url).pathname.endsWith(".gz") || res.headers.get("content-type")?.includes("gzip");
 
     if (isGzip) {
       await pipeline(res.body, createGunzip(), dest);
@@ -257,8 +258,12 @@ function createServer(httpPort?: number): McpServer {
         "~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the " +
         "relevant language, prefer semantic_search.\n\n" +
 
-        "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that " +
-        "resist structured metadata, find_similar for artwork-to-artwork similarity from a known objectNumber. " +
+        (gemmaDb?.available && gemmaModel?.available
+          ? "Search modes: search_artwork for structured filters, semantic_search for free-text concepts, " +
+            "multimodal_search for what artworks show (images, text, Iconclass), "
+          : "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that " +
+            "resist structured metadata, ") +
+        "find_similar for artwork-to-artwork similarity from a known objectNumber. " +
         "For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.\n\n" +
 
         "Specialised tools cover provenance, bibliography, conservation, curated sets, and OAI-PMH deltas — " +

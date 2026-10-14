@@ -148,7 +148,16 @@ const staleMirror = (what) =>
 // The instructions block is hand-written prose with no other owner, so it is
 // the part of the mirror most prone to silent drift.
 const quotedBlock = /## Server Description\n\n([\s\S]*?)\n\n---/.exec(mirror)?.[1] ?? "";
-const quotedInstructions = quotedBlock.split("\n").map((l) => l.replace(/^> ?/, "")).join("\n");
+let quotedInstructions = quotedBlock.split("\n").map((l) => l.replace(/^> ?/, "")).join("\n");
+// The mirror quotes the production (gemma.db) text; without it the search-modes sentence reverts.
+if (!HAS_GEMMA_DB) {
+  quotedInstructions = quotedInstructions.replace(
+    "Search modes: search_artwork for structured filters, semantic_search for free-text concepts, " +
+      "multimodal_search for what artworks show (images, text, Iconclass), ",
+    "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that " +
+      "resist structured metadata, ",
+  );
+}
 if (squash(quotedInstructions) !== squash(client.getInstructions() ?? "")) staleMirror("server instructions");
 
 // Headings may carry an annotation suffix, e.g. '*(app tool — user-facing)*'.

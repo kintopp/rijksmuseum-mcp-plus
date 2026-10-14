@@ -2,6 +2,8 @@
 
 How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 
+The block below is the production text. Without `gemma.db`, the search-modes sentence begins "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that resist structured metadata, find_similar …".
+
 ## Server Description
 
 > Rijksmuseum collection explorer — circa 834,000 artworks from antiquity to the present day spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.
@@ -18,7 +20,7 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 >
 > Two free-text corpora are searchable through search_artwork: descriptions (Dutch, cataloguer-written, ~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the relevant language, prefer semantic_search.
 >
-> Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that resist structured metadata, find_similar for artwork-to-artwork similarity from a known objectNumber. For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.
+> Search modes: search_artwork for structured filters, semantic_search for free-text concepts, multimodal_search for what artworks show (images, text, Iconclass), find_similar for artwork-to-artwork similarity from a known objectNumber. For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.
 >
 > Specialised tools cover provenance, bibliography, conservation, curated sets, and OAI-PMH deltas — see their descriptions for routing.
 
@@ -26,7 +28,7 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 
 ## Tool Descriptions
 
-19 tools total: 16 standard tools + 3 app tools (`get_artwork_image` user-facing; `remount_viewer` and `poll_viewer_commands` internal viewer plumbing). Listed in registration order — this is the order the SDK surfaces them in `tools/list`.
+20 tools total: 17 standard tools + 3 app tools (`get_artwork_image` user-facing; `remount_viewer` and `poll_viewer_commands` internal viewer plumbing). Listed in registration order — this is the order the SDK surfaces them in `tools/list`.
 
 ### 1. `search_artwork`
 
