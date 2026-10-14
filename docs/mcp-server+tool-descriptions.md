@@ -2,6 +2,8 @@
 
 How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 
+The block below is the production text. Without `gemma.db`, the search-modes sentence begins "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that resist structured metadata, find_similar …".
+
 ## Server Description
 
 > Rijksmuseum collection explorer — circa 834,000 artworks from antiquity to the present day spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.
@@ -18,7 +20,7 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 >
 > Two free-text corpora are searchable through search_artwork: descriptions (Dutch, cataloguer-written, ~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the relevant language, prefer semantic_search.
 >
-> Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that resist structured metadata, find_similar for artwork-to-artwork similarity from a known objectNumber. For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.
+> Search modes: search_artwork for structured filters, semantic_search for free-text concepts, multimodal_search for what artworks show (images, text, Iconclass), find_similar for artwork-to-artwork similarity from a known objectNumber. For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.
 >
 > Specialised tools cover provenance, bibliography, conservation, curated sets, and OAI-PMH deltas — see their descriptions for routing.
 
@@ -26,7 +28,7 @@ How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 
 ## Tool Descriptions
 
-19 tools total: 16 standard tools + 3 app tools (`get_artwork_image` user-facing; `remount_viewer` and `poll_viewer_commands` internal viewer plumbing). Listed in registration order — this is the order the SDK surfaces them in `tools/list`.
+20 tools total: 17 standard tools + 3 app tools (`get_artwork_image` user-facing; `remount_viewer` and `poll_viewer_commands` internal viewer plumbing). Listed in registration order — this is the order the SDK surfaces them in `tools/list`.
 
 ### 1. `search_artwork`
 
@@ -186,3 +188,11 @@ Filter notes: supports pre-filtering by subject, depictedPerson, depictedPlace, 
 Painting queries: paintings are underrepresented (prints and drawings outnumber them ~77:1), and missing key works are not visible in the returned list. When paintings are the expected result type, pre-filter with type: 'painting' here or pair this with search_artwork(type: 'painting', subject: …) / search_artwork(type: 'painting', creator: …).
 
 Multilingual: queries in Dutch, German, French and other languages are supported but may benefit from a wider result window or English reformulation if canonical works are missing.
+
+### 20. `multimodal_search`
+
+Find artworks by what they show, ranked over metadata, images and Iconclass. One query is matched in three channels of a shared multilingual embedding space: 'metadata' (title, description, subjects and other catalogue text), 'image' (the artwork's photograph itself — finds depictions the catalogue never mentions), and 'iconclass' (the nearest Iconclass notations, then the artworks tagged with them). Results are fused by reciprocal rank; each carries its rank and similarity per channel plus matchedBy.
+
+Reading the channels: a hit in several channels is the strongest evidence; an image-only hit is often an uncatalogued depiction (verify with inspect_artwork_image); a metadata-only hit is described but may not be visually central. Similarities are comparable only within one channel — image scores run lower than text scores. To see one channel's own ranking (e.g. image-only discoveries pushed below the fused cut), pass channels: ['image']. iconclassNotations lists the notations the Iconclass channel used; pass a fitting one to search_artwork(iconclass) for the complete tagged set.
+
+Best for visual and scene descriptions ('children playing in the street', 'red umbrella', 'horseman in the snow') and abstract concepts. Weak on artist names and named historical periods — use search_artwork filters (creator, creationDate, type) for those, here as pre-filters or there directly. Not for artwork-to-artwork similarity — use find_similar. Not for counts — use collection_stats.

@@ -69,8 +69,8 @@ const toolsResult = await client.listTools();
 const toolNames = toolsResult.tools.map((t) => t.name).sort();
 console.log(`  Found ${toolNames.length} tools: ${toolNames.join(", ")}`);
 
-// All 19 tools registered with ENABLE_FIND_SIMILAR=true: 16 standard
-// (incl. find_similar + search_inscriptions + get_conservation_history + get_artwork_bibliography + find_artworks_citing_publication) + 3 app (get_artwork_image,
+// All 20 tools registered with ENABLE_FIND_SIMILAR=true and gemma.db present: 17 standard
+// (incl. find_similar + multimodal_search + search_inscriptions + get_conservation_history + get_artwork_bibliography + find_artworks_citing_publication) + 3 app (get_artwork_image,
 // remount_viewer, poll_viewer_commands).
 const expectedTools = [
   "browse_set",
@@ -84,6 +84,7 @@ const expectedTools = [
   "get_recent_changes",
   "inspect_artwork_image",
   "list_curated_sets",
+  "multimodal_search",
   "navigate_viewer",
   "poll_viewer_commands",
   "remount_viewer",

@@ -805,5 +805,18 @@
       "dist"
     ],
     "purpose": "tools/list contract: every schema is clean JSON Schema 2020-12 and $ref-free, every tool rejects unknown args by name, annotations match (fixture DB)"
+  },
+  "test-multimodal-search.mjs": {
+    "category": "db",
+    "class": "smoke",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist",
+      "gemmaDb",
+      "network",
+      "vocabDb"
+    ],
+    "purpose": "multimodal_search over stdio: channel fusion, single-channel mode, filters, pagination (needs gemma.db + Gemma query model)"
   }
 }

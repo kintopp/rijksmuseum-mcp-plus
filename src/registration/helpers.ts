@@ -36,6 +36,7 @@ export const TOOL_LIMITS = {
   search_artwork:      { max: 50,  default: 25 },
   search_persons:      { max: 100, default: 25 },
   semantic_search:     { max: 50,  default: 15 },
+  multimodal_search:   { max: 50,  default: 15 },
   search_provenance:   { max: 50,  default: 1 },
   search_inscriptions: { max: 100, default: 20 },
   browse_set:          { max: 50,  default: 10 },

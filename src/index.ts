@@ -17,6 +17,8 @@ import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
 import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
 import { EmbeddingModel } from "./api/EmbeddingModel.js";
+import { GemmaDb } from "./api/GemmaDb.js";
+import { GemmaModel } from "./api/GemmaModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
 import { UsageStats } from "./utils/UsageStats.js";
 import {
@@ -102,6 +104,14 @@ const EMBEDDINGS_DB_SPEC: DbSpec = {
   validationQuery: "SELECT 1 FROM vec_artworks_rowids LIMIT 1",
 };
 
+const GEMMA_DB_SPEC: DbSpec = {
+  name: "Gemma",
+  pathEnvVar: "GEMMA_DB_PATH",
+  urlEnvVar: "GEMMA_DB_URL",
+  defaultFile: "gemma.db",
+  validationQuery: "SELECT 1 FROM vec_gemma_images_rowids LIMIT 1",
+};
+
 function resolveDbPathForSpec(spec: DbSpec): string {
   return process.env[spec.pathEnvVar] || path.join(__dirname, "..", "data", spec.defaultFile);
 }
@@ -140,7 +150,8 @@ async function ensureDb(spec: DbSpec): Promise<void> {
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
     const dest = fs.createWriteStream(tmpPath);
-    const isGzip = url.endsWith(".gz") || res.headers.get("content-type")?.includes("gzip");
+    // pathname, not the raw URL: a presigned link ends in its query string.
+    const isGzip = new URL(url).pathname.endsWith(".gz") || res.headers.get("content-type")?.includes("gzip");
 
     if (isGzip) {
       await pipeline(res.body, createGunzip(), dest);
@@ -163,6 +174,8 @@ async function ensureDb(spec: DbSpec): Promise<void> {
 let vocabDb: VocabularyDb | null = null;
 let embeddingsDb: EmbeddingsDb | null = null;
 let embeddingModel: EmbeddingModel | null = null;
+let gemmaDb: GemmaDb | null = null;
+let gemmaModel: GemmaModel | null = null;
 
 async function initDatabases(): Promise<void> {
   await ensureDb(VOCAB_DB_SPEC);
@@ -176,12 +189,19 @@ async function initDatabases(): Promise<void> {
     const targetDim = embeddingsDb.available ? embeddingsDb.vectorDimensions : 0;
     await embeddingModel.init(modelId, targetDim);
   }
+  await ensureDb(GEMMA_DB_SPEC);
+  gemmaDb = new GemmaDb();
+  if (gemmaDb.available) {
+    gemmaModel = new GemmaModel();
+    await gemmaModel.init();
+  }
 }
 
 function buildMemoryDbHandles(): DbHandle[] {
   return [
     { name: "vocab", filePath: vocabDb?.dbPath ?? null, db: vocabDb?.rawDb ?? null },
     { name: "embeddings", filePath: embeddingsDb?.dbPath ?? null, db: embeddingsDb?.rawDb ?? null },
+    { name: "gemma", filePath: gemmaDb?.dbPath ?? null, db: gemmaDb?.rawDb ?? null },
   ];
 }
 
@@ -238,8 +258,12 @@ function createServer(httpPort?: number): McpServer {
         "~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the " +
         "relevant language, prefer semantic_search.\n\n" +
 
-        "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that " +
-        "resist structured metadata, find_similar for artwork-to-artwork similarity from a known objectNumber. " +
+        (gemmaDb?.available && gemmaModel?.available
+          ? "Search modes: search_artwork for structured filters, semantic_search for free-text concepts, " +
+            "multimodal_search for what artworks show (images, text, Iconclass), "
+          : "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that " +
+            "resist structured metadata, ") +
+        "find_similar for artwork-to-artwork similarity from a known objectNumber. " +
         "For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.\n\n" +
 
         "Specialised tools cover provenance, bibliography, conservation, curated sets, and OAI-PMH deltas — " +
@@ -247,7 +271,8 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, usageStats);
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, usageStats,
+    { db: gemmaDb, model: gemmaModel });
   return server;
 }
 
@@ -563,6 +588,9 @@ async function runHttp(): Promise<void> {
       }
       if (embeddingModel?.available) {
         await embeddingModel.embed("warmup");
+      }
+      if (gemmaModel?.available) {
+        await gemmaModel.embed("warmup");
       }
       ready = true;
       logInfo(`  Background warmup complete in ${Date.now() - t0}ms — /ready now true`, { warmupMs: Date.now() - t0 });

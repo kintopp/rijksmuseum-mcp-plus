@@ -62,6 +62,7 @@ const EXPECTED = {
   get_artwork_details: READ_CLOSED,
   collection_stats: READ_CLOSED,
   semantic_search: READ_CLOSED,
+  multimodal_search: READ_CLOSED,
   find_similar: READ_OPEN,            // rijksmuseum.nl visual-similarity channel
   search_provenance: READ_CLOSED,
   search_inscriptions: READ_CLOSED,
@@ -84,8 +85,9 @@ for (const t of tools) {
     check(t.annotations?.[key] === value, `${t.name}.annotations.${key} is ${t.annotations?.[key]}, expected ${value}`);
   }
 }
-// semantic_search needs the embeddings DB + model, which CI does not have.
-const missing = Object.keys(EXPECTED).filter((n) => n !== "semantic_search" && !tools.some((t) => t.name === n));
+// semantic_search and multimodal_search need their vector DB + model, which CI does not have.
+const OPTIONAL = new Set(["semantic_search", "multimodal_search"]);
+const missing = Object.keys(EXPECTED).filter((n) => !OPTIONAL.has(n) && !tools.some((t) => t.name === n));
 check(missing.length === 0, `tools not registered: ${missing.join(", ")}`);
 
 // ── 3. Unknown arguments are rejected ───────────────────────────────

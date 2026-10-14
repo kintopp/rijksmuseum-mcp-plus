@@ -17,12 +17,13 @@ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 
 // Full roster with ENABLE_FIND_SIMILAR=true. Bump when a tool is added; it is
 // pinned so a SHRINKING roster can't quietly shrink the gates that count it.
-export const TOOL_COUNT = 19;
+export const TOOL_COUNT = 20;
 
-// No fixture stands in for the embeddings DB, so semantic_search registers
-// only where a real one exists (not in CI).
+// No fixture stands in for the embeddings or Gemma DB, so semantic_search and
+// multimodal_search register only where a real one exists (not in CI).
 export const HAS_EMBEDDINGS_DB = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db") !== null;
-export const EXPECTED_TOOL_COUNT = HAS_EMBEDDINGS_DB ? TOOL_COUNT : TOOL_COUNT - 1;
+export const HAS_GEMMA_DB = resolveDbPath("GEMMA_DB_PATH", "gemma.db") !== null;
+export const EXPECTED_TOOL_COUNT = TOOL_COUNT - (HAS_EMBEDDINGS_DB ? 0 : 1) - (HAS_GEMMA_DB ? 0 : 1);
 
 export async function connectFixtureClient(name, env = {}) {
   const transport = new StdioClientTransport({

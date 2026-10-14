@@ -4976,6 +4976,32 @@ export class VocabularyDb {
   }
 
   /**
+   * Artworks whose subjects carry any of the given base notations, exactly or
+   * key-expanded/named (`n(+…)`, `n(NAME)`). Maps art_id → index of the first
+   * matching notation, so callers can pass the notations in priority order.
+   */
+  artIdsByNotations(notations: string[]): Map<number, number> {
+    const out = new Map<number, number>();
+    if (!this.db || notations.length === 0) return out;
+    const subjectId = this.requireFieldId("subject");
+    // `notation >= n( AND < n)` is the index-friendly form of `LIKE 'n(%'` — ')' sorts right after '('.
+    const vocabStmt = this.db.prepare(
+      "SELECT vocab_int_id FROM vocabulary WHERE notation = ? OR (notation >= ? AND notation < ?)"
+    );
+    const mapStmt = this.db.prepare(
+      "SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?"
+    );
+    notations.forEach((n, i) => {
+      for (const v of vocabStmt.all(n, `${n}(`, `${n})`) as { vocab_int_id: number }[]) {
+        for (const m of mapStmt.all(subjectId, v.vocab_int_id) as { artwork_id: number }[]) {
+          if (!out.has(m.artwork_id)) out.set(m.artwork_id, i);
+        }
+      }
+    });
+    return out;
+  }
+
+  /**
    * Find vocabulary IDs via FTS5, falling back to LIKE on normalized labels
    * for compound word variants (e.g. "printmaker" vs "print maker").
    */

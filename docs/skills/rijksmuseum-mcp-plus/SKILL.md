@@ -1,10 +1,10 @@
 ---
 name: rijksmuseum-mcp-plus
 description: >
-  Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
+  Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, text-to-image search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.96"
-  last_updated: "2026-10-11"
+  version: "0.97"
+  last_updated: "2026-10-14"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -25,6 +25,7 @@ This project enriched parts of the museum's data; the Rijksmuseum has not review
 - **Place authorities**: coordinates from Getty TGN (ODC-By 1.0), Wikidata (CC0) and GeoNames (CC BY 4.0), added only where a museum-supplied authority ID resolves them.
 - **Production records**: each maker paired with their own role and attribution qualifier, which is what makes same-row attribution filters possible.
 - **Titles, descriptions, inscriptions and curatorial narratives**: encoded as embeddings for semantic search and for `find_similar`'s Description channel.
+- **Images**: the photographs themselves, the catalogue text and the Iconclass notations encoded into one shared image–text embedding space, so `multimodal_search` can rank a text query against what the pictures show.
 
 Only images (IIIF, `iiif.micr.io`), `get_recent_changes` and `find_similar`'s Visual channel are fetched live, so an image can be current while its metadata is not.
 
@@ -58,6 +59,7 @@ The tool descriptions already document every parameter and say which tool does w
 **Place and similarity.**
 - Many place coordinates are rounded to about 2 km, so a `nearPlace` radius below that cannot separate a landmark from its city.
 - Prints and drawings outnumber paintings roughly 77:1, so unfiltered semantic results rarely surface the paintings; that gap is invisible in the returned list.
+- `multimodal_search`'s image channel sees only digitised works, and its matches are visual resemblance, not identification: an image-only hit for a named place may show any town that looks like it. Similarities are comparable only within one channel (image scores run lower than text scores), so rank within a channel, never across them. Like all embedding search it is weak on artist names and named periods; put those in its filters.
 
 **Provenance semantics.**
 - On the periods layer, `dateFrom`/`dateTo` bound the start and end of ownership, which is far stricter than the events layer's "something happened between these years". For wartime questions, the events layer is usually the right one.
@@ -82,6 +84,7 @@ Draw on whichever of these fit, combine them, or ignore them.
 - **Follow the people.** Makers, sitters, copyists, owners, dealers and donors are separate indexes into the same objects. A painting's afterlife may be clearer through its copyist, its sitter's other portraits, or the collector who owned it than through the painting itself. Owners of prints and drawings also left collector's marks (Lugt numbers, via `search_inscriptions`); many are the print room's own stamp, but former owners' marks reach more than twice as many works as the parsed provenance covers, almost all of them outside it.
 - **Follow the object outward.** Related and physical companions on the record, `find_similar`'s channels, prints made after it, works cited in the same publication, and other works in its provenance (`relatedTo`). Object numbers encode department and, for many objects, accession year, so a wildcard (`RP-P-1906-*`) can rebuild an acquisition batch.
 - **Use counts as arguments.** A distribution can test a claim (when a motif rises and falls, which cities dominate a medium, who collected what) and turn an anecdote into a pattern, or show that it isn't one.
+- **Search what the work shows.** For scenes, motifs and visual details ("children playing in the street", "a red umbrella"), `multimodal_search` runs one query through three channels at once: catalogue metadata, the images themselves, and the Iconclass notations nearest the query. Read the channels against each other. A work found by several is the strongest candidate. An image-only hit is often a depiction the catalogue never recorded, so look at it before claiming it. A metadata-only hit is described that way but may not show it prominently. The fused list can bury image-only discoveries; `channels: ["image"]` shows that channel's own ranking. When one of the returned `iconclassNotations` fits, `search_artwork` with that `iconclass` gives the complete tagged set rather than a ranked sample.
 - **Look.** `inspect_artwork_image` can read what the catalogue never recorded: signatures, seals, cartouches, inscriptions, details in the background. Keep what the catalogue says separate from what you see in the image.
 - **Read the negative space.** What is undigitised (`imageAvailable: false`), uncatalogued, missing from a provenance chain (`hasGap`), or orphaned in the authority files (`search_persons` `unused`) can be as telling as what is present.
 - **Change the language.** Dutch terms, Iconclass notations (13 languages, from the Iconclass server) and English reformulations of semantic queries each reach different material. One concept can sit in several Iconclass branches (a dog as pet under `34B11`, as a symbol of fidelity under `11A(DOG)`).
@@ -90,6 +93,7 @@ Draw on whichever of these fit, combine them, or ignore them.
 
 - Give the `objectNumber` for every work you discuss, linked to its Rijksmuseum page; cite the handle URI from `externalIds` when a persistent citation is needed.
 - Separate three sources of statement: what the catalogue records, what you observed in an image, and what comes from your own background knowledge.
+- For `multimodal_search` results, say which channels found each work, and present the candidates the channels agree on separately from those only the image or only the text supports.
 - Pass on links the tools produce for the user: `find_similar` comparison pages and provenance review URLs. The user cannot see tool output, so these links are their only way to those pages.
 - Say what scope your searches covered, especially when an answer rests on a sample rather than an exhaustive query.
 
