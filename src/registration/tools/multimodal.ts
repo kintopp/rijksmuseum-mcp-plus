@@ -55,7 +55,7 @@ export function registerMultimodalTools(
       description:
         "Find artworks by what they show, ranked over metadata, images and Iconclass. " +
         "One query is matched in three channels of a shared multilingual embedding space: " +
-        "'metadata' (title, description, subjects and other catalogue text), " +
+        "'metadata' (title, inscriptions, description and curatorial narrative), " +
         "'image' (the artwork's photograph itself — finds depictions the catalogue never mentions), and " +
         "'iconclass' (the nearest Iconclass notations, then the artworks tagged with them). " +
         "Results are fused by reciprocal rank; each carries its rank and similarity per channel plus matchedBy.\n\n" +

@@ -191,7 +191,7 @@ Multilingual: queries in Dutch, German, French and other languages are supported
 
 ### 20. `multimodal_search`
 
-Find artworks by what they show, ranked over metadata, images and Iconclass. One query is matched in three channels of a shared multilingual embedding space: 'metadata' (title, description, subjects and other catalogue text), 'image' (the artwork's photograph itself — finds depictions the catalogue never mentions), and 'iconclass' (the nearest Iconclass notations, then the artworks tagged with them). Results are fused by reciprocal rank; each carries its rank and similarity per channel plus matchedBy.
+Find artworks by what they show, ranked over metadata, images and Iconclass. One query is matched in three channels of a shared multilingual embedding space: 'metadata' (title, inscriptions, description and curatorial narrative), 'image' (the artwork's photograph itself — finds depictions the catalogue never mentions), and 'iconclass' (the nearest Iconclass notations, then the artworks tagged with them). Results are fused by reciprocal rank; each carries its rank and similarity per channel plus matchedBy.
 
 Reading the channels: a hit in several channels is the strongest evidence; an image-only hit is often an uncatalogued depiction (verify with inspect_artwork_image); a metadata-only hit is described but may not be visually central. Similarities are comparable only within one channel — image scores run lower than text scores. To see one channel's own ranking (e.g. image-only discoveries pushed below the fused cut), pass channels: ['image']. iconclassNotations lists the notations the Iconclass channel used; pass a fitting one to search_artwork(iconclass) for the complete tagged set.
 
