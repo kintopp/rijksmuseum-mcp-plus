@@ -109,7 +109,7 @@ const GEMMA_DB_SPEC: DbSpec = {
   pathEnvVar: "GEMMA_DB_PATH",
   urlEnvVar: "GEMMA_DB_URL",
   defaultFile: "gemma.db",
-  validationQuery: "SELECT 1 FROM vec_gemma_images_rowids LIMIT 1",
+  validationQuery: "SELECT 1 FROM vec_gemma_iconclass_rowids LIMIT 1",
 };
 
 function resolveDbPathForSpec(spec: DbSpec): string {
