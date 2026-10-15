@@ -288,6 +288,7 @@ async function runStdio(): Promise<void> {
   if (process.env.MCP_SKIP_STARTUP_WARM !== "1") {
     if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); vocabDb.ensureCuratedSetsCache(); }
     if (embeddingsDb?.available) embeddingsDb.warmCorePages();
+    if (gemmaDb?.available) await gemmaDb.loadCoarse(() => Promise.resolve());
   }
   // Factory runs once per connection; the opening exchange pins the protocol era.
   serveStdio(() => createServer(), {
@@ -591,6 +592,9 @@ async function runHttp(): Promise<void> {
       }
       if (gemmaModel?.available) {
         await gemmaModel.embed("warmup");
+      }
+      if (gemmaDb?.available) {
+        await gemmaDb.loadCoarse(yieldTick);
       }
       ready = true;
       logInfo(`  Background warmup complete in ${Date.now() - t0}ms — /ready now true`, { warmupMs: Date.now() - t0 });

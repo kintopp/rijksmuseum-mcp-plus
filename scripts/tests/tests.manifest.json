@@ -818,5 +818,15 @@
       "vocabDb"
     ],
     "purpose": "multimodal_search over stdio: channel fusion, single-channel mode, filters, pagination (needs gemma.db + Gemma query model)"
+  },
+  "test-gemma-two-stage.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "GemmaDb two-stage search (MRL-prefix scan + exact rescore) and legacy vec0 layout vs brute-force cosine on a seeded synthetic gemma.db"
   }
 }
