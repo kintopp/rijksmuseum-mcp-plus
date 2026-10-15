@@ -3,7 +3,7 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, text-to-image search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.97"
+  version: "0.98"
   last_updated: "2026-10-14"
 ---
 
@@ -25,7 +25,7 @@ This project enriched parts of the museum's data; the Rijksmuseum has not review
 - **Place authorities**: coordinates from Getty TGN (ODC-By 1.0), Wikidata (CC0) and GeoNames (CC BY 4.0), added only where a museum-supplied authority ID resolves them.
 - **Production records**: each maker paired with their own role and attribution qualifier, which is what makes same-row attribution filters possible.
 - **Titles, descriptions, inscriptions and curatorial narratives**: encoded as embeddings for semantic search and for `find_similar`'s Description channel.
-- **Images**: the photographs themselves, the catalogue text and the Iconclass notations encoded into one shared image–text embedding space, so `multimodal_search` can rank a text query against what the pictures show.
+- **Images, catalogue text and Iconclass notations**: the photographs, the same four text fields, and the labels of the Iconclass notations used in the collection, encoded into one shared image–text embedding space, so `multimodal_search` can rank a text query against what the pictures show. Subject terms are not part of the text it matches.
 
 Only images (IIIF, `iiif.micr.io`), `get_recent_changes` and `find_similar`'s Visual channel are fetched live, so an image can be current while its metadata is not.
 

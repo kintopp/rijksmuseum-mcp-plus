@@ -4,6 +4,7 @@
 
 - **`search_artwork`** — Filter the collection by structured criteria (subject, material, technique, dates, place, person, theme, …). Combinable filters; AND semantics on arrays.
 - **`semantic_search`** — Find artworks by meaning, concept, or theme using natural language. Ranked by embedding similarity over each artwork's title, inscriptions, description and curatorial narrative.
+- **`multimodal_search`** — Find artworks by what they show. One query runs through three channels in a shared image–text embedding space (EmbeddingGemma 2): catalogue text (title, inscriptions, description, curatorial narrative), the digitised images themselves, and the nearest Iconclass notations. Results are fused by reciprocal rank and record which channels found each work; accepts the same pre-filters as `search_artwork`.
 - **`search_persons`** — Find persons (artists, depicted figures, donors) by demographic (gender, born/died) or structural (birth/death place, profession) criteria; each result also carries name variants and external authority IDs (VIAF/ULAN/RKD/Wikidata). Two-step pattern: feed the returned vocab IDs into `search_artwork({creator: <vocabId>})`.
 - **`collection_stats`** — Aggregate statistics, counts, and distributions across the collection.
 - **`browse_set`** — DB-backed enumeration of artworks within a curated collection set.

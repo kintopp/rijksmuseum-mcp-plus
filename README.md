@@ -6,7 +6,7 @@
 
 ## Overview
 
-The **rijksmuseum-mcp+** MCP server lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and an enriched copy of the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). This in turn enables many features beyond those offered by the Rijksmuseum's own [Search API](https://data.rijksmuseum.nl) and [collections portal](https://www.rijksmuseum.nl/en/collection/), including full-text semantic search, structured provenance analysis, artwork similarity comparisons, AI-supported visual analysis, and geospatial queries. Rijksmuseum-mcp+ works best when used together with [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp), a sibling resource for searching and exploring [Iconclass](https://iconclass.org) concepts.
+The **rijksmuseum-mcp+** MCP server lets you explore the Rijksmuseum's artwork collections through natural conversation with an AI assistant. It does this by creating a [bridge](https://www.anthropic.com/news/model-context-protocol) between the AI system's chat environment and an enriched copy of the museum's [open-access, curated metadata](https://data.rijksmuseum.nl). This in turn enables many features beyond those offered by the Rijksmuseum's own [Search API](https://data.rijksmuseum.nl) and [collections portal](https://www.rijksmuseum.nl/en/collection/), including full-text semantic search, text-to-image search, structured provenance analysis, artwork similarity comparisons, AI-supported visual analysis, and geospatial queries. Rijksmuseum-mcp+ works best when used together with [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp), a sibling resource for searching and exploring [Iconclass](https://iconclass.org) concepts.
 
 > Please do not treat the data made available by this resource as current or authoritative. It is based on data copied from the Rijksmuseum on May 2nd, 2026. For current data, please always use the Rijksmuseum's own [search portal](https://www.rijksmuseum.nl/en/collection/) and [APIs](https://data.rijksmuseum.nl). Nor have the (in small part, also LLM based) enrichments of the museum's provenance data been reviewed or endorsed by the Rijksmuseum. This is an early pre-release of a technology demo that is still in active development.
 
@@ -14,7 +14,8 @@ This tool was developed as a technology demo by the [Research and Infrastructure
 
 ## Features
 
-- **Finding artworks**. You can search by keyword, by structured filters (artist, type, material, technique, date, physical dimensions, production place), or by meaning — a semantic search that handles interpretive queries like "melancholy winter scenes at dusk". There's also [iconographic search via Iconclass codes](https://kintopp.github.io/rijksmuseum-mcp-plus/iconclass-visualization), so you can ask for works depicting a specific scene or motif rather than just matching words in titles. 
+- **Finding artworks**. You can search by keyword, by structured filters (artist, type, material, technique, date, physical dimensions, production place), or by meaning — a semantic search that handles interpretive queries like "melancholy winter scenes at dusk". There's also [iconographic search via Iconclass codes](https://kintopp.github.io/rijksmuseum-mcp-plus/iconclass-visualization), so you can ask for works depicting a specific scene or motif rather than just matching words in titles.
+- **Searching what artworks show**. A multimodal search matches a plain-language description such as "children playing in the street" or "a red umbrella" against the digitised images themselves, not only against the catalogue. The same query is also run against the catalogue text and against Iconclass subject codes, and each result records which of the three found it. Works found in the images alone are often depictions the catalogue never mentions; the AI assistant can open and inspect such an image to confirm what it shows. The search can be narrowed with the usual filters, for example to paintings, a period, or a single artist. Image search covers the digitised part of the collection.
 - **Looking closely at works.** Any artwork can be opened in an interactive, inline viewer. You can instruct the AI-assistant to inspect image regions by itself — useful for analysing a specific area of the image you've highlighted for it in the viewer. If an artwork has curator defined related artworks (e.g. preparatory sketches, or different impressions of the same design) these can be accessed through the viewer as well — its < / > buttons step through them in place, without leaving the viewer.
   <p align="center"><img src="docs/van-der-Ast.jpg" alt="Stilleven met vruchten en bloemen (SK-A-2152) with highlighted detail containing three shells" width="600"></p>
 - **Collection-level analysis**. You can ask for statistical breakdowns across the whole collection: top creators, distributions by decade, type, or theme, geographic spread, as well as demographic questions.
@@ -51,7 +52,7 @@ The `rijksmuseum-mcp+` skill file ([.zip archive](docs/skills/rijksmuseum-mcp-pl
 
 ## How it works
 
-When you submit a question, the AI assistant reads the [descriptions](/docs/mcp-server+tool-descriptions.md) of the [tools](/docs/available-tools.md) provided by the MCP server together with their [search parameters](/docs/mcp-tool-parameters.md) and then decides which combination of tools and parameters are best used to query museum's [metadata](/docs/metadata-categories.md) for an answer. During this process, it will often chain several tools together in sequence (the so-called 'agentic loop'), each result informing the next query. For example, the assistant might [search](/docs/search-parameters.md) the collection using structured filters (`search_artwork`), look up an artwork's full metadata (`get_artwork_details`), query ownership history (`search_provenance`), or find artworks by meaning or concept (`semantic_search`).  The results from each tool come back as structured data and text, which the AI assistant interprets, contextualises, and when satisfied, generates for you as an answer in natural language.
+When you submit a question, the AI assistant reads the [descriptions](/docs/mcp-server+tool-descriptions.md) of the [tools](/docs/available-tools.md) provided by the MCP server together with their [search parameters](/docs/mcp-tool-parameters.md) and then decides which combination of tools and parameters are best used to query museum's [metadata](/docs/metadata-categories.md) for an answer. During this process, it will often chain several tools together in sequence (the so-called 'agentic loop'), each result informing the next query. For example, the assistant might [search](/docs/search-parameters.md) the collection using structured filters (`search_artwork`), look up an artwork's full metadata (`get_artwork_details`), query ownership history (`search_provenance`), find artworks by meaning or concept (`semantic_search`), or search for what artworks show across their images, catalogue text and Iconclass codes (`multimodal_search`).  The results from each tool come back as structured data and text, which the AI assistant interprets, contextualises, and when satisfied, generates for you as an answer in natural language.
 
 At each step, the AI assistant can combine the retrieved data from the Rijksmuseum with its own background knowledge — about artists, periods, iconographic traditions, and historical context — to offer interpretations that go beyond what the museum's metadata alone can provide. But any such interpretation is always 'constrained' by the curated metadata it has retrieved, by the instructions given to the AI assistant in the MCP server, and by the specialised domain knowledge and guidance it draws on from the optional [research skill](#research-skill) document. Together, these act as a kind of 'harness' for the AI assistant, keeping it factually grounded on the curated metadata and the user's query. In essence, this approach trades the conceptual simplicity of a traditional search interface, where you formulate a keyword-based query, receive results, and interpret these yourself, for a more flexible and powerful but also more complex scenario, where an AI assistant can formulate and combine queries, search metadata, and interpret the results on your behalf. In addition, the AI-assistant can offer a certain degree of 'introspection' on its actions – to explain how and why a search was conducted in a certain way, what the data it retrieved looked like, and recommend follow-up actions. 
 
@@ -63,11 +64,12 @@ flowchart LR
 
     AI <-->|"MCP tool calls
     (agentic loop)"| Server["rijksmuseum-mcp+
-    19 tools"]
+    20 tools"]
 
     Server --> Search["Search & Discovery
     structured filters,
     semantic search,
+    text-to-image search,
     collection statistics"]
 
     Server --> Details["Details & Metadata
@@ -78,7 +80,7 @@ flowchart LR
     Server --> Images["Image Inspection
     deep-zoom viewer,
     region crops for AI vision,
-    overlay annotations"]
+    user-highlighted regions"]
 
     Search --> VocabDB[("Vocab DB
     834K artworks
@@ -87,6 +89,9 @@ flowchart LR
     Search --> EmbeddingsDB[("Embeddings DB
     834K vectors
     semantic search")]
+    Search --> GemmaDB[("Multimodal DB
+    text + image vectors
+    EmbeddingGemma 2")]
     Details --> VocabDB
     Images --> IIIF["IIIF Image API
     iiif.micr.io"]
@@ -118,7 +123,6 @@ Ongoing:
 Later:
 
 - paper/presentation
-- investigate text based image retrieval
 
 Maybe:
 
