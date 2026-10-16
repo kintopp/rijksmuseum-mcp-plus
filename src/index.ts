@@ -15,7 +15,6 @@ import { createGunzip } from "node:zlib";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
-import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
 import { GemmaDb } from "./api/GemmaDb.js";
 import { GemmaModel } from "./api/GemmaModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
@@ -94,15 +93,6 @@ const VOCAB_DB_SPEC: DbSpec = {
   validationQuery: "SELECT 1 FROM vocab_term_counts LIMIT 1",
 };
 
-const EMBEDDINGS_DB_SPEC: DbSpec = {
-  name: "Embeddings",
-  pathEnvVar: "EMBEDDINGS_DB_PATH",
-  urlEnvVar: "EMBEDDINGS_DB_URL",
-  defaultFile: "embeddings.db",
-  // vec0's plain shadow table: present in full and slim layouts, readable without sqlite-vec loaded.
-  validationQuery: "SELECT 1 FROM vec_desc_artworks_rowids LIMIT 1",
-};
-
 const GEMMA_DB_SPEC: DbSpec = {
   name: "Gemma",
   pathEnvVar: "GEMMA_DB_PATH",
@@ -171,15 +161,12 @@ async function ensureDb(spec: DbSpec): Promise<void> {
 // ─── Shared database instances (one read-only instance each) ─────────
 
 let vocabDb: VocabularyDb | null = null;
-let embeddingsDb: EmbeddingsDb | null = null;
 let gemmaDb: GemmaDb | null = null;
 let gemmaModel: GemmaModel | null = null;
 
 async function initDatabases(): Promise<void> {
   await ensureDb(VOCAB_DB_SPEC);
   vocabDb = new VocabularyDb();
-  await ensureDb(EMBEDDINGS_DB_SPEC);
-  embeddingsDb = new EmbeddingsDb();
   await ensureDb(GEMMA_DB_SPEC);
   gemmaDb = new GemmaDb();
   if (gemmaDb.available) {
@@ -191,7 +178,6 @@ async function initDatabases(): Promise<void> {
 function buildMemoryDbHandles(): DbHandle[] {
   return [
     { name: "vocab", filePath: vocabDb?.dbPath ?? null, db: vocabDb?.rawDb ?? null },
-    { name: "embeddings", filePath: embeddingsDb?.dbPath ?? null, db: embeddingsDb?.rawDb ?? null },
     { name: "gemma", filePath: gemmaDb?.dbPath ?? null, db: gemmaDb?.rawDb ?? null },
   ];
 }
@@ -261,7 +247,7 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, embeddingsDb, httpPort, usageStats,
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, httpPort, usageStats,
     { db: gemmaDb, model: gemmaModel });
   return server;
 }

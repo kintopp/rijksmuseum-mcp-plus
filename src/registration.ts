@@ -10,7 +10,6 @@ import { fileURLToPath } from "node:url";
 import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
-import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
 import { GemmaDb } from "./api/GemmaDb.js";
 import { GemmaModel } from "./api/GemmaModel.js";
 import { UsageStats } from "./utils/UsageStats.js";
@@ -114,7 +113,6 @@ function registerTools(
   api: RijksmuseumApiClient,
   oai: OaiPmhClient,
   vocabDb: VocabularyDb | null,
-  embeddingsDb: EmbeddingsDb | null,
   httpPort: number | undefined,
   withLogging: ReturnType<typeof createLogger>,
   stats?: UsageStats,
@@ -131,7 +129,7 @@ function registerTools(
   registerProvenanceTools(server, oai, vocabDb, publicBaseUrl, withLogging, stats);
   registerInscriptionsTools(server, vocabDb, withLogging, stats);
   registerStatsTools(server, vocabDb, withLogging, stats);
-  registerSimilarTools(server, vocabDb, embeddingsDb, publicBaseUrl, withLogging, stats);
+  registerSimilarTools(server, vocabDb, gemma?.db ?? null, publicBaseUrl, withLogging, stats);
   registerSemanticTools(server, gemma?.db ?? null, gemma?.model ?? null, vocabDb, withLogging, stats);
   registerMultimodalTools(server, gemma?.db ?? null, gemma?.model ?? null, vocabDb, withLogging, stats);
 }
@@ -220,12 +218,11 @@ export function registerAll(
   apiClient: RijksmuseumApiClient,
   oaiClient: OaiPmhClient,
   vocabDb: VocabularyDb | null,
-  embeddingsDb: EmbeddingsDb | null,
   httpPort?: number,
   stats?: UsageStats,
   gemma?: GemmaHandles
 ): void {
-  registerTools(server, apiClient, oaiClient, vocabDb, embeddingsDb, httpPort, createLogger(stats), stats, gemma);
+  registerTools(server, apiClient, oaiClient, vocabDb, httpPort, createLogger(stats), stats, gemma);
   // The only MCP resource is the artwork viewer UI, registered next.
   registerAppViewerResource(server);
 

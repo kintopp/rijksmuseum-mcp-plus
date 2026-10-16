@@ -87,7 +87,6 @@ const ALLOWED_RUNTIMES = new Set(["node"]);
 const ALLOWED_REQUIRES = new Set([
   "apiKey",
   "dist",
-  "embeddingsDb",
   "gemmaDb",
   "manual",
   "network",

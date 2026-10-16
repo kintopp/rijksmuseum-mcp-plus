@@ -7,8 +7,8 @@
     "requires": [
       "dist",
       "vocabDb",
-      "embeddingsDb",
-      "network"
+      "network",
+      "gemmaDb"
     ],
     "purpose": "upstream-drift detector: live tool responses (IIIF, OAI-PMH, visual search) .parse()d against exported zod output schemas"
   },
@@ -406,9 +406,9 @@
     "runtime": "node",
     "requires": [
       "dist",
-      "embeddingsDb",
       "network",
-      "vocabDb"
+      "vocabDb",
+      "gemmaDb"
     ],
     "purpose": "headless CLI smoke test (needs built dist/ + DBs + live IIIF; in test:cli)"
   },
@@ -419,9 +419,9 @@
     "runtime": "node",
     "requires": [
       "dist",
-      "embeddingsDb",
       "network",
-      "vocabDb"
+      "vocabDb",
+      "gemmaDb"
     ],
     "purpose": "19-tool MCP smoke test over stdio (needs built dist/ + DBs + live IIIF; in test:mcp)"
   },
@@ -590,12 +590,12 @@
     "runtime": "node",
     "requires": [
       "dist",
-      "embeddingsDb",
       "manual",
       "network",
-      "vocabDb"
+      "vocabDb",
+      "gemmaDb"
     ],
-    "purpose": "find_similar HTML page across all channels (needs vocab+embeddings+iconclass DBs, net for Visual)"
+    "purpose": "find_similar HTML page across all channels (needs vocab+gemma DBs, net for Visual)"
   },
   "test-fts-edge-cases.mjs": {
     "category": "ci",
@@ -614,10 +614,10 @@
     "runtime": "node",
     "requires": [
       "dist",
-      "embeddingsDb",
       "manual",
       "network",
-      "vocabDb"
+      "vocabDb",
+      "gemmaDb"
     ],
     "purpose": "inspect_artwork_image/navigate_viewer/poll workflow (needs dist/ + DBs + live IIIF)"
   },
@@ -782,19 +782,6 @@
       "dist"
     ],
     "purpose": "2026-07-28 wire over HTTP + stdio (server/discover, envelope headers, tools/resources, Origin/405, concurrency) plus legacy-handshake regression, on the fixture DB; raw fetch because the v1 client cannot reach this wire"
-  },
-  "test-embeddings-slim-parity.mjs": {
-    "category": "db",
-    "class": "smoke",
-    "status": "manual",
-    "runtime": "node",
-    "requires": [
-      "dist",
-      "embeddingsDb",
-      "vocabDb",
-      "manual"
-    ],
-    "purpose": "vec0-only EmbeddingsDb parity vs the plain-table SQL, on full and slimmed embeddings DBs (needs data/embeddings-slim.db from slim-embeddings-db.py)"
   },
   "test-tool-schemas.mjs": {
     "category": "ci",

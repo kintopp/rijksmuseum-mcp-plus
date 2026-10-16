@@ -10,7 +10,7 @@ All scripts operate on the databases in `data/`. Python scripts use the `embeddi
 
 ## Harvest & DB Build
 
-The core pipeline that produces the two databases (vocabulary + embeddings) from scratch. Iconclass moved to its own service in v0.23.1 — see `legacy/` below.
+The core pipeline that produces the vocabulary database from scratch (vectors: see Embeddings). Iconclass moved to its own service in v0.23.1 — see `legacy/` below.
 
 | Script | Lang | Description |
 |--------|------|-------------|
@@ -107,16 +107,14 @@ One-shot diagnostic probes + apply script that surfaced and fixed 13 obsolete-TG
 
 ## Embeddings
 
+All runtime vector search (`semantic_search`, `multimodal_search`, find_similar's Description channel) reads `gemma.db` (EmbeddingGemma 2, 768d int8). `embeddings.db` (e5) is retired; its generators are in `legacy/`.
+
 | Script | Lang | Description |
 |--------|------|-------------|
-| `generate-embeddings-mps.py` | Python | Generates artwork embeddings locally using Apple MPS GPU. Streaming to SQLite. |
-| `generate-vocabulary-embeddings-modal.py` | Python | Generates artwork embeddings on Modal cloud GPUs (A10) under different source text strategies. Production script for `no-subjects` strategy. |
-| `generate-description-embeddings-modal.py` | Python | Generates description-only embeddings on Modal A10G. PCA dimensionality reduction (384→256), int8 quantisation. Writes `desc_embeddings` + `vec_desc_artworks` tables to embeddings DB. |
-| `assemble-embeddings-release.py` | Python | Assembles a deployable embeddings DB from a freshly-regenerated MAIN index (`artwork_embeddings`/`vec_artworks`) plus the carried-over DESCRIPTION index (`desc_embeddings`/`vec_desc_artworks`). Run after any main-only regen so find_similar's Description channel survives — `--main`/`--desc-source`/`--out`. |
-| `build-inscription-embed-text.mjs` | Node | Pre-pass for #383: runs the shipping TS parser (`formatInscriptionsForEmbedding`) over every inscription-bearing artwork and writes boilerplate-stripped text to a sidecar DB the Modal generator reads in Phase 1. Imports from `dist/`. |
-| `delete_phantom_vec0_rowids.mjs` | Node | Surgical cleanup of phantom `vec_artworks` rowids left by the vec0 chunk allocator (#261). Dry-run unless `--apply`; `--db` defaults to `data/embeddings.db`. |
-
-(The original non-streaming generator, `generate-embeddings-outdated.py`, now lives in `legacy/` — see below.)
+| `embed-corpus-embeddinggemma2-modal.py` | Python | Encodes the full corpus with EmbeddingGemma 2 on Modal: images, Dutch descriptions, the metadata composite and Iconclass notations. Writes fp16 sets to `data/egemma2-test/corpus/`. Resumable. |
+| `build-gemma-db.py` | Python | Builds the deployable `gemma.db` from the int8 sets in `data/egemma2-test/corpus/int8/`: two-stage `metadata`/`images`/`descriptions` channels (full vectors + 384d coarse chunks) and the vec0 Iconclass table. Re-resolves art_ids against the vocab DB by object number. `--out`. |
+| `build-inscription-embed-text.mjs` | Node | Pre-pass for #383: runs the shipping TS parser (`formatInscriptionsForEmbedding`) over every inscription-bearing artwork and writes boilerplate-stripped text to a sidecar DB the metadata-composite encoder reads. Imports from `dist/`. |
+| `desc-embed-bakeoff.py` | Python | Description-model bake-off (Iconclass-agreement proxy + blind LLM-judged pool) that chose Gemma for the Description channel. |
 
 ## IIIF Image Corpus
 
@@ -256,7 +254,11 @@ Scripts retained for reference but no longer part of any release path. Do not ru
 | `legacy/build-iconclass-db.py` | Python | Built the standalone `iconclass.db` from the CC0 Iconclass data dump + artwork counts from vocab DB. Iconclass moved to its own MCP service in v0.23.1 (`kintopp/rijksmuseum-iconclass-mcp`). Counts sidecar refresh now lives in that repo — see RELEASE.md Phase B-bis. |
 | `legacy/generate-iconclass-embeddings-modal.py` | Python | Generated Iconclass notation embeddings on Modal. Same Iconclass-MCP split — embedding generation now belongs to that repo. |
 | `legacy/test-iconclass-compliance.py` | Python | 40-case compliance suite (data integrity + MCP behaviour) for the standalone `iconclass.db`. Belongs with the Iconclass-MCP split above; kept here for reference only. |
-| `legacy/generate-embeddings-outdated.py` | Python | **Superseded** by `generate-embeddings-mps.py`. Original non-streaming artwork-embedding generator. |
+| `legacy/generate-embeddings-outdated.py` | Python | Original non-streaming e5 artwork-embedding generator. |
+| `legacy/generate-vocabulary-embeddings-modal.py`, `legacy/generate-description-embeddings-modal.py` | Python | e5 artwork / description embedding generators on Modal for the retired `embeddings.db`. |
+| `legacy/generate-embeddings-mps.py` | Python | Local (Apple MPS) e5 artwork-embedding generator. |
+| `legacy/delete_phantom_vec0_rowids.mjs` | Node | Cleaned phantom `vec_artworks` rowids left by the vec0 chunk allocator (#261) in `embeddings.db`. |
+| `legacy/assemble-embeddings-release.py`, `legacy/slim-embeddings-db.py`, `legacy/trim-embedding-vocab.py` | Python | Assembled, slimmed and vocab-trimmed the retired `embeddings.db` for deploy. |
 | `legacy/backfill-from-v23.1.mjs` | Node | One-time migration that carried supplementary columns forward from a v0.23.1 vocab DB into the v0.24 re-harvest. Not part of any current release path. |
 
 ### One-off harvest recovery
@@ -317,7 +319,7 @@ The maintained surface is `scripts/tests/tests.manifest.json` plus `scripts/test
 
 - `class`: `gate` (maintained CI gate), `smoke` (useful but DB/live/manual prerequisites), or `scratch` (expendable probe/history).
 - `status`: `promoted`, `manual`, `scratch`, or `deprecated`.
-- `requires`: structured prerequisites such as `dist`, `vocabDb`, `embeddingsDb`, `network`, `server`, `apiKey`, and `manual`.
+- `requires`: structured prerequisites such as `dist`, `vocabDb`, `gemmaDb`, `network`, `server`, `apiKey`, and `manual`.
 
 Uniform summaries and shared harness cleanup should apply to `gate` tests and newly promoted tests only. Scratch/manual/deprecated scripts are intentionally low-contract.
 

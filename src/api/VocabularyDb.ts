@@ -1312,7 +1312,7 @@ export class VocabularyDb {
   // 256 entries × ~8KB compiled-statement worst case ≈ 2MB ceiling.
   private static readonly FILTER_ART_IDS_CACHE_CAP = 256;
   private stmtFilterArtIds = new Map<string, Statement>();
-  // Chunk-size-keyed statement caches (like EmbeddingsDb.stmtFilteredKnn)
+  // Chunk-size-keyed statement caches
   private stmtLookupTypesCache = new Map<number, Statement>();
   private stmtReconstructSourceCache = new Map<number, Statement>();
   private stmtBatchByArtIdCache = new Map<number, Statement>();

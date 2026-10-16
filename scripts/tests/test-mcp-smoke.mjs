@@ -212,6 +212,19 @@ const semText = textOf(semResult);
 assert(!semResult.isError, "semantic_search succeeded");
 assert(semText.length > 50, "semantic_search returned substantial results");
 
+// Description channel reads gemma.db's stored description vectors; a gemma.db
+// without that table silently yields an empty channel, so pin it non-empty.
+section("9b. find_similar Description channel");
+
+const simResult = await client.callTool({
+  name: "find_similar",
+  arguments: { objectNumber: "SK-C-5" },
+});
+const descHits = simResult.structuredContent?.modes?.description ?? [];
+assert(!simResult.isError, "find_similar succeeded");
+assert(descHits.length > 0, `Description channel returned results (got ${descHits.length})`);
+assert(!descHits.some(c => c.objectNumber === "SK-C-5"), "Description channel excludes the seed");
+
 // ══════════════════════════════════════════════════════════════════
 //  10. search_provenance
 // ══════════════════════════════════════════════════════════════════

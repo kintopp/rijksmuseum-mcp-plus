@@ -45,7 +45,7 @@ A release combines code changes, DB updates, and a GitHub release tag. The full 
 
 ## Phase B: DB upgrade (destructive production action — always ask for confirmation)
 
-> **Timing warning: Between swapping vocab and embeddings DBs, semantic_search returns silently-wrong results.** Embedding art_ids do not align with the new vocab DB rows (≈99% mismatch after a harvest). Example: after vocab-only swap, art_id `RP-T-1948-397` still holds the v0.22 vector for "Moonlit River Landscape with Fishermen", but reconstructSourceText pulls the v0.24 title for that art_id — which is "Griekse klederdracht". Do both swaps **back-to-back**. Do not demo, announce, or leave the server idle in this window.
+> **Timing warning: Between swapping the vocab and Gemma DBs, semantic_search, multimodal_search and find_similar's Description channel return silently-wrong results.** gemma.db's art_ids are resolved against one vocab build (`version_info.vocab_db_built_at`) and do not align with a new harvest's rows (≈99% mismatch). Example: after a vocab-only swap, an art_id still holds the vector for "Moonlit River Landscape with Fishermen", but reconstructSourceText pulls the new title for that art_id — e.g. "Griekse klederdracht". Rebuild gemma.db against the new vocab DB (`scripts/build-gemma-db.py`) and do both swaps **back-to-back**. Do not demo, announce, or leave the server idle in this window.
 
 ### Shell quoting: `railway ssh` + zsh
 
@@ -68,7 +68,7 @@ Never chain `&&` across two `railway ssh` calls if one uses a local glob — ver
 
 ### For each DB that changed
 
-Two DBs on this server's Railway volume: vocabulary, embeddings. (Iconclass moved to a separate service in v0.23.1 — see Phase B-bis.)
+Two DBs on this server's Railway volume: vocabulary, gemma. (Iconclass moved to a separate service in v0.23.1 — see Phase B-bis.) gemma.db is **not** a public release asset (Rijksmuseum clearance pending): it lives in the private Railway bucket and `GEMMA_DB_URL` is a presigned link — see "Gemma only" below.
 
 **Pre-publish backfills (vocabulary.db only).** Run idempotent backfills against the freshly harvested local DB *before* compression so the curated state is baked into the released `.db.gz`:
 
@@ -180,24 +180,16 @@ python3 scripts/geocoding/strip_non_authority_coords.py
 
 Each script is idempotent — re-running on an already-backfilled DB updates 0 rows.
 
-**Embeddings only — assemble MAIN + DESC first (do NOT deploy the regen output directly).**
-`generate-vocabulary-embeddings-modal.py` produces a **main-only** DB (`artwork_embeddings` +
-`vec_artworks`). The deployed `embeddings.db` ALSO carries `desc_embeddings` + `vec_desc_artworks`
-(find_similar's Description channel), built separately and unchanged by a main regen. Deploying the
-main-only DB silently breaks that channel. Combine with the currently-deployed DB's desc index:
+**Gemma only — rebuild against the deployed vocab DB, upload to the private bucket.**
 ```bash
-python3 scripts/assemble-embeddings-release.py \
-  --main data/embeddings-no-subjects.db \
-  --desc-source data/embeddings.db \   # the CURRENTLY-DEPLOYED DB (its desc index is authoritative)
-  --out data/embeddings-<rel>.db
+~/miniconda3/envs/embeddings/bin/python scripts/build-gemma-db.py --out data/gemma-<rel>.db
+gzip -k data/gemma-<rel>.db
+railway bucket credentials --bucket rijksmuseum-private-assets --json > creds.json   # chmod 600; never commit
+~/miniconda3/envs/embeddings/bin/python scripts/upload-private-asset.py \
+  --creds creds.json --file data/gemma-<rel>.db.gz --key gemma/<rel>/gemma.db.gz --url-out url.txt
 ```
-Then slim it for deploy — drops the plain `artwork_embeddings`/`desc_embeddings` copies (the runtime
-reads only vec0 + `artwork_object_numbers`), roughly halving the DB:
-```bash
-~/miniconda3/envs/embeddings/bin/python scripts/slim-embeddings-db.py \
-  --in data/embeddings-<rel>.db --out data/embeddings-<rel>-slim.db
-```
-`--desc-source` may be a full or a slim DB; the assemble script reads the description vectors from either.
+`url.txt` holds a 7-day presigned link for `GEMMA_DB_URL` (step 6 below, instead of a GitHub release URL).
+Skip step 4 for gemma.db. The build script asserts per-table and coarse-chunk counts itself.
 
 **Completeness gate (BLOCKS deploy — run before compressing any DB).** A regenerated DB must match
 the *shape* of the one it replaces, not just look internally valid:
@@ -205,13 +197,13 @@ the *shape* of the one it replaces, not just look internally valid:
   v0.70 main-only DB was 383 MB gz vs ~595 historical) is a **STOP** — diff the table inventory, do
   not rationalize it.
 - **Table inventory + row counts.** `sqlite_master` table list and per-table `COUNT(*)` must match the
-  deployed DB (slim embeddings: `vec_artworks`==`artwork_object_numbers`==`version_info.artwork_count`, `vec_desc_artworks`==`desc_artwork_count`).
-- **`version_info` keys.** Must carry every key the deployed DB has (embeddings: both the artwork keys
-  AND the `desc_*` block — a missing `desc_*` block means the desc half is absent).
+  deployed DB (gemma: `gemma_{metadata,images,descriptions}_vectors` == `version_info.{metadata,image,description}_count`).
+- **`version_info` keys.** Must carry every key the deployed DB has (gemma: a missing `description_count`
+  means find_similar's Description channel will be empty).
 - **Provenance alignment.** `vocab_db_built_at` must equal the deployed `vocabulary.db` `version_info.built_at`
   (else art_ids mismatch).
-- **Sample KNN on BOTH indexes.** A self-KNN on `vec_artworks` AND `vec_desc_artworks` returns the query
-  row at distance ~0.
+- **Local smoke.** `GEMMA_DB_PATH=data/gemma-<rel>.db node scripts/tests/test-mcp-smoke.mjs` passes
+  (it pins the Description channel non-empty).
 
 ```bash
 # 3. Compress (locally) and record SHA-256 — only AFTER the completeness gate passes
@@ -272,22 +264,22 @@ collection_stats(dimension: "type")
 - Confirm `Total artworks: <N>` matches the release-notes count exactly (e.g. 833,432 for v0.24; 834,435 for v0.30 and v0.40).
 - For v0.24+ specifically: `collection_stats(dimension: "categoryMethod")` returns the enrichment-audit-trail dimension. A pre-v0.24 DB rejects the dimension entirely, so this is a definitive v0.24-or-later check.
 
-**Embeddings DB swap verification.** Verify by **ranking + a feature discriminator, NOT an absolute
+**Gemma DB swap verification.** Verify by **ranking + a feature discriminator, NOT an absolute
 similarity value** — a full regen re-encodes every vector, so absolute scores drift globally (~0.004 in
 v0.70) and the score also depends on the query-encoder version. A stale absolute value caused a false
 "old DB still serving" alarm in the v0.70 swap.
-1. **Main index — ranking.** `semantic_search(query: "moonlit harbor with ships")` → rank 1 = `RP-T-1948-397`
-   "Moonlit River Landscape with Fishermen". If rank 1 is topically unrelated (e.g. "Griekse klederdracht"),
-   the art_ids are mismatched — the new DB hasn't landed; re-check `/data/embeddings.db` size + timestamp via `railway ssh`.
+1. **Metadata index — ranking.** `semantic_search(query: "moonlit harbor with ships")` → the top hits are moonlit
+   harbour/river scenes. Topically unrelated hits (e.g. "Griekse klederdracht") mean the art_ids are mismatched —
+   the new DB hasn't landed; re-check `/data/gemma.db` size + timestamp via `railway ssh`.
 2. **Main index — change discriminator** (only if the regen changed the source text, e.g. the #383 strip):
    pick a query that exercises the change and confirm prod matches the NEW local DB, not the old. v0.70 strip:
    `semantic_search("verzamelaarsmerk collector mark stamp Lugt verso")` tops at **~0.83** (stripped) vs **~0.91**
    (old, boilerplate baked in).
-3. **Description channel** (catches a missing `desc_embeddings` half — the v0.70 near-miss): `find_similar(objectNumber: "SK-C-5")`
+3. **Description channel** (catches a gemma.db without `gemma_descriptions_vectors`): `find_similar(objectNumber: "SK-C-5")`
    must show **`Description: N`** with N > 0 in its channel summary. `Description: 0` means the desc index didn't load.
 - Note: MCP schemas are `.strict()` — do **not** pass `limit`/`topK` args; semantic_search returns 15 by default.
 
-**Health polling during cutover:** expect a ~60–90s window of `/health` timeouts while the new container fetches and decompresses the gz (embeddings is ~1.1 GB gz → ~2 GB uncompressed). After that window, `/health` + `/ready` should return steadily.
+**Health polling during cutover:** expect a ~60–90s window of `/health` timeouts while the new container fetches and decompresses the gz (gemma is ~1.6 GB gz → ~2.4 GB uncompressed). After that window, `/health` + `/ready` should return steadily.
 
 ### Fallback if download fails
 
@@ -297,7 +289,7 @@ There is no local `.bak` to restore (see "Why `rm` and not `mv → .bak`" above)
 railway variables --service rijksmuseum-mcp-plus \
   --set "<DB_URL_VAR>=https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/<previous-tag>/<db-file>.db.gz"
 ```
-The env-var change triggers one redeploy that downloads the previous version. Slower than a `.bak` swap (~5 min download for vocab, ~6 min for embeddings) but reliable. Backward-compat guards in the code keep the older DB functional under the newer server.
+The env-var change triggers one redeploy that downloads the previous version. Slower than a `.bak` swap (~5 min download for vocab, ~6 min for gemma) but reliable. Backward-compat guards in the code keep the older DB functional under the newer server.
 
 **Reminder: this is a destructive production action. Always ask the user for confirmation before steps 5 and 6.**
 
@@ -352,4 +344,4 @@ gh release upload counts-latest data/iconclass-counts.db --clobber \
 
 13. **Refresh the local DB to match prod.** After a DB swap, the local `data/<db-file>.db` is still the
     *previous* version, so local dev/tests diverge from production. Replace it with the deployed artifact
-    (e.g. `cp data/embeddings-<rel>.db data/embeddings.db`) so later local runs match what's live.
+    (e.g. `cp data/gemma-<rel>.db data/gemma.db`) so later local runs match what's live.

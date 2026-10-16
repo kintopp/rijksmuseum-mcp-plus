@@ -26,7 +26,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-The vocabulary and embeddings databases are **not** bundled and are **not** fetched by default. The server downloads each one on first start only when you set its URL variable — `VOCAB_DB_URL` and `EMBEDDINGS_DB_URL` (see [Configuration](#configuration)) — pointing at the gzipped assets published on the [releases page](https://github.com/kintopp/rijksmuseum-mcp-plus/releases). Budget roughly 500 MiB + 580 MiB compressed, unpacking to about 2 GiB + 1.1 GiB on disk. Without them the server still starts, but [vocabulary-backed search parameters](search-parameters.md) and every other DB-backed tool are silently absent from `tools/list`. `semantic_search` and `multimodal_search` also need the Gemma database (`GEMMA_DB_URL`; not yet published) and download their query model (~310 MB) on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
+The vocabulary database is **not** bundled and is **not** fetched by default. The server downloads it on first start only when you set `VOCAB_DB_URL` (see [Configuration](#configuration)) to the gzipped asset published on the [releases page](https://github.com/kintopp/rijksmuseum-mcp-plus/releases). Budget roughly 500 MiB compressed, unpacking to about 2 GiB on disk. Without it the server still starts, but [vocabulary-backed search parameters](search-parameters.md) and every other DB-backed tool are silently absent from `tools/list`. `semantic_search`, `multimodal_search` and the Description channel of `find_similar` also need the Gemma database (`GEMMA_DB_URL`; not yet published); the two search tools download their query model (~310 MB) on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
 
 Restart your MCP client after updating the config.
 
@@ -75,7 +75,7 @@ npm link             # optional — puts `rijks-mcp` on your PATH
 
 | Transport | Needs | Notes |
 |---|---|---|
-| **stdio** (default) | `npm install` + `npm run build` + the databases (~2 GiB + ~1.1 GiB on disk) | Selected when neither `--http` nor `RIJKS_MCP_HTTP` is set — the CLI spawns `node dist/index.js` itself. The DBs download to `data/` on the first run **only if `VOCAB_DB_URL`/`EMBEDDINGS_DB_URL` are set** (fully local/offline afterwards); otherwise place the files at `data/` yourself. The embedding model (~130 MB) downloads on first `semantic`/`similar` use. |
+| **stdio** (default) | `npm install` + `npm run build` + the vocabulary database (~2 GiB on disk; the Gemma database adds ~2.4 GiB) | Selected when neither `--http` nor `RIJKS_MCP_HTTP` is set — the CLI spawns `node dist/index.js` itself. The DBs download to `data/` on the first run **only if `VOCAB_DB_URL`/`GEMMA_DB_URL` are set** (fully local/offline afterwards); otherwise place the files at `data/` yourself. The Gemma query model (~310 MB) downloads on first `semantic` use. |
 | **HTTP** | `npm install` + a reachable `/mcp` server | Selected via `--http <url>` or the `RIJKS_MCP_HTTP` environment variable — talks to a running `npm run serve`/Railway server, warm so calls return instantly. No local build or DBs when targeting an already-running server (the public Railway instance, or your own `npm run serve`, which itself needs the full stdio setup). |
 
 ```bash
@@ -145,7 +145,7 @@ The server declares `tools` and `resources` capabilities only — it registers n
 
 #### Architecture
 
-A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in `registration/tools/` → the data layer (`VocabularyDb` / `GemmaDb` + `GemmaModel` / `EmbeddingsDb` / `RijksmuseumApiClient` / `OaiPmhClient`) → JSON.
+A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in `registration/tools/` → the data layer (`VocabularyDb` / `GemmaDb` + `GemmaModel` / `RijksmuseumApiClient` / `OaiPmhClient`) → JSON.
 
 **Entry and dispatch**
 
@@ -182,8 +182,7 @@ A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in
 | `VocabularyDb.ts` | Vocabulary search, `VOCAB_FILTERS`, the Getty AAT URI constants, `reconstructSourceText()`, all SQL |
 | `VocabularyDb.similarity.ts` | `findSimilarBy*` channel implementations |
 | `OaiPmhClient.ts` | OAI-PMH XML/EDM — change tracking for `get_recent_changes` |
-| `GemmaDb.ts` | EmbeddingGemma 2 vector search (metadata, image, Iconclass): in-memory coarse scan plus exact rescore, optionally restricted to a candidate ID list |
-| `EmbeddingsDb.ts` | Description-vector KNN on vec0 for `find_similar` |
+| `GemmaDb.ts` | EmbeddingGemma 2 vector search (metadata, image, description, Iconclass): in-memory coarse scan plus exact rescore, optionally restricted to a candidate ID list |
 | `RijksmuseumApiClient.ts` | IIIF image info + region fetch, response cache |
 | `GemmaModel.ts` | EmbeddingGemma 2 text-tower query encoding (transformers.js, ONNX on CPU) |
 | `vocab-format.ts` | Label and date-range formatting helpers |
@@ -194,7 +193,7 @@ A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in
 
 **Viewer** — `apps/artwork-viewer/` is the Vite source root for the inline MCP Apps IIIF viewer (OpenSeadragon), built to `dist/apps/`.
 
-**Databases** — `data/vocabulary.db` (built from OAI-PMH + Linked Art + Schema.org dumps), `data/gemma.db` (int8[768] EmbeddingGemma 2 vectors) and `data/embeddings.db` (int8[384] description vectors). None is in git.
+**Databases** — `data/vocabulary.db` (built from OAI-PMH + Linked Art + Schema.org dumps), and `data/gemma.db` (int8[768] EmbeddingGemma 2 vectors). Neither is in git.
 
 #### Data Sources
 
@@ -218,9 +217,7 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 
 **Vocabulary database:** A pre-built SQLite database maps roughly 420K controlled vocabulary terms to about 830K artworks via some 15 million mappings, built from OAI-PMH EDM records, Linked Art resolution, and Schema.org full-collection dumps. It is the single source of truth for artwork metadata at runtime, powering `get_artwork_details`, the [vocabulary-backed and full-text filters of `search_artwork`](search-parameters.md), date and dimension ranges, and geo-proximity search. It also powers `search_persons` over roughly 290K person and 12K group authority records (some 700K name variants) with biographical filters, and includes geocoded places sourced from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/), with coordinates retained only where a Rijksmuseum-supplied authority identifier deterministically resolves them (the earlier inferred and manual tiers were dropped to avoid unsourced placements). Provenance coverage spans roughly 48K artworks with parsed ownership chains (events, parties, transfers, dates, locations, prices), aligned with the AAM/CMOA notation standard.
 
-**Gemma database:** A pre-built SQLite database of [EmbeddingGemma 2](https://huggingface.co/onnx-community/embeddinggemma-2-ONNX) vectors (int8, 768d) in one shared text–image space: composite artwork text (title, inscriptions, description, curatorial narrative; about 830K vectors), artwork images, and Iconclass notations. The metadata vectors power `semantic_search` and, with the image and Iconclass vectors, `multimodal_search`. Search first scans an in-memory 384d prefix of every vector, then rescores the best candidates exactly against the full vectors; a candidate set pre-filtered through the vocabulary database is rescored exactly when small. Queries are encoded at runtime by the model's text tower only. Source text is reconstructed from the vocabulary DB at query time rather than stored alongside the vectors.
-
-**Embeddings database:** A pre-built SQLite database whose `vec_desc_artworks` table (int8-384d, [sqlite-vec](https://github.com/asg017/sqlite-vec) `vec0`) holds description-only vectors from the Dutch-tuned [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) and powers the Description channel of `find_similar`; the Visual channel of `find_similar` is sourced separately from the Rijksmuseum's own image-embedding service.
+**Gemma database:** A pre-built SQLite database of [EmbeddingGemma 2](https://huggingface.co/onnx-community/embeddinggemma-2-ONNX) vectors (int8, 768d) in one shared text–image space: composite artwork text (title, inscriptions, description, curatorial narrative; about 830K vectors), artwork images, Dutch descriptions alone (about 510K), and Iconclass notations. The metadata vectors power `semantic_search` and, with the image and Iconclass vectors, `multimodal_search`; the description vectors power the Description channel of `find_similar`, which queries with the seed artwork's stored vector and so needs no query model. Search first scans an in-memory 384d prefix of every vector, then rescores the best candidates exactly against the full vectors; a candidate set pre-filtered through the vocabulary database is rescored exactly when small. Queries are encoded at runtime by the model's text tower only. Source text is reconstructed from the vocabulary DB at query time rather than stored alongside the vectors. The Visual channel of `find_similar` is sourced separately from the Rijksmuseum's own image-embedding service.
 
 #### Configuration
 
@@ -234,9 +231,7 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 | `PUBLIC_URL` | Base URL for `/similar/:uuid` and `/enrichment-review/:uuid` links in HTTP mode (e.g. `https://example.up.railway.app`) | `http://localhost:$PORT` |
 | `VOCAB_DB_PATH` | Path to vocabulary SQLite database | `data/vocabulary.db` |
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
-| `EMBEDDINGS_DB_PATH` | Path to embeddings SQLite database | `data/embeddings.db` |
-| `EMBEDDINGS_DB_URL` | URL to download embeddings DB on first start; gzip supported | *(none)* |
-| `GEMMA_DB_PATH` | Path to the Gemma SQLite database (`semantic_search` and `multimodal_search` register only when present) | `data/gemma.db` |
+| `GEMMA_DB_PATH` | Path to the Gemma SQLite database (`semantic_search` and `multimodal_search` register only when present; `find_similar`'s Description channel is empty without it) | `data/gemma.db` |
 | `GEMMA_DB_URL` | URL to download the Gemma DB on first start; gzip supported | *(none)* |
 | `GEMMA_MODEL_DTYPE` | ONNX dtype of the Gemma query model (`q8` uses about half the memory of `fp32`, at a few times the latency) | `q8` |
 | `GEMMA_THREADS` | onnxruntime intra-op threads for the Gemma query model | `2` |

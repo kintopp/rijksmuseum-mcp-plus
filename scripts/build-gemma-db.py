@@ -6,6 +6,7 @@ Inputs are the int8 corpus sets quantised from the fp16 masters
 (data/egemma2-test/corpus/int8/, one shared scale, 768d):
   text-metadata.npz  -> metadata channel  (metadata composite, one per artwork)
   images.npz         -> images channel    (one image per artwork)
+  text-description.npz -> descriptions channel (Dutch description; find_similar item->item)
   text-iconclass.npz -> vec_gemma_iconclass  (base notations that tag Rijksmuseum artworks)
 
 Artwork channels use a two-stage layout (version_info coarse_dims): the server holds an
@@ -44,6 +45,7 @@ IMAGE_SOFT_TOKENS = 280
 BATCH = 10_000
 COARSE_DIMS = 384
 COARSE_CHUNK_ROWS = 32_768
+CHANNELS = (("text-metadata", "metadata"), ("images", "images"), ("text-description", "descriptions"))
 
 
 def open_vec(path: str) -> sqlite3.Connection:
@@ -145,7 +147,7 @@ def main() -> None:
 
     counts: dict[str, int] = {}
     objects: dict[int, str] = {}
-    for stem, ch in (("text-metadata", "metadata"), ("images", "images")):
+    for stem, ch in CHANNELS:
         z = np.load(src / f"{stem}.npz")
         on, vec = z["object_number"], z["vec"]
         assert vec.shape[1] == dims, f"{stem}: {vec.shape[1]}d != {dims}d"
@@ -188,6 +190,7 @@ def main() -> None:
         "coarse_dims": str(COARSE_DIMS),
         "metadata_count": str(counts["gemma_metadata_vectors"]),
         "image_count": str(counts["gemma_images_vectors"]),
+        "description_count": str(counts["gemma_descriptions_vectors"]),
         "iconclass_count": str(counts["vec_gemma_iconclass"]),
         "built_at": datetime.now(timezone.utc).isoformat(),
         "vocab_db_built_at": vocab_vi.get("built_at", ""),
@@ -200,7 +203,7 @@ def main() -> None:
     for table, n in counts.items():
         got = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         assert got == n, f"{table}: {got} != {n}"
-    for ch in ("metadata", "images"):
+    for _, ch in CHANNELS:
         got = db.execute("SELECT SUM(n) FROM gemma_coarse_chunks WHERE channel = ?", (ch,)).fetchone()[0]
         assert got == counts[f"gemma_{ch}_vectors"], f"coarse {ch}: {got} != {counts[f'gemma_{ch}_vectors']}"
     db.close()

@@ -16,10 +16,10 @@ export interface GemmaNotation {
   similarity: number;
 }
 
-export type GemmaVectorTable = "metadata" | "images";
-const TABLES: GemmaVectorTable[] = ["metadata", "images"];
+export type GemmaVectorTable = "metadata" | "images" | "descriptions";
 
-const VEC_TABLES: Record<GemmaVectorTable, string> = {
+/** Channels the legacy vec0 layout carries; `descriptions` exists only in two-stage builds. */
+const VEC_TABLES: Partial<Record<GemmaVectorTable, string>> = {
   metadata: "vec_gemma_metadata",
   images: "vec_gemma_images",
 };
@@ -37,7 +37,7 @@ interface CoarseIndex {
 
 /**
  * Read-only wrapper around gemma.db (scripts/build-gemma-db.py): EmbeddingGemma 2
- * vectors for artwork metadata, artwork images and Iconclass notations, all in one
+ * vectors for artwork metadata, images, Dutch descriptions and Iconclass notations, all in one
  * 768d space.
  *
  * Two layouts. Two-stage (version_info coarse_dims): an MRL-truncated prefix of every
@@ -57,6 +57,8 @@ export class GemmaDb {
   private filteredKnn = new Map<GemmaVectorTable, Statement>();
   private stmtVectors = new Map<GemmaVectorTable, Statement>();
   private stmtNotationKnn: Statement | null = null;
+  private stmtStoredVector: Statement | null = null;
+  private tables: GemmaVectorTable[] = [];
   private coarse = new Map<GemmaVectorTable, CoarseIndex>();
   private loaders = new Map<GemmaVectorTable, Generator<void, CoarseIndex>>();
 
@@ -84,7 +86,14 @@ export class GemmaDb {
       // mmap only adds file pages to RSS — the coarse chunks would be resident twice.
       if (this.coarseDims) this.db.pragma("mmap_size = 0");
 
-      for (const t of TABLES) {
+      this.tables = ["metadata", "images"];
+      if (this.coarseDims && this.db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'gemma_descriptions_vectors'",
+      ).get()) {
+        this.tables.push("descriptions");
+        this.stmtStoredVector = this.db.prepare("SELECT embedding FROM gemma_descriptions_vectors WHERE artwork_id = ?");
+      }
+      for (const t of this.tables) {
         if (this.coarseDims) {
           this.stmtVectors.set(t, this.db.prepare(`
             SELECT artwork_id, embedding FROM gemma_${t}_vectors
@@ -112,7 +121,8 @@ export class GemmaDb {
         ORDER BY v.distance
       `);
       const layout = this.coarseDims ? `two-stage, ${this.coarseDims}d coarse` : "vec0";
-      logInfo(`Gemma DB: ${meta.metadata_count} metadata / ${meta.image_count} image / ${meta.iconclass_count} Iconclass vectors (${this.dimensions}d, ${layout})`);
+      const desc = meta.description_count ? ` / ${meta.description_count} description` : "";
+      logInfo(`Gemma DB: ${meta.metadata_count} metadata / ${meta.image_count} image${desc} / ${meta.iconclass_count} Iconclass vectors (${this.dimensions}d, ${layout})`);
     } catch (err) {
       logError("Failed to open Gemma DB", err);
       this.db = null;
@@ -120,6 +130,8 @@ export class GemmaDb {
   }
 
   get available(): boolean { return this.db !== null && this.stmtNotationKnn !== null; }
+  /** find_similar's Description channel; needs no query model. */
+  get descriptionsAvailable(): boolean { return this.stmtStoredVector !== null; }
   get buildId(): string { return this.buildId_; }
   get dbPath(): string | null { return this.dbPath_; }
   get rawDb(): DatabaseType | null { return this.db; }
@@ -131,7 +143,7 @@ export class GemmaDb {
   async loadCoarse(yieldTick: () => Promise<void>): Promise<void> {
     if (!this.db || !this.coarseDims) return;
     const t0 = Date.now();
-    for (const t of TABLES) {
+    for (const t of this.tables) {
       const loader = this.loader(t);
       while (!this.coarse.has(t)) {
         loader.next();
@@ -260,6 +272,13 @@ export class GemmaDb {
     });
     hits.sort((a, b) => b.similarity - a.similarity);
     return hits.slice(0, k);
+  }
+
+  /** Top-k artworks nearest the seed's stored description vector, the seed itself excluded. */
+  similarDescriptions(artId: number, k: number): GemmaHit[] {
+    const row = this.stmtStoredVector?.get(artId) as { embedding: Buffer } | undefined;
+    if (!row) return [];
+    return this.search("descriptions", row.embedding, k + 1).filter(h => h.artId !== artId).slice(0, k);
   }
 
   /** Nearest Iconclass notations (only those that tag Rijksmuseum artworks). */

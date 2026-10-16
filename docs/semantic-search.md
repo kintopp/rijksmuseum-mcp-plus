@@ -94,9 +94,9 @@ Source text is not stored in the vector database. It is reconstructed at query t
 
 **No relevance ranking for filters.** Within the filtered set, results are ranked by embedding similarity — there is no hybrid score combining metadata relevance with semantic similarity.
 
-### Description embeddings (separate path)
+### Description embeddings (find_similar)
 
-A separate, description-only embedding set lives in the embeddings database (`embeddings.db`) and powers the Description signal in `find_similar`. It is not used by `semantic_search`. The model is [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) — a Dutch-tuned E5 variant — and the vectors are full 384-dimensional int8. Coverage matches the `description_text` field exactly, one row per described artwork (~61% of the collection); artworks without a description are absent from the description index, so Description-signal results for those objects simply return nothing rather than fabricating a nearest neighbour.
+The Gemma database also holds a description-only vector per described artwork, encoded with the same EmbeddingGemma 2 model from the Dutch `description_text` alone. These power the Description signal in `find_similar` and are not used by `semantic_search`. The seed artwork's own stored vector is the query, so this channel needs no query model. Coverage matches the `description_text` field exactly (~61% of the collection); artworks without a description are absent from the index, so Description-signal results for those objects return nothing rather than a fabricated nearest neighbour.
 
 ### Technical details
 

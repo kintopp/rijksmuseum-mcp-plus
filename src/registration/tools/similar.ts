@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { VocabularyDb, formatDateRange } from "../../api/VocabularyDb.js";
-import { EmbeddingsDb } from "../../api/EmbeddingsDb.js";
+import { GemmaDb } from "../../api/GemmaDb.js";
 import { UsageStats } from "../../utils/UsageStats.js";
 import {
   ANN_READ_OPEN,
@@ -31,7 +31,7 @@ import type { DepictedSimilarResult } from "../../api/VocabularyDb.js";
 export function registerSimilarTools(
   server: McpServer,
   vocabDb: VocabularyDb | null,
-  embeddingsDb: EmbeddingsDb | null,
+  gemmaDb: GemmaDb | null,
   publicBaseUrl: string | undefined,
   withLogging: ReturnType<typeof createLogger>,
   _stats?: UsageStats
@@ -123,25 +123,25 @@ export function registerSimilarTools(
 
         // Description — needs its own batch lookups (descriptions not in findSimilarBy* results)
         let descCandidates: SimilarCandidate[] = [];
-        if (embeddingsDb?.descriptionAvailable) {
-          const descResults = embeddingsDb.searchDescriptionSimilar(artRow.artId, maxResults);
+        if (gemmaDb?.descriptionsAvailable) {
+          const descResults = gemmaDb.similarDescriptions(artRow.artId, maxResults);
           if (descResults.length > 0) {
             const descArtIds = descResults.map(r => r.artId);
             const descMeta = vocabDb!.batchLookupByArtId(descArtIds);
             const descTypes = vocabDb!.batchLookupTypesByArtId(descArtIds);
             const descTexts = vocabDb!.batchLookupDescriptionsByArtId(descArtIds);
-            descCandidates = descResults.map(r => {
-              const m = descMeta.get(r.artId);
-              const date = formatDateRange(m?.dateEarliest, m?.dateLatest);
+            descCandidates = descResults.filter(r => descMeta.has(r.artId)).map(r => {
+              const m = descMeta.get(r.artId)!;
+              const date = formatDateRange(m.dateEarliest, m.dateLatest);
               return {
-                objectNumber: r.objectNumber,
-                title: m?.title ?? "",
-                creator: m?.creator ?? "",
+                objectNumber: m.objectNumber,
+                title: m.title ?? "",
+                creator: m.creator ?? "",
                 ...(date && { date }),
                 ...(descTypes.has(r.artId) && { type: descTypes.get(r.artId) }),
-                iiifId: m?.iiifId ?? undefined,
+                iiifId: m.iiifId ?? undefined,
                 score: r.similarity,
-                url: `https://www.rijksmuseum.nl/en/collection/${r.objectNumber}`,
+                url: `https://www.rijksmuseum.nl/en/collection/${m.objectNumber}`,
                 detail: truncate(descTexts.get(r.artId) ?? "", 200),
                 descSnippet: truncateSnippet(descTexts.get(r.artId), 160),
               };
