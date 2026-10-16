@@ -110,12 +110,13 @@ For a command-line version of scenario 9 that processes every stamped sheet, see
 
 ### 7. Tobacco Smoking in Dutch Genre Painting
 
-*How completely does the catalogue's subject indexing record tobacco smoking in seventeenth-century Dutch paintings? Find paintings that show someone smoking or holding a pipe, check each against the image, and compare the confirmed set with the works tagged with the subject. What kinds of painting does the subject index miss, and what does the image search wrongly include?*
-<!-- TODO: Demo link and Findings after the claude.ai run -->
+*How completely does the catalogue's subject indexing record tobacco smoking in seventeenth-century Dutch paintings? Find paintings that show someone smoking or holding a pipe, check each against the image, and compare the confirmed set with the works tagged with the subject. What kinds of painting does the subject index miss, and what does the image search wrongly include?* [Demo](https://claude.ai/share/3fd8c743-cc4a-4f82-a0f3-88d809a185bd)
+
+**Findings:** 27 seventeenth-century paintings are tagged *pipe – tobacco* (41C741) or *tobacco* (41C74), but the notation records the pipe rather than the act: nine of them show a pipe that nobody is using, mostly in still lifes. Of the 40 paintings the model confirmed as showing someone smoking or holding a pipe, 18 are tagged. Most of the untagged works are tavern interiors and guardroom scenes; in 15 of them the title or description mentions the pipe, and seven were found only by the image search. Of the image search's top 50 results, 24 are genuine; the false positives include horns, flutes, batons and drinking figures, and crowded scenes with small pipes rank far down.
 
 **How the tools enable it:**
 - `multimodal_search` with `channels: ["image"]` and `type: "painting"` ranks paintings by what their photographs show, whatever the record says
-- `search_artwork` with `subject` or `iconclass` gives the indexed set to compare against
+- `search_artwork` with `iconclass` gives the indexed set to compare against, and with `description` finds works whose catalogue text mentions a pipe
 - `inspect_artwork_image` confirms or rejects each image-only match
 
 **Why it matters:** Subject indexes are often treated as complete. Comparing them with what the images show measures how much they miss, and checking each match by eye shows how far the image search can be trusted.
