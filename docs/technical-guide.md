@@ -26,7 +26,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-The vocabulary and embeddings databases are **not** bundled and are **not** fetched by default. The server downloads each one on first start only when you set its URL variable — `VOCAB_DB_URL` and `EMBEDDINGS_DB_URL` (see [Configuration](#configuration)) — pointing at the gzipped assets published on the [releases page](https://github.com/kintopp/rijksmuseum-mcp-plus/releases). Budget roughly 500 MiB + 580 MiB compressed, unpacking to about 2 GiB + 1.1 GiB on disk. Without them the server still starts, but [vocabulary-backed search parameters](search-parameters.md), `semantic_search`, and every other DB-backed tool are silently absent from `tools/list`. The embedding model (~130 MB) is downloaded on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
+The vocabulary and embeddings databases are **not** bundled and are **not** fetched by default. The server downloads each one on first start only when you set its URL variable — `VOCAB_DB_URL` and `EMBEDDINGS_DB_URL` (see [Configuration](#configuration)) — pointing at the gzipped assets published on the [releases page](https://github.com/kintopp/rijksmuseum-mcp-plus/releases). Budget roughly 500 MiB + 580 MiB compressed, unpacking to about 2 GiB + 1.1 GiB on disk. Without them the server still starts, but [vocabulary-backed search parameters](search-parameters.md) and every other DB-backed tool are silently absent from `tools/list`. `semantic_search` and `multimodal_search` also need the Gemma database (`GEMMA_DB_URL`; not yet published) and download their query model (~310 MB) on first use. For Iconclass taxonomy navigation, use the dedicated [Iconclass MCP server](https://github.com/kintopp/rijksmuseum-iconclass-mcp).
 
 Restart your MCP client after updating the config.
 
@@ -115,7 +115,7 @@ See [mcp-tool-parameters.md](mcp-tool-parameters.md) for the full parameter refe
 |---|---|
 | `search_artwork` | Search the collection using [33 search filters](search-parameters.md) including full-text fields, the structured `textQuery` DSL, object numbers with wildcards, vocabulary labels, creator demographics, dimensions, geo proximity, place hierarchy expansion, curatorial themes, and source-channel taxonomy. Filters combine freely, except that proximity search overrides `depictedPlace`/`productionPlace`. Returns up to 25 results (max 50). Compact mode, facets, offset pagination, and `sortBy`/`sortOrder` (with universal `art_id` tiebreaker) supported. |
 | `search_persons` | Search the person and group authority records by name (variant-aware), gender, birth year, birth/death place, or profession. Returns vocab IDs to feed into `search_artwork({creator: …})` for works *by* a person, or `search_artwork({depictedPerson: …})` for works *depicting* them. Each result also carries `nameVariants[]` and `equivalents[]` (external authority crosswalks — VIAF/ULAN/RKD/Wikidata) where present. By default restricts to persons with ≥1 artwork in the collection. |
-| `semantic_search` | Find artworks by meaning, concept, or theme using natural language. Returns up to 15 results (max 50) ranked by semantic similarity with reconstructed source text for grounding. Pre-filters: `type`, `material`, `technique`, `creationDate`, `dateMatch`, `creator`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, `imageAvailable`. Requires embeddings database and embedding model. |
+| `semantic_search` | Find artworks by meaning, concept, or theme using natural language. Returns up to 15 results (max 50) ranked by semantic similarity with reconstructed source text for grounding. Pre-filters: `type`, `material`, `technique`, `creationDate`, `dateMatch`, `creator`, `subject`, `iconclass`, `depictedPerson`, `depictedPlace`, `productionPlace`, `collectionSet`, `aboutActor`, `imageAvailable`. Requires the Gemma database and query model. |
 | `collection_stats` | Aggregate statistics, counts, and distributions across any dimension (artwork or provenance). Returns text tables plus a structured payload disclosing denominator/grouping/coverage semantics. 34 dimensions in all. Artwork: type, material, technique, creator, productionRole, depictedPerson, depictedPlace, productionPlace, placeType, century, decade, height, width, theme, sourceType, exhibition, decadeModified, plus creator demographics (profession, birthPlace, deathPlace, gender, creatorBirthDecade, creatorBirthCentury). Provenance: transferType, transferCategory, provenanceDecade, provenanceLocation, party, partyRole, partyPosition, currency, categoryMethod, positionMethod, parseMethod. 48 filters, including the vocabulary set, creator demographics, presence flags (`hasInscription`, `hasNarrative`, `hasDimensions`, `hasExhibitions`, `hasExaminations`, and others), and the provenance tier. Demographic filters such as `gender` work directly here — no `search_persons` round-trip needed. All filters combine freely; event-level filters compose on the same event row, party-level filters on the same party row. |
 | `get_artwork_details` | [metadata categories](metadata-categories.md) by object number (e.g. `SK-C-5`) or Linked Art URI. Returns titles, creator, date, description, curatorial narrative, dimensions, materials, production details (with creator life dates, gender, biographical notes, attribution qualifiers, and Wikidata IDs where available), provenance (raw text + parsed chain), inscriptions (raw text plus a query-time parse into per-segment marks/transcriptions and a per-object summary), iconographic subjects, related objects and frame/pedestal physical relations (`physicalRelations[]`), entity-level external authority crosswalks (`equivalents[]`), and more. All data served from the local vocabulary database. |
 | `get_artwork_bibliography` | Scholarly references for one artwork by object number — citations with the linked publication, pages, and ISBN where known. Returns the first 5 entries plus a `total` count by default; `full: true` returns all (major works can carry 100+). |
@@ -145,7 +145,7 @@ The server declares `tools` and `resources` capabilities only — it registers n
 
 #### Architecture
 
-A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in `registration/tools/` → the data layer (`VocabularyDb` / `EmbeddingsDb` + `EmbeddingModel` / `RijksmuseumApiClient` / `OaiPmhClient`) → JSON.
+A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in `registration/tools/` → the data layer (`VocabularyDb` / `GemmaDb` + `GemmaModel` / `EmbeddingsDb` / `RijksmuseumApiClient` / `OaiPmhClient`) → JSON.
 
 **Entry and dispatch**
 
@@ -182,9 +182,10 @@ A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in
 | `VocabularyDb.ts` | Vocabulary search, `VOCAB_FILTERS`, the Getty AAT URI constants, `reconstructSourceText()`, all SQL |
 | `VocabularyDb.similarity.ts` | `findSimilarBy*` channel implementations |
 | `OaiPmhClient.ts` | OAI-PMH XML/EDM — change tracking for `get_recent_changes` |
-| `EmbeddingsDb.ts` | sqlite-vec KNN on vec0 (pure, and filtered by a candidate ID list) plus description similarity |
+| `GemmaDb.ts` | EmbeddingGemma 2 vector search (metadata, image, Iconclass): in-memory coarse scan plus exact rescore, optionally restricted to a candidate ID list |
+| `EmbeddingsDb.ts` | Description-vector KNN on vec0 for `find_similar` |
 | `RijksmuseumApiClient.ts` | IIIF image info + region fetch, response cache |
-| `EmbeddingModel.ts` | HuggingFace Transformers query encoding (ONNX/WASM) |
+| `GemmaModel.ts` | EmbeddingGemma 2 text-tower query encoding (transformers.js, ONNX on CPU) |
 | `vocab-format.ts` | Label and date-range formatting helpers |
 
 **Domain modules** — `src/`: `provenance.ts` + `provenance-grammar.peggy` / `provenance-peg.ts` / `provenance-interpret.ts` (three-layer provenance parser), `inscriptions.ts` (query-time inscription parser), `similarHtml.ts` and `enrichmentReviewHtml.ts` (HTML page templates), `types.ts` (IIIF + OAI-PMH interfaces), `places.json` / `placetype-labels.json` / `placetypeLabels.ts` (place gazetteer).
@@ -193,7 +194,7 @@ A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in
 
 **Viewer** — `apps/artwork-viewer/` is the Vite source root for the inline MCP Apps IIIF viewer (OpenSeadragon), built to `dist/apps/`.
 
-**Databases** — `data/vocabulary.db` (built from OAI-PMH + Linked Art + Schema.org dumps) and `data/embeddings.db` (int8[384] vectors). Neither is in git.
+**Databases** — `data/vocabulary.db` (built from OAI-PMH + Linked Art + Schema.org dumps), `data/gemma.db` (int8[768] EmbeddingGemma 2 vectors) and `data/embeddings.db` (int8[384] description vectors). None is in git.
 
 #### Data Sources
 
@@ -217,7 +218,9 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 
 **Vocabulary database:** A pre-built SQLite database maps roughly 420K controlled vocabulary terms to about 830K artworks via some 15 million mappings, built from OAI-PMH EDM records, Linked Art resolution, and Schema.org full-collection dumps. It is the single source of truth for artwork metadata at runtime, powering `get_artwork_details`, the [vocabulary-backed and full-text filters of `search_artwork`](search-parameters.md), date and dimension ranges, and geo-proximity search. It also powers `search_persons` over roughly 290K person and 12K group authority records (some 700K name variants) with biographical filters, and includes geocoded places sourced from [Getty TGN](https://www.getty.edu/research/tools/vocabularies/tgn/), [Wikidata](https://www.wikidata.org/), [GeoNames](https://www.geonames.org/), and the [World Historical Gazetteer](https://whgazetteer.org/), with coordinates retained only where a Rijksmuseum-supplied authority identifier deterministically resolves them (the earlier inferred and manual tiers were dropped to avoid unsourced placements). Provenance coverage spans roughly 48K artworks with parsed ownership chains (events, parties, transfers, dates, locations, prices), aligned with the AAM/CMOA notation standard.
 
-**Embeddings database:** A pre-built SQLite database with two int8-384d vec0 tables. The primary `vec_artworks` table (about 830K vectors, [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small)) is built from composite artwork text — title, inscriptions, description, curatorial narrative — and powers `semantic_search`. A second `vec_desc_artworks` table holds description-only vectors from the Dutch-tuned [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) and powers the Description channel of `find_similar`; the Visual channel of `find_similar` is sourced separately from the Rijksmuseum's own image-embedding service. Vector search uses [sqlite-vec](https://github.com/asg017/sqlite-vec) `vec0` virtual tables for both pure KNN and KNN restricted to a candidate set pre-filtered through the vocabulary database. Source text is reconstructed from the vocabulary DB at query time rather than stored alongside the vectors.
+**Gemma database:** A pre-built SQLite database of [EmbeddingGemma 2](https://huggingface.co/onnx-community/embeddinggemma-2-ONNX) vectors (int8, 768d) in one shared text–image space: composite artwork text (title, inscriptions, description, curatorial narrative; about 830K vectors), artwork images, and Iconclass notations. The metadata vectors power `semantic_search` and, with the image and Iconclass vectors, `multimodal_search`. Search first scans an in-memory 384d prefix of every vector, then rescores the best candidates exactly against the full vectors; a candidate set pre-filtered through the vocabulary database is rescored exactly when small. Queries are encoded at runtime by the model's text tower only. Source text is reconstructed from the vocabulary DB at query time rather than stored alongside the vectors.
+
+**Embeddings database:** A pre-built SQLite database whose `vec_desc_artworks` table (int8-384d, [sqlite-vec](https://github.com/asg017/sqlite-vec) `vec0`) holds description-only vectors from the Dutch-tuned [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) and powers the Description channel of `find_similar`; the Visual channel of `find_similar` is sourced separately from the Rijksmuseum's own image-embedding service.
 
 #### Configuration
 
@@ -233,7 +236,10 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
 | `EMBEDDINGS_DB_PATH` | Path to embeddings SQLite database | `data/embeddings.db` |
 | `EMBEDDINGS_DB_URL` | URL to download embeddings DB on first start; gzip supported | *(none)* |
-| `EMBEDDING_MODEL_ID` | HuggingFace model ID for query embedding | `kintopp/multilingual-e5-small-rijksmuseum` |
+| `GEMMA_DB_PATH` | Path to the Gemma SQLite database (`semantic_search` and `multimodal_search` register only when present) | `data/gemma.db` |
+| `GEMMA_DB_URL` | URL to download the Gemma DB on first start; gzip supported | *(none)* |
+| `GEMMA_MODEL_DTYPE` | ONNX dtype of the Gemma query model (`q8` uses about half the memory of `fp32`, at a few times the latency) | `q8` |
+| `GEMMA_THREADS` | onnxruntime intra-op threads for the Gemma query model | `2` |
 | `HF_HOME` | HuggingFace cache directory (useful for persistent volumes in deployment) | *(system default)* |
 | `ENABLE_FIND_SIMILAR` | Set to `"false"` to disable the `find_similar` tool | `true` |
 | `ENABLE_THEME_SIMILAR` | Set to `"false"` to disable just the Theme channel inside `find_similar` (other channels keep working) | `true` |

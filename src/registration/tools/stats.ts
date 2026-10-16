@@ -1,8 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { VocabularyDb, STATS_DIMENSION_NAMES, type CollectionStatsParams } from "../../api/VocabularyDb.js";
-import { EmbeddingsDb } from "../../api/EmbeddingsDb.js";
-import { EmbeddingModel } from "../../api/EmbeddingModel.js";
 import { UsageStats } from "../../utils/UsageStats.js";
 import {
   ANN_READ_CLOSED,
@@ -63,8 +61,6 @@ const CollectionStatsOutput = {
 export function registerStatsTools(
   server: McpServer,
   vocabDb: VocabularyDb | null,
-  _embeddingsDb: EmbeddingsDb | null,
-  _embeddingModel: EmbeddingModel | null,
   withLogging: ReturnType<typeof createLogger>,
   _stats?: UsageStats
 ): void {

@@ -18,7 +18,7 @@
  *
  * Run:  node scripts/tests/test-tool-descriptions.mjs
  */
-import { connectFixtureClient, HAS_EMBEDDINGS_DB } from "./fixture-client.mjs";
+import { connectFixtureClient, HAS_GEMMA_DB } from "./fixture-client.mjs";
 
 
 let passed = 0;
@@ -104,7 +104,7 @@ section("Cross-links between retrieval tools");
 assert(sa.includes("semantic_search") && sa.includes("find_similar") && sa.includes("search_persons"),
   "search_artwork cross-links to semantic_search, find_similar, search_persons");
 
-if (HAS_EMBEDDINGS_DB) {
+if (HAS_GEMMA_DB) {
   const ss = descOf("semantic_search");
   assert(ss.includes("search_artwork") && ss.includes("find_similar"),
     "semantic_search cross-links to search_artwork and find_similar");

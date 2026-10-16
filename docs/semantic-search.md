@@ -4,7 +4,7 @@ The `semantic_search` tool finds artworks by meaning, concept, or theme using na
 
 ### How it works
 
-Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 384-dimensional vector generated from a composite text built from four metadata fields (the "no-subjects" strategy):
+Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 768-dimensional vector generated from a composite text built from four metadata fields (the "no-subjects" strategy):
 
 | Field | Source | Coverage |
 |-------|--------|----------|
@@ -15,7 +15,7 @@ Each artwork in the Rijksmuseum collection has a pre-computed embedding — a 38
 
 Iconclass subject labels and creator names are deliberately excluded — benchmarking showed that including subject labels biased results toward tagged vocabulary matches rather than semantic meaning, sharply reducing the number of paintings surfaced in painting-expected queries. Creator names are excluded because they duplicate the structured `creator` filter path (#72).
 
-The composite text is assembled as `[Title] ... [Inscriptions] ... [Description] ... [Narrative] ...` (omitting empty fields) and embedded using [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small), a multilingual sentence embedding model. Embeddings are int8-quantized (384 dimensions) and stored in a SQLite database using [sqlite-vec](https://github.com/asg017/sqlite-vec).
+The composite text is assembled as `[Title] ... [Inscriptions] ... [Description] ... [Narrative] ...` (omitting empty fields) and embedded using Google's [EmbeddingGemma 2](https://huggingface.co/onnx-community/embeddinggemma-2-ONNX), a multilingual text–image embedding model. Embeddings are int8-quantized (768 dimensions) and stored in the Gemma database (`gemma.db`), which also holds the image and Iconclass vectors behind `multimodal_search`. `semantic_search` ranks the same metadata vectors as `multimodal_search`'s metadata channel, and adds the source text of each hit for grounding.
 
 At query time, the user's query is embedded with the same model, and the nearest artwork vectors are returned ranked by cosine similarity.
 
@@ -69,8 +69,8 @@ The tool uses two internal search paths:
 
 | Mode | When | How |
 |------|------|-----|
-| **Pure KNN** | No filters, or vocab DB unavailable | vec0 virtual table — brute-force scan of every vector |
-| **Filtered KNN** | Any metadata filter | Vocabulary DB narrows candidates by metadata; the vec0 scan is then restricted to that ID list and ranks it exactly, however broad the filter |
+| **Unfiltered** | No filters, or vocab DB unavailable | In-memory scan of a 384-dimensional prefix of every vector picks the top 2,000 candidates, which are then rescored exactly against the full 768-dimensional vectors |
+| **Filtered** | Any metadata filter | Vocabulary DB narrows candidates by metadata. Up to 20,000 candidates are rescored exactly; a broader set goes through the same two-stage pass, restricted to the candidates |
 
 The search mode (`semantic` or `semantic+filtered`) is reported in the response.
 
@@ -78,11 +78,11 @@ The search mode (`semantic` or `semantic+filtered`) is reported in the response.
 
 Each result includes:
 - **Rank**, **object number**, **title**, **creator**, **date**, **type** — artwork identification
-- **Similarity score** — cosine similarity (0–1, higher = more similar)
+- **Similarity score** — cosine similarity (higher = more similar). EmbeddingGemma scores sit in a narrow band (most relevant hits around 0.75–0.85), so read them as a ranking, not as absolute relevance
 - **Source text** — the reconstructed composite text that was originally embedded, in the same `[Label] value` format. This is the grounding context — use it to explain *why* a result was retrieved or to identify false positives.
 - **URL** — link to the artwork on rijksmuseum.nl
 
-Source text is not stored in the embeddings database (saving ~270 MB). It is reconstructed at query time from the vocabulary database, matching the original embedding generation format.
+Source text is not stored in the vector database. It is reconstructed at query time from the vocabulary database, matching the original embedding generation format.
 
 ### Known limitations
 
@@ -90,22 +90,22 @@ Source text is not stored in the embeddings database (saving ~270 MB). It is rec
 
 **Cross-language precision.** Queries in Dutch, German, French, and other languages are supported via the multilingual embedding model, but may carry a precision penalty compared to English queries. Expected canonical works may appear lower in the ranking or be absent. If results seem off, try reformulating in English.
 
+**Names and named periods.** The model is weaker on artist names and named historical periods (e.g. "Tachtigjarige Oorlog") than on scene descriptions and concepts. Use the `creator` and `creationDate` pre-filters, or `search_artwork`, for those.
+
 **No relevance ranking for filters.** Within the filtered set, results are ranked by embedding similarity — there is no hybrid score combining metadata relevance with semantic similarity.
 
 ### Description embeddings (separate path)
 
-A second, description-only embedding set is stored alongside the main vectors and powers the Description signal in `find_similar`. It is not used by `semantic_search`. The model is [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) — a Dutch-tuned E5 variant — and the vectors are full 384-dimensional int8. Coverage matches the `description_text` field exactly, one row per described artwork (~61% of the collection); artworks without a description are absent from the description index, so Description-signal results for those objects simply return nothing rather than fabricating a nearest neighbour.
+A separate, description-only embedding set lives in the embeddings database (`embeddings.db`) and powers the Description signal in `find_similar`. It is not used by `semantic_search`. The model is [`clips/e5-small-trm-nl`](https://huggingface.co/clips/e5-small-trm-nl) — a Dutch-tuned E5 variant — and the vectors are full 384-dimensional int8. Coverage matches the `description_text` field exactly, one row per described artwork (~61% of the collection); artworks without a description are absent from the description index, so Description-signal results for those objects simply return nothing rather than fabricating a nearest neighbour.
 
 ### Technical details
 
-- **Embedding model:** `intfloat/multilingual-e5-small` (118M params, 384 dimensions). Runtime inference via `@huggingface/transformers` (ONNX/WASM, pure JavaScript — no native addon). The query encoder is [`kintopp/multilingual-e5-small-rijksmuseum`](https://huggingface.co/kintopp/multilingual-e5-small-rijksmuseum), the [Xenova](https://huggingface.co/Xenova/multilingual-e5-small) int8 ONNX export with its 250K-piece vocabulary trimmed to the pieces the collection and common query languages use, which roughly halves its memory without changing the vectors.
-- **Vector storage:** [sqlite-vec](https://github.com/asg017/sqlite-vec) pinned to 0.1.9. Brute-force scan (no ANN index). At 384 int8 bytes per vector the main vec0 table runs to roughly 300 MB; vec0 serves both pure and filtered KNN, so each vector is stored once.
-- **Query embedding prefix:** The model uses the `query:` prefix for queries and `passage:` for documents, following the E5 instruction format.
-- **Database size:** ~0.53 GiB uncompressed (both vec0 indexes plus an art_id → object number table); older releases also carried plain-table copies of every vector (~1.11 GiB). Downloaded on first start only when `EMBEDDINGS_DB_URL` is set.
+- **Embedding model:** EmbeddingGemma 2 (768 dimensions, Matryoshka-trained so a prefix of the vector is itself a usable embedding). Runtime inference via `@huggingface/transformers` (ONNX on CPU, int8 by default) loads the [`onnx-community/embeddinggemma-2-ONNX`](https://huggingface.co/onnx-community/embeddinggemma-2-ONNX) text tower only, pinned to a fixed revision so an upstream re-export cannot shift the query space.
+- **Query embedding prefix:** queries are encoded as `task: search result | query: …`; the stored artwork texts were encoded as documents.
+- **Vector storage:** full vectors in plain SQLite tables, read by rowid for the exact rescoring step; the 384-dimensional prefixes are loaded into memory at startup.
 
 ### Operational notes
 
-- **The tool is conditionally registered.** `semantic_search` appears in `tools/list` only when *both* the embeddings database and the embedding model loaded successfully. If the model fails to load, the tool silently disappears and calls return `-32602`, while every vocabulary-backed tool keeps working — so the failure looks like something else entirely.
+- **The tool is conditionally registered.** `semantic_search` (like `multimodal_search`) appears in `tools/list` only when *both* the Gemma database and the Gemma query model loaded successfully. If the model fails to load, the tool silently disappears and calls return `-32602`, while every vocabulary-backed tool keeps working — so the failure looks like something else entirely.
 - **Set `HF_HOME`.** transformers.js does not honour `HF_HOME` itself; the server reads it and assigns it to the library's cache directory. Leave it unset and the model lands in an ephemeral cache, is re-fetched on every boot, and a busy startup can fail that fetch — which produces exactly the silent unregistration above.
-- **Results are cached.** Responses go through an LRU+TTL cache keyed on the embeddings build id, the model id, and the canonical arguments, with in-flight de-duplication. A database swap therefore invalidates the cache automatically.
-- **Warm-up is lazy.** The embeddings warm passes were removed from the HTTP startup path (they were single uninterruptible SQLite calls that blocked the event loop for seconds). The first `semantic_search` after a cold start pays the vec0 page-in cost instead.
+- **Results are cached.** Responses go through an LRU+TTL cache keyed on the Gemma database build id and the canonical arguments, with in-flight de-duplication. A database swap therefore invalidates the cache automatically.

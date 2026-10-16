@@ -16,7 +16,6 @@ import { RijksmuseumApiClient } from "./api/RijksmuseumApiClient.js";
 import { OaiPmhClient } from "./api/OaiPmhClient.js";
 import { VocabularyDb } from "./api/VocabularyDb.js";
 import { EmbeddingsDb } from "./api/EmbeddingsDb.js";
-import { EmbeddingModel } from "./api/EmbeddingModel.js";
 import { GemmaDb } from "./api/GemmaDb.js";
 import { GemmaModel } from "./api/GemmaModel.js";
 import { ResponseCache } from "./utils/ResponseCache.js";
@@ -101,7 +100,7 @@ const EMBEDDINGS_DB_SPEC: DbSpec = {
   urlEnvVar: "EMBEDDINGS_DB_URL",
   defaultFile: "embeddings.db",
   // vec0's plain shadow table: present in full and slim layouts, readable without sqlite-vec loaded.
-  validationQuery: "SELECT 1 FROM vec_artworks_rowids LIMIT 1",
+  validationQuery: "SELECT 1 FROM vec_desc_artworks_rowids LIMIT 1",
 };
 
 const GEMMA_DB_SPEC: DbSpec = {
@@ -173,7 +172,6 @@ async function ensureDb(spec: DbSpec): Promise<void> {
 
 let vocabDb: VocabularyDb | null = null;
 let embeddingsDb: EmbeddingsDb | null = null;
-let embeddingModel: EmbeddingModel | null = null;
 let gemmaDb: GemmaDb | null = null;
 let gemmaModel: GemmaModel | null = null;
 
@@ -182,13 +180,6 @@ async function initDatabases(): Promise<void> {
   vocabDb = new VocabularyDb();
   await ensureDb(EMBEDDINGS_DB_SPEC);
   embeddingsDb = new EmbeddingsDb();
-  const needsModel = embeddingsDb.available;
-  if (needsModel) {
-    embeddingModel = new EmbeddingModel();
-    const modelId = process.env.EMBEDDING_MODEL_ID ?? "kintopp/multilingual-e5-small-rijksmuseum";
-    const targetDim = embeddingsDb.available ? embeddingsDb.vectorDimensions : 0;
-    await embeddingModel.init(modelId, targetDim);
-  }
   await ensureDb(GEMMA_DB_SPEC);
   gemmaDb = new GemmaDb();
   if (gemmaDb.available) {
@@ -261,8 +252,7 @@ function createServer(httpPort?: number): McpServer {
         (gemmaDb?.available && gemmaModel?.available
           ? "Search modes: search_artwork for structured filters, semantic_search for free-text concepts, " +
             "multimodal_search for what artworks show (images, text, Iconclass), "
-          : "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that " +
-            "resist structured metadata, ") +
+          : "Search modes: search_artwork for structured filters, ") +
         "find_similar for artwork-to-artwork similarity from a known objectNumber. " +
         "For aggregate counts and distributions, use collection_stats instead of looping search_artwork calls.\n\n" +
 
@@ -271,7 +261,7 @@ function createServer(httpPort?: number): McpServer {
     }
   );
 
-  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, embeddingsDb, embeddingModel, httpPort, usageStats,
+  registerAll(server, sharedApiClient, sharedOaiClient, vocabDb, embeddingsDb, httpPort, usageStats,
     { db: gemmaDb, model: gemmaModel });
   return server;
 }
@@ -287,7 +277,6 @@ async function runStdio(): Promise<void> {
   // The CLI's stdio transport sets MCP_SKIP_STARTUP_WARM=1; default stays eager.
   if (process.env.MCP_SKIP_STARTUP_WARM !== "1") {
     if (vocabDb?.available) { vocabDb.warmCorePages(); vocabDb.warmSimilarCaches(); vocabDb.ensureCuratedSetsCache(); }
-    if (embeddingsDb?.available) embeddingsDb.warmCorePages();
     if (gemmaDb?.available) await gemmaDb.loadCoarse(() => Promise.resolve());
   }
   // Factory runs once per connection; the opening exchange pins the protocol era.
@@ -567,18 +556,15 @@ async function runHttp(): Promise<void> {
     logInfo(`  Ready:        GET  /ready`);
   });
 
-  // Background warm-up: cheap steps only — vocab core pages (~20ms) and the
-  // ONNX first inference (~140ms). Not awaited; listen() is already serving.
+  // Background warm-up: cheap steps only — vocab core pages (~20ms), the Gemma
+  // first inference and the chunked (yielding) Gemma coarse-index load. Not
+  // awaited; listen() is already serving.
   //
-  // Everything expensive stays lazy, including EmbeddingsDb.warmCorePages()
-  // (~8.6s) and the former warmFilteredPath() (~5.2s), alongside the long-
-  // standing warmSimilarCaches() (~3-4s) and ensureCuratedSetsCache() (~9s).
-  // Each is one uninterruptible better-sqlite3 call that setImmediate cannot
+  // warmSimilarCaches() (~3-4s) and ensureCuratedSetsCache() (~9s) stay lazy:
+  // each is one uninterruptible better-sqlite3 call that setImmediate cannot
   // preempt, so warming here blocks /health and `initialize` for its full
   // duration and defeats fast wake — binding the socket early does not help.
-  // Do not re-add them. The embeddings ones in particular retain nothing
-  // (they only pre-fault mmap pages), so lazy costs one slower first query,
-  // not a deferred build. Stdio warms eagerly instead — see runStdio.
+  // Do not re-add them. Stdio warms eagerly instead — see runStdio.
   const warmInBackground = async (): Promise<void> => {
     const yieldTick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
     const t0 = Date.now();
@@ -586,9 +572,6 @@ async function runHttp(): Promise<void> {
       await yieldTick(); // let listen()'s callback + any queued wake requests flush first
       if (vocabDb?.available) {
         vocabDb.warmCorePages(); await yieldTick();
-      }
-      if (embeddingModel?.available) {
-        await embeddingModel.embed("warmup");
       }
       if (gemmaModel?.available) {
         await gemmaModel.embed("warmup");

@@ -19,11 +19,10 @@ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 // pinned so a SHRINKING roster can't quietly shrink the gates that count it.
 export const TOOL_COUNT = 20;
 
-// No fixture stands in for the embeddings or Gemma DB, so semantic_search and
-// multimodal_search register only where a real one exists (not in CI).
-export const HAS_EMBEDDINGS_DB = resolveDbPath("EMBEDDINGS_DB_PATH", "embeddings.db") !== null;
+// No fixture stands in for the Gemma DB, so semantic_search and multimodal_search
+// register only where a real one exists (not in CI).
 export const HAS_GEMMA_DB = resolveDbPath("GEMMA_DB_PATH", "gemma.db") !== null;
-export const EXPECTED_TOOL_COUNT = TOOL_COUNT - (HAS_EMBEDDINGS_DB ? 0 : 1) - (HAS_GEMMA_DB ? 0 : 1);
+export const EXPECTED_TOOL_COUNT = TOOL_COUNT - (HAS_GEMMA_DB ? 0 : 2);
 
 export async function connectFixtureClient(name, env = {}) {
   const transport = new StdioClientTransport({

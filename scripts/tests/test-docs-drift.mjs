@@ -25,7 +25,7 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { readFileSync } from "node:fs";
-import { connectFixtureClient, HAS_EMBEDDINGS_DB, HAS_GEMMA_DB } from "./fixture-client.mjs";
+import { connectFixtureClient, HAS_GEMMA_DB } from "./fixture-client.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PARAM_DOC = join(ROOT, "docs", "mcp-tool-parameters.md");
@@ -35,14 +35,14 @@ const MIRROR_DOC = join(ROOT, "docs", "mcp-server+tool-descriptions.md");
 // top-level params. Listing them explicitly keeps the check honest.
 const NESTED_KEYS = new Set(["action", "region", "relativeTo", "relativeToSize"]);
 
-// No fixture stands in for the embeddings DB (834K vectors + an ONNX model), so
+// No fixture stands in for the Gemma DB (834K vectors + an ONNX model), so
 // these tools are absent wherever it is, and their doc sections go unverified.
 // Gated on the backend actually being missing: a tool that fails to register
 // WITH its backend present is a real fault, not an environment gap.
 const OPTIONAL_BACKEND_TOOLS = new Map([
   ["semantic_search", {
-    backend: "embeddings DB + embedding model",
-    absent: () => !HAS_EMBEDDINGS_DB,
+    backend: "Gemma DB + Gemma model",
+    absent: () => !HAS_GEMMA_DB,
   }],
   ["multimodal_search", {
     backend: "Gemma DB + Gemma model",
@@ -154,8 +154,7 @@ if (!HAS_GEMMA_DB) {
   quotedInstructions = quotedInstructions.replace(
     "Search modes: search_artwork for structured filters, semantic_search for free-text concepts, " +
       "multimodal_search for what artworks show (images, text, Iconclass), ",
-    "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that " +
-      "resist structured metadata, ",
+    "Search modes: search_artwork for structured filters, ",
   );
 }
 if (squash(quotedInstructions) !== squash(client.getInstructions() ?? "")) staleMirror("server instructions");
