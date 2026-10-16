@@ -55,6 +55,8 @@ HTTP mode activates automatically when `PORT` is set or `--http` is passed.
 
 The included `railway.json` supports one-click deployment on [Railway](https://railway.app/). Railway sets `PORT` automatically.
 
+On Railway, point `VOCAB_DB_PATH`, `GEMMA_DB_PATH` and `HF_HOME` at the persistent volume (e.g. `/data/vocabulary.db`, `/data/gemma.db`, `/data/hf-cache`); otherwise the databases and the query model land on the container filesystem and download again on every redeploy. A database kept in a private S3-compatible bucket (such as a Railway bucket) can be given as `GEMMA_DB_URL=s3://<bucket>/<key>` together with the `S3_*` credentials below: the server presigns a short-lived link at boot, so no expiring URL is stored in the environment. Set the glibc variable `MALLOC_MMAP_THRESHOLD_=131072` as well. Loading the Gemma coarse index allocates large temporary buffers, and without the setting glibc keeps several hundred megabytes of them in its arena after they are freed.
+
 #### CLI
 
 A headless CLI (`scripts/cli.mjs`, exposed as `npm run cli` or the `rijks-mcp` bin — run `npm link` once to put it on your `PATH`) drives the server's stateless tools as an MCP *client* — so a CLI query returns exactly what an LLM would get, and it doubles as a debug/regression harness. It is JSON-first, aimed at agents and shell pipelines. The four viewer/stateful tools (`get_artwork_image`, `navigate_viewer`, `remount_viewer`, `poll_viewer_commands`) are out of scope.
@@ -232,10 +234,14 @@ The following APIs are used only during the **offline harvest** (not at runtime)
 | `VOCAB_DB_PATH` | Path to vocabulary SQLite database | `data/vocabulary.db` |
 | `VOCAB_DB_URL` | URL to download vocabulary DB on first start; gzip supported | *(none)* |
 | `GEMMA_DB_PATH` | Path to the Gemma SQLite database (`semantic_search` and `multimodal_search` register only when present; `find_similar`'s Description channel is empty without it) | `data/gemma.db` |
-| `GEMMA_DB_URL` | URL to download the Gemma DB on first start; gzip supported | *(none)* |
+| `GEMMA_DB_URL` | URL to download the Gemma DB on first start; gzip supported. An `s3://<bucket>/<key>` URL is presigned at boot with the `S3_*` credentials (as is `VOCAB_DB_URL`) | *(none)* |
+| `S3_ENDPOINT` | S3-compatible endpoint for `s3://` download URLs (virtual-hosted addressing, e.g. `https://t3.storageapi.dev`) | *(none)* |
+| `S3_REGION` | SigV4 signing region for `s3://` download URLs | `auto` |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Credentials for `s3://` download URLs; read-only access to the bucket is enough | *(none)* |
 | `GEMMA_MODEL_DTYPE` | ONNX dtype of the Gemma query model (`q8` uses about half the memory of `fp32`, at a few times the latency) | `q8` |
 | `GEMMA_THREADS` | onnxruntime intra-op threads for the Gemma query model | `2` |
 | `HF_HOME` | HuggingFace cache directory (useful for persistent volumes in deployment) | *(system default)* |
+| `MALLOC_MMAP_THRESHOLD_` | glibc allocator setting, not read by the server. `131072` returns the Gemma loader's freed buffers to the OS (Linux only) | *(glibc default)* |
 | `ENABLE_FIND_SIMILAR` | Set to `"false"` to disable the `find_similar` tool | `true` |
 | `ENABLE_THEME_SIMILAR` | Set to `"false"` to disable just the Theme channel inside `find_similar` (other channels keep working) | `true` |
 | `STRUCTURED_CONTENT` | Set to `"false"` to disable structured output (workaround for clients with `outputSchema` bugs) | *(enabled)* |

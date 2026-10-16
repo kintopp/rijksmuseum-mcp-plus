@@ -100,6 +100,16 @@
     ],
     "purpose": "/mcp Origin allowlist helper unit tests (isAllowedOrigin)"
   },
+  "test-s3-presign.mjs": {
+    "category": "base",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "SigV4 presigning of s3:// DB download URLs vs AWS + boto3 reference vectors"
+  },
   "test-text-query-dsl.mjs": {
     "category": "base",
     "class": "gate",

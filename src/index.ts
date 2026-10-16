@@ -28,6 +28,7 @@ import { registerAll, similarPages, enrichmentReviewPages } from "./registration
 import { isAllowedOrigin, parseMcpAllowedOrigins } from "./utils/origin.js";
 import { logInfo, logWarn, logError } from "./utils/log.js";
 import { startIdleReclaim } from "./utils/idleReclaim.js";
+import { presignS3Get, s3CredentialsFromEnv } from "./utils/s3Presign.js";
 import archivedPages from "./archived-pages.json" with { type: "json" };
 
 const SERVER_NAME = "rijksmuseum-mcp+";
@@ -124,8 +125,17 @@ async function ensureDb(spec: DbSpec): Promise<void> {
     }
   }
 
-  const url = process.env[spec.urlEnvVar];
+  let url = process.env[spec.urlEnvVar];
   if (!url) return;
+  if (url.startsWith("s3://")) {
+    // Presigned per boot, so a private asset needs no expiring link in the env.
+    const creds = s3CredentialsFromEnv();
+    if (!creds) {
+      logError(`${spec.urlEnvVar} is an s3:// URL but S3_ENDPOINT/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY are not all set`, undefined, { db: spec.name });
+      return;
+    }
+    url = presignS3Get(url, creds, 3600);
+  }
 
   logInfo(`Downloading ${spec.name} DB...`);
   const dir = path.dirname(dbPath);
