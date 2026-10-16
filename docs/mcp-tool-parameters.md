@@ -26,7 +26,7 @@ The primary search tool. Filters combine freely, with one exception: proximity s
 | Parameter | Description |
 |---|---|
 | `subject` | Primary concept/theme search — covers roughly seven artworks in eight via Iconclass vocabulary. Start here for thematic queries; a miss is not proof of absence, so fall through to `semantic_search` |
-| `iconclass` | Exact Iconclass notation code (e.g. `34B11` for dogs). More precise than `subject` |
+| `iconclass` | Iconclass notation code (e.g. `34B11` for dogs), including its key-expanded and named forms (`45H3` matches `45H3(+1)`), not narrower codes. More precise than `subject` |
 | `description` | Full-text search on cataloguer descriptions (Dutch, roughly 60% coverage) |
 | `curatorialNarrative` | Full-text search on museum wall text (English, a small curated subset) |
 | `inscription` | Full-text search on inscription texts (signatures, mottoes, dates on objects) |
@@ -192,7 +192,7 @@ Aggregate statistics, counts, and distributions across the collection. Returns t
 | `depictedPerson` | Filter by depicted person (partial match) |
 | `depictedPlace` | Filter by depicted place (partial match) |
 | `subject` | Filter by subject (partial match on Iconclass labels) |
-| `iconclass` | Filter by exact Iconclass notation code (e.g. `73D82`) |
+| `iconclass` | Filter by Iconclass notation code (e.g. `73D82`), including its key-expanded and named forms |
 | `collectionSet` | Filter by curated set name (partial match) |
 | `theme` | Filter by curatorial thematic tag (partial match) |
 | `sourceType` | Filter by source-channel taxonomy (e.g. `designs`, `paintings`, `prints (visual works)`) |

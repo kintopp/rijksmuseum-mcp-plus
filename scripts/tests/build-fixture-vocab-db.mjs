@@ -101,6 +101,8 @@ const VOCAB = [
 const ICONCLASS_VOCAB = [
   ["v-ic-prey", "concept", "beasts of prey", "roofdieren", "beastsofprey", "roofdieren", 120, "25F23"],
   ["v-ic-saint", "concept", "male saints", "mannelijke heiligen", "malesaints", "mannelijkeheiligen", 121, "11H"],
+  // Key-expanded form of 25F23, for the iconclass filter's match rule.
+  ["v-ic-prey-sleep", "concept", "beasts of prey (+ sleeping)", "roofdieren (+ slapend)", "beastsofpreysleeping", "roofdierenslapend", 122, "25F23(+46)"],
 ];
 
 // object_number, art_id, title, creator_label, description_text, inscription_text,
@@ -138,6 +140,8 @@ const MAPPINGS = [
   [1, 120, 12], [1, 121, 12],
   [2, 120, 12], [2, 121, 12],
   [3, 121, 12],
+  // FX-3 is already Iconclass-tagged, so the find_similar IDF denominators don't move.
+  [3, 122, 12],
   [7, 120, 12],
   // Depicted-Person overlap: FX-1 depicts Saint Peter(130) + William of Orange(131).
   // FX-6 shares both; FX-4 shares only 131; FX-8 carries Maria(132) alone (raises

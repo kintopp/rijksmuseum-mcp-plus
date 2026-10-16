@@ -57,7 +57,7 @@ Match against the controlled-term vocabulary. Labels are bilingual (English and 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `subject` | string **[]** | Subject matter (Iconclass themes, depicted scenes). Primary parameter for concept searches — use before `description` or `curatorialNarrative`. Roughly 108K terms across the large majority of artworks. Exact word matching with a morphological fallback. | `"winter landscape"` |
-| `iconclass` | string **[]** | Exact Iconclass notation code. More precise than `subject` — use the Iconclass server's search tool to discover codes by concept. Roughly 23K distinct notations are actually mapped to artworks here; the upstream thesaurus is far larger. | `"73D82"` |
+| `iconclass` | string **[]** | Iconclass notation code; also matches its key-expanded and named forms (`45H3` matches `45H3(+1)`), not narrower codes. More precise than `subject` — use the Iconclass server's search tool to discover codes by concept. Roughly 23K distinct notations are actually mapped to artworks here; the upstream thesaurus is far larger. | `"73D82"` |
 | `depictedPerson` | string **[]** | Person depicted in the artwork — roughly 58K distinct persons across about 200K artworks. Matches against the full name-variant table, including historical forms. | `"Willem van Oranje"` |
 | `depictedPlace` | string **[]** | Place depicted in the artwork — roughly 22K distinct places across the subject and spatial fields. Supports multi-word names with geo-disambiguation (e.g. "Oude Kerk Amsterdam" resolves to the Oude Kerk in Amsterdam). Distinct from `productionPlace` — a painting *depicting* Amsterdam may have been made in Haarlem. | `"Batavia"` |
 

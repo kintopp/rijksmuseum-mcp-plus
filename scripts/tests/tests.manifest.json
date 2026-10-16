@@ -617,6 +617,16 @@
     ],
     "purpose": "search_artwork never errors on punctuation, FTS5 operators, unbalanced quotes, diacritics or degenerate text (fixture DB)"
   },
+  "test-iconclass-notation-match.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "iconclass filter matches a code's key-expanded/named forms but not narrower codes, in search_artwork and collection_stats (fixture DB)"
+  },
   "test-inspect-navigate.mjs": {
     "category": "db",
     "class": "scratch",

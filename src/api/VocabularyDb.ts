@@ -965,17 +965,28 @@ const INTERNAL_MAX_RESULTS_CAP = 100;
  */
 const PROVENANCE_COUNT_CAP = 50000;
 
+/**
+ * Iconclass notation match: the code plus its key-expanded and named forms (`n(+…)`,
+ * `n(NAME)`) — the same concept with a modifier — but not narrower codes (`n1…`).
+ * `n( ≤ notation < n)` is the index-friendly `LIKE 'n(%'`: ')' sorts right after '('.
+ */
+const NOTATION_MATCH = "(notation = ? OR (notation >= ? AND notation < ?))";
+const notationMatchBindings = (notation: unknown): string[] => {
+  const n = String(notation);
+  return [n, `${n}(`, `${n})`];
+};
+
 interface VocabFilter {
   param: keyof VocabSearchParams;
   fields: string[];
   vocabType?: string;
-  matchMode: "like" | "like-word" | "exact-notation";
+  matchMode: "like" | "like-word" | "notation";
   /** When FTS5 is available, upgrade this mode to FTS5 instead. */
   ftsUpgrade?: boolean;
 }
 
 const VOCAB_FILTERS: VocabFilter[] = [
-  { param: "iconclass",      fields: ["subject"],               matchMode: "exact-notation" },
+  { param: "iconclass",      fields: ["subject"],               matchMode: "notation" },
   { param: "subject",        fields: ["subject"],               matchMode: "like-word",  ftsUpgrade: true },
   { param: "depictedPerson", fields: ["subject"],               matchMode: "like", vocabType: "person",         ftsUpgrade: true },
   { param: "depictedPlace",  fields: ["subject", "spatial"],    matchMode: "like", vocabType: "place",          ftsUpgrade: true },
@@ -1046,8 +1057,8 @@ interface StatsVocabFilter {
   key: keyof CollectionStatsParams;
   fields: string[];
   vocabType?: string;
-  /** Match on `notation` column instead of `label_en` (for Iconclass codes). */
-  exactNotation?: boolean;
+  /** Match Iconclass codes (buildVocabMatch) instead of labels. */
+  matchMode?: "notation";
 }
 
 /** Vocab filters available on collection_stats. Subset of VOCAB_FILTERS with simpler matching. */
@@ -1060,7 +1071,7 @@ const STATS_VOCAB_FILTERS: readonly StatsVocabFilter[] = [
   { key: "depictedPerson",       fields: ["subject"],            vocabType: "person" },
   { key: "depictedPlace",        fields: ["subject", "spatial"], vocabType: "place" },
   { key: "subject",              fields: ["subject"] },
-  { key: "iconclass",            fields: ["subject"],  exactNotation: true },
+  { key: "iconclass",            fields: ["subject"],  matchMode: "notation" },
   { key: "collectionSet",        fields: ["collection_set"],     vocabType: "set" },
   { key: "theme",                fields: ["theme"] },
   { key: "sourceType",           fields: ["source_type"] },
@@ -4016,7 +4027,7 @@ export class VocabularyDb {
     // Artwork vocab filters — data-driven to avoid copy-paste.
     // Uses FTS5 when available (50-100x faster than LIKE '%...%' on 194K vocab terms).
     // All paths use the two-step subquery pattern (narrow vocab first, then index-lookup on mappings).
-    for (const { key, fields, vocabType, exactNotation } of STATS_VOCAB_FILTERS) {
+    for (const { key, fields, vocabType, matchMode } of STATS_VOCAB_FILTERS) {
       if (interceptSkip.has(key)) continue;
       const val = params[key];
       if (val == null || typeof val !== "string") continue;
@@ -4037,9 +4048,10 @@ export class VocabularyDb {
         }
       }
 
-      if (exactNotation) {
-        // Exact notation match (Iconclass codes) — two-step subquery, no FTS
-        const filter = this.mappingFilterSubquery(fields, `notation = ?${typeClause}`, [val, ...typeBindings]);
+      if (matchMode) {
+        // Two-step subquery, no FTS
+        const { where, bindings: matchBindings } = this.buildVocabMatch(matchMode, val);
+        const filter = this.mappingFilterSubquery(fields, `${where}${typeClause}`, [...matchBindings, ...typeBindings]);
         conditions.push(filter.condition);
         bindings.push(...filter.bindings);
       } else if (this.hasFts5) {
@@ -4756,7 +4768,7 @@ export class VocabularyDb {
           }
         }
 
-        const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
+        const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "notation";
 
         if (useFts) {
           // Person name matching: use person_names_fts (two-tier) when available
@@ -4967,34 +4979,23 @@ export class VocabularyDb {
     }
   }
 
-  /** Look up a vocabulary term by Iconclass notation. */
-  lookupByNotation(code: string): { id: string; labelEn: string; labelNl: string } | null {
-    if (!this.db) return null;
-    const row = this.db
-      .prepare("SELECT id, label_en, label_nl FROM vocabulary WHERE notation = ?")
-      .get(code) as { id: string; label_en: string; label_nl: string } | undefined;
-    if (!row) return null;
-    return { id: row.id, labelEn: row.label_en || "", labelNl: row.label_nl || "" };
-  }
-
   /**
-   * Artworks whose subjects carry any of the given base notations, exactly or
-   * key-expanded/named (`n(+…)`, `n(NAME)`). Maps art_id → index of the first
-   * matching notation, so callers can pass the notations in priority order.
+   * Artworks whose subjects match any of the given notations (NOTATION_MATCH). Maps
+   * art_id → index of the first matching notation, so callers can pass the notations
+   * in priority order.
    */
   artIdsByNotations(notations: string[]): Map<number, number> {
     const out = new Map<number, number>();
     if (!this.db || notations.length === 0) return out;
     const subjectId = this.requireFieldId("subject");
-    // `notation >= n( AND < n)` is the index-friendly form of `LIKE 'n(%'` — ')' sorts right after '('.
     const vocabStmt = this.stmtVocabByNotation ??= this.db.prepare(
-      "SELECT vocab_int_id FROM vocabulary WHERE notation = ? OR (notation >= ? AND notation < ?)"
+      `SELECT vocab_int_id FROM vocabulary WHERE ${NOTATION_MATCH}`
     );
     const mapStmt = this.stmtArtworksByFieldVocab ??= this.db.prepare(
       "SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?"
     );
     notations.forEach((n, i) => {
-      for (const v of vocabStmt.all(n, `${n}(`, `${n})`) as { vocab_int_id: number }[]) {
+      for (const v of vocabStmt.all(...notationMatchBindings(n)) as { vocab_int_id: number }[]) {
         for (const m of mapStmt.all(subjectId, v.vocab_int_id) as { artwork_id: number }[]) {
           if (!out.has(m.artwork_id)) out.set(m.artwork_id, i);
         }
@@ -5125,8 +5126,8 @@ export class VocabularyDb {
   /** Build vocab WHERE clause and bindings for the non-FTS path. */
   private buildVocabMatch(matchMode: VocabFilter["matchMode"], value: unknown): { where: string; bindings: unknown[] } {
     switch (matchMode) {
-      case "exact-notation":
-        return { where: "notation = ?", bindings: [value] };
+      case "notation":
+        return { where: NOTATION_MATCH, bindings: notationMatchBindings(value) };
       case "like-word":
         return { where: "(regexp_word(?, label_en) OR regexp_word(?, label_nl))", bindings: [value, value] };
       default:
@@ -5213,7 +5214,7 @@ export class VocabularyDb {
     }
     const typeClause = filter.vocabType ? ` AND type = ?` : "";
     const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
-    const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "exact-notation";
+    const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "notation";
 
     if (useFts) {
       let vocabIds = filter.vocabType === "person" && this.hasPersonNames

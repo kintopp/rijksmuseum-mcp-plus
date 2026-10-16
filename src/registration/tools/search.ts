@@ -189,7 +189,7 @@ export function registerSearchTools(
               iconclass: stringOrArray()
                 .optional()
                 .describe(
-                  "Exact Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion). More precise than subject (exact code vs. label text) — use the Iconclass server's search tool to discover codes by concept."
+                  "Iconclass notation code (e.g. '34B11' for dogs, '73D82' for Crucifixion); also matches its key-expanded and named forms ('45H3' matches '45H3(+1)'), not narrower codes. More precise than subject (code vs. label text) — use the Iconclass server's search tool to discover codes by concept."
                 ),
               depictedPerson: stringOrArray()
                 .optional()

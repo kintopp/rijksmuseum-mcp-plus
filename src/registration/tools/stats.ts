@@ -118,7 +118,7 @@ export function registerStatsTools(
           depictedPerson: optStr().describe("Filter to artworks depicting this person (partial match)."),
           depictedPlace: optStr().describe("Filter to artworks depicting this place (partial match). Areal places (continents/oceans/empires) are excluded from depictedPlace/productionPlace rollups."),
           subject: optStr().describe("Filter to artworks with this subject (partial match on Iconclass labels)."),
-          iconclass: optStr().describe("Filter by exact Iconclass notation code (e.g. '73D82')."),
+          iconclass: optStr().describe("Filter by Iconclass notation code (e.g. '73D82'), including its key-expanded and named forms."),
           collectionSet: optStr().describe("Filter to artworks in this curated set (partial match on set name)."),
           theme: optStr().describe("Filter to artworks tagged with this curatorial theme (partial match)."),
           sourceType: optStr().describe("Filter by source-channel taxonomy: 'designs', 'drawings', 'paintings', 'prints (visual works)', 'sculpture (visual works)', 'photographs'."),
