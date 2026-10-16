@@ -214,6 +214,8 @@ function initUsageStats(): void {
 // ─── Create a configured McpServer ───────────────────────────────────
 
 function createServer(httpPort?: number): McpServer {
+  // Same condition as the semantic_search / multimodal_search registration guards.
+  const vectorSearch = !!(gemmaDb?.available && gemmaModel?.available && vocabDb?.available);
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION, title: "Rijksmuseum MCP+" },
     {
@@ -242,10 +244,10 @@ function createServer(httpPort?: number): McpServer {
         "precise iconographic filtering.\n\n" +
 
         "Two free-text corpora are searchable through search_artwork: descriptions (Dutch, cataloguer-written, " +
-        "~61% coverage) and curatorialNarrative (English wall text, ~14K works). When neither corpus carries the " +
-        "relevant language, prefer semantic_search.\n\n" +
+        "~61% coverage) and curatorialNarrative (English wall text, ~14K works)." +
+        (vectorSearch ? " When neither corpus carries the relevant language, prefer semantic_search." : "") + "\n\n" +
 
-        (gemmaDb?.available && gemmaModel?.available
+        (vectorSearch
           ? "Search modes: search_artwork for structured filters, semantic_search for free-text concepts, " +
             "multimodal_search for what artworks show (images, text, Iconclass), "
           : "Search modes: search_artwork for structured filters, ") +
@@ -569,12 +571,11 @@ async function runHttp(): Promise<void> {
       if (vocabDb?.available) {
         vocabDb.warmCorePages(); await yieldTick();
       }
-      if (gemmaModel?.available) {
-        await gemmaModel.embed("warmup");
-      }
-      if (gemmaDb?.available) {
-        await gemmaDb.loadCoarse(yieldTick);
-      }
+      // ORT inference runs on native threads, so it overlaps the chunked coarse load.
+      await Promise.all([
+        gemmaModel?.available ? gemmaModel.embed("warmup") : undefined,
+        gemmaDb?.available ? gemmaDb.loadCoarse(yieldTick) : undefined,
+      ]);
       ready = true;
       logInfo(`  Background warmup complete in ${Date.now() - t0}ms — /ready now true`, { warmupMs: Date.now() - t0 });
       logInfo(formatMemorySnapshotDetailed(captureMemorySnapshot(buildMemoryDbHandles())));

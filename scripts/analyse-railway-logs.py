@@ -64,8 +64,9 @@ PERIOD_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
 STARTUP_PATTERNS = [
     "Vocabulary DB loaded",
     "Iconclass DB loaded",
-    "Embeddings DB",
-    "Embedding model loaded",
+    "Gemma DB:",
+    "Gemma model loaded",
+    "Gemma coarse index loaded",
     "listening on",
     "pre-warmed",
     "Top artwork",
@@ -947,9 +948,9 @@ def section_7(calls, sessions, startup_events):
                 if c["tool"] == "semantic_search" and c["ms"] > 10000]
     if sem_cold:
         recs_high.append(
-            f"**Pre-warm embeddings DB mmap pages** — {len(sem_cold)} semantic "
-            f"search calls exceeded 10s (all first-after-restart). A dummy "
-            f"semantic query during startup would eliminate these cold spikes."
+            f"**Cold semantic_search calls** — {len(sem_cold)} calls exceeded "
+            f"10s. Check they arrived before the background warm-up finished "
+            f"(\"Gemma coarse index loaded\" in the startup events)."
         )
 
     # Container cycling

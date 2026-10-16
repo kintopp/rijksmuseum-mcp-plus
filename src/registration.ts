@@ -119,6 +119,8 @@ function registerTools(
   gemma?: GemmaHandles
 ): void {
   const publicBaseUrl = resolvePublicUrl(httpPort);
+  const gemmaDb = gemma?.db ?? null;
+  const gemmaModel = gemma?.model ?? null;
 
   registerSearchTools(server, vocabDb, withLogging, stats);
   registerDetailsTools(server, vocabDb, withLogging, stats);
@@ -129,9 +131,9 @@ function registerTools(
   registerProvenanceTools(server, oai, vocabDb, publicBaseUrl, withLogging, stats);
   registerInscriptionsTools(server, vocabDb, withLogging, stats);
   registerStatsTools(server, vocabDb, withLogging, stats);
-  registerSimilarTools(server, vocabDb, gemma?.db ?? null, publicBaseUrl, withLogging, stats);
-  registerSemanticTools(server, gemma?.db ?? null, gemma?.model ?? null, vocabDb, withLogging, stats);
-  registerMultimodalTools(server, gemma?.db ?? null, gemma?.model ?? null, vocabDb, withLogging, stats);
+  registerSimilarTools(server, vocabDb, gemmaDb, publicBaseUrl, withLogging, stats);
+  registerSemanticTools(server, gemmaDb, gemmaModel, vocabDb, withLogging, stats);
+  registerMultimodalTools(server, gemmaDb, gemmaModel, vocabDb, withLogging, stats);
 }
 
 // ─── MCP App Resource ────────────────────────────────────────────────

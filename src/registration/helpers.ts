@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { SORT_COLUMNS, type SortColumn, type BrowseSetRecord, type ProvenanceArtworkResult } from "../api/VocabularyDb.js";
+import { SORT_COLUMNS, FILTER_ART_IDS_KEYS, type SortColumn, type BrowseSetRecord, type ProvenanceArtworkResult, type VocabularyDb } from "../api/VocabularyDb.js";
 import { UsageStats } from "../utils/UsageStats.js";
 import { buildContentBlocks, mirrorWarningsToText, type JsonTextOptions, type TextBlock } from "../utils/responseShape.js";
 import { logInfo, logWarn, logError } from "../utils/log.js";
@@ -106,6 +106,43 @@ export const stringOrArray = () => z.preprocess(
 );
 export const optStr = () => z.preprocess(stripNull, z.string().optional());
 export const optMinStr = () => z.preprocess(stripNull, z.string().min(1).optional());
+
+/** Vocab pre-filter fields of the vector-search tools (keys of FILTER_ART_IDS_KEYS). */
+export const vectorPrefilterShape = () => ({
+  type: stringOrArray().optional().describe("Pre-filter by object type (e.g. 'painting', 'print')."),
+  material: stringOrArray().optional().describe("Pre-filter by material (e.g. 'canvas', 'paper')."),
+  technique: stringOrArray().optional().describe("Pre-filter by technique (e.g. 'etching', 'oil painting')."),
+  creationDate: optStr().optional().describe("Pre-filter by date — exact year ('1642') or wildcard ('16*')"),
+  dateMatch: z.preprocess(stripNull,
+    z.enum(["overlaps", "within", "midpoint"]).optional(),
+  ).describe("Date matching mode — see search_artwork for details."),
+  creator: stringOrArray().optional().describe("Pre-filter by artist name."),
+  subject: stringOrArray().optional().describe("Pre-filter by subject."),
+  iconclass: stringOrArray().optional().describe("Pre-filter by Iconclass notation."),
+  depictedPerson: stringOrArray().optional().describe("Pre-filter by depicted person."),
+  depictedPlace: stringOrArray().optional().describe("Pre-filter by depicted place."),
+  productionPlace: stringOrArray().optional().describe("Pre-filter by production place."),
+  collectionSet: stringOrArray().optional().describe("Pre-filter by collection set."),
+  aboutActor: optStr().optional().describe("Pre-filter by person (depicted or creator)"),
+  imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Pre-filter by digitisation: true = only artworks with images, false = only those without"),
+});
+
+/**
+ * Resolve a vector-search tool's pre-filters to candidate art_ids. No `candidates`
+ * means rank unfiltered; an empty array means the filters match nothing.
+ */
+export function resolvePrefilter(vocabDb: VocabularyDb, args: Record<string, unknown>): { candidates?: number[]; warning?: string } {
+  const filterParams: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(args)) {
+    if (val !== undefined && FILTER_ART_IDS_KEYS.has(key)) filterParams[key] = val;
+  }
+  if (Object.keys(filterParams).length === 0) return {};
+  const candidates = vocabDb.filterArtIds(filterParams);
+  if (candidates === null) {
+    return { warning: "Metadata filters ignored: none of them is an effective filter. Results are unfiltered." };
+  }
+  return { candidates };
+}
 
 // #363: structured textQuery DSL schema. Built via factories so each of
 // must/should/mustNot gets a *distinct* clause-schema instance — sharing one

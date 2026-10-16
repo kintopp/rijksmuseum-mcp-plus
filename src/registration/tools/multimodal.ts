@@ -1,17 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { VocabularyDb, formatDateRange, FILTER_ART_IDS_KEYS } from "../../api/VocabularyDb.js";
-import { GemmaDb, type GemmaHit } from "../../api/GemmaDb.js";
+import { VocabularyDb, formatDateRange } from "../../api/VocabularyDb.js";
+import { GemmaDb, type GemmaHit, type GemmaNotation } from "../../api/GemmaDb.js";
 import { GemmaModel } from "../../api/GemmaModel.js";
 import { UsageStats } from "../../utils/UsageStats.js";
 import { getOrComputeWithInflight } from "../../utils/inflightCache.js";
 import {
   ANN_READ_CLOSED,
   TOOL_LIMITS,
-  stripNull,
-  stripNullCoerceBool,
-  optStr,
-  stringOrArray,
+  vectorPrefilterShape,
+  resolvePrefilter,
   type InferOutput,
   structuredResponse,
   withOutputSchema,
@@ -73,22 +71,7 @@ export function registerMultimodalTools(
         query: z.string().describe("What the artwork shows or is about (e.g. 'children playing outside on the street')"),
         channels: z.array(z.enum(CHANNELS)).min(1).optional()
           .describe("Channels to run and fuse (default all three). A single channel returns that channel's own ranking."),
-        type: stringOrArray().optional().describe("Pre-filter by object type (e.g. 'painting', 'print')."),
-        material: stringOrArray().optional().describe("Pre-filter by material."),
-        technique: stringOrArray().optional().describe("Pre-filter by technique."),
-        creationDate: optStr().optional().describe("Pre-filter by date — exact year ('1642') or wildcard ('16*')"),
-        dateMatch: z.preprocess(stripNull,
-          z.enum(["overlaps", "within", "midpoint"]).optional(),
-        ).describe("Date matching mode — see search_artwork for details."),
-        creator: stringOrArray().optional().describe("Pre-filter by artist name."),
-        subject: stringOrArray().optional().describe("Pre-filter by subject."),
-        iconclass: stringOrArray().optional().describe("Pre-filter by Iconclass notation."),
-        depictedPerson: stringOrArray().optional().describe("Pre-filter by depicted person."),
-        depictedPlace: stringOrArray().optional().describe("Pre-filter by depicted place."),
-        productionPlace: stringOrArray().optional().describe("Pre-filter by production place."),
-        collectionSet: stringOrArray().optional().describe("Pre-filter by collection set."),
-        aboutActor: optStr().optional().describe("Pre-filter by person (depicted or creator)"),
-        imageAvailable: z.preprocess(stripNullCoerceBool, z.boolean().optional()).describe("Pre-filter by digitisation: true = only artworks with images, false = only those without"),
+        ...vectorPrefilterShape(),
         maxResults: z.number().int().min(1).max(TOOL_LIMITS.multimodal_search.max).default(TOOL_LIMITS.multimodal_search.default).optional()
           .describe("Number of fused results to return (default 15)."),
         offset: z.number().int().min(0).default(0).optional()
@@ -108,24 +91,14 @@ export function registerMultimodalTools(
         const query = gemmaDb.quantize(await gemmaModel.embed(args.query));
         stats?.recordPhase("multimodal_search", "embed", performance.now() - tEmbed);
 
-        const filterParams: Record<string, unknown> = {};
-        for (const [key, val] of Object.entries(args)) {
-          if (val !== undefined && FILTER_ART_IDS_KEYS.has(key)) filterParams[key] = val;
-        }
-        let candidates: number[] | undefined;
-        if (Object.keys(filterParams).length > 0) {
-          const ids = vocabDb.filterArtIds(filterParams);
-          if (ids === null) {
-            warnings.push("Metadata filters ignored: none of them is an effective filter. Results are unfiltered.");
-          } else if (ids.length === 0) {
-            const empty: Output = {
-              searchMode: "multimodal+filtered", query: args.query, channels, returnedCount: 0, results: [],
-              warnings: ["No artworks match the specified filters."],
-            };
-            return structuredResponse(empty, `0 multimodal matches for "${args.query}" (no filter matches)`);
-          } else {
-            candidates = ids;
-          }
+        const { candidates, warning } = resolvePrefilter(vocabDb, args);
+        if (warning) warnings.push(warning);
+        if (candidates?.length === 0) {
+          const empty: Output = {
+            searchMode: "multimodal+filtered", query: args.query, channels, returnedCount: 0, results: [],
+            warnings: ["No artworks match the specified filters."],
+          };
+          return structuredResponse(empty, `0 multimodal matches for "${args.query}" (no filter matches)`);
         }
 
         const tScan = performance.now();
@@ -133,20 +106,15 @@ export function registerMultimodalTools(
         if (channels.includes("metadata")) hits.set("metadata", gemmaDb.search("metadata", query, CHANNEL_DEPTH, candidates));
         if (channels.includes("image")) hits.set("image", gemmaDb.search("images", query, CHANNEL_DEPTH, candidates));
 
-        let notations: { notation: string; label: string; similarity: number }[] = [];
-        const notationOf = new Map<number, number>(); // art_id → index into notations
+        let notations: GemmaNotation[] = [];
+        let tagged = new Map<number, number>(); // art_id → index into notations
         if (channels.includes("iconclass")) {
           notations = gemmaDb.nearestNotations(query, ICONCLASS_NOTATIONS);
-          const tagged = vocabDb.artIdsByNotations(notations.map(n => n.notation));
-          let ids = [...tagged.keys()];
-          if (candidates) {
-            const allowed = new Set(candidates);
-            ids = ids.filter(id => allowed.has(id));
-          }
-          // Tagged artworks are ranked by their metadata similarity to the query.
+          tagged = vocabDb.artIdsByNotations(notations.map(n => n.notation));
+          const ids = candidates ? candidates.filter(id => tagged.has(id)) : [...tagged.keys()];
+          // Tagged artworks are ranked by their metadata similarity, but report their notation's.
           const ranked = gemmaDb.search("metadata", query, CHANNEL_DEPTH, ids);
-          hits.set("iconclass", ranked);
-          for (const h of ranked) notationOf.set(h.artId, tagged.get(h.artId)!);
+          hits.set("iconclass", ranked.map(h => ({ artId: h.artId, similarity: notations[tagged.get(h.artId)!].similarity })));
           if (ids.length === 0) {
             warnings.push("Iconclass channel: no artworks carry the nearest notations" + (candidates ? " within the filters." : "."));
           }
@@ -159,10 +127,7 @@ export function registerMultimodalTools(
           list.forEach((h, i) => {
             const entry = fused.get(h.artId) ?? { score: 0, ranks: {} };
             entry.score += 1 / (RRF_K + i + 1);
-            entry.ranks[channel] = {
-              rank: i + 1,
-              similarity: channel === "iconclass" ? notations[notationOf.get(h.artId)!].similarity : h.similarity,
-            };
+            entry.ranks[channel] = { rank: i + 1, similarity: h.similarity };
             fused.set(h.artId, entry);
           });
         }
@@ -172,7 +137,7 @@ export function registerMultimodalTools(
 
         const artIds = page.map(([id]) => id);
         const metaMap = vocabDb.batchLookupByArtId(artIds);
-        const typeMap = vocabDb.lookupTypes(artIds.map(id => metaMap.get(id)?.objectNumber ?? "").filter(Boolean));
+        const typeMap = vocabDb.batchLookupTypesByArtId(artIds);
         const round = (x: number) => Math.round(x * 1000) / 1000;
 
         const results: Output["results"] = [];
@@ -181,17 +146,18 @@ export function registerMultimodalTools(
           if (!meta) continue;
           const date = formatDateRange(meta.dateEarliest, meta.dateLatest);
           const ic = ranks.iconclass;
+          const type = typeMap.get(artId);
           results.push({
             rank: offset + results.length + 1,
             objectNumber: meta.objectNumber,
             title: meta.title,
             creator: meta.creator,
             ...(date && { date }),
-            ...(typeMap.has(meta.objectNumber) && { type: typeMap.get(meta.objectNumber) }),
+            ...(type && { type }),
             matchedBy: CHANNELS.filter(c => ranks[c]),
             ...(ranks.metadata && { metadata: { rank: ranks.metadata.rank, similarity: round(ranks.metadata.similarity) } }),
             ...(ranks.image && { image: { rank: ranks.image.rank, similarity: round(ranks.image.similarity) } }),
-            ...(ic && { iconclass: { rank: ic.rank, similarity: round(ic.similarity), notation: notations[notationOf.get(artId)!].notation } }),
+            ...(ic && { iconclass: { rank: ic.rank, similarity: round(ic.similarity), notation: notations[tagged.get(artId)!].notation } }),
             url: `https://www.rijksmuseum.nl/en/collection/${meta.objectNumber}`,
           });
         }

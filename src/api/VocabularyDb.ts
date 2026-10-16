@@ -1317,6 +1317,8 @@ export class VocabularyDb {
   private stmtReconstructSourceCache = new Map<number, Statement>();
   private stmtBatchByArtIdCache = new Map<number, Statement>();
   private stmtBatchTypesByArtIdCache = new Map<number, Statement>();
+  private stmtVocabByNotation: Statement | null = null;
+  private stmtArtworksByFieldVocab: Statement | null = null;
   private stmtBatchDescByArtIdCache = new Map<number, Statement>();
   private stmtBatchImportanceByArtIdCache = new Map<number, Statement>();
   private stmtParentGroupingsCache = new Map<number, Statement>();
@@ -4985,10 +4987,10 @@ export class VocabularyDb {
     if (!this.db || notations.length === 0) return out;
     const subjectId = this.requireFieldId("subject");
     // `notation >= n( AND < n)` is the index-friendly form of `LIKE 'n(%'` — ')' sorts right after '('.
-    const vocabStmt = this.db.prepare(
+    const vocabStmt = this.stmtVocabByNotation ??= this.db.prepare(
       "SELECT vocab_int_id FROM vocabulary WHERE notation = ? OR (notation >= ? AND notation < ?)"
     );
-    const mapStmt = this.db.prepare(
+    const mapStmt = this.stmtArtworksByFieldVocab ??= this.db.prepare(
       "SELECT artwork_id FROM mappings WHERE field_id = ? AND vocab_rowid = ?"
     );
     notations.forEach((n, i) => {

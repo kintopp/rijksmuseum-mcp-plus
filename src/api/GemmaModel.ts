@@ -8,9 +8,9 @@
 import { logInfo, logError } from "../utils/log.js";
 
 const QUERY_PREFIX = "task: search result | query: ";
-export const GEMMA_MODEL_ID = "onnx-community/embeddinggemma-2-ONNX";
+const GEMMA_MODEL_ID = "onnx-community/embeddinggemma-2-ONNX";
 /** Pinned so a re-export upstream can't silently shift the query space away from gemma.db. */
-export const GEMMA_MODEL_REVISION = "daa72c51243991dfcaf9f9137d2c573d8f7790c0";
+const GEMMA_MODEL_REVISION = "daa72c51243991dfcaf9f9137d2c573d8f7790c0";
 
 export class GemmaModel {
   // transformers.js model/tokenizer types are too broad to express usefully.

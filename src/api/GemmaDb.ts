@@ -51,7 +51,6 @@ export class GemmaDb {
   private dbPath_: string | null = null;
   private buildId_ = "unknown";
   private scale = 127;
-  private dimensions = 768;
   private coarseDims = 0;
   private knn = new Map<GemmaVectorTable, Statement>();
   private filteredKnn = new Map<GemmaVectorTable, Statement>();
@@ -60,7 +59,7 @@ export class GemmaDb {
   private stmtStoredVector: Statement | null = null;
   private tables: GemmaVectorTable[] = [];
   private coarse = new Map<GemmaVectorTable, CoarseIndex>();
-  private loaders = new Map<GemmaVectorTable, Generator<void, CoarseIndex>>();
+  private loaders = new Map<GemmaVectorTable, Generator<void, void>>();
 
   constructor() {
     const dbPath = resolveDbPath("GEMMA_DB_PATH", "gemma.db");
@@ -80,7 +79,6 @@ export class GemmaDb {
       );
       this.buildId_ = meta.built_at ?? "unknown";
       this.scale = parseFloat(meta.int8_scale ?? "127");
-      this.dimensions = parseInt(meta.dimensions ?? "768", 10);
       this.coarseDims = parseInt(meta.coarse_dims ?? "0", 10);
       // Two-stage scans an in-memory copy and rescores a few thousand rows per query, so
       // mmap only adds file pages to RSS — the coarse chunks would be resident twice.
@@ -122,7 +120,7 @@ export class GemmaDb {
       `);
       const layout = this.coarseDims ? `two-stage, ${this.coarseDims}d coarse` : "vec0";
       const desc = meta.description_count ? ` / ${meta.description_count} description` : "";
-      logInfo(`Gemma DB: ${meta.metadata_count} metadata / ${meta.image_count} image${desc} / ${meta.iconclass_count} Iconclass vectors (${this.dimensions}d, ${layout})`);
+      logInfo(`Gemma DB: ${meta.metadata_count} metadata / ${meta.image_count} image${desc} / ${meta.iconclass_count} Iconclass vectors (${meta.dimensions ?? 768}d, ${layout})`);
     } catch (err) {
       logError("Failed to open Gemma DB", err);
       this.db = null;
@@ -155,7 +153,7 @@ export class GemmaDb {
   }
 
   /** Shared between the async warm-up and a search that arrives before it finishes. */
-  private loader(t: GemmaVectorTable): Generator<void, CoarseIndex> {
+  private loader(t: GemmaVectorTable): Generator<void, void> {
     let g = this.loaders.get(t);
     if (!g) {
       g = this.loadChunks(t);
@@ -164,7 +162,7 @@ export class GemmaDb {
     return g;
   }
 
-  private *loadChunks(t: GemmaVectorTable): Generator<void, CoarseIndex> {
+  private *loadChunks(t: GemmaVectorTable): Generator<void, void> {
     const db = this.db!;
     const d = this.coarseDims;
     const { total, chunks } = db.prepare(
@@ -186,17 +184,14 @@ export class GemmaDb {
       off += row.n;
       yield;
     }
-    const index = { ids, prefixes, invNorms };
-    this.coarse.set(t, index);
-    return index;
+    this.coarse.set(t, { ids, prefixes, invNorms });
   }
 
   private ensureCoarse(t: GemmaVectorTable): CoarseIndex {
     const loaded = this.coarse.get(t);
     if (loaded) return loaded;
     const g = this.loader(t);
-    let r = g.next();
-    while (!r.done) r = g.next();
+    while (!g.next().done);
     return this.coarse.get(t)!;
   }
 
@@ -261,12 +256,11 @@ export class GemmaDb {
     const qNorm = Math.sqrt(qq);
     const rows = this.stmtVectors.get(t)!.all(JSON.stringify(ids)) as { artwork_id: number; embedding: Buffer }[];
     const hits: GemmaHit[] = rows.map(r => {
-      const v = r.embedding;
+      const v = new Int8Array(r.embedding.buffer, r.embedding.byteOffset, r.embedding.length);
       let dot = 0, vv = 0;
       for (let j = 0; j < v.length; j++) {
-        const x = (v[j] << 24) >> 24; // Buffer reads uint8; sign-extend to int8
-        dot += x * q[j];
-        vv += x * x;
+        dot += v[j] * q[j];
+        vv += v[j] * v[j];
       }
       return { artId: r.artwork_id, similarity: dot / (Math.sqrt(vv) * qNorm) };
     });

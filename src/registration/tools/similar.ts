@@ -130,21 +130,22 @@ export function registerSimilarTools(
             const descMeta = vocabDb!.batchLookupByArtId(descArtIds);
             const descTypes = vocabDb!.batchLookupTypesByArtId(descArtIds);
             const descTexts = vocabDb!.batchLookupDescriptionsByArtId(descArtIds);
-            descCandidates = descResults.filter(r => descMeta.has(r.artId)).map(r => {
-              const m = descMeta.get(r.artId)!;
+            descCandidates = descResults.flatMap(r => {
+              const m = descMeta.get(r.artId);
+              if (!m) return [];
               const date = formatDateRange(m.dateEarliest, m.dateLatest);
-              return {
+              return [{
                 objectNumber: m.objectNumber,
-                title: m.title ?? "",
-                creator: m.creator ?? "",
+                title: m.title,
+                creator: m.creator,
                 ...(date && { date }),
                 ...(descTypes.has(r.artId) && { type: descTypes.get(r.artId) }),
                 iiifId: m.iiifId ?? undefined,
-                score: r.similarity,
+                score: Math.round(r.similarity * 1000) / 1000,
                 url: `https://www.rijksmuseum.nl/en/collection/${m.objectNumber}`,
                 detail: truncate(descTexts.get(r.artId) ?? "", 200),
                 descSnippet: truncateSnippet(descTexts.get(r.artId), 160),
-              };
+              }];
             });
           }
         }
