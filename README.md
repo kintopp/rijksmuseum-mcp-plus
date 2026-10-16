@@ -32,7 +32,7 @@ The system is designed to let you search, explore and ask questions about the Ri
 
 *What is the actual distribution of Rembrandt's works in the Rijksmuseum across painting, printmaking, and drawing — and how does this challenge popular perceptions of him as primarily a painter?* [Demo](https://claude.ai/share/e2070805-94a5-4e35-9aea-24b6274b641d) 
 
-For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). Eight scenarios for art historians and curators cover iconographic and semantic search, image inspection, similarity search, provenance, collectors' marks, bibliography and conservation records, each with a shared demo transcript and a chart.
+For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). Nine scenarios for art historians and curators cover iconographic, semantic and multimodal search, image inspection, similarity search, provenance, collectors' marks, bibliography and conservation records, each with a shared demo transcript.
 
 ## Quick Start
 

@@ -643,7 +643,7 @@ count summary entirely.
 
 ## Worked example: Waller's collector's mark
 
-[Research scenario 7](research-scenarios.md#7-fg-wallers-collectors-mark-lugt-2760) asks whether the collector's mark of F.G. Waller (Lugt 2760) identifies his personal collection. Answering it properly means joining every stamped sheet to its credit line, but the mark sits on some 33,000 sheets, far more than a chat session can handle. The shell can do the join:
+[Research scenario 9](research-scenarios.md#9-fg-wallers-collectors-mark-lugt-2760) asks whether the collector's mark of F.G. Waller (Lugt 2760) identifies his personal collection. Answering it properly means joining every stamped sheet to its credit line, but the mark sits on some 33,000 sheets, far more than a chat session can handle. The shell can do the join:
 
 ```bash
 export RIJKS_MCP_HTTP=http://localhost:3000/mcp        # a warm server (npm run serve); stdio would spawn per call

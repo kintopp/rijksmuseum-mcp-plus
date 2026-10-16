@@ -1,10 +1,10 @@
 ## Research Scenarios
 
-The eight scenarios below are written for art historians, curators and other GLAM professionals. Each poses a research question that cannot be answered by retrieving records alone: the model has to check its results against the catalogue, weigh conflicting evidence and say how far its conclusions can be trusted. Together they cover the server's main areas (structured and semantic search, aggregate statistics, image inspection, similarity search, provenance, inscriptions and collectors' marks, bibliography, and conservation records), with an emphasis on questions that the Rijksmuseum's own search interfaces and data dumps do not support directly.
+The nine scenarios below are written for art historians, curators and other GLAM professionals. Each poses a research question that cannot be answered by retrieving records alone: the model has to check its results against the catalogue, weigh conflicting evidence and say how far its conclusions can be trusted. Together they cover the server's main areas (structured, semantic and multimodal search, aggregate statistics, image inspection, similarity search, provenance, inscriptions and collectors' marks, bibliography, and conservation records), with an emphasis on questions that the Rijksmuseum's own search interfaces and data dumps do not support directly.
 
 Each scenario has a question, and the **Demo** link opens the shared claude.ai transcript of the run (Claude Opus 5.5, medium effort, with the `rijksmuseum-mcp-plus` skill invoked at the start of the question). The demos for scenarios 1 and 6 end with a follow-up prompt asking for a chart, which shared transcripts do not display. Where a run produced HTML pages on the server (similarity comparisons, provenance enrichment reviews), saved copies are linked.
 
-For a command-line version of scenario 7 that processes every stamped sheet, see the [CLI guide](cli-guide.md#worked-example-wallers-collectors-mark).
+For a command-line version of scenario 9 that processes every stamped sheet, see the [CLI guide](cli-guide.md#worked-example-wallers-collectors-mark).
 
 1. [Representations of the Stadholders, Maurits to William III](#1-representations-of-the-stadholders-maurits-to-william-iii)
 2. [European–Asian Cultural Contact as Subject Matter](#2-europeanasian-cultural-contact-as-subject-matter)
@@ -12,8 +12,9 @@ For a command-line version of scenario 7 that processes every stamped sheet, see
 4. [Dating Utamaro Prints from Their Seals and Signatures](#4-dating-utamaro-prints-from-their-seals-and-signatures)
 5. [The Attribution of "The Tree of Jesse" (SK-A-3901)](#5-the-attribution-of-the-tree-of-jesse-sk-a-3901)
 6. [Artworks Displaced between 1933 and 1945](#6-artworks-displaced-between-1933-and-1945)
-7. [F.G. Waller's Collector's Mark (Lugt 2760)](#7-fg-wallers-collectors-mark-lugt-2760)
+7. [Tobacco Smoking in Dutch Genre Painting](#7-tobacco-smoking-in-dutch-genre-painting)
 8. [The Rijksmuseum's Share of the 1936 Exhibition of Asian Art](#8-the-rijksmuseums-share-of-the-1936-exhibition-of-asian-art)
+9. [F.G. Waller's Collector's Mark (Lugt 2760)](#9-fg-wallers-collectors-mark-lugt-2760)
 
 ---
 
@@ -107,18 +108,17 @@ For a command-line version of scenario 7 that processes every stamped sheet, see
 
 ---
 
-### 7. F.G. Waller's Collector's Mark (Lugt 2760)
+### 7. Tobacco Smoking in Dutch Genre Painting
 
-*The collector's mark of F.G. Waller (Lugt 2760) appears on tens of thousands of sheets in the Rijksprentenkabinet. Does it identify his personal collection? Use the available evidence, such as dates, credit lines and inventory numbers, to establish what the mark signifies, and state how far a conclusion based on a sample can be relied on.* [Demo](https://claude.ai/share/6401b054-25ae-4da1-84d9-17c442677c35)
-
-**Findings:** The mark appears on some 33,600 records. Production dates are a weak test of Waller's ownership, since most stamped sheets were made in the eighteenth and nineteenth centuries and could have been his or bought later by the Waller Fund. Entry dates are a better test: in the model's sample of 25 sheets, every gift or bequest from Waller entered by 1935, 17 sheets entered after his death, and four were both made and acquired after 1934, so the stamp cannot mean that he owned them. The model notes that its sample was drawn from top-ranked search results and says nothing about proportions. The [CLI version](cli-guide.md#worked-example-wallers-collectors-mark) of this scenario tallies the credit lines of 20,000 stamped sheets and finds that about two-thirds were Waller Fund purchases.
+*How completely does the catalogue's subject indexing record tobacco smoking in seventeenth-century Dutch paintings? Find paintings that show someone smoking or holding a pipe, check each against the image, and compare the confirmed set with the works tagged with the subject. What kinds of painting does the subject index miss, and what does the image search wrongly include?*
+<!-- TODO: Demo link and Findings after the claude.ai run -->
 
 **How the tools enable it:**
-- `search_inscriptions` with `collectorMark` finds the sheets bearing the stamp, resolved through Lugt numbers
-- `search_artwork` with an `inscription` filter and a date range gives counts by period
-- `get_artwork_details` and `search_provenance` with `creditLineQuery` supply credit lines and acquisition dates
+- `multimodal_search` with `channels: ["image"]` and `type: "painting"` ranks paintings by what their photographs show, whatever the record says
+- `search_artwork` with `subject` or `iconclass` gives the indexed set to compare against
+- `inspect_artwork_image` confirms or rejects each image-only match
 
-**Why it matters:** A collector's mark is often the only evidence of ownership for works on paper, but a museum may apply a collector's stamp to sheets bought with his fund as well as to those he owned. The scenario shows how to test what a mark records before using it to reconstruct a collection, and how much weight a sample can bear.
+**Why it matters:** Subject indexes are often treated as complete. Comparing them with what the images show measures how much they miss, and checking each match by eye shows how far the image search can be trusted.
 
 ---
 
@@ -134,3 +134,18 @@ For a command-line version of scenario 7 that processes every stamped sheet, see
 - `search_provenance` traces each object's owners from 1936 to its acquisition
 
 **Why it matters:** Most past exhibitions are not recorded as sets in museum databases, but their catalogues are often cited in object bibliographies. Following those citations recovers an exhibition's content, and the provenance chains show what it represented at the time.
+
+---
+
+### 9. F.G. Waller's Collector's Mark (Lugt 2760)
+
+*The collector's mark of F.G. Waller (Lugt 2760) appears on tens of thousands of sheets in the Rijksprentenkabinet. Does it identify his personal collection? Use the available evidence, such as dates, credit lines and inventory numbers, to establish what the mark signifies, and state how far a conclusion based on a sample can be relied on.* [Demo](https://claude.ai/share/6401b054-25ae-4da1-84d9-17c442677c35)
+
+**Findings:** The mark appears on some 33,600 records. Production dates are a weak test of Waller's ownership, since most stamped sheets were made in the eighteenth and nineteenth centuries and could have been his or bought later by the Waller Fund. Entry dates are a better test: in the model's sample of 25 sheets, every gift or bequest from Waller entered by 1935, 17 sheets entered after his death, and four were both made and acquired after 1934, so the stamp cannot mean that he owned them. The model notes that its sample was drawn from top-ranked search results and says nothing about proportions. The [CLI version](cli-guide.md#worked-example-wallers-collectors-mark) of this scenario tallies the credit lines of 20,000 stamped sheets and finds that about two-thirds were Waller Fund purchases.
+
+**How the tools enable it:**
+- `search_inscriptions` with `collectorMark` finds the sheets bearing the stamp, resolved through Lugt numbers
+- `search_artwork` with an `inscription` filter and a date range gives counts by period
+- `get_artwork_details` and `search_provenance` with `creditLineQuery` supply credit lines and acquisition dates
+
+**Why it matters:** A collector's mark is often the only evidence of ownership for works on paper, but a museum may apply a collector's stamp to sheets bought with his fund as well as to those he owned. The scenario shows how to test what a mark records before using it to reconstruct a collection, and how much weight a sample can bear.
