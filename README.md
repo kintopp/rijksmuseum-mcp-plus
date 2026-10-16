@@ -86,13 +86,11 @@ flowchart LR
     834K artworks
     418K vocab terms
     14.8M mappings")]
-    Search --> EmbeddingsDB[("Embeddings DB
-    834K vectors
-    semantic search")]
-    Search --> GemmaDB[("Multimodal DB
+    Search --> GemmaDB[("Embeddings DB
     text + image vectors
     EmbeddingGemma 2")]
     Details --> VocabDB
+    Details --> GemmaDB
     Images --> IIIF["IIIF Image API
     iiif.micr.io"]
 
@@ -107,7 +105,7 @@ flowchart LR
     LA -.->|"vocab + artwork
     enrichment"| VocabDB
     VocabDB -.->|"embedding
-    generation"| EmbeddingsDB
+    generation"| GemmaDB
 ```
 
 ## Technical notes
