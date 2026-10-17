@@ -149,6 +149,57 @@ The server declares `tools` and `resources` capabilities only — it registers n
 
 A request flows: MCP SDK → `registration.ts` dispatcher → a tool callback in `registration/tools/` → the data layer (`VocabularyDb` / `GemmaDb` + `GemmaModel` / `RijksmuseumApiClient` / `OaiPmhClient`) → JSON.
 
+
+```mermaid
+flowchart LR
+    User["You"] <-->|conversation| AI["AI Assistant"]
+
+    AI <-->|"MCP tool calls
+    (agentic loop)"| Server["rijksmuseum-mcp+
+    20 tools"]
+
+    Server --> Search["Search & Discovery
+    structured filters,
+    semantic search,
+    text-to-image search,
+    collection statistics"]
+
+    Server --> Details["Details & Metadata
+    provenance chains,
+    bibliography & conservation,
+    similarity comparison"]
+
+    Server --> Images["Image Inspection
+    deep-zoom viewer,
+    region crops for AI vision,
+    user-highlighted regions"]
+
+    Search --> VocabDB[("Vocab DB
+    834K artworks
+    418K vocab terms
+    14.8M mappings")]
+    Search --> GemmaDB[("Embeddings DB
+    text + image vectors
+    EmbeddingGemma 2")]
+    Details --> VocabDB
+    Details --> GemmaDB
+    Images --> IIIF["IIIF Image API
+    iiif.micr.io"]
+
+    subgraph Harvest ["Periodic harvest (offline)"]
+        OAI["OAI-PMH
+        data.rijksmuseum.nl/oai"]
+        LA["Linked Art
+        id.rijksmuseum.nl
+        (harvest-time)"]
+    end
+    OAI -.->|"834K records"| VocabDB
+    LA -.->|"vocab + artwork
+    enrichment"| VocabDB
+    VocabDB -.->|"embedding
+    generation"| GemmaDB
+```
+
 **Entry and dispatch**
 
 | Path | Role |
