@@ -54,56 +54,6 @@ The `rijksmuseum-mcp+` skill file ([.zip archive](docs/skills/rijksmuseum-mcp-pl
 
 For local setup (stdio or HTTP, also via cli), deployment, architecture, data sources, and configuration, please see the [technical guide](/docs/technical-guide.md). For measurements of what the server costs and saves in tokens compared with plain web search, see the (still early and experimental) [benchmarks](/docs/benchmarks.md).
 
-```mermaid
-flowchart LR
-    User["You"] <-->|conversation| AI["AI Assistant"]
-
-    AI <-->|"MCP tool calls
-    (agentic loop)"| Server["rijksmuseum-mcp+
-    20 tools"]
-
-    Server --> Search["Search & Discovery
-    structured filters,
-    semantic search,
-    text-to-image search,
-    collection statistics"]
-
-    Server --> Details["Details & Metadata
-    provenance chains,
-    bibliography & conservation,
-    similarity comparison"]
-
-    Server --> Images["Image Inspection
-    deep-zoom viewer,
-    region crops for AI vision,
-    user-highlighted regions"]
-
-    Search --> VocabDB[("Vocab DB
-    834K artworks
-    418K vocab terms
-    14.8M mappings")]
-    Search --> GemmaDB[("Embeddings DB
-    text + image vectors
-    EmbeddingGemma 2")]
-    Details --> VocabDB
-    Details --> GemmaDB
-    Images --> IIIF["IIIF Image API
-    iiif.micr.io"]
-
-    subgraph Harvest ["Periodic harvest (offline)"]
-        OAI["OAI-PMH
-        data.rijksmuseum.nl/oai"]
-        LA["Linked Art
-        id.rijksmuseum.nl
-        (harvest-time)"]
-    end
-    OAI -.->|"834K records"| VocabDB
-    LA -.->|"vocab + artwork
-    enrichment"| VocabDB
-    VocabDB -.->|"embedding
-    generation"| GemmaDB
-```
-
 ## Roadmap
 
 Ongoing:
