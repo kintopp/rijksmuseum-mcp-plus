@@ -149,9 +149,11 @@ const staleMirror = (what) =>
 // the part of the mirror most prone to silent drift.
 const quotedBlock = /## Server Description\n\n([\s\S]*?)\n\n---/.exec(mirror)?.[1] ?? "";
 let quotedInstructions = quotedBlock.split("\n").map((l) => l.replace(/^> ?/, "")).join("\n");
-// The mirror quotes the production (gemma.db) text; without it the search-modes sentence reverts.
+// The mirror quotes the production (gemma.db) text; without it both semantic_search mentions drop.
 if (!HAS_GEMMA_DB) {
   quotedInstructions = quotedInstructions.replace(
+    " When neither corpus carries the relevant language, prefer semantic_search.", "",
+  ).replace(
     "Search modes: search_artwork for structured filters, semantic_search for free-text concepts, " +
       "multimodal_search for what artworks show (images, text, Iconclass), ",
     "Search modes: search_artwork for structured filters, ",
