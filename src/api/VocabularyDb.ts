@@ -1006,8 +1006,10 @@ const VOCAB_FILTERS: VocabFilter[] = [
 // Same-row intercepts (#349/#357) hit these three filters per query. Caching the
 // VocabFilter references avoids a linear VOCAB_FILTERS.find() scan on every search.
 const CREATOR_FILTER = VOCAB_FILTERS.find(f => f.param === "creator")!;
-/** Above this many creators for one name, the ambiguity warning gives a count, not a list. */
+/** Above this many creators for one name, the ambiguity warning stops listing them. */
 const CREATOR_AMBIGUITY_LIST_MAX = 10;
+/** The only vocabulary types the creator field maps to. */
+const CREATOR_LABEL_TYPES = " AND type IN ('person', 'group')";
 const QUALIFIER_FILTER = VOCAB_FILTERS.find(f => f.param === "attributionQualifier")!;
 const ROLE_FILTER = VOCAB_FILTERS.find(f => f.param === "productionRole")!;
 
@@ -1275,6 +1277,7 @@ export class VocabularyDb {
   private stmtPartyEnrichment_: Statement | null = null;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
+  private stmtCreatorsAmong: Statement | null = null;
   private stmtLookupPersonInfo: Statement | null = null;
   private stmtLookupIiifId: Statement | null = null;
   private stmtImageMetadata: Statement | null = null;
@@ -3388,17 +3391,9 @@ export class VocabularyDb {
     }
 
     // Resolve artworkCount in one batch query for the page.
-    const artworkCountMap = new Map<number, number>();
-    if (hasArtworks && creatorFieldId !== undefined && nameOrder && pageRows.length > 0) {
-      const intIds = pageRows.map(r => r.vocab_int_id);
-      const ph = intIds.map(() => "?").join(", ");
-      const countRows = this.db.prepare(
-        `SELECT vocab_rowid, COUNT(*) AS cnt FROM mappings
-         WHERE field_id = ? AND vocab_rowid IN (${ph})
-         GROUP BY vocab_rowid`
-      ).all(creatorFieldId, ...intIds) as { vocab_rowid: number; cnt: number }[];
-      for (const r of countRows) artworkCountMap.set(r.vocab_rowid, r.cnt);
-    }
+    const artworkCountMap = hasArtworks && creatorFieldId !== undefined && nameOrder && pageRows.length > 0
+      ? this.countCreatorWorks(creatorFieldId, pageRows.map(r => r.vocab_int_id))
+      : new Map<number, number>();
 
     const pageVocabIds = pageRows.map((r) => r.id);
     const equivMap = this.fetchEquivalents(pageVocabIds);
@@ -4013,7 +4008,7 @@ export class VocabularyDb {
     const intercept = this.applySameRowIntercepts(params as unknown as Record<string, unknown>, warnings);
     if (intercept === null) {
       return { ...baseShape, total: 0, coverage: { withBucket: 0, withoutBucket: 0 }, totalBuckets: 0, offset, entries: [],
-        warnings: ["No vocabulary matches for the supplied creator / attributionQualifier / productionRole. No artworks match these filters."] };
+        warnings: [...warnings, "No vocabulary matches for the supplied creator / attributionQualifier / productionRole. No artworks match these filters."] };
     }
     conditions.push(...intercept.conditions);
     bindings.push(...intercept.bindings);
@@ -4058,15 +4053,15 @@ export class VocabularyDb {
         bindings.push(...filter.bindings);
       } else if (this.hasFts5) {
         // FTS5 path: resolve vocab IDs first, then use direct mapping filter
-        const vocabIds = key === "creator"
-          ? this.resolveCreatorIds(val, warnings)
-          : vocabType === "person" && this.hasPersonNames
-            ? this.findPersonIdsFts(val)
-            : this.findVocabIdsFts(val, typeClause, typeBindings);
+        const warningsBefore = warnings.length;
+        const vocabIds = this.resolveFtsIds(key, vocabType, val, warnings);
         if (vocabIds.length === 0) {
-          // Filter matched zero vocab terms → no artworks can match → return empty immediately
+          // Filter matched zero vocab terms → no artworks can match → return empty immediately.
+          // A resolver that explained the miss itself (creator) supersedes the generic line.
           return { ...baseShape, total: 0, coverage: { withBucket: 0, withoutBucket: 0 }, totalBuckets: 0, offset: 0, entries: [],
-            warnings: [`No vocabulary matches found for ${key}="${val}". No artworks match this filter.`] };
+            warnings: warnings.length > warningsBefore
+              ? warnings
+              : [...warnings, `No vocabulary matches found for ${key}="${val}". No artworks match this filter.`] };
         }
         const ftsFilter = this.mappingFilterDirect(fields, vocabIds);
         conditions.push(ftsFilter.condition);
@@ -4776,11 +4771,7 @@ export class VocabularyDb {
 
         if (useFts) {
           // Person name matching: use person_names_fts (two-tier) when available
-          let vocabIds = filter.param === "creator"
-            ? this.resolveCreatorIds(String(value), warnings)
-            : filter.vocabType === "person" && this.hasPersonNames
-              ? this.findPersonIdsFts(String(value))
-              : this.findVocabIdsFts(String(value), typeClause, typeBindings);
+          let vocabIds = this.resolveFtsIds(filter.param, filter.vocabType, String(value), warnings);
 
           // Multi-word place fallback: split "Oude Kerk Amsterdam" → "Oude Kerk" near "Amsterdam"
           if (vocabIds.length === 0 && filter.vocabType === "place") {
@@ -5094,16 +5085,32 @@ export class VocabularyDb {
     return tier2.map((r) => r.id);
   }
 
+  /** FTS id resolution for a vocab filter value — shared by the search, stats and same-row paths. */
+  private resolveFtsIds(param: string, vocabType: string | undefined, value: string, warnings?: string[]): string[] {
+    if (param === "creator") return this.resolveCreatorIds(value, warnings);
+    if (vocabType === "person" && this.hasPersonNames) return this.findPersonIdsFts(value);
+    return vocabType
+      ? this.findVocabIdsFts(value, " AND type = ?", [vocabType])
+      : this.findVocabIdsFts(value, "", []);
+  }
+
   /**
-   * Resolve a `creator` name string: authority labels ∪ person name variants ∪
-   * organisation/group alt-names. Labels alone miss natural-order queries for the
+   * Resolve a `creator` name string: person name variants ∪ organisation/group
+   * alt-names ∪ authority labels. Labels alone miss natural-order queries for the
    * majority of persons, whose labels are inverted ("Vermeer, Johannes"). When the
    * name reaches more than one actual creator, `warnings` names them.
    */
   private resolveCreatorIds(value: string, warnings?: string[]): string[] {
-    const ids = new Set(this.findVocabIdsFts(value, "", []));
+    const ids = new Set<string>();
     if (this.hasPersonNames) for (const id of this.findPersonIdsFts(value)) ids.add(id);
     if (this.hasEntityAltNames) for (const id of this.findOrgIdsFts(value)) ids.add(id);
+    // Once a name matched, skip the label fallback tiers: the LIKE tier scans the
+    // whole vocabulary table.
+    const phrase = escapeFts5(value);
+    const labelIds = ids.size === 0
+      ? this.findVocabIdsFts(value, CREATOR_LABEL_TYPES, [])
+      : phrase ? this.queryVocabFts(phrase, CREATOR_LABEL_TYPES, []) : [];
+    for (const id of labelIds) ids.add(id);
     const out = [...ids];
     if (warnings) {
       if (out.length === 0) {
@@ -5118,13 +5125,16 @@ export class VocabularyDb {
   private warnCreatorAmbiguity(value: string, ids: string[], warnings: string[]): void {
     const creatorFieldId = this.fieldIdMap.get("creator");
     if (creatorFieldId === undefined) return;
-    const ph = ids.map(() => "?").join(", ");
-    const creators = this.db!.prepare(
+    // json_each keeps one bound parameter however broad the name ("van" ≈ 25K ids);
+    // the LIMIT stops the EXISTS probes once the list would collapse to a count anyway.
+    this.stmtCreatorsAmong ??= this.db!.prepare(
       `SELECT v.id, v.label_en, v.label_nl, v.birth_year, v.death_year, v.vocab_int_id
        FROM vocabulary v
-       WHERE v.id IN (${ph})
-         AND EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)`
-    ).all(...ids, creatorFieldId) as {
+       WHERE v.id IN (SELECT value FROM json_each(?))
+         AND EXISTS (SELECT 1 FROM mappings m WHERE m.field_id = ? AND m.vocab_rowid = v.vocab_int_id)
+       LIMIT ?`
+    );
+    const creators = this.stmtCreatorsAmong.all(JSON.stringify(ids), creatorFieldId, CREATOR_AMBIGUITY_LIST_MAX + 1) as {
       id: string; label_en: string | null; label_nl: string | null;
       birth_year: number | null; death_year: number | null; vocab_int_id: number;
     }[];
@@ -5132,12 +5142,12 @@ export class VocabularyDb {
 
     const hint = "To restrict to one, pass its vocabId from search_persons as creator.";
     if (creators.length > CREATOR_AMBIGUITY_LIST_MAX) {
-      warnings.push(`creator:"${value}" matched ${creators.length} different creators; results combine all their works. ${hint}`);
+      warnings.push(`creator:"${value}" matched more than ${CREATOR_AMBIGUITY_LIST_MAX} different creators; results combine all their works. ${hint}`);
       return;
     }
-    const countStmt = this.db!.prepare(`SELECT COUNT(*) AS n FROM mappings WHERE field_id = ? AND vocab_rowid = ?`);
+    const counts = this.countCreatorWorks(creatorFieldId, creators.map(c => c.vocab_int_id));
     const described = creators
-      .map(c => ({ ...c, works: (countStmt.get(creatorFieldId, c.vocab_int_id) as { n: number }).n }))
+      .map(c => ({ ...c, works: counts.get(c.vocab_int_id) ?? 0 }))
       .sort((a, b) => b.works - a.works || a.id.localeCompare(b.id))
       .map(c => {
         const dates = c.birth_year != null || c.death_year != null
@@ -5145,6 +5155,17 @@ export class VocabularyDb {
         return `${c.label_en || c.label_nl} (${dates}vocabId ${c.id}; ${c.works} ${c.works === 1 ? "work" : "works"})`;
       });
     warnings.push(`creator:"${value}" matched ${creators.length} different creators; results combine their works: ${described.join(", ")}. ${hint}`);
+  }
+
+  /** Creator-mapped artwork count per vocab_int_id; ids without works are absent. */
+  private countCreatorWorks(creatorFieldId: number, intIds: number[]): Map<number, number> {
+    const ph = intIds.map(() => "?").join(", ");
+    const rows = this.db!.prepare(
+      `SELECT vocab_rowid, COUNT(*) AS cnt FROM mappings
+       WHERE field_id = ? AND vocab_rowid IN (${ph})
+       GROUP BY vocab_rowid`
+    ).all(creatorFieldId, ...intIds) as { vocab_rowid: number; cnt: number }[];
+    return new Map(rows.map(r => [r.vocab_rowid, r.cnt]));
   }
 
   private findPersonIdsFts(value: string): string[] {
@@ -5266,12 +5287,7 @@ export class VocabularyDb {
     const typeBindings: unknown[] = filter.vocabType ? [filter.vocabType] : [];
     const useFts = this.hasFts5 && filter.ftsUpgrade && filter.matchMode !== "notation";
 
-    if (useFts) {
-      if (filter.param === "creator") return this.resolveCreatorIds(String(value), warnings);
-      return filter.vocabType === "person" && this.hasPersonNames
-        ? this.findPersonIdsFts(String(value))
-        : this.findVocabIdsFts(String(value), typeClause, typeBindings);
-    }
+    if (useFts) return this.resolveFtsIds(filter.param, filter.vocabType, String(value), warnings);
 
     const { where, bindings: matchBindings } = this.buildVocabMatch(filter.matchMode, value);
     const rows = this.db!.prepare(
@@ -5388,6 +5404,17 @@ export class VocabularyDb {
       );
       skipParams.add("creator");
       skipParams.add("productionRole");
+    }
+
+    // Creator resolved above but bound by neither intercept: filter it here so the
+    // default loop doesn't resolve it (and repeat its warnings) a second time.
+    if (!skipParams.has("creator")) {
+      for (const ids of creatorIdsPerElement) {
+        const f = this.mappingFilterDirect(CREATOR_FILTER.fields, ids);
+        conditions.push(f.condition);
+        bindings.push(...f.bindings);
+      }
+      skipParams.add("creator");
     }
 
     return { skipParams, conditions, bindings };

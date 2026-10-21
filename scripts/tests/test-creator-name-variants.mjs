@@ -15,7 +15,9 @@
  *  6. An unrecognised name returns 0 with no recovery hint.
  *  7. The three resolution sites disagree: collection_stats, and the same-row
  *     intercept (productionRole + sameRowMatching), must resolve variants and carry
- *     the warning too — once, not duplicated.
+ *     the warning too — once, not duplicated, including when the qualifier
+ *     intercept falls through to the default loop after resolving the creator.
+ *  8. collection_stats replaces the creator's no-match hint with its generic line.
  *
  * Untested branch: more than CREATOR_AMBIGUITY_LIST_MAX creators collapses the
  * list to a count; the fixture has no name that broad.
@@ -96,6 +98,21 @@ try {
   check("shared variant → FX-4, FX-7", same(sameRowShared.objs, ["FX-4", "FX-7"]), `got ${sameRowShared.objs}`);
   check("warning carried exactly once", same(sameRowShared.warnings, [BOSSCHAERT_WARNING]),
     `got ${JSON.stringify(sameRowShared.warnings)}`);
+  // A qualifier absent from assignment_pairs makes the intercept fall through to the
+  // default loop after it has already resolved the creator.
+  const fallThrough = await search({ creator: "Ambrosius Bosschaert", attributionQualifier: "painter" });
+  check("qualifier fall-through → warning carried exactly once", same(fallThrough.warnings, [BOSSCHAERT_WARNING]),
+    `got ${JSON.stringify(fallThrough.warnings)}`);
+  const fallThroughStats = await call("collection_stats", { dimension: "type", creator: "Ambrosius Bosschaert", attributionQualifier: "painter" });
+  check("qualifier fall-through (stats) → warning carried exactly once",
+    (fallThroughStats.warnings ?? []).filter(w => w === BOSSCHAERT_WARNING).length === 1,
+    `got ${JSON.stringify(fallThroughStats.warnings)}`);
+
+  console.log("\n7c. collection_stats zero match keeps the resolver's hint");
+  const statsNone = await call("collection_stats", { dimension: "type", creator: "Hendrikus Avercampius" });
+  check("→ total 0 with the creator hint, exact text", statsNone.total === 0 && same(statsNone.warnings, [
+    'creator:"Hendrikus Avercampius" matched no artist or organisation name. Check the spelling, or look for candidates with search_persons.',
+  ]), `got ${statsNone.total} ${JSON.stringify(statsNone.warnings)}`);
 } catch (e) {
   console.error(e);
   failed++;
