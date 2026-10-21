@@ -92,6 +92,23 @@ const VOCAB = [
   ["v-dp-peter", "person", "Saint Peter", "Petrus", "saintpeter", "petrus", 130],
   ["v-dp-orange", "person", "William of Orange", "Willem van Oranje", "williamoforange", "willemvanoranje", 131],
   ["v-dp-maria", "person", "Maria", "Maria", "maria", "maria", 132],
+  // Creator name variants: inverted labels (the majority shape in the real DB) whose
+  // natural-order and alternate spellings live only in person_names; two Bosschaerts
+  // share the variant "Ambrosius Bosschaert".
+  ["v-avercamp", "person", "Avercamp, Hendrick", "Avercamp, Hendrick", "avercamp,hendrick", "avercamp,hendrick", 140],
+  ["v-bosschaert-i", "person", "Bosschaert, Ambrosius (I)", "Bosschaert, Ambrosius (I)", "bosschaert,ambrosius(i)", "bosschaert,ambrosius(i)", 141],
+  ["v-bosschaert-ii", "person", "Bosschaert, Ambrosius (II)", "Bosschaert, Ambrosius (II)", "bosschaert,ambrosius(ii)", "bosschaert,ambrosius(ii)", 142],
+  ["v-role-painter", "classification", "painter", "schilder", "painter", "schilder", 143],
+  // Namesake decoy (no mappings), like the real "Johannes Vermeer Prijs": a label phrase
+  // hit on it used to stop findVocabIdsFts before its order-insensitive fallback.
+  ["v-avercamp-prize", "classification", "Hendrick Avercamp Prize", "Hendrick Avercamp Prijs", "hendrickavercampprize", "hendrickavercampprijs", 144],
+];
+
+// id, birth_year, death_year — printed in the creator-ambiguity warning.
+const PERSON_DATES = [
+  ["v-avercamp", 1585, 1634],
+  ["v-bosschaert-i", 1573, 1621],
+  ["v-bosschaert-ii", 1609, 1645],
 ];
 
 // Iconclass notations (vocabulary.notation set) for the find_similar Iconclass channel
@@ -111,7 +128,7 @@ const ARTWORKS = [
   ["FX-1", 1, "The Night Watch Study", "Rembrandt van Rijn", "An oil study of a militia company.", "signatuur, rechtsonder: ‘Rembrandt f 1642’ | signature, lower right: ‘Rembrandt f 1642’", "Curatorial note on the militia study.", 100, 80, 1640, 1642, 1, 2, "iiif-fx-1"],
   ["FX-2", 2, "Winter Landscape with Skaters", "Hendrick Avercamp", "Villagers skating on a frozen river.", null, null, 50, 40, 1608, 1610, 0, 1, null],
   ["FX-3", 3, "Etching of a Windmill", "Anonymous", "A windmill beside a canal.", null, null, 20, 15, 1800, 1850, 1, 3, "iiif-fx-3"],
-  ["FX-4", 4, "Untitled Portrait", "Unknown", null, null, null, null, null, null, null, 1, 1, "iiif-fx-4"],
+  ["FX-4", 4, "Untitled Portrait", "Ambrosius Bosschaert (II)", null, null, null, null, null, null, null, 1, 1, "iiif-fx-4"],
   ["FX-5", 5, "Map of Amsterdam", "Anonymous", "A printed city map.", null, null, 30, 25, 1650, 1650, 0, 2, null],
   ["FX-6", 6, "Self-Portrait", "Rembrandt van Rijn", "The artist in later life.", "aetatis 54", null, 70, 55, 1660, 1660, 1, 2, "iiif-fx-6"],
   ["FX-7", 7, "Tulip Still Life", "Ambrosius Bosschaert", "A vase of tulips in a niche.", null, null, 45, 35, 1620, 1625, 1, 2, "iiif-fx-7"],
@@ -121,7 +138,7 @@ const ARTWORKS = [
 
 // artwork_id (art_id), vocab_rowid (vocab_int_id), field_id
 //   type=15 → paintings: FX-1,2,4,6,7 (5);  prints: FX-3,5,8 (3)
-//   material=6 → canvas on FX-1;  creator=4 → Rembrandt on FX-1,FX-6
+//   material=6 → canvas on FX-1;  creator=4 → Rembrandt on FX-1,FX-6 (+ name-variant persons below)
 //   subject=12 → Amsterdam depicted on FX-5
 const MAPPINGS = [
   [1, 101, 15], [1, 103, 6], [1, 104, 4],
@@ -133,6 +150,10 @@ const MAPPINGS = [
   [7, 101, 15],
   [8, 102, 15],
   [9, 110, 4], [9, 111, 4], [9, 112, 8], [9, 113, 8],
+  // Creator name variants: Avercamp on FX-2, Bosschaert (I) on FX-7, (II) on FX-4, each as painter.
+  [2, 140, 4], [2, 143, 8],
+  [7, 141, 4], [7, 143, 8],
+  [4, 142, 4], [4, 143, 8],
   // ── find_similar fixtures (plan 047) — subject field (12) ──
   // Iconclass overlap: FX-1 carries 25F23(len5) + 11H(len3). FX-2 shares both,
   // FX-7 shares only 25F23 (depth 5 ≥ MIN_SOLO_NOTATION_DEPTH → kept), FX-3 shares
@@ -156,6 +177,9 @@ const MAPPINGS = [
 const PRODUCTION_ROLE_PAIRS = [
   [9, "v-deadmaster", "v-role-afterpaint", 1],
   [9, "v-photog", "v-role-fotograaf", 0],
+  [2, "v-avercamp", "v-role-painter", 0],
+  [7, "v-bosschaert-i", "v-role-painter", 0],
+  [4, "v-bosschaert-ii", "v-role-painter", 0],
 ];
 
 const VERSION_INFO = [
@@ -219,6 +243,8 @@ export function buildFixture(filename = FIXTURE_DB_NAME) {
     "INSERT INTO vocabulary (id, type, label_en, label_nl, label_en_norm, label_nl_norm, vocab_int_id, notation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     ICONCLASS_VOCAB
   );
+  insertMany("UPDATE vocabulary SET birth_year = ?, death_year = ? WHERE id = ?",
+    PERSON_DATES.map(([id, born, died]) => [born, died, id]));
   insertMany(
     `INSERT INTO artworks
        (object_number, art_id, title, title_all_text, creator_label, description_text,
@@ -314,6 +340,12 @@ export function buildFixture(filename = FIXTURE_DB_NAME) {
     ["v-rembrandt", "Rijn, Rembrandt van", "nl", "inverted"],
     ["v-rembrandt", "Rembrandt Harmensz. van Rijn", "nl", "alternate"],
     ["v-rembrandt", "Rijn, Rembrandt van", "en", "former"],     // DUPLICATE name (diff lang) → must collapse to one
+    ["v-avercamp", "Hendrick Avercamp", "en", "display"],
+    ["v-avercamp", "Hendrik Avercamp", "nl", "alternate"],
+    ["v-bosschaert-i", "Ambrosius Bosschaert", "en", "display"],
+    ["v-bosschaert-i", "Ambrosius Bosschaert de Oude", "nl", "alternate"],
+    ["v-bosschaert-ii", "Ambrosius Bosschaert", "en", "display"],
+    ["v-bosschaert-ii", "Ambrosius Bosschaert de Jonge", "nl", "alternate"],
   ];
   insertMany(
     "INSERT INTO person_names (person_id, name, lang, classification) VALUES (?, ?, ?, ?)",

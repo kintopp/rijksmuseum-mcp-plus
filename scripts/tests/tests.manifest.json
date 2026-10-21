@@ -291,6 +291,16 @@
     ],
     "purpose": "Track-2 wirings end-to-end over stdio MCP (needs built dist/ + DB)"
   },
+  "test-creator-name-variants.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "creator name strings resolve through every recorded name variant and warn when they reach several creators, in search_artwork, collection_stats and the same-row intercept (fixture DB)"
+  },
   "test-creator-vocabid.mjs": {
     "category": "track2",
     "class": "smoke",
