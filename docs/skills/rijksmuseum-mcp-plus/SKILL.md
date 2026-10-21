@@ -3,8 +3,8 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, text-to-image search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.99"
-  last_updated: "2026-10-16"
+  version: "0.100"
+  last_updated: "2026-10-21"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -45,7 +45,7 @@ The tool descriptions already document every parameter and say which tool does w
 
 **Language and naming.**
 - Most titles are Dutch only; English titles exist mainly for prominent works. Report the title that exists rather than inventing a translation. Descriptions are Dutch; curatorial narratives (far fewer) are English. Some vocabulary only matches in Dutch (`fotograaf`, `Tweede Wereldoorlog`, theme labels, curated-set names).
-- Artists can be catalogued under historical forms ("Jheronimus Bosch"). A creator name string also merges every artist who shares it; a `vocabId` from `search_persons` names exactly one person.
+- A `creator` name matches every recorded variant of a person's name, in any order or historical spelling ("Vermeer, Johannes", "Hieronymus Bosch" for Jheronimus Bosch). It therefore also merges everyone who shares a variant: "Jan Vermeer" reaches Johannes Vermeer, Jan Vermeer van Haarlem and Jan van der Meer, and "Frans van Mieris" both generations. A warning lists the creators a name matched; a `vocabId` from `search_persons` names exactly one person. A zero for a named artist means the name was not recognised, not that the museum holds nothing by them; check it with `search_persons`.
 
 **Attribution is layered.**
 - `creator` alone matches anyone on any production row, so a master's name also pulls in prints and photographs made *after* them. Autograph scope means `creator` + a making `productionRole` + `sameRowMatching: true`. The making-role labels are `painter`, `draughtsman` and `print maker` (with a space). Tell the user which scope you applied.
