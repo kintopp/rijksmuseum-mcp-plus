@@ -301,7 +301,9 @@ async function runHttp(): Promise<void> {
     })
   );
   app.use(compression({ threshold: 1024 })); // gzip responses ≥ 1 KB (skips small payloads + base64 images)
-  app.use(express.json({ limit: "1mb" })); // explicit cap; /mcp bodies are small JSON-RPC requests
+  // explicit cap; /mcp bodies are small JSON-RPC requests. inflate: false rejects
+  // Content-Encoding'd bodies (415) so zlib/Brotli never decodes attacker input.
+  app.use(express.json({ limit: "1mb", inflate: false }));
 
   // ── MCP endpoint (stateless — no sessions, no SSE streams) ─────
   //

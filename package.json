@@ -4,7 +4,7 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=24.14.1 <25"
+    "node": ">=24.22.1 <25"
   },
   "main": "dist/index.js",
   "bin": {
@@ -51,7 +51,7 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "fast-xml-parser": "^5.3.5",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.5",
     "sqlite-vec": "0.1.9",
     "zod": "^4.4.0"
   },
