@@ -12,14 +12,10 @@
  * mirroring test-http-viewer-queues.mjs / test-inspect-navigate.mjs. Argument handling and
  * rendering are covered offline by the gate tests test-cli-usage.mjs / test-cli-render.mjs.
  */
-import { execFile } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { runCli as runCliChild, jsonlRows } from "./cli-fixture.mjs";
 import { existsSync, statSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
-const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const CLI = path.join(PROJECT_ROOT, "scripts", "cli.mjs");
 
 let passed = 0;
 let failed = 0;
@@ -32,21 +28,7 @@ function section(name) {
   console.log(`\n${"═".repeat(60)}\n  ${name}\n${"═".repeat(60)}`);
 }
 
-/** Run the CLI; resolve with {code, stdout, stderr} (never rejects). */
-function runCli(args, timeout = 90000) {
-  // These are stdio smoke tests. Strip RIJKS_MCP_HTTP (the docs recommend exporting it, so it's
-  // commonly set in dev shells / agents) so an exported Railway URL can't hijack the stdio path.
-  // Tests that need HTTP pass --http explicitly, which overrides the env var inside the CLI.
-  const { RIJKS_MCP_HTTP, ...env } = process.env;
-  return new Promise((resolve) => {
-    execFile("node", [CLI, ...args], { cwd: PROJECT_ROOT, timeout, maxBuffer: 64 * 1024 * 1024, env },
-      (err, stdout, stderr) => {
-        resolve({ code: err?.code ?? 0, killed: !!err?.killed, stdout: stdout ?? "", stderr: stderr ?? "" });
-      });
-  });
-}
-
-const jsonlRows = (s) => s.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const runCli = (args, timeout = 90000) => runCliChild(args, { timeout });
 
 // ── 1. tools --json (capabilities dump; excludes viewer tools) ──────────────────
 section("1. tools --json");
@@ -83,7 +65,7 @@ section("3. search --query tulip --max 3 --fields objectNumber,title");
   let rows = [];
   try { rows = jsonlRows(r.stdout); } catch { /* fail below */ }
   assert(rows.length >= 1 && rows.length <= 3, `1–3 JSONL rows (got ${rows.length})`);
-  assert(rows.every((row) => "objectNumber" in row), "each row is valid JSON with objectNumber");
+  assert(rows.every((row) => row && "objectNumber" in row), "each row is valid JSON with objectNumber");
   assert(/\bshown\b/.test(r.stderr), "stderr carries a count/pagination summary");
 }
 
@@ -238,7 +220,7 @@ section("14. inscriptions --transcribedText Rembrandt");
   let rows = [];
   try { rows = jsonlRows(r.stdout); } catch { /* fail below */ }
   assert(rows.length >= 1 && rows.length <= 3, `1–3 JSONL rows (got ${rows.length})`);
-  assert(rows.every((row) => "objectNumber" in row), "each row is valid JSON with objectNumber");
+  assert(rows.every((row) => row && "objectNumber" in row), "each row is valid JSON with objectNumber");
   assert(/\bshown\b/.test(r.stderr), "stderr carries a count/pagination summary");
 }
 

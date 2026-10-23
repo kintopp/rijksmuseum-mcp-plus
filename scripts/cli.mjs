@@ -45,14 +45,14 @@ class UsageError extends Error {}
 // `total`= key holding the count used for the pagination summary.
 // `page` = "offset" (maxResults+offset), "token" (resumptionToken) or "full" (first few, --full for all).
 // `cap` = the tool's result-cap param that --max/-n resolves to; absent → --max is a usage error.
-// `alt` = list key the tool fills instead of `list` in some modes (search compact, provenance credit lines).
+// `alt` = {param: list key} — when that param is sent, rows come back under that key instead of `list`.
 // `aside` = top-level keys outside the rows, which neither JSONL nor --fields can reach.
 const VERBS = {
-  search:       { tool: "search_artwork",        pos: "query",        list: "results",  total: "totalResults",  page: "offset", cap: "maxResults", alt: "ids", aside: ["facets"] },
+  search:       { tool: "search_artwork",        pos: "query",        list: "results",  total: "totalResults",  page: "offset", cap: "maxResults", alt: { compact: "ids" }, aside: ["facets"] },
   semantic:     { tool: "semantic_search",       pos: "query",        list: "results",  total: "returnedCount", page: "offset", cap: "maxResults" },
   multimodal:   { tool: "multimodal_search",     pos: "query",        list: "results",  total: "returnedCount", page: "offset", cap: "maxResults" },
   persons:      { tool: "search_persons",        pos: "name",         list: "persons",  total: "totalResults",  page: "offset", cap: "maxResults" },
-  provenance:   { tool: "search_provenance",     pos: "party",        list: "results",  total: "totalArtworks", page: "offset", cap: "maxResults", alt: "creditLineResults", aside: ["facets"] },
+  provenance:   { tool: "search_provenance",     pos: "party",        list: "results",  total: "totalArtworks", page: "offset", cap: "maxResults", alt: { creditLineQuery: "creditLineResults" }, aside: ["facets"] },
   inscriptions: { tool: "search_inscriptions",   pos: "text",         list: "results",  total: "totalConfirmed", page: "offset", cap: "maxResults" },
   details:      { tool: "get_artwork_details",   pos: "objectNumber", single: true },
   conservation: { tool: "get_conservation_history", pos: "objectNumber", single: true },
@@ -242,7 +242,7 @@ function boolSetFor(schema) {
 
 // A value flag with no value: name the flag if it exists, else treat it as the typo it is.
 function missingValueError(key, verb, props) {
-  if (key === "max" || GLOBAL_VALUE.has(key) || resolveKey(key, props) in props) {
+  if (PRESCAN_VALUE.has(key) || resolveKey(key, props) in props) {
     return new UsageError(`--${key} expects a value (see \`rijks-mcp ${verb} --help\`)`);
   }
   return unknownFlagError(key, verb, props);
@@ -298,11 +298,11 @@ function validateToolArgs(verb, schema, args) {
 
 // ── Transport / connection ───────────────────────────────────────────────────
 // The stdio server's stderr is piped, not inherited, so its startup logs don't mix into ours
-// (where counts and notes go). The last lines are kept so a failed connect or tool call can
-// show the server's own diagnosis.
+// (where counts and notes go). The last lines are kept so a failed connect or a thrown call
+// (transport failure, server crash) can show the server's own diagnosis.
 const SERVER_LOG_KEEP = 200;
 const serverLog = [];
-let serverLogSeq = 0;
+let serverLogSeq = 0; // lines ever logged; serverLog holds the last SERVER_LOG_KEEP of them
 
 async function connect(httpUrl) {
   const transport = httpUrl
@@ -322,7 +322,8 @@ async function connect(httpUrl) {
     partial = parts.pop();
     for (const line of parts) {
       if (!line.trim()) continue;
-      serverLog.push({ seq: ++serverLogSeq, line });
+      serverLog.push(line);
+      serverLogSeq++;
       if (serverLog.length > SERVER_LOG_KEEP) serverLog.shift();
     }
   });
@@ -330,25 +331,21 @@ async function connect(httpUrl) {
   try {
     await client.connect(transport);
   } catch (err) {
-    const tail = serverLog.map((l) => l.line).join("\n");
+    const tail = serverLog.join("\n");
     throw new Error(tail ? `${err?.message ?? err}\n${tail}` : (err?.message ?? String(err)), { cause: err });
   }
   return client;
 }
 
 // Server log lines above info level written after `since` (a serverLogSeq mark), as
-// `server <level>: <message> — <error>`, minus any whose error the caller already shows
-// (`known`). Waits briefly: stderr can trail the JSON-RPC response.
-async function serverProblemsSince(since, known = "") {
-  await new Promise((r) => setTimeout(r, 50));
+// `server <level>: <message> — <error>`.
+function serverProblemsSince(since) {
+  const n = Math.min(serverLogSeq - since, serverLog.length);
   const out = [];
-  for (const { seq, line } of serverLog) {
-    if (seq <= since) continue;
-    let rec = null;
-    try { rec = JSON.parse(line); } catch { /* plain text line */ }
+  for (const line of n > 0 ? serverLog.slice(-n) : []) {
+    const rec = safeParseJson(line);
     if (rec && typeof rec === "object") {
       if (rec.level === "info" || rec.level === "debug") continue;
-      if (rec.error && known.includes(rec.error)) continue;
       out.push(`server ${rec.level ?? "log"}: ${rec.message ?? line}${rec.error ? ` — ${rec.error}` : ""}`);
     } else {
       out.push(`server: ${line}`);
@@ -357,21 +354,20 @@ async function serverProblemsSince(since, known = "") {
   return out;
 }
 
-// One tool call; on failure, append the server's own warn/error log lines (stdio only).
+// One tool call. An isError result already carries the diagnosis (the server logs that same
+// text), so only a thrown failure gets the server's warn/error lines appended (stdio only).
 async function callWithDiagnosis(client, name, args) {
   const mark = serverLogSeq;
   try {
-    const res = await client.callTool({ name, arguments: args });
-    if (res.isError) res.serverProblems = await serverProblemsSince(mark, textOf(res));
-    return res;
+    return await client.callTool({ name, arguments: args });
   } catch (err) {
-    const problems = await serverProblemsSince(mark);
+    // stderr can trail the failure; give it a moment, but only when a server is piping it.
+    if (serverLogSeq) await new Promise((r) => setTimeout(r, 50));
+    const problems = serverProblemsSince(mark);
     if (problems.length) err.message = `${err?.message ?? err}\n${problems.join("\n")}`;
     throw err;
   }
 }
-
-const errorText = (res) => [textOf(res), ...(res.serverProblems ?? [])].join("\n");
 
 // ── Result helpers ─────────────────────────────────────────────────────────────
 const textOf = (res) => (res.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
@@ -404,9 +400,10 @@ function renderTable(rows, fields) {
 
 function paginationSummary(verbCfg, data, list, flags) {
   const parts = [];
+  const total = verbCfg.total ? data[verbCfg.total] : undefined;
+  const ofTotal = typeof total === "number" ? ` of ${total}` : "";
   if (verbCfg.page === "offset") {
     const offset = Number(flags.offset ?? 0) || 0;
-    const total = verbCfg.total ? data[verbCfg.total] : undefined;
     if (typeof total === "number") {
       parts.push(`${list.length} shown (offset ${offset}) of ${total}`);
       if (list.length && offset + list.length < total) parts.push(`pass --offset ${offset + list.length} for more`);
@@ -414,12 +411,10 @@ function paginationSummary(verbCfg, data, list, flags) {
       parts.push(`${list.length} shown (offset ${offset})`);
     }
   } else if (verbCfg.page === "full") {
-    const total = data[verbCfg.total];
-    parts.push(`${list.length} shown${typeof total === "number" ? ` of ${total}` : ""}`);
+    parts.push(`${list.length} shown${ofTotal}`);
     if (typeof total === "number" && list.length < total) parts.push("pass --full for all");
   } else if (verbCfg.page === "token") {
-    const total = verbCfg.total ? data[verbCfg.total] : undefined;
-    parts.push(`${list.length} shown${typeof total === "number" ? ` of ${total}` : ""}`);
+    parts.push(`${list.length} shown${ofTotal}`);
     if (data.resumptionToken) parts.push(`pass --resumption-token ${data.resumptionToken} for more`);
   } else {
     parts.push(`${list.length} shown`);
@@ -427,11 +422,10 @@ function paginationSummary(verbCfg, data, list, flags) {
   return parts.join("; ");
 }
 
-// The row list: `alt` replaces `list` when the tool filled it instead (search --compact → ids,
-// provenance --creditLineQuery → creditLineResults).
-function listKeyOf(verbCfg, data) {
-  if (verbCfg.alt && Array.isArray(data[verbCfg.alt]) && data[verbCfg.alt].length && !data[verbCfg.list]?.length) {
-    return verbCfg.alt;
+// The row list, chosen by the request: `alt` maps a mode param to the key its rows come under.
+function listKeyOf(verbCfg, data, toolArgs) {
+  for (const [param, key] of Object.entries(verbCfg.alt ?? {})) {
+    if (toolArgs[param]) return key;
   }
   return verbCfg.list ?? Object.keys(data).find((k) => Array.isArray(data[k]));
 }
@@ -448,10 +442,6 @@ function resultNotes(verbCfg, data, listKey) {
   if (data.candidatesCapped === true) {
     notes.push(`partial — only the first window of ${fmtCount(data.totalCandidates)} text candidates was parsed, `
       + `so ${fmtCount(data.totalConfirmed)} confirmed is a lower bound; add a narrowing term`);
-  }
-  if (data.autoCompacted === true) {
-    notes.push("rows are compact summaries — the full result exceeded the response-size limit; "
-      + "lower --max (≤10) or pass --objectNumber for full event chains");
   }
   if (listKey === "creditLineResults") {
     notes.push("rows are credit-line matches (how the museum acquired the work), not parsed provenance");
@@ -475,7 +465,7 @@ function resultNotes(verbCfg, data, listKey) {
 }
 
 // ── Output rendering ─────────────────────────────────────────────────────────
-function renderResult(res, verbCfg, flags) {
+function renderResult(res, verbCfg, flags, toolArgs) {
   const fields = flags.fields ? String(flags.fields).split(",").map((s) => s.trim()).filter(Boolean) : null;
   const data = res.structuredContent ?? safeParseJson(textOf(res));
   const quiet = flags.quiet === true;
@@ -522,7 +512,7 @@ function renderResult(res, verbCfg, flags) {
   }
 
   // List tools → JSONL (default) or table.
-  const listKey = listKeyOf(verbCfg, data);
+  const listKey = listKeyOf(verbCfg, data, toolArgs);
   const list = Array.isArray(data[listKey]) ? data[listKey] : [];
   if (flags.table === true) {
     // Compact ids are bare strings; give them a column so the table has something to show.
@@ -809,8 +799,8 @@ async function main() {
         }
         try {
           const res = await callWithDiagnosis(client, cfg.tool, toolArgs);
-          if (res.isError) { process.stderr.write(`[${line}] ${errorText(res)}\n`); failures++; continue; }
-          renderResult(res, cfg, flags);
+          if (res.isError) { process.stderr.write(`[${line}] ${textOf(res)}\n`); failures++; continue; }
+          renderResult(res, cfg, flags, toolArgs);
         } catch (err) {
           process.stderr.write(`[${line}] Error: ${err?.message ?? err}\n`);
           failures++;
@@ -833,11 +823,11 @@ async function main() {
 
     const res = await callWithDiagnosis(client, cfg.tool, toolArgs);
     if (res.isError) {
-      process.stderr.write(errorText(res) + "\n");
+      process.stderr.write(textOf(res) + "\n");
       process.exitCode = 1;
       return;
     }
-    renderResult(res, cfg, flags);
+    renderResult(res, cfg, flags, toolArgs);
   } catch (err) {
     process.stderr.write(`Error: ${err?.message ?? err}\n`);
     process.exitCode = err instanceof UsageError ? 2 : 1;

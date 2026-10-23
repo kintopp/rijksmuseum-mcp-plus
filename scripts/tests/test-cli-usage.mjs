@@ -16,7 +16,7 @@
  *
  * Run:  node scripts/tests/test-cli-usage.mjs   (needs npm run build)
  */
-import { fixtureCli } from "./cli-fixture.mjs";
+import { fixtureCli, parseJson as parse } from "./cli-fixture.mjs";
 
 const cli = fixtureCli("cli-usage");
 
@@ -26,19 +26,25 @@ function check(cond, msg) {
   if (cond) { passed++; console.log(`  ✓ ${msg}`); }
   else { failed++; console.log(`  ✗ ${msg}`); }
 }
-const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
 const DEAD = ["--http", "http://127.0.0.1:1/mcp"];
 
 console.log("\nCLI usage tests (fixture server)\n");
 
 // ── Static paths: no server ────────────────────────────────────────────────────
+// The tools manifest is read once (one server start) and reused below.
+const [r0, v, u, compact] = await Promise.all([
+  cli([...DEAD, "--help"]),
+  cli([...DEAD, "stats", "--help"]),
+  cli(["frobnicate"]),
+  cli(["tools", "--compact"]),
+]);
+const manifestAll = parse(compact.stdout) ?? [];
+// Tools absent from this server (Gemma-gated) come back with empty args.
+const manifest = manifestAll.filter((m) => Object.keys(m.args).length);
 {
-  const r = await cli([...DEAD, "--help"]);
-  check(r.code === 0 && /Usage: rijks-mcp/.test(r.stdout) && !/Connection failed/.test(r.stderr), "top-level --help renders without a server");
-  const v = await cli([...DEAD, "stats", "--help"]);
+  check(r0.code === 0 && /Usage: rijks-mcp/.test(r0.stdout) && !/Connection failed/.test(r0.stderr), "top-level --help renders without a server");
   check(v.code === 0 && /stats → collection_stats/.test(v.stdout) && /Aliases:  --max, -n  → topN/.test(v.stdout),
     "per-command --help degrades without a server and names the verb's own cap");
-  const u = await cli(["frobnicate"]);
   check(u.code === 2 && /^Unknown command: frobnicate/.test(u.stderr), "unknown command → exit 2");
 }
 
@@ -60,12 +66,9 @@ console.log("\nCLI usage tests (fixture server)\n");
 
 // Every verb's cap must be a real param of its tool (tools --compact reports it as `max`).
 {
-  const r = await cli(["tools", "--compact"]);
-  // Tools absent from this server (Gemma-gated) come back with empty args; skip them.
-  const manifest = (parse(r.stdout) ?? []).filter((m) => Object.keys(m.args).length);
   const bad = manifest.filter((m) => m.max && !(m.max in m.args)).map((m) => `${m.verb}:${m.max}`);
   const capped = manifest.filter((m) => m.max).length;
-  check(r.code === 0 && capped >= 8 && bad.length === 0, `every --max target is a schema param (${capped} capped verbs; bad: ${bad.join(", ") || "none"})`);
+  check(compact.code === 0 && capped >= 8 && bad.length === 0, `every --max target is a schema param (${capped} capped verbs; bad: ${bad.join(", ") || "none"})`);
   const stats = manifest.find((m) => m.verb === "stats");
   check(stats?.max === "topN", "tools --compact reports stats' cap as topN");
 }
@@ -119,9 +122,8 @@ function exampleArgv(line) {
   return [...cmd.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]);
 }
 {
-  const tools = parse((await cli(["tools", "--compact"])).stdout) ?? [];
-  const registered = new Set(tools.filter((t) => Object.keys(t.args).length).map((t) => t.verb));
-  const verbs = tools.map((t) => t.verb);
+  const registered = new Set(manifest.map((t) => t.verb));
+  const verbs = manifestAll.map((t) => t.verb);
   check(verbs.length >= 14, `tools --compact lists the verbs (${verbs.length})`);
   // Each spawn starts a server, so run them a few at a time; report in verb order.
   const results = new Array(verbs.length);

@@ -7,14 +7,14 @@
  *   - stdout stops being pure JSONL (a summary, note or server log line lands there).
  *   - the server's own startup log leaks into the CLI's stderr.
  *   - a mode that fills a different list key (search --compact → ids) renders as
- *     "0 shown … pass --offset 0".
+ *     "0 shown … pass --offset 0"; the key must follow the request, not which array is non-empty.
  *   - a capped/partial/multi-valued result reads as complete: the text-channel caveat is
  *     not restated as a `note:` line.
  *   - --quiet / --json / --fields / --table / --stdin contracts drift.
  *
  * Run:  node scripts/tests/test-cli-render.mjs   (needs npm run build)
  */
-import { fixtureCli } from "./cli-fixture.mjs";
+import { fixtureCli, parseJson as parse, jsonlRows as jsonl } from "./cli-fixture.mjs";
 
 const cli = fixtureCli("cli-render");
 
@@ -24,8 +24,6 @@ function check(cond, msg) {
   if (cond) { passed++; console.log(`  ✓ ${msg}`); }
   else { failed++; console.log(`  ✗ ${msg}`); }
 }
-const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
-const jsonl = (s) => s.trim().split("\n").filter(Boolean).map(parse);
 
 console.log("\nCLI render tests (fixture server)\n");
 
@@ -41,6 +39,7 @@ const [list, quiet, json, table, compact, single, bib, stats, batch, batchFail] 
   cli(["details", "--stdin", "--fields", "objectNumber"], { input: "FX-1\n# comment\n\nFX-2\n" }),
   cli(["details", "--stdin", "--fields", "objectNumber"], { input: "FX-1\nNOPE\n" }),
 ]);
+const creditLine = await cli(["provenance", "--creditLineQuery", "zzzunmatched", "--quiet"]);
 
 // ── List tool → JSONL + stderr summary ─────────────────────────────────────────
 check(list.code === 0 && JSON.stringify(jsonl(list.stdout)) === '[{"objectNumber":"FX-1"},{"objectNumber":"FX-6"}]',
@@ -69,6 +68,14 @@ check(quiet.code === 0 && quiet.stderr === "" && quiet.stdout === list.stdout, "
 check(compact.code === 0 && JSON.stringify(jsonl(compact.stdout)) === '["FX-1","FX-2"]',
   "search --compact renders its ids as JSONL rows");
 check(compact.stderr === "2 shown (offset 0) of 5; pass --offset 2 for more\n", "…and counts them, not the empty results list");
+
+check(creditLine.code === 0 && creditLine.stdout === "" && creditLine.stderr === "",
+  "--quiet also drops notes (empty credit-line result)");
+{
+  const loud = await cli(["provenance", "--creditLineQuery", "zzzunmatched"]);
+  check(/^note: rows are credit-line matches/m.test(loud.stderr),
+    "the list key follows the request: an empty credit-line result is still labelled as credit-line");
+}
 
 // ── Single-object tool ─────────────────────────────────────────────────────────
 check(single.code === 0 && single.stdout === '{"objectNumber":"FX-1","title":"The Night Watch Study"}\n',
