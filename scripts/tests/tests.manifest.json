@@ -845,5 +845,25 @@
       "dist"
     ],
     "purpose": "GemmaDb two-stage search (MRL-prefix scan + exact rescore) and legacy vec0 layout vs brute-force cosine on a seeded synthetic gemma.db"
+  },
+  "test-cli-usage.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "CLI argument handling, help and exit codes against a fixture-DB server (no tool calls)"
+  },
+  "test-cli-render.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "CLI output rendering (JSONL/table/json/stdin/notes) over the real stdio chain on the fixture DB"
   }
 }

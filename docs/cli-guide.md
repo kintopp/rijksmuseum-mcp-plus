@@ -92,11 +92,18 @@ don't recur for its lifetime, which is why HTTP is still the better choice for r
 |---|---|
 | Result rows (list tools) | **stdout**, one JSON object per line (JSONL) |
 | Single-object results (`details`, `similar`, `inspect` metadata) | **stdout**, one compact JSON object |
-| Count + pagination hint + `warnings` | **stderr** |
-| Server diagnostics (DB banner, per-tool log line) — *stdio mode only* | **stderr** |
+| Count + pagination hint + `note:` lines + `warnings` | **stderr** |
+| Server warn/error log lines for a failed call — *stdio mode only* | **stderr** |
 
-Server diagnostics appear on stderr only in stdio mode (the subprocess inherits stderr). Under
-`--http` they stay on the server, so stderr carries just the CLI's own summary line.
+**`note:` lines** restate caveats that the tool's text summary carries but JSONL rows can't: a
+capped or partial total (`search_provenance`, `search_inscriptions`), compact summaries returned in
+place of full chains, credit-line matches that aren't parsed provenance, artworks that fall in no
+`stats` bucket, multi-valued `stats` dimensions, and top-level keys such as `facets` that sit
+outside the rows (pass `--json` to read them).
+
+In stdio mode the server's own log is captured, not passed through: a successful call leaves stderr
+to the CLI. When a call or the connection fails, the server's warn/error lines from that call are
+appended to the error (skipping any that only repeat it).
 
 ### Output flags
 
@@ -106,7 +113,7 @@ Server diagnostics appear on stderr only in stdio mode (the subprocess inherits 
 | `--json` | Print the entire `structuredContent` payload, pretty-printed (verbatim — no list-splitting, no projection) |
 | `--table` | Terse human-readable table (opt-in) |
 | `--fields a,b,c` | Project to these top-level keys on every emitted object — the biggest token saver |
-| `--quiet` | Suppress the stderr summary line |
+| `--quiet` | Suppress the stderr summary and `note:` lines |
 | `-o` / `-h` | Short aliases for `--out` and `--help` |
 
 **Flag spelling.** Tool parameters are camelCase, but you may write them in kebab-case: `--resumption-token` and `--resumptionToken` are equivalent, as are `--include-extent-text` and `--includeExtentText`. The kebab form is resolved only when the camelCase name is a real parameter of that command, so CLI-owned flags like `--show-call` are never mistaken for tool arguments.
@@ -119,7 +126,7 @@ $ node scripts/cli.mjs search --creator "Rembrandt van Rijn" --type painting --m
 # (on stderr)  2 shown (offset 0) of 34; pass --offset 2 for more
 
 # Table for eyeballing
-$ node scripts/cli.mjs stats type --topN 5 --fields label,count --table
+$ node scripts/cli.mjs stats type --max 5 --fields label,count --table
 label                  count
 ---------------------  ------
 print                  369054
@@ -135,7 +142,7 @@ carte-de-visite        17979
 |---|---|
 | `0` | Success |
 | `1` | Tool error or connection failure (the server's prose error — e.g. "no results; try the Dutch term" — is written to stderr) |
-| `2` | Usage error — unknown command, an out-of-scope viewer tool, or a malformed flag *value* (e.g. invalid `--textQuery` JSON). A flag the schema rejects is a **tool** error, so it exits `1`, not `2`. |
+| `2` | Usage error — unknown command, an out-of-scope viewer tool, an unknown flag (with a "Did you mean" hint for punctuation/case slips), a missing required parameter, a flag with no value, an extra positional, `--max` on a command with no cap, or a malformed JSON value. These are checked against the live schema before the call, so `--show-call` also rejects them. A flag the schema knows but whose *value* it rejects (e.g. an unknown `stats` dimension) is a **tool** error, exit `1`. |
 
 ### Batch mode (`--stdin`)
 
@@ -174,19 +181,19 @@ hanging on the keyboard).
   Pass them as a single JSON literal — `--textQuery '{"must":[…]}'` — which the CLI parses before
   sending. `--help` shows these as `<json>`; malformed JSON is a usage error (exit 2) naming the flag.
 
-### The `--max` alias caveat
+### `--max` maps to each command's own cap
 
-`--max` (and `-n`) is a convenience alias for `maxResults`, which **most** commands use. Several
-commands cap differently — using `--max` there is rejected by the strict schema (you'll get an
-empty stdout + a tool error on stderr, exit 1):
+`--max` (and `-n`) resolves to whichever parameter caps that command's results: `topN` for `stats`,
+`maxResults` for every other capped command. Commands without a cap reject it as a usage error
+(exit 2):
 
-| Command | Use this for the result cap |
+| Command | Result cap |
 |---|---|
-| `stats` | `--topN <n>` |
-| `list-sets` | `--minMembers` / `--maxMembers` (no direct cap) |
-| `bibliography`, `citing` | `--full` (first 5 / first 20 plus a total by default) |
-| `details`, `conservation`, `inspect` | no cap — single-object lookups |
-| everything else | `--max` / `--maxResults` |
+| `stats` | `--max` → `topN` |
+| `list-sets` | none — narrow with `--query` / `--minMembers` / `--maxMembers` |
+| `bibliography`, `citing` | none — `--full` returns all (first 5 / first 20 plus a total by default) |
+| `details`, `conservation`, `inspect` | none — single-object lookups |
+| everything else | `--max` → `maxResults` |
 
 When in doubt, `node scripts/cli.mjs <command> --help` lists the real flags (generated from the
 live schema, so it never drifts).
@@ -207,8 +214,8 @@ node scripts/cli.mjs <command> --show-call # print the resolved {tool, arguments
 ```
 
 `tools --compact` is the agent bootstrap — a small JSON manifest (one entry per tool: `verb`, `tool`,
-`positional`, `result` shape, optional `page` mode, and `args` as name→type, with a trailing `!`
-marking required args). It's the CLI equivalent of MCP `tools/list` but ~30× smaller than
+`positional`, `result` shape, optional `page` mode, optional `max` (the parameter `--max` maps to),
+and `args` as name→type, with a trailing `!` marking required args). It's the CLI equivalent of MCP `tools/list` but ~30× smaller than
 `tools --json`, which dumps every tool's full input *and* output JSON Schema — reserve that for deep
 introspection. Both derive from the live schema, so neither drifts from the server.
 
@@ -219,6 +226,7 @@ $ node scripts/cli.mjs tools --compact | jq '.[] | select(.tool=="find_similar")
   "tool": "find_similar",
   "positional": "objectNumber",
   "result": "single",
+  "max": "maxResults",
   "args": { "objectNumber": "string!", "maxResults": "number", ... }
 }
 ```
@@ -245,6 +253,7 @@ $ node scripts/cli.mjs --show-call search --query "tulip" --type print --max 10
 |---|---|---|---|---|---|
 | `search` | `search_artwork` | `query` | `--max` | `results` | offset |
 | `semantic` | `semantic_search` | `query` | `--max` | `results` | offset |
+| `multimodal` | `multimodal_search` | `query` | `--max` | `results` | offset |
 | `persons` | `search_persons` | `name` | `--max` | `persons` | offset |
 | `provenance` | `search_provenance` | `party` | `--max` | `results` | offset |
 | `inscriptions` | `search_inscriptions` | `text` | `--max` | `results` | offset |
@@ -252,7 +261,7 @@ $ node scripts/cli.mjs --show-call search --query "tulip" --type print --max 10
 | `bibliography` | `get_artwork_bibliography` | `objectNumber` | `--full` | `entries` | — |
 | `citing` | `find_artworks_citing_publication` | `publication` | `--full` | `artworks` | — |
 | `conservation` | `get_conservation_history` | `objectNumber` | — (single) | — | — |
-| `stats` | `collection_stats` | `dimension` | `--topN` | `entries` | offset |
+| `stats` | `collection_stats` | `dimension` | `--max` (→ `topN`) | `entries` | offset |
 | `similar` | `find_similar` | `objectNumber` | `--max` | — (single) | — |
 | `browse-set` | `browse_set` | `setSpec` | `--max` | `records` | token |
 | `list-sets` | `list_curated_sets` | — | — | `sets` | — |
@@ -419,7 +428,7 @@ carry 100+).
 $ node scripts/cli.mjs bibliography SK-C-5 --fields sequence,citation
 {"sequence":1,"citation":"Anne Lenders, 'Short notice. The Dog in The Night Watch ...', The Rijksmuseum Bulletin 73 (2025) nr. 3, p. 212-223."}
 ...
-# stderr: 5 shown
+# stderr: 5 shown of 111; pass --full for all
 
 # All entries; pull just the linked-publication URIs
 node scripts/cli.mjs bibliography SK-C-5 --full --json | jq -r '.entries[].publicationUri | select(. != null)'
@@ -442,7 +451,7 @@ a `total` count; `--full` returns all.
 $ node scripts/cli.mjs citing https://id.rijksmuseum.nl/301154354 --fields objectNumber,title,creator
 {"objectNumber":"RP-P-OB-20.603","title":"Portret van dr. Gachet","creator":"Vincent van Gogh"}
 ...
-# stderr: 19 shown
+# stderr: 19 shown of 19
 
 # The bare id works too
 node scripts/cli.mjs citing 301154354 --full --fields objectNumber,creator
@@ -482,7 +491,7 @@ Aggregate counts/distributions across a dimension. **Cap with `--topN`, not `--m
 provenance dimensions; filters compose (`--type`, `--creator`, `--productionPlace`, …).
 
 ```bash
-$ node scripts/cli.mjs stats type --topN 5 --fields label,count --table
+$ node scripts/cli.mjs stats type --max 5 --fields label,count --table
 label                  count
 ---------------------  ------
 print                  369054
@@ -611,7 +620,7 @@ Because lists are JSONL on stdout, the usual Unix tools compose:
 
 ```bash
 # Top 10 object types as a count table
-node scripts/cli.mjs stats type --topN 10 --fields label,count | jq -r '[.label, .count] | @tsv'
+node scripts/cli.mjs stats type --max 10 --fields label,count | jq -r '[.label, .count] | @tsv'
 
 # All Rembrandt paintings' object numbers, one per line
 node scripts/cli.mjs search --creator 2103429 --type painting --max 50 --fields objectNumber \
@@ -700,7 +709,7 @@ The CLI uses the same `callTool` and returns the same rows the AI assistant sees
 | Symptom | Cause / fix |
 |---|---|
 | `Connection failed … run npm run build …` | stdio path needs a built `dist/` and the DBs in `data/`. Build first, or use `--http <url>`. |
-| Empty stdout + an error on stderr | The strict schema rejected a flag (e.g. `--max` on `stats` — use `--topN`; or an unknown flag). Check `<verb> --help`. |
+| Exit 2 with `--x is not a flag for "<verb>"` | Typo or wrong command; the message suggests the nearest flag and lists the real ones. Check `<verb> --help`. |
 | `Unknown command … (viewer/stateful tool — not available over the CLI)` | The viewer tools aren't exposed over the CLI by design. |
 | First `semantic`/`similar`/`list-sets` call is slow | Expected on either transport — those build lazily on first use (~8–9 s). An `--http` server avoids it only once it has already served one such call. |
 | No `structuredContent` over `--http` | The target server has `STRUCTURED_CONTENT=false`. The CLI falls back to printing the text channel; re-enable structured output on the server for JSON. |

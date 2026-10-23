@@ -43,23 +43,26 @@ class UsageError extends Error {}
 // `pos`  = which input param the first positional maps to.
 // `list` = key in structuredContent holding the result array (list tools).
 // `total`= key holding the count used for the pagination summary.
-// `page` = "offset" (maxResults+offset) or "token" (resumptionToken).
+// `page` = "offset" (maxResults+offset), "token" (resumptionToken) or "full" (first few, --full for all).
+// `cap` = the tool's result-cap param that --max/-n resolves to; absent → --max is a usage error.
+// `alt` = list key the tool fills instead of `list` in some modes (search compact, provenance credit lines).
+// `aside` = top-level keys outside the rows, which neither JSONL nor --fields can reach.
 const VERBS = {
-  search:       { tool: "search_artwork",        pos: "query",        list: "results",  total: "totalResults",  page: "offset" },
-  semantic:     { tool: "semantic_search",       pos: "query",        list: "results",  total: "returnedCount", page: "offset" },
-  multimodal:   { tool: "multimodal_search",     pos: "query",        list: "results",  total: "returnedCount", page: "offset" },
-  persons:      { tool: "search_persons",        pos: "name",         list: "persons",  total: "totalResults",  page: "offset" },
-  provenance:   { tool: "search_provenance",     pos: "party",        list: "results",  total: "totalArtworks", page: "offset" },
-  inscriptions: { tool: "search_inscriptions",   pos: "text",         list: "results",  total: "totalConfirmed", page: "offset" },
+  search:       { tool: "search_artwork",        pos: "query",        list: "results",  total: "totalResults",  page: "offset", cap: "maxResults", alt: "ids", aside: ["facets"] },
+  semantic:     { tool: "semantic_search",       pos: "query",        list: "results",  total: "returnedCount", page: "offset", cap: "maxResults" },
+  multimodal:   { tool: "multimodal_search",     pos: "query",        list: "results",  total: "returnedCount", page: "offset", cap: "maxResults" },
+  persons:      { tool: "search_persons",        pos: "name",         list: "persons",  total: "totalResults",  page: "offset", cap: "maxResults" },
+  provenance:   { tool: "search_provenance",     pos: "party",        list: "results",  total: "totalArtworks", page: "offset", cap: "maxResults", alt: "creditLineResults", aside: ["facets"] },
+  inscriptions: { tool: "search_inscriptions",   pos: "text",         list: "results",  total: "totalConfirmed", page: "offset", cap: "maxResults" },
   details:      { tool: "get_artwork_details",   pos: "objectNumber", single: true },
   conservation: { tool: "get_conservation_history", pos: "objectNumber", single: true },
-  bibliography: { tool: "get_artwork_bibliography", pos: "objectNumber", list: "entries", total: "total" },
-  citing:       { tool: "find_artworks_citing_publication", pos: "publication", list: "artworks", total: "total" },
-  stats:        { tool: "collection_stats",      pos: "dimension",    list: "entries",  total: "totalBuckets",  page: "offset" },
-  similar:      { tool: "find_similar",          pos: "objectNumber", single: true },
-  "browse-set": { tool: "browse_set",            pos: "setSpec",      list: "records",  total: "totalInSet",    page: "token" },
+  bibliography: { tool: "get_artwork_bibliography", pos: "objectNumber", list: "entries", total: "total", page: "full" },
+  citing:       { tool: "find_artworks_citing_publication", pos: "publication", list: "artworks", total: "total", page: "full" },
+  stats:        { tool: "collection_stats",      pos: "dimension",    list: "entries",  total: "totalBuckets",  page: "offset", cap: "topN" },
+  similar:      { tool: "find_similar",          pos: "objectNumber", single: true, cap: "maxResults" },
+  "browse-set": { tool: "browse_set",            pos: "setSpec",      list: "records",  total: "totalInSet",    page: "token", cap: "maxResults" },
   "list-sets":  { tool: "list_curated_sets",                          list: "sets",     total: "totalSets" },
-  changes:      { tool: "get_recent_changes",                         list: "records",  total: "totalChanges",  page: "token" },
+  changes:      { tool: "get_recent_changes",                         list: "records",  total: "totalChanges",  page: "token", cap: "maxResults" },
   inspect:      { tool: "inspect_artwork_image", pos: "objectNumber", image: true },
 };
 const TOOL_TO_VERB = Object.fromEntries(Object.entries(VERBS).map(([v, c]) => [c.tool, v]));
@@ -92,13 +95,13 @@ const VERB_HELP = {
                   example: `rijks-mcp bibliography SK-C-5 --fields sequence,citation` },
   citing:       { summary: "Reverse bibliography — artworks whose references cite a publication (by URI or id); complement of bibliography.",
                   example: `rijks-mcp citing 30189730 --full --fields objectNumber,creator` },
-  stats:        { summary: "Group-by breakdown over one dimension (type, decade, creator, place…) — counts/percentages. Cap with --topN, not --max.",
-                  example: `rijks-mcp stats type --topN 10 --fields label,count --table` },
+  stats:        { summary: "Group-by breakdown over one dimension (type, decade, creator, place…) — counts/percentages per bucket.",
+                  example: `rijks-mcp stats type --max 10 --fields label,count --table` },
   similar:      { summary: "Given one object number, finds others like it across 9 signal channels plus a pooled consensus.",
                   example: `rijks-mcp similar SK-C-5 --max 10 --json | jq '.modes.visual'` },
   "browse-set": { summary: "Enumerate the member artworks of one curated set by setSpec (token pagination).",
                   example: `rijks-mcp browse-set 2619 --max 5 --fields objectNumber,title` },
-  "list-sets":  { summary: "Browse curated sets — thematic/sub-collection groupings; filter by --query/--minMembers/--maxMembers (no --max).",
+  "list-sets":  { summary: "Browse curated sets — thematic/sub-collection groupings; filter by --query/--minMembers/--maxMembers.",
                   example: `rijks-mcp list-sets --query Rembrandt --fields setSpec,name,memberCount` },
   changes:      { summary: "OAI-PMH delta feed — records changed in a date range; --identifiersOnly for light headers (token paging).",
                   example: `rijks-mcp changes --from 2024-01-01 --identifiersOnly --max 5` },
@@ -116,23 +119,49 @@ for (const v of Object.keys(VERBS)) {
 // tokenize), and search_artwork has its own `compact` param we must forward, not shadow.
 const GLOBAL_BOOL = new Set(["json", "table", "quiet", "show-call", "help", "stdin"]);
 const GLOBAL_VALUE = new Set(["http", "fields", "out"]);
-// Short/friendly flag aliases → canonical name.
-const FLAG_ALIASES = { max: "maxResults", n: "maxResults", o: "out", h: "help" };
+// Short/friendly flag aliases → canonical name. `max` is resolved per verb to cfg.cap
+// in buildToolArgs (maxResults for most tools, topN for stats).
+const FLAG_ALIASES = { n: "max", o: "out", h: "help" };
+// Value-taking flags to skip (with their value) during the pre-scan for the verb.
+const PRESCAN_VALUE = new Set([...GLOBAL_VALUE, "max"]);
 
 const MIME_EXT = { "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/tiff": ".tif" };
+
+// Flag-shaped token: long (`--json`) or short (`-n`). A negative number (`-4.9`) is not.
+const isFlagLike = (t) => t.startsWith("--") || (t.startsWith("-") && t.length === 2 && /[a-z]/i.test(t[1]));
+
+// The commonest flag slip is punctuation or case, not spelling: `--resumption_token`.
+function nearestFlag(key, candidates) {
+  const squash = (s) => s.replace(/[-_]/g, "").toLowerCase();
+  return [...candidates].find((c) => c !== key && squash(c) === squash(key)) || null;
+}
+
+// The one "no such flag" message, shared by the tokenizer (a value-less typo) and
+// validateToolArgs (`--typo value`), so a mistake reads the same in either form.
+function unknownFlagError(key, verb, props) {
+  const names = Object.keys(props);
+  const near = nearestFlag(key, names);
+  return new UsageError(
+    `--${key} is not a flag for "${verb}".${near ? ` Did you mean --${near}?` : ""}`
+    + ` Tool flags: ${names.map((p) => `--${p}`).join(", ")} (see \`rijks-mcp ${verb} --help\`)`,
+  );
+}
 
 // ── Tiny arg tokenizer ────────────────────────────────────────────────────────
 // parseArgs can't disambiguate `--flag value` from a boolean without a per-flag
 // spec, and we only know booleans after listTools(). So we hand-roll: a flag is
 // boolean if it's in `boolSet`; otherwise it consumes the next token as its value.
-// `--key=value` always works; repeated keys collect into an array.
+// `--key=value` always works; repeated keys collect into an array. A value flag
+// followed by another flag (or nothing) is recorded in `missing` rather than
+// swallowing that flag as its value.
 function tokenize(args, boolSet) {
   const flags = {};
   const positionals = [];
+  const missing = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--") { positionals.push(...args.slice(i + 1)); break; }
-    if (!a.startsWith("--") && !(a.startsWith("-") && a.length === 2 && /[a-z]/i.test(a[1]))) {
+    if (!isFlagLike(a)) {
       positionals.push(a);
       continue;
     }
@@ -148,12 +177,13 @@ function tokenize(args, boolSet) {
     key = FLAG_ALIASES[key] || key;
     if (val === undefined) {
       if (boolSet.has(key)) val = true;
+      else if (args[i + 1] === undefined || isFlagLike(args[i + 1])) { missing.push(key); continue; }
       else { val = args[i + 1]; i++; }
     }
     if (key in flags) flags[key] = [].concat(flags[key], val);
     else flags[key] = val;
   }
-  return { flags, positionals };
+  return { flags, positionals, missing };
 }
 
 // ── JSON Schema → arg classification ────────────────────────────────────────────
@@ -210,37 +240,138 @@ function boolSetFor(schema) {
   return s;
 }
 
+// A value flag with no value: name the flag if it exists, else treat it as the typo it is.
+function missingValueError(key, verb, props) {
+  if (key === "max" || GLOBAL_VALUE.has(key) || resolveKey(key, props) in props) {
+    return new UsageError(`--${key} expects a value (see \`rijks-mcp ${verb} --help\`)`);
+  }
+  return unknownFlagError(key, verb, props);
+}
+
 // Map tokenized flags + positionals → tool arguments (coerced per schema).
-function buildToolArgs(verbCfg, schema, flags, positionals) {
+function buildToolArgs(verb, verbCfg, schema, flags, positionals) {
   const props = schema?.properties ?? {};
   const args = {};
   for (const [rawKey, raw] of Object.entries(flags)) {
     if (GLOBAL_BOOL.has(rawKey) || GLOBAL_VALUE.has(rawKey)) continue;
-    const key = resolveKey(rawKey, props);
+    let key;
+    if (rawKey === "max") {
+      if (!verbCfg.cap) throw new UsageError(`--max/-n is not a flag for "${verb}" — it has no result cap (see \`rijks-mcp ${verb} --help\`)`);
+      key = verbCfg.cap;
+    } else {
+      key = resolveKey(rawKey, props);
+    }
     args[key] = coerce(raw, propType(props[key]), key);
   }
-  // First positional → the verb's primary param (if the flag wasn't already set).
-  if (positionals.length && verbCfg.pos && args[verbCfg.pos] === undefined) {
+  // First positional → the verb's primary param (if the flag wasn't already set). An empty
+  // positional is dropped, never sent as "" — the required check then names the param.
+  let consumed = 0;
+  if (positionals.length && verbCfg.pos && args[verbCfg.pos] === undefined && positionals[0] !== "") {
     args[verbCfg.pos] = coerce(positionals[0], propType(props[verbCfg.pos]), verbCfg.pos);
+    consumed = 1;
+  }
+  // A verb takes at most one positional; a second one would otherwise be dropped silently.
+  const extra = positionals.slice(consumed).filter((p) => p !== "");
+  if (extra.length) {
+    const hint = verbCfg.pos
+      ? `"${verb}" takes a single <${verbCfg.pos}> positional; pass other values as flags`
+      : `"${verb}" takes no positional arguments`;
+    throw new UsageError(`unexpected extra argument(s): ${extra.map((e) => `"${e}"`).join(", ")} — ${hint}`);
   }
   return args;
 }
 
+// Check resolved args against the live inputSchema BEFORE --show-call prints them or the
+// server sees them: an unknown flag or a missing required param is a usage error (exit 2),
+// and --show-call never presents a call as valid that the strict schema would reject.
+function validateToolArgs(verb, schema, args) {
+  const props = schema?.properties ?? {};
+  for (const key of Object.keys(args)) {
+    if (!(key in props)) throw unknownFlagError(key, verb, props);
+  }
+  for (const req of schema?.required ?? []) {
+    if (args[req] === undefined) {
+      throw new UsageError(`"${verb}" requires <${req}> (positional or --${req}) — see \`rijks-mcp ${verb} --help\``);
+    }
+  }
+}
+
 // ── Transport / connection ───────────────────────────────────────────────────
+// The stdio server's stderr is piped, not inherited, so its startup logs don't mix into ours
+// (where counts and notes go). The last lines are kept so a failed connect or tool call can
+// show the server's own diagnosis.
+const SERVER_LOG_KEEP = 200;
+const serverLog = [];
+let serverLogSeq = 0;
+
 async function connect(httpUrl) {
   const transport = httpUrl
     ? new StreamableHTTPClientTransport(new URL(httpUrl))
     : new StdioClientTransport({
-        command: "node",
+        command: process.execPath,
         args: ["dist/index.js"],
         cwd: PROJECT_ROOT,
         // Force structured output on, and skip the ~13s eager warm-up (lazy on first use).
         env: { ...process.env, STRUCTURED_CONTENT: "true", MCP_SKIP_STARTUP_WARM: "1" },
+        stderr: "pipe",
       });
+  let partial = "";
+  // Stays attached for the whole session: it also keeps the pipe drained.
+  transport.stderr?.on("data", (chunk) => {
+    const parts = (partial + chunk.toString()).split("\n");
+    partial = parts.pop();
+    for (const line of parts) {
+      if (!line.trim()) continue;
+      serverLog.push({ seq: ++serverLogSeq, line });
+      if (serverLog.length > SERVER_LOG_KEEP) serverLog.shift();
+    }
+  });
   const client = new Client({ name: "rijks-mcp", version: "0.1" });
-  await client.connect(transport);
+  try {
+    await client.connect(transport);
+  } catch (err) {
+    const tail = serverLog.map((l) => l.line).join("\n");
+    throw new Error(tail ? `${err?.message ?? err}\n${tail}` : (err?.message ?? String(err)), { cause: err });
+  }
   return client;
 }
+
+// Server log lines above info level written after `since` (a serverLogSeq mark), as
+// `server <level>: <message> — <error>`, minus any whose error the caller already shows
+// (`known`). Waits briefly: stderr can trail the JSON-RPC response.
+async function serverProblemsSince(since, known = "") {
+  await new Promise((r) => setTimeout(r, 50));
+  const out = [];
+  for (const { seq, line } of serverLog) {
+    if (seq <= since) continue;
+    let rec = null;
+    try { rec = JSON.parse(line); } catch { /* plain text line */ }
+    if (rec && typeof rec === "object") {
+      if (rec.level === "info" || rec.level === "debug") continue;
+      if (rec.error && known.includes(rec.error)) continue;
+      out.push(`server ${rec.level ?? "log"}: ${rec.message ?? line}${rec.error ? ` — ${rec.error}` : ""}`);
+    } else {
+      out.push(`server: ${line}`);
+    }
+  }
+  return out;
+}
+
+// One tool call; on failure, append the server's own warn/error log lines (stdio only).
+async function callWithDiagnosis(client, name, args) {
+  const mark = serverLogSeq;
+  try {
+    const res = await client.callTool({ name, arguments: args });
+    if (res.isError) res.serverProblems = await serverProblemsSince(mark, textOf(res));
+    return res;
+  } catch (err) {
+    const problems = await serverProblemsSince(mark);
+    if (problems.length) err.message = `${err?.message ?? err}\n${problems.join("\n")}`;
+    throw err;
+  }
+}
+
+const errorText = (res) => [textOf(res), ...(res.serverProblems ?? [])].join("\n");
 
 // ── Result helpers ─────────────────────────────────────────────────────────────
 const textOf = (res) => (res.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
@@ -278,10 +409,14 @@ function paginationSummary(verbCfg, data, list, flags) {
     const total = verbCfg.total ? data[verbCfg.total] : undefined;
     if (typeof total === "number") {
       parts.push(`${list.length} shown (offset ${offset}) of ${total}`);
-      if (offset + list.length < total) parts.push(`pass --offset ${offset + list.length} for more`);
+      if (list.length && offset + list.length < total) parts.push(`pass --offset ${offset + list.length} for more`);
     } else {
       parts.push(`${list.length} shown (offset ${offset})`);
     }
+  } else if (verbCfg.page === "full") {
+    const total = data[verbCfg.total];
+    parts.push(`${list.length} shown${typeof total === "number" ? ` of ${total}` : ""}`);
+    if (typeof total === "number" && list.length < total) parts.push("pass --full for all");
   } else if (verbCfg.page === "token") {
     const total = verbCfg.total ? data[verbCfg.total] : undefined;
     parts.push(`${list.length} shown${typeof total === "number" ? ` of ${total}` : ""}`);
@@ -290,6 +425,53 @@ function paginationSummary(verbCfg, data, list, flags) {
     parts.push(`${list.length} shown`);
   }
   return parts.join("; ");
+}
+
+// The row list: `alt` replaces `list` when the tool filled it instead (search --compact → ids,
+// provenance --creditLineQuery → creditLineResults).
+function listKeyOf(verbCfg, data) {
+  if (verbCfg.alt && Array.isArray(data[verbCfg.alt]) && data[verbCfg.alt].length && !data[verbCfg.list]?.length) {
+    return verbCfg.alt;
+  }
+  return verbCfg.list ?? Object.keys(data).find((k) => Array.isArray(data[k]));
+}
+
+const fmtCount = (n) => Number(n).toLocaleString("en-US");
+
+// Caveats the tools state in their text channel, which JSONL replaces — without these a
+// capped or partial result reads as a complete one. Rebuilt from structured fields only.
+function resultNotes(verbCfg, data, listKey) {
+  const notes = [];
+  if (data.totalArtworksCapped === true) {
+    notes.push(`the total is a lower bound — counting stopped at ${fmtCount(data.totalArtworks)}; narrow the query for an exact figure`);
+  }
+  if (data.candidatesCapped === true) {
+    notes.push(`partial — only the first window of ${fmtCount(data.totalCandidates)} text candidates was parsed, `
+      + `so ${fmtCount(data.totalConfirmed)} confirmed is a lower bound; add a narrowing term`);
+  }
+  if (data.autoCompacted === true) {
+    notes.push("rows are compact summaries — the full result exceeded the response-size limit; "
+      + "lower --max (≤10) or pass --objectNumber for full event chains");
+  }
+  if (listKey === "creditLineResults") {
+    notes.push("rows are credit-line matches (how the museum acquired the work), not parsed provenance");
+  }
+  if (data.enrichmentReview?.count) {
+    const where = data.enrichmentReview.url ?? data.enrichmentReview.file;
+    notes.push(`${fmtCount(data.enrichmentReview.count)} LLM-assisted record(s) in this result${where ? ` — review page: ${where}` : ""}`);
+  }
+  if (data.coverage?.withoutBucket) {
+    notes.push(`${fmtCount(data.coverage.withoutBucket)} of ${fmtCount(data.total)} artworks have no ${data.dimension} value and are in no bucket`);
+  }
+  if (data.multiValued === true) {
+    notes.push(`${data.dimension} is multi-valued — an artwork can count in several buckets, so counts need not sum to the total`);
+  }
+  for (const key of verbCfg.aside ?? []) {
+    const v = data[key];
+    if (v == null || (typeof v === "object" && !Object.keys(v).length)) continue;
+    notes.push(`top-level \`${key}\` is not part of the rows — pass --json to read it`);
+  }
+  return notes;
 }
 
 // ── Output rendering ─────────────────────────────────────────────────────────
@@ -340,14 +522,19 @@ function renderResult(res, verbCfg, flags) {
   }
 
   // List tools → JSONL (default) or table.
-  const listKey = verbCfg.list ?? Object.keys(data).find((k) => Array.isArray(data[k]));
+  const listKey = listKeyOf(verbCfg, data);
   const list = Array.isArray(data[listKey]) ? data[listKey] : [];
   if (flags.table === true) {
-    process.stdout.write(renderTable(list.map((r) => project(r, fields)), fields) + "\n");
+    // Compact ids are bare strings; give them a column so the table has something to show.
+    const rows = list.map((r) => (typeof r === "object" && r !== null ? project(r, fields) : { [listKey]: r }));
+    process.stdout.write(renderTable(rows, fields) + "\n");
   } else {
     for (const row of list) process.stdout.write(JSON.stringify(project(row, fields)) + "\n");
   }
-  if (!quiet) process.stderr.write(paginationSummary(verbCfg, data, list, flags) + "\n");
+  if (!quiet) {
+    process.stderr.write(paginationSummary(verbCfg, data, list, flags) + "\n");
+    for (const n of resultNotes(verbCfg, data, listKey)) process.stderr.write(`note: ${n}\n`);
+  }
   emitWarnings();
 }
 
@@ -396,7 +583,7 @@ function topUsage() {
     "Common flags:",
     "  --http <url>     target a running server (else stdio-spawns dist/index.js); env: RIJKS_MCP_HTTP",
     "  --fields a,b,c   project to these top-level keys on every row (biggest token saver)",
-    "  --max N  (-n)    result cap → maxResults  (stats caps with --topN; list-sets has none)",
+    "  --max N  (-n)    result cap → the command's own cap param (maxResults; topN for stats)",
     "  --json           full structuredContent payload, pretty-printed",
     "  --table          terse human-readable table",
     "  --quiet          suppress the stderr count/summary line",
@@ -407,7 +594,7 @@ function topUsage() {
     "  HTTP (recommended): --http <url> or RIJKS_MCP_HTTP — a warm server; every call is instant.",
     "  stdio (default):    no --http; spawns `node dist/index.js` — needs `npm run build` + DBs in data/.",
     "",
-    "Output:  list tools → JSONL · single-object tools → one compact JSON · counts+paging → stderr.",
+    "Output:  list tools → JSONL · single-object tools → one compact JSON · counts+paging+notes → stderr.",
     "Exit:    0 ok · 1 tool/connection error · 2 usage error",
   );
   return lines.join("\n");
@@ -450,8 +637,8 @@ function verbHelp(verb, cfg, tool) {
       lines.push(`  --${name} <${propType(prop)}>${req}  ${desc}${enums ? "  " + enums : ""}`);
     }
     if (cfg.image) lines.push("  --out <file>  write the image bytes to disk");
-    if ("maxResults" in props) lines.push("", "Aliases:  --max, -n  → maxResults");
   }
+  if (cfg.cap) lines.push("", `Aliases:  --max, -n  → ${cfg.cap}`);
   if (meta.example) lines.push("", "Example:", "  " + meta.example);
   if (!tool) lines.push(
     "",
@@ -503,6 +690,7 @@ function toolsCompact(toolMap) {
     const result = cfg.single ? "single" : cfg.image ? "image" : (cfg.list ?? null);
     const entry = { verb, tool: name, positional: cfg.pos ?? null, result, args };
     if (cfg.page) entry.page = cfg.page;
+    if (cfg.cap) entry.max = cfg.cap;
     return entry;
   });
 }
@@ -521,8 +709,9 @@ async function main() {
     if (a === "--http") { httpUrl = argv[i + 1]; i++; continue; }
     if (a.startsWith("--http=")) { httpUrl = a.slice("--http=".length); continue; }
     if (a.startsWith("-")) {
-      const key = a.replace(/^--?/, "").split("=")[0];
-      if (GLOBAL_VALUE.has(key) && !a.includes("=")) i++; // skip its value
+      const raw = a.replace(/^--?/, "").split("=")[0];
+      const key = FLAG_ALIASES[raw] || raw;
+      if (PRESCAN_VALUE.has(key) && !a.includes("=")) i++; // skip its value
       continue;
     }
     if (verb === undefined) verb = a;
@@ -597,24 +786,30 @@ async function main() {
 
     // Re-tokenize using the tool's schema, dropping the verb itself from positionals.
     const boolSet = boolSetFor(tool.inputSchema);
-    const { flags, positionals } = tokenize(argv, boolSet);
+    const { flags, positionals, missing } = tokenize(argv, boolSet);
+    if (missing.length) throw missingValueError(missing[0], verb, tool.inputSchema?.properties ?? {});
+    // The verb is always the first bare token; drop it so the rest map to tool params.
+    const restPositionals = positionals[0] === verb ? positionals.slice(1) : positionals;
 
     // Batch mode: read the primary positional from stdin, one invocation per line
     // over this single connection. Other flags (--fields/--json/--max/…) apply per line.
     if (flags.stdin === true) {
       if (!cfg.pos) throw new UsageError(`--stdin needs a verb with a positional argument; ${verb} has none`);
       if (process.stdin.isTTY) throw new UsageError("--stdin set but stdin is a TTY — pipe input (e.g. `printf 'SK-C-5\\n' | rijks-mcp details --stdin`)");
+      if (restPositionals.length) throw new UsageError(`--stdin supplies <${cfg.pos}>; drop the positional argument(s): ${restPositionals.map((p) => `"${p}"`).join(", ")}`);
       const lines = await readStdinLines();
+      // Flag mistakes are the same on every line — report them once, before any call.
+      if (lines.length) validateToolArgs(verb, tool.inputSchema, buildToolArgs(verb, cfg, tool.inputSchema, flags, [lines[0]]));
       let failures = 0;
       for (const line of lines) {
-        const toolArgs = buildToolArgs(cfg, tool.inputSchema, flags, [line]);
+        const toolArgs = buildToolArgs(verb, cfg, tool.inputSchema, flags, [line]);
         if (flags["show-call"] === true) {
           process.stdout.write(JSON.stringify({ tool: cfg.tool, arguments: toolArgs }) + "\n");
           continue;
         }
         try {
-          const res = await client.callTool({ name: cfg.tool, arguments: toolArgs });
-          if (res.isError) { process.stderr.write(`[${line}] ${textOf(res)}\n`); failures++; continue; }
+          const res = await callWithDiagnosis(client, cfg.tool, toolArgs);
+          if (res.isError) { process.stderr.write(`[${line}] ${errorText(res)}\n`); failures++; continue; }
           renderResult(res, cfg, flags);
         } catch (err) {
           process.stderr.write(`[${line}] Error: ${err?.message ?? err}\n`);
@@ -628,18 +823,17 @@ async function main() {
       return;
     }
 
-    // The verb is always the first bare token; drop it so the rest map to tool params.
-    const restPositionals = positionals[0] === verb ? positionals.slice(1) : positionals;
-    const toolArgs = buildToolArgs(cfg, tool.inputSchema, flags, restPositionals);
+    const toolArgs = buildToolArgs(verb, cfg, tool.inputSchema, flags, restPositionals);
+    validateToolArgs(verb, tool.inputSchema, toolArgs);
 
     if (flags["show-call"] === true) {
       process.stdout.write(JSON.stringify({ tool: cfg.tool, arguments: toolArgs }, null, 2) + "\n");
       return;
     }
 
-    const res = await client.callTool({ name: cfg.tool, arguments: toolArgs });
+    const res = await callWithDiagnosis(client, cfg.tool, toolArgs);
     if (res.isError) {
-      process.stderr.write(textOf(res) + "\n");
+      process.stderr.write(errorText(res) + "\n");
       process.exitCode = 1;
       return;
     }

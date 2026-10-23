@@ -9,7 +9,8 @@
  * Run:       node scripts/tests/test-cli.mjs   (or `npm run test:cli`)
  *
  * Excluded from `npm test` / `test:all` — it needs dist/ + DBs and hits live IIIF,
- * mirroring test-http-viewer-queues.mjs / test-inspect-navigate.mjs.
+ * mirroring test-http-viewer-queues.mjs / test-inspect-navigate.mjs. Argument handling and
+ * rendering are covered offline by the gate tests test-cli-usage.mjs / test-cli-render.mjs.
  */
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -183,7 +184,7 @@ section("10. --help is offline-safe + curated");
   assert(/Common flags:/.test(r.stdout) && /Transports:/.test(r.stdout), "Common flags + Transports blocks present");
   assert(/RIJKS_MCP_HTTP/.test(r.stdout), "mentions the RIJKS_MCP_HTTP env var");
   // Curated one-liners, not truncated tool-description fragments.
-  assert(/Cap with --topN/.test(r.stdout), "stats line is the curated summary (not a clipped tool desc)");
+  assert(/counts\/percentages per bucket/.test(r.stdout), "stats line is the curated summary (not a clipped tool desc)");
 }
 
 // ── 11. per-command --help: schema-derived flags + curated example (live server) ─
