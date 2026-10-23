@@ -6,7 +6,7 @@ All scripts operate on the databases in `data/`. Python scripts use the `embeddi
 
 | Script | Lang | Description |
 |--------|------|-------------|
-| `cli.mjs` | Node | Headless CLI over the server's stateless tools (`npm run cli -- <verb>`, `rijks-mcp` bin). An MCP *client*, not a second search implementation: `--http <url>`/`RIJKS_MCP_HTTP` hits a warm server, else stdio-spawns `dist/index.js`. JSON-first output (JSONL / `--json` / `--table` / `--fields`); counts + paging on stderr; exit 0/1/2. Verbs and flag coercion derive from the live `inputSchema`. Use `env -u RIJKS_MCP_HTTP …` to exercise unpushed local changes. |
+| `cli.mjs` | Node | Headless CLI over the server's stateless tools (`npm run cli -- <verb>`, `rijks-mcp` bin). An MCP *client*, not a second search implementation: `--http <url>`/`RIJKS_MCP_HTTP` hits a warm server, else stdio-spawns `dist/index.js`. JSON-first output (JSONL / `--json` / `--table` / `--fields`); counts, paging and `note:` caveats on stderr; exit 0/1/2. The verb roster and help are static (`VERBS` + `VERB_HELP`); flag lists, coercion and pre-call validation derive from the live `inputSchema`. Use `env -u RIJKS_MCP_HTTP …` to exercise unpushed local changes. |
 
 ## Harvest & DB Build
 
@@ -393,6 +393,8 @@ Imported from `dist/` or run against in-memory SQLite — no `data/` access. The
 | `test-placetype-labels.mjs` | Unit tests for `placetypeLabels` (`src/placetypeLabels.ts`). |
 | `test-oai-deletions.mjs` | Unit test for OAI-PMH deleted-record surfacing (`header @status="deleted"`, #394). |
 | `test-vocabdb-fixture.mjs` | Hermetic characterization tests for `VocabularyDb` (plans/003): a tiny synthetic fixture DB locks in core query-builder behaviour. |
+| `test-cli-usage.mjs` | CLI argument handling on the fixture DB: per-verb `--max` mapping, unknown/missing flags → exit 2, every `--help` example passes `--show-call`. Needs `dist/`. |
+| `test-cli-render.mjs` | CLI output contract on the fixture DB: JSONL/`--json`/`--table`/`--fields`/`--stdin`, stderr counts and `note:` lines. Needs `dist/`. Shares `cli-fixture.mjs` with `test-cli.mjs`. |
 | `test-harvest-run-provenance.py` | Python unit tests for the harvest run-provenance helpers in `harvest-vocabulary-db.py` (#230). |
 
 ### Integration, smoke & query-plan tests

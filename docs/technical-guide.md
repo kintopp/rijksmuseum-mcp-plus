@@ -89,11 +89,11 @@ npm run cli -- tools --json          # capabilities dump (the agent bootstrap)
 npm run cli -- search --help         # flags for one command, generated from the live schema
 ```
 
-- **Commands** are short verbs aliased to tools (`search`, `semantic`, `persons`, `provenance`, `inscriptions`, `details`, `bibliography`, `citing`, `conservation`, `stats`, `similar`, `browse-set`, `list-sets`, `changes`, `inspect`). The first positional maps to the tool's primary parameter; everything else is a `--flag`. Help and flag coercion are derived from the live `inputSchema`, so they never drift.
-- **Output:** list tools emit JSONL on stdout (one object per line, `jq -c`-friendly); single-object tools emit one compact JSON object. `--json` prints the whole payload pretty; `--table` is a terse human view; `--fields a,b,c` projects keys (the main token lever). Counts, pagination hints (`--offset` / `--resumption-token`), and warnings go to stderr to keep stdout clean. `--show-call` prints the resolved `{tool, arguments}` without executing.
-- **Exit codes:** `0` ok · `1` tool/connection error · `2` usage error. Tool errors preserve the server's prose routing hints (on stderr).
+- **Commands** are short verbs aliased to tools (`search`, `semantic`, `multimodal`, `persons`, `provenance`, `inscriptions`, `details`, `bibliography`, `citing`, `conservation`, `stats`, `similar`, `browse-set`, `list-sets`, `changes`, `inspect`). The first positional maps to the tool's primary parameter; everything else is a `--flag`. `--max` (`-n`) maps to each command's own result cap. Flag lists, coercion and validation are derived from the live `inputSchema`, so an unknown or missing flag is caught before the call.
+- **Output:** list tools emit JSONL on stdout (one object per line, `jq -c`-friendly); single-object tools emit one compact JSON object. `--json` prints the whole payload pretty; `--table` is a terse human view; `--fields a,b,c` projects keys (the main token lever). Counts, pagination hints (`--offset` / `--resumption-token`), warnings, and `note:` lines restating caveats the JSONL drops (capped totals, multi-valued buckets) go to stderr to keep stdout clean. `--show-call` prints the resolved `{tool, arguments}` without executing.
+- **Exit codes:** `0` ok · `1` tool/connection error · `2` usage error (unknown command or flag, missing required parameter). Tool errors preserve the server's prose routing hints (on stderr).
 
-Smoke test: `npm run test:cli` (needs a built `dist/` + the DBs; hits live IIIF, so it is excluded from `npm test`/`test:all`).
+Argument handling and the output contract are gated in CI against a fixture DB (`test-cli-usage.mjs`, `test-cli-render.mjs`). The full smoke test, `npm run test:cli`, needs a built `dist/` + the DBs and hits live IIIF, so it is excluded from `npm test`/`test:all`.
 
 See the [CLI guide](cli-guide.md) for the full command reference, output model, and pipeline recipes.
 
