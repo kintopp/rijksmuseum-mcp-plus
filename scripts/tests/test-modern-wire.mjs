@@ -94,6 +94,31 @@ try {
   const many = await Promise.all(Array.from({ length: 8 }, () => modern("tools/list", {})));
   check(many.every((r) => r.status === 200), "8 concurrent modern requests all succeed");
 
+  // A listen stream the client abandons must be torn down, or it stays
+  // registered and its keep-alive queues chunks forever (heap leak). The
+  // observable symptom is the SDK's per-handler cap of 1024 open streams.
+  const listenAndDrop = async (id) => {
+    const ac = new AbortController();
+    const r = await fetch(URL_, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream",
+        "mcp-protocol-version": MODERN, "mcp-method": "subscriptions/listen" },
+      body: JSON.stringify({ jsonrpc: "2.0", id, method: "subscriptions/listen",
+        params: { notifications: { toolsListChanged: true }, _meta: envelope() } }),
+      signal: ac.signal,
+    });
+    const { value } = await r.body.getReader().read();
+    ac.abort();
+    return new TextDecoder().decode(value);
+  };
+  const ACK = "notifications/subscriptions/acknowledged";
+  check((await listenAndDrop(1)).includes(ACK), "subscriptions/listen is acknowledged");
+  for (let i = 2; i <= 1024; i++) await listenAndDrop(i);
+  await new Promise((r) => setTimeout(r, 200));
+  const next = await listenAndDrop(1025);
+  check(next.includes(ACK) && !next.includes("Subscription limit reached"),
+    "a listen stream is still accepted after 1024 dropped ones (disconnects tear streams down)");
+
   console.log("HTTP, legacy wire");
   const init = await post({}, { jsonrpc: "2.0", id: 1, method: "initialize",
     params: { protocolVersion: LEGACY, capabilities: {}, clientInfo: { name: "t", version: "0" } } });
