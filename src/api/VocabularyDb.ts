@@ -1446,14 +1446,18 @@ export class VocabularyDb {
       this.hasRecordModified_ = this.columnExists("artworks", "record_modified");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
-      if (this.hasProvenanceTables_) {
-        // An aggregate always yields one row. The join drops targets that are not artworks
-        // ("Hoek 1985") and self-references, whose pointer would lead back to the same event.
+      if (this.hasProvenanceTables_ && this.columnExists("provenance_events", "cross_ref_target")) {
+        // A target counts only if search_provenance would show a chain there: not a citation
+        // ("Hoek 1985"), not this artwork, and not one with no real events of its own.
         this.stmtProvenanceCounts = this.db.prepare(
-          `SELECT pe.n, t.object_number AS target
-           FROM (SELECT COUNT(*) FILTER (WHERE is_cross_ref = 0) AS n, MAX(cross_ref_target) AS target
-                 FROM provenance_events WHERE artwork_id = ?) pe
-           LEFT JOIN artworks t ON t.object_number = pe.target AND t.art_id <> ?`
+          `SELECT
+             (SELECT COUNT(*) FROM provenance_events WHERE artwork_id = ? AND is_cross_ref = 0) AS n,
+             (SELECT t.object_number
+              FROM provenance_events pe
+              JOIN artworks t ON t.object_number = pe.cross_ref_target AND t.art_id <> pe.artwork_id
+              WHERE pe.artwork_id = ? AND pe.is_cross_ref = 1
+                AND EXISTS (SELECT 1 FROM provenance_events r WHERE r.artwork_id = t.art_id AND r.is_cross_ref = 0)
+              ORDER BY pe.sequence LIMIT 1) AS target`
         );
       }
       this.hasProvenancePeriods_ = this.tableExists("provenance_periods");
@@ -1468,7 +1472,7 @@ export class VocabularyDb {
           WHERE artwork_id = ? AND position_method LIKE 'llm%'
         `);
       }
-      if (this.hasPartyTable_) {
+      if (this.hasPartyTable_ && this.columnExists("provenance_parties", "position_method")) {
         this.stmtPartyPositionMethod_ = this.db.prepare(`
           SELECT sequence, party_name FROM provenance_parties
           WHERE artwork_id = ? AND position_method = ?
@@ -4375,7 +4379,7 @@ export class VocabularyDb {
     const bindings: unknown[] = [];
     const warnings: string[] = [];
     let geoResult: { placeIds: string[]; referencePlace: string; refLat: number; refLon: number } | null = null;
-    let geoBindingCount = 0;
+    let geoFilter: { condition: string; bindings: unknown[] } | null = null;
 
     // Handle geo proximity filter: nearLat/nearLon (coordinates) or nearPlace (name)
     const hasCoordPair = effective.nearLat != null && effective.nearLon != null;
@@ -4435,10 +4439,7 @@ export class VocabularyDb {
           };
         }
 
-        const geoFilter = this.mappingFilterDirect(GEO_PLACE_FIELDS, geoResult.placeIds);
-        conditions.push(geoFilter.condition);
-        bindings.push(...geoFilter.bindings);
-        geoBindingCount = geoFilter.bindings.length;
+        geoFilter = this.mappingFilterDirect(GEO_PLACE_FIELDS, geoResult.placeIds);
       }
     }
 
@@ -4527,6 +4528,14 @@ export class VocabularyDb {
       }
     }
 
+    // The distance-ordered row query restricts to the place set itself, so it uses these.
+    const nonGeoConditions = [...conditions];
+    const nonGeoBindings = [...bindings];
+    if (geoFilter) {
+      conditions.unshift(geoFilter.condition);
+      bindings.unshift(...geoFilter.bindings);
+    }
+
     if (conditions.length === 0 && !ftsJoinClause) {
       return emptyResult(warnings);
     }
@@ -4593,23 +4602,22 @@ export class VocabularyDb {
             : `ORDER BY a.art_id ASC`;
     // Aggregate first so the place set drives; a correlated MIN in ORDER BY rescans the
     // JSON per mapping row and takes seconds on large cities.
-    // `nearest` already restricts to the place set, so the geo condition (always pushed first) is dropped.
-    const { clause: geoField, bindings: geoFieldBindings } = this.buildFieldClause(GEO_PLACE_FIELDS);
-    const rowSql = distanceOrdered
+    const geoField = distanceOrdered ? this.buildFieldClause(GEO_PLACE_FIELDS) : null;
+    const rowSql = geoField
       ? `WITH pd(rid, d) AS MATERIALIZED (SELECT CAST(key AS INTEGER), value FROM json_each(?)),
         nearest AS (SELECT m.artwork_id AS aid, MIN(pd.d) AS dist FROM pd CROSS JOIN mappings m
-                    ON m.vocab_rowid = pd.rid AND ${geoField} GROUP BY m.artwork_id)
+                    ON m.vocab_rowid = pd.rid AND ${geoField.clause} GROUP BY m.artwork_id)
         SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest,
                COUNT(*) OVER () AS total
         FROM nearest n JOIN artworks a ON a.art_id = n.aid
-        WHERE ${conditions.slice(1).join(" AND ") || "1"}
+        WHERE ${nonGeoConditions.join(" AND ") || "1"}
         ${orderBy} LIMIT ?`
       : `SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest
         FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
-    const rowParams = distanceOrdered
+    const rowParams = geoField
       ? [
           this.placeDistanceJson(geoResult!.placeIds, geoResult!.refLat, geoResult!.refLon),
-          ...geoFieldBindings, ...bindings.slice(geoBindingCount), fetchLimit,
+          ...geoField.bindings, ...nonGeoBindings, fetchLimit,
         ]
       : ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, fetchLimit] : [...bindings, fetchLimit];
     const rows = this.db.prepare(rowSql).all(...rowParams) as {

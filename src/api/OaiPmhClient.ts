@@ -166,7 +166,7 @@ export class OaiPmhClient {
     const rawSets = root.ListSets?.set ?? [];
 
     const sets: OaiSet[] = rawSets.map((s: any) => {
-      const spec = s.setSpec ?? "";
+      const spec = s.setSpec?.[0] ?? "";
       return {
         setSpec: spec,
         name: s.setName ?? "",

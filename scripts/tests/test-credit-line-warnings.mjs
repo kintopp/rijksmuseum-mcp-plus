@@ -2,7 +2,7 @@
  * creditLineQuery warns only about filters the caller actually sent.
  *
  * Failure modes:
- *  - compact's schema default reads as a caller filter, so every call warns falsely
+ *  - a default or an explicit compact:false reads as a caller filter, so the call warns falsely
  *  - an explicit compact:true or a real filter stops being reported
  *
  * Run:  node scripts/tests/test-credit-line-warnings.mjs
@@ -33,6 +33,10 @@ console.log("\ncreditLineQuery warnings\n");
 
 await check("no warning when only creditLineQuery is sent", async () => {
   assert.deepEqual(await warningsFor({ creditLineQuery: "gift" }), []);
+});
+
+await check("an explicit compact:false is not reported", async () => {
+  assert.deepEqual(await warningsFor({ creditLineQuery: "gift", compact: false }), []);
 });
 
 await check("an explicit compact:true is reported", async () => {

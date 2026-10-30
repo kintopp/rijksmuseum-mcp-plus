@@ -12,7 +12,8 @@
  *  6. A cross-reference-only artwork gives no pointer to where its chain is recorded.
  *  7. An artwork with events and a cross-reference omits the cross-reference, or sends
  *     the reader to the target instead of this object's chain.
- *  8. A target that is not an artwork, a null target, or the artwork itself reads as a real pointer.
+ *  8. A target that is not an artwork, a null target, the artwork itself, or one with no real
+ *     events reads as a real pointer; or such a target hides a usable one on the same artwork.
  *  9. The target field is missing from tools/list, or non-null without provenance tables.
  */
 import Database from "better-sqlite3";
@@ -46,11 +47,15 @@ ev.run(1, 2, "to the museum, 1900", "sale", 0, null);
 ev.run(2, 1, FX2_TEXT, "unknown", 1, "FX-1");
 ev.run(5, 1, "Jan Six, Amsterdam", "collection", 0, null);
 ev.run(5, 2, "to the museum, 1901", "sale", 0, null);
-ev.run(5, 3, "see also FX-1", "unknown", 1, "FX-1");
+ev.run(5, 3, "see also this object", "unknown", 1, "FX-5");
+ev.run(5, 4, "see also FX-1", "unknown", 1, "FX-1");
 ev.run(6, 1, FX6_TEXT, "unknown", 1, "Hoek 1985");
 ev.run(7, 1, "Anna Collector", "collection", 0, null);
 ev.run(7, 2, "see Hoek 1985", "unknown", 1, "Hoek 1985");
+ev.run(7, 3, "see also FX-1", "unknown", 1, "FX-1");
 ev.run(8, 1, FX8_TEXT, "unknown", 1, null);
+ev.run(8, 2, "see FX-3", "unknown", 1, "FX-3");
+ev.run(8, 3, "see FX-9", "unknown", 1, "FX-9");
 ev.run(9, 1, FX9_TEXT, "unknown", 1, "FX-9");
 raw.close();
 
@@ -130,13 +135,16 @@ try {
     pointer: `Provenance events: 2 parsed, plus a cross-reference to FX-1. Full chain: search_provenance(objectNumber="FX-5")`,
   });
 
-  console.log("\n4c. Target that is not an artwork, null, or the artwork itself: no target, no cross-reference wording");
-  checkRow("FX-6", await details("FX-6"), { count: 0, provenance: FX6_TEXT });
+  console.log("\n4c. A citation target that sorts after a real one must not hide it");
   checkRow("FX-7", await details("FX-7"), {
     count: 1,
+    target: "FX-1",
     provenance: FX7_TEXT,
-    pointer: `Provenance events: 1 parsed. Full chain: search_provenance(objectNumber="FX-7")`,
+    pointer: `Provenance events: 1 parsed, plus a cross-reference to FX-1. Full chain: search_provenance(objectNumber="FX-7")`,
   });
+
+  console.log("\n4d. Target that is not an artwork, null, the artwork itself, or without real events: no target, no cross-reference wording");
+  checkRow("FX-6", await details("FX-6"), { count: 0, provenance: FX6_TEXT });
   checkRow("FX-8", await details("FX-8"), { count: 0, provenance: FX8_TEXT });
   checkRow("FX-9", await details("FX-9"), { count: 0, provenance: FX9_TEXT });
 

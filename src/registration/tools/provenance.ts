@@ -453,8 +453,13 @@ export function registerProvenanceTools(
           });
 
           // Everything except the three params this branch honours is ignored.
+          // A false or null value asks for nothing, so there is nothing to report.
           const ignored = Object.keys(args)
-            .filter(k => !["creditLineQuery", "maxResults", "offset"].includes(k));
+            .filter(k => !["creditLineQuery", "maxResults", "offset"].includes(k))
+            .filter(k => {
+              const v = (args as Record<string, unknown>)[k];
+              return v != null && v !== false;
+            });
           const warnings: string[] = [];
           if (ignored.length > 0) {
             warnings.push(

@@ -345,7 +345,7 @@ export const ArtworkDetailOutput = {
   provenanceEventCount: z.number().int().nullable()
     .describe("Parsed provenance events for this artwork, excluding cross-references — call search_provenance with objectNumber for the structured chain. 0 can mean no provenance, an unparsed text, or a cross-reference to another object (see provenanceCrossRefTarget); read `provenance`. Null when provenance data isn't present in this database."),
   provenanceCrossRefTarget: z.string().nullable()
-    .describe("Object number of the artwork this one's provenance cross-references — call search_provenance with it for the chain recorded there. Null when there is no cross-reference, or its target is this artwork or not an artwork in this database."),
+    .describe("Object number of the artwork this one's provenance cross-references — call search_provenance with it for the chain recorded there. Null when there is no cross-reference, or its target is this artwork, is not an artwork in this database, or has no provenance events of its own."),
   error: z.string().optional(),
 };
 
