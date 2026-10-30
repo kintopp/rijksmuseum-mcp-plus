@@ -5,7 +5,7 @@
 // material_id, technique_id) populated from the REAL embeddings.db vectors, then
 // times native filtered KNN against it. Compares to the existing chunked path.
 //
-// Run: node scripts/tests/bench-native-prefilter.mjs
+// Run: node scripts/legacy/bench-native-prefilter.mjs
 import Database from "better-sqlite3";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";

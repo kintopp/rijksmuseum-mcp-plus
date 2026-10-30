@@ -3,10 +3,10 @@
 Blind text-retrieval comparison: EmbeddingGemma 2 vs the deployed e5 vectors, on the metadata
 composite (semantic_search) and on Dutch descriptions (find_similar's Description channel).
 
-    python scripts/egemma2-text-compare.py queries   # writes queries.json; then encode with Gemma:
+    python scripts/legacy/egemma2-text-compare.py queries   # writes queries.json; then encode with Gemma:
     modal run scripts/embed-corpus-embeddinggemma2-modal.py --queries data/egemma2-test/corpus/compare-text/queries.json
-    python scripts/egemma2-text-compare.py pool      # rankings.json + pool.md (shuffled, systems hidden)
-    python scripts/egemma2-text-compare.py score     # reads grades.json {query: {object_number: 0|1|2}}
+    python scripts/legacy/egemma2-text-compare.py pool      # rankings.json + pool.md (shuffled, systems hidden)
+    python scripts/legacy/egemma2-text-compare.py score     # reads grades.json {query: {object_number: 0|1|2}}
 
 Run with ~/miniconda3/envs/embeddings/bin/python.
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
+PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 VOCAB_DB = PROJECT_DIR / "data" / "vocabulary.db"
 E5_DB = PROJECT_DIR / "data" / "embeddings.db"
 CORPUS = PROJECT_DIR / "data" / "egemma2-test" / "corpus"

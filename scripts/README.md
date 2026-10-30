@@ -140,7 +140,6 @@ Read-only scripts that inspect data without modifying it.
 | `explore-smell-clusters.py` | Python | Smell-focused embedding cluster analysis. Outputs interactive HTML. |
 | `generate-cluster-viz.py` | Python | Generates interactive Plotly HTML from pre-computed cluster data. |
 | `discover-linked-art-schema.py` | Python | Exhaustive Linked Art field-path analysis. Resolves sample artworks, walks JSON-LD trees, reports coverage/cardinality/anomalies. Run before harvests. |
-| `provenance-sample-analysis.mjs` | Node | Analyses 100 stratified provenance records from vocab DB to catalogue patterns for PEG grammar design. |
 | `probe-edm-shape.py` | Python | Captures the current OAI-PMH EDM wire shape as a baseline, so the announced Europeana-validation EDM release can be diffed against it. Read-only. Sibling to `probe-harvest.py` (which monitors the Linked Art JSON shape). |
 | `probe-dumps.py` | Python | Quick probe of the Schema.org / Linked Art dump archives: samples members, enumerates predicates with counts. Used by the v0.26 dump audit. |
 
@@ -259,6 +258,8 @@ Scripts retained for reference but no longer part of any release path. Do not ru
 | `legacy/generate-embeddings-mps.py` | Python | Local (Apple MPS) e5 artwork-embedding generator. |
 | `legacy/delete_phantom_vec0_rowids.mjs` | Node | Cleaned phantom `vec_artworks` rowids left by the vec0 chunk allocator (#261) in `embeddings.db`. |
 | `legacy/assemble-embeddings-release.py`, `legacy/slim-embeddings-db.py`, `legacy/trim-embedding-vocab.py` | Python | Assembled, slimmed and vocab-trimmed the retired `embeddings.db` for deploy. |
+| `legacy/egemma2-text-compare.py` | Python | Blind comparison of e5 against EmbeddingGemma 2 text retrieval. Needs the retired `embeddings.db`. |
+| `legacy/bench-vec0-filtered.mjs`, `legacy/bench-native-prefilter.mjs`, `legacy/bench-filter-limit-scaling.mjs` | Node | vec0 filtered-KNN benchmarks over e5 vectors. Need the retired `embeddings.db`. |
 | `legacy/backfill-from-v23.1.mjs` | Node | One-time migration that carried supplementary columns forward from a v0.23.1 vocab DB into the v0.24 re-harvest. Not part of any current release path. |
 
 ### One-off harvest recovery

@@ -2,7 +2,7 @@
 // Times the chunked vec_distance_cosine path at increasing candidate counts and
 // compares to the flat-cost pure-KNN + post-filter fallback (the >limit path).
 //
-// Run: node scripts/tests/bench-filter-limit-scaling.mjs
+// Run: node scripts/legacy/bench-filter-limit-scaling.mjs
 import Database from "better-sqlite3";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";

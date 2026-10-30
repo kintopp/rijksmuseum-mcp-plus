@@ -3,7 +3,7 @@
 // every vector) can be dropped? Compares the current vec_distance_cosine path
 // over artwork_embeddings with vec0 variants, for timing and top-k agreement.
 //
-//   node scripts/tests/bench-vec0-filtered.mjs [--db data/embeddings.db] [--reps 3]
+//   node scripts/legacy/bench-vec0-filtered.mjs [--db data/embeddings.db] [--reps 3]
 
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
