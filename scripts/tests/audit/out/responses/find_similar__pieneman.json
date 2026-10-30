@@ -4,10 +4,461 @@
   "anchor": "SK-A-1115",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 4,
-  "bytesText": 297,
-  "structured": null,
-  "text": "Similar to \"The Battle of Waterloo\" (SK-A-1115)\nVisual: 3 | Co-Production: 3 | Related: 3 | Lineage: 0 | Iconclass: 3 | Description: 3 | Theme: 3 | Person: 3 | Place: 3 | Pooled (4+): 0\n\n/var/folders/14/cd_23cfd3n18qrqgb22ghypc0000gq/T/rijksmuseum-similar-59a20bfe-e162-4f11-a632-5ef0a253727e.html",
+  "bytesStructured": 12553,
+  "bytesText": 306,
+  "structured": {
+    "query": {
+      "objectNumber": "SK-A-1115",
+      "title": "The Battle of Waterloo",
+      "creator": "Jan Willem Pieneman",
+      "date": "1824",
+      "type": "painting",
+      "iiifId": "GebpD",
+      "description": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.",
+      "iconclassCodes": [
+        {
+          "notation": "45E4",
+          "label": "animals used in the army"
+        },
+        {
+          "notation": "45H3",
+          "label": "battle"
+        },
+        {
+          "notation": "45H52",
+          "label": "putting out of action by wounding"
+        }
+      ],
+      "lineageQualifiers": [],
+      "depictedPersons": [
+        {
+          "label": "William II of the Netherlands",
+          "wikidataUri": "http://www.wikidata.org/entity/Q154287"
+        },
+        {
+          "label": "Wellington, Arthur Wellesley of",
+          "wikidataUri": "http://www.wikidata.org/entity/Q131691"
+        },
+        {
+          "label": "Hill, sir Rowland",
+          "wikidataUri": "http://www.wikidata.org/entity/Q370241"
+        }
+      ],
+      "depictedPlaces": [
+        {
+          "label": "Waterloo",
+          "wikidataUri": "http://vocab.getty.edu/tgn/7008022"
+        }
+      ],
+      "themes": [
+        "history painting",
+        "battlefield",
+        "military history"
+      ],
+      "relatedVariantLabels": [
+        "production stadia"
+      ],
+      "relatedObjectLabels": [
+        "related object",
+        "original | reproduction"
+      ]
+    },
+    "modes": {
+      "iconclass": [
+        {
+          "objectNumber": "RP-P-1904-1682",
+          "title": "Slag bij Leuven",
+          "creator": "Johannes Steyn (mentioned on object)",
+          "date": "1831",
+          "type": "print",
+          "iiifId": "eApuB",
+          "score": 76,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-P-1904-1682",
+          "detail": "45H52 putting out of action by wounding, 45H3 battle",
+          "sharedNotations": [
+            "45H52",
+            "45H3"
+          ]
+        },
+        {
+          "objectNumber": "RP-F-F25056-D",
+          "title": "Fotoreproductie van een schilderij van Napoleon Bonaparte bij de slag van Regensburg door Pierre Gautherot",
+          "creator": "anonymous",
+          "date": "1890–1930",
+          "type": "reproductie",
+          "score": 76,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-F-F25056-D",
+          "detail": "45H52 putting out of action by wounding, 45H3 battle",
+          "sharedNotations": [
+            "45H52",
+            "45H3"
+          ]
+        },
+        {
+          "objectNumber": "RP-F-2001-7-18-8",
+          "title": "Fotoreproductie van een prent van Horatio Nelson die gewond aankomt op Tenerife na de zeeslag bij Kaap Sint-Vincent in 1797",
+          "creator": "anonymous",
+          "date": "1877–1887",
+          "type": "reproductie",
+          "iiifId": "ADECz",
+          "score": 76,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-F-2001-7-18-8",
+          "detail": "45H52 putting out of action by wounding, 45H3 battle",
+          "sharedNotations": [
+            "45H52",
+            "45H3"
+          ]
+        }
+      ],
+      "lineage": [],
+      "description": [
+        {
+          "objectNumber": "RP-P-OB-27.938",
+          "title": "Slag bij Waterloo",
+          "creator": "Nicolaas Pieneman (mentioned on object)",
+          "date": "1820–1833",
+          "type": "print",
+          "iiifId": "yjXAz",
+          "score": 0.975,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938",
+          "detail": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt lin...",
+          "descSnippet": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]"
+        },
+        {
+          "objectNumber": "RP-P-OB-27.939",
+          "title": "Slag bij Waterloo",
+          "creator": "Jean Augustin Daiwaille",
+          "date": "1820–1833",
+          "type": "print",
+          "iiifId": "sPpFA",
+          "score": 0.975,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939",
+          "detail": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt lin...",
+          "descSnippet": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]"
+        },
+        {
+          "objectNumber": "RP-P-OB-29.375",
+          "title": "Slag bij Waterloo",
+          "creator": "Nicolaas Pieneman (mentioned on object)",
+          "date": "1820–1833",
+          "type": "print",
+          "iiifId": "sfFyh",
+          "score": 0.975,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-P-OB-29.375",
+          "detail": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt lin...",
+          "descSnippet": "De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De […]"
+        }
+      ],
+      "visual": [
+        {
+          "objectNumber": "SK-A-3753",
+          "title": "Louis XIV Crossing into the Netherlands at Lobith",
+          "creator": "Adam Frans van der Meulen",
+          "iiifId": "KtNHn",
+          "score": 3,
+          "url": "https://www.rijksmuseum.nl/en/collection/SK-A-3753"
+        },
+        {
+          "objectNumber": "SK-A-605",
+          "title": "The Battle of the Boyne, Ireland, between Kings James II and William III, 12 July 1690",
+          "creator": "Jan van Huchtenburg",
+          "iiifId": "cAqLF",
+          "score": 2,
+          "url": "https://www.rijksmuseum.nl/en/collection/SK-A-605"
+        },
+        {
+          "objectNumber": "SK-A-664",
+          "title": "Prince Maurice at the Battle of Nieuwpoort, 2 July 1600",
+          "creator": "Pauwels van Hillegaert (signed by artist)",
+          "iiifId": "SyWtO",
+          "score": 1,
+          "url": "https://www.rijksmuseum.nl/en/collection/SK-A-664"
+        }
+      ],
+      "theme": [
+        {
+          "objectNumber": "SK-A-2823",
+          "title": "The Prince of Orange changing his Wounded Horse during the Engagement at Boutersem",
+          "creator": "Cornelis Kruseman",
+          "date": "1837–1839",
+          "type": "schets",
+          "iiifId": "FgJBY",
+          "score": 7.74,
+          "url": "https://www.rijksmuseum.nl/en/collection/SK-A-2823",
+          "detail": "history painting, military history",
+          "sharedTerms": [
+            {
+              "label": "history painting"
+            },
+            {
+              "label": "military history"
+            }
+          ]
+        },
+        {
+          "objectNumber": "SK-C-222",
+          "title": "Jan van Speyk steekt de lont in het kruit, 5 februari 1831",
+          "creator": "Jacobus Schoemaker Doyer",
+          "date": "1831–1850",
+          "type": "painting",
+          "iiifId": "LQGwS",
+          "score": 7.74,
+          "url": "https://www.rijksmuseum.nl/en/collection/SK-C-222",
+          "detail": "history painting, military history",
+          "sharedTerms": [
+            {
+              "label": "history painting"
+            },
+            {
+              "label": "military history"
+            }
+          ]
+        },
+        {
+          "objectNumber": "SK-C-226",
+          "title": "The Explosion of Gunboat nr 2, under Command of Jan van Speyk, off Antwerp, 5 February 1831",
+          "creator": "Martinus Schouman",
+          "date": "1832",
+          "type": "painting",
+          "iiifId": "xseWA",
+          "score": 7.74,
+          "url": "https://www.rijksmuseum.nl/en/collection/SK-C-226",
+          "detail": "history painting, military history",
+          "sharedTerms": [
+            {
+              "label": "history painting"
+            },
+            {
+              "label": "military history"
+            }
+          ]
+        }
+      ],
+      "relatedVariant": [
+        {
+          "objectNumber": "RP-T-1964-102A",
+          "title": "Study for The Battle of Waterloo",
+          "creator": "Jan Willem Pieneman",
+          "date": "1824",
+          "type": "drawing",
+          "iiifId": "cOJsQ",
+          "score": 10,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-T-1964-102A",
+          "detail": "production stadia",
+          "sharedTerms": [
+            {
+              "label": "production stadia"
+            }
+          ]
+        },
+        {
+          "objectNumber": "RP-T-1964-101A",
+          "title": "Study for The Battle of Waterloo",
+          "creator": "Jan Willem Pieneman",
+          "date": "1824",
+          "type": "drawing",
+          "iiifId": "IFifs",
+          "score": 10,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-T-1964-101A",
+          "detail": "production stadia",
+          "sharedTerms": [
+            {
+              "label": "production stadia"
+            }
+          ]
+        },
+        {
+          "objectNumber": "RP-T-1964-103",
+          "title": "Study for The Battle of Waterloo",
+          "creator": "Jan Willem Pieneman",
+          "date": "1824",
+          "type": "drawing",
+          "iiifId": "hkPWp",
+          "score": 10,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-T-1964-103",
+          "detail": "production stadia",
+          "sharedTerms": [
+            {
+              "label": "production stadia"
+            }
+          ]
+        }
+      ],
+      "relatedObject": [
+        {
+          "objectNumber": "NG-1171-B",
+          "title": "Beschrijving van het schilderij voorstellende den veldslag bij Waterloo",
+          "creator": "Met & Meylink",
+          "date": "1825",
+          "type": "brochure",
+          "iiifId": "KdqhZ",
+          "score": 2,
+          "url": "https://www.rijksmuseum.nl/en/collection/NG-1171-B",
+          "detail": "related object",
+          "sharedTerms": [
+            {
+              "label": "related object"
+            }
+          ]
+        },
+        {
+          "objectNumber": "NG-1171-A",
+          "title": "Tekening van het schilderij voorstellende den veldslag bij Waterloo",
+          "creator": "Met & Meylink",
+          "date": "1825",
+          "type": "drawing",
+          "iiifId": "HuSXY",
+          "score": 2,
+          "url": "https://www.rijksmuseum.nl/en/collection/NG-1171-A",
+          "detail": "related object",
+          "sharedTerms": [
+            {
+              "label": "related object"
+            }
+          ]
+        },
+        {
+          "objectNumber": "RP-P-1909-4151",
+          "title": "Slag bij Waterloo, 1815",
+          "creator": "Carel Christiaan Antony Last (mentioned on object)",
+          "date": "1865",
+          "type": "print",
+          "iiifId": "dqScR",
+          "score": 4,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-P-1909-4151",
+          "detail": "original | reproduction",
+          "sharedTerms": [
+            {
+              "label": "original | reproduction"
+            }
+          ]
+        }
+      ],
+      "depictedPerson": [
+        {
+          "objectNumber": "RP-P-1903-A-23874",
+          "title": "Gedenkzuil voor de Slag bij Waterloo",
+          "creator": "Cornelis Bogerts (mentioned on object)",
+          "date": "1815–1817",
+          "type": "print",
+          "iiifId": "svzxI",
+          "score": 12.36,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-P-1903-A-23874",
+          "detail": "Wellington, Arthur Wellesley of, William II of the Netherlands",
+          "sharedTerms": [
+            {
+              "label": "Wellington, Arthur Wellesley of",
+              "wikidataUri": "http://www.wikidata.org/entity/Q131691"
+            },
+            {
+              "label": "William II of the Netherlands",
+              "wikidataUri": "http://www.wikidata.org/entity/Q154287"
+            }
+          ]
+        },
+        {
+          "objectNumber": "RP-P-OB-27.938",
+          "title": "Slag bij Waterloo",
+          "creator": "Nicolaas Pieneman (mentioned on object)",
+          "date": "1820–1833",
+          "type": "print",
+          "iiifId": "yjXAz",
+          "score": 12.36,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.938",
+          "detail": "Wellington, Arthur Wellesley of, William II of the Netherlands",
+          "sharedTerms": [
+            {
+              "label": "Wellington, Arthur Wellesley of",
+              "wikidataUri": "http://www.wikidata.org/entity/Q131691"
+            },
+            {
+              "label": "William II of the Netherlands",
+              "wikidataUri": "http://www.wikidata.org/entity/Q154287"
+            }
+          ]
+        },
+        {
+          "objectNumber": "RP-P-OB-27.939",
+          "title": "Slag bij Waterloo",
+          "creator": "Jean Augustin Daiwaille",
+          "date": "1820–1833",
+          "type": "print",
+          "iiifId": "sPpFA",
+          "score": 12.36,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-P-OB-27.939",
+          "detail": "Wellington, Arthur Wellesley of, William II of the Netherlands",
+          "sharedTerms": [
+            {
+              "label": "Wellington, Arthur Wellesley of",
+              "wikidataUri": "http://www.wikidata.org/entity/Q131691"
+            },
+            {
+              "label": "William II of the Netherlands",
+              "wikidataUri": "http://www.wikidata.org/entity/Q154287"
+            }
+          ]
+        }
+      ],
+      "depictedPlace": [
+        {
+          "objectNumber": "RP-T-1929-22",
+          "title": "Thuiskomst van een oude soldaat, na de slag bij Waterloo",
+          "creator": "Eugène François de Block",
+          "date": "1843",
+          "type": "drawing",
+          "iiifId": "pUhZL",
+          "score": 6.49,
+          "url": "https://www.rijksmuseum.nl/en/collection/RP-T-1929-22",
+          "detail": "Waterloo",
+          "sharedTerms": [
+            {
+              "label": "Waterloo",
+              "wikidataUri": "http://vocab.getty.edu/tgn/7008022"
+            }
+          ]
+        },
+        {
+          "objectNumber": "SK-A-2165",
+          "title": "The Chassé Division at the Battle of Waterloo",
+          "creator": "Jan Hoynck van Papendrecht (mentioned on object)",
+          "date": "1900–1905",
+          "type": "painting",
+          "score": 6.49,
+          "url": "https://www.rijksmuseum.nl/en/collection/SK-A-2165",
+          "detail": "Waterloo",
+          "sharedTerms": [
+            {
+              "label": "Waterloo",
+              "wikidataUri": "http://vocab.getty.edu/tgn/7008022"
+            }
+          ]
+        },
+        {
+          "objectNumber": "SK-A-3856",
+          "title": "Een oud-strijder van de Slag bij Waterloo, geportretteerd ter gelegenheid van de 60-jarige herdenking van de slag",
+          "creator": "Piet Slager (I)",
+          "date": "1875–1876",
+          "type": "painting",
+          "score": 6.49,
+          "url": "https://www.rijksmuseum.nl/en/collection/SK-A-3856",
+          "detail": "Waterloo",
+          "sharedTerms": [
+            {
+              "label": "Waterloo",
+              "wikidataUri": "http://vocab.getty.edu/tgn/7008022"
+            }
+          ]
+        }
+      ]
+    },
+    "pooled": [],
+    "poolThreshold": 4,
+    "pageUrl": "/var/folders/14/cd_23cfd3n18qrqgb22ghypc0000gq/T/rijksmuseum-similar-6889768e-d3df-41d9-9f3d-dc879b996bb5.html",
+    "generatedAt": "2026-10-30 11:39",
+    "visualSearchUrl": "https://www.rijksmuseum.nl/en/collection/visual/search?objectNodeId=9fc8b4d132695d9b276b9c92522386f3",
+    "visualTotalResults": 4
+  },
+  "text": "Similar to \"The Battle of Waterloo\" (SK-A-1115)\nVisual: 3 | Related Variant: 3 | Related Object: 3 | Lineage: 0 | Iconclass: 3 | Description: 3 | Theme: 3 | Person: 3 | Place: 3 | Pooled (4+): 0\n\n/var/folders/14/cd_23cfd3n18qrqgb22ghypc0000gq/T/rijksmuseum-similar-6889768e-d3df-41d9-9f3d-dc879b996bb5.html",
   "args": {
     "objectNumber": "SK-A-1115",
     "maxResults": 3

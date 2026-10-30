@@ -9,10 +9,12 @@
     "imageBytes"
   ],
   "isError": false,
-  "bytesStructured": 311,
+  "bytesStructured": 377,
   "bytesText": 0,
   "structured": {
     "objectNumber": "SK-A-1115",
+    "title": "The Battle of Waterloo",
+    "creator": "Jan Willem Pieneman",
     "region": "pct:40,40,20,20",
     "requestedSize": 400,
     "nativeWidth": 8106,
@@ -22,8 +24,8 @@
     "cropRegion": "pct:40,40,20,20",
     "rotation": 0,
     "quality": "default",
-    "fetchTimeMs": 35,
-    "viewUUID": "a46b199e-0234-49a4-9448-e02805de3bab",
+    "fetchTimeMs": 379,
+    "viewUUID": "fa27f30a-b52c-440d-8936-4fcfea26fdd6",
     "viewerNavigated": true
   },
   "text": "",

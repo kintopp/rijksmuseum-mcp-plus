@@ -4,8 +4,8 @@
   "anchor": "SK-A-1115",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 6737,
-  "bytesText": 3109,
+  "bytesStructured": 8935,
+  "bytesText": 3135,
   "structured": {
     "id": "https://id.rijksmuseum.nl/8065",
     "objectNumber": "SK-A-1115",
@@ -122,21 +122,57 @@
       }
     ],
     "relatedObjectsTotalCount": 4,
-    "persistentId": "http://hdl.handle.net/10934/RM0001.COLLECT.8065",
+    "physicalRelations": [
+      {
+        "relationship": "object | former frame",
+        "objectNumber": "SK-L-3820",
+        "title": "Neo-klassieke, vergulde lijst van naaldhout",
+        "objectUri": "https://id.rijksmuseum.nl/200668737",
+        "iiifId": null
+      }
+    ],
+    "physicalRelationsTotalCount": 1,
+    "persistentId": "http://hdl.handle.net/10934/RM0001.COLLECT.5029",
     "objectTypes": [
       {
         "id": "2208",
-        "label": "painting"
+        "label": "painting",
+        "equivalents": [
+          {
+            "authority": "aat",
+            "id": "300177435",
+            "uri": "http://vocab.getty.edu/aat/300177435"
+          }
+        ]
       }
     ],
     "materials": [
       {
         "id": "22010",
-        "label": "canvas"
+        "label": "canvas",
+        "equivalents": [
+          {
+            "authority": "aat",
+            "id": "300014078",
+            "uri": "http://vocab.getty.edu/aat/300014078"
+          }
+        ]
       },
       {
         "id": "2209",
-        "label": "oil paint (paint)"
+        "label": "oil paint (paint)",
+        "equivalents": [
+          {
+            "authority": "wikidata",
+            "id": "Q296955",
+            "uri": "http://www.wikidata.org/entity/Q296955"
+          },
+          {
+            "authority": "aat",
+            "id": "300015050",
+            "uri": "http://vocab.getty.edu/aat/300015050"
+          }
+        ]
       }
     ],
     "production": [
@@ -146,6 +182,28 @@
         "attributionQualifier": "primary",
         "place": "Abcoude",
         "actorUri": "2101244",
+        "equivalents": [
+          {
+            "authority": "wikidata",
+            "id": "Q512948",
+            "uri": "http://www.wikidata.org/entity/Q512948"
+          },
+          {
+            "authority": "viaf",
+            "id": "77060508",
+            "uri": "http://viaf.org/viaf/77060508"
+          },
+          {
+            "authority": "ulan",
+            "id": "500024980",
+            "uri": "http://vocab.getty.edu/ulan/500024980"
+          },
+          {
+            "authority": "rkd",
+            "id": "63369",
+            "uri": "https://rkd.nl/artists/63369"
+          }
+        ],
         "personInfo": {
           "birthYear": 1779,
           "deathYear": 1853,
@@ -202,21 +260,79 @@
       "depictedPersons": [
         {
           "id": "21040136",
-          "label": "William II of the Netherlands"
+          "label": "William II of the Netherlands",
+          "equivalents": [
+            {
+              "authority": "wikidata",
+              "id": "Q154287",
+              "uri": "http://www.wikidata.org/entity/Q154287"
+            },
+            {
+              "authority": "viaf",
+              "id": "5904163513732811230007",
+              "uri": "http://viaf.org/viaf/5904163513732811230007"
+            },
+            {
+              "authority": "ulan",
+              "id": "500373138",
+              "uri": "http://vocab.getty.edu/ulan/500373138"
+            },
+            {
+              "authority": "rkd",
+              "id": "349540",
+              "uri": "https://rkd.nl/artists/349540"
+            }
+          ]
         },
         {
           "id": "21076460",
-          "label": "Wellington, Arthur Wellesley of"
+          "label": "Wellington, Arthur Wellesley of",
+          "equivalents": [
+            {
+              "authority": "wikidata",
+              "id": "Q131691",
+              "uri": "http://www.wikidata.org/entity/Q131691"
+            },
+            {
+              "authority": "viaf",
+              "id": "2465308",
+              "uri": "http://viaf.org/viaf/2465308"
+            },
+            {
+              "authority": "ulan",
+              "id": "500088735",
+              "uri": "http://vocab.getty.edu/ulan/500088735"
+            }
+          ]
         },
         {
           "id": "2109825",
-          "label": "Hill, sir Rowland"
+          "label": "Hill, sir Rowland",
+          "equivalents": [
+            {
+              "authority": "wikidata",
+              "id": "Q370241",
+              "uri": "http://www.wikidata.org/entity/Q370241"
+            },
+            {
+              "authority": "viaf",
+              "id": "32793081",
+              "uri": "http://viaf.org/viaf/32793081"
+            }
+          ]
         }
       ],
       "depictedPlaces": [
         {
           "id": "2301002",
-          "label": "Waterloo"
+          "label": "Waterloo",
+          "equivalents": [
+            {
+              "authority": "tgn",
+              "id": "7008022",
+              "uri": "http://vocab.getty.edu/tgn/7008022"
+            }
+          ]
         }
       ]
     },
@@ -227,15 +343,36 @@
     "themes": [
       {
         "id": "22015182",
-        "label": "history painting"
+        "label": "history painting",
+        "equivalents": [
+          {
+            "authority": "aat",
+            "id": "300033898",
+            "uri": "http://vocab.getty.edu/aat/300033898"
+          }
+        ]
       },
       {
         "id": "22014932",
-        "label": "battlefield"
+        "label": "battlefield",
+        "equivalents": [
+          {
+            "authority": "aat",
+            "id": "300000835",
+            "uri": "http://vocab.getty.edu/aat/300000835"
+          }
+        ]
       },
       {
         "id": "22012473",
-        "label": "military history"
+        "label": "military history",
+        "equivalents": [
+          {
+            "authority": "aat",
+            "id": "300249450",
+            "uri": "http://vocab.getty.edu/aat/300249450"
+          }
+        ]
       }
     ],
     "themesTotalCount": 3,
@@ -246,7 +383,9 @@
       "inscriptions": 0,
       "total": 0
     },
-    "provenanceChain": null,
+    "bibliographyCount": 27,
+    "provenanceEventCount": 0,
+    "provenanceCrossRefTarget": null,
     "parsedInscriptions": [
       {
         "sequence": 0,
@@ -298,7 +437,7 @@
       "techniques": []
     }
   },
-  "text": "SK-A-1115 — The Battle of Waterloo\nJan Willem Pieneman, 1824\nh 567 cm × w 823 cm\ndepth 10 cm\nfirst, room 1.12\n\nTypes: painting\nMaterials: canvas, oil paint (paint)\nCollections: schilderijen, Alle gepubliceerde objecten, Entire Public Domain Set, biografisch, Top 1000 ...and 2 more\nIconclass: 45E4 | 45H3 | 45H52\nDepicted persons: William II of the Netherlands, Wellington, Arthur Wellesley of, Hill, sir Rowland\nDepicted places: Waterloo\nProduction: Pieneman, Jan Willem (1779–1853) [painter], Abcoude\n\n[Description] De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.\n[Narrative] Here the Duke of Wellington is receiving the message that Prussian forces are coming to his aid. Wellington, commander of the Anglo-Dutch troops, is the central figure in this group portrait of the major players at Waterloo. Lying wounded on a stretcher in the left foreground is the Dutch Crown Prince, later King William II. Originally intended for Wellington, the painting remained in the Netherlands thanks to William I who bought the picture for his son.\n[Inscriptions] signatuur en datum, rechts op een affuit: ‘1824 J.W. Pieneman’; signature and date: ‘1824 J.W. Pieneman’\n[Inscription notes] bears transcribed text\n[Titles] (4 variants) full/nl: De slag bij Waterloo | display/nl: De Slag bij Waterloo | display/en: The Battle of Waterloo | full/en: The Battle of Waterloo\n[Related variants] production stadia: RP-T-1964-101A, RP-T-1964-102A, RP-T-1964-103, RP-T-1964-99\nURL: https://www.rijksmuseum.nl/en/collection/SK-A-1115",
+  "text": "SK-A-1115 — The Battle of Waterloo\nJan Willem Pieneman, 1824\nh 567 cm × w 823 cm\ndepth 10 cm\nfirst, room 1.12\n\nTypes: painting\nMaterials: canvas, oil paint (paint)\nCollections: schilderijen, Alle gepubliceerde objecten, Entire Public Domain Set, biografisch, Top 1000 ...and 2 more\nIconclass: 45E4 | 45H3 | 45H52\nDepicted persons: William II of the Netherlands, Wellington, Arthur Wellesley of, Hill, sir Rowland\nDepicted places: Waterloo\nProduction: Pieneman, Jan Willem (1779–1853) [painter], Abcoude\n\n[Description] De slag bij Waterloo, 18 juni 1815. Gezicht op het slagveld op het moment dat de Engelse bevelhebber Wellington hoort dat Pruisische hulp onderweg is. De gewonde Willem, prins van Oranje, wordt links op de voorgrond weggevoerd. De bevelhebbers en andere officieren te paard staan in het midden, rechts op de voorgrond gewonde en dode soldaten. Op de achtergrond woeden de gevechten op het slagveld. Geportretteerd zijn verder (onder anderen): Lieutenant-general Lord Uxbridge, sir Rowland Hill, Staff Colonel Sir William Delancey, Major-General George Cooke, Colonel Harvey, Colonel Campbell. luitenant-generaal Don Miquel de Alava, Lieutenant-colonel F.C. Ponsonby, Major William Thornhill, Jean Victor, baron De Constant de Rebeque, Colonel Sir John Elley, Luitenant-kolonel Aberson, Generaal-majoor A.K.J.G. d'Aubremé, Kapitein Aberson, Kapitein H. Roepel, Kolonel H. Detmers, Majoor J.L.D. van der Smissen, Colonel J. Colborne, Luitenant kolonel Jhr. W.F. Boreel. Luitenant Generaal D.H. Baron Chassé, Colonel Sir G.A. Wood, Generaal Majoor J.B. Baon van Merlen, Luitenant Generaal Ch. von Alten, Major General Sir Colin Halkett, Lieutenant-Colonel William George Harris, Kapitein C. Nepveu, Fitzroy James Henry Somerset, H.D. Graaf De Cruquenbourg, N.C. Ampt, Generaal-Majoor Jhr. A.D. Trip, John William Fremantle, Generaal-Majoor Graaf van Rheede, Major-General Lord Edward Somerset, Charles Gordon Lennox, earl of March, Colonel Dennis Pack, Majoor P.S.R. van Hooff, Major general John Ormsby Vandeleur, Major Georg, Freiherr Baring, Kolonel C. Von Ompteda, Kolonel L.J.H.F. De Caylar en Général de Division Cambronne, Maréchal de Camp.\n[Narrative] Here the Duke of Wellington is receiving the message that Prussian forces are coming to his aid. Wellington, commander of the Anglo-Dutch troops, is the central figure in this group portrait of the major players at Waterloo. Lying wounded on a stretcher in the left foreground is the Dutch Crown Prince, later King William II. Originally intended for Wellington, the painting remained in the Netherlands thanks to William I who bought the picture for his son.\n[Inscriptions] signatuur en datum, rechts op een affuit: ‘1824 J.W. Pieneman’; signature and date: ‘1824 J.W. Pieneman’\n[Inscription notes] bears transcribed text\n[Titles] (4 variants) full/nl: De slag bij Waterloo | display/nl: De Slag bij Waterloo | display/en: The Battle of Waterloo | full/en: The Battle of Waterloo\n[Related variants] production stadia: RP-T-1964-101A, RP-T-1964-102A, RP-T-1964-103, RP-T-1964-99\n\nBibliography: 27 entries\nURL: https://www.rijksmuseum.nl/en/collection/SK-A-1115",
   "args": {
     "objectNumber": "SK-A-1115"
   }

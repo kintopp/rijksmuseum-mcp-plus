@@ -4,7 +4,7 @@
   "anchor": "SK-C-5",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 483,
+  "bytesStructured": 473,
   "bytesText": 245,
   "structured": {
     "iiifInfoUrl": "https://iiif.micr.io/PJEZO/info.json",
@@ -16,10 +16,10 @@
     "date": "1642",
     "license": "http://creativecommons.org/publicdomain/mark/1.0/",
     "physicalDimensions": "h 379.5 cm × w 453.5 cm",
-    "collectionUrl": "https://www.rijksmuseum.nl/en/collection/SK-C-5",
-    "viewUUID": "285ebf4c-955f-4466-9245-61a959cc27bc"
+    "url": "https://www.rijksmuseum.nl/en/collection/SK-C-5",
+    "viewUUID": "78a567ba-f096-44b6-8d58-66ff91a96551"
   },
-  "text": "SK-C-5 — \"The Night Watch Militia Company of District II under the Command of Captain Frans Banninck Cocq\" by Rembrandt van Rijn | 14645×12158px [http://creativecommons.org/publicdomain/mark/1.0/] | viewUUID: 285ebf4c-955f-4466-9245-61a959cc27bc",
+  "text": "SK-C-5 — \"The Night Watch Militia Company of District II under the Command of Captain Frans Banninck Cocq\" by Rembrandt van Rijn | 14645×12158px [http://creativecommons.org/publicdomain/mark/1.0/] | viewUUID: 78a567ba-f096-44b6-8d58-66ff91a96551",
   "args": {
     "objectNumber": "SK-C-5"
   }

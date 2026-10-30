@@ -6,7 +6,7 @@
   "bytesStructured": 791,
   "bytesText": 617,
   "structured": {
-    "totalResults": 122,
+    "totalResults": 128,
     "results": [
       {
         "objectNumber": "SK-C-5",
@@ -35,7 +35,7 @@
     ],
     "source": "vocabulary"
   },
-  "text": "3 results of 122 total (vocabulary search)\n1. SK-C-5 | painting | 1642 | \"The Night Watch Militia Company of District II under the Command of Captain Frans Banninck Cocq\" — Rembrandt van Rijn https://www.rijksmuseum.nl/en/collection/SK-C-5\n2. SK-A-4947 | keyboard instrument | 1604–1607 | \"Amsterdam as the Centre of World Trade\" — Pieter Isaacsz. https://www.rijksmuseum.nl/en/collection/SK-A-4947\n3. SK-A-1393 | painting | 1667–1678 | \"Het verbranden van de Engelse vloot bij Chatham, juni 1667, tijdens de Tweede Engelse Zeeoorlog (1665-1667)\" — Willem Schellinks https://www.rijksmuseum.nl/en/collection/SK-A-1393",
+  "text": "3 results of 128 total (vocabulary search)\n1. SK-C-5 | painting | 1642 | \"The Night Watch Militia Company of District II under the Command of Captain Frans Banninck Cocq\" — Rembrandt van Rijn https://www.rijksmuseum.nl/en/collection/SK-C-5\n2. SK-A-4947 | keyboard instrument | 1604–1607 | \"Amsterdam as the Centre of World Trade\" — Pieter Isaacsz. https://www.rijksmuseum.nl/en/collection/SK-A-4947\n3. SK-A-1393 | painting | 1667–1678 | \"Het verbranden van de Engelse vloot bij Chatham, juni 1667, tijdens de Tweede Engelse Zeeoorlog (1665-1667)\" — Willem Schellinks https://www.rijksmuseum.nl/en/collection/SK-A-1393",
   "args": {
     "type": "painting",
     "productionPlace": "Amsterdam",

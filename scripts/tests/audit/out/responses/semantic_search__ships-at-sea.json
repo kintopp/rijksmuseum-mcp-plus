@@ -3,8 +3,8 @@
   "fixture": "ships-at-sea",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 1046,
-  "bytesText": 751,
+  "bytesStructured": 949,
+  "bytesText": 654,
   "structured": {
     "searchMode": "semantic",
     "query": "ships at sea in a storm",
@@ -12,40 +12,40 @@
     "results": [
       {
         "rank": 1,
-        "objectNumber": "RP-T-00-1672",
-        "title": "Twee schepen op zee bij storm",
-        "creator": "Hendrik Kobell",
-        "date": "1761–1779",
-        "type": "drawing",
-        "similarityScore": 0.885,
-        "sourceText": "[Title] Twee schepen op zee bij storm",
-        "url": "https://www.rijksmuseum.nl/en/collection/RP-T-00-1672"
-      },
-      {
-        "rank": 2,
-        "objectNumber": "SK-C-448",
-        "title": "Ships in a Storm",
-        "creator": "attributed to Andries van Eertvelt",
-        "date": "1600–1652",
-        "type": "painting",
-        "similarityScore": 0.872,
-        "sourceText": "[Title] Ships in a Storm [Inscriptions] signatuur, midden onder: vE. | signature [Description] Zeegezicht met enkele schepen op zee tijdens een storm.",
-        "url": "https://www.rijksmuseum.nl/en/collection/SK-C-448"
-      },
-      {
-        "rank": 3,
         "objectNumber": "RP-P-OB-15.176",
         "title": "Zeilsschepen in storm op zee",
         "creator": "anonymous",
         "date": "1605–1703",
         "type": "print",
-        "similarityScore": 0.866,
+        "similarityScore": 0.865,
         "sourceText": "[Title] Zeilsschepen in storm op zee",
         "url": "https://www.rijksmuseum.nl/en/collection/RP-P-OB-15.176"
+      },
+      {
+        "rank": 2,
+        "objectNumber": "RP-P-1898-A-20645",
+        "title": "Zeilsschepen in storm op zee",
+        "creator": "Gillis van Scheyndel (I)",
+        "date": "1605–1653",
+        "type": "print",
+        "similarityScore": 0.865,
+        "sourceText": "[Title] Zeilsschepen in storm op zee",
+        "url": "https://www.rijksmuseum.nl/en/collection/RP-P-1898-A-20645"
+      },
+      {
+        "rank": 3,
+        "objectNumber": "RP-T-00-1672",
+        "title": "Twee schepen op zee bij storm",
+        "creator": "Hendrik Kobell",
+        "date": "1761–1779",
+        "type": "drawing",
+        "similarityScore": 0.859,
+        "sourceText": "[Title] Twee schepen op zee bij storm",
+        "url": "https://www.rijksmuseum.nl/en/collection/RP-T-00-1672"
       }
     ]
   },
-  "text": "3 semantic matches for \"ships at sea in a storm\" (semantic mode)\n\n1. RP-T-00-1672 | drawing | 1761–1779 | \"Twee schepen op zee bij storm\" — Hendrik Kobell https://www.rijksmuseum.nl/en/collection/RP-T-00-1672  [0.89]\n   [Title] Twee schepen op zee bij storm\n\n2. SK-C-448 | painting | 1600–1652 | \"Ships in a Storm\" — attributed to Andries van Eertvelt https://www.rijksmuseum.nl/en/collection/SK-C-448  [0.87]\n   [Title] Ships in a Storm [Inscriptions] signatuur, midden onder: vE. | signature [Description] Zeegezicht met enkele schepen op zee tijdens een storm.\n\n3. RP-P-OB-15.176 | print | 1605–1703 | \"Zeilsschepen in storm op zee\" — anonymous https://www.rijksmuseum.nl/en/collection/RP-P-OB-15.176  [0.87]\n   [Title] Zeilsschepen in storm op zee",
+  "text": "3 semantic matches for \"ships at sea in a storm\" (semantic mode)\n\n1. RP-P-OB-15.176 | print | 1605–1703 | \"Zeilsschepen in storm op zee\" — anonymous https://www.rijksmuseum.nl/en/collection/RP-P-OB-15.176  [0.86]\n   [Title] Zeilsschepen in storm op zee\n\n2. RP-P-1898-A-20645 | print | 1605–1653 | \"Zeilsschepen in storm op zee\" — Gillis van Scheyndel (I) https://www.rijksmuseum.nl/en/collection/RP-P-1898-A-20645  [0.86]\n   [Title] Zeilsschepen in storm op zee\n\n3. RP-T-00-1672 | drawing | 1761–1779 | \"Twee schepen op zee bij storm\" — Hendrik Kobell https://www.rijksmuseum.nl/en/collection/RP-T-00-1672  [0.86]\n   [Title] Twee schepen op zee bij storm",
   "args": {
     "query": "ships at sea in a storm",
     "maxResults": 3

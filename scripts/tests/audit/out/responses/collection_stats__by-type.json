@@ -3,10 +3,76 @@
   "fixture": "by-type",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 4,
-  "bytesText": 499,
-  "structured": null,
-  "text": "type distribution:\nTotal artworks: 834,435\nShowing entries 1–10 of 632 distinct values\n\n  print                  369,054  (44.2%)\n  photograph             133,804  (16.0%)\n  drawing                 56,763  (6.8%)\n  photomechanical print   52,428  (6.3%)\n  carte-de-visite         17,979  (2.2%)\n  rectos                  15,055  (1.8%)\n  letter                  11,412  (1.4%)\n  stereograph             11,056  (1.3%)\n  versos                  10,534  (1.3%)\n  popular print            9,004  (1.1%)",
+  "bytesStructured": 787,
+  "bytesText": 584,
+  "structured": {
+    "dimension": "type",
+    "denominatorScope": "artwork",
+    "multiValued": true,
+    "groupingKey": "label",
+    "ordering": "count_desc",
+    "appliedFilters": {},
+    "total": 834435,
+    "coverage": {
+      "withBucket": 742872,
+      "withoutBucket": 91563
+    },
+    "totalBuckets": 632,
+    "offset": 0,
+    "entries": [
+      {
+        "label": "print",
+        "count": 369054,
+        "percentage": 44.2
+      },
+      {
+        "label": "photograph",
+        "count": 133804,
+        "percentage": 16
+      },
+      {
+        "label": "drawing",
+        "count": 56763,
+        "percentage": 6.8
+      },
+      {
+        "label": "photomechanical print",
+        "count": 52428,
+        "percentage": 6.3
+      },
+      {
+        "label": "carte-de-visite",
+        "count": 17979,
+        "percentage": 2.2
+      },
+      {
+        "label": "rectos",
+        "count": 15055,
+        "percentage": 1.8
+      },
+      {
+        "label": "letter",
+        "count": 11412,
+        "percentage": 1.4
+      },
+      {
+        "label": "stereograph",
+        "count": 11056,
+        "percentage": 1.3
+      },
+      {
+        "label": "versos",
+        "count": 10534,
+        "percentage": 1.3
+      },
+      {
+        "label": "popular print",
+        "count": 9004,
+        "percentage": 1.1
+      }
+    ]
+  },
+  "text": "type distribution:\nTotal artworks: 834,435\n(multi-valued: artworks can match multiple buckets, so percentages can sum to >100%)\nShowing entries 1–10 of 632 distinct values\n\n  print                  369,054  (44.2%)\n  photograph             133,804  (16.0%)\n  drawing                 56,763  (6.8%)\n  photomechanical print   52,428  (6.3%)\n  carte-de-visite         17,979  (2.2%)\n  rectos                  15,055  (1.8%)\n  letter                  11,412  (1.4%)\n  stereograph             11,056  (1.3%)\n  versos                  10,534  (1.3%)\n  popular print            9,004  (1.1%)",
   "args": {
     "dimension": "type",
     "topN": 10

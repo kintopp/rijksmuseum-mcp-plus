@@ -3,8 +3,8 @@
   "fixture": "wellington",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 3901,
-  "bytesText": 538,
+  "bytesStructured": 3663,
+  "bytesText": 674,
   "structured": {
     "totalArtworks": 1,
     "results": [
@@ -190,14 +190,14 @@
             "parseMethod": "peg",
             "categoryMethod": "rule:transfer_is_ownership",
             "correctionMethod": null,
-            "enrichmentReasoning": "Deterministic rule: all transfer-type events in the Rijksmuseum corpus are permanent institutional transfers. Verified via LLM pilot batch (50 artworks, 57/57 → ownership) and keyword analysis (0 genuine custody matches among 6,233 events).",
+            "enrichmentReasoning": null,
             "matched": false
           }
         ]
       }
     ]
   },
-  "text": "1 artwork with matching provenance\n\nRP-T-1961-81 | \"Reclining Lion\" — school of Rembrandt van Rijn (1650)\n  https://www.rijksmuseum.nl/en/collection/RP-T-1961-81\n  >>> 1. collection | Adelbert Wellington Brownlow Cust  [cat=ownership]\n      2. sale | P. & D. Colnaghi | 29 June 1926 sqq. | London | pounds 620  [cat=ownership]\n      3. collection | Isaäc de Bruijn | by 1929 | Spiez  [cat=ownership]\n      4. gift | museum (L. 2228) | 1949  [cat=ownership]\n      5. transfer | the museum | 1960  [cat=ownership/rule:transfer_is_ownership]",
+  "text": "1 artwork with matching provenance\n\nRP-T-1961-81 | \"Reclining Lion\" — school of Rembrandt van Rijn (1650)\n  https://www.rijksmuseum.nl/en/collection/RP-T-1961-81\n  >>> 1. collection | Adelbert Wellington Brownlow Cust (collector)  [cat=ownership]\n      2. sale | P. & D. Colnaghi (buyer) | 29 June 1926 sqq. | London | pounds 620 | src: According to an inscription on the drawing.  [cat=ownership]\n      3. collection | Isaäc de Bruijn (collector) | by 1929 | Spiez  [cat=ownership]\n      4. gift | museum (L. 2228) (recipient) | 1949 | src: London 1929, no. 623.  [cat=ownership]\n      5. transfer | the museum (recipient) | 1960  [cat=ownership/rule:transfer_is_ownership]",
   "args": {
     "party": "Wellington"
   }

@@ -4,7 +4,7 @@
   "anchor": "SK-A-2344",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 398,
+  "bytesStructured": 388,
   "bytesText": 161,
   "structured": {
     "iiifInfoUrl": "https://iiif.micr.io/QkOGy/info.json",
@@ -16,10 +16,10 @@
     "date": "1660",
     "license": "http://creativecommons.org/publicdomain/mark/1.0/",
     "physicalDimensions": "h 45.5 cm × w 41 cm",
-    "collectionUrl": "https://www.rijksmuseum.nl/en/collection/SK-A-2344",
-    "viewUUID": "4f40db80-8302-4432-a6cf-9b481499270c"
+    "url": "https://www.rijksmuseum.nl/en/collection/SK-A-2344",
+    "viewUUID": "3181d9f0-3228-4b04-924c-cb1af705e1b1"
   },
-  "text": "SK-A-2344 — \"The Milkmaid\" by Johannes Vermeer | 4649×5177px [http://creativecommons.org/publicdomain/mark/1.0/] | viewUUID: 4f40db80-8302-4432-a6cf-9b481499270c",
+  "text": "SK-A-2344 — \"The Milkmaid\" by Johannes Vermeer | 4649×5177px [http://creativecommons.org/publicdomain/mark/1.0/] | viewUUID: 3181d9f0-3228-4b04-924c-cb1af705e1b1",
   "args": {
     "objectNumber": "SK-A-2344"
   }

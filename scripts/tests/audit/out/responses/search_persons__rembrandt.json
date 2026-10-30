@@ -3,7 +3,7 @@
   "fixture": "rembrandt",
   "excludeFields": [],
   "isError": false,
-  "bytesStructured": 440,
+  "bytesStructured": 1249,
   "bytesText": 137,
   "structured": {
     "totalResults": 2,
@@ -17,7 +17,35 @@
         "deathYear": 1669,
         "gender": "male",
         "artworkCount": 3717,
-        "wikidataId": "Q5598"
+        "wikidataId": "Q5598",
+        "equivalents": [
+          {
+            "authority": "wikidata",
+            "id": "Q5598",
+            "uri": "http://www.wikidata.org/entity/Q5598"
+          },
+          {
+            "authority": "viaf",
+            "id": "64013650",
+            "uri": "http://viaf.org/viaf/64013650"
+          },
+          {
+            "authority": "ulan",
+            "id": "500011051",
+            "uri": "http://vocab.getty.edu/ulan/500011051"
+          },
+          {
+            "authority": "rkd",
+            "id": "66219",
+            "uri": "https://rkd.nl/artists/66219"
+          }
+        ],
+        "nameVariants": [
+          "Rembrandt",
+          "Rembrandt Harmensz. van Rijn",
+          "Rembrandt van Rijn",
+          "Rijn, Rembrandt Harmensz. van"
+        ]
       },
       {
         "vocabId": "210159785",
@@ -28,7 +56,32 @@
         "deathYear": null,
         "gender": null,
         "artworkCount": 1,
-        "wikidataId": "Q375926"
+        "wikidataId": "Q375926",
+        "equivalents": [
+          {
+            "authority": "wikidata",
+            "id": "Q375926",
+            "uri": "http://www.wikidata.org/entity/Q375926"
+          },
+          {
+            "authority": "viaf",
+            "id": "27334932",
+            "uri": "http://viaf.org/viaf/27334932"
+          },
+          {
+            "authority": "ulan",
+            "id": "500019719",
+            "uri": "http://vocab.getty.edu/ulan/500019719"
+          },
+          {
+            "authority": "rkd",
+            "id": "62243",
+            "uri": "https://rkd.nl/artists/62243"
+          }
+        ],
+        "nameVariants": [
+          "Peale, Rembrandt"
+        ]
       }
     ]
   },
