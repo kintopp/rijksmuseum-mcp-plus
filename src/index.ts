@@ -366,7 +366,7 @@ async function runHttp(): Promise<void> {
     const lastLogged = recentIpRejections.get(hit) ?? 0;
     if (now - lastLogged >= ORIGIN_LOG_INTERVAL_MS) {
       recentIpRejections.set(hit, now);
-      console.warn(`[mcp-block] 403 rejected ip=${hit} (chain=${candidates.join("|")})`);
+      logWarn("MCP blocked IP rejected", undefined, { ip: hit, chain: candidates.join("|") });
     }
     res.status(403).json({
       jsonrpc: "2.0",
@@ -384,7 +384,7 @@ async function runHttp(): Promise<void> {
   // to disable web-host checking).
   const mcpOriginAllowlist = parseMcpAllowedOrigins(process.env.MCP_ALLOWED_ORIGINS);
   if (mcpOriginAllowlist === "*") {
-    console.warn("[mcp-origin] WARNING: web-host validation disabled (MCP_ALLOWED_ORIGINS=*)");
+    logWarn("MCP origin validation disabled", undefined, { setting: "MCP_ALLOWED_ORIGINS=*" });
   }
   const recentOriginRejections = new Map<string, number>();
   const ORIGIN_LOG_INTERVAL_MS = 60_000;
@@ -408,7 +408,7 @@ async function runHttp(): Promise<void> {
     const lastLogged = recentOriginRejections.get(origin!) ?? 0;
     if (now - lastLogged >= ORIGIN_LOG_INTERVAL_MS) {
       recentOriginRejections.set(origin!, now);
-      console.warn(`[mcp-origin] 403 rejected origin=${origin} ip=${req.ip}`);
+      logWarn("MCP origin rejected", undefined, { origin, ip: req.ip });
     }
     res.status(403).json({
       jsonrpc: "2.0",

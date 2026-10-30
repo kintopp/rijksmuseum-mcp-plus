@@ -11,7 +11,8 @@
  * written to bare stderr, which Railway tags level=error; client text from a bad
  * body in the logs; a blocked Origin able to write those log lines; another
  * route's error reported as a JSON-RPC parse error; /debug/memory losing
- * heapAfterMajorGc, the leak signal after a deploy.
+ * heapAfterMajorGc, the leak signal after a deploy; a gate's log line written to
+ * bare stderr, so MCP_ALLOWED_ORIGINS=* shows up under @level:error on every boot.
  *
  * withResponseGuard (real createMcpHandler and toNodeHandler over real HTTP,
  * since the adapter's unconditional writeHead and its abort path are the hazards):
@@ -93,9 +94,9 @@ const paddedJson = (size) => {
   return JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { _meta: { pad: "x".repeat(size - empty.length) } } });
 };
 
-function boot(port, nodeArgs = []) {
+function boot(port, nodeArgs = [], env = {}) {
   const child = spawn("node", [...nodeArgs, "dist/index.js"], {
-    env: { ...process.env, PORT: String(port), ENABLE_FIND_SIMILAR: "true", MCP_SKIP_STARTUP_WARM: "1", VOCAB_DB_PATH: buildFixture(`fixture-http-transport-${port}.db`) },
+    env: { ...process.env, PORT: String(port), ENABLE_FIND_SIMILAR: "true", MCP_SKIP_STARTUP_WARM: "1", ...env, VOCAB_DB_PATH: buildFixture(`fixture-http-transport-${port}.db`) },
     stdio: ["ignore", "ignore", "pipe"],
   });
   process.once("exit", () => child.kill("SIGKILL"));
@@ -227,9 +228,11 @@ try {
     const bare = lines.filter((l) => {
       try { return typeof JSON.parse(l).level !== "string"; } catch { return true; }
     });
-    // The Origin gate's own [mcp-origin] line predates this and is throttled.
-    const unexpected = bare.filter((l) => !l.startsWith("[mcp-origin]"));
-    eq(unexpected.join("\n").slice(0, 200), "", "every other stderr line is JSON with a level");
+    eq(bare.join("\n").slice(0, 200), "", "every stderr line is JSON with a level");
+    const refused = lines.filter((l) => l.includes('"message":"MCP origin rejected"'));
+    eq(refused.length, 1, "a refused Origin logs one line");
+    eq(JSON.parse(refused[0] ?? "{}").level, "warn", "at warn");
+    eq(JSON.parse(refused[0] ?? "{}").origin, "https://evil.example", "naming the Origin");
     const warns = lines.filter((l) => l.includes('"message":"Rejected MCP request body"'));
     eq(warns.length, 3, "only the 413, the parse error and the gzip 415 log a rejected body");
     check(warns.every((l) => JSON.parse(l).level === "warn"), "rejected input is logged at warn, not error");
@@ -269,6 +272,24 @@ console.log("/debug/memory");
   } finally {
     gcServer.child.kill();
   }
+}
+
+// ── Gate configuration logging ────────────────────────────────────
+console.log("gate logging");
+{
+  const port = Number(PORT) + 2;
+  const gated = await boot(port, [], { MCP_ALLOWED_ORIGINS: "*", MCP_BLOCKED_IPS: "127.0.0.1" });
+  try {
+    const r = await raw(`http://127.0.0.1:${port}/mcp`, { headers: legacyJson, body: "{}" });
+    eq(r.status, 403, "a blocked IP is refused");
+    const entries = gated.stderr.split("\n").filter(Boolean).map((l) => {
+      try { return JSON.parse(l); } catch { return { bare: l }; }
+    });
+    eq(entries.filter((e) => e.bare).map((e) => e.bare).join("\n").slice(0, 200), "", "every stderr line is JSON");
+    eq(entries.find((e) => e.message === "MCP origin validation disabled")?.level, "warn", "MCP_ALLOWED_ORIGINS=* is a warning, not an error");
+    eq(entries.find((e) => e.message === "MCP blocked IP rejected")?.level, "warn", "so is a blocked IP's refusal");
+    eq(entries.filter((e) => e.level === "error").length, 0, "and neither reaches @level:error");
+  } finally { gated.child.kill("SIGKILL"); }
 }
 
 // ── withResponseGuard through toNodeHandler ───────────────────────
