@@ -43,8 +43,9 @@
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.1",
-    "@modelcontextprotocol/ext-apps": "^2.0.3",
-    "@modelcontextprotocol/server": "^2.2.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "@modelcontextprotocol/node": "^2.1.2",
+    "@modelcontextprotocol/server": "^2.4.0",
     "axios": "^1.7.9",
     "better-sqlite3": "^12.6.2",
     "compression": "^1.8.1",
@@ -53,18 +54,17 @@
     "fast-xml-parser": "^5.3.5",
     "sharp": "^0.35.5",
     "sqlite-vec": "0.1.9",
-    "zod": "^4.4.0"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
-    "@modelcontextprotocol/client": "^2.2.0",
+    "@modelcontextprotocol/client": "^2.4.0",
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
-    "adm-zip": "^0.5.17",
     "ajv": "^8.20.0",
     "bplist-parser": "^0.3.2",
     "eslint": "^10.0.2",
@@ -78,6 +78,7 @@
     "vite-plugin-singlefile": "^2.3.0"
   },
   "overrides": {
-    "onnxruntime-node": "1.24.3"
+    "onnxruntime-node": "1.24.3",
+    "adm-zip": "0.6.1"
   }
 }

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { toNodeHandler } from "@modelcontextprotocol/node";
 import express from "express";
 import compression from "compression";
 import cors from "cors";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { createGunzip } from "node:zlib";
@@ -28,6 +28,7 @@ import { registerAll, similarPages, enrichmentReviewPages } from "./registration
 import { isAllowedOrigin, parseMcpAllowedOrigins } from "./utils/origin.js";
 import { logInfo, logWarn, logError } from "./utils/log.js";
 import { startIdleReclaim } from "./utils/idleReclaim.js";
+import { withResponseTimeout } from "./utils/responseTimeout.js";
 import { presignS3Get, s3CredentialsFromEnv } from "./utils/s3Presign.js";
 import archivedPages from "./archived-pages.json" with { type: "json" };
 
@@ -286,6 +287,15 @@ async function runStdio(): Promise<void> {
 
 // ─── HTTP mode ───────────────────────────────────────────────────────
 
+// express.json only reads JSON bodies; the MCP adapter and handler read the rest.
+const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+const RESPONSE_TIMEOUT_MS = 30_000;
+const REJECTED_BODY: Record<number, { code: number; message: string }> = {
+  400: { code: -32700, message: "Parse error: the request body is not valid JSON" },
+  413: { code: -32000, message: `Payload Too Large: Request body must not exceed ${MAX_REQUEST_BODY_BYTES} bytes` },
+  415: { code: -32000, message: "Unsupported Media Type: compressed or non-UTF-8 request bodies are not accepted" },
+};
+
 async function runHttp(): Promise<void> {
   await initDatabases();
   initSharedClients();
@@ -303,7 +313,7 @@ async function runHttp(): Promise<void> {
   app.use(compression({ threshold: 1024 })); // gzip responses ≥ 1 KB (skips small payloads + base64 images)
   // explicit cap; /mcp bodies are small JSON-RPC requests. inflate: false rejects
   // Content-Encoding'd bodies (415) so zlib/Brotli never decodes attacker input.
-  app.use(express.json({ limit: "1mb", inflate: false }));
+  app.use(express.json({ limit: MAX_REQUEST_BODY_BYTES, inflate: false }));
 
   // ── MCP endpoint (stateless — no sessions, no SSE streams) ─────
   //
@@ -313,16 +323,6 @@ async function runHttp(): Promise<void> {
   // related-variant nav + the poll loop). No long-lived connections to time out
   // (#41). createServer() is cheap — the DBs, API clients, and embedding model are
   // module-scope singletons; only tool/Zod registration runs per request.
-
-  // 30s safety net — respond 504 before Railway's proxy kills the connection silently
-  app.use("/mcp", (_req: express.Request, res: express.Response, next: express.NextFunction) => {
-    res.setTimeout(30_000, () => {
-      if (!res.headersSent) {
-        res.status(504).json({ error: "Request timeout" });
-      }
-    });
-    next();
-  });
 
   // ── IP blocklist (operator-configured, MCP_BLOCKED_IPS) ─────────────────
   //
@@ -417,7 +417,13 @@ async function runHttp(): Promise<void> {
   // a fresh McpServer. 2026-07-28 requests are served statelessly; 2025-era
   // clients fall back to the SDK's `sessionIdGenerator: undefined` idiom.
   const mcpHandler = createMcpHandler(() => createServer(port), {
+    maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+    // Fires for rejected client requests as well as serving failures.
     onerror: (err) => logWarn("MCP handler error", err),
+  });
+  const handleMcp = toNodeHandler(withResponseTimeout(mcpHandler, RESPONSE_TIMEOUT_MS), {
+    maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+    onerror: (err) => logError("MCP endpoint error", err),
   });
 
   // ── Idle page-cache release (MEMORY_RELEASE_IDLE_MINUTES, 0 = off) ──
@@ -431,49 +437,7 @@ async function runHttp(): Promise<void> {
     next();
   });
 
-  app.post("/mcp", async (req: express.Request, res: express.Response) => {
-    // A client disconnect must reach the SDK: without the signal and the
-    // pipeline's cancel, an SSE response (subscriptions/listen) outlives its
-    // socket and its keep-alive timer queues chunks forever.
-    const disconnect = new AbortController();
-    res.on("close", () => disconnect.abort());
-    try {
-      const headers = new Headers();
-      for (const [key, value] of Object.entries(req.headers)) {
-        // express.json() already consumed and decoded the raw stream; its framing
-        // headers would misdescribe the re-serialised body.
-        if (key === "content-length" || key === "content-encoding") continue;
-        if (typeof value === "string") headers.set(key, value);
-        else if (Array.isArray(value)) for (const v of value) headers.append(key, v);
-      }
-      const response = await mcpHandler.fetch(
-        new Request(`http://${req.headers.host ?? "localhost"}/mcp`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(req.body),
-          signal: disconnect.signal,
-        }),
-        { parsedBody: req.body }
-      );
-      res.status(response.status);
-      response.headers.forEach((value, key) => {
-        if (key === "content-length") return; // compression may rewrite the body
-        res.setHeader(key, value);
-      });
-      if (response.body) {
-        // pipeline (unlike pipe) destroys the source when res closes, which
-        // cancels the web stream. A premature close is the client leaving.
-        pipeline(Readable.fromWeb(response.body as import("node:stream/web").ReadableStream), res).catch(() => {});
-      } else {
-        res.end();
-      }
-    } catch (err) {
-      logError("MCP endpoint error", err);
-      if (!res.headersSent) {
-        res.status(500).json({ error: "Internal server error" });
-      }
-    }
-  });
+  app.post("/mcp", (req: express.Request, res: express.Response) => handleMcp(req, res, req.body));
 
   // Reject GET/DELETE/etc. — stateless mode has no SSE streams or sessions.
   //
@@ -546,6 +510,26 @@ async function runHttp(): Promise<void> {
   // on redeploy. Same unauthenticated operational-signal rationale as /debug/memory.
   app.get("/debug/slow-queries", (_req: express.Request, res: express.Response) => {
     res.json(usageStats?.slowQueries() ?? { perInput: {}, phases: {} });
+  });
+
+  // ── Rejected requests ───────────────────────────────────────────
+  //
+  // express.json() fails here. Express's default handler answers in HTML and
+  // writes the stack to bare stderr, which Railway tags level=error.
+  app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) {
+      next(err);
+      return;
+    }
+    const status = err.status ?? 500;
+    const rejection = REJECTED_BODY[status];
+    if (rejection) logWarn("Rejected MCP request body", err.message);
+    else logError("MCP request error", err);
+    res.status(rejection ? status : 500).json({
+      jsonrpc: "2.0",
+      error: rejection ?? { code: -32603, message: "Internal server error" },
+      id: null,
+    });
   });
 
   // ── Start listening, THEN warm in the background ────────────────
