@@ -260,6 +260,16 @@
     ],
     "purpose": "facet percentage denominator, midpoint date bins and hasProvenance:false report true numbers"
   },
+  "test-geo-proximity-fixture.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "proximity search orders by distance in SQL, identically in compact and full mode"
+  },
   "test-vocabdb-id-lists.mjs": {
     "category": "ci",
     "class": "gate",

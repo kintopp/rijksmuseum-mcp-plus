@@ -4545,12 +4545,10 @@ export class VocabularyDb {
       }
     }
 
-    // When geo is active and neither BM25 nor sortBy is ordering, use a larger
-    // internal limit so distance ordering (applied post-query) sees the true
-    // top-N nearest artworks, not just the most-important ones. Cap at 2000.
+    // Geo orders by distance in SQL unless BM25 or sortBy claims the order.
     // Always fetch limit + offset rows so post-query offset works correctly.
-    const geoExpansion = geoResult && !ftsRankOrder && !sortByActive;
-    const fetchLimit = geoExpansion ? Math.max((limit + userOffset) * 10, 2000) : limit + userOffset;
+    const geoDistanceOrder = geoResult && !ftsRankOrder && !sortByActive ? geoResult : null;
+    const fetchLimit = limit + userOffset;
 
     // All ordering paths get a deterministic tiebreaker on a.art_id ASC so
     // pagination is stable across pages even within heavy importance ties
@@ -4563,10 +4561,31 @@ export class VocabularyDb {
         : this.hasImportance
           ? `ORDER BY a.importance DESC${tiebreaker}`
           : `ORDER BY a.art_id ASC`;
-    const sql = `SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
-    const rows = this.db.prepare(sql).all(
-      ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, fetchLimit] : [...bindings, fetchLimit]),
-    ) as {
+    const selectCols = "a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest";
+    const rowQuery = (() => {
+      if (!geoDistanceOrder) {
+        return {
+          sql: `SELECT ${selectCols} FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`,
+          params: ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, fetchLimit] : [...bindings, fetchLimit],
+        };
+      }
+      // Aggregate first so the place set drives; a correlated MIN in ORDER BY rescans the
+      // JSON per mapping row and takes seconds on large cities.
+      const { clause: geoField, bindings: geoFieldBindings } = this.buildFieldClause(["subject", "spatial"]);
+      return {
+        sql: `WITH pd(rid, d) AS MATERIALIZED (SELECT CAST(key AS INTEGER), value FROM json_each(?)),
+        nearest AS (SELECT m.artwork_id AS aid, MIN(pd.d) AS dist FROM pd CROSS JOIN mappings m
+                    ON m.vocab_rowid = pd.rid AND ${geoField} GROUP BY m.artwork_id)
+        SELECT ${selectCols} FROM nearest n JOIN artworks a ON a.art_id = n.aid
+        WHERE ${where}
+        ORDER BY n.dist ASC${this.hasImportance ? ", a.importance DESC" : ""}${tiebreaker} LIMIT ?`,
+        params: [
+          this.placeDistanceJson(geoDistanceOrder.placeIds, geoDistanceOrder.refLat, geoDistanceOrder.refLon),
+          ...geoFieldBindings, ...bindings, fetchLimit,
+        ],
+      };
+    })();
+    const rows = this.db.prepare(rowQuery.sql).all(...rowQuery.params) as {
       object_number: string;
       title: string;
       title_all_text: string | null;
@@ -4586,6 +4605,10 @@ export class VocabularyDb {
           ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : bindings),
         ) as { n: number }).n;
 
+    // Apply offset then truncate to user's requested limit
+    if (userOffset > 0) rows.splice(0, userOffset);
+    if (rows.length > limit) rows.splice(limit);
+
     // When nearPlace is active, enrich results with nearest place + distance
     // Skip enrichment in compact mode (only IDs needed)
     let distanceMap: Map<string, { place: string; dist: number }> | undefined;
@@ -4600,7 +4623,7 @@ export class VocabularyDb {
            JOIN vocabulary v ON m.vocab_rowid = v.vocab_int_id
            JOIN artworks a ON m.artwork_id = a.art_id
            WHERE a.object_number IN (${objPlaceholders})
-             AND ${geoFieldClause} AND v.lat IS NOT NULL
+             AND ${geoFieldClause} AND v.lat IS NOT NULL AND v.is_areal IS NOT 1
            ORDER BY dist`;
 
       const distRows = this.db.prepare(distSql).all(
@@ -4617,19 +4640,6 @@ export class VocabularyDb {
         }
       }
     }
-
-    // Sort by distance when geo is active and neither BM25 nor sortBy is ordering
-    if (distanceMap && distanceMap.size > 0 && !ftsRankOrder && !sortByActive) {
-      rows.sort((a, b) => {
-        const da = distanceMap!.get(a.object_number)?.dist ?? Infinity;
-        const db = distanceMap!.get(b.object_number)?.dist ?? Infinity;
-        return da - db;
-      });
-    }
-
-    // Apply offset then truncate to user's requested limit (post-query for geo-expansion + distance sort)
-    if (userOffset > 0) rows.splice(0, userOffset);
-    if (rows.length > limit) rows.splice(limit);
 
     // Faceted counts: compute requested dimensions when results are truncated
     let facets: Record<string, Array<{ label: string; count: number }>> | undefined;
@@ -5465,6 +5475,15 @@ export class VocabularyDb {
 
     const placeIds = this.findPlaceIdsNearCoords(ref.lat, ref.lon, radiusKm);
     return { placeIds, refPlace: ref.label, refLat: ref.lat, refLon: ref.lon };
+  }
+
+  /** Distance (km) from the reference point to each resolved place, keyed by vocab_int_id. */
+  private placeDistanceJson(placeIds: string[], refLat: number, refLon: number): string {
+    const rows = this.db!.prepare(
+      `SELECT vocab_int_id AS r, haversine_km(?, ?, lat, lon) AS d
+       FROM vocabulary WHERE id IN (SELECT value FROM json_each(?)) AND lat IS NOT NULL`
+    ).all(refLat, refLon, JSON.stringify(placeIds)) as { r: number; d: number }[];
+    return JSON.stringify(Object.fromEntries(rows.map((x) => [x.r, x.d])));
   }
 
   /** Find all place vocab IDs within radiusKm of the given coordinates (bounding box + Haversine). */
