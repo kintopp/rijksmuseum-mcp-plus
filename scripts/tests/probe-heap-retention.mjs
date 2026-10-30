@@ -2,7 +2,7 @@
 // Spawns a local HTTP server with --inspect, runs rounds of varied tool calls, and after each
 // round samples heapUsed before and after a forced full GC (CDP HeapProfiler.collectGarbage).
 // Retained heap that keeps climbing round over round = leak; a plateau = lazy GC only.
-// Usage: node scripts/tests/probe-heap-retention.mjs [--rounds N] [--gemma data/gemma-v3.db]
+// Usage: node scripts/tests/probe-heap-retention.mjs [--rounds N] [--gemma data/gemma.db]
 import { spawn } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -13,7 +13,7 @@ const ROUNDS = Number(arg("--rounds", 8));
 const PORT = 3124, INSPECT = 9339, BASE = `http://localhost:${PORT}`;
 
 const server = spawn(process.execPath, [`--inspect=127.0.0.1:${INSPECT}`, "dist/index.js"], {
-  env: { ...process.env, PORT: String(PORT), GEMMA_DB_PATH: arg("--gemma", "data/gemma-v3.db") },
+  env: { ...process.env, PORT: String(PORT), GEMMA_DB_PATH: arg("--gemma", "data/gemma.db") },
   stdio: ["ignore", "ignore", "ignore"],
 });
 process.on("exit", () => server.kill());

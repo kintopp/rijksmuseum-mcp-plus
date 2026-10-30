@@ -17,7 +17,7 @@
 //
 // Requires:
 //   - npm run build  (dist/index.js must exist)
-//   - data/vocabulary.db, data/embeddings.db present locally
+//   - data/vocabulary.db, data/gemma.db present locally
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";

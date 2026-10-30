@@ -1,10 +1,10 @@
 // Scratch probe: find_similar Description channel on gemma.db's two-stage `descriptions`
 // table vs an exact brute-force cosine over the same int8 vectors, plus per-call latency.
-// Usage: GEMMA_DB_PATH=data/gemma-v3.db node scripts/tests/probe-description-gemma.mjs [seeds=25]
+// Usage: GEMMA_DB_PATH=data/gemma.db node scripts/tests/probe-description-gemma.mjs [seeds=25]
 import Database from "better-sqlite3";
 import { GemmaDb } from "../../dist/api/GemmaDb.js";
 
-process.env.GEMMA_DB_PATH ??= "data/gemma-v3.db";
+process.env.GEMMA_DB_PATH ??= "data/gemma.db";
 const N_SEEDS = parseInt(process.argv[2] ?? "25", 10);
 const K = 10;
 

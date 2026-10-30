@@ -5,7 +5,7 @@
 //   node scripts/tests/compare-visual-similarity.mjs [outFile] [perCategory] [k]
 //
 // Needs dist/, data/vocabulary.db, a two-stage gemma.db (GEMMA_DB_PATH, default
-// data/gemma-v3.db) and network access to rijksmuseum.nl (2 requests per seed, paced).
+// data/gemma.db) and network access to rijksmuseum.nl (2 requests per seed, paced).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -14,7 +14,7 @@ import Database from "better-sqlite3";
 import axios from "axios";
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-process.env.GEMMA_DB_PATH ??= path.join(PROJECT_DIR, "data/gemma-v3.db");
+process.env.GEMMA_DB_PATH ??= path.join(PROJECT_DIR, "data/gemma.db");
 const { GemmaDb } = await import(path.join(PROJECT_DIR, "dist/api/GemmaDb.js"));
 const { USER_AGENT } = await import(path.join(PROJECT_DIR, "dist/utils/userAgent.js"));
 
