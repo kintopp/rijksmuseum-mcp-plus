@@ -9,10 +9,13 @@ type NodeMcpHandler = (req: IncomingMessage, res: ServerResponse, parsedBody?: u
  * destroyed socket, since a 2025-era SSE call commits its headers at once.
  *
  * Either way `res` closes before toNodeHandler has finished, which is what makes
- * it abort the request and tear the call down. Answering through the Response
- * instead would leave the stuck call running. Wall-clock, because SSE keep-alive
- * frames reset an idle timer. A subscriptions/listen stream is long-lived by
- * design and is not timed.
+ * it abort the request, and tools pass that signal to their upstream calls.
+ * Answering through the Response instead would leave the stuck call running.
+ * Wall-clock, because SSE keep-alive frames reset an idle timer. A
+ * subscriptions/listen stream is long-lived by design and is not timed.
+ *
+ * A response that has filled the socket buffers or already ended is finished work
+ * going to a slow client, not a stuck call, so it gets one more period to download.
  */
 export function withResponseGuard(handle: NodeMcpHandler, ms: number): NodeMcpHandler {
   return async (req, res, parsedBody) => {
@@ -20,7 +23,7 @@ export function withResponseGuard(handle: NodeMcpHandler, ms: number): NodeMcpHa
     if (body?.method === "subscriptions/listen") return handle(req, res, parsedBody);
 
     let timedOut = false;
-    const timer = setTimeout(() => {
+    const cut = () => {
       timedOut = true;
       if (res.headersSent) {
         res.destroy();
@@ -30,6 +33,10 @@ export function withResponseGuard(handle: NodeMcpHandler, ms: number): NodeMcpHa
       const payload = JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Request timeout" }, id });
       res.writeHead(504, { "content-type": "application/json", "content-length": Buffer.byteLength(payload) });
       res.end(payload);
+    };
+    let timer = setTimeout(() => {
+      if (res.writableEnded || res.writableNeedDrain) timer = setTimeout(cut, ms);
+      else cut();
     }, ms);
     res.once("close", () => clearTimeout(timer));
 
@@ -53,10 +60,13 @@ export function withResponseFraming(handler: FetchLikeMcpHandler): FetchLikeMcpH
   return {
     fetch: async (request, options) => {
       const response = await handler.fetch(request, options);
+      const cancelBody = () => void response.body?.cancel().catch(() => {});
       if (request.signal.aborted) {
-        response.body?.cancel().catch(() => {});
+        cancelBody();
         return response;
       }
+      // The abort can still be on its way: the guard's 504 only closes `res` later.
+      request.signal.addEventListener("abort", cancelBody, { once: true });
       if (!response.body || !response.headers.get("content-type")?.includes("application/json")) return response;
       const body = await response.arrayBuffer();
       const headers = new Headers(response.headers);

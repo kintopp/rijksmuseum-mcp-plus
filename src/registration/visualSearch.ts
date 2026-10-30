@@ -29,13 +29,14 @@ setInterval(() => {
 
 /** Resolve an objectNumber to the Rijksmuseum website's objectNodeId (hex hash).
  *  Returns null if the artwork is not in the website search index. */
-export async function resolveObjectNodeId(objectNumber: string): Promise<string | null> {
+export async function resolveObjectNodeId(objectNumber: string, signal?: AbortSignal): Promise<string | null> {
   const cached = nodeIdCache.get(objectNumber);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   try {
     const resp = await axios.get("https://www.rijksmuseum.nl/api/v1/collection/search", {
       params: { query: objectNumber, language: "en", pageSize: 5 },
       timeout: 5000,
+      signal,
     });
     const objs: VisualSearchArtObject[] = resp.data?.artObjects ?? [];
     const match = objs.find(o => o.objectNumber === objectNumber);
@@ -52,6 +53,7 @@ export async function resolveObjectNodeId(objectNumber: string): Promise<string 
 export async function fetchVisualSimilar(
   objectNodeId: string,
   maxResults: number,
+  signal?: AbortSignal,
 ): Promise<{ candidates: SimilarCandidate[]; totalResults: number; searchUrl: string }> {
   const cacheKey = `${objectNodeId}:${maxResults}`;
   const cached = visualCache.get(cacheKey);
@@ -62,6 +64,7 @@ export async function fetchVisualSimilar(
     const resp = await axios.get("https://www.rijksmuseum.nl/api/v1/collection/visualsearch", {
       params: { objectNodeId, language: "en", page: 1, pageSize: maxResults },
       timeout: 8000,
+      signal,
     });
     const objs: VisualSearchArtObject[] = resp.data?.artObjects ?? [];
     const hasMore: boolean = resp.data?.hasMoreResults ?? false;

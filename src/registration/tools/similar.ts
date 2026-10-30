@@ -66,7 +66,7 @@ export function registerSimilarTools(
         // structuredContent carries the full per-channel payload (#379); text channel stays URL + counts.
         ...withOutputSchema(FindSimilarOutput),
       },
-      withLogging("find_similar", async (args) => {
+      withLogging("find_similar", async (args, ctx) => {
         const maxResults = args.maxResults ?? 20;
 
         // Resolve query artwork metadata + iiif_id
@@ -80,7 +80,7 @@ export function registerSimilarTools(
         const queryDate = formatDateRange(queryInfo?.dateEarliest, queryInfo?.dateLatest);
 
         // Start visual search HTTP resolution concurrently with sync DB work
-        const nodeIdPromise = resolveObjectNodeId(args.objectNumber);
+        const nodeIdPromise = resolveObjectNodeId(args.objectNumber, ctx.mcpReq.signal);
 
         // ── Run all 4 signals ──────────────────────────────────────
 
@@ -200,7 +200,7 @@ export function registerSimilarTools(
         try {
           const nodeId = await nodeIdPromise;
           if (nodeId) {
-            const visual = await fetchVisualSimilar(nodeId, maxResults);
+            const visual = await fetchVisualSimilar(nodeId, maxResults, ctx.mcpReq.signal);
             visualCandidates = visual.candidates;
             visualSearchUrl = visual.searchUrl;
             visualTotalResults = visual.totalResults;

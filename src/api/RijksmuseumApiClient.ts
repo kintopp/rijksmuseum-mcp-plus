@@ -39,23 +39,23 @@ export class RijksmuseumApiClient {
    * Fast-path image info: fetch info.json for a known IIIF ID (1 request).
    * Returns pixel dimensions, IIIF info URL, and a thumbnail URL.
    */
-  async getImageInfoFast(iiifId: string, thumbnailWidth: number = 800): Promise<ArtworkImageInfo | null> {
+  async getImageInfoFast(iiifId: string, signal?: AbortSignal, thumbnailWidth: number = 800): Promise<ArtworkImageInfo | null> {
     try {
-      return await this.buildImageInfo(iiifId, thumbnailWidth);
+      return await this.buildImageInfo(iiifId, thumbnailWidth, signal);
     } catch (err) {
-      logError("Fast image info failed", err);
+      if (!axios.isCancel(err)) logError("Fast image info failed", err);
       return null;
     }
   }
 
   /** Shared info.json fetch + URL construction. */
-  private async buildImageInfo(iiifId: string, thumbnailWidth: number): Promise<ArtworkImageInfo> {
+  private async buildImageInfo(iiifId: string, thumbnailWidth: number, signal?: AbortSignal): Promise<ArtworkImageInfo> {
     // iiifId is DB-resolved (short Micrio tokens), but encode as defense-in-depth
     // against any future path where a less-sanitized id reaches these templates.
     const iiifInfoUrl = `${RijksmuseumApiClient.IIIF_BASE}/${encodeURIComponent(iiifId)}/info.json`;
     const info = await this.cache.getOrFetch<IIIFInfoResponse>(
       `iiif:${iiifId}`,
-      async () => (await this.http.get<IIIFInfoResponse>(iiifInfoUrl)).data,
+      async () => (await this.http.get<IIIFInfoResponse>(iiifInfoUrl, { signal })).data,
       RijksmuseumApiClient.TTL_IMAGE
     );
 
@@ -71,11 +71,12 @@ export class RijksmuseumApiClient {
   }
 
   /** Fetch a IIIF image URL as base64 (shared by region and thumbnail fetchers) */
-  private async fetchIiifAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
+  private async fetchIiifAsBase64(url: string, signal?: AbortSignal): Promise<{ data: string; mimeType: string }> {
     try {
       const { data } = await this.http.get(url, {
         responseType: "arraybuffer",
         headers: { Accept: "image/jpeg, image/*" },
+        signal,
       });
       return { data: Buffer.from(data).toString("base64"), mimeType: "image/jpeg" };
     } catch (err: unknown) {
@@ -98,6 +99,7 @@ export class RijksmuseumApiClient {
     size: number = 1200,
     rotation: number = 0,
     quality: "default" | "gray" = "default",
+    signal?: AbortSignal,
   ): Promise<{ data: string; mimeType: string }> {
     const url = `${RijksmuseumApiClient.IIIF_BASE}/${encodeURIComponent(iiifId)}/${region}/${size},/${rotation}/${quality}.jpg`;
 
@@ -105,9 +107,9 @@ export class RijksmuseumApiClient {
     // Cropped regions vary too much to cache effectively.
     if (region === "full") {
       const cacheKey = `img:${iiifId}:${size}:${rotation}:${quality}`;
-      return this.imageCache.getOrFetch(cacheKey, () => this.fetchIiifAsBase64(url));
+      return this.imageCache.getOrFetch(cacheKey, () => this.fetchIiifAsBase64(url, signal));
     }
 
-    return this.fetchIiifAsBase64(url);
+    return this.fetchIiifAsBase64(url, signal);
   }
 }

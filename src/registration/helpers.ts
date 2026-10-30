@@ -1,3 +1,4 @@
+import axios from "axios";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { SORT_COLUMNS, FILTER_ART_IDS_KEYS, type SortColumn, type BrowseSetRecord, type ProvenanceArtworkResult, type VocabularyDb } from "../api/VocabularyDb.js";
@@ -563,7 +564,8 @@ export function createLogger(stats?: UsageStats) {
       } catch (err) {
         const ms = Math.round(performance.now() - start);
         const error = err instanceof Error ? err.message : String(err);
-        logError(toolName, err, { tool: toolName, ms, ok: false, ...(input && { input }) });
+        // A cancelled call means the caller left or the deadline passed, not a server failure.
+        (axios.isCancel(err) ? logWarn : logError)(toolName, err, { tool: toolName, ms, ok: false, ...(input && { input }) });
         stats?.record(toolName, ms, false);
         stats?.recordInput(toolName, canonicalInputKey(input, 300), ms);
         // Do NOT emit structuredContent here — a bare { error } fails SDK

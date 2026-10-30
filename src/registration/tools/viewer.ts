@@ -66,10 +66,10 @@ export function registerViewerTools(
     | { ok: false; reason: "no_artwork" | "no_image"; error: string }
     | { ok: true; artwork: ArtworkMetadata; imageInfo: ImageInfo };
 
-  const loadArtworkAndImageInfo = async (objectNumber: string): Promise<ArtworkAndImage> => {
+  const loadArtworkAndImageInfo = async (objectNumber: string, signal: AbortSignal): Promise<ArtworkAndImage> => {
     const artwork = vocabDb?.lookupImageMetadata(objectNumber);
     if (!artwork) return { ok: false, reason: "no_artwork", error: "No artwork found for this object number" };
-    const imageInfo = artwork.iiifId ? await api.getImageInfoFast(artwork.iiifId) : null;
+    const imageInfo = artwork.iiifId ? await api.getImageInfoFast(artwork.iiifId, signal) : null;
     if (!imageInfo) return { ok: false, reason: "no_image", error: "No image available for this artwork" };
     return { ok: true, artwork, imageInfo };
   };
@@ -85,8 +85,8 @@ export function registerViewerTools(
         height: number;
         narrationPrefix: string;
       };
-  const resolveArtworkImagePayload = async (objectNumber: string): Promise<ArtworkImagePayload> => {
-    const loaded = await loadArtworkAndImageInfo(objectNumber);
+  const resolveArtworkImagePayload = async (objectNumber: string, signal: AbortSignal): Promise<ArtworkImagePayload> => {
+    const loaded = await loadArtworkAndImageInfo(objectNumber, signal);
     if (!loaded.ok) return { ok: false, error: loaded.error };
     const { artwork, imageInfo } = loaded;
 
@@ -130,8 +130,8 @@ export function registerViewerTools(
         ui: { resourceUri: ARTWORK_VIEWER_RESOURCE_URI },
       },
     },
-    withLogging("get_artwork_image", async (args) => {
-      const payload = await resolveArtworkImagePayload(args.objectNumber);
+    withLogging("get_artwork_image", async (args, ctx) => {
+      const payload = await resolveArtworkImagePayload(args.objectNumber, ctx.mcpReq.signal);
       if (!payload.ok) {
         const errorData: InferOutput<typeof ImageInfoOutput> = {
           objectNumber: args.objectNumber,
@@ -196,7 +196,7 @@ export function registerViewerTools(
         },
       },
     },
-    withLogging("remount_viewer", async (args) => {
+    withLogging("remount_viewer", async (args, ctx) => {
       const queue = viewerQueues.get(args.viewUUID);
       if (!queue) {
         const errorData: InferOutput<typeof ImageInfoOutput> = {
@@ -209,7 +209,7 @@ export function registerViewerTools(
         };
       }
 
-      const payload = await resolveArtworkImagePayload(args.objectNumber);
+      const payload = await resolveArtworkImagePayload(args.objectNumber, ctx.mcpReq.signal);
       if (!payload.ok) {
         const errorData: InferOutput<typeof ImageInfoOutput> = {
           objectNumber: args.objectNumber,
@@ -294,7 +294,7 @@ export function registerViewerTools(
       }).strict(),
       ...withOutputSchema(InspectImageOutput),
     },
-    withLogging("inspect_artwork_image", async (args) => {
+    withLogging("inspect_artwork_image", async (args, ctx) => {
       const cropError = (error: string, text?: string, recovery?: OobWarning["details"]) => {
         const data: InferOutput<typeof InspectImageOutput> = {
           objectNumber: args.objectNumber,
@@ -318,7 +318,7 @@ export function registerViewerTools(
       };
 
       try {
-        const loaded = await loadArtworkAndImageInfo(args.objectNumber);
+        const loaded = await loadArtworkAndImageInfo(args.objectNumber, ctx.mcpReq.signal);
         if (!loaded.ok && loaded.reason === "no_artwork") {
           return cropError(loaded.error);
         }
@@ -404,6 +404,7 @@ export function registerViewerTools(
             effectiveSize,
             args.rotation,
             args.quality,
+            ctx.mcpReq.signal,
           ));
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

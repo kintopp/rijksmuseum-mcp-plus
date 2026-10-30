@@ -19,7 +19,11 @@
  * the request's JSON-RPC id; a 2025-era SSE call with no deadline; a late result
  * crashing the adapter or going unhandled; a listen stream cut at the deadline;
  * a late SSE body left unread, so its keep-alive runs forever (#427); a handler
- * throw hidden behind the 504.
+ * throw hidden behind the 504; an adapter failure swallowed by the guard's catch;
+ * a finished result cut while a slow client downloads it; a stalled download
+ * held open forever; a late SSE body missed because the abort came after the
+ * framing layer looked; an upstream timeout the deadline hides; a tool's upstream
+ * call left running after the deadline, or logged as a server error.
  *
  * Mounting the error handler app-wide is an equivalent mutation: it is registered
  * before the page routes, so their errors never reach it.
@@ -34,6 +38,16 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { withResponseFraming, withResponseGuard } from "../../dist/utils/responseGuard.js";
+import { OaiPmhClient } from "../../dist/api/OaiPmhClient.js";
+import { RijksmuseumApiClient } from "../../dist/api/RijksmuseumApiClient.js";
+import { VocabularyDb } from "../../dist/api/VocabularyDb.js";
+import { createLogger } from "../../dist/registration/helpers.js";
+import { registerProvenanceTools } from "../../dist/registration/tools/provenance.js";
+import { registerSimilarTools } from "../../dist/registration/tools/similar.js";
+import { registerViewerTools } from "../../dist/registration/tools/viewer.js";
+import axios from "axios";
+import compression from "compression";
+import { randomBytes } from "node:crypto";
 import { buildFixture } from "./build-fixture-vocab-db.mjs";
 import { EXPECTED_TOOL_COUNT as TOOL_COUNT } from "./fixture-client.mjs";
 
@@ -413,6 +427,168 @@ console.log("withResponseGuard");
       eq((await r.json()).error?.message, "Internal server error", "the 500 is the adapter's JSON-RPC error");
       eq(s.adapterErrors.join(), "boom", "the adapter's onerror sees the cause");
     } finally { s.close(); }
+  }
+  {
+    // A stub, not toNodeHandler: only an adapter that itself rejects reaches the guard's catch.
+    const failing = (delay) => withResponseGuard(async () => {
+      await sleep(delay);
+      throw new Error("adapter failed");
+    }, TIMEOUT_MS)({}, new http.ServerResponse({ method: "POST" }), {});
+    const outcome = (p) => p.then(() => "swallowed", (e) => e.message);
+    eq(await outcome(failing(0)), "adapter failed", "an adapter failure before the deadline reaches the caller");
+    eq(await outcome(failing(TIMEOUT_MS * 2)), "adapter failed", "and so does one after it");
+  }
+
+  // Large enough to outlast the socket buffers, so the client's pace decides when it finishes.
+  {
+    const DEADLINE = 1500;
+    const payload = randomBytes(15 * 1024 * 1024).toString("base64");
+    const large = (contentType) => async () => new Response(payload, { headers: { "content-type": contentType } });
+    const stuckStream = async () => new Response(new ReadableStream({
+      start(c) { c.enqueue(new TextEncoder().encode(": keepalive\n\n")); },
+    }), { headers: { "content-type": "text/event-stream" } });
+
+    /** Serve one response through the guard and record when the server closes it. */
+    const serveTimed = async (fetchStub, compress) => {
+      const handle = withResponseGuard(toNodeHandler(withResponseFraming({ fetch: fetchStub })), DEADLINE);
+      const state = { closedAfter: null };
+      const server = http.createServer((req, res) => {
+        const start = Date.now();
+        res.once("close", () => { state.closedAfter = Date.now() - start; });
+        const run = () => handle(req, res, {}).catch(() => res.destroy());
+        if (compress) compression()(req, res, run);
+        else run();
+      });
+      await new Promise((r) => server.listen(0, "127.0.0.1", r));
+      state.url = `http://127.0.0.1:${server.address().port}/mcp`;
+      state.close = () => { server.closeAllConnections(); server.close(); };
+      return state;
+    };
+    /** Start reading only after `readAfter`; with none, never read at all. */
+    const download = (url, readAfter) => new Promise((resolve) => {
+      const req = http.request(url, { method: "POST", headers: { "accept-encoding": "gzip", "content-length": 0 } }, (res) => {
+        if (readAfter === undefined) return;
+        setTimeout(() => {
+          const chunks = [];
+          res.on("data", (c) => chunks.push(c));
+          res.on("error", () => resolve("cut"));
+          res.on("end", () => {
+            const wire = Buffer.concat(chunks);
+            resolve(res.headers["content-encoding"] === "gzip" ? zlib.gunzipSync(wire).toString() : wire.toString());
+          });
+        }, readAfter);
+      });
+      req.on("error", () => resolve("cut"));
+      req.end();
+    });
+
+    const servers = await Promise.all([
+      serveTimed(large("application/json")),
+      serveTimed(large("text/event-stream")),
+      serveTimed(large("application/json"), true),
+      serveTimed(large("application/json")),
+      serveTimed(stuckStream),
+    ]);
+    const [json, sse, gzipped, stalled, stuck] = servers;
+    try {
+      const reads = Promise.all([json, sse, gzipped].map((s) => download(s.url, DEADLINE * 1.2)));
+      download(stalled.url);
+      download(stuck.url, 0);
+      const [jsonBody, sseBody, gzipBody] = await reads;
+      check(jsonBody === payload, "a JSON result still downloading at the deadline arrives whole");
+      check(sseBody === payload, "so does an SSE result");
+      check(gzipBody === payload, "and a compressed one");
+      await sleep(DEADLINE * 1.2);
+      check(stuck.closedAfter !== null && stuck.closedAfter < DEADLINE * 1.5, "a stuck stream is still cut at the first deadline, keep-alives or not");
+      check(stalled.closedAfter !== null && stalled.closedAfter >= DEADLINE * 1.5 && stalled.closedAfter < DEADLINE * 3, "a client that never reads is cut after one more deadline");
+    } finally { servers.forEach((s) => s.close()); }
+  }
+
+  {
+    const controller = new AbortController();
+    let cancelled = false;
+    const body = new ReadableStream({ cancel() { cancelled = true; } });
+    const framing = withResponseFraming({
+      fetch: async () => new Response(body, { headers: { "content-type": "text/event-stream" } }),
+    });
+    await framing.fetch(new Request("http://x/mcp", { method: "POST", signal: controller.signal }));
+    controller.abort();
+    await sleep(0);
+    check(cancelled, "a body returned just before the abort is cancelled by it");
+  }
+
+  check(new OaiPmhClient().http.defaults.timeout < 30_000, "the OAI timeout fires before the 30 s response guard, so its own error reaches the caller");
+
+  {
+    const DEADLINE = 300;
+    process.env.VOCAB_DB_PATH = buildFixture("fixture-http-transport.db");
+    const vocabDb = new VocabularyDb();
+    const answers = (url) => {
+      if (url.endsWith("/info.json")) return { width: 100, height: 80 };
+      if (url.endsWith("/collection/search")) return { artObjects: [{ objectNumber: "FX-1", objectNodeId: "node-1" }] };
+      return null;
+    };
+    const scenarios = [
+      { tool: "get_recent_changes", args: { from: "2026-01-01" }, hangOn: "oai" },
+      { tool: "get_artwork_image", args: { objectNumber: "FX-1" }, hangOn: "/info.json" },
+      { tool: "inspect_artwork_image", args: { objectNumber: "FX-1" }, hangOn: ".jpg" },
+      { tool: "find_similar", args: { objectNumber: "FX-1" }, hangOn: "/collection/search" },
+      { tool: "find_similar", args: { objectNumber: "FX-1" }, hangOn: "/collection/visualsearch" },
+    ];
+    const originalAdapter = axios.defaults.adapter;
+    const originalConsoleError = console.error;
+    const logged = [];
+    console.error = (line) => logged.push(String(line));
+    try {
+      for (const [i, { tool, args, hangOn }] of scenarios.entries()) {
+        let hung = null;
+        axios.defaults.adapter = (config) => {
+          const url = `${config.baseURL ?? ""}${config.url}`;
+          const answer = answers(url);
+          if (!url.includes(hangOn) && answer) return Promise.resolve({ data: answer, status: 200, statusText: "OK", headers: {}, config });
+          hung = config;
+          return new Promise((_, reject) => {
+            config.signal?.addEventListener("abort", () => reject(new axios.CanceledError()), { once: true });
+          });
+        };
+        const oai = new OaiPmhClient();
+        const api = new RijksmuseumApiClient();
+        const withLogging = createLogger();
+        const factory = () => {
+          const s = new McpServer({ name: "abort-test", version: "0" });
+          registerProvenanceTools(s, oai, vocabDb, undefined, withLogging);
+          registerViewerTools(s, api, vocabDb, undefined, withLogging);
+          registerSimilarTools(s, vocabDb, null, "http://127.0.0.1", withLogging);
+          return s;
+        };
+        const handle = withResponseGuard(toNodeHandler(withResponseFraming(createMcpHandler(factory))), DEADLINE);
+        const rejections = [];
+        const server = http.createServer((req, res) => {
+          const chunks = [];
+          req.on("data", (c) => chunks.push(c));
+          req.on("end", () => {
+            handle(req, res, JSON.parse(Buffer.concat(chunks).toString())).catch((e) => { rejections.push(e.message); res.destroy(); });
+          });
+        });
+        await new Promise((r) => server.listen(0, "127.0.0.1", r));
+        try {
+          const label = `${tool} (${hangOn})`;
+          logged.length = 0;
+          const r = await raw(`http://127.0.0.1:${server.address().port}/mcp`, {
+            headers: { ...modernHeaders("tools/call"), "mcp-name": tool },
+            body: JSON.stringify({ jsonrpc: "2.0", id: i + 1, method: "tools/call", params: { name: tool, arguments: args, _meta: MODERN_META } }),
+          });
+          eq(r.status, 504, `${label}: a hung upstream call hits the deadline`);
+          await sleep(100);
+          check(hung?.signal?.aborted === true, `${label}: the deadline aborts the upstream call`);
+          eq(logged.filter((l) => l.includes('"level":"error"')).join("\n").slice(0, 200), "", `${label}: an aborted call isn't logged as a server error`);
+          eq(rejections.join(), "", `${label}: and nothing throws out of the guard`);
+        } finally { server.closeAllConnections(); server.close(); }
+      }
+    } finally {
+      console.error = originalConsoleError;
+      axios.defaults.adapter = originalAdapter;
+    }
   }
 
   process.off("unhandledRejection", onUnhandled);

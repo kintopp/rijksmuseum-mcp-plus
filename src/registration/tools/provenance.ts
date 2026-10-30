@@ -264,15 +264,16 @@ export function registerProvenanceTools(
       }).strict(),
       ...withOutputSchema(RecentChangesOutput),
     },
-    withLogging("get_recent_changes", async (args) => {
+    withLogging("get_recent_changes", async (args, ctx) => {
+      const { signal } = ctx.mcpReq;
       if (!args.resumptionToken && !args.from) {
         return errorResponse("Either from or resumptionToken is required.");
       }
 
       const fetchByMode = (token: string, identifiers?: boolean) =>
         identifiers
-          ? oai.listIdentifiers({ resumptionToken: token })
-          : oai.listRecords({ resumptionToken: token });
+          ? oai.listIdentifiers({ resumptionToken: token, signal })
+          : oai.listRecords({ resumptionToken: token, signal });
 
       const resolved = resolveOaiBuffer(args.resumptionToken, "get_recent_changes");
       if (resolved && "error" in resolved) return resolved.error;
@@ -291,6 +292,7 @@ export function registerProvenanceTools(
         until: args.until,
         set: args.setSpec,
         resumptionToken: args.resumptionToken,
+        signal,
       };
 
       const useIdentifiers = args.identifiersOnly;

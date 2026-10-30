@@ -57,7 +57,8 @@ export class OaiPmhClient {
   constructor() {
     this.http = axios.create({
       baseURL: OAI_BASE_URL,
-      timeout: 30_000,
+      // Below the /mcp response guard's 30 s, so this timeout's error reaches the caller.
+      timeout: 25_000,
       headers: { Accept: "text/xml", "User-Agent": USER_AGENT },
       httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 5 }),
     });
@@ -76,9 +77,10 @@ export class OaiPmhClient {
   // ── Raw OAI request ──────────────────────────────────────────
 
   private async oaiRequest(
-    params: Record<string, string>
+    params: Record<string, string>,
+    signal?: AbortSignal
   ): Promise<Record<string, any>> {
-    const { data } = await this.http.get("", { params });
+    const { data } = await this.http.get("", { params, signal });
     const parsed = this.parser.parse(data);
 
     // The root element is OAI-PMH (or OAI-PMH with namespace prefix)
@@ -184,9 +186,10 @@ export class OaiPmhClient {
     from?: string;
     until?: string;
     resumptionToken?: string;
+    signal?: AbortSignal;
   }): Promise<OaiListResult<OaiParsedRecord>> {
     const params = OaiPmhClient.buildOaiParams("ListRecords", opts);
-    const root = await this.oaiRequest(params);
+    const root = await this.oaiRequest(params, opts.signal);
     return OaiPmhClient.parseListResponse(root, "ListRecords", "record", OaiPmhClient.parseEdmRecord);
   }
 
@@ -197,9 +200,10 @@ export class OaiPmhClient {
     from?: string;
     until?: string;
     resumptionToken?: string;
+    signal?: AbortSignal;
   }): Promise<OaiListResult<OaiRecordHeader>> {
     const params = OaiPmhClient.buildOaiParams("ListIdentifiers", opts);
-    const root = await this.oaiRequest(params);
+    const root = await this.oaiRequest(params, opts.signal);
     return OaiPmhClient.parseListResponse(root, "ListIdentifiers", "header", OaiPmhClient.parseHeader);
   }
 
