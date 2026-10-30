@@ -1273,6 +1273,7 @@ export class VocabularyDb {
   private hasTransferCategory_ = false;
   private hasPartyEnrichmentReasoning_ = false;
   private stmtPartyEnrichment_: Statement | null = null;
+  private stmtPartyPositionMethod_: Statement | null = null;
   private fieldIdMap = new Map<string, number>();
   private stmtLookupArtwork: Statement | null = null;
   private stmtCreatorsAmong: Statement | null = null;
@@ -1448,6 +1449,12 @@ export class VocabularyDb {
           SELECT sequence, party_idx, position_method, enrichment_reasoning
           FROM provenance_parties
           WHERE artwork_id = ? AND position_method LIKE 'llm%'
+        `);
+      }
+      if (this.hasPartyTable_ && this.columnExists("provenance_parties", "position_method")) {
+        this.stmtPartyPositionMethod_ = this.db.prepare(`
+          SELECT sequence, party_name FROM provenance_parties
+          WHERE artwork_id = ? AND position_method = ?
         `);
       }
 
@@ -5796,7 +5803,11 @@ export class VocabularyDb {
     if (params.dateTo != null && (row.date_year == null || row.date_year > params.dateTo)) return false;
     if (params.currency && row.price_currency !== params.currency) return false;
     if (params.hasPrice && row.price_amount == null) return false;
-    if (params.hasGap && row.gap !== 1) return false;
+    // hasGap admits at artwork level and only highlights gap events when it is the sole event filter.
+    const hasOtherEventFilter = params.party || params.transferType || params.location
+      || params.dateFrom != null || params.dateTo != null || params.currency || params.hasPrice
+      || params.relatedTo || params.categoryMethod || params.positionMethod;
+    if (params.hasGap && !hasOtherEventFilter && row.gap !== 1) return false;
     if (params.relatedTo && row.cross_ref_target !== params.relatedTo) return false;
     if (params.categoryMethod && row.category_method !== params.categoryMethod) return false;
     // positionMethod is an artwork-level filter (via provenance_parties table), not per-event — handled in SQL
@@ -5832,27 +5843,22 @@ export class VocabularyDb {
       }
     }
 
-    // Post-enrichment: re-evaluate positionMethod matching per event.
-    // positionMethod can't be checked in eventMatchesFilters() because position_method
-    // is only available after party enrichment above. Demote events that don't have
-    // any party with the requested positionMethod. When `party` is also set, the same
-    // party row must satisfy both filters (#347) — mirrors the same-row SQL conjunction
-    // and keeps `matched` aligned with the rows the SQL admitted.
-    if (!allMatched && params?.positionMethod) {
+    // Demote events with no party carrying the requested positionMethod. When `party` is
+    // also set, the same party row must satisfy both filters (#347) — mirrors the same-row
+    // SQL conjunction and keeps `matched` aligned with the rows the SQL admitted.
+    // Without the statement, SQL already filtered through its fallback.
+    if (!allMatched && params?.positionMethod && this.stmtPartyPositionMethod_) {
       const partyNeedle = params.party?.toLowerCase();
+      const partyRows = this.stmtPartyPositionMethod_.all(first.artwork_id, params.positionMethod) as {
+        sequence: number; party_name: string;
+      }[];
+      const matchingSequences = new Set(partyRows
+        .filter(p => partyNeedle == null || p.party_name.toLowerCase().includes(partyNeedle))
+        .map(p => p.sequence));
       matchedCount = 0;
       for (const event of events) {
-        if (event.matched) {
-          const hasMatch = event.parties.some(p =>
-            p.positionMethod === params.positionMethod &&
-            (partyNeedle == null || p.name.toLowerCase().includes(partyNeedle)),
-          );
-          if (!hasMatch) {
-            event.matched = false;
-          } else {
-            matchedCount++;
-          }
-        }
+        event.matched = event.matched && matchingSequences.has(event.sequence);
+        if (event.matched) matchedCount++;
       }
     }
 
@@ -5915,11 +5921,12 @@ export class VocabularyDb {
       conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence AND pp.party_name LIKE '%' || ? || '%' AND pp.position_method = ?)");
       bindings.push(params.party, params.positionMethod);
     } else if (params.party) {
-      // Event-level filter: match on the event's own parties JSON, not artwork-level EXISTS.
-      // Artwork-level EXISTS would return events from artworks where the party appears
-      // *somewhere* in the chain, causing false positives when combined with event-level
-      // filters like transferType (the party might be on a different event).
-      conditions.push("pe.parties LIKE '%' || ? || '%'");
+      // Event-level filter: the party must be on this event, not somewhere in the chain,
+      // or event-level filters like transferType would produce false positives. Names only:
+      // the JSON also holds role words and dates.
+      conditions.push(this.hasPartyTable_
+        ? "EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence AND pp.party_name LIKE '%' || ? || '%')"
+        : "pe.parties LIKE '%' || ? || '%'");
       bindings.push(params.party);
     }
     if (params.transferType) {
@@ -6028,9 +6035,7 @@ export class VocabularyDb {
       LIMIT ? OFFSET ?
     `).all(...sortBindings, ...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
 
-    if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
-
-    const totalArtworks = (this.db.prepare(`
+    const countArtworks = () => (this.db!.prepare(`
       SELECT COUNT(*) AS cnt FROM (
         SELECT DISTINCT pe.artwork_id
         FROM provenance_events pe
@@ -6039,6 +6044,19 @@ export class VocabularyDb {
         LIMIT ?
       )
     `).get(...bindings, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt;
+
+    if (artworkIds.length === 0) {
+      const total = offset > 0 ? countArtworks() : 0;
+      if (total === 0) return { totalArtworks: 0, results: [] };
+      return {
+        totalArtworks: total,
+        totalArtworksCapped: total >= PROVENANCE_COUNT_CAP || undefined,
+        results: [],
+        warnings: [...warnings, `offset ${offset} is past the last matching artwork (${total} total)`],
+      };
+    }
+
+    const totalArtworks = countArtworks();
 
     // Step 2: Fetch full chains for matched artworks
     const placeholders = artworkIds.map(() => "?").join(", ");
@@ -6355,9 +6373,7 @@ export class VocabularyDb {
       `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
     }
 
-    if (artworkIds.length === 0) return { totalArtworks: 0, results: [] };
-
-    const totalArtworks = (this.db.prepare(`
+    const countArtworks = () => (this.db!.prepare(`
       SELECT COUNT(*) AS cnt FROM (
         SELECT DISTINCT pp.artwork_id
         FROM provenance_periods pp
@@ -6366,6 +6382,19 @@ export class VocabularyDb {
         LIMIT ?
       )
     `).get(...bindings, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt;
+
+    if (artworkIds.length === 0) {
+      const total = offset > 0 ? countArtworks() : 0;
+      if (total === 0) return { totalArtworks: 0, results: [] };
+      return {
+        totalArtworks: total,
+        totalArtworksCapped: total >= PROVENANCE_COUNT_CAP || undefined,
+        results: [],
+        warnings: [`offset ${offset} is past the last matching artwork (${total} total)`],
+      };
+    }
+
+    const totalArtworks = countArtworks();
 
     // Fetch full period chains
     const placeholders = artworkIds.map(() => "?").join(", ");

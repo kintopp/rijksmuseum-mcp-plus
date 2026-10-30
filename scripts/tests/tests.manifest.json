@@ -270,6 +270,16 @@
     ],
     "purpose": "proximity search orders by distance in SQL, identically in compact and full mode"
   },
+  "test-provenance-filter-consistency.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "search_provenance admission and per-event matched flags agree; past-end offset reports the true total"
+  },
   "test-vocabdb-id-lists.mjs": {
     "category": "ci",
     "class": "gate",
