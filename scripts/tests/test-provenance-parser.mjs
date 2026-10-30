@@ -11,7 +11,6 @@ import {
   stripHtml,
   classifyTransfer,
   parseEvent,
-  parseProvenance,
 } from "../../dist/provenance.js";
 
 // The field parsers are private to provenance.ts; each event field is exactly
@@ -54,14 +53,6 @@ function section(name) {
   console.log(`  ${name}`);
   console.log(`${"═".repeat(60)}`);
 }
-
-// ── Test fixtures ────────────────────────────────────────────────
-
-const PROV_SKA2344 = `? Pieter Claesz van Ruijven (1624-1674) and Maria Simonsdr de Knuijt (1623-1681), Delft; ? their daughter, Magdalena van Ruijven (1655-1682), Delft; ? her widower, Jacob Dissius (1653-1695), Delft;{Montias 1989, pp. 246-262, 359, doc. 417.} his sale, Amsterdam, 16 May 1696, no. 2, fl. 175, to Isaac Rooleeuw (1663-1701), Amsterdam;{Hoet and Terwesten 1752-1770, vol. 1 (1752), p. 34; Montias 1989, p. 363, doc. 439; Grijzenhout 2010, p. 66.} his sale, Amsterdam, 20 April 1701, no. 7, fl. 320;{...} …; sale Jacob van Hoek (1670-1718), Amsterdam, 12 April 1719, no. 20, fl. 126;{...} …; collection Pieter Leendert de Neufville (1707-1759), Amsterdam, after 1752;{...} his son, Leendert Pieter de Neufville (1729-1774?), Amsterdam; sale De Neufville, Amsterdam (J.M. Cok), 19 June 1765, no. 65, fl. 560, to the dealer Yver;{...} …; sale Jean Dulong (?-?), Amsterdam, 18 April 1768, no. 10, fl. 925, to Van Diemen;{...} …; collection Jan Jacob de Bruyn (1720-1792), Amsterdam;{...} his sale, Amsterdam, 12 September 1798, no. 32, fl. 1,550, to the dealer J.A. Spaan;{...} …; sale Hendrik Muilman (1743-1812), Amsterdam, 12 April 1813, no. 96, fl. 2,125, to the dealer J. de Vries for Lucretia Johanna van Winter (1785-1845), Amsterdam;{...} her widower, Jonkheer Hendrik Six (1790-1847), Lord of Hillegom, Amsterdam; their son, Jonkheer Pieter Hendrik Six (1827-1905), Lord of Vromade, Amsterdam;{...} from whose heirs, fl. 550,000, with 38 other paintings, with the support of the Vereniging Rembrandt, to the museum, 1908`;
-
-const PROV_SKA3981 = `…; ? estate inventory, Clara de Valaer (1584-1660), widow successfully of Eduart van Domselaer (1568-1624) and Hendrick van Domselaer (1580/81-1652), Amsterdam, 16 October 1660, as security ('een stuk synde twee pauwen ende een kint van Rembrant');{Bredius 1908, p. 223; Strauss <em>et al.</em> 1979, p. 461, doc. no. 1660/15 } ? estate inventory of her son, Tobias van Domselaer (1611-85), Amsterdam, September 1685 ('een groot schilderij met twee paeuwen van Rembrandt'); {Hofstede de Groot 1906, p. 419, doc. no. 359.} …; ? collection John Blackwood (?-1777), Soho Square, London;{The collector and dealer John Blackwood is known to have imported paintings from the Dutch Republic. His collection is mentioned in his 1777 will, but without specification of the individual works; London, The National Archives, Prerogative Court of Canterbury, inv. no. PROB 11/1036, 19 November 1777, Codicil p. 12.} ? his son, Colonel John Blackwood (?-1780), Cheshunt Nunnery, Hertfordshire;{According to his father's 1777 will, he was to inherit the 'pictures and bronzes and marble busts' in the 'for room up two pair of stairs'.} ? his widow, Catherine Ann Blackwood (? - 1804), Cheshunt Nunnery, Hertfordshire; ? her nephew, William Ralph Cartwright (1771-1850), Aynhoe Park, Northampton;{The collection of paintings and bronzes owned by Catherine Ann Blackwood were bequeathed to her nephew; London, The National Archives, Prerogative Court of Canterbury, inv. no. PROB 11/1405, 29 March 1804. According to The Gentleman's Magazine, XCV (1804), p. 431, the collection inherited by William Ralph Cartwright from his aunt Catherine Ann Blackwood had been formed by John Blackwood (?-1777).} first recorded in his collection in 1819;{Lent in that year to the British Institution's annual exhibition; see British Institution 1824, p. 162, no. 33.} his son, Sir Thomas Cartwright (1795-1850), Aynhoe Park, Northampton; his son, William Cornwallis Cartwright (1825-1915), Aynhoe Park, Northampton; last recorded in his collection in 1915;{Hofstede de Groot VI, 1915, p. 403, no. 968.} from whom purchased by the dealer Frederik Muller, Amsterdam, c. 1915;{Schmidt-Degener 1918, p. 3.} from whom purchased by Jean Joseph Marie Chabot (1857-1944), Rotterdam, Montreux, Brussels and Wassenaar, 1918 (on loan to the museum, November 1923 to 27 July 1942, SK-C-1124-I);{Schmidt-Degener 1918, p. 3.} from whom, with two other paintings, fl. 800,000, to Dr. Erhard Göpel, The Hague, for Adolf Hitler's Führermuseum, Linz, 21 July 1942 (inv. no. 2418);{Schwarz 2004, p. 146, no. XXII/10.} war recuperation, SNK, 9 November 1945 (inv. no. NK 2346);{Schwarz 2004, p. 146, no. XXII/10; MCCP website, no. 4299.} on loan from the SNK to the museum, June 1948 - 1960 (SK-C-1396); transferred to the museum, 1960`;
-
-const PROV_SKA4885 = `Commissioned by Abraham Anthonisz Recht (1588-1664), Amsterdam;{According to an entry in Johannes Wtenbogaert's appointment book dated 13 April 1633: 'Wtgeschildert van Rembrant, voor Abr Anthonissen'; Tideman 1903, p. 127; Strauss <em>et al.</em> 1979, p. 99, doc. no. 1633/2.} estate inventory of his house in the Diemermeer, Watergraafsmeer, 20 October 1664, in the parlor ('1 contrefeijtsel van Johannes Uyttenbogaert f 40.-');{Strauss <em>et al.</em> 1979, p. 531, doc. no. 1664/2; Dudok van Heel 1994, p. 343.} …; collection Conte Girolamo Manfrin (1742-1802), Palazzo Manfrin, Venice;{Wax seal and label on the reverse of the painting.} first mentioned in the Manfrin collection, 1806;{Von der Recke 1819, p. 200.} by descent to Marchesa Bortolina Manfrin Plattis;{Coll. cat. Manfrin Plattis 1851: 'In Stanza segnata D: [no.] 23. Rembrandt. Ritratto con colare bianco'. The number D 23 is recorded on one of the labels on the reverse.} from whom, 8,000 Napoléons, with 14 other paintings, to Alexander Barker (?-1873), London, 1856;{Robertson 1978, p. 316.} by whom probably sold to Baron Mayer Amschel de Rothschild (1818-74), Mentmore Towers, Buckinghamshire, before 1860;{According to an 1883 catalogue of the paintings at Mentmore towers, the painting was acquired before 1860; see the catalogue for the sale, [section Neil Archibald Primrose, 7th Earl of Rosebery], London (Sotheby's), 8 July 1992, no. 86.} his daughter, Hannah Primrose (1851-90), Countess of Rosebery, Mentmore Towers, Buckinghamshire; her husband, Archibald Primrose (1847-1929), 5th Earl of Rosebery, Mentmore Towers, Buckinghamshire; his son, Harry Meyer Archibald Primrose (1882-1974), 6th Earl of Rosebery, Mentmore Towers, Buckinghamshire; his son, Neil Archibald Primrose (1929-), 7th Earl of Rosebery, Mentmore Towers, Buckinghamshire and from 1977 Dalmeny House, near Edinburgh; sale [section Neil Archibald Primrose, 7th Earl of Rosebery], London (Sotheby's), 8 July 1992, no. 86, £ 4,180,000, to the dealers Otto Naumann and Dr Alfred Bader; from whom purchased by the museum, with support from the Vereniging Rembrandt, the Prins Bernhard Fonds, the Stichting VSB Fonds, the Rijksmuseum-Stichting, the State of the Netherlands, and numerous individuals and companies, December 1992`;
 
 // ══════════════════════════════════════════════════════════════════
 //  Section 1: extractCitations
@@ -314,165 +305,16 @@ section("7. parseParty");
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  Section 8: parseProvenance — SK-A-2344 (The Milkmaid)
-// ══════════════════════════════════════════════════════════════════
-
-section("8. parseProvenance — SK-A-2344 (The Milkmaid)");
-
-{
-  const chain = parseProvenance(PROV_SKA2344);
-  assertEq(chain.events.length, 16, "16 events");
-
-  // First event: uncertain Pieter Claesz van Ruijven
-  const e1 = chain.events[0];
-  assertEq(e1.uncertain, true, "first event uncertain (?)");
-  assertEq(e1.location, "Delft", "first event location Delft");
-  assertEq(e1.sequence, 1, "first event sequence 1");
-
-  // Sale event with price and buyer (Dissius sale, 1696)
-  const saleEvent = chain.events.find(
-    e => e.transferType === "sale" && e.date?.year === 1696
-  );
-  assert(saleEvent !== undefined, "1696 sale event found");
-  assertEq(saleEvent?.price?.amount, 175, "1696 sale price fl. 175");
-  assertEq(saleEvent?.price?.currency, "guilders", "guilders currency");
-  assertEq(saleEvent?.location, "Amsterdam", "1696 sale in Amsterdam");
-  assert(saleEvent?.saleDetails?.includes("no. 2"), "lot number in sale details");
-
-  // Gap events
-  const gaps = chain.events.filter(e => e.gap);
-  assert(gaps.length >= 4, `at least 4 gaps (got ${gaps.length})`);
-
-  // Collection event
-  const collEvent = chain.events.find(e => e.transferType === "collection");
-  assert(collEvent !== undefined, "collection event found");
-
-  // Last event: purchase by museum, 1908
-  const last = chain.events[chain.events.length - 1];
-  assertEq(last.transferType, "sale", "last event is purchase");
-  assertEq(last.date?.year, 1908, "museum purchase 1908");
-  assertEq(last.price?.amount, 550000, "museum purchase price fl. 550,000");
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  Section 9: parseProvenance — SK-A-3981 (Still Life with Peacocks)
-// ══════════════════════════════════════════════════════════════════
-
-section("9. parseProvenance — SK-A-3981 (Still Life with Peacocks)");
-
-{
-  const chain = parseProvenance(PROV_SKA3981);
-  assertEq(chain.events.length, 16, "16 events");
-
-  // Confiscation event (Führermuseum)
-  const confEvent = chain.events.find(e => e.transferType === "confiscation");
-  assert(confEvent !== undefined, "confiscation event found");
-  assertEq(confEvent?.date?.year, 1942, "confiscation 1942");
-
-  // War recuperation
-  const recupEvent = chain.events.find(e => e.transferType === "recuperation");
-  assert(recupEvent !== undefined, "recuperation event found");
-  assertEq(recupEvent?.date?.year, 1945, "recuperation 1945");
-
-  // Loan event
-  const loanEvent = chain.events.find(e => e.transferType === "loan");
-  assert(loanEvent !== undefined, "loan event found");
-
-  // Transfer to museum
-  const transferEvent = chain.events.find(e => e.transferType === "transfer");
-  assert(transferEvent !== undefined, "transfer event found");
-  assertEq(transferEvent?.date?.year, 1960, "transfer 1960");
-
-  // HTML stripping (et al. in citations)
-  const rawTexts = chain.events.map(e => e.rawText).join(" ");
-  assert(!rawTexts.includes("<em>"), "no <em> tags in rawText (HTML stripped)");
-
-  // Purchase event: from whom purchased by dealer
-  const purchEvent = chain.events.find(e => e.transferType === "sale");
-  assert(purchEvent !== undefined, "purchase event found (dealer Muller)");
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  Section 10: parseProvenance — SK-A-4885 (Johannes Wtenbogaert)
-// ══════════════════════════════════════════════════════════════════
-
-section("10. parseProvenance — SK-A-4885 (Johannes Wtenbogaert)");
-
-{
-  const chain = parseProvenance(PROV_SKA4885);
-  assertEq(chain.events.length, 13, "13 events");
-
-  // Commission origin
-  const commEvent = chain.events.find(e => e.transferType === "commission");
-  assert(commEvent !== undefined, "commission event found");
-  assertEq(commEvent?.party?.role, "patron", "commission party is patron");
-  assert(commEvent?.party?.name?.includes("Abraham"), "patron name Abraham");
-
-  // Sotheby's sale with £ price
-  const saleEvent = chain.events.find(
-    e => e.transferType === "sale" && e.price?.currency === "pounds"
-  );
-  assert(saleEvent !== undefined, "Sotheby's sale with £ found");
-  assertEq(saleEvent?.price?.amount, 4180000, "£4,180,000");
-  assertEq(saleEvent?.date?.year, 1992, "sale 1992");
-
-  // Napoléons price
-  const napEvent = chain.events.find(e => e.price?.currency === "napoléons");
-  assert(napEvent !== undefined, "Napoléons price event found");
-  assertEq(napEvent?.price?.amount, 8000, "8,000 Napoléons");
-
-  // Inheritance events (Primrose family)
-  const inhEvents = chain.events.filter(e => ["inheritance", "by_descent", "widowhood"].includes(e.transferType));
-  assert(inhEvents.length >= 4, `≥4 inheritance/by_descent/widowhood events (got ${inhEvents.length})`);
-
-  // Venice location
-  const veniceEvent = chain.events.find(e => e.location === "Venice");
-  assert(veniceEvent !== undefined, "Venice location found");
-
-  // Last event: museum purchase December 1992
-  const last = chain.events[chain.events.length - 1];
-  assertEq(last.transferType, "sale", "last event is purchase");
-  assertEq(last.date?.year, 1992, "museum purchase December 1992");
-}
-
-// ══════════════════════════════════════════════════════════════════
 //  Section 11: Edge cases
 // ══════════════════════════════════════════════════════════════════
 
 section("11. Edge cases");
 
 {
-  const chain = parseProvenance(null);
-  assertEq(chain.events.length, 0, "null input → empty events");
-}
-
-{
-  const chain = parseProvenance("");
-  assertEq(chain.events.length, 0, "empty string → empty events");
-}
-
-{
-  const chain = parseProvenance(undefined);
-  assertEq(chain.events.length, 0, "undefined → empty events");
-}
-
-{
-  const chain = parseProvenance("single owner, no semicolons");
-  assertEq(chain.events.length, 1, "single segment without semicolons");
-  assertEq(chain.events[0].sequence, 1, "sequence starts at 1");
-}
-
-{
-  const chain = parseProvenance("A; B; C");
-  assertEq(chain.events.length, 3, "simple three-segment chain");
-  assertEq(chain.events[2].sequence, 3, "third event sequence 3");
-}
-
-{
   // Verify citations are restored in rawText
-  const chain = parseProvenance("owner;{cite 1} next owner");
-  const hasRawCitation = chain.events.some(e => e.rawText.includes("{cite 1}"));
-  assert(hasRawCitation, "citations restored in rawText");
+  const { cleaned, citations } = extractCitations("owner;{cite 1} next owner");
+  const events = splitEvents(cleaned).map((seg, i) => parseEvent(seg, i + 1, citations));
+  assert(events.some(e => e.rawText.includes("{cite 1}")), "citations restored in rawText");
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -578,16 +420,16 @@ section("15. Uncertainty + classification");
 
 {
   // "? Estate inventory" — the ? should be stripped before classification
-  const chain = parseProvenance("? Estate inventory, Eberhard Jabach (1618-95), Paris, 17 July 1696");
-  assertEq(chain.events[0].uncertain, true, "? prefix → uncertain");
-  assertEq(chain.events[0].transferType, "inventory", "? Estate inventory → inventory (? stripped)");
+  const event = ev("? Estate inventory, Eberhard Jabach (1618-95), Paris, 17 July 1696");
+  assertEq(event.uncertain, true, "? prefix → uncertain");
+  assertEq(event.transferType, "inventory", "? Estate inventory → inventory (? stripped)");
 }
 
 {
   // "? Presented by" — gift with uncertainty
-  const chain = parseProvenance("? Presented by the artist to Don Ramón Satué, Madrid, 1823");
-  assertEq(chain.events[0].transferType, "gift", "? Presented by → gift");
-  assertEq(chain.events[0].uncertain, true, "uncertain gift");
+  const event = ev("? Presented by the artist to Don Ramón Satué, Madrid, 1823");
+  assertEq(event.transferType, "gift", "? Presented by → gift");
+  assertEq(event.uncertain, true, "uncertain gift");
 }
 
 // ══════════════════════════════════════════════════════════════════

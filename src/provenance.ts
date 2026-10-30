@@ -8,7 +8,8 @@
  *   - `?` prefix marks uncertain attribution
  *   - `(YYYY-YYYY)` life dates, `c.` approximate, `before`/`after` qualifiers
  *
- * Pipeline: extractCitations → splitEvents → per-event parsing → ProvenanceChain
+ * Pieces: extractCitations → splitEvents → parseEvent. provenance-peg.ts drives them, with
+ * parseEvent as the fallback for segments the grammar rejects.
  */
 
 // ─── Types ─────────────────────────────────────────────────────────
@@ -165,11 +166,6 @@ export interface ProvenanceEvent {
   saleDetails: string | null;
   citations: ProvenanceCitation[];
   uncertain: boolean;
-}
-
-export interface ProvenanceChain {
-  events: ProvenanceEvent[];
-  raw: string;
 }
 
 // ─── 1. extractCitations ───────────────────────────────────────────
@@ -742,22 +738,4 @@ function restoreCitations(
     const val = citationMap.get(key);
     return val != null ? `{${stripHtml(val)}}` : key;
   });
-}
-
-// ─── 10. parseProvenance ───────────────────────────────────────────
-
-/**
- * Entry point: parse a full provenance string into a structured chain.
- * Pipeline: extractCitations → splitEvents → map(parseEvent).
- */
-export function parseProvenance(text: string | null | undefined): ProvenanceChain {
-  if (!text || !text.trim()) {
-    return { events: [], raw: text ?? "" };
-  }
-
-  const { cleaned, citations } = extractCitations(text);
-  const segments = splitEvents(cleaned);
-  const events = segments.map((seg, i) => parseEvent(seg, i + 1, citations));
-
-  return { events, raw: text };
 }
