@@ -27,4 +27,4 @@ find_similar(objectNumber="RP-P-1958-335", maxResults=50)  # default 20
 
 ## Availability and fallbacks
 
-The tool can be switched off server-side: if `find_similar` is absent from the tool list, fall back to `semantic_search`, or to a `search_artwork` built from the source work's creator + type + subject. The Theme channel can also be disabled independently — a comparison page without a Theme column is normal, not an error.
+The tool can be switched off server-side: if `find_similar` is absent from the tool list, fall back to `semantic_search`, or to a `search_artwork` built from the source work's creator + type + subject. The Theme channel can be disabled independently, Description needs the vector database, and Visual depends on a live call to the museum's website. A comparison page without any of these rows is normal, not an error.

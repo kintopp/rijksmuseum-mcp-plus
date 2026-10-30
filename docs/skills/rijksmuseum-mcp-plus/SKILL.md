@@ -3,8 +3,8 @@ name: rijksmuseum-mcp-plus
 description: >
   Research workflows for the Rijksmuseum MCP+ server, addressing Dutch arts, crafts, and history across the museum's holdings. Capabilities include keyword, structured, and semantic text search, text-to-image search, AI-driven image analysis, geospatial queries, collection statistics, Iconclass-driven iconographic discovery, AAM/CMOA-aligned provenance, and image similarity research. Trigger on any question that could plausibly be answered from the Rijksmuseum's holdings — Golden Age Dutch and Flemish painting, prints and drawings, Asian export art, decorative arts and craft objects, photography, historical artefacts, ownership history, museum acquisitions — even when the user doesn't name the collection.
 metadata:
-  version: "0.100"
-  last_updated: "2026-10-21"
+  version: "0.101"
+  last_updated: "2026-10-30"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -38,7 +38,7 @@ The tool descriptions already document every parameter and say which tool does w
 ## How the catalogue can mislead
 
 **Absence is rarely evidence.**
-- `get_artwork_details` → `attributionMarks: 0` does not mean unsigned. The mark rows and the inscription field are independent datasets: The Night Watch reports 0 marks yet carries "Rembrandt f 1642" in `parsedInscriptions`. Check `parsedInscriptions` before reporting that a work has no signature.
+- `get_artwork_details` → `attributionMarks.total: 0` does not mean unsigned. The mark rows and the inscription field are independent datasets: The Night Watch reports 0 marks yet carries "Rembrandt f 1642" in `parsedInscriptions`. Check `parsedInscriptions` before reporting that a work has no signature.
 - `get_conservation_history` covers a small fraction of a percent of the collection, and famous paintings are not favoured (The Night Watch and The Milkmaid both return nothing). An empty result means no examination record was harvested, not that the work was never examined.
 - The inscription field is a mark-and-annotation log dominated by verso collector's stamps, not a transcription of visible text. Coins, medals and posters covered in legends often have nothing entered. `placement` (recto/verso) is almost never recorded for paintings, so adding it zeroes a painting query.
 - Parsed provenance exists for only about one artwork in sixteen. Credit lines reach much further but record how the *museum* acquired a work, not earlier ownership. They are templated boilerplate, so search them on distinctive donor or fund names, not words like "gift" or "purchase". A credit-line search (`creditLineQuery`) covers only works *without* parsed provenance, so a complete answer for a donor or fund needs it plus a `party` search of the parsed chains; the two sets do not overlap.

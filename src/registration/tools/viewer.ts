@@ -558,7 +558,7 @@ export function registerViewerTools(
         "correct the coordinates and retry. Keep batches under 10 commands per call. The viewer session " +
         "(viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.\n\n" +
         "Coordinate shortcut: to zoom to a region of a prior inspect_artwork_image crop, use 'relativeTo' with " +
-        "the crop's region string and specify 'region' as coordinates within the crop's local space; the server " +
+        "the cropRegion of an inspect that used a pct: region (only pct:x,y,w,h is accepted) and specify 'region' as coordinates within the crop's local space; the server " +
         "projects to full-image space deterministically. Use pct:x,y,w,h for crop-local percentages, or " +
         "crop_pixels:x,y,w,h plus relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from " +
         "inspect_artwork_image for crop-local rendered pixels.\n\n" +
@@ -576,7 +576,7 @@ export function registerViewerTools(
           ),
           region: optStr().optional().describe("IIIF region (required): 'full', 'square', 'pct:x,y,w,h', 'crop_pixels:x,y,w,h', or 'x,y,w,h'"),
           relativeTo: optStr().optional().describe(
-            "Crop region from a prior inspect_artwork_image call. When provided, " +
+            "pct:x,y,w,h crop region from a prior inspect_artwork_image call that used a pct: region. When provided, " +
             "'region' is interpreted as coordinates within that crop's local space " +
             "and projected to full-image space by the server. Use pct: region values directly, " +
             "or crop_pixels: values with relativeToSize from inspect_artwork_image."

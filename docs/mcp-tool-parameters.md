@@ -408,7 +408,7 @@ Zoom/pan an already-open artwork viewer to a specific region.
 | `commands` | **Required.** Array of commands, at least one, executed in order. Keep a batch to roughly ten or fewer. Each has: |
 | ↳ `action` | `navigate` (zoom/pan to `region`) |
 | ↳ `region` | IIIF region (required) |
-| ↳ `relativeTo` | Crop region from a prior `inspect_artwork_image` — coordinates in `region` are projected from crop-local to full-image space |
+| ↳ `relativeTo` | `pct:x,y,w,h` crop region from a prior `inspect_artwork_image` that used a `pct:` region — coordinates in `region` are projected from crop-local to full-image space |
 | ↳ `relativeToSize` | `{ width, height }` — actual pixel dimensions of the inspected crop (copy from `cropPixelWidth`/`cropPixelHeight`). Required when `relativeTo` is set and `region` uses `crop_pixels:`. |
 
 ---

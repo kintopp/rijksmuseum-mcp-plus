@@ -104,7 +104,7 @@ Region formats:
 
 Out-of-bounds regions are rejected with an `overlay_region_out_of_bounds` warning — correct the coordinates and retry. Keep batches under 10 commands per call. The viewer session (viewUUID) remains active for 30 minutes of idle inactivity — any polling or navigation resets the clock.
 
-Coordinate shortcut: to zoom to a region of a prior inspect_artwork_image crop, use 'relativeTo' with the crop's region string and specify 'region' as coordinates within the crop's local space; the server projects to full-image space deterministically. Use pct:x,y,w,h for crop-local percentages, or crop_pixels:x,y,w,h plus relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from inspect_artwork_image for crop-local rendered pixels.
+Coordinate shortcut: to zoom to a region of a prior inspect_artwork_image crop, use 'relativeTo' with the cropRegion of an inspect that used a pct: region (only pct:x,y,w,h is accepted) and specify 'region' as coordinates within the crop's local space; the server projects to full-image space deterministically. Use pct:x,y,w,h for crop-local percentages, or crop_pixels:x,y,w,h plus relativeToSize:{width: cropPixelWidth, height: cropPixelHeight} from inspect_artwork_image for crop-local rendered pixels.
 
 Response field deliveryState reports whether the iframe drained the commands immediately (`delivered_recently`), the iframe exists but hasn't polled recently and the commands are queued (`queued_waiting_for_viewer` — typical when scrolled out of view), or no iframe has connected yet (`no_live_viewer_seen`). In the queued case, the command is preserved server-side and will apply automatically when the viewer resumes polling — do not narrate this as a delivery failure to the user.
 

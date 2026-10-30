@@ -452,9 +452,11 @@ export function registerProvenanceTools(
             offset: (args.offset as number | undefined) ?? 0,
           });
 
-          // Everything except the three params this branch honours is ignored.
+          // Everything except the three params this branch honours is ignored. compact's
+          // schema default fills it in, so only an explicit true was asked for.
           const ignored = Object.keys(args)
-            .filter(k => !["creditLineQuery", "maxResults", "offset"].includes(k));
+            .filter(k => !["creditLineQuery", "maxResults", "offset"].includes(k))
+            .filter(k => !(k === "compact" && args.compact === false));
           const warnings: string[] = [];
           if (ignored.length > 0) {
             warnings.push(

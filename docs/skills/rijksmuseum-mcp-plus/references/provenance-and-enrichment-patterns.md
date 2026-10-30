@@ -23,7 +23,7 @@ specialised query patterns.
 
 Provenance research moves through three levels of detail:
 
-1. **Scope and profile** — `search_provenance` for keyword search over the raw provenance corpus, with `facets: true` for quick distributional context. For credit-line / donor / fund queries (e.g. "Drucker-Fraser", "Vereniging Rembrandt") use `search_provenance` — the credit line covers a much larger share of the catalogue than parsed provenance chains do and captures the last link of acquisition.
+1. **Scope and profile** — `search_provenance` over the parsed provenance fields, with `facets: true` for quick distributional context. For donor or fund queries (e.g. "Drucker-Fraser", "Vereniging Rembrandt") run both `party` and `creditLineQuery`: the credit-line search covers works without parsed provenance, so the two sets do not overlap.
 2. **Structured chain analysis** — `search_provenance` with structured filters (`transferType`, `party`, `dateFrom`/`dateTo`, etc.) returns parsed chains with dates, prices, transfer types, and ownership periods.
 3. **Single-object deep dive** — `search_provenance(objectNumber=...)` for the full chain, then `get_artwork_details` for narrative text and curatorial context.
 
@@ -191,8 +191,8 @@ each decision. **Always show this URL to the user.**
 
 ### Two complementary audit layers
 
-The four fields above (`parseMethod`, `categoryMethod`, `positionMethod`,
-`enrichmentReasoning`) are **event-level** audit metadata — they record how
+The fields above, plus `correctionMethod` (`llm_structural:…`, for LLM structural
+corrections), are **event-level** audit metadata — they record how
 each parsed provenance event was produced.
 
 The vocabulary DB also carries an **entity-level** 3-tier audit vocabulary
@@ -299,7 +299,7 @@ search_provenance(categoryMethod="llm_enrichment", facets=true)
 search_provenance(party="Mannheimer", maxResults=50)
 
 # Collector as seller specifically
-search_provenance(party="Goupil", maxResults=20)
+search_provenance(party="Goupil", maxResults=10)
 # Then filter results: role="seller" + position="sender" to map direction of trade
 
 # Ownership durations for a family name
@@ -310,11 +310,12 @@ search_provenance(layer="periods", ownerName="Six",
 ### Acquisition channel analysis
 
 ```python
-# Use search_provenance to profile how the museum acquired works from a donor
-# or fund. `credit_line`-derived events recover acquisition context (donor name,
-# purchase fund) for works whose provenance text omits it.
-search_provenance(party="Drucker-Fraser", maxResults=20)
-search_provenance(party="Vereniging Rembrandt", transferType="gift", maxResults=20)
+# A donor or fund needs two calls: parsed chains, and works known only by credit line.
+# creditLineQuery is standalone: it ignores other filters and returns creditLineResults.
+search_provenance(party="Drucker-Fraser", maxResults=10)
+search_provenance(creditLineQuery="Drucker-Fraser")
+search_provenance(party="Vereniging Rembrandt", transferType="gift", maxResults=10)
+search_provenance(creditLineQuery="Vereniging Rembrandt")
 ```
 
 ### Wartime provenance
@@ -341,7 +342,7 @@ search_provenance(transferType="recuperation", maxResults=20)
 # Most expensive recorded transactions in guilders
 # Check batchPrice on results — true means en bloc total, not individual price
 search_provenance(hasPrice=true, currency="guilders",
-                  sortBy="price", sortOrder="desc", maxResults=20)
+                  sortBy="price", sortOrder="desc", maxResults=10)
 
 # Price history for a specific work
 search_provenance(objectNumber="SK-A-2344", layer="events")
@@ -374,18 +375,16 @@ search_provenance(dateFrom=1400, dateTo=1500, sortBy="dateYear",
 Use `collection_stats` for single-call time series — no manual pagination loop needed:
 
 ```python
-# Sale events per decade 1600–1900
+# Each bucket counts distinct artworks with a matching event; an artwork can appear in several decades.
+# Artworks with a sale in each decade, 1600–1900
 collection_stats(dimension="provenanceDecade", transferType="sale",
                  provenanceDateFrom=1600, provenanceDateTo=1900)
-# → 1600s  234  (3.2%)
-#   1610s  456  (6.1%)
-#   ...
 
 # Half-century bins
 collection_stats(dimension="provenanceDecade", transferType="sale",
                  provenanceDateFrom=1600, provenanceDateTo=1900, binWidth=50)
 
-# Confiscation events by decade (wartime distribution)
+# Artworks with a confiscation in each decade
 collection_stats(dimension="provenanceDecade", transferType="confiscation")
 # → reveals 1790s + 1940s bimodal pattern (French Revolution + WWII)
 ```

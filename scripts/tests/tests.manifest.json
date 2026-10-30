@@ -280,6 +280,16 @@
     ],
     "purpose": "search_provenance admission and per-event matched flags agree; past-end offset reports the true total"
   },
+  "test-credit-line-warnings.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "creditLineQuery warns only about filters the caller sent, not compact's schema default"
+  },
   "test-vocabdb-id-lists.mjs": {
     "category": "ci",
     "class": "gate",
