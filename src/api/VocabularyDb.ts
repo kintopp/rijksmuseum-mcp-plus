@@ -166,6 +166,8 @@ export interface ArtworkDetailFromDb {
   bibliographyCount: number | null;
   /** Parsed provenance events, excluding cross-references. Null when the provenance tables are absent. */
   provenanceEventCount: number | null;
+  /** Object number of the other artwork a stored cross-reference points to. Null when none resolves to one. */
+  provenanceCrossRefTarget: string | null;
 }
 
 export interface BibliographyFromDb {
@@ -1304,7 +1306,7 @@ export class VocabularyDb {
   private stmtConservationModifications: Statement | null = null;
   private stmtArtworkCitations: Statement | null = null;
   private stmtCitationCount: Statement | null = null;
-  private stmtProvenanceEventCount: Statement | null = null;
+  private stmtProvenanceCounts: Statement | null = null;
   private stmtArtworksByPublication: Statement | null = null;
   private stmtBrowseSetLookup: Statement | null = null;
   private stmtBrowseSetCount: Statement | null = null;
@@ -1445,8 +1447,13 @@ export class VocabularyDb {
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
       if (this.hasProvenanceTables_) {
-        this.stmtProvenanceEventCount = this.db.prepare(
-          "SELECT COUNT(*) AS n FROM provenance_events WHERE artwork_id = ? AND is_cross_ref = 0"
+        // An aggregate always yields one row. The join drops targets that are not artworks
+        // ("Hoek 1985") and self-references, whose pointer would lead back to the same event.
+        this.stmtProvenanceCounts = this.db.prepare(
+          `SELECT pe.n, t.object_number AS target
+           FROM (SELECT COUNT(*) FILTER (WHERE is_cross_ref = 0) AS n, MAX(cross_ref_target) AS target
+                 FROM provenance_events WHERE artwork_id = ?) pe
+           LEFT JOIN artworks t ON t.object_number = pe.target AND t.art_id <> ?`
         );
       }
       this.hasProvenancePeriods_ = this.tableExists("provenance_periods");
@@ -2210,9 +2217,7 @@ export class VocabularyDb {
     const bibliographyCount = this.stmtCitationCount
       ? (this.stmtCitationCount.get(row.art_id) as { n: number }).n
       : null;
-    const provenanceEventCount = this.stmtProvenanceEventCount
-      ? (this.stmtProvenanceEventCount.get(row.art_id) as { n: number }).n
-      : null;
+    const provenanceCounts = this.stmtProvenanceCounts?.get(row.art_id, row.art_id) as { n: number; target: string | null } | undefined;
 
     // The handle suffix is an upstream identifier unrelated to art_id — never synthesize it.
     const externalIds = this.fetchArtworkExternalIds(row.art_id);
@@ -2260,7 +2265,8 @@ export class VocabularyDb {
       ...this.fetchExhibitions(row.art_id),
       attributionMarks: this.computeAttributionMarks(row.art_id),
       bibliographyCount,
-      provenanceEventCount,
+      provenanceEventCount: provenanceCounts?.n ?? null,
+      provenanceCrossRefTarget: provenanceCounts?.target ?? null,
     };
   }
 

@@ -402,7 +402,7 @@ default 20); page with `--offset`.
 
 ### `details` → `get_artwork_details`
 
-Full metadata for one object — the complete record, 46 top-level fields. Single-object output. Pair
+Full metadata for one object — the complete record, 47 top-level fields. Single-object output. Pair
 with `--fields` to keep it small.
 
 ```bash

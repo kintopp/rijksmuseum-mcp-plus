@@ -76,8 +76,11 @@ function formatDetailSummary(d: ArtworkDetailFromDb & { inscriptionSummary: Insc
   if (isum.collectorMarks.length) bits.push(`marks: ${isum.collectorMarks.join(", ")}`);
   if (bits.length) lines.push(`[Inscription notes] ${bits.join("; ")}`);
   if (d.provenance) lines.push(`[Provenance] ${d.provenance}`);
+  const crossRef = d.provenanceCrossRefTarget;
   if (d.provenanceEventCount) {
-    lines.push(`Provenance events: ${d.provenanceEventCount} parsed. Full chain: search_provenance(objectNumber="${d.objectNumber}")`);
+    lines.push(`Provenance events: ${d.provenanceEventCount} parsed${crossRef ? `, plus a cross-reference to ${crossRef}` : ""}. Full chain: search_provenance(objectNumber="${d.objectNumber}")`);
+  } else if (crossRef) {
+    lines.push(`Provenance recorded on ${crossRef}. Full chain: search_provenance(objectNumber="${crossRef}")`);
   }
   if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
 
