@@ -4229,6 +4229,12 @@ export class VocabularyDb {
         conditions.push(`EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = a.art_id AND ${ppConds.join(" AND ")})`);
         bindings.push(...ppBindings);
       }
+      if (params.hasProvenance === false) {
+        conditions.push("NOT EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
+        if (evConds.length > 0 || ppConds.length > 0) {
+          warnings.push("hasProvenance=false contradicts the provenance filters (they require provenance), so no artworks match.");
+        }
+      }
     }
     const where = conditions.length > 0 ? conditions.join(" AND ") : "1";
 
@@ -4832,6 +4838,9 @@ export class VocabularyDb {
     if (effective.hasProvenance === true && this.hasProvenanceTables_) {
       conditions.push("EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
     }
+    if (effective.hasProvenance === false && this.hasProvenanceTables_) {
+      conditions.push("NOT EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
+    }
 
     // Creation date range filter
     if (effective.creationDate) {
@@ -4844,10 +4853,10 @@ export class VocabularyDb {
             conditions.push("a.date_earliest IS NOT NULL AND a.date_earliest >= ? AND a.date_latest <= ?");
             bindings.push(range.earliest, range.latest);
           } else if (mode === "midpoint") {
-            // Midpoint of artwork range must fall within query range — each artwork in exactly one bin.
-            // Uses sum BETWEEN 2*lo AND 2*hi to evaluate the expression once per row (integer-exact).
+            // A half-year midpoint (odd sum) belongs to the bin whose last year it follows,
+            // hence 2*hi+1: each artwork lands in exactly one bin.
             conditions.push("a.date_earliest IS NOT NULL AND (a.date_earliest + a.date_latest) BETWEEN ? AND ?");
-            bindings.push(range.earliest * 2, range.latest * 2);
+            bindings.push(range.earliest * 2, range.latest * 2 + 1);
           } else {
             // "overlaps" (default): artwork range overlaps the query range
             conditions.push("a.date_earliest IS NOT NULL AND a.date_latest >= ? AND a.date_earliest <= ?");

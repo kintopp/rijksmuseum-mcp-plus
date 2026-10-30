@@ -250,6 +250,16 @@
     ],
     "purpose": "hermetic VocabularyDb characterization against a synthetic fixture DB"
   },
+  "test-search-stats-correctness.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "facet percentage denominator, midpoint date bins and hasProvenance:false report true numbers"
+  },
   "test-vocabdb-id-lists.mjs": {
     "category": "ci",
     "class": "gate",

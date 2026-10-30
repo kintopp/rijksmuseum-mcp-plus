@@ -481,7 +481,7 @@ export function registerSearchTools(
           : `${compactResult.ids.length} results`) + " (compact)";
         const textParts: string[] = [header];
         if (compactResult.facets) {
-          addPercentages(compactResult.facets);
+          addPercentages(compactResult.facets, compactResult.totalResults);
           textParts.push(formatFacets(compactResult.facets));
         }
         if (compactResult.ids.length) textParts.push(compactResult.ids.join(", "));
@@ -540,7 +540,7 @@ export function registerSearchTools(
         ` (vocabulary search)`;
       const textParts: string[] = [header];
       if (result.facets) {
-        addPercentages(result.facets);
+        addPercentages(result.facets, result.totalResults);
         textParts.push(formatFacets(result.facets));
       }
       textParts.push(...result.results.map((r, i) => formatSearchLine(r, i)));

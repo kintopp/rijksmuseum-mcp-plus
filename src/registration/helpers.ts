@@ -289,14 +289,17 @@ export function formatFacets(facets: Record<string, Array<{ label: string; count
   return lines.join("\n");
 }
 
-/** Add percentage to each facet entry based on the sum of counts in that dimension. */
-export function addPercentages(facets: Record<string, Array<{ label: string; count: number; percentage?: number }>>): void {
+/** Add each facet entry's share of `denominator`, the artwork count of the result set the
+ *  facets were computed over. No denominator means no percentages: a share of an unknown
+ *  or capped total would be wrong. Multi-valued dimensions can sum past 100%. */
+export function addPercentages(
+  facets: Record<string, Array<{ label: string; count: number; percentage?: number }>>,
+  denominator: number | undefined,
+): void {
+  if (!denominator || denominator <= 0) return;
   for (const entries of Object.values(facets)) {
-    const total = entries.reduce((sum, e) => sum + e.count, 0);
-    if (total > 0) {
-      for (const e of entries) {
-        e.percentage = Math.round((e.count / total) * 1000) / 10;
-      }
+    for (const e of entries) {
+      e.percentage = Math.round((e.count / denominator) * 1000) / 10;
     }
   }
 }

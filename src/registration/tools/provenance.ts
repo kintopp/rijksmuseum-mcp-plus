@@ -770,7 +770,7 @@ export function registerProvenanceTools(
 
         // Add percentages to provenance facets and format in text output
         if (result.facets) {
-          addPercentages(result.facets);
+          addPercentages(result.facets, result.totalArtworksCapped ? undefined : result.totalArtworks);
           lines.push("");
           lines.push(formatFacets(result.facets));
         }

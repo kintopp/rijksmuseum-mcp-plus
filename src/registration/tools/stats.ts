@@ -294,7 +294,8 @@ export function registerStatsTools(
         if (params.creationDateFrom != null || params.creationDateTo != null) {
           filterParts.push(`created ${params.creationDateFrom ?? "..."}–${params.creationDateTo ?? "..."}`);
         }
-        if (params.hasProvenance) filterParts.push("hasProvenance");
+        if (params.hasProvenance === true) filterParts.push("hasProvenance");
+        else if (params.hasProvenance === false) filterParts.push("hasProvenance=false");
         if (params.transferType) filterParts.push(`transferType=${params.transferType}`);
         if (params.provenanceLocation) filterParts.push(`provenanceLocation=${params.provenanceLocation}`);
         if (params.party) filterParts.push(`party=${params.party}`);
