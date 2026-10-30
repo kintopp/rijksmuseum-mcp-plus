@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { PerformanceObserver, constants as perfConstants } from "node:perf_hooks";
 
 // Memory observability for issue #272 — captures process RSS breakdown,
 // per-DB SQLite pragma state, and (on Linux) per-DB mmap'd resident bytes
@@ -33,6 +34,24 @@ export interface MemorySnapshot {
     vmSizeBytes: number;
   } | null;
   databases: DbPragmaInfo[];
+  heapAfterMajorGc: { usedBytes: number; at: string } | null;
+}
+
+let heapAfterMajorGc: MemorySnapshot["heapAfterMajorGc"] = null;
+let gcObserver: PerformanceObserver | null = null;
+
+/** Record heapUsed after each major GC, for /debug/memory. Idempotent. */
+export function startGcObserver(): void {
+  if (gcObserver) return;
+  gcObserver = new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      const kind = (e as { detail?: { kind?: number } }).detail?.kind;
+      if (kind === perfConstants.NODE_PERFORMANCE_GC_MAJOR) {
+        heapAfterMajorGc = { usedBytes: process.memoryUsage().heapUsed, at: new Date().toISOString() };
+      }
+    }
+  });
+  gcObserver.observe({ entryTypes: ["gc"] });
 }
 
 interface PragmaQueryable {
@@ -167,6 +186,7 @@ export function captureMemorySnapshot(handles: DbHandle[]): MemorySnapshot {
     },
     vm: readVmStats(),
     databases,
+    heapAfterMajorGc,
   };
 }
 

@@ -861,7 +861,7 @@
     "requires": [
       "dist"
     ],
-    "purpose": "HTTP framing behind compression, request body limits and JSON-RPC rejection errors on the fixture DB, plus withResponseTimeout through the SDK's toNodeHandler"
+    "purpose": "HTTP framing behind compression, request body handling and JSON-RPC rejection errors on the fixture DB, /debug/memory heapAfterMajorGc, plus withResponseGuard through the SDK's toNodeHandler"
   },
   "test-modern-wire.mjs": {
     "category": "ci",
