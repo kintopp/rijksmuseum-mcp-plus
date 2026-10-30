@@ -166,10 +166,10 @@ export class OaiPmhClient {
     const rawSets = root.ListSets?.set ?? [];
 
     const sets: OaiSet[] = rawSets.map((s: any) => {
-      const spec = String(s.setSpec ?? "");
+      const spec = s.setSpec ?? "";
       return {
         setSpec: spec,
-        name: String(s.setName ?? ""),
+        name: s.setName ?? "",
         lodUri: `https://id.rijksmuseum.nl/${spec}`,
       };
     });
@@ -208,9 +208,9 @@ export class OaiPmhClient {
   private static parseHeader(header: any): OaiRecordHeader {
     const specs = header.setSpec ?? [];
     return {
-      identifier: String(header.identifier ?? ""),
-      datestamp: String(header.datestamp ?? ""),
-      setSpecs: (Array.isArray(specs) ? specs : [specs]).map(String),
+      identifier: header.identifier ?? "",
+      datestamp: header.datestamp ?? "",
+      setSpecs: Array.isArray(specs) ? specs : [specs],
       // Deleted records carry header @status="deleted" (deletedRecord=persistent).
       ...(header["@status"] === "deleted" ? { deleted: true } : {}),
     };
@@ -222,9 +222,9 @@ export class OaiPmhClient {
     // Header (may be wrapped in array by isArray callback)
     const rawHeader = record.header;
     const header = Array.isArray(rawHeader) ? rawHeader[0] ?? {} : rawHeader ?? {};
-    const datestamp = String(header.datestamp ?? "");
-    const setSpecs = (header.setSpec ?? []).map(String);
-    const identifier = String(header.identifier ?? "");
+    const datestamp = header.datestamp ?? "";
+    const setSpecs = header.setSpec ?? [];
+    const identifier = header.identifier ?? "";
 
     // Deleted records carry header @status="deleted" and no <metadata> block,
     // so every field below resolves empty — short-circuit to a minimal record.
@@ -438,11 +438,10 @@ export class OaiPmhClient {
     let fallback: string | null = null;
 
     for (const f of fields) {
-      const raw = typeof f === "string"
+      const text = typeof f === "string"
         ? f
         : f["#text"] ?? null;
-      if (raw == null) continue;
-      const text = String(raw);
+      if (text == null) continue;
 
       const lang = typeof f === "object" ? f["@xml:lang"] : null;
       if (lang === "en" && !en) en = text;

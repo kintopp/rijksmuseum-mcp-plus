@@ -966,6 +966,8 @@ const INTERNAL_MAX_RESULTS_CAP = 100;
  * bounded.
  */
 const PROVENANCE_COUNT_CAP = 50000;
+/** Mapping fields that place an artwork for proximity search. */
+const GEO_PLACE_FIELDS = ["subject", "spatial"];
 
 /**
  * Iconclass notation match: the code plus its key-expanded and named forms (`n(+…)`,
@@ -1459,7 +1461,7 @@ export class VocabularyDb {
           WHERE artwork_id = ? AND position_method LIKE 'llm%'
         `);
       }
-      if (this.hasPartyTable_ && this.columnExists("provenance_parties", "position_method")) {
+      if (this.hasPartyTable_) {
         this.stmtPartyPositionMethod_ = this.db.prepare(`
           SELECT sequence, party_name FROM provenance_parties
           WHERE artwork_id = ? AND position_method = ?
@@ -3303,13 +3305,15 @@ export class VocabularyDb {
     }
 
     // Step 2: build SQL on the candidate set + column filters + hasArtworks.
-    const conditions: string[] = ["v.type = 'person'"];
+    // With candidates the id list drives; idx_vocab_type would walk every person and probe it per row.
+    const conditions: string[] = [candidateIds !== null ? "+v.type = 'person'" : "v.type = 'person'"];
     const bindings: unknown[] = [];
+    let from = "vocabulary v";
 
     if (candidateIds !== null) {
       const idsArr = Array.from(candidateIds);
       if (idsArr.length === 0) return { totalResults: 0, persons: [], ...(warnings.length && { warnings }) };
-      conditions.push("v.id IN (SELECT value FROM json_each(?))");
+      from = "json_each(?) j CROSS JOIN vocabulary v ON v.id = j.value";
       bindings.push(JSON.stringify(idsArr));
     }
 
@@ -3353,7 +3357,7 @@ export class VocabularyDb {
     const where = conditions.join(" AND ");
 
     const totalResults = (this.db.prepare(
-      `SELECT COUNT(*) AS n FROM vocabulary v WHERE ${where}`
+      `SELECT COUNT(*) AS n FROM ${from} WHERE ${where}`
     ).get(...bindings) as { n: number }).n;
 
     if (totalResults === 0) {
@@ -3376,15 +3380,13 @@ export class VocabularyDb {
 
     let pageRows: PageRow[];
     if (nameOrder) {
-      // FTS-rank order requires sorting in JS. Defer per-row artworkCount to a
-      // single page-only batch below — for broad name searches the candidate
-      // set can be 10K+ persons, and a correlated subquery per row is wasteful
+      // The id list is in FTS-rank order, and intersecting filters keep it. Defer per-row
+      // artworkCount to a single page-only batch below — for broad name searches the
+      // candidate set can be 10K+ persons, and a correlated subquery per row is wasteful
       // when only ~25 are returned.
-      const allRows = this.db.prepare(
-        `SELECT ${baseColumns} FROM vocabulary v WHERE ${where}`
-      ).all(...bindings) as PageRow[];
-      allRows.sort((a, b) => (nameOrder!.get(a.id) ?? 0) - (nameOrder!.get(b.id) ?? 0));
-      pageRows = allRows.slice(offset, offset + limit);
+      pageRows = this.db.prepare(
+        `SELECT ${baseColumns} FROM ${from} WHERE ${where} ORDER BY j.key LIMIT ? OFFSET ?`
+      ).all(...bindings, limit, offset) as PageRow[];
     } else {
       // No name FTS — order by artworkCount in SQL (no JS post-processing needed).
       const artworkCountSql = creatorFieldId !== undefined
@@ -3392,7 +3394,7 @@ export class VocabularyDb {
         : "0";
       pageRows = this.db.prepare(
         `SELECT ${baseColumns}, ${artworkCountSql} AS artwork_count
-         FROM vocabulary v
+         FROM ${from}
          WHERE ${where}
          ORDER BY artwork_count DESC, COALESCE(v.label_en, v.label_nl) COLLATE NOCASE
          LIMIT ? OFFSET ?`
@@ -4367,6 +4369,7 @@ export class VocabularyDb {
     const bindings: unknown[] = [];
     const warnings: string[] = [];
     let geoResult: { placeIds: string[]; referencePlace: string; refLat: number; refLon: number } | null = null;
+    let geoBindingCount = 0;
 
     // Handle geo proximity filter: nearLat/nearLon (coordinates) or nearPlace (name)
     const hasCoordPair = effective.nearLat != null && effective.nearLon != null;
@@ -4426,12 +4429,10 @@ export class VocabularyDb {
           };
         }
 
-        const geoFilter = this.mappingFilterDirect(
-          ["subject", "spatial"],
-          geoResult.placeIds,
-        );
+        const geoFilter = this.mappingFilterDirect(GEO_PLACE_FIELDS, geoResult.placeIds);
         conditions.push(geoFilter.condition);
         bindings.push(...geoFilter.bindings);
+        geoBindingCount = geoFilter.bindings.length;
       }
     }
 
@@ -4568,67 +4569,69 @@ export class VocabularyDb {
 
     // Geo orders by distance in SQL unless BM25 or sortBy claims the order.
     // Always fetch limit + offset rows so post-query offset works correctly.
-    const geoDistanceOrder = geoResult && !ftsRankOrder && !sortByActive ? geoResult : null;
+    const distanceOrdered = geoResult !== null && !ftsRankOrder && !sortByActive;
     const fetchLimit = limit + userOffset;
 
     // All ordering paths get a deterministic tiebreaker on a.art_id ASC so
     // pagination is stable across pages even within heavy importance ties
     // (550K+ artworks share importance=7 — see #321).
     const tiebreaker = ", a.art_id ASC";
-    const orderBy = sortByActive
-      ? `ORDER BY ${sortByClause}${tiebreaker}`
-      : ftsRankOrder
-        ? `ORDER BY fts.rank${tiebreaker}`
-        : this.hasImportance
-          ? `ORDER BY a.importance DESC${tiebreaker}`
-          : `ORDER BY a.art_id ASC`;
-    const selectCols = "a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest";
-    const rowQuery = (() => {
-      if (!geoDistanceOrder) {
-        return {
-          sql: `SELECT ${selectCols} FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`,
-          params: ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, fetchLimit] : [...bindings, fetchLimit],
-        };
-      }
-      // Aggregate first so the place set drives; a correlated MIN in ORDER BY rescans the
-      // JSON per mapping row and takes seconds on large cities.
-      const { clause: geoField, bindings: geoFieldBindings } = this.buildFieldClause(["subject", "spatial"]);
-      return {
-        sql: `WITH pd(rid, d) AS MATERIALIZED (SELECT CAST(key AS INTEGER), value FROM json_each(?)),
+    const orderBy = distanceOrdered
+      ? `ORDER BY n.dist ASC${this.hasImportance ? ", a.importance DESC" : ""}${tiebreaker}`
+      : sortByActive
+        ? `ORDER BY ${sortByClause}${tiebreaker}`
+        : ftsRankOrder
+          ? `ORDER BY fts.rank${tiebreaker}`
+          : this.hasImportance
+            ? `ORDER BY a.importance DESC${tiebreaker}`
+            : `ORDER BY a.art_id ASC`;
+    // Aggregate first so the place set drives; a correlated MIN in ORDER BY rescans the
+    // JSON per mapping row and takes seconds on large cities.
+    // `nearest` already restricts to the place set, so the geo condition (always pushed first) is dropped.
+    const { clause: geoField, bindings: geoFieldBindings } = this.buildFieldClause(GEO_PLACE_FIELDS);
+    const rowSql = distanceOrdered
+      ? `WITH pd(rid, d) AS MATERIALIZED (SELECT CAST(key AS INTEGER), value FROM json_each(?)),
         nearest AS (SELECT m.artwork_id AS aid, MIN(pd.d) AS dist FROM pd CROSS JOIN mappings m
                     ON m.vocab_rowid = pd.rid AND ${geoField} GROUP BY m.artwork_id)
-        SELECT ${selectCols} FROM nearest n JOIN artworks a ON a.art_id = n.aid
-        WHERE ${where}
-        ORDER BY n.dist ASC${this.hasImportance ? ", a.importance DESC" : ""}${tiebreaker} LIMIT ?`,
-        params: [
-          this.placeDistanceJson(geoDistanceOrder.placeIds, geoDistanceOrder.refLat, geoDistanceOrder.refLon),
-          ...geoFieldBindings, ...bindings, fetchLimit,
-        ],
-      };
-    })();
-    const rows = this.db.prepare(rowQuery.sql).all(...rowQuery.params) as {
+        SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest,
+               COUNT(*) OVER () AS total
+        FROM nearest n JOIN artworks a ON a.art_id = n.aid
+        WHERE ${conditions.slice(1).join(" AND ") || "1"}
+        ${orderBy} LIMIT ?`
+      : `SELECT a.object_number, a.title, a.title_all_text, a.creator_label, a.date_earliest, a.date_latest
+        FROM artworks a ${ftsJoinClause} WHERE ${where} ${orderBy} LIMIT ?`;
+    const rowParams = distanceOrdered
+      ? [
+          this.placeDistanceJson(geoResult!.placeIds, geoResult!.refLat, geoResult!.refLon),
+          ...geoFieldBindings, ...bindings.slice(geoBindingCount), fetchLimit,
+        ]
+      : ftsJoinBinding != null ? [ftsJoinBinding, ...bindings, fetchLimit] : [...bindings, fetchLimit];
+    const rows = this.db.prepare(rowSql).all(...rowParams) as {
       object_number: string;
       title: string;
       title_all_text: string | null;
       creator_label: string;
       date_earliest: number | null;
       date_latest: number | null;
+      total?: number;
     }[];
 
     // Compute total count only when results are truncated (rows.length === fetchLimit).
     // When results fit within the limit, rows.length IS the total — no extra scan needed.
     // Worst case (gender scans) adds ~850ms, but only when the count is informative.
+    // The distance-ordered query already carries the count; the offset is applied below in JS
+    // so that rows[0] exists on every truncated page.
     const totalResults = rows.length < fetchLimit
       ? rows.length
-      : (this.db.prepare(
-          `SELECT COUNT(*) as n FROM artworks a ${ftsJoinClause} WHERE ${where}`,
-        ).get(
-          ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : bindings),
-        ) as { n: number }).n;
+      : distanceOrdered
+        ? rows[0].total!
+        : (this.db.prepare(
+            `SELECT COUNT(*) as n FROM artworks a ${ftsJoinClause} WHERE ${where}`,
+          ).get(
+            ...(ftsJoinBinding != null ? [ftsJoinBinding, ...bindings] : bindings),
+          ) as { n: number }).n;
 
-    // Apply offset then truncate to user's requested limit
-    if (userOffset > 0) rows.splice(0, userOffset);
-    if (rows.length > limit) rows.splice(limit);
+    rows.splice(0, userOffset);
 
     // When nearPlace is active, enrich results with nearest place + distance
     // Skip enrichment in compact mode (only IDs needed)
@@ -4636,7 +4639,7 @@ export class VocabularyDb {
     if (!compact && geoResult && rows.length > 0) {
       const objNums = rows.map((r) => r.object_number);
       const objPlaceholders = objNums.map(() => "?").join(", ");
-      const { clause: geoFieldClause, bindings: geoFieldBindings } = this.buildFieldClause(["subject", "spatial"], true);
+      const { clause: geoFieldClause, bindings: geoFieldBindings } = this.buildFieldClause(GEO_PLACE_FIELDS, true);
 
       const distSql = `SELECT a.object_number, v.label_en, v.label_nl,
                   haversine_km(?, ?, v.lat, v.lon) AS dist
@@ -5891,6 +5894,17 @@ export class VocabularyDb {
     };
   }
 
+  /** The reply for a page with no artworks: past the end when anything matched, otherwise empty. */
+  private emptyProvenancePage(total: number, offset: number, warnings: string[]): ProvenanceSearchResult {
+    if (total === 0) return { totalArtworks: 0, results: [], ...(warnings.length > 0 && { warnings }) };
+    return {
+      totalArtworks: total,
+      totalArtworksCapped: total >= PROVENANCE_COUNT_CAP || undefined,
+      results: [],
+      warnings: [...warnings, `offset ${offset} is past the last matching artwork (${total} total)`],
+    };
+  }
+
   /**
    * Search provenance events across artworks.
    *
@@ -5934,17 +5948,15 @@ export class VocabularyDb {
     // PK (artwork_id, sequence, party_idx) shares (artwork_id, sequence) with provenance_events,
     // and party_idx maps 1:1 onto positions in pe.parties JSON (relied on by stmtPartyEnrichment_).
     const sameRowPartyConjunction = !!params.party && !!params.positionMethod && this.hasPartyTable_;
-    if (sameRowPartyConjunction) {
-      conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence AND pp.party_name LIKE '%' || ? || '%' AND pp.position_method = ?)");
-      bindings.push(params.party, params.positionMethod);
-    } else if (params.party) {
+    if (params.party) {
       // Event-level filter: the party must be on this event, not somewhere in the chain,
       // or event-level filters like transferType would produce false positives. Names only:
       // the JSON also holds role words and dates.
       conditions.push(this.hasPartyTable_
-        ? "EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence AND pp.party_name LIKE '%' || ? || '%')"
+        ? `EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence AND pp.party_name LIKE '%' || ? || '%'${sameRowPartyConjunction ? " AND pp.position_method = ?" : ""})`
         : "pe.parties LIKE '%' || ? || '%'");
       bindings.push(params.party);
+      if (sameRowPartyConjunction) bindings.push(params.positionMethod);
     }
     if (params.transferType) {
       const types = Array.isArray(params.transferType) ? params.transferType : [params.transferType];
@@ -6052,7 +6064,7 @@ export class VocabularyDb {
       LIMIT ? OFFSET ?
     `).all(...sortBindings, ...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
 
-    const countArtworks = () => (this.db!.prepare(`
+    const totalArtworks = artworkIds.length > 0 || offset > 0 ? (this.db.prepare(`
       SELECT COUNT(*) AS cnt FROM (
         SELECT DISTINCT pe.artwork_id
         FROM provenance_events pe
@@ -6060,20 +6072,9 @@ export class VocabularyDb {
         WHERE ${where}
         LIMIT ?
       )
-    `).get(...bindings, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt;
+    `).get(...bindings, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt : 0;
 
-    if (artworkIds.length === 0) {
-      const total = offset > 0 ? countArtworks() : 0;
-      if (total === 0) return { totalArtworks: 0, results: [], ...(warnings.length > 0 && { warnings }) };
-      return {
-        totalArtworks: total,
-        totalArtworksCapped: total >= PROVENANCE_COUNT_CAP || undefined,
-        results: [],
-        warnings: [...warnings, `offset ${offset} is past the last matching artwork (${total} total)`],
-      };
-    }
-
-    const totalArtworks = countArtworks();
+    if (artworkIds.length === 0) return this.emptyProvenancePage(totalArtworks, offset, warnings);
 
     // Step 2: Fetch full chains for matched artworks
     const placeholders = artworkIds.map(() => "?").join(", ");
@@ -6390,7 +6391,7 @@ export class VocabularyDb {
       `).all(...bindings, maxResults, offset) as { artwork_id: number }[]).map(r => r.artwork_id);
     }
 
-    const countArtworks = () => (this.db!.prepare(`
+    const totalArtworks = artworkIds.length > 0 || offset > 0 ? (this.db.prepare(`
       SELECT COUNT(*) AS cnt FROM (
         SELECT DISTINCT pp.artwork_id
         FROM provenance_periods pp
@@ -6398,20 +6399,9 @@ export class VocabularyDb {
         WHERE ${where}
         LIMIT ?
       )
-    `).get(...bindings, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt;
+    `).get(...bindings, PROVENANCE_COUNT_CAP) as { cnt: number }).cnt : 0;
 
-    if (artworkIds.length === 0) {
-      const total = offset > 0 ? countArtworks() : 0;
-      if (total === 0) return { totalArtworks: 0, results: [] };
-      return {
-        totalArtworks: total,
-        totalArtworksCapped: total >= PROVENANCE_COUNT_CAP || undefined,
-        results: [],
-        warnings: [`offset ${offset} is past the last matching artwork (${total} total)`],
-      };
-    }
-
-    const totalArtworks = countArtworks();
+    if (artworkIds.length === 0) return this.emptyProvenancePage(totalArtworks, offset, []);
 
     // Fetch full period chains
     const placeholders = artworkIds.map(() => "?").join(", ");
