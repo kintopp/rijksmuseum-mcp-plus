@@ -915,5 +915,15 @@
       "dist"
     ],
     "purpose": "CLI output rendering (JSONL/table/json/stdin/notes) over the real stdio chain on the fixture DB"
+  },
+  "test-details-provenance-pointer.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "get_artwork_details drops the parsed chain and points to search_provenance only when stored non-cross-reference events exist"
   }
 }

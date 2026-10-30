@@ -607,10 +607,7 @@ ${renderDerivable(derivables)}
   <ul>
     <li><span class="badge badge-warn">computed text-only</span> — the value
       itself doesn't appear anywhere in structured. Strongest signal: this is a
-      fact computed at render time (e.g. <code>get_artwork_details</code>'s
-      <code>[Provenance parsed]</code> block — event counts, gap counts,
-      earliest owner — derived in <code>formatDetailSummary</code> from the raw
-      provenance text). Clients that read only structuredContent never see
+      fact computed at render time. Clients that read only structuredContent never see
       these facts; consumers comparing tools across the two channels see
       asymmetric data.</li>
     <li><span class="badge badge-info">derived rendering</span> — the label has

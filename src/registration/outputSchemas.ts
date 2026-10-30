@@ -224,26 +224,6 @@ export const ArtworkDetailOutput = {
   techniqueStatement: z.string().nullable(),
   physicalDimensions: z.string().nullable().describe("Short reconstructed dimensions string (e.g. \"h 379.5 cm × w 453.5 cm\") from formatDimensions(height, width). Same value and key the viewer tools (get_artwork_image / remount_viewer) emit. For the full structured measurements use dimensions[]; for verbose cataloguer prose use extentText."),
   provenance: z.string().nullable(),
-  provenanceChain: z.array(z.object({
-    sequence: z.number().int(),
-    gap: z.boolean(),
-    uncertain: z.boolean(),
-    transferType: z.string().describe("Normalized transfer type: sale, inheritance, by_descent, widowhood, bequest, commission, confiscation, theft, looting, recuperation, loan, transfer, collection, gift, exchange, deposit, restitution, inventory, or unknown."),
-    party: z.object({
-      name: z.string(),
-    }).nullable(),
-    location: z.string().nullable(),
-    date: z.object({
-      year: z.number().int().nullable().describe("Best-effort single year; null if the date couldn't be reduced to a year."),
-      text: z.string().describe("Original date expression as it appeared in the source."),
-    }).nullable(),
-    price: z.object({
-      currency: z.string(),
-      amount: z.number().nullable(),
-      text: z.string(),
-    }).nullable(),
-  })).nullable()
-    .describe("Parsed provenance events derived from the raw `provenance` string via the project's PEG parser. Null when no provenance text is available. Clients can re-derive counts, gaps, year spans, transfer-type histograms, and earliest-known-owner from this array; the text channel renders a summary built from the same data."),
   creditLine: z.string().nullable(),
   inscriptions: z.array(z.string()),
   parsedInscriptions: z.array(z.object({
@@ -362,6 +342,8 @@ export const ArtworkDetailOutput = {
   attributionMarks: attributionMarksShape.describe("Presence of signature/inscription marks only — a count, not content. The harvested rows carry no transcribed text and their carrier URIs do not resolve; use parsedInscriptions / search_inscriptions for the actual transcriptions."),
   bibliographyCount: z.number().int().nullable()
     .describe("Citation count for this artwork — call get_artwork_bibliography for the entries. Null when bibliography data isn't present in this database."),
+  provenanceEventCount: z.number().int().nullable()
+    .describe("Parsed provenance events for this artwork, excluding cross-references — call search_provenance with objectNumber for the structured chain. 0 can mean no provenance, an unparsed text, or a cross-reference to another object; read `provenance`. Null when provenance data isn't present in this database."),
   error: z.string().optional(),
 };
 

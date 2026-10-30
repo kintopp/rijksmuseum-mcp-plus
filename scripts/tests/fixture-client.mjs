@@ -33,8 +33,8 @@ export async function connectFixtureClient(name, env = {}) {
       MCP_SKIP_STARTUP_WARM: "1",
       ENABLE_FIND_SIMILAR: "true",
       STRUCTURED_CONTENT: "true",
-      VOCAB_DB_PATH: buildFixture(`fixture-${name}.db`),
       ...env,
+      VOCAB_DB_PATH: env.VOCAB_DB_PATH ?? buildFixture(`fixture-${name}.db`),
     },
     stderr: "ignore",
   });

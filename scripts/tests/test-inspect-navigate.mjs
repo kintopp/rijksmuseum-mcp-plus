@@ -1062,56 +1062,6 @@ console.log("\n--- 9e: JSON null on semantic_search filters ---");
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  10. provenanceChain in structuredContent — schema conformance
-// ══════════════════════════════════════════════════════════════════
-
-section("10. provenanceChain structuredContent validation");
-
-// provenanceChain is exposed in structuredContent as a parsed array of events
-// (sequence, transferType, party, location, date, price, gap, uncertain) so
-// clients reading only structuredContent — web app, agentic pipelines — don't
-// have to re-parse the raw provenance string. The text channel renders a
-// human-readable summary built from the same data. Null when no provenance
-// text is available.
-console.log("\n--- 10a: get_artwork_details — provenanceChain present in structuredContent ---");
-{
-  const r = await client.callTool({
-    name: "get_artwork_details",
-    arguments: { objectNumber: "SK-A-2344" },
-  });
-  const { sc, isError } = parseResult(r);
-  assert(!isError, "get_artwork_details succeeds for SK-A-2344");
-  assert(sc != null, "structuredContent present");
-  assert(sc?.provenance != null, "provenance raw text present in structuredContent");
-  assert(Array.isArray(sc?.provenanceChain), "provenanceChain is an array");
-  assert((sc?.provenanceChain?.length ?? 0) > 0, "provenanceChain has at least one event");
-  const ev = sc?.provenanceChain?.[0];
-  assert(typeof ev?.sequence === "number" && typeof ev?.transferType === "string",
-    "provenanceChain events carry sequence + transferType");
-  assert(typeof ev?.gap === "boolean" && typeof ev?.uncertain === "boolean",
-    "provenanceChain events carry gap + uncertain booleans");
-  // Verify provenance summary is in the text channel
-  const text = r.content?.find(c => c.type === "text")?.text ?? "";
-  assert(text.includes("[Provenance parsed]"), "text channel includes provenance summary");
-}
-
-// 10b. Artwork without provenance
-console.log("\n--- 10b: artwork without provenance ---");
-{
-  const r = await client.callTool({
-    name: "get_artwork_details",
-    arguments: { objectNumber: "BK-NM-1010" },
-  });
-  const { sc, isError } = parseResult(r);
-  if (!isError && sc) {
-    assert(sc.provenance == null, "provenance raw text is null when no provenance");
-    assert(sc.provenanceChain === null, "provenanceChain is null (not undefined) when no provenance");
-  } else {
-    assert(true, "skipped — artwork not found");
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 

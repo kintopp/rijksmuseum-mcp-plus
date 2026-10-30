@@ -410,7 +410,7 @@ $ node scripts/cli.mjs details SK-C-5 --fields objectNumber,title,creator,date,t
 {"objectNumber":"SK-C-5","title":"The Night Watch ...","creator":"Rembrandt van Rijn","date":"1642","type":"painting"}
 
 # Full record, pretty
-node scripts/cli.mjs details SK-C-5 --json | jq '.provenanceChain'
+node scripts/cli.mjs details SK-C-5 --json | jq '.provenanceEventCount'
 ```
 
 Note the field rename in recent versions: physical dimensions are under `physicalDimensions` (was

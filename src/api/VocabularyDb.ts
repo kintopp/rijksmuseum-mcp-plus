@@ -164,6 +164,8 @@ export interface ArtworkDetailFromDb {
   attributionMarks: AttributionMarks;
   /** Number of bibliography entries for this artwork. Null when the artwork_citations table is absent. */
   bibliographyCount: number | null;
+  /** Parsed provenance events, excluding cross-references. Null when the provenance tables are absent. */
+  provenanceEventCount: number | null;
 }
 
 export interface BibliographyFromDb {
@@ -1300,6 +1302,7 @@ export class VocabularyDb {
   private stmtConservationModifications: Statement | null = null;
   private stmtArtworkCitations: Statement | null = null;
   private stmtCitationCount: Statement | null = null;
+  private stmtProvenanceEventCount: Statement | null = null;
   private stmtArtworksByPublication: Statement | null = null;
   private stmtBrowseSetLookup: Statement | null = null;
   private stmtBrowseSetCount: Statement | null = null;
@@ -1439,6 +1442,11 @@ export class VocabularyDb {
       this.hasRecordModified_ = this.columnExists("artworks", "record_modified");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
+      if (this.hasProvenanceTables_ && this.columnExists("provenance_events", "is_cross_ref")) {
+        this.stmtProvenanceEventCount = this.db.prepare(
+          "SELECT COUNT(*) AS n FROM provenance_events WHERE artwork_id = ? AND is_cross_ref = 0"
+        );
+      }
       this.hasProvenancePeriods_ = this.tableExists("provenance_periods");
       this.hasPartyTable_ = this.tableExists("provenance_parties");
       this.hasPartyPosition_ = this.hasPartyTable_ && this.columnExists("provenance_parties", "party_position");
@@ -2200,6 +2208,9 @@ export class VocabularyDb {
     const bibliographyCount = this.stmtCitationCount
       ? (this.stmtCitationCount.get(row.art_id) as { n: number }).n
       : null;
+    const provenanceEventCount = this.stmtProvenanceEventCount
+      ? (this.stmtProvenanceEventCount.get(row.art_id) as { n: number }).n
+      : null;
 
     // The handle suffix is an upstream identifier unrelated to art_id — never synthesize it.
     const externalIds = this.fetchArtworkExternalIds(row.art_id);
@@ -2247,6 +2258,7 @@ export class VocabularyDb {
       ...this.fetchExhibitions(row.art_id),
       attributionMarks: this.computeAttributionMarks(row.art_id),
       bibliographyCount,
+      provenanceEventCount,
     };
   }
 

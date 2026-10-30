@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { VocabularyDb, type ArtworkDetailFromDb, pluralize } from "../../api/VocabularyDb.js";
+import { VocabularyDb, type ArtworkDetailFromDb } from "../../api/VocabularyDb.js";
 import { UsageStats } from "../../utils/UsageStats.js";
 import {
   ANN_READ_CLOSED,
@@ -15,29 +15,17 @@ import {
 import {
   ArtworkDetailOutput,
 } from "../outputSchemas.js";
-import { parseProvenance } from "../../provenance.js";
 import { parseInscriptions, summarizeInscriptions, type ParsedInscription, type InscriptionSummary } from "../../inscriptions.js";
 
-// ─── Provenance chain + detail helpers (used by get_artwork_details) ────────
+// ─── Detail helpers (used by get_artwork_details) ───────────────────────────
 
-interface ProvenanceChainEvent {
-  sequence: number;
-  gap: boolean;
-  uncertain: boolean;
-  transferType: string;
-  party: { name: string } | null;
-  location: string | null;
-  date: { year: number | null; text: string } | null;
-  price: { currency: string; amount: number | null; text: string } | null;
-}
-type DetailWithChain = (InferOutput<typeof ArtworkDetailOutput> | ArtworkDetailFromDb) & {
-  provenanceChain?: ProvenanceChainEvent[] | null;
+type EnrichedDetail = (InferOutput<typeof ArtworkDetailOutput> | ArtworkDetailFromDb) & {
   parsedInscriptions?: ParsedInscription[];
   inscriptionSummary?: InscriptionSummary;
 };
 
 /** Format artwork detail as a compact key-value summary for LLM content (Tier 3). */
-function formatDetailSummary(d: DetailWithChain): string {
+function formatDetailSummary(d: EnrichedDetail): string {
   const lines: string[] = [];
   lines.push(`${d.objectNumber} — ${d.title}`);
   lines.push(`${d.creator}${d.date ? `, ${d.date}` : ""}`);
@@ -96,39 +84,8 @@ function formatDetailSummary(d: DetailWithChain): string {
     if (bits.length) lines.push(`[Inscription notes] ${bits.join("; ")}`);
   }
   if (d.provenance) lines.push(`[Provenance] ${d.provenance}`);
-  if (d.provenanceChain?.length) {
-    const evts = d.provenanceChain;
-    const count = evts.length;
-    const gaps = evts.filter(e => e.gap).length;
-    const first = evts[0];
-    const last = evts[count - 1];
-    const years = evts.map(e => e.date?.year).filter((y): y is number => y != null);
-    const span = years.length >= 2 ? `${Math.min(...years)}–${Math.max(...years)}` : years.length === 1 ? `${years[0]}` : "";
-    lines.push(`[Provenance parsed] ${count} events${gaps ? `, ${pluralize(gaps, "gap")}` : ""}${span ? ` (${span})` : ""}`);
-
-    // Acquisition: how the museum got it (last event)
-    if (last) {
-      const priceFmt = last.price
-        ? `${last.price.currency} ${last.price.amount?.toLocaleString("en") ?? last.price.text}`
-        : null;
-      const parts = [last.transferType !== "unknown" ? last.transferType : null, last.date?.text, priceFmt].filter(Boolean);
-      if (parts.length) lines.push(`  Acquired: ${parts.join(", ")}`);
-    }
-    // Chain shape: transfer type counts
-    const typeCounts = new Map<string, number>();
-    for (const e of evts) {
-      if (e.transferType !== "unknown") typeCounts.set(e.transferType, (typeCounts.get(e.transferType) ?? 0) + 1);
-    }
-    const notable = [...typeCounts.entries()].filter(([, n]) => n > 0).map(([t, n]) => n > 1 ? pluralize(n, t) : t);
-    if (gaps) notable.push(pluralize(gaps, "gap"));
-    if (notable.length) lines.push(`  Chain: ${notable.join(", ")}`);
-    // Earliest known owner
-    if (first?.party) {
-      let earliest = first.party.name;
-      if (first.location) earliest += `, ${first.location}`;
-      if (first.uncertain) earliest += " (uncertain)";
-      lines.push(`  Earliest: ${earliest}`);
-    }
+  if (d.provenanceEventCount) {
+    lines.push(`Provenance events: ${d.provenanceEventCount} parsed. Full chain: search_provenance(objectNumber="${d.objectNumber}")`);
   }
   if (d.creditLine) lines.push(`[Credit line] ${d.creditLine}`);
 
@@ -200,7 +157,7 @@ export function registerDetailsTools(
         "Provide exactly one of objectNumber (e.g. 'SK-C-5' for The Night Watch) or uri (a Linked Art URI from relatedObjects).\n\n" +
         "Returns metadata including titles (primary plus the full set of variants with language and qualifier — Dutch/English brief/full/display/former), " +
         "creator, date, dateDisplay (free-text form), description, curatorial narrative, dimensions (text + structured: height/width/depth/weight/diameter where present), " +
-        "extentText, materials, object type, production details (with creator life dates, gender, and Wikidata ID where available), provenance, credit line, inscriptions, license, " +
+        "extentText, materials, object type, production details (with creator life dates, gender, and Wikidata ID where available), raw provenance text (structured chain: search_provenance), credit line, inscriptions, license, " +
         "related objects (each carrying objectNumber + iiifId for in-viewer navigation), themes, exhibitions, attributionMarks (signature/inscription counts), externalIds (handle + other), " +
         "location (museum room when on display, as { roomId, floor, roomName }), recordCreated/recordModified timestamps, plus collection sets and reference metadata. " +
         "Authority IDs appear at two levels: work-level under externalIds (handle + other), and entity-level under equivalents[] arrays on objectTypes, materials, production entries, subjects.depictedPersons / subjects.depictedPlaces, collectionSetLabels and themes — each entry a { authority, id, uri } triple (VIAF/ULAN/RKD/Getty TGN+AAT/GeoNames/Wikidata), and one entity can carry several, so read every entry (iconclass terms have none). " +
@@ -253,31 +210,15 @@ export function registerDetailsTools(
       const detail = vocabDb.getArtworkDetail(objNum);
       if (!detail) throw new Error(`No artwork found: ${objNum}`);
 
-      const provenanceChain: ProvenanceChainEvent[] | null = detail.provenance
-        ? parseProvenance(detail.provenance).events.map(e => ({
-            sequence: e.sequence,
-            gap: e.gap,
-            uncertain: e.uncertain,
-            transferType: e.transferType,
-            party: e.party ? { name: e.party.name } : null,
-            location: e.location,
-            date: e.date ? { year: e.date.year, text: e.date.text } : null,
-            price: e.price
-              ? { currency: e.price.currency, amount: e.price.amount, text: e.price.text }
-              : null,
-          }))
-        : null;
-
-      // Runtime inscription parse (issue #383) — lossless per-segment structure
-      // plus a rollup. Same hybrid shape as provenanceChain: parsed here from the
-      // already-split `inscriptions` segments, no harvest dependency.
+      // Runtime inscription parse — lossless per-segment structure plus a rollup,
+      // parsed here from the already-split `inscriptions` segments, no harvest
+      // dependency.
       const parsedInscriptions = parseInscriptions(detail.inscriptions);
       const inscriptionSummary = summarizeInscriptions(parsedInscriptions);
 
       const enriched = {
         ...detail,
         extentText: args.verboseExtent === true ? detail.extentText : null,
-        provenanceChain,
         parsedInscriptions,
         inscriptionSummary,
       };

@@ -240,8 +240,6 @@ export function intraFieldDup(str) {
  * (or any object key in the response) contains the normalised label
  * token. Examples:
  *   - text label "Description" maps to structured `description`
- *   - text label "Provenance parsed" maps to no structured key
- *     (the parsed chain is computed in formatDetailSummary, not stored)
  *
  * Filters out:
  *   - very short values (< 12 chars)
