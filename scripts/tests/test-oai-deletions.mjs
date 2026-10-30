@@ -102,6 +102,47 @@ const LIST_RECORDS_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </ListRecords>
 </OAI-PMH>`;
 
+const NUMERIC_VALUES_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH ${NS}>
+  <responseDate>2026-06-16T08:00:00Z</responseDate>
+  <request verb="ListRecords" metadataPrefix="edm">https://data.rijksmuseum.nl/oai</request>
+  <ListRecords>
+    <record>
+      <header>
+        <identifier>https://id.rijksmuseum.nl/3001</identifier>
+        <datestamp>2026-01-28T07:15:24Z</datestamp>
+      </header>
+      <metadata>
+        <rdf:RDF ${NS}>
+          <ore:Aggregation rdf:about="https://id.rijksmuseum.nl/3001/aggregation">
+            <edm:aggregatedCHO>
+              <edm:ProvidedCHO rdf:about="https://id.rijksmuseum.nl/3001">
+                <dc:identifier>0012345</dc:identifier>
+                <dc:title xml:lang="en">1.50</dc:title>
+                <dc:subject rdf:resource="https://id.rijksmuseum.nl/s1"/>
+                <dc:subject rdf:resource="https://id.rijksmuseum.nl/s2"/>
+                <dc:subject rdf:resource="https://id.rijksmuseum.nl/s3"/>
+              </edm:ProvidedCHO>
+            </edm:aggregatedCHO>
+          </ore:Aggregation>
+          <skos:Concept rdf:about="https://id.rijksmuseum.nl/s1">
+            <skos:prefLabel xml:lang="en">angels</skos:prefLabel>
+            <skos:altLabel>11E1</skos:altLabel>
+          </skos:Concept>
+          <skos:Concept rdf:about="https://id.rijksmuseum.nl/s2">
+            <skos:prefLabel xml:lang="en">Old Testament</skos:prefLabel>
+            <skos:altLabel>71</skos:altLabel>
+          </skos:Concept>
+          <skos:Concept rdf:about="https://id.rijksmuseum.nl/s3">
+            <skos:prefLabel xml:lang="en">trade</skos:prefLabel>
+            <skos:altLabel>46A12</skos:altLabel>
+          </skos:Concept>
+        </rdf:RDF>
+      </metadata>
+    </record>
+  </ListRecords>
+</OAI-PMH>`;
+
 // ══════════════════════════════════════════════════════════════════
 section("1. listIdentifiers — deleted header flagging");
 
@@ -133,6 +174,18 @@ assert(delRec?.title === null && delRec?.creator === null, "deleted record field
 assert(liveRec?.deleted === undefined, "live record has no deleted flag");
 assert(liveRec?.objectNumber === "RP-P-TEST-1", "live record parses objectNumber from metadata");
 assert(liveRec?.title === "Test Title", "live record parses title from metadata");
+
+// ══════════════════════════════════════════════════════════════════
+section("3. numeric-looking text stays a string");
+
+const [numericRec] = (await clientReturning(NUMERIC_VALUES_XML).listRecords({ from: "2026-06-16" })).records;
+
+assert(numericRec?.title === "1.50", "title keeps its trailing zero");
+assert(numericRec?.objectNumber === "0012345", "objectNumber keeps its leading zeros");
+const codes = (numericRec?.subjects ?? []).map((s) => s.code);
+assert(codes.includes("11E1"), "digits-E-digits notation survives");
+assert(codes.includes("71"), "all-digit notation survives");
+assert(codes.includes("46A12"), "ordinary notation survives");
 
 // ══════════════════════════════════════════════════════════════════
 console.log(`\n${"─".repeat(60)}`);

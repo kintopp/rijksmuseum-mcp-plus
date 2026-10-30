@@ -68,6 +68,8 @@ export class OaiPmhClient {
       removeNSPrefix: false,
       isArray: (tagName) => ARRAY_TAGS.has(tagName),
       trimValues: true,
+      // OAI text is opaque: numeric coercion turns Iconclass 11E1 into 110 and drops leading zeros.
+      parseTagValue: false,
     });
   }
 
@@ -436,8 +438,7 @@ export class OaiPmhClient {
     let fallback: string | null = null;
 
     for (const f of fields) {
-      // fast-xml-parser auto-converts numeric text (e.g. "1619") to numbers
-      const raw = typeof f === "string" || typeof f === "number"
+      const raw = typeof f === "string"
         ? f
         : f["#text"] ?? null;
       if (raw == null) continue;
@@ -474,7 +475,7 @@ export class OaiPmhClient {
   private static firstText(fields: any[]): string | null {
     if (!fields || fields.length === 0) return null;
     const f = fields[0];
-    if (typeof f === "string" || typeof f === "number") return String(f);
+    if (typeof f === "string") return f;
     return f["#text"] ?? null;
   }
 
