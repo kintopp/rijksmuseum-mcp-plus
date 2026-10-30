@@ -5,6 +5,7 @@
  *  - wrong denominator: a facet percentage is a share of the listed entries, not of the result
  *  - midpoint falling between bins: an odd date sum (1649–1650) lands in no decade
  *  - ignored false: hasProvenance:false is accepted and echoed but never applied
+ *  - silent empty: hasProvenance:false with a provenance dimension returns no entries and no reason
  *
  * Run:  node scripts/tests/test-search-stats-correctness.mjs
  * Requires: npm run build (imports from dist/).
@@ -54,6 +55,32 @@ await check("search_artwork facet percentage is a share of totalResults", async 
   const entry = facets.century.find((e) => e.label === "17th century");
   assert.equal(entry.count, 4);
   assert.equal(entry.percentage, 80);
+});
+const statsDimWarning = (dim) =>
+  `hasProvenance=false contradicts the ${dim} dimension (it counts provenance records), so no entries are returned.`;
+const stats = async (args) => (await client.callTool({ name: "collection_stats", arguments: args })).structuredContent;
+
+for (const dimension of ["provenanceDecade", "transferType", "party"]) {
+  await check(`collection_stats warns on ${dimension} with hasProvenance:false`, async () => {
+    const r = await stats({ dimension, hasProvenance: false });
+    assert.deepEqual(r.entries, []);
+    assert.deepEqual(r.warnings, [statsDimWarning(dimension)]);
+  });
+}
+
+await check("collection_stats gives one warning when a provenance filter also contradicts", async () => {
+  const r = await stats({ dimension: "provenanceDecade", hasProvenance: false, transferType: "sale" });
+  assert.deepEqual(r.warnings, ["hasProvenance=false contradicts the provenance filters (they require provenance), so no artworks match."]);
+});
+
+await check("a non-provenance dimension with hasProvenance:false does not warn", async () => {
+  const r = await stats({ dimension: "type", hasProvenance: false });
+  assert.ok(r.entries.length > 0);
+  assert.equal(r.warnings, undefined);
+});
+
+await check("a provenance dimension with hasProvenance:true does not warn", async () => {
+  assert.equal((await stats({ dimension: "provenanceDecade", hasProvenance: true })).warnings, undefined);
 });
 await client.close();
 

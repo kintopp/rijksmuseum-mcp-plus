@@ -65,7 +65,7 @@ The primary search tool. Filters combine freely, with one exception: proximity s
 |---|---|
 | `aboutActor` | Artworks about a person — broader than `depictedPerson`, searches both subject and creator vocabulary (for an artist, includes works they made) |
 | `imageAvailable` | `true` = only works with a digital image; `false` = only those without one |
-| `hasProvenance` | `true` to return only works with parsed provenance records (roughly 48K) |
+| `hasProvenance` | `true` to return only works with parsed provenance records (roughly 48K); `false` for works without them |
 | `sameRowMatching` | Constrain `creator` + `productionRole` to the *same* production row (autograph detection). For "making" roles only — leave default off for "after X by" relational roles. Requires both `creator` and `productionRole`. |
 
 ### Output controls
@@ -236,7 +236,7 @@ Booleans that restrict the denominator to artworks carrying (or lacking) a given
 ### Provenance filters
 | Parameter | Description |
 |---|---|
-| `hasProvenance` | Restrict to artworks with provenance records (roughly 48K) |
+| `hasProvenance` | `true` restricts to artworks with provenance records (roughly 48K); `false` to artworks without them |
 | `transferType` | [events] Filter to artworks with at least one provenance event of this transfer type |
 | `provenanceLocation` | [events] Filter by provenance event location (partial match) |
 | `party` | [parties] Filter to artworks involving this party/collector (partial match) |

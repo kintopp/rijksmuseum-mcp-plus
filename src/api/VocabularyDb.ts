@@ -4252,6 +4252,8 @@ export class VocabularyDb {
         conditions.push("NOT EXISTS (SELECT 1 FROM provenance_events WHERE artwork_id = a.art_id)");
         if (evConds.length > 0 || ppConds.length > 0) {
           warnings.push("hasProvenance=false contradicts the provenance filters (they require provenance), so no artworks match.");
+        } else if (params.dimension === "provenanceDecade" || PROV_DIMENSION_DEFS.some(d => d.label === params.dimension)) {
+          warnings.push(`hasProvenance=false contradicts the ${params.dimension} dimension (it counts provenance records), so no entries are returned.`);
         }
       }
     }
@@ -5815,14 +5817,15 @@ export class VocabularyDb {
     if (params.dateTo != null && (row.date_year == null || row.date_year > params.dateTo)) return false;
     if (params.currency && row.price_currency !== params.currency) return false;
     if (params.hasPrice && row.price_amount == null) return false;
-    // hasGap admits at artwork level and only highlights gap events when it is the sole event filter.
+    // A chain without a gap event never reaches this check (buildProvenanceArtwork); hasGap only
+    // narrows the highlight to gap events when it is the sole event filter.
     const hasOtherEventFilter = params.party || params.transferType || params.location
       || params.dateFrom != null || params.dateTo != null || params.currency || params.hasPrice
       || params.relatedTo || params.categoryMethod || params.positionMethod;
     if (params.hasGap && !hasOtherEventFilter && row.gap !== 1) return false;
     if (params.relatedTo && row.cross_ref_target !== params.relatedTo) return false;
     if (params.categoryMethod && row.category_method !== params.categoryMethod) return false;
-    // positionMethod is an artwork-level filter (via provenance_parties table), not per-event — handled in SQL
+    // positionMethod needs the party rows, so buildProvenanceArtwork applies it.
     return true;
   }
 
@@ -5834,8 +5837,10 @@ export class VocabularyDb {
   ): ProvenanceArtworkResult {
     const first = rows[0];
     let matchedCount = 0;
+    // hasGap is an artwork-level requirement; the objectNumber path reaches here without SQL having checked it.
+    const failsHasGap = params?.hasGap && !rows.some(r => r.gap === 1);
     const events = rows.map(r => {
-      const matched = allMatched || (params ? this.eventMatchesFilters(r, params) : false);
+      const matched = allMatched || (params && !failsHasGap ? this.eventMatchesFilters(r, params) : false);
       if (matched) matchedCount++;
       return this.buildProvenanceEvent(r, matched);
     });
@@ -5993,7 +5998,7 @@ export class VocabularyDb {
     }
     if (params.positionMethod && !sameRowPartyConjunction) {
       if (this.hasPartyTable_) {
-        conditions.push("pe.artwork_id IN (SELECT pp2.artwork_id FROM provenance_parties pp2 WHERE pp2.position_method = ?)");
+        conditions.push("EXISTS (SELECT 1 FROM provenance_parties pp WHERE pp.artwork_id = pe.artwork_id AND pp.sequence = pe.sequence AND pp.position_method = ?)");
       } else {
         // Fallback for DBs without party table — filter on category_method instead (best effort)
         conditions.push("pe.category_method = ?");
@@ -6002,7 +6007,7 @@ export class VocabularyDb {
     }
 
     if (conditions.length === 0) {
-      return { totalArtworks: 0, results: [] };
+      return { totalArtworks: 0, results: [], ...(warnings.length > 0 && { warnings }) };
     }
 
     const where = conditions.join(" AND ");
@@ -6059,7 +6064,7 @@ export class VocabularyDb {
 
     if (artworkIds.length === 0) {
       const total = offset > 0 ? countArtworks() : 0;
-      if (total === 0) return { totalArtworks: 0, results: [] };
+      if (total === 0) return { totalArtworks: 0, results: [], ...(warnings.length > 0 && { warnings }) };
       return {
         totalArtworks: total,
         totalArtworksCapped: total >= PROVENANCE_COUNT_CAP || undefined,

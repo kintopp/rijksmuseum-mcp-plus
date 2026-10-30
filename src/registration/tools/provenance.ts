@@ -426,7 +426,7 @@ export function registerProvenanceTools(
           ).describe(`Maximum artworks to return (1–${TOOL_LIMITS.search_provenance.max}, default ${TOOL_LIMITS.search_provenance.default}). Each artwork includes its full chain.`),
           facets: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("If true, compute provenance facets: transferType, decade, location, transferCategory, partyPosition."),
-          compact: z.preprocess(stripNullCoerceBool, z.boolean().default(false))
+          compact: z.preprocess(stripNullCoerceBool, z.boolean().optional())
             .describe("Compact per-artwork comparison mode: omit the full event/period arrays; return a fixed-size summary rollup plus matched one-liners per artwork. The rollup follows the layer — summary/matchedEvents at layer='events', periodSummary/matchedPeriods (owners, durations, acquisition methods) at layer='periods'. Use to compare a collector/dealer across many works in one call (full mode overflows the result cap past ~1 artwork). Raises the default maxResults to 12."),
         }).strict(),
         ...withOutputSchema(ProvenanceSearchOutput),
@@ -452,11 +452,9 @@ export function registerProvenanceTools(
             offset: (args.offset as number | undefined) ?? 0,
           });
 
-          // Everything except the three params this branch honours is ignored. compact's
-          // schema default fills it in, so only an explicit true was asked for.
+          // Everything except the three params this branch honours is ignored.
           const ignored = Object.keys(args)
-            .filter(k => !["creditLineQuery", "maxResults", "offset"].includes(k))
-            .filter(k => !(k === "compact" && args.compact === false));
+            .filter(k => !["creditLineQuery", "maxResults", "offset"].includes(k));
           const warnings: string[] = [];
           if (ignored.length > 0) {
             warnings.push(

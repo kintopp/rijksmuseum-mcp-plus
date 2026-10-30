@@ -166,7 +166,7 @@ export function registerSearchTools(
           ),
         hasProvenance: z.preprocess(stripNullCoerceBool, z.boolean().optional())
           .describe(
-            "If true, only return artworks that have parsed provenance records — roughly 48K, about 6% of the collection. " +
+            "If true, only return artworks that have parsed provenance records — roughly 48K, about 6% of the collection; if false, only artworks without them. " +
             "Combine with other filters for cross-domain queries (e.g. type='painting' + hasProvenance=true). " +
             "Cannot be used alone — combine with at least one other filter."
           ),

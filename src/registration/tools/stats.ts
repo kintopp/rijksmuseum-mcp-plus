@@ -154,7 +154,7 @@ export function registerStatsTools(
           // Provenance filters — names mirror their dimension counterparts. All filters tagged
           // [events] compose on the same event row; [parties] filters compose on the same party row.
           hasProvenance: z.preprocess(stripNullCoerceBool, z.boolean().optional())
-            .describe("If true, restrict to artworks with parsed provenance records (roughly 6% of the collection)."),
+            .describe("If true, restrict to artworks with parsed provenance records (roughly 6% of the collection); if false, to artworks without them."),
           transferType: optStr().describe("[events] Filter to artworks with at least one provenance event of this transfer type (e.g. 'sale', 'confiscation')."),
           provenanceLocation: optStr().describe("[events] Filter to artworks with at least one provenance event in this location (partial match)."),
           party: optStr().describe("[parties] Filter to artworks involving this party/collector (partial match)."),
