@@ -14,8 +14,8 @@ authors:
 repository-code: "https://github.com/kintopp/rijksmuseum-mcp-plus"
 url: "https://rijksmuseum-mcp-plus-production.up.railway.app/mcp"
 license: MIT
-version: "0.95"
-date-released: "2026-10-16"
+version: "0.96"
+date-released: "2026-10-30"
 keywords:
   - digital humanities
   - museum collections
