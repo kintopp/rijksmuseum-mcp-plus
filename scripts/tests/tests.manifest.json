@@ -250,6 +250,16 @@
     ],
     "purpose": "hermetic VocabularyDb characterization against a synthetic fixture DB"
   },
+  "test-vocabdb-id-lists.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "broad vocab id lists bind as one JSON parameter: no SQL variable overflow, no clipped person count"
+  },
   "test-title-variants.mjs": {
     "category": "track2",
     "class": "smoke",

@@ -1043,15 +1043,13 @@ function emitSameRowExists(
   bindings: unknown[],
 ): void {
   for (const cIds of creatorIdsPerElement) {
-    const cPlaceholders = cIds.map(() => "?").join(", ");
     for (const sIds of secondaryIdsPerElement) {
-      const sPlaceholders = sIds.map(() => "?").join(", ");
       conditions.push(
         `a.art_id IN (SELECT ${alias}.artwork_id FROM ${table} ${alias} ` +
-        `WHERE ${alias}.${secondaryColumn} IN (${sPlaceholders}) ` +
-        `AND ${alias}.creator_id IN (${cPlaceholders}))`
+        `WHERE ${alias}.${secondaryColumn} IN (SELECT value FROM json_each(?)) ` +
+        `AND ${alias}.creator_id IN (SELECT value FROM json_each(?)))`
       );
-      bindings.push(...sIds, ...cIds);
+      bindings.push(JSON.stringify(sIds), JSON.stringify(cIds));
     }
   }
 }
@@ -3292,16 +3290,8 @@ export class VocabularyDb {
     if (candidateIds !== null) {
       const idsArr = Array.from(candidateIds);
       if (idsArr.length === 0) return { totalResults: 0, persons: [], ...(warnings.length && { warnings }) };
-      // Stay under SQLite default variable limit (999) by chunking via a temp table.
-      if (idsArr.length > 900) {
-        // For very large candidate sets, fall back to using a subquery with chunked
-        // INSERTs into a temp table — but this is rare for person search.
-        warnings.push(`Candidate set (${idsArr.length}) clipped to first 900 by ranking.`);
-        idsArr.length = 900;
-      }
-      const ph = idsArr.map(() => "?").join(", ");
-      conditions.push(`v.id IN (${ph})`);
-      bindings.push(...idsArr);
+      conditions.push("v.id IN (SELECT value FROM json_each(?))");
+      bindings.push(JSON.stringify(idsArr));
     }
 
     if (params.gender) {
@@ -5236,13 +5226,12 @@ export class VocabularyDb {
 
     const rowids = this.vocabIdsToRowids(vocabTextIds);
     if (rowids.length === 0) return { condition: "0", bindings: [] };
-    const placeholders = rowids.map(() => "?").join(", ");
     return {
       condition: `a.art_id IN (
         SELECT m.artwork_id FROM mappings m
-        WHERE ${fieldClause} AND m.vocab_rowid IN (${placeholders})
+        WHERE ${fieldClause} AND m.vocab_rowid IN (SELECT value FROM json_each(?))
       )`,
-      bindings: [...fieldBindings, ...rowids],
+      bindings: [...fieldBindings, JSON.stringify(rowids)],
     };
   }
 
