@@ -6,7 +6,6 @@ import {
   ANN_READ_CLOSED,
   stripNullCoerceBool,
   optStr,
-  type InferOutput,
   errorResponse,
   structuredResponse,
   withOutputSchema,
@@ -15,17 +14,12 @@ import {
 import {
   ArtworkDetailOutput,
 } from "../outputSchemas.js";
-import { parseInscriptions, summarizeInscriptions, type ParsedInscription, type InscriptionSummary } from "../../inscriptions.js";
+import { parseInscriptions, summarizeInscriptions, type InscriptionSummary } from "../../inscriptions.js";
 
 // ─── Detail helpers (used by get_artwork_details) ───────────────────────────
 
-type EnrichedDetail = (InferOutput<typeof ArtworkDetailOutput> | ArtworkDetailFromDb) & {
-  parsedInscriptions?: ParsedInscription[];
-  inscriptionSummary?: InscriptionSummary;
-};
-
 /** Format artwork detail as a compact key-value summary for LLM content (Tier 3). */
-function formatDetailSummary(d: EnrichedDetail): string {
+function formatDetailSummary(d: ArtworkDetailFromDb & { inscriptionSummary: InscriptionSummary }): string {
   const lines: string[] = [];
   lines.push(`${d.objectNumber} — ${d.title}`);
   lines.push(`${d.creator}${d.date ? `, ${d.date}` : ""}`);
@@ -75,14 +69,12 @@ function formatDetailSummary(d: EnrichedDetail): string {
   if (d.inscriptions.length) lines.push(`[Inscriptions] ${d.inscriptions.join("; ")}`);
   // Inscription notes — separate artwork-borne text from ownership-stamp boilerplate
   // for clients that read the text channel rather than structuredContent.
-  if (d.inscriptionSummary) {
-    const isum = d.inscriptionSummary;
-    const bits: string[] = [];
-    if (isum.hasTranscribedText) bits.push("bears transcribed text");
-    else if (isum.hasCollectorMarkOnly) bits.push("collector's marks only — no transcribed text");
-    if (isum.collectorMarks.length) bits.push(`marks: ${isum.collectorMarks.join(", ")}`);
-    if (bits.length) lines.push(`[Inscription notes] ${bits.join("; ")}`);
-  }
+  const isum = d.inscriptionSummary;
+  const bits: string[] = [];
+  if (isum.hasTranscribedText) bits.push("bears transcribed text");
+  else if (isum.hasCollectorMarkOnly) bits.push("collector's marks only — no transcribed text");
+  if (isum.collectorMarks.length) bits.push(`marks: ${isum.collectorMarks.join(", ")}`);
+  if (bits.length) lines.push(`[Inscription notes] ${bits.join("; ")}`);
   if (d.provenance) lines.push(`[Provenance] ${d.provenance}`);
   if (d.provenanceEventCount) {
     lines.push(`Provenance events: ${d.provenanceEventCount} parsed. Full chain: search_provenance(objectNumber="${d.objectNumber}")`);

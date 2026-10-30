@@ -1442,7 +1442,7 @@ export class VocabularyDb {
       this.hasRecordModified_ = this.columnExists("artworks", "record_modified");
       this.hasImportance = this.columnExists("artworks", "importance");
       this.hasProvenanceTables_ = this.tableExists("provenance_events");
-      if (this.hasProvenanceTables_ && this.columnExists("provenance_events", "is_cross_ref")) {
+      if (this.hasProvenanceTables_) {
         this.stmtProvenanceEventCount = this.db.prepare(
           "SELECT COUNT(*) AS n FROM provenance_events WHERE artwork_id = ? AND is_cross_ref = 0"
         );
