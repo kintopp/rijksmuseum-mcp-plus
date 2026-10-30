@@ -5919,6 +5919,25 @@ export class VocabularyDb {
     };
   }
 
+  private static objectNumberIgnoredFilters(params: ProvenanceSearchParams): string[] {
+    // The objectNumber paths return before the SQL that applies these artwork-level filters.
+    const ignored: string[] = [];
+    const checks: string[] = [];
+    if (params.excludeTransferType?.length) {
+      ignored.push("excludeTransferType");
+      checks.push("events[].transferType");
+    }
+    if (params.creator) {
+      ignored.push("creator");
+      checks.push("creator");
+    }
+    if (ignored.length === 0) return [];
+    return [
+      `${ignored.join(" and ")} ${ignored.length > 1 ? "are" : "is"} not applied when objectNumber is set; the full chain is returned. ` +
+      `Check ${checks.join(" and ")} in this result, or omit objectNumber to search across artworks.`,
+    ];
+  }
+
   /**
    * Search provenance events across artworks.
    *
@@ -5948,6 +5967,7 @@ export class VocabularyDb {
         ORDER BY pe.sequence
       `).all(params.objectNumber) as ProvenanceEventDbRow[];
       if (rows.length === 0) return { totalArtworks: 0, results: [], ...(warnings.length > 0 && { warnings }) };
+      warnings.push(...VocabularyDb.objectNumberIgnoredFilters(params));
       return { totalArtworks: 1, results: [this.buildProvenanceArtwork(rows, false, params)], ...(warnings.length > 0 && { warnings }) };
     }
 
@@ -6314,7 +6334,8 @@ export class VocabularyDb {
         ORDER BY pp.sequence
       `).all(params.objectNumber) as ProvenancePeriodDbRow[];
       if (rows.length === 0) return { totalArtworks: 0, results: [] };
-      return { totalArtworks: 1, results: [this.buildProvenanceArtworkPeriods(rows, false, params)] };
+      const warnings = VocabularyDb.objectNumberIgnoredFilters(params);
+      return { totalArtworks: 1, results: [this.buildProvenanceArtworkPeriods(rows, false, params)], ...(warnings.length > 0 && { warnings }) };
     }
 
     // ── Build WHERE conditions ──

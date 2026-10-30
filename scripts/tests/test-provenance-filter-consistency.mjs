@@ -12,6 +12,7 @@
  *  - positionMethod's correlated condition breaks under a sort CTE rewrite, or facets count a different set
  *  - objectNumber bypasses the artwork-level hasGap, flagging events in a chain with no gap
  *  - the zero-result return drops warnings already collected
+ *  - objectNumber silently skips excludeTransferType or creator, reading as if the artwork passed
  *
  * Run:  node scripts/tests/test-provenance-filter-consistency.mjs
  * Requires: npm run build (imports from dist/).
@@ -192,6 +193,42 @@ await checkTool("a zero-result search keeps its warnings", async () => {
   const r = await search({ party: "nobody", sortBy: "duration" });
   assert.equal(r.totalArtworks, 0);
   assert.deepEqual(r.warnings, ["sortBy='duration' is only supported with layer='periods'. Sort ignored; results are in default order."]);
+});
+
+const ignoredByObjectNumber = (filters, checks) =>
+  `${filters} not applied when objectNumber is set; the full chain is returned. ` +
+  `Check ${checks} in this result, or omit objectNumber to search across artworks.`;
+
+await checkTool("objectNumber warns that excludeTransferType is not applied", async () => {
+  const r = await search({ objectNumber: "FX-1", excludeTransferType: "sale" });
+  assert.equal(r.results[0].eventCount, 2);
+  assert.deepEqual(r.warnings, [ignoredByObjectNumber("excludeTransferType is", "events[].transferType")]);
+});
+
+await checkTool("objectNumber warns that creator is not applied", async () => {
+  const r = await search({ objectNumber: "FX-1", creator: "nobody" });
+  assert.deepEqual(r.warnings, [ignoredByObjectNumber("creator is", "creator")]);
+});
+
+await checkTool("objectNumber names both filters in one warning", async () => {
+  const r = await search({ objectNumber: "FX-1", excludeTransferType: "sale", creator: "nobody" });
+  assert.deepEqual(r.warnings, [ignoredByObjectNumber("excludeTransferType and creator are", "events[].transferType and creator")]);
+});
+
+await checkTool("objectNumber warns about creator at the periods layer", async () => {
+  const r = await search({ objectNumber: "FX-1", creator: "nobody", layer: "periods" });
+  assert.deepEqual(r.warnings, [ignoredByObjectNumber("creator is", "creator")]);
+});
+
+await checkTool("objectNumber alone or with an applied filter does not warn", async () => {
+  assert.equal((await search({ objectNumber: "FX-1" })).warnings, undefined);
+  assert.equal((await search({ objectNumber: "FX-1", transferType: "sale" })).warnings, undefined);
+});
+
+await checkTool("an unknown objectNumber does not claim a chain was returned", async () => {
+  const r = await search({ objectNumber: "NOPE", creator: "nobody" });
+  assert.equal(r.totalArtworks, 0);
+  assert.equal(r.warnings, undefined);
 });
 
 await client.close();
