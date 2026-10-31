@@ -464,7 +464,10 @@ console.log("withResponseGuard");
   {
     const DEADLINE = 1500;
     const payload = randomBytes(15 * 1024 * 1024).toString("base64");
-    const large = (contentType) => async () => new Response(payload, { headers: { "content-type": contentType } });
+    // Smaller, because compression runs at the client's pace: gzipping the full payload
+    // takes about as long as the download's window before the second deadline.
+    const gzipPayload = payload.slice(0, payload.length / 3);
+    const large = (contentType, body = payload) => async () => new Response(body, { headers: { "content-type": contentType } });
     const stuckStream = async () => new Response(new ReadableStream({
       start(c) { c.enqueue(new TextEncoder().encode(": keepalive\n\n")); },
     }), { headers: { "content-type": "text/event-stream" } });
@@ -506,7 +509,7 @@ console.log("withResponseGuard");
     const servers = await Promise.all([
       serveTimed(large("application/json")),
       serveTimed(large("text/event-stream")),
-      serveTimed(large("application/json"), true),
+      serveTimed(large("application/json", gzipPayload), true),
       serveTimed(large("application/json")),
       serveTimed(stuckStream),
     ]);
@@ -518,7 +521,7 @@ console.log("withResponseGuard");
       const [jsonBody, sseBody, gzipBody] = await reads;
       check(jsonBody === payload, "a JSON result still downloading at the deadline arrives whole");
       check(sseBody === payload, "so does an SSE result");
-      check(gzipBody === payload, "and a compressed one");
+      check(gzipBody === gzipPayload, "and a compressed one");
       await sleep(DEADLINE * 1.2);
       check(stuck.closedAfter !== null && stuck.closedAfter < DEADLINE * 1.5, "a stuck stream is still cut at the first deadline, keep-alives or not");
       check(stalled.closedAfter !== null && stalled.closedAfter >= DEADLINE * 1.5 && stalled.closedAfter < DEADLINE * 3, "a client that never reads is cut after one more deadline");
