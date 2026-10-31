@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Token/cost benchmark: runs each prompt through headless Claude Code with the
 // Rijksmuseum MCP server ("mcp" arm), with web tools only ("baseline" arm), and
-// optionally with the server plus the skill from docs/skills ("mcp+skill" arm).
+// optionally with the server plus the skill from skill/ ("mcp+skill" arm).
 // Cost is Claude Code's own total_cost_usd, which is computed at API list price
 // even when the session itself is billed to a subscription.
 //

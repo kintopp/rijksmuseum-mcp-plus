@@ -19,6 +19,7 @@
     "build:peggy": "peggy --format es -o src/provenance-parser.generated.js src/provenance-grammar.peggy",
     "build": "npm run build:peggy && npm run build:ui && tsc && cp src/provenance-parser.generated.js dist/ && git rev-parse --short HEAD > dist/commit.txt 2>/dev/null || true",
     "build:ui": "vite build -c apps/artwork-viewer/vite.config.ts",
+    "build:skill": "node scripts/build-skill.mjs",
     "start": "node dist/index.js",
     "serve": "node dist/index.js --http",
     "cli": "node scripts/cli.mjs",

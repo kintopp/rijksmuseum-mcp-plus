@@ -38,7 +38,15 @@
     "status": "promoted",
     "runtime": "node",
     "requires": [],
-    "purpose": "version-policy sync: CITATION.cff == server major.minor; SKILL.md within the point-release window"
+    "purpose": "version sync: CITATION.cff == server major.minor; SKILL.md metadata.version == package.json"
+  },
+  "test-skill-bundle.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [],
+    "purpose": "committed .skill bundles are byte-identical rebuilds of skill/; SKILL.md frontmatter conforms to the Agent Skills spec"
   },
   "test-pure-functions.mjs": {
     "category": "base",

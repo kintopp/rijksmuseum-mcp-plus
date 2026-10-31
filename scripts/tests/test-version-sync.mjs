@@ -1,14 +1,9 @@
 #!/usr/bin/env node
 /**
- * test-version-sync.mjs — version-consistency gate across the three version
- * carriers: package.json (server, source of truth), CITATION.cff, and
- * docs/skills/rijksmuseum-mcp-plus/SKILL.md.
- *
- * Encodes the POLICY, not strict equality (versioning cadence: server releases
- * step in larger increments; SKILL.md takes point releases between them):
+ * test-version-sync.mjs — one version across the three carriers. package.json is
+ * the source of truth.
  *  - CITATION.cff `version` must equal the server's major.minor exactly.
- *  - SKILL.md `metadata.version` must share the server's major, be >= the
- *    server's minor, and stay within +9 of it (the between-releases window).
+ *  - skill/rijksmuseum-mcp-plus/SKILL.md `metadata.version` must equal it in full.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -18,7 +13,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const cff = readFileSync(join(ROOT, "CITATION.cff"), "utf8");
-const skill = readFileSync(join(ROOT, "docs/skills/rijksmuseum-mcp-plus/SKILL.md"), "utf8");
+const skill = readFileSync(join(ROOT, "skill/rijksmuseum-mcp-plus/SKILL.md"), "utf8");
 
 let failures = 0;
 function check(label, ok, detail) {
@@ -48,21 +43,13 @@ if (cffMatch) {
 
 const fmEnd = skill.indexOf("---", 4);
 const frontmatter = fmEnd === -1 ? "" : skill.slice(0, fmEnd);
-const skillMatch = /^\s*version:\s*"?(\d+)\.(\d+)"?\s*$/m.exec(frontmatter);
-check("SKILL.md frontmatter has metadata.version", !!skillMatch, "no `version:` in frontmatter");
-if (skillMatch) {
-  const [, kMajor, kMinor] = skillMatch.map(Number);
+const skillVersion = /^ {2}version:\s*"([^"]*)"\s*$/m.exec(frontmatter)?.[1];
+check("SKILL.md frontmatter has metadata.version", skillVersion !== undefined, "no indented `version:` in frontmatter");
+if (skillVersion !== undefined) {
   check(
-    `SKILL.md version (${kMajor}.${kMinor}) shares server major (${sMajor})`,
-    kMajor === sMajor,
-    "SKILL.md must be re-based when the server takes a major bump"
-  );
-  check(
-    `SKILL.md minor (${kMinor}) is within [${sMinor}, ${sMinor + 9}] of server minor`,
-    kMinor >= sMinor && kMinor <= sMinor + 9,
-    kMinor < sMinor
-      ? "SKILL.md lags the server release — bump it"
-      : "SKILL.md ran past the point-release window — the server release is overdue a bump"
+    `SKILL.md metadata.version (${skillVersion}) equals package.json (${pkg.version})`,
+    skillVersion === pkg.version,
+    "run `npm run build:skill` and commit the result"
   );
 }
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 export const benchDir = path.dirname(fileURLToPath(import.meta.url));
 export const projectRoot = path.resolve(benchDir, "../..");
 export const DEFAULT_SERVER = "https://rijksmuseum-mcp-plus-production.up.railway.app/mcp";
-export const SKILL_DIR = path.join(projectRoot, "docs/skills/rijksmuseum-mcp-plus");
+export const SKILL_DIR = path.join(projectRoot, "skill/rijksmuseum-mcp-plus");
 
 export const LOCAL_SERVER = {
   command: process.execPath,

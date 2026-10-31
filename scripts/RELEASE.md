@@ -335,9 +335,9 @@ gh release upload counts-latest data/iconclass-counts.db --clobber \
     # should print v0.XX
     ```
 
-12. **Attach the skill bundle.** Every release carries the current `.skill`. Confirm it matches `docs/skills/rijksmuseum-mcp-plus/` first (rebuild with `./scripts/build-skill.sh` if not).
+12. **Attach the skill bundle.** Every release carries the current `.skill`, which takes its `metadata.version` from `package.json`, so a version bump needs `npm run build:skill` and a commit of the result (`test-skill-bundle.mjs` fails otherwise).
     ```bash
-    gh release upload v0.XX docs/skills/rijksmuseum-mcp-plus.skill
+    gh release upload v0.XX skill/rijksmuseum-mcp-plus.skill
     ```
 
 13. **Update version references:**

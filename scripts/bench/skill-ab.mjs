@@ -7,7 +7,7 @@
 //   node scripts/bench/skill-ab.mjs [--variant name=<skill dir>]... [--no-none]
 //        [--runs N] [--only id,id] [--model sonnet|opus] [--concurrency N] [--budget <usd>]
 //
-// Default arms: "none" and "current" (docs/skills/rijksmuseum-mcp-plus). Always runs the
+// Default arms: "none" and "current" (skill/rijksmuseum-mcp-plus). Always runs the
 // local build (dist/index.js). Judge the output with skill-judge.mjs <results dir>.
 
 import { spawn } from "node:child_process";
