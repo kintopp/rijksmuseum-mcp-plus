@@ -211,9 +211,9 @@ gzip -k -f data/<db-file>.db
 shasum -a 256 data/<db-file>.db.gz
 
 # 4. Create GitHub pre-release with the asset (provides download URL)
-# Notes: `git mv` the rolling RELEASE_NOTES_next.md → RELEASE_NOTES_v0.XX.md (and strip its maintainer "Source trail" comment) before this step — see that file's header.
+# Notes: draft them outside the repo; never keep a RELEASE_NOTES file in the working tree.
 gh release create v0.XX --prerelease data/<db-file>.db.gz \
-  --title "v0.XX" --notes-file RELEASE_NOTES_v0.XX.md
+  --title "v0.XX" --notes-file <path-outside-repo>/RELEASE_NOTES_v0.XX.md
 
 # 5. Remove old DB + journal siblings from Railway volume.
 #    The .db-wal and .db-shm files MUST be removed alongside the .db — see "WAL/SHM gotcha" below.
@@ -335,13 +335,18 @@ gh release upload counts-latest data/iconclass-counts.db --clobber \
     # should print v0.XX
     ```
 
-12. **Update version references:**
+12. **Attach the skill bundle.** Every release carries the current `.skill`. Confirm it matches `docs/skills/rijksmuseum-mcp-plus/` first (rebuild with `./scripts/build-skill.sh` if not).
+    ```bash
+    gh release upload v0.XX docs/skills/rijksmuseum-mcp-plus.skill
+    ```
+
+13. **Update version references:**
     - `package.json` (usually pre-bumped in Phase A push)
     - `MEMORY.md` Project State line → shipped
     - `MEMORY.md` Current Versions → add as current, demote prior
     - `completed-work.md` Version History → append new entry
     - Delete any `v0XX_release_state.md` project memo (its state is now history)
 
-13. **Refresh the local DB to match prod.** After a DB swap, the local `data/<db-file>.db` is still the
+14. **Refresh the local DB to match prod.** After a DB swap, the local `data/<db-file>.db` is still the
     *previous* version, so local dev/tests diverge from production. Replace it with the deployed artifact
     (e.g. `cp data/gemma-<rel>.db data/gemma.db`) so later local runs match what's live.
