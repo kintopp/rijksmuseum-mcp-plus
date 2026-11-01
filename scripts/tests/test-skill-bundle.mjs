@@ -61,7 +61,7 @@ check("bundles and metadata.version are a rebuild of the source", rebuild.status
 
 const bundleBytes = readFileSync(join(ROOT, "skill", `${SKILL_NAME}.skill`));
 const bundle = readZip(bundleBytes);
-check(".skill.zip is a byte-identical copy of the .skill", readFileSync(join(ROOT, "skill", `${SKILL_NAME}.skill.zip`)).equals(bundleBytes));
+check(".zip is a byte-identical copy of the .skill", readFileSync(join(ROOT, "skill", `${SKILL_NAME}.zip`)).equals(bundleBytes));
 
 const names = [...bundle.keys()];
 check("SKILL.md is the first entry, inside the skill folder", names[0] === `${SKILL_NAME}/SKILL.md`, names[0]);
