@@ -53,7 +53,7 @@ HTTP mode activates automatically when `PORT` is set or `--http` is passed.
 
 `GET /mcp` (and every other non-POST verb) returns **405** with an `Allow: POST` header. This is deliberate, not a bug: the `2025-11-25` spec permits declining to offer an SSE stream at the endpoint, and the post-`2025-11-25` draft removes the GET stream entirely, making 405 the prescribed behaviour. Clients probing for a listening stream will see it.
 
-The included `railway.json` supports one-click deployment on [Railway](https://railway.app/). Railway sets `PORT` automatically.
+The production deployment on [Railway](https://railway.app/) is configured in `.railway/railway.ts`. Railway does not read that file during a deploy, so changes to it take effect only after `railway config apply`. Railway sets `PORT` automatically.
 
 On Railway, point `VOCAB_DB_PATH`, `GEMMA_DB_PATH` and `HF_HOME` at the persistent volume (e.g. `/data/vocabulary.db`, `/data/gemma.db`, `/data/hf-cache`); otherwise the databases and the query model land on the container filesystem and download again on every redeploy. A database kept in a private S3-compatible bucket (such as a Railway bucket) can be given as `GEMMA_DB_URL=s3://<bucket>/<key>` together with the `S3_*` credentials below: the server presigns a short-lived link at boot, so no expiring URL is stored in the environment. Set the glibc variable `MALLOC_MMAP_THRESHOLD_=131072` as well. Loading the Gemma coarse index allocates large temporary buffers, and without the setting glibc keeps several hundred megabytes of them in its arena after they are freed.
 
