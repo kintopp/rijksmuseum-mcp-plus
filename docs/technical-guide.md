@@ -1,6 +1,6 @@
 ### Technical Guide
 
-The sections below are for developers who want to run the server locally, deploy it, or understand the architecture.
+The sections below are for developers who want to run the server locally, deploy it, or understand the architecture. Note that currently (October, 2026) Mistral Vibe can't use a locally hosted MCP server.
 
 #### Local Setup (stdio)
 
