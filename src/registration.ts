@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/server";
+import { McpServer, type CacheHint } from "@modelcontextprotocol/server";
 import {
   registerAppResource,
   getUiCapability,
@@ -183,8 +183,12 @@ const ARTWORK_VIEWER_UI_META = {
   prefersBorder: false,
 };
 
+// Hint for results that change only on deploy. Kept short: every inputSchema is
+// strict, so a client holding a pre-deploy tools/list gets hard errors until it expires.
+export const DEPLOY_STABLE_CACHE_HINT: CacheHint = { ttlMs: 600_000, cacheScope: "public" };
+
 function registerAppViewerResource(server: McpServer): void {
-  registerAppResource(
+  const resource = registerAppResource(
     server,
     "Rijksmuseum Artwork Viewer",
     ARTWORK_VIEWER_RESOURCE_URI,
@@ -205,6 +209,8 @@ function registerAppViewerResource(server: McpServer): void {
       ],
     })
   );
+  // Never let clients cache the "Viewer Not Built" fallback.
+  if (loadViewerHtml() !== VIEWER_FALLBACK_HTML) resource.cacheHint = DEPLOY_STABLE_CACHE_HINT;
 }
 
 // ─── Public entry points ─────────────────────────────────────────────

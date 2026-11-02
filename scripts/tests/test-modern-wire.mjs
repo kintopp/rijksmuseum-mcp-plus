@@ -64,8 +64,13 @@ try {
   check(!JSON.stringify(list.body?.result ?? {}).includes("$ref"), "schemas stay $ref-free");
   const img = list.body?.result?.tools?.find((t) => t.name === "get_artwork_image");
   check(img?._meta?.ui?.resourceUri === "ui://rijksmuseum/artwork-viewer.html", "get_artwork_image keeps its ui.resourceUri");
-  const cacheable = (r) => r?.ttlMs === 3_600_000 && r?.cacheScope === "public";
-  check(cacheable(d.body?.result) && cacheable(list.body?.result), "server/discover + tools/list carry public 1h cache hints");
+  const cacheable = (r) => r?.ttlMs > 0 && r?.cacheScope === "public";
+  const uncached = (r) => r != null && r.ttlMs === 0 && r.cacheScope === "private";
+  // Healthy only when the model-gated tools registered (depends on a local gemma.db).
+  const healthy = names.includes("semantic_search");
+  const hinted = healthy ? cacheable : uncached;
+  check(hinted(d.body?.result) && hinted(list.body?.result),
+    `server/discover + tools/list ${healthy ? "carry a public cache hint" : "stay uncached on a degraded boot"}`);
 
   const s = await call("search_artwork", { creator: "Rembrandt van Rijn", type: "painting", maxResults: 3 });
   check(!s.body?.result?.isError && s.body?.result?.structuredContent?.results?.length > 0, "search_artwork returns structuredContent");
@@ -81,8 +86,8 @@ try {
   const c = res.body?.result?.contents?.[0];
   check(c?.mimeType === "text/html;profile=mcp-app" && c?.text?.length > 100_000, "viewer resource readable over modern wire");
   check(c?._meta?.ui?.csp?.connectDomains?.[0] === "https://iiif.micr.io", "viewer resource keeps CSP meta");
-  check(cacheable(res.body?.result), "viewer resources/read carries public 1h cache hint");
-  check(!("ttlMs" in (s.body?.result ?? {})), "tools/call result carries no cache fields");
+  check(cacheable(res.body?.result), "viewer resources/read carries a public cache hint");
+  check(s.body?.result != null && !("ttlMs" in s.body.result), "tools/call result carries no cache fields");
 
   const fut = await post({ "mcp-protocol-version": "2099-01-01", "mcp-method": "tools/list" },
     { jsonrpc: "2.0", id: 1, method: "tools/list", params: { _meta: envelope("2099-01-01") } });
@@ -129,7 +134,7 @@ try {
   check(init.body?.result?.protocolVersion === LEGACY, "legacy initialize negotiates 2025-11-25");
   const ll = await post({ "mcp-protocol-version": LEGACY }, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
   check(ll.body?.result?.tools?.length === TOOL_COUNT, `legacy tools/list returns ${TOOL_COUNT} tools`);
-  check(!("ttlMs" in (ll.body?.result ?? {})) && !("cacheScope" in (ll.body?.result ?? {})), "legacy tools/list has no cache fields");
+  check(ll.body?.result != null && !("ttlMs" in ll.body.result) && !("cacheScope" in ll.body.result), "legacy tools/list has no cache fields");
 } finally {
   child.kill();
 }

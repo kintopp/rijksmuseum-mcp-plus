@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { McpServer, createMcpHandler, type CacheHint, type McpServerOptions } from "@modelcontextprotocol/server";
+import { McpServer, createMcpHandler, type McpServerOptions } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import express from "express";
@@ -25,7 +25,7 @@ import {
   startGcObserver,
   type DbHandle,
 } from "./utils/MemoryStats.js";
-import { registerAll, similarPages, enrichmentReviewPages } from "./registration.js";
+import { registerAll, similarPages, enrichmentReviewPages, DEPLOY_STABLE_CACHE_HINT } from "./registration.js";
 import { isAllowedOrigin, parseMcpAllowedOrigins } from "./utils/origin.js";
 import { logInfo, logWarn, logError } from "./utils/log.js";
 import { startIdleReclaim } from "./utils/idleReclaim.js";
@@ -215,15 +215,13 @@ function initUsageStats(): void {
 
 // ─── Create a configured McpServer ───────────────────────────────────
 
-// Lists, instructions and the viewer HTML are fixed for the process lifetime
-// (DBs init before the server answers), so they only change on deploy.
-const DEPLOY_STABLE: CacheHint = { ttlMs: 3_600_000, cacheScope: "public" };
+// Lists and instructions are fixed for the process lifetime (DBs init before the
+// server answers). A degraded boot drops the model-gated tools, so it sends no hint:
+// a redeploy fix must reach clients at once. resources/read hints are per resource.
 const CACHE_HINTS: McpServerOptions["cacheHints"] = {
-  "server/discover": DEPLOY_STABLE,
-  "tools/list": DEPLOY_STABLE,
-  "resources/list": DEPLOY_STABLE,
-  "resources/templates/list": DEPLOY_STABLE,
-  "resources/read": DEPLOY_STABLE,
+  "server/discover": DEPLOY_STABLE_CACHE_HINT,
+  "tools/list": DEPLOY_STABLE_CACHE_HINT,
+  "resources/list": DEPLOY_STABLE_CACHE_HINT,
 };
 
 function createServer(httpPort?: number): McpServer {
@@ -233,7 +231,7 @@ function createServer(httpPort?: number): McpServer {
     { name: SERVER_NAME, version: SERVER_VERSION, title: "Rijksmuseum MCP+" },
     {
       capabilities: { tools: {}, resources: {} },
-      cacheHints: CACHE_HINTS,
+      cacheHints: vectorSearch ? CACHE_HINTS : undefined,
       instructions:
         "Rijksmuseum collection explorer — circa 834,000 artworks from antiquity to the present day " +
         "spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.\n\n" +
