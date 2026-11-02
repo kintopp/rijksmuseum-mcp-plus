@@ -183,9 +183,9 @@ const ARTWORK_VIEWER_UI_META = {
   prefersBorder: false,
 };
 
-// Hint for results that change only on deploy. Kept short: every inputSchema is
-// strict, so a client holding a pre-deploy tools/list gets hard errors until it expires.
-export const DEPLOY_STABLE_CACHE_HINT: CacheHint = { ttlMs: 600_000, cacheScope: "public" };
+// Hint for results that change only on deploy. Every inputSchema is strict, so after a
+// schema-breaking deploy a client holding the old tools/list gets hard errors until it expires.
+export const DEPLOY_STABLE_CACHE_HINT: CacheHint = { ttlMs: 3_600_000, cacheScope: "public" };
 
 function registerAppViewerResource(server: McpServer): void {
   const resource = registerAppResource(
