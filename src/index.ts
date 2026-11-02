@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
+import { McpServer, createMcpHandler, type CacheHint, type McpServerOptions } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import express from "express";
@@ -215,6 +215,17 @@ function initUsageStats(): void {
 
 // ─── Create a configured McpServer ───────────────────────────────────
 
+// Lists, instructions and the viewer HTML are fixed for the process lifetime
+// (DBs init before the server answers), so they only change on deploy.
+const DEPLOY_STABLE: CacheHint = { ttlMs: 3_600_000, cacheScope: "public" };
+const CACHE_HINTS: McpServerOptions["cacheHints"] = {
+  "server/discover": DEPLOY_STABLE,
+  "tools/list": DEPLOY_STABLE,
+  "resources/list": DEPLOY_STABLE,
+  "resources/templates/list": DEPLOY_STABLE,
+  "resources/read": DEPLOY_STABLE,
+};
+
 function createServer(httpPort?: number): McpServer {
   // Same condition as the semantic_search / multimodal_search registration guards.
   const vectorSearch = !!(gemmaDb?.available && gemmaModel?.available && vocabDb?.available);
@@ -222,6 +233,7 @@ function createServer(httpPort?: number): McpServer {
     { name: SERVER_NAME, version: SERVER_VERSION, title: "Rijksmuseum MCP+" },
     {
       capabilities: { tools: {}, resources: {} },
+      cacheHints: CACHE_HINTS,
       instructions:
         "Rijksmuseum collection explorer — circa 834,000 artworks from antiquity to the present day " +
         "spanning paintings, prints, drawings, photographs, furniture, ceramics, textiles, and more.\n\n" +
