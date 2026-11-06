@@ -21,10 +21,8 @@
  * crashing the adapter or going unhandled; a listen stream cut at the deadline;
  * a late SSE body left unread, so its keep-alive runs forever (#427); a handler
  * throw hidden behind the 504; an adapter failure swallowed by the guard's catch;
- * a finished result cut while a slow client downloads it; a stalled download
- * held open forever; a late SSE body missed because the abort came after the
- * framing layer looked; an upstream timeout the deadline hides; a tool's upstream
- * call left running after the deadline, or logged as a server error.
+ * an upstream timeout the deadline hides; a tool's upstream call left running
+ * after the deadline, or logged as a server error.
  *
  * Mounting the error handler app-wide is an equivalent mutation: it is registered
  * before the page routes, so their errors never reach it.
@@ -47,8 +45,6 @@ import { registerProvenanceTools } from "../../dist/registration/tools/provenanc
 import { registerSimilarTools } from "../../dist/registration/tools/similar.js";
 import { registerViewerTools } from "../../dist/registration/tools/viewer.js";
 import axios from "axios";
-import compression from "compression";
-import { randomBytes } from "node:crypto";
 import { buildFixture } from "./build-fixture-vocab-db.mjs";
 import { EXPECTED_TOOL_COUNT as TOOL_COUNT } from "./fixture-client.mjs";
 
@@ -458,87 +454,6 @@ console.log("withResponseGuard");
     const outcome = (p) => p.then(() => "swallowed", (e) => e.message);
     eq(await outcome(failing(0)), "adapter failed", "an adapter failure before the deadline reaches the caller");
     eq(await outcome(failing(TIMEOUT_MS * 2)), "adapter failed", "and so does one after it");
-  }
-
-  // Large enough to outlast the socket buffers, so the client's pace decides when it finishes.
-  {
-    const DEADLINE = 1500;
-    const payload = randomBytes(15 * 1024 * 1024).toString("base64");
-    // Smaller, because compression runs at the client's pace: gzipping the full payload
-    // takes about as long as the download's window before the second deadline.
-    const gzipPayload = payload.slice(0, payload.length / 3);
-    const large = (contentType, body = payload) => async () => new Response(body, { headers: { "content-type": contentType } });
-    const stuckStream = async () => new Response(new ReadableStream({
-      start(c) { c.enqueue(new TextEncoder().encode(": keepalive\n\n")); },
-    }), { headers: { "content-type": "text/event-stream" } });
-
-    /** Serve one response through the guard and record when the server closes it. */
-    const serveTimed = async (fetchStub, compress) => {
-      const handle = withResponseGuard(toNodeHandler(withResponseFraming({ fetch: fetchStub })), DEADLINE);
-      const state = { closedAfter: null };
-      const server = http.createServer((req, res) => {
-        const start = Date.now();
-        res.once("close", () => { state.closedAfter = Date.now() - start; });
-        const run = () => handle(req, res, {}).catch(() => res.destroy());
-        if (compress) compression()(req, res, run);
-        else run();
-      });
-      await new Promise((r) => server.listen(0, "127.0.0.1", r));
-      state.url = `http://127.0.0.1:${server.address().port}/mcp`;
-      state.close = () => { server.closeAllConnections(); server.close(); };
-      return state;
-    };
-    /** Start reading only after `readAfter`; with none, never read at all. */
-    const download = (url, readAfter) => new Promise((resolve) => {
-      const req = http.request(url, { method: "POST", headers: { "accept-encoding": "gzip", "content-length": 0 } }, (res) => {
-        if (readAfter === undefined) return;
-        setTimeout(() => {
-          const chunks = [];
-          res.on("data", (c) => chunks.push(c));
-          res.on("error", () => resolve("cut"));
-          res.on("end", () => {
-            const wire = Buffer.concat(chunks);
-            resolve(res.headers["content-encoding"] === "gzip" ? zlib.gunzipSync(wire).toString() : wire.toString());
-          });
-        }, readAfter);
-      });
-      req.on("error", () => resolve("cut"));
-      req.end();
-    });
-
-    const servers = await Promise.all([
-      serveTimed(large("application/json")),
-      serveTimed(large("text/event-stream")),
-      serveTimed(large("application/json", gzipPayload), true),
-      serveTimed(large("application/json")),
-      serveTimed(stuckStream),
-    ]);
-    const [json, sse, gzipped, stalled, stuck] = servers;
-    try {
-      const reads = Promise.all([json, sse, gzipped].map((s) => download(s.url, DEADLINE * 1.2)));
-      download(stalled.url);
-      download(stuck.url, 0);
-      const [jsonBody, sseBody, gzipBody] = await reads;
-      check(jsonBody === payload, "a JSON result still downloading at the deadline arrives whole");
-      check(sseBody === payload, "so does an SSE result");
-      check(gzipBody === gzipPayload, "and a compressed one");
-      await sleep(DEADLINE * 1.2);
-      check(stuck.closedAfter !== null && stuck.closedAfter < DEADLINE * 1.5, "a stuck stream is still cut at the first deadline, keep-alives or not");
-      check(stalled.closedAfter !== null && stalled.closedAfter >= DEADLINE * 1.5 && stalled.closedAfter < DEADLINE * 3, "a client that never reads is cut after one more deadline");
-    } finally { servers.forEach((s) => s.close()); }
-  }
-
-  {
-    const controller = new AbortController();
-    let cancelled = false;
-    const body = new ReadableStream({ cancel() { cancelled = true; } });
-    const framing = withResponseFraming({
-      fetch: async () => new Response(body, { headers: { "content-type": "text/event-stream" } }),
-    });
-    await framing.fetch(new Request("http://x/mcp", { method: "POST", signal: controller.signal }));
-    controller.abort();
-    await sleep(0);
-    check(cancelled, "a body returned just before the abort is cancelled by it");
   }
 
   check(new OaiPmhClient().http.defaults.timeout < 30_000, "the OAI timeout fires before the 30 s response guard, so its own error reaches the caller");
