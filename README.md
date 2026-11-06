@@ -116,4 +116,4 @@ Collection data and images are provided by the **[Rijksmuseum, Amsterdam](https:
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+The software in this project is licensed under the [MIT License](LICENSE).
