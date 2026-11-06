@@ -56,6 +56,8 @@ Currently (October, 2026) ChatGPT's free tier makes uploading skill files cumber
 
 For local setup (stdio or HTTP, also via cli), deployment, architecture, data sources, and configuration, please see the [technical guide](/docs/technical-guide.md). For measurements of what the server costs and saves in tokens compared with plain web search, see the (still early and experimental) [benchmarks](/docs/benchmarks.md).
 
+The enriched metadata is available as a standalone SQLite database ([`vocabulary.db.gz`](https://github.com/kintopp/rijksmuseum-mcp-plus/releases/download/v0.90/vocabulary.db.gz), from the [v0.90 release](https://github.com/kintopp/rijksmuseum-mcp-plus/releases/tag/v0.90)). Its tables, joins and example queries are described in the [database schema](/docs/database-schema.md).
+
 ## Roadmap
 
 Ongoing:
@@ -107,6 +109,8 @@ Collection data and images are provided by the **[Rijksmuseum, Amsterdam](https:
 **Licensing:** Information and data that are no longer (or never were) protected by copyright carry the **Public Domain Mark** and/or **[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)**. Where the Rijksmuseum holds copyright, it generally waives its rights under CC0 1.0; in cases where it does exercise copyright, materials are made available under **[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)**. Materials under third-party copyright without express permission are not made available as open data. Individual licence designations appear on the [collection website](https://www.rijksmuseum.nl/en/rijksstudio).
 
 **Attribution:** The Rijksmuseum considers it good practice to provide attribution and/or source citation via a credit line and data citation, regardless of the licence applied. Please see the Rijksmuseum's [information and data policy](https://data.rijksmuseum.nl/policy/information-and-data-policy) for the full terms.
+
+**Enriched data:** The enrichments this project adds to the vocabulary database, such as the parsed provenance tables, and the embeddings database (`gemma.db`) are released under **[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)**. The Rijksmuseum records they are built on keep the licences described above.
 
 > This project was inspired by [@r-huijts/rijksmuseum-mcp](https://github.com/r-huijts/rijksmuseum-mcp), the original Rijksmuseum MCP server based on the museum's now superseded REST API.
 
