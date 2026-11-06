@@ -250,6 +250,7 @@ function applyHostContext(
   if (params.displayMode) {
     currentDisplayMode = params.displayMode;
     updateFullscreenButton();
+    syncCooperativeGestures();
   }
 }
 
@@ -399,6 +400,7 @@ async function toggleFullscreen(): Promise<void> {
     const result = await app.requestDisplayMode({ mode: target });
     currentDisplayMode = result.mode;
     updateFullscreenButton();
+    syncCooperativeGestures();
   } catch {
     // Host doesn't support display mode changes — try browser fullscreen as fallback
     const container = document.querySelector('.main');
@@ -420,12 +422,28 @@ function updateFullscreenButton(): void {
   }
 }
 
+// Inline, a plain wheel or one-finger drag scrolls the host page past the
+// viewer; Ctrl/Cmd+wheel, trackpad pinch and two-finger touch drive OSD. OSD
+// suspends this only in its own full-page mode, not in host or browser
+// fullscreen, and select mode needs one-finger drags for the rectangle.
+function syncCooperativeGestures(): void {
+  viewer?.setCooperativeGestures(
+    currentDisplayMode === 'inline' && !document.fullscreenElement && !selectMode
+  );
+}
+
+document.addEventListener('fullscreenchange', () => {
+  updateFullscreenButton();
+  syncCooperativeGestures();
+});
+
 // ── Selection mode ───────────────────────────────────────────────
 
 function toggleSelectMode(): void {
   if (!viewer) return;
   selectMode = !selectMode;
   viewer.setMouseNavEnabled(!selectMode);
+  syncCooperativeGestures();
   updateSelectButton();
 
   if (selectMode) {
@@ -699,6 +717,7 @@ function initializeViewer(iiifInfoUrl: string): void {
     visibilityRatio: 0.5,
     gestureSettingsMouse: { scrollToZoom: true, clickToZoom: false, dblClickToZoom: false },
   });
+  syncCooperativeGestures();
 
   // Prevent browser scroll-into-view shift when OSD canvas receives focus
   viewer.canvas.addEventListener('focus', () => { window.scrollTo(0, 0); }, true);
