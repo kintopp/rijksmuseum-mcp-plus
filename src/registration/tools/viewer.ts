@@ -245,7 +245,7 @@ export function registerViewerTools(
       description:
         "Returns image bytes (base64) for the LLM's own visual analysis. " +
         "Covers a whole artwork or a region. " +
-        "The LLM can see and reason about the image immediately — not for the user to view (use get_artwork_image for the interactive viewer). " +
+        "The LLM can see and reason about the image immediately; it is for your own analysis. To show an artwork to the user, use get_artwork_image (the interactive viewer). " +
         "Not for listing or summarising artworks — use search_artwork.\n\n" +
         "Use with region 'full' (default) to inspect the complete artwork, or specify a " +
         "region to zoom into details, read inscriptions, or examine specific areas. " +

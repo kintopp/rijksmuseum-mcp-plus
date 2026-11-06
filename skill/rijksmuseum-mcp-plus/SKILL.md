@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires the rijksmuseum-mcp+ MCP server and network access.
 metadata:
   version: "0.96.0"
-  last_updated: "2026-10-31"
+  last_updated: "2026-11-06"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -96,7 +96,7 @@ Draw on whichever of these fit, combine them, or ignore them.
 - Give the `objectNumber` for every work you discuss, linked to its Rijksmuseum page; cite the handle URI from `externalIds` when a persistent citation is needed.
 - Separate three sources of statement: what the catalogue records, what you observed in an image, and what comes from your own background knowledge.
 - For `multimodal_search` results, say which channels found each work, and present the candidates the channels agree on separately from those only the image or only the text supports.
-- Pass on links the tools produce for the user: `find_similar` comparison pages and provenance review URLs. The user cannot see tool output, so these links are their only way to those pages.
+- Pass on links the tools produce for the user: `find_similar` comparison pages and provenance review URLs. Include them as links in your reply, which is where the user reads the results.
 - Say what scope your searches covered, especially when an answer rests on a sample rather than an exhaustive query.
 
 ## References

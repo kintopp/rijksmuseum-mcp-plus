@@ -339,7 +339,7 @@ export function registerProvenanceTools(
           "(location fixes, event reclassification, event splitting), and enrichmentReasoning provides the LLM's reasoning " +
           "for any non-deterministic decision. Parties have position (sender/receiver/agent) indicating their role in the transfer.\n\n" +
           "When results contain LLM-enriched records, the response ends with a REVIEW_URL or REVIEW_FILE line pointing at a human-review page for those decisions. " +
-          "Include that URL or path verbatim as a link in your reply — the user cannot see tool output, so it is their only route to the page.\n\n" +
+          "Include that URL or path verbatim as a link in your reply, which is where the user reads the results.\n\n" +
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "Only the parsed provenance fields exposed below are searchable. " +
           "At least one filter is required.\n\n" +

@@ -78,7 +78,7 @@ Internal: switch the viewer to a different artwork while preserving the viewUUID
 
 ### 9. `inspect_artwork_image`
 
-Returns image bytes (base64) for the LLM's own visual analysis. Covers a whole artwork or a region. The LLM can see and reason about the image immediately — not for the user to view (use get_artwork_image for the interactive viewer). Not for listing or summarising artworks — use search_artwork.
+Returns image bytes (base64) for the LLM's own visual analysis. Covers a whole artwork or a region. The LLM can see and reason about the image immediately; it is for your own analysis. To show an artwork to the user, use get_artwork_image (the interactive viewer). Not for listing or summarising artworks — use search_artwork.
 
 Use with region 'full' (default) to inspect the complete artwork, or specify a region to zoom into details, read inscriptions, or examine specific areas. The response includes cropPixelWidth/cropPixelHeight: the actual pixel dimensions of the returned image.
 
@@ -140,7 +140,7 @@ Event flags:
 
 Every record carries provenance-of-provenance metadata: parseMethod shows how the event was parsed (peg, regex_fallback, cross_ref, credit_line, llm_structural), categoryMethod/positionMethod show how classifications and party positions were determined (type_mapping, role_mapping, llm_enrichment, llm_disambiguation, rule:transfer_is_ownership), correctionMethod (llm_structural:#NNN) shows LLM structural corrections (location fixes, event reclassification, event splitting), and enrichmentReasoning provides the LLM's reasoning for any non-deterministic decision. Parties have position (sender/receiver/agent) indicating their role in the transfer.
 
-When results contain LLM-enriched records, the response ends with a REVIEW_URL or REVIEW_FILE line pointing at a human-review page for those decisions. Include that URL or path verbatim as a link in your reply — the user cannot see tool output, so it is their only route to the page.
+When results contain LLM-enriched records, the response ends with a REVIEW_URL or REVIEW_FILE line pointing at a human-review page for those decisions. Include that URL or path verbatim as a link in your reply, which is where the user reads the results.
 
 Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable. At least one filter is required.
 
