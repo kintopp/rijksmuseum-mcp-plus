@@ -43,8 +43,9 @@ export function withResponseGuard(handle: NodeMcpHandler, ms: number): NodeMcpHa
 }
 
 /**
- * Cancels a response nobody will read: an unread SSE body keeps its keep-alive
- * timer queueing chunks forever (#427), and an aborted signal doesn't stop it.
+ * Cancels the body of a response that arrives after its request was aborted, since
+ * nobody will read it: an unread SSE body can keep its keep-alive timer queueing
+ * chunks (#427).
  *
  * Gives JSON answers a Content-Length. toNodeHandler writes headers before the
  * first chunk, so without one `compression` can't apply its size threshold.

@@ -18,7 +18,8 @@
  * since the adapter's unconditional writeHead and its abort path are the hazards):
  * a stuck call never answered; a 504 that leaves the tool running; a 504 without
  * the request's JSON-RPC id; a 2025-era SSE call with no deadline; a late result
- * crashing the adapter or going unhandled; a listen stream cut at the deadline;
+ * crashing the adapter or going unhandled; keep-alive frames extending the
+ * deadline, as an idle timer would; a listen stream cut at the deadline;
  * a late SSE body left unread, so its keep-alive runs forever (#427); a handler
  * throw hidden behind the 504; an adapter failure swallowed by the guard's catch;
  * an upstream timeout the deadline hides; a tool's upstream call left running
@@ -409,6 +410,22 @@ console.log("withResponseGuard");
       eq(unhandled.length, 0, "its late rejection stays handled");
       eq(s.rejections.join(), "", "and doesn't throw out of the guard");
     } finally { s.close(); }
+  }
+  {
+    let beat;
+    const s = await serveStub(async () => new Response(new ReadableStream({
+      start(c) { beat = setInterval(() => c.enqueue(new TextEncoder().encode(": keepalive\n\n")), TIMEOUT_MS / 5); },
+      cancel() { clearInterval(beat); },
+    }), { headers: { "content-type": "text/event-stream" } }));
+    try {
+      const start = Date.now();
+      const outcome = await Promise.race([
+        post(s.url).then((r) => r.text()).then(() => "ended", () => "cut"),
+        sleep(TIMEOUT_MS * 10).then(() => "still open"),
+      ]);
+      eq(outcome, "cut", "a stuck stream sending keep-alives is cut");
+      check(Date.now() - start < TIMEOUT_MS * 3, "at the first deadline: keep-alives don't extend it");
+    } finally { clearInterval(beat); s.close(); }
   }
   {
     const s = await serveStub(async () => new Response(new ReadableStream({
