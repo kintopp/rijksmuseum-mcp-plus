@@ -62,7 +62,7 @@
     "expect": [
       "Bieruma Oosting",
       "Pennink",
-      "Vos"
+      "Maria Vos\\b"
     ],
     "probes": [
       {
@@ -78,7 +78,7 @@
     "tier": "medium",
     "prompt": "Govert Flinck's \"Isaac Blessing Jacob\" (SK-A-110) has passed through the conservation studio many times. Pull its technical examination record: which examination methods were used, when, and by whom? Summarise how the methods changed from the earliest X-rays to the recent campaigns.",
     "expect": [
-      "1930",
+      "\\b1930\\b[\\s\\S]{0,80}(X-?ray|radiograph)|(X-?ray|radiograph)[\\s\\S]{0,80}\\b1930\\b",
       "infra-?red",
       "X-?ray|radiograph"
     ],
