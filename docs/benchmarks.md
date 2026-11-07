@@ -55,11 +55,11 @@ node scripts/bench/mcp-bench.mjs --dry-run              # print the sessions wit
 
 **Cache warm-up.** Before the measured sessions, the benchmark sends one trivial question per arm ("Reply with just: ok"). This loads that arm's instructions and tool descriptions into Claude's cache, the way an earlier question would in normal use. Every measured session then starts from the same state, so the comparison reflects how each arm answers rather than which session happened to run first. The warm-up's cost is reported on its own line as the **entry cost**: what the first question of a session pays on top of the per-question figures.
 
-Each session runs in an empty scratch directory with the user's own settings, hooks, plugins and MCP servers switched off, so the arms differ only in the tools they're given. Output goes to `scripts/bench/results/<timestamp>/`: one JSON file per session (the full result, including the answer text and which tools were called) and a `summary.csv`. The console shows one line per session followed by per-question averages and arm-to-arm ratios:
+Each session runs in an empty scratch directory with the user's own settings, hooks, plugins and MCP servers switched off, so the arms differ only in the tools they're given. Claude Code's tool search is not among those tools, so the mcp arms read every tool description up front. A session that times out or ends with an error still counts as a run in *passed*; the console gives the reason, and the session's cost is reported as unknown. Output goes to `scripts/bench/results/<timestamp>/`: one JSON file per session (the full result, including the answer text and which tools were called) and a `summary.csv`. The console shows one line per session followed by per-question averages and arm-to-arm ratios:
 
 ```
   women-artists / mcp / sonnet / run 1 ... 67,740 tokens, $0.025, 2 turns, 1 tool calls, 9s, expect ok
-  women-artists / baseline / sonnet / run 1 ... 237,540 tokens, $0.298, 42 turns, 41 tool calls, 83s, expect FAIL (missing /Pennink/, /Vos/)
+  women-artists / baseline / sonnet / run 1 ... 237,540 tokens, $0.298, 42 turns, 41 tool calls, 83s, expect FAIL (missing /Pennink/, /Maria Vos\b/)
 ```
 
 ### The questions
@@ -71,8 +71,8 @@ The questions live in [`scripts/bench/prompts.json`](../scripts/bench/prompts.js
 | `milkmaid-id` | simple | Object number of Vermeer's *The Milkmaid* | `SK-A-2344` |
 | `nightwatch-dims` | simple | Recorded dimensions of *The Night Watch* | 379.5 × 453.5 cm |
 | `avercamp-skaters` | medium | Avercamp's winter landscape with skaters: object number and Dutch title | `SK-A-1718` |
-| `women-artists` | medium | The three most prolific women artists in the collection | Bieruma Oosting, Pennink-Boelen, Vos |
-| `flinck-examinations` | medium | Technical examination record of Flinck's *Isaac Blessing Jacob* (former research scenario 34) | 1930, infrared, X-ray |
+| `women-artists` | medium | The three most prolific women artists in the collection | Bieruma Oosting, Pennink-Boelen, Maria Vos |
+| `flinck-examinations` | medium | Technical examination record of Flinck's *Isaac Blessing Jacob* (former research scenario 34) | 1930 next to the X-ray mention, infrared, X-ray |
 | `wartime-provenance` | complex | Works confiscated or restituted 1933–1945, with gaps (former research scenario 23) | confiscation, restitution, a matching object number |
 | `rembrandt-acquisition` | complex | How the Rembrandt collection was acquired (former research scenario 8) | bequest, purchase, Rembrandt object numbers |
 
@@ -123,13 +123,15 @@ node scripts/bench/footprint.mjs --json     # machine-readable output
 
 | Part | Tokens | When a model reads it |
 |---|---|---|
-| Full tool descriptions (17 tools) | 30,630 | Up front, in apps that load all tools at once (such as Claude Code) |
-| Tool names and one-line summaries | 487 | Up front, in apps that load tools on demand (such as claude.ai) |
+| Full tool descriptions (17 tools) | 30,630 | Up front, in apps that load all tools at once (and in this benchmark) |
+| Tool names and one-line summaries | 487 | Up front, in apps that load tools on demand (such as claude.ai, or Claude Code with tool search) |
 | Largest single tool (`search_artwork`) | 8,766 | When the tool is first needed, in on-demand apps |
 | Typical tool response | 240–3,223 | After each call (an object's full details ≈ 1,900–3,200; a semantic search ≈ 2,800) |
 | Skill description | 287 | Always, once the skill is installed |
 | Skill body | 2,860 | When Claude decides the skill is relevant |
 | Skill reference files | 792–7,103 each | Only when a reference is opened |
+
+The tool figures include the fixed instructions the API adds whenever a request carries tools, so the per-tool counts each contain that overhead once.
 
 The full tool descriptions account for almost all of the entry cost seen in the benchmark. The skill body is now small; most of the mcp+skill arm's remaining overhead is Claude Code's listing of its built-in skills (see *Caveats*). Individual responses, by contrast, are small; the expensive conversations are the ones that need many calls.
 
@@ -138,5 +140,5 @@ The full tool descriptions account for almost all of the entry cost seen in the 
 - **Per-question costs assume a warm cache.** Claude caches what it has already read for up to an hour. The cache warm-up makes every measured session start warm, so the per-question figures describe an ongoing session; the first question of a new session also pays the entry cost. Running two benchmarks at the same time lets them share a cache, which makes the second one's entry cost look too low. With `--cold`, whichever session runs first in each arm pays the entry cost instead, and single runs can differ several-fold; compare averages over three or more runs.
 - **The baseline knows famous facts.** For well-known works Claude may answer from memory without searching at all, so the baseline wins the simplest questions. This is a real effect, not a flaw in the benchmark, but it means the server's value shows mainly in the medium and complex questions.
 - **The skill arm carries extra overhead.** Claude Code can't load our skill without also listing its own built-in skills, which adds a few thousand (mostly cached) tokens per step to the mcp+skill arm only. The skill also loads only when Claude decides it is relevant, which in practice means the harder research questions.
-- **This measures Claude Code, not claude.ai.** The sessions connect to the server directly. Chat apps such as claude.ai or Claude Desktop add their own instructions, and claude.ai loads full tool descriptions only when they're needed, so its entry cost is likely lower. Absolute numbers there will differ; the comparison between arms should hold. The [server footprint](#server-footprint) gives the app-independent part.
+- **This measures Claude Code, not claude.ai.** The sessions connect to the server directly. Chat apps such as claude.ai or Claude Desktop add their own instructions, and claude.ai loads full tool descriptions only when they're needed, so its entry cost is likely lower. Absolute numbers there will differ; the comparison between arms should hold. The [server footprint](#server-footprint) gives the app-independent part. Claude Code also defers tool descriptions by default (tool search); the benchmark leaves tool search out of each arm's tools, so its mcp arms pay the full entry cost.
 - **Results are a snapshot.** Model releases, tool-description changes and data updates all move the numbers, which is why each results table is dated and names the model and server version.
