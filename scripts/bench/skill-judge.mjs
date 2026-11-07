@@ -59,8 +59,8 @@ async function main() {
   const questions = Object.fromEntries(JSON.parse(readFileSync(new URL("./open-prompts.json", import.meta.url), "utf8")).map((p) => [p.id, p.prompt]));
   const sessions = opts.dirs.flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".json") && f.includes("__"))
     .map((f) => JSON.parse(readFileSync(path.join(d, f), "utf8"))));
-  const failed = sessions.filter((s) => s.failed);
-  const byPrompt = Object.groupBy(sessions.filter((s) => !s.failed), (s) => s.prompt);
+  const { failed = [], answered = [] } = Object.groupBy(sessions, (s) => (s.failed ? "failed" : "answered"));
+  const byPrompt = Object.groupBy(answered, (s) => s.prompt);
   const DIMS = ["breadth", "originality", "grounding", "critical", "overall"];
 
   const scored = [];
@@ -82,8 +82,9 @@ async function main() {
   console.log(["arm", "n", "failed", ...cols].join("\t"));
   for (const arm of arms) {
     const rows = scored.filter((s) => s.arm === arm);
-    const lost = failed.filter((s) => s.arm === arm).length;
-    console.log([arm, rows.length + lost, lost, ...cols.map((c) => rows.length ? mean(rows.map((r) => r[c])).toFixed(c === "cost" ? 3 : 2) : "-")].join("\t"));
+    const cell = (c) => (rows.length ? mean(rows.map((r) => r[c])).toFixed(c === "cost" ? 3 : 2) : "-");
+    const n = sessions.filter((s) => s.arm === arm).length;
+    console.log([arm, n, n - rows.length, ...cols.map(cell)].join("\t"));
   }
   for (const s of failed) console.log(`  failed: ${s.prompt} / ${s.arm} / run ${s.run}: ${s.failed}`);
   console.log("\nper prompt (overall / originality):");

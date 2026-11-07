@@ -72,7 +72,7 @@ The questions live in [`scripts/bench/prompts.json`](../scripts/bench/prompts.js
 | `nightwatch-dims` | simple | Recorded dimensions of *The Night Watch* | 379.5 × 453.5 cm |
 | `avercamp-skaters` | medium | Avercamp's winter landscape with skaters: object number and Dutch title | `SK-A-1718` |
 | `women-artists` | medium | The three most prolific women artists in the collection | Bieruma Oosting, Pennink-Boelen, Maria Vos |
-| `flinck-examinations` | medium | Technical examination record of Flinck's *Isaac Blessing Jacob* (former research scenario 34) | 1930 next to the X-ray mention, infrared, X-ray |
+| `flinck-examinations` | medium | Technical examination record of Flinck's *Isaac Blessing Jacob* (former research scenario 34) | 1930 next to an X-ray mention, infrared |
 | `wartime-provenance` | complex | Works confiscated or restituted 1933–1945, with gaps (former research scenario 23) | confiscation, restitution, a matching object number |
 | `rembrandt-acquisition` | complex | How the Rembrandt collection was acquired (former research scenario 8) | bequest, purchase, Rembrandt object numbers |
 

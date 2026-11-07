@@ -108,7 +108,8 @@ function runClaude(args, cwd, timeoutSec) {
     const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); }, timeoutSec * 1000);
     child.on("close", (code, signal) => {
       clearTimeout(timer);
-      resolve({ code, signal, timedOut, stdout, stderr });
+      const failure = timedOut ? `timeout after ${timeoutSec}s` : `error (exit ${code}${signal ? `, ${signal}` : ""})`;
+      resolve({ failure, stdout, stderr });
     });
   });
 }
@@ -219,14 +220,13 @@ async function main() {
 
   const rows = [];
   await pool(jobs, opts.concurrency, async (job) => {
-    const { code, signal, timedOut, stdout, stderr, parsed } = await runJob(job);
+    const { failure, stdout, stderr, parsed } = await runJob(job);
     const base = `${job.prompt.id}__${job.arm}__${job.model}__run${job.run}`;
     if (!parsed) {
       // No result event, so the session's cost is unknown, not zero.
-      const reason = timedOut ? `timeout after ${opts.timeoutSec}s` : `error (exit ${code}${signal ? `, ${signal}` : ""})`;
-      writeFileSync(path.join(outDir, `${base}.err.txt`), `${reason}\n${stderr}\n${stdout}`);
-      console.log(`  ${jobLabel(job)} ... ${reason.toUpperCase()}, cost unknown (see ${base}.err.txt)`);
-      rows.push({ job, s: null, passed: false, verdict: reason });
+      writeFileSync(path.join(outDir, `${base}.err.txt`), `${failure}\n${stderr}\n${stdout}`);
+      console.log(`  ${jobLabel(job)} ... ${failure.toUpperCase()}, cost unknown (see ${base}.err.txt)`);
+      rows.push({ job, s: null, passed: false, verdict: failure });
       return;
     }
     const { result, toolCalls } = parsed;
@@ -259,13 +259,16 @@ async function main() {
         const all = rows.filter((r) => r.job.prompt.id === prompt.id && r.job.model === model && r.job.arm === arm);
         if (!all.length) continue;
         const ok = all.filter((r) => r.s);
-        const passed = `passed ${all.filter((r) => r.passed).length}/${all.length}`;
-        const failed = all.length - ok.length ? `, ${all.length - ok.length} failed (${all.filter((r) => !r.s).map((r) => r.verdict).join("; ")})` : "";
-        if (!ok.length) { console.log(`  ${prompt.id} / ${arm} / ${model} ... no completed sessions, ${passed}${failed}`); continue; }
-        const avg = (k) => mean(ok.map((r) => r.s[k]));
-        byArm[arm] = { tokens: avg("tokens"), cost: avg("cost") };
-        console.log(`  ${prompt.id} / ${arm} / ${model} ... ${fmtInt(Math.round(byArm[arm].tokens))} tokens, ${fmtUsd(byArm[arm].cost)}, ` +
-          `${avg("turns").toFixed(1)} turns, ${Math.round(avg("seconds"))}s, ${passed}${failed}`);
+        const bad = all.filter((r) => !r.s);
+        let line = "no completed sessions";
+        if (ok.length) {
+          const avg = (k) => mean(ok.map((r) => r.s[k]));
+          byArm[arm] = { tokens: avg("tokens"), cost: avg("cost") };
+          line = `${fmtInt(Math.round(byArm[arm].tokens))} tokens, ${fmtUsd(byArm[arm].cost)}, ${avg("turns").toFixed(1)} turns, ${Math.round(avg("seconds"))}s`;
+        }
+        line += `, passed ${all.filter((r) => r.passed).length}/${all.length}`;
+        if (bad.length) line += `, ${bad.length} failed (${bad.map((r) => r.verdict).join("; ")})`;
+        console.log(`  ${prompt.id} / ${arm} / ${model} ... ${line}`);
       }
       for (const a of opts.arms) {
         for (const b of ARMS[a].compareTo) {

@@ -75,7 +75,11 @@ function runClaude(args, cwd, timeoutSec) {
     let stdout = "", timedOut = false;
     child.stdout.on("data", (d) => { stdout += d; });
     const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); }, timeoutSec * 1000);
-    child.on("close", (code, signal) => { clearTimeout(timer); resolve({ stdout, code, signal, timedOut }); });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      const failure = timedOut ? `timeout after ${timeoutSec}s` : `error (exit ${code}${signal ? `, ${signal}` : ""})`;
+      resolve({ failure, stdout });
+    });
   });
 }
 
@@ -135,15 +139,14 @@ async function main() {
 
   let total = 0, unknown = 0;
   await pool(jobs, opts.concurrency, async ({ p, arm, run }) => {
-    const { stdout, code, signal, timedOut } = await runClaude(claudeArgs(p.prompt, setups[arm], opts), setups[arm].cwd, opts.timeoutSec);
+    const { failure, stdout } = await runClaude(claudeArgs(p.prompt, setups[arm], opts), setups[arm].cwd, opts.timeoutSec);
     const parsed = parseStream(stdout);
     const base = `${p.id}__${arm}__run${run}`;
     if (!parsed) {
       // Kept on disk so skill-judge counts it against its arm; with no result event the cost is unknown.
-      const failed = timedOut ? `timeout after ${opts.timeoutSec}s` : `error (exit ${code}${signal ? `, ${signal}` : ""})`;
       unknown++;
-      writeFileSync(path.join(outDir, `${base}.json`), JSON.stringify({ prompt: p.id, arm, run, cost: null, failed }, null, 2));
-      console.log(`  ${base} ... ${failed.toUpperCase()}, cost unknown`);
+      writeFileSync(path.join(outDir, `${base}.json`), JSON.stringify({ prompt: p.id, arm, run, cost: null, failed: failure }, null, 2));
+      console.log(`  ${base} ... ${failure.toUpperCase()}, cost unknown`);
       return;
     }
     const answer = parsed.result.result ?? "";

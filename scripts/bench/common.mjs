@@ -1,4 +1,4 @@
-// Shared by mcp-bench.mjs and footprint.mjs.
+// Shared by the bench scripts.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
