@@ -59,7 +59,8 @@ async function main() {
   const questions = Object.fromEntries(JSON.parse(readFileSync(new URL("./open-prompts.json", import.meta.url), "utf8")).map((p) => [p.id, p.prompt]));
   const sessions = opts.dirs.flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".json") && f.includes("__"))
     .map((f) => JSON.parse(readFileSync(path.join(d, f), "utf8"))));
-  const byPrompt = Object.groupBy(sessions, (s) => s.prompt);
+  const failed = sessions.filter((s) => s.failed);
+  const byPrompt = Object.groupBy(sessions.filter((s) => !s.failed), (s) => s.prompt);
   const DIMS = ["breadth", "originality", "grounding", "critical", "overall"];
 
   const scored = [];
@@ -75,17 +76,21 @@ async function main() {
 
   writeFileSync(path.join(opts.dirs.at(-1), "judged.json"), JSON.stringify(scored, null, 2));
   const cols = [...DIMS, "calls", "distinctSignatures", "objectNumbersCited", "cost"];
-  const arms = [...new Set(scored.map((s) => s.arm))];
+  const arms = [...new Set(sessions.map((s) => s.arm))];
   const mean = (xs) => xs.reduce((x, y) => x + y, 0) / xs.length;
-  console.log(["arm", "n", ...cols].join("\t"));
+  // Scores cover answered sessions only; "failed" shows what each arm lost to timeouts and errors.
+  console.log(["arm", "n", "failed", ...cols].join("\t"));
   for (const arm of arms) {
     const rows = scored.filter((s) => s.arm === arm);
-    console.log([arm, rows.length, ...cols.map((c) => mean(rows.map((r) => r[c])).toFixed(c === "cost" ? 3 : 2))].join("\t"));
+    const lost = failed.filter((s) => s.arm === arm).length;
+    console.log([arm, rows.length + lost, lost, ...cols.map((c) => rows.length ? mean(rows.map((r) => r[c])).toFixed(c === "cost" ? 3 : 2) : "-")].join("\t"));
   }
+  for (const s of failed) console.log(`  failed: ${s.prompt} / ${s.arm} / run ${s.run}: ${s.failed}`);
   console.log("\nper prompt (overall / originality):");
   for (const pid of Object.keys(byPrompt)) {
     console.log(`  ${pid}\t` + arms.map((arm) => {
       const rows = scored.filter((s) => s.prompt === pid && s.arm === arm);
+      if (!rows.length) return `${arm} -`;
       return `${arm} ${mean(rows.map((r) => r.overall)).toFixed(1)}/${mean(rows.map((r) => r.originality)).toFixed(1)}`;
     }).join("\t"));
   }

@@ -72,10 +72,10 @@ function claudeArgs(prompt, setup, opts) {
 function runClaude(args, cwd, timeoutSec) {
   return new Promise((resolve) => {
     const child = spawn("claude", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
+    let stdout = "", timedOut = false;
     child.stdout.on("data", (d) => { stdout += d; });
-    const timer = setTimeout(() => child.kill("SIGTERM"), timeoutSec * 1000);
-    child.on("close", () => { clearTimeout(timer); resolve(stdout); });
+    const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); }, timeoutSec * 1000);
+    child.on("close", (code, signal) => { clearTimeout(timer); resolve({ stdout, code, signal, timedOut }); });
   });
 }
 
@@ -133,11 +133,19 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   console.log(`${jobs.length} sessions (${arms.map((a) => a.name).join(", ")}) → ${path.relative(process.cwd(), outDir)}`);
 
-  let total = 0;
+  let total = 0, unknown = 0;
   await pool(jobs, opts.concurrency, async ({ p, arm, run }) => {
-    const parsed = parseStream(await runClaude(claudeArgs(p.prompt, setups[arm], opts), setups[arm].cwd, opts.timeoutSec));
+    const { stdout, code, signal, timedOut } = await runClaude(claudeArgs(p.prompt, setups[arm], opts), setups[arm].cwd, opts.timeoutSec);
+    const parsed = parseStream(stdout);
     const base = `${p.id}__${arm}__run${run}`;
-    if (!parsed) { console.log(`  ${base} ... ERROR`); return; }
+    if (!parsed) {
+      // Kept on disk so skill-judge counts it against its arm; with no result event the cost is unknown.
+      const failed = timedOut ? `timeout after ${opts.timeoutSec}s` : `error (exit ${code}${signal ? `, ${signal}` : ""})`;
+      unknown++;
+      writeFileSync(path.join(outDir, `${base}.json`), JSON.stringify({ prompt: p.id, arm, run, cost: null, failed }, null, 2));
+      console.log(`  ${base} ... ${failed.toUpperCase()}, cost unknown`);
+      return;
+    }
     const answer = parsed.result.result ?? "";
     const m = metrics(parsed.calls, answer);
     total += parsed.result.total_cost_usd ?? 0;
@@ -147,7 +155,7 @@ async function main() {
     }, null, 2));
     console.log(`  ${base} ... $${(parsed.result.total_cost_usd ?? 0).toFixed(3)}, ${m.calls} calls, ${m.distinctSignatures} signatures, ${m.objectNumbersCited} objects`);
   });
-  console.log(`Total $${total.toFixed(2)}`);
+  console.log(`Total $${total.toFixed(2)}${unknown ? `, plus ${unknown} failed session(s) with unknown cost` : ""}`);
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });
