@@ -21,7 +21,7 @@
  *   --sample-size N      Records to sample (default: 200)
  *   --db PATH            Vocab DB path (default: data/vocabulary.db)
  *   --output PATH        JSON output (default: data/audit-<mode>-<YYYY-MM-DD>.json)
- *   --model MODEL        Anthropic model (default: claude-sonnet-4-20250514)
+ *   --model MODEL        Anthropic model (default: claude-sonnet-4-6; field-correction: claude-haiku-4-5-20251001)
  *   --resume BATCH_ID    Poll existing batch instead of creating new one
  *   --dry-run            Build prompts, write to output, don't submit
  *   --stratify           Mode 1 only: stratify by parse_method + century
@@ -2727,11 +2727,8 @@ function printPositionEnrichmentReport(report) {
 function estimateCost(results) {
   // Batch API pricing (50% of standard)
   const RATES = {
-    "claude-sonnet-4-20250514": { input: 1.50, output: 7.50 },
     "claude-sonnet-4-6": { input: 1.50, output: 7.50 },
-    "claude-sonnet-4-6-20250514": { input: 1.50, output: 7.50 },
-    "claude-opus-4-6": { input: 7.50, output: 37.50 },
-    "claude-opus-4-20250514": { input: 7.50, output: 37.50 },
+    "claude-opus-4-6": { input: 2.50, output: 12.50 },
     "claude-haiku-4-5-20251001": { input: 0.50, output: 2.50 },
   };
   const rate = RATES[model] || { input: 1.50, output: 7.50 };

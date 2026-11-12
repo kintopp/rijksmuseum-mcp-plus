@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires the rijksmuseum-mcp+ MCP server and network access.
 metadata:
   version: "0.96.0"
-  last_updated: "2026-11-06"
+  last_updated: "2026-11-12"
 ---
 
 # Rijksmuseum MCP+ Research Skill

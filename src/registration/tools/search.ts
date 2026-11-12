@@ -86,7 +86,7 @@ export function registerSearchTools(
         "At least one filter is required. There is no full-text search across all metadata. " +
         "For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), subject has the highest recall — it searches the large majority of the collection via structured Iconclass vocabulary. " +
         "Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. " +
-        "For broader concept discovery beyond structured vocabulary, use semantic_search — but combine it with search_artwork(type: 'painting', …) for painting queries since paintings are underrepresented there.\n\n" +
+        "For broader concept discovery beyond structured vocabulary, use semantic_search.\n\n" +
         "Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). " +
         "If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. " +
         "Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer for the user)." +
@@ -166,7 +166,7 @@ export function registerSearchTools(
           ),
         hasProvenance: z.preprocess(stripNullCoerceBool, z.boolean().optional())
           .describe(
-            "If true, only return artworks that have parsed provenance records — roughly 48K, about 6% of the collection; if false, only artworks without them. " +
+            "If true, only return artworks that have parsed provenance records — about 6% of the collection; if false, only artworks without them. " +
             "Combine with other filters for cross-domain queries (e.g. type='painting' + hasProvenance=true). " +
             "Cannot be used alone — combine with at least one other filter."
           ),
@@ -579,10 +579,8 @@ export function registerSearchTools(
         annotations: ANN_READ_CLOSED,
         description:
           "Find persons by gender, birth/death year or place, or profession. " +
-          "Returns vocab IDs. " +
           "Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, " +
           "or search_artwork({depictedPerson: <name>}) for works depicting them. " +
-          "Two-step pattern: search_persons → search_artwork. " +
           "Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.\n\n" +
           "Not for free-text concept queries — use semantic_search. " +
           "Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.\n\n" +

@@ -29,7 +29,7 @@ Provenance research moves through three levels of detail:
 
 **Cross-domain queries**: `hasProvenance: true` on `search_artwork` or `collection_stats` bridges the two systems — e.g. `collection_stats(dimension="type", hasProvenance=true)`.
 
-**Enrichment transparency:** `categoryMethod` and `positionMethod` are queryable input filters on `search_provenance`, not just output fields. When results contain LLM-enriched records, the response includes a review URL — **always show it to the user** (see [Enrichment Provenance](#enrichment-provenance)).
+**Enrichment transparency:** `categoryMethod` and `positionMethod` are queryable input filters on `search_provenance`, not just output fields. When results contain LLM-enriched records, the response includes a review URL for the user (see [Enrichment Provenance](#enrichment-provenance)).
 
 **Pagination**: when `totalArtworks` exceeds the page size, paginate with `offset` — advance it by the `maxResults` you used each call (caller-selectable 1–50, default 1), looping until `offset ≥ totalArtworks`.
 
@@ -182,35 +182,13 @@ determined:
 - `parseMethod`: how the event was parsed (`peg`, `regex_fallback`, `cross_ref`, `credit_line`, `llm_structural`)
 - `categoryMethod`: how the transfer type/category was determined (`type_mapping` = parser, `rule:transfer_is_ownership` = validated rule, `llm_enrichment` = LLM)
 - `positionMethod` (on parties): how the party position was determined (`role_mapping` = parser from party role, `type_mapping` = parser from event type, `llm_enrichment` = LLM, `llm_disambiguation` = LLM-decomposed merged text, `rule:missing_receiver` = deterministic tail-party backfill)
+- `correctionMethod`: LLM structural corrections (`llm_structural:…` — location fixes, event reclassification, event splitting)
 - `enrichmentReasoning`: the LLM's reasoning for any non-deterministic decision
 
 When results contain LLM-enriched records, `search_provenance` provides a URL
 to an enrichment review page (at `${PUBLIC_URL}/enrichment-review/:uuid`,
 TTL-cached for 30 minutes) showing the full methodology and reasoning for
-each decision. **Always show this URL to the user.**
-
-### Two complementary audit layers
-
-The fields above, plus `correctionMethod` (`llm_structural:…`, for LLM structural
-corrections), are **event-level** audit metadata — they record how
-each parsed provenance event was produced.
-
-The vocabulary DB also carries an **entity-level** 3-tier audit vocabulary
-that runs alongside this:
-
-| Tier | Meaning |
-|------|---------|
-| `deterministic` | Source-derived without inference (e.g. exact-match alt-name from authority files) |
-| `inferred` | Algorithmically inferred (e.g. fuzzy-match alt-name not yet reviewed) |
-| `manual` | Human-reviewed (e.g. fuzzy-match alt-name confirmed by reviewer) |
-
-This 3-tier vocabulary appears on `entity_alt_names.tier`, on geo-enrichment
-audit columns (`coord_method` / `placetype_source`), and on the entity-level
-audit twins of provenance enrichment. Don't confuse them — *event*-level
-methods (`peg` / `regex_fallback` / `cross_ref` / `credit_line` /
-`llm_structural` / `llm_enrichment`) describe the parsed event provenance,
-while the 3-tier vocabulary describes the provenance of supporting entity
-data (places, alt-names, external IDs) that the event references.
+each decision. Pass it on to the user as a link.
 
 ### Querying by enrichment method
 

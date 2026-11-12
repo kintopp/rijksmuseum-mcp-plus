@@ -343,7 +343,7 @@ export function registerProvenanceTools(
           "Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. " +
           "Only the parsed provenance fields exposed below are searchable. " +
           "At least one filter is required.\n\n" +
-          "creditLineQuery — unstructured fallback: only ~48K artworks have parsed provenance, but many more carry a credit-line field " +
+          "creditLineQuery — unstructured fallback: only about 6% of artworks have parsed provenance, but many more carry a credit-line field " +
           "(acquisition/funding statements). It is a standalone mode for artworks lacking parsed provenance — a free-text search over credit lines that " +
           "ignores all other filters and returns matches in creditLineResults (not results). Credit lines record the museum's own acquisition, not prior ownership, " +
           "so present those results as coming from unstructured credit-line text, not parsed provenance.",

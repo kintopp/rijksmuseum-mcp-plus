@@ -2,7 +2,7 @@
 
 How the `rijksmuseum-mcp+` server describes itself to MCP clients.
 
-The block below is the production text. Without `gemma.db`, the search-modes sentence begins "Three search modes: search_artwork for structured filters, semantic_search for free-text concepts that resist structured metadata, find_similar …".
+The block below is the production text. Without `gemma.db`, the semantic_search sentence after the free-text corpora is dropped and the search-modes sentence names only search_artwork and find_similar.
 
 ## Server Description
 
@@ -36,13 +36,13 @@ Structured filter search — artworks matching ALL given filters. Filters cover 
 
 Ranking: relevance (BM25) when text search (description, title, etc.) or geographic proximity is used; otherwise importance (image availability, curatorial attention, metadata richness). For concept-ranked results, use semantic_search.
 
-At least one filter is required. There is no full-text search across all metadata. For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), subject has the highest recall — it searches the large majority of the collection via structured Iconclass vocabulary. Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. For broader concept discovery beyond structured vocabulary, use semantic_search — but combine it with search_artwork(type: 'painting', …) for painting queries since paintings are underrepresented there.
+At least one filter is required. There is no full-text search across all metadata. For concept or thematic searches (e.g. 'winter landscape', 'smell', 'crucifixion'), subject has the highest recall — it searches the large majority of the collection via structured Iconclass vocabulary. Use description for cataloguer observations (compositional details, specific motifs); use curatorialNarrative for curatorial interpretation and art-historical context. These three corpora can return complementary results. For broader concept discovery beyond structured vocabulary, use semantic_search.
 
 Array values are AND-combined (e.g. subject: ['landscape', 'seascape'] finds artworks with both). If many results share an object-number prefix (e.g. multiple folios of one sketchbook), a `warnings` note flags it; narrow with type/material filters or treat the shared prefix as the unit. Each result carries an objectNumber for follow-up calls to get_artwork_details (full metadata) or get_artwork_image (deep-zoom viewer for the user). Parameters combine freely, with one exception: proximity search overrides depictedPlace/productionPlace (see nearPlace). Vocabulary labels are bilingual (English and Dutch); try the Dutch term if English returns no results (e.g. 'fotograaf' instead of 'photographer'). For proximity search, use nearPlace with a place name, or nearLat/nearLon for arbitrary locations. For acquisition channel / donor analysis (gifts, bequests, fund names like 'Vereniging Rembrandt'), use search_provenance.
 
 ### 2. `search_persons`
 
-Find persons by gender, birth/death year or place, or profession. Returns vocab IDs. Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, or search_artwork({depictedPerson: <name>}) for works depicting them. Two-step pattern: search_persons → search_artwork. Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.
+Find persons by gender, birth/death year or place, or profession. Returns vocab IDs to feed into search_artwork({creator: <vocabId>}) for works by them, or search_artwork({depictedPerson: <name>}) for works depicting them. Examples: 'female impressionist painters born after 1850' or 'Dutch painters who died in Italy'.
 
 Not for free-text concept queries — use semantic_search. Not for filter-based artwork search by a known creator name — use search_artwork({creator: <name>}) directly.
 
@@ -92,7 +92,7 @@ The response includes the active viewUUID (if any) for follow-up navigate_viewer
 
 Zooms/pans an already-open viewer to a region. Steer the user's view to a detail. Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image.
 
-In most cases you do NOT need this tool: inspect_artwork_image already auto-zooms the open viewer to whatever region it inspects. Call navigate_viewer only to move the user's view WITHOUT fetching image bytes for your own analysis.
+Usually unnecessary: inspect_artwork_image already auto-zooms the open viewer to whatever region it inspects. Call navigate_viewer to move the user's view without fetching image bytes for your own analysis.
 
 By default, region coordinates are in full-image space (percentages or pixels of the original image), not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image will target the identical area in the viewer. Exception: when a command includes relativeTo, region is interpreted in that inspected crop's local coordinate space.
 
@@ -144,7 +144,7 @@ When results contain LLM-enriched records, the response ends with a REVIEW_URL o
 
 Use hasGap to find artworks with gaps in their provenance chain — red flags for wartime displacement or undocumented transfers. Only the parsed provenance fields exposed below are searchable. At least one filter is required.
 
-creditLineQuery — unstructured fallback: only ~48K artworks have parsed provenance, but many more carry a credit-line field (acquisition/funding statements). It is a standalone mode for artworks lacking parsed provenance — a free-text search over credit lines that ignores all other filters and returns matches in creditLineResults (not results). Credit lines record the museum's own acquisition, not prior ownership, so present those results as coming from unstructured credit-line text, not parsed provenance.
+creditLineQuery — unstructured fallback: only about 6% of artworks have parsed provenance, but many more carry a credit-line field (acquisition/funding statements). It is a standalone mode for artworks lacking parsed provenance — a free-text search over credit lines that ignores all other filters and returns matches in creditLineResults (not results). Credit lines record the museum's own acquisition, not prior ownership, so present those results as coming from unstructured credit-line text, not parsed provenance.
 
 ### 16. `search_inscriptions`
 

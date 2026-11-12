@@ -541,8 +541,8 @@ export function registerViewerTools(
         "Steer the user's view to a detail. " +
         "Requires a viewUUID from a prior get_artwork_image call (the viewer must be open). " +
         "Not for opening the viewer — use get_artwork_image. Not for visual analysis — use inspect_artwork_image.\n\n" +
-        "In most cases you do NOT need this tool: inspect_artwork_image already auto-zooms the open viewer to " +
-        "whatever region it inspects. Call navigate_viewer only to move the user's view WITHOUT fetching image " +
+        "Usually unnecessary: inspect_artwork_image already auto-zooms the open viewer to " +
+        "whatever region it inspects. Call navigate_viewer to move the user's view without fetching image " +
         "bytes for your own analysis.\n\n" +
         "By default, region coordinates are in full-image space (percentages or pixels of the original image), " +
         "not relative to the current viewport. The same pct:x,y,w,h used in inspect_artwork_image " +
