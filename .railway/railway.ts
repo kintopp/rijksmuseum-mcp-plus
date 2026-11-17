@@ -13,7 +13,7 @@ export default defineRailway(() => {
     healthcheck: "/health",
     healthcheckTimeout: 360,
     replicas: { "europe-west4-drams3a": 1 },
-    deploy: { limitOverride: { containers: { cpu: 24, memoryBytes: 5000000000 } }, restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 3 },
+    deploy: { limitOverride: { containers: { cpu: 24, memoryBytes: 5000000000 } }, restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 3, sleepApplication: true },
     volumeMounts: { "/data": rijksmuseumMcpPlusVolume },
   });
 
