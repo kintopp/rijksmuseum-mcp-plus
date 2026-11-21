@@ -1,0 +1,31 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "rijksmuseum",
+  "version": "0.96.0",
+  "description": "Search the Rijksmuseum's collection of Dutch art, crafts and history by metadata, iconography and provenance, by meaning, by describing what an image shows, or by similarity to another work, and view high-resolution images. Includes a research guidance skill.",
+  "author": {
+    "name": "University of Basel",
+    "url": "https://rise.unibas.ch/en/"
+  },
+  "homepage": "https://github.com/kintopp/rijksmuseum-mcp-plus",
+  "repository": "https://github.com/kintopp/rijksmuseum-mcp-plus",
+  "license": "MIT",
+  "keywords": [
+    "rijksmuseum",
+    "art-history",
+    "provenance",
+    "iconclass",
+    "digital-humanities"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Rijksmuseum MCP+",
+        "shortDescription": "Search the Rijksmuseum collection: art, provenance and images",
+        "developerName": "University of Basel",
+        "category": "Productivity",
+        "websiteURL": "https://github.com/kintopp/rijksmuseum-mcp-plus"
+      }
+    }
+  }
+}

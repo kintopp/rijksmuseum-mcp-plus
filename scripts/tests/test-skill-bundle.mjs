@@ -13,9 +13,16 @@
  *  - Skill folder renamed away from `name`, or a description over the 1024-char cap.
  *  - license or compatibility dropped. Their values are per-server choices, so only
  *    presence and the spec's length cap are checked.
+ *  - plugin/rijksmuseum/ (what a marketplace installs): skill copy or manifest
+ *    version stale (via --check above), a renamed plugin, connector key or URL, an
+ *    extra key on a server entry (the Agent Plugins schema rejects it), a wrong
+ *    $schema, a top-level bin/ (claude.ai refuses the plugin), or a lost display name.
+ *  - A hard-wrapped paragraph or list item in the skill's Markdown, which ChatGPT's
+ *    skill page shows as broken lines.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import { inflateRawSync } from "node:zlib";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -101,6 +108,46 @@ const metadata = lines.slice(metaStart + 1, metaEnd === -1 ? undefined : metaEnd
 check("metadata values are quoted strings", metadata.length > 0 && metadata.every((l) => /^ {2}[a-z_]+: ".*"$/.test(l)), metadata.join(" | "));
 check("metadata.version equals package.json", metadata.includes(`  version: "${pkg.version}"`), metadata.join(" | "));
 check("metadata.last_updated is a date", metadata.some((l) => /^ {2}last_updated: "\d{4}-\d{2}-\d{2}"$/.test(l)));
+
+// Hand-written, not read from the server: the connector key is what users see and
+// reconnect to, so changing it must be deliberate.
+const PLUGIN_DIR = join(ROOT, "plugin", "rijksmuseum");
+const SERVER_URL = "https://rijksmuseum-mcp-plus-production.up.railway.app/mcp";
+const DISPLAY_NAME = "Rijksmuseum MCP+";
+const readJson = (...p) => JSON.parse(readFileSync(join(PLUGIN_DIR, ...p), "utf8"));
+const claudeManifest = readJson(".claude-plugin", "plugin.json");
+const portableManifest = readJson("plugin.json");
+check("both plugin manifests are named rijksmuseum", claudeManifest.name === "rijksmuseum" && portableManifest.name === "rijksmuseum");
+check(`both plugin manifests show "${DISPLAY_NAME}"`, claudeManifest.displayName === DISPLAY_NAME && portableManifest.extensions?.["com.openai"]?.interface?.displayName === DISPLAY_NAME);
+check("plugin.json has the Agent Plugins schema", portableManifest.$schema === "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json");
+const claudeMcp = readJson(".mcp.json");
+const portableMcp = readJson("mcp.json");
+check(".mcp.json declares only the Rijksmuseum http server", isDeepStrictEqual(claudeMcp, { mcpServers: { Rijksmuseum: { type: "http", url: SERVER_URL } } }), JSON.stringify(claudeMcp));
+check("mcp.json declares the same server as streamable-http", portableMcp.$schema === "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json" && isDeepStrictEqual(portableMcp.mcpServers, { Rijksmuseum: { type: "streamable-http", url: SERVER_URL } }), JSON.stringify(portableMcp));
+check("the plugin has no top-level bin/", !existsSync(join(PLUGIN_DIR, "bin")));
+const openaiYaml = readFileSync(join(SKILL_DIR, "agents", "openai.yaml"), "utf8");
+check(`agents/openai.yaml shows the skill as "${DISPLAY_NAME}"`, new RegExp(`^interface:\n {2}display_name: "${DISPLAY_NAME.replace("+", "\\+")}"$`, "m").test(openaiYaml));
+
+// A line continues the previous one unless either starts a block. Code fences are skipped.
+const BLOCK_START = /^(#|\||>|---\s*$|\s*([-*]|\d+\.) )/;
+for (const rel of sourceFiles.filter((f) => f.endsWith(".md"))) {
+  let text = readFileSync(join(SKILL_DIR, rel), "utf8");
+  if (rel === "SKILL.md") text = text.slice(text.indexOf("\n---\n", 4) + 5);
+  const wrapped = [];
+  let fence = false;
+  let prev = "";
+  for (const line of text.split("\n")) {
+    if (line.startsWith("```")) {
+      fence = !fence;
+      prev = "";
+      continue;
+    }
+    if (fence) continue;
+    if (line.trim() && prev.trim() && !BLOCK_START.test(line) && !/^(#|\||---\s*$)/.test(prev)) wrapped.push(line.slice(0, 60));
+    prev = line;
+  }
+  check(`${rel} has one line per paragraph and list item`, wrapped.length === 0, `unwrap: ${wrapped[0]}`);
+}
 
 if (failures > 0) {
   console.error(`skill-bundle: ${failures} check(s) failed`);

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "Rijksmuseum": {
+      "type": "http",
+      "url": "https://rijksmuseum-mcp-plus-production.up.railway.app/mcp"
+    }
+  }
+}

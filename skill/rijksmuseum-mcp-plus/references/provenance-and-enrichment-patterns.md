@@ -1,8 +1,6 @@
 # Provenance Data Model and Query Patterns
 
-Reference material for `search_provenance`. Consult this file when you need to
-interpret raw provenance text, understand the data model, or construct
-specialised query patterns.
+Reference material for `search_provenance`. Consult this file when you need to interpret raw provenance text, understand the data model, or construct specialised query patterns.
 
 ## Contents
 
@@ -37,8 +35,7 @@ Provenance research moves through three levels of detail:
 
 ## Provenance Text Format (AAM Standard)
 
-The Rijksmuseum's provenance text follows the **AAM (American Alliance of
-Museums) standard** for provenance notation:
+The Rijksmuseum's provenance text follows the **AAM (American Alliance of Museums) standard** for provenance notation:
 
 - **Semicolon-delimited events**: each ownership change is separated by `;` — `Owner A, City, date; Owner B, City, date`
 - **Chronological order**: earliest known owner first, current holder last
@@ -49,18 +46,13 @@ Museums) standard** for provenance notation:
 - **Cross-references**: `(see also SK-A-3137)` links to pendant or companion works that share provenance
 - **Life dates**: `Name (1650–1720)` — dates in parentheses after a name are birth–death years, not event dates
 
-The Rijksmuseum extends the AAM standard with Dutch-language keywords
-(`schenking` = gift, `bruikleen` = loan, `verwerving` = acquisition,
-`aangekocht` = purchased) and institutional conventions (`Inv.` = inventory
-reference, `L.` = Lugt collector mark number).
+The Rijksmuseum extends the AAM standard with Dutch-language keywords (`schenking` = gift, `bruikleen` = loan, `verwerving` = acquisition, `aangekocht` = purchased) and institutional conventions (`Inv.` = inventory reference, `L.` = Lugt collector mark number).
 
 ---
 
 ## Transfer Types (CMOA/PLOD-aligned Vocabulary)
 
-Transfer types follow the **CMOA Art Tracks thesaurus** (Carnegie Museum of
-Art, [github.com/cmoa/art-tracks](https://github.com/cmoa/art-tracks)),
-aligned with the **PLOD framework** (Art Institute of Chicago).
+Transfer types follow the **CMOA Art Tracks thesaurus** (Carnegie Museum of Art, [github.com/cmoa/art-tracks](https://github.com/cmoa/art-tracks)), aligned with the **PLOD framework** (Art Institute of Chicago).
 
 | Type | Category | Description |
 |------|----------|-------------|
@@ -84,8 +76,7 @@ aligned with the **PLOD framework** (Art Institute of Chicago).
 | `transfer` | ownership | Administrative or intra-organisational transfer (predominantly ownership; a handful of custody/ambiguous variants also exist) |
 | `unknown` | ambiguous | Parser could not classify (includes cross-references) |
 
-Extensions beyond CMOA: `recuperation` (physical recovery vs legal return),
-`collection` (AAM bare-name convention), `inventory` (attestation events).
+Extensions beyond CMOA: `recuperation` (physical recovery vs legal return), `collection` (AAM bare-name convention), `inventory` (attestation events).
 
 **Event flags:**
 
@@ -94,17 +85,13 @@ Extensions beyond CMOA: `recuperation` (physical recovery vs legal return),
 | `unsold: true` | `sale` | Auction lot was unsold, bought in, or withdrawn. No ownership transfer occurred. Filter these when analysing actual sales. |
 | `batchPrice: true` | any with price | The price is an en bloc / batch total for multiple artworks, not an individual price. **Always filter these when ranking or comparing prices** — they massively distort rankings (e.g. the single fl. 6,350,000 Mannheimer sale is attributed to several hundred individual objects). |
 
-**Inheritance granularity**: use `by_descent` for works inherited by named
-relatives, `widowhood` for widow/widower inheritance specifically, or
-`inheritance` for the generic case. To catch all inheritance-related transfers:
-`transferType: ["by_descent", "widowhood", "inheritance"]`.
+**Inheritance granularity**: use `by_descent` for works inherited by named relatives, `widowhood` for widow/widower inheritance specifically, or `inheritance` for the generic case. To catch all inheritance-related transfers: `transferType: ["by_descent", "widowhood", "inheritance"]`.
 
 ---
 
 ## Party Roles and Positions
 
-Each party in a provenance event has a **role** (what they did) and a
-**position** (their side of the transfer):
+Each party in a provenance event has a **role** (what they did) and a **position** (their side of the transfer):
 
 | Role | Position | Context |
 |------|----------|---------|
@@ -120,31 +107,17 @@ Each party in a provenance event has a **role** (what they did) and a
 | `consignor` | sender | Sale events (owner delivering work to auction/dealer) |
 | `dealer` / `intermediary` / `auctioneer` | agent | Facilitated without owning |
 
-The table above lists the canonical role values. LLM enrichment also introduces
-granular variants (`his widow`, `his son`, `his daughter`, `seller/consignor`,
-`dealer/intermediary`, etc.) — dozens of them, each with small counts. When
-filtering by role, note that `collection_stats`' `partyRole` filter is an exact
-match and misses these variants; a `party=` name search on `search_provenance`
-does not depend on role labels.
+The table above lists the canonical role values. LLM enrichment also introduces granular variants (`his widow`, `his son`, `his daughter`, `seller/consignor`, `dealer/intermediary`, etc.) — dozens of them, each with small counts. When filtering by role, note that `collection_stats`' `partyRole` filter is an exact match and misses these variants; a `party=` name search on `search_provenance` does not depend on role labels.
 
-Positions (`sender`/`receiver`/`agent`) are derived from roles via deterministic
-mapping, with LLM enrichment for ambiguous cases. The `positionMethod` field
-tracks how each party's position was determined: `role_mapping` (deterministic,
-from the party's role), `type_mapping` (deterministic, from the event's
-transfer type), `llm_enrichment` (LLM-classified), or `llm_disambiguation`
-(LLM-decomposed from merged party text).
+Positions (`sender`/`receiver`/`agent`) are derived from roles via deterministic mapping, with LLM enrichment for ambiguous cases. The `positionMethod` field tracks how each party's position was determined: `role_mapping` (deterministic, from the party's role), `type_mapping` (deterministic, from the event's transfer type), `llm_enrichment` (LLM-classified), or `llm_disambiguation` (LLM-decomposed from merged party text).
 
-Coverage spans tens of thousands of artworks with at least one parsed
-provenance event, and a larger pool of individual events and named parties
-(roughly one named party per event). Not all events have named parties — bare-name
-`collection` events and cross-references often lack structured party data.
+Coverage spans tens of thousands of artworks with at least one parsed provenance event, and a larger pool of individual events and named parties (roughly one named party per event). Not all events have named parties — bare-name `collection` events and cross-references often lack structured party data.
 
 ---
 
 ## Date Representation
 
-Dates use qualified single years with temporal bounds, similar to the **EDTF
-(Extended Date/Time Format)** approach:
+Dates use qualified single years with temporal bounds, similar to the **EDTF (Extended Date/Time Format)** approach:
 
 | Expression | `dateYear` | `dateQualifier` | Interpretation |
 |------------|-----------|-----------------|----------------|
@@ -160,24 +133,15 @@ Dates use qualified single years with temporal bounds, similar to the **EDTF
 
 ## Historical Currencies
 
-Prices are stored in their original historical currency — no inflation
-adjustment or cross-currency conversion is performed. Currency values observed
-in the data: `guilders`, `pounds`, `francs`, `livres`, `napoléons`, `louis_d_or`,
-`guineas`, `belgian_francs`, `deutschmarks`, `reichsmarks`, `swiss_francs`,
-`euros`, `dollars`, `yen`, `marks`. Pre-decimal notations (£.s.d, fl. X:Y:-) are
-converted to decimal equivalents of the base currency unit.
+Prices are stored in their original historical currency — no inflation adjustment or cross-currency conversion is performed. Currency values observed in the data: `guilders`, `pounds`, `francs`, `livres`, `napoléons`, `louis_d_or`, `guineas`, `belgian_francs`, `deutschmarks`, `reichsmarks`, `swiss_francs`, `euros`, `dollars`, `yen`, `marks`. Pre-decimal notations (£.s.d, fl. X:Y:-) are converted to decimal equivalents of the base currency unit.
 
-Note on batch prices: *en bloc* prices (a batch sold together, e.g. the
-entire Mannheimer collection for fl. 6,350,000) are attributed to every
-individual item in the batch. These events are flagged with `batchPrice: true`
-— always filter them out when ranking or comparing prices.
+Note on batch prices: *en bloc* prices (a batch sold together, e.g. the entire Mannheimer collection for fl. 6,350,000) are attributed to every individual item in the batch. These events are flagged with `batchPrice: true` — always filter them out when ranking or comparing prices.
 
 ---
 
 ## Enrichment Provenance
 
-Every record carries provenance-of-provenance metadata tracking how it was
-determined:
+Every record carries provenance-of-provenance metadata tracking how it was determined:
 
 - `parseMethod`: how the event was parsed (`peg`, `regex_fallback`, `cross_ref`, `credit_line`, `llm_structural`)
 - `categoryMethod`: how the transfer type/category was determined (`type_mapping` = parser, `rule:transfer_is_ownership` = validated rule, `llm_enrichment` = LLM)
@@ -185,15 +149,11 @@ determined:
 - `correctionMethod`: LLM structural corrections (`llm_structural:…` — location fixes, event reclassification, event splitting)
 - `enrichmentReasoning`: the LLM's reasoning for any non-deterministic decision
 
-When results contain LLM-enriched records, `search_provenance` provides a URL
-to an enrichment review page (at `${PUBLIC_URL}/enrichment-review/:uuid`,
-TTL-cached for 30 minutes) showing the full methodology and reasoning for
-each decision. Pass it on to the user as a link.
+When results contain LLM-enriched records, `search_provenance` provides a URL to an enrichment review page (at `${PUBLIC_URL}/enrichment-review/:uuid`, TTL-cached for 30 minutes) showing the full methodology and reasoning for each decision. Pass it on to the user as a link.
 
 ### Querying by enrichment method
 
-`categoryMethod` and `positionMethod` are input filters on `search_provenance`,
-not just output fields. Use them to audit LLM-mediated interpretations:
+`categoryMethod` and `positionMethod` are input filters on `search_provenance`, not just output fields. Use them to audit LLM-mediated interpretations:
 
 ```python
 search_provenance(categoryMethod="llm_enrichment", maxResults=10)
@@ -206,11 +166,7 @@ search_provenance(positionMethod="llm_disambiguation", maxResults=10)
 # → artworks where merged party text was decomposed by LLM (low hundreds of splits)
 ```
 
-Combining `party` with `positionMethod` enforces same-row matching: both
-filters must hold on the *same* party of the *same* event, not just somewhere
-in the artwork's chain. A query like `party="Bredius", positionMethod="llm_enrichment"`
-returns events where Bredius himself was llm-enriched, not events where some
-other party on the same event happened to be llm-enriched.
+Combining `party` with `positionMethod` enforces same-row matching: both filters must hold on the *same* party of the *same* event, not just somewhere in the artwork's chain. A query like `party="Bredius", positionMethod="llm_enrichment"` returns events where Bredius himself was llm-enriched, not events where some other party on the same event happened to be llm-enriched.
 
 For collection-wide distribution of methods:
 ```python
@@ -233,16 +189,13 @@ The `parseMethod` field records how each provenance record was processed:
 | `credit_line` | Inferred from the museum's credit line field when the provenance chain lacked acquisition information |
 | `llm_structural` | LLM-resolved structural cases the PEG grammar could not parse |
 
-`credit_line` events are particularly useful: they recover acquisition context
-(donor name, purchase fund) that the provenance text omits. For the current
-distribution of methods, use `collection_stats(dimension="parseMethod")`.
+`credit_line` events are particularly useful: they recover acquisition context (donor name, purchase fund) that the provenance text omits. For the current distribution of methods, use `collection_stats(dimension="parseMethod")`.
 
 ---
 
 ## Provenance Facets
 
-`search_provenance` supports `facets: true`, returning 5 facet dimensions
-alongside chain results:
+`search_provenance` supports `facets: true`, returning 5 facet dimensions alongside chain results:
 
 - **transferType**: distribution of transfer types in matching events
 - **decade**: temporal distribution of matching events

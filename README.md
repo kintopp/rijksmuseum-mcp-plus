@@ -46,6 +46,17 @@ Many other desktop and web-based clients such as OpenAI's ChatGPT or Mistral's V
 
 Afterwards, follow the same procedure to install rijksmuseum-mcp+'s sibling resource for IconClass, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). This allows you to automatically search and explore c. 1.3 million [IconClass](https://iconclass.org) notations, concepts, and descriptive texts alongside the Rijksmuseum's metadata.
 
+### Plugin: connector and skill together
+
+rijksmuseum-mcp+ is also available as the `rijksmuseum` plugin in the [kintopp-plugins](https://github.com/kintopp/kintopp-plugins) marketplace. The plugin installs the hosted connector (shown as "Rijksmuseum") together with the research skill described below.
+
+- **claude.ai or Claude Desktop:** _Customize_ → _Plugins_ → _Add_ → _Add marketplace_, enter `kintopp/kintopp-plugins`, add the Rijksmuseum MCP+ plugin, then connect its connector on the plugin's _Connectors_ tab.
+- **Claude Code:** `claude plugin marketplace add kintopp/kintopp-plugins`, then `claude plugin install rijksmuseum@kintopp-plugins`.
+- **ChatGPT desktop app:** _Plugins_ → _Add plugin marketplace_, enter `kintopp/kintopp-plugins` as the Source and leave Git ref and Sparse paths empty, then install the plugin from the plugin browser. The plugin runs only in Codex mode, not in ordinary ChatGPT chats. ChatGPT on the web cannot add a marketplace.
+- **Codex CLI:** `codex plugin marketplace add kintopp/kintopp-plugins`, then `codex plugin add rijksmuseum@kintopp-plugins`.
+
+It has not yet been tested whether the image viewer works when the connector comes from the plugin, or whether a plugin's connector counts toward the one-connector limit of a free Claude account. For the viewer, use the connector URL above. If you already added that connector by hand, the plugin's connector reaches the same server. To add your own instructions, use a separate skill or your project's instructions rather than editing the installed copy, which a plugin update may overwrite.
+
 ## Research skill
 
 The `rijksmuseum-mcp+` skill file ([rijksmuseum-mcp-plus.skill](skill/rijksmuseum-mcp-plus.skill)) gives the AI assistant detailed guidance in natural language on how to use rijksmuseum-mcp+ effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions and known limitations. The package also includes reference files with full description of the available provenance search patterns and the `find_similar` functionality. Skills were [originally developed by Anthropic](https://support.claude.com/en/articles/12512176-what-are-skills) for their Claude products but have since become an [open standard](https://agentskills.io/home). Making use of this skill is optional but will significantly improve the quality and efficiency of your AI assistant's responses when exploring the collection. The downloaded skill file can be installed in Claude by following [these instructions](https://claude.com/resources/tutorials/teach-claude-your-way-of-working-using-skills).

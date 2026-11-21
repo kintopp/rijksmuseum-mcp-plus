@@ -46,7 +46,7 @@
     "status": "promoted",
     "runtime": "node",
     "requires": [],
-    "purpose": "committed .skill bundles are byte-identical rebuilds of skill/; SKILL.md frontmatter conforms to the Agent Skills spec"
+    "purpose": "committed .skill bundles and the plugin/rijksmuseum/ skill copy are byte-identical rebuilds of skill/; SKILL.md frontmatter conforms to the Agent Skills spec; plugin manifests, MCP configs and one-line skill paragraphs"
   },
   "test-pure-functions.mjs": {
     "category": "base",

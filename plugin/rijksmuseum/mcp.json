@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "Rijksmuseum": {
+      "type": "streamable-http",
+      "url": "https://rijksmuseum-mcp-plus-production.up.railway.app/mcp"
+    }
+  }
+}
