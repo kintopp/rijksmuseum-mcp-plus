@@ -539,7 +539,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
                                       padding: 1px 5px; border-radius: 3px; color: #1565c0; }
   .meta-section .meta-content .qualifier { background: #f3e5f5; color: #6a1b9a; }
   .meta-section .meta-content a:hover .qualifier { text-decoration: underline; }
-  .meta-desc { color: #555; font-size: 1em; line-height: 1.45; }
+  .meta-desc { color: #555; font-size: 1.1em; line-height: 1.45; }
 
   .signal-rows { display: flex; flex-direction: column; gap: 20px; }
 
@@ -548,7 +548,7 @@ export function generateSimilarHtml(data: SimilarPageData): string {
   .row-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
   .row-label { font-size: 0.95em; font-weight: 600; }
   .row-count { font-size: 0.75em; color: #888; }
-  .row-method { font-size: 0.72em; color: #888; line-height: 1.3; margin-bottom: 12px;
+  .row-method { font-size: 0.8em; color: #888; line-height: 1.3; margin-bottom: 12px;
                 max-width: 80ch; }
   .row-method a { color: #0066cc; }
   .row-method strong { font-weight: 600; color: #666; }
