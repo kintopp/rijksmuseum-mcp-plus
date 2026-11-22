@@ -26,7 +26,7 @@ This MCP server was developed by the [Research and Infrastructure Support](https
 - **Linked Open Data**. Works carry persistent handle.net URIs and other external IDs, and entities (creators, materials, depicted persons and places, themes) carry identifiers linking them to Wikidata, VIAF, ULAN, and RKD.
 - **Command-line interface.** The [bundled `rijks-mcp` tool](https://github.com/kintopp/rijksmuseum-mcp-plus/blob/main/docs/technical-guide.md#cli) runs the same queries from the terminal — each tool exposed as a verb, with JSONL output for piping into tools such as `jq` so that results are scriptable and reproducible.
 
-## Sample Queries
+## Research Scenarios
 
 The system is designed to let you search, explore and ask questions about the Rijksmuseum's collections in natural language. For example:
 
