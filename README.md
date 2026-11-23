@@ -48,12 +48,10 @@ Afterwards, follow the same procedure to install rijksmuseum-mcp+'s sibling reso
 
 ### Plugin: connector and skill together
 
-rijksmuseum-mcp+ is also available as the `rijksmuseum` plugin in the [kintopp-plugins](https://github.com/kintopp/kintopp-plugins) marketplace. The plugin installs the hosted connector (shown as "Rijksmuseum") together with the research skill described below.
+rijksmuseum-mcp+ is also available as a plugin that installs the hosted connector (shown as "Rijksmuseum") together with the research skill described below. Download the file for your platform from the [plugin](plugin/) folder and upload it:
 
-- **claude.ai or Claude Desktop:** _Customize_ → _Plugins_ → _Add_ → _Add marketplace_, enter `kintopp/kintopp-plugins`, add the Rijksmuseum MCP+ plugin, then connect its connector on the plugin's _Connectors_ tab.
-- **Claude Code:** `claude plugin marketplace add kintopp/kintopp-plugins`, then `claude plugin install rijksmuseum@kintopp-plugins`.
-- **ChatGPT desktop app:** _Plugins_ → _Add plugin marketplace_, enter `kintopp/kintopp-plugins` as the Source and leave Git ref and Sparse paths empty, then install the plugin from the plugin browser. The plugin runs only in Codex mode, not in ordinary ChatGPT chats. ChatGPT on the web cannot add a marketplace.
-- **Codex CLI:** `codex plugin marketplace add kintopp/kintopp-plugins`, then `codex plugin add rijksmuseum@kintopp-plugins`.
+- **claude.ai or Claude Desktop:** [`rijksmuseum-claude.zip`](plugin/rijksmuseum-claude.zip). _Customize_ → _Plugins_ → _Upload plugin_, then connect its connector on the plugin's _Connectors_ tab.
+- **ChatGPT:** [`rijksmuseum-chatgpt.zip`](plugin/rijksmuseum-chatgpt.zip), uploaded as a personal plugin.
 
 It has not yet been tested whether the image viewer works when the connector comes from the plugin, or whether a plugin's connector counts toward the one-connector limit of a free Claude account. For the viewer, use the connector URL above. If you already added that connector by hand, the plugin's connector reaches the same server. To add your own instructions, use a separate skill or your project's instructions rather than editing the installed copy, which a plugin update may overwrite.
 

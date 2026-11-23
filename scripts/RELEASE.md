@@ -335,7 +335,7 @@ gh release upload counts-latest data/iconclass-counts.db --clobber \
     # should print v0.XX
     ```
 
-12. **Attach the skill bundles.** Every release carries the current `.skill` and `.zip`, which take their `metadata.version` from `package.json`, so a version bump needs `npm run build:skill` and a commit of the result (`test-skill-bundle.mjs` fails otherwise). The same build stamps the version into `plugin/rijksmuseum/`'s manifests, which is what makes existing plugin installs pick up the release.
+12. **Attach the skill bundles.** Every release carries the current `.skill` and `.zip`, which take their `metadata.version` from `package.json`, so a version bump needs `npm run build:skill` and a commit of the result (`test-skill-bundle.mjs` fails otherwise). The same build stamps the version into the manifests of the two plugin zips in `plugin/`, which is what makes existing plugin installs pick up the release.
     ```bash
     gh release upload v0.XX skill/rijksmuseum-mcp-plus.skill skill/rijksmuseum-mcp-plus.zip
     ```
