@@ -1,4 +1,4 @@
-# Compared with the Rijksmuseum
+# The rijksmuseum-mcp+ MCP server compared with the Rijksmuseum's resources
 
 The Rijksmuseum’s online resources are built primarily for browsing and for retrieving individual records. The collection portal pairs a keyword box with fifteen facet filters and sorts results by popularity; the Search API accepts about a dozen parameters covering the usual catalogue fields and returns bare identifiers in a fixed, unranked order, each of which must then be fetched separately.
 
