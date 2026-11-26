@@ -3,8 +3,8 @@
 // identical .zip copy (Mistral Vibe rejects the .skill extension), after syncing
 // SKILL.md's metadata.version from package.json. It also packs the two plugin
 // zips users upload by hand: plugin/rijksmuseum-claude.zip (claude.ai, Desktop)
-// and plugin/rijksmuseum-chatgpt.zip (ChatGPT), each holding only its platform's
-// manifest and MCP config at the archive root, plus the skill. Claude refuses an
+// and plugin/rijksmuseum-chatgpt.zip (ChatGPT, Codex layout), each holding only its
+// platform's manifest and MCP config, plus the skill. Claude refuses an
 // archive with more than one plugin.json. Installs update only when the version
 // changes, so the manifests carry package.json's version.
 //
@@ -152,34 +152,34 @@ const claudePlugin = buildZip(
   ],
   dosDate,
 );
+// Codex layout: the ChatGPT app reads .codex-plugin/plugin.json and .mcp.json.
 const chatgptPlugin = buildZip(
   [
     {
-      name: "plugin.json",
+      name: ".codex-plugin/plugin.json",
       content: json({
-        $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
         name: PLUGIN_NAME,
         ...manifestFields,
-        extensions: {
-          "com.openai": {
-            interface: {
-              displayName: PLUGIN_DISPLAY_NAME,
-              shortDescription: SHORT_DESCRIPTION,
-              developerName: AUTHOR.name,
-              category: "Productivity",
-              websiteURL: REPO_URL,
-            },
-          },
+        skills: "./skills/",
+        mcpServers: "./.mcp.json",
+        interface: {
+          displayName: PLUGIN_DISPLAY_NAME,
+          shortDescription: SHORT_DESCRIPTION,
+          developerName: AUTHOR.name,
+          category: "Productivity",
+          websiteURL: REPO_URL,
+          longDescription: DESCRIPTION,
+          capabilities: ["Interactive", "Read"],
+          defaultPrompt: [
+            "Find paintings by Rembrandt that depict biblical scenes",
+            "Trace the provenance of The Night Watch",
+            "Show me a high-resolution image of Vermeer's The Milkmaid",
+          ],
+          screenshots: [],
         },
       }),
     },
-    {
-      name: "mcp.json",
-      content: json({
-        $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
-        mcpServers: { [CONNECTOR_KEY]: { type: "streamable-http", url: SERVER_URL } },
-      }),
-    },
+    { name: ".mcp.json", content: json({ mcpServers: { [CONNECTOR_KEY]: { type: "http", url: SERVER_URL } } }) },
     ...pluginSkill(() => true),
   ],
   dosDate,

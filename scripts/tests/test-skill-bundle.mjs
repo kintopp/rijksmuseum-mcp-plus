@@ -17,8 +17,8 @@
  *    above), the other platform's manifest in the archive (Claude refuses more than
  *    one plugin.json), files nested under a folder, a skill copy that differs from
  *    the source, a manifest version off package.json, a renamed plugin, connector key
- *    or URL, an extra key on a server entry (the Agent Plugins schema rejects it), a
- *    wrong $schema, a top-level bin/ (claude.ai refuses the plugin), a lost display
+ *    or URL, an extra key on a server entry, a Codex manifest
+ *    that doesn't point at skills/ and .mcp.json, a top-level bin/ (claude.ai refuses the plugin), a lost display
  *    name, or a ChatGPT shortDescription over its 57-character cut.
  *  - A hard-wrapped paragraph or list item in the skill's Markdown, which ChatGPT's
  *    skill page shows as broken lines.
@@ -121,9 +121,9 @@ const claudeZip = readZip(readFileSync(join(ROOT, "plugin", "rijksmuseum-claude.
 const chatgptZip = readZip(readFileSync(join(ROOT, "plugin", "rijksmuseum-chatgpt.zip")));
 const zipJson = (zip, name) => JSON.parse(zip.get(name)?.toString("utf8") ?? "null");
 const claudeManifest = zipJson(claudeZip, ".claude-plugin/plugin.json");
-const portableManifest = zipJson(chatgptZip, "plugin.json");
-check("the Claude zip has no Agent Plugins files", !claudeZip.has("plugin.json") && !claudeZip.has("mcp.json"));
-check("the ChatGPT zip has no Claude files", ![...chatgptZip.keys()].some((n) => n.startsWith(".claude-plugin/") || n === ".mcp.json"));
+const codexManifest = zipJson(chatgptZip, ".codex-plugin/plugin.json");
+check("the Claude zip has no Codex files", ![...claudeZip.keys()].some((n) => n.startsWith(".codex-plugin/")));
+check("the ChatGPT zip has no Claude or root manifest files", ![...chatgptZip.keys()].some((n) => n.startsWith(".claude-plugin/") || n === "plugin.json" || n === "mcp.json"));
 for (const [label, zip, rels] of [
   ["Claude", claudeZip, sourceFiles.filter((rel) => !rel.startsWith("agents/"))],
   ["ChatGPT", chatgptZip, sourceFiles],
@@ -132,16 +132,17 @@ for (const [label, zip, rels] of [
   check(`the ${label} zip holds the skill folder`, skillNames.length === rels.length && rels.every((rel) => zip.get(`skills/${SKILL_NAME}/${rel}`)?.equals(bundle.get(`${SKILL_NAME}/${rel}`))), `${skillNames.length} vs ${rels.length}`);
   check(`the ${label} zip has no top-level bin/`, ![...zip.keys()].some((n) => n.startsWith("bin/")));
 }
-check("both plugin manifests are named rijksmuseum", claudeManifest?.name === "rijksmuseum" && portableManifest?.name === "rijksmuseum");
-check("both plugin manifests carry package.json's version", claudeManifest?.version === pkg.version && portableManifest?.version === pkg.version);
-check(`both plugin manifests show "${DISPLAY_NAME}"`, claudeManifest?.displayName === DISPLAY_NAME && portableManifest?.extensions?.["com.openai"]?.interface?.displayName === DISPLAY_NAME);
-const shortDescription = portableManifest?.extensions?.["com.openai"]?.interface?.shortDescription ?? "";
+check("both plugin manifests are named rijksmuseum", claudeManifest?.name === "rijksmuseum" && codexManifest?.name === "rijksmuseum");
+check("both plugin manifests carry package.json's version", claudeManifest?.version === pkg.version && codexManifest?.version === pkg.version);
+check(`both plugin manifests show "${DISPLAY_NAME}"`, claudeManifest?.displayName === DISPLAY_NAME && codexManifest?.interface?.displayName === DISPLAY_NAME);
+const shortDescription = codexManifest?.interface?.shortDescription ?? "";
 check(`shortDescription is 1-57 characters (${shortDescription.length})`, shortDescription.length >= 1 && shortDescription.length <= 57);
-check("plugin.json has the Agent Plugins schema", portableManifest?.$schema === "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json");
-const claudeMcp = zipJson(claudeZip, ".mcp.json");
-const portableMcp = zipJson(chatgptZip, "mcp.json");
-check(".mcp.json declares only the Rijksmuseum http server", isDeepStrictEqual(claudeMcp, { mcpServers: { Rijksmuseum: { type: "http", url: SERVER_URL } } }), JSON.stringify(claudeMcp));
-check("mcp.json declares the same server as streamable-http", portableMcp?.$schema === "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json" && isDeepStrictEqual(portableMcp.mcpServers, { Rijksmuseum: { type: "streamable-http", url: SERVER_URL } }), JSON.stringify(portableMcp));
+check("the Codex manifest points at the skills folder and .mcp.json", codexManifest?.skills === "./skills/" && codexManifest?.mcpServers === "./.mcp.json");
+const expectedMcp = { mcpServers: { Rijksmuseum: { type: "http", url: SERVER_URL } } };
+for (const [label, zip] of [["Claude", claudeZip], ["ChatGPT", chatgptZip]]) {
+  const mcp = zipJson(zip, ".mcp.json");
+  check(`the ${label} .mcp.json declares only the Rijksmuseum http server`, isDeepStrictEqual(mcp, expectedMcp), JSON.stringify(mcp));
+}
 const openaiYaml = readFileSync(join(SKILL_DIR, "agents", "openai.yaml"), "utf8");
 check(`agents/openai.yaml shows the skill as "${SKILL_DISPLAY_NAME}"`, /^interface:\n {2}display_name: "Rijksmuseum"$/m.test(openaiYaml));
 
