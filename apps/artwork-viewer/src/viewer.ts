@@ -368,18 +368,16 @@ async function navigateRelated(direction: 'prev' | 'next'): Promise<void> {
   const target = viewerRelatedIndex === -1
     ? (direction === 'next' ? 0 : len - 1)
     : (direction === 'next' ? (viewerRelatedIndex + 1) % len : (viewerRelatedIndex - 1 + len) % len);
-  const gen = ++mountGen;
-  const data = await fetchMount(viewerRelatedObjects[target].objectNumber);
-  if (!data || gen !== mountGen) return;
+  const data = await fetchLatestMount(viewerRelatedObjects[target].objectNumber);
+  if (!data) return;
   viewerRelatedIndex = target;
   applyMountedArtwork(data, { mode: 'related' });
 }
 
 async function returnToSeed(): Promise<void> {
   if (!seedObjectNumber || viewerRelatedIndex === -1) return;
-  const gen = ++mountGen;
-  const data = await fetchMount(seedObjectNumber);
-  if (!data || gen !== mountGen) return;
+  const data = await fetchLatestMount(seedObjectNumber);
+  if (!data) return;
   viewerRelatedIndex = -1;
   applyMountedArtwork(data, { mode: 'related' });
 }
@@ -390,9 +388,8 @@ async function stepSequence(direction: 'prev' | 'next'): Promise<void> {
   const target = direction === 'next'
     ? (viewerSequenceIndex + 1) % len
     : (viewerSequenceIndex - 1 + len) % len;
-  const gen = ++mountGen;
-  const data = await fetchMount(viewerSequence[target].objectNumber);
-  if (!data || gen !== mountGen) return;
+  const data = await fetchLatestMount(viewerSequence[target].objectNumber);
+  if (!data) return;
   viewerSequenceIndex = target;
   applyMountedArtwork(data, { mode: 'sequence' });
   void fetchRelatedObjectsForCurrent(data.objectNumber);
@@ -410,6 +407,13 @@ function updateSequenceControls(): void {
 function resetOrReturn(): void {
   if (viewerRelatedIndex !== -1) void returnToSeed();
   else resetView();
+}
+
+// Null when the fetch fails or a newer mount started while it was in flight.
+async function fetchLatestMount(objectNumber: string): Promise<ArtworkImageData | null> {
+  const gen = ++mountGen;
+  const data = await fetchMount(objectNumber);
+  return gen === mountGen ? data : null;
 }
 
 async function fetchMount(objectNumber: string): Promise<ArtworkImageData | null> {
