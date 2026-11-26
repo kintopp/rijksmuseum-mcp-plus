@@ -203,11 +203,11 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { mode: MountMode }):
     renderViewer(data);
   }
   // renderViewer re-creates the toolbar from a static HTML template where
-  // prev/next-related start disabled; fetchRelatedObjectsForCurrent only
-  // re-enables them on the seed-mount path. Re-assert the state here so peer
-  // navigation and seed-returns keep the mouse buttons live as long as
+  // prev/next-related start hidden; fetchRelatedObjectsForCurrent only
+  // shows them on the seed-mount path. Re-assert the state here so peer
+  // navigation and seed-returns keep the mouse buttons available as long as
   // viewerRelatedObjects has entries.
-  setNavButtonsEnabled(viewerRelatedObjects.length > 0);
+  setRelatedNavAvailable(viewerRelatedObjects.length > 0);
   updateSequenceControls();
   updateModelContext(data);
   if (data.viewUUID) {
@@ -323,23 +323,17 @@ function resetView(): void {
   if (selectMode) toggleSelectMode();
 }
 
-function setNavButtonsEnabled(enabled: boolean): void {
-  const prev = document.getElementById('prev-related') as HTMLButtonElement | null;
-  const next = document.getElementById('next-related') as HTMLButtonElement | null;
-  const disabledHint = 'No related variants available';
-  if (prev) {
-    prev.disabled = !enabled;
-    prev.title = enabled ? 'Previous related variant' : disabledHint;
-  }
-  if (next) {
-    next.disabled = !enabled;
-    next.title = enabled ? 'Next related variant' : disabledHint;
+// Hidden rather than disabled: greyed-out arrows read as the set's prev/next.
+function setRelatedNavAvailable(available: boolean): void {
+  for (const id of ['prev-related', 'next-related']) {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (btn) btn.hidden = !available;
   }
 }
 
 async function fetchRelatedObjectsForCurrent(objectNumber: string): Promise<void> {
   viewerRelatedObjects = [];
-  setNavButtonsEnabled(false);
+  setRelatedNavAvailable(false);
   try {
     const result = await app.callServerTool({
       name: 'get_artwork_details',
@@ -354,7 +348,7 @@ async function fetchRelatedObjectsForCurrent(objectNumber: string): Promise<void
       (r): r is RelatedPeer => !!r.objectNumber && !!r.iiifId,
     );
     viewerRelatedObjects = peers;
-    setNavButtonsEnabled(peers.length > 0);
+    setRelatedNavAvailable(peers.length > 0);
   } catch {
     /* keep buttons disabled, fail silent */
   }
@@ -730,8 +724,8 @@ function renderViewer(data: ArtworkImageData): void {
           <button id="zoom-in" title="Zoom In">+</button>
           <button id="zoom-out" title="Zoom Out">&minus;</button>
           <button id="reset-view" title="Reset / return to seed">Reset</button>
-          <button id="prev-related" title="Previous related variant" disabled>&#9664;</button>
-          <button id="next-related" title="Next related variant" disabled>&#9654;</button>
+          <button id="prev-related" title="Previous related variant" hidden>&#9664;</button>
+          <button id="next-related" title="Next related variant" hidden>&#9654;</button>
           <button id="select-mode" title="Select Region">&#9744;</button>
         </div>
       </div>
