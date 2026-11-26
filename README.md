@@ -34,32 +34,51 @@ The system is designed to let you search, explore and ask questions about the Ri
 
 For examples of more complex queries and sample responses, please browse the [research scenarios](docs/research-scenarios.md). Nine scenarios for art historians and curators cover iconographic, semantic and multimodal search, image inspection, similarity search, provenance, collectors' marks, bibliography and conservation records, each with a shared demo transcript.
 
-## Quick Start
+## Installation
 
-The best way to get started is with [Claude Desktop](https://claude.com/download) or [claude.ai](https://claude.ai) by adding rijksmuseum-mcp+ to Claude as a *remotely hosted*, [custom 'Connector'](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) using the URL below. This is currently free for one connector – additional connectors require a paid ('Pro') or higher [subscription](https://claude.com/pricing) from Anthropic.
+### Hosted
+
+The easiest way to start is to install the Rijksmuseum MCP+ plugin. It adds the hosted version of the server as a connector (shown as "Rijksmuseum"), together with the [research skill](#research-skill) that tells the AI assistant how to use it. The server needs no account or sign-in information.
+
+**Claude** ([claude.ai](https://claude.ai), or the Claude [desktop app](https://claude.com/download)): *// recommended*
+
+1. Download [`rijksmuseum-claude.zip`](https://github.com/kintopp/rijksmuseum-mcp-plus/raw/refs/heads/main/plugin/rijksmuseum-claude.zip).
+2. In Claude, go to _Settings_ → _Plugins_ → _Browse plugins_ (scroll down to the bottom) → _Add_ → _Upload plugin_ and choose the file.
+3. Open the plugin, go to its _Connectors_ tab, and add the "Rijksmuseum" connector.
+4. If you like, set the permissions for its tools in _Customize_ → _Connectors_, for example to "Always allow".
+
+**N.B.** A free Claude account allows only one custom connector. To make room for it, you will need to remove (not just disable) any existing custom connector in _Customize_ → _Connectors_ first. Adding the Iconclass server as well (see below) requires a paid ('Pro') or higher [subscription](https://claude.com/pricing). Anthropic's [plugin instructions](https://claude.com/docs/plugins/overview#install-a-plugin) provide more details.
+
+**ChatGPT** ([desktop app](https://chatgpt.com/download/) – not chatgpt.com):
+
+1. Download [`rijksmuseum-chatgpt.zip`](https://github.com/kintopp/rijksmuseum-mcp-plus/raw/refs/heads/main/plugin/rijksmuseum-chatgpt.zip).
+2. In the ChatGPT desktop app, go to _Settings_ → _Plugins_ → _Add_ and _Upload plugin archive_. Select and _Add_ the plugin.
+3. Next select _Install plugin_. After this the plugin is available.
+4. To use it, create a new chat, switch to 'Work' mode, and select the plugin via the + symbol. Else, type "@Rijksmuseum MCP+" at the start of the prompt. **N.B.** You can only use a custom plugin from the 'Work' mode in ChatGPT or in Codex.
+
+**Other AI clients:** add the hosted server as a remote MCP server (often called a "custom connector") with this URL, and leave the authentication settings empty:
+
 ```
 https://rijksmuseum-mcp-plus-production.up.railway.app/mcp
 ```
-Go to _Customize_ → _Connectors_ → _Add custom connector_ → Name it as you like and paste the URL into the _Remote MCP Server URL_ field. You can ignore the Authentication section. Once the connector is configured, optionally set the permissions for its tools (e.g. 'Always allow'). See Anthropic's [instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) for more detailed instructions.
 
-Many other desktop and web-based clients such as OpenAI's ChatGPT or Mistral's Vibe and open-source applications support remotely hosted, custom MCP servers. Please consult their documentation for more information. In particular, the free version of [Mistral's Vibe](https://chat.mistral.ai) already has excellent support for MCP servers and skills (see below). In contrast, ChatGPT can currently (October, 2026) only support the full functionality of this server (in particular, viewing and interacting with images in the chat timeline) in conjunction with a paid Business or Enterprise subscription. So at the moment the best way to use the hosted MCP server for free is either with Claude or with Mistral. Alternatively, you can install rijksmuseum-mcp+ locally on your own computer. Please consult the [technical guide](/docs/technical-guide.md) for more details.
+The free version of [Mistral's Vibe](https://chat.mistral.ai) also has excellent support for MCP servers, including components like the interactive image viewer. **N.B.** A connector added this way has no skill; install the skill file separately (see [below](#research-skill)).
 
-Afterwards, follow the same procedure to install rijksmuseum-mcp+'s sibling resource for IconClass, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp). This allows you to automatically search and explore c. 1.3 million [IconClass](https://iconclass.org) notations, concepts, and descriptive texts alongside the Rijksmuseum's metadata.
+### Iconclass
 
-### Plugin: connector and skill together
+Afterwards, follow the same procedure to install rijksmuseum-mcp+'s sibling resource for Iconclass, [rijksmuseum-iconclass-mcp](https://github.com/kintopp/rijksmuseum-iconclass-mcp), which has its own [plugin](https://github.com/kintopp/rijksmuseum-iconclass-mcp/tree/main/plugin). This allows you to automatically search and explore c. 1.3 million [Iconclass](https://iconclass.org) notations, concepts, and descriptive texts alongside the Rijksmuseum's metadata.
 
-rijksmuseum-mcp+ is also available as a plugin that installs the hosted connector (shown as "Rijksmuseum") together with the research skill described below. Download the file for your platform from the [plugin](plugin/) folder and upload it:
+### Local
 
-- **claude.ai or Claude Desktop:** [`rijksmuseum-claude.zip`](plugin/rijksmuseum-claude.zip). _Customize_ → _Plugins_ → _Upload plugin_, then connect its connector on the plugin's _Connectors_ tab.
-- **ChatGPT:** [`rijksmuseum-chatgpt.zip`](plugin/rijksmuseum-chatgpt.zip), uploaded as a personal plugin.
-
-It has not yet been tested whether the image viewer works when the connector comes from the plugin, or whether a plugin's connector counts toward the one-connector limit of a free Claude account. For the viewer, use the connector URL above. If you already added that connector by hand, the plugin's connector reaches the same server. To add your own instructions, use a separate skill or your project's instructions rather than editing the installed copy, which a plugin update may overwrite.
+Alternatively, you can install rijksmuseum-mcp+ *locally* on your own computer. Please consult the [technical guide](/docs/technical-guide.md) for more details.
 
 ## Research skill
 
-The `rijksmuseum-mcp+` skill file ([rijksmuseum-mcp-plus.skill](skill/rijksmuseum-mcp-plus.skill)) gives the AI assistant detailed guidance in natural language on how to use rijksmuseum-mcp+ effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions and known limitations. The package also includes reference files with full description of the available provenance search patterns and the `find_similar` functionality. Skills were [originally developed by Anthropic](https://support.claude.com/en/articles/12512176-what-are-skills) for their Claude products but have since become an [open standard](https://agentskills.io/home). Making use of this skill is optional but will significantly improve the quality and efficiency of your AI assistant's responses when exploring the collection. The downloaded skill file can be installed in Claude by following [these instructions](https://claude.com/resources/tutorials/teach-claude-your-way-of-working-using-skills).
+A skill gives an AI assistant detailed guidance in natural language on how to use a resource such as an MCP server effectively: which tool to choose for a given question type, how to combine searches, important metadata distinctions and known limitations. The `rijksmuseum-mcp+` skill also includes reference files with a full description of the available provenance search patterns and the `find_similar` functionality. Skills were [originally developed by Anthropic](https://claude.com/resources/tutorials/teach-claude-your-way-of-working-using-skills) for their Claude products but have since become a widely-supported [open standard](https://agentskills.io/home). Making use of this skill is optional but will significantly improve the quality and efficiency of your AI assistant's responses when exploring the collection.
 
-Currently (October, 2026) ChatGPT's free tier makes uploading skill files cumbersome. Instead, use [Mistral Vibe](https://mistral.ai/products/vibe/) and install the skill via the 'folder' option, first downloading and unpacking [`rijksmuseum-mcp-plus.zip`](skill/rijksmuseum-mcp-plus.zip).
+The plugin (see [Installation](#installation) above) already includes the skill. Don't edit the installed copy. To add your own instructions, put them in a separate skill or in your project's instructions.
+
+You only need the separate skill file if you add the server as a custom connector, install it locally, or use a client without plugin support. To access it, download and unzip: [`rijksmuseum-mcp-plus.zip`](https://github.com/kintopp/rijksmuseum-mcp-plus/releases/latest/download/rijksmuseum-mcp-plus.zip). If you use Mistral Vibe, install the skill via the 'folder' option.
 
 ## Technical Design
 
