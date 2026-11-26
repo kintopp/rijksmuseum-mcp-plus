@@ -49,7 +49,7 @@ The easiest way to start is to install the Rijksmuseum MCP+ plugin. It adds the 
 
 **N.B.** A free Claude account allows only one custom connector. To make room for it, you will need to remove (not just disable) any existing custom connector in _Customize_ → _Connectors_ first. In addition, the use of any MCP server will consume your free usage quickly. Adding the Iconclass server as well (see below) requires a paid ('Pro') or higher [subscription](https://claude.com/pricing). Anthropic's [plugin instructions](https://claude.com/docs/plugins/overview#install-a-plugin) provide more details. 
 
-**ChatGPT** ([desktop app](https://chatgpt.com/download/) – not chatgpt.com):
+**ChatGPT** ([desktop app](https://chatgpt.com/download/) – not chatgpt.com): *// currently unreliable*
 
 1. Download [`rijksmuseum-chatgpt.zip`](https://github.com/kintopp/rijksmuseum-mcp-plus/raw/refs/heads/main/plugin/rijksmuseum-chatgpt.zip).
 2. In the ChatGPT desktop app, go to _Settings_ → _Plugins_ → _Add_ and _Upload plugin archive_. Select and _Add_ the plugin.
