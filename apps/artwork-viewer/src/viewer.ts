@@ -188,8 +188,6 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { mode: MountMode }):
   if (opts.mode !== 'related') {
     seedObjectNumber = data.objectNumber;
     viewerRelatedIndex = -1;
-    // The old seed's peers; fetchRelatedObjectsForCurrent refills them.
-    viewerRelatedObjects = [];
   }
   // Match the fresh OSD viewer renderViewer() will create — rotate/flip math
   // is incremental and drifts if these vars outlive the previous viewer.
