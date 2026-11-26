@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires the rijksmuseum-mcp+ MCP server and network access.
 metadata:
   version: "0.96.0"
-  last_updated: "2026-11-23"
+  last_updated: "2026-11-26"
 ---
 
 # Rijksmuseum MCP+ Research Skill
@@ -89,7 +89,7 @@ Draw on whichever of these fit, combine them, or ignore them.
 - **Search what the work shows.** For scenes, motifs and visual details ("children playing in the street", "a red umbrella"), `multimodal_search` runs one query through three channels at once: catalogue metadata, the images themselves, and the Iconclass notations nearest the query. Read the channels against each other. A work found by several is the strongest candidate. An image-only hit is often a depiction the catalogue never recorded, so look at it before claiming it. A metadata-only hit is described that way but may not show it prominently. The fused list can bury image-only discoveries; `channels: ["image"]` shows that channel's own ranking. When one of the returned `iconclassNotations` fits, `search_artwork` with that `iconclass` gives the complete tagged set rather than a ranked sample.
 - **Look.** `inspect_artwork_image` can read what the catalogue never recorded: signatures, seals, cartouches, inscriptions, details in the background. Keep what the catalogue says separate from what you see in the image.
 - **Read the negative space.** What is undigitised (`imageAvailable: false`), uncatalogued, missing from a provenance chain (`hasGap`), or orphaned in the authority files (`search_persons` `unused`) can be as telling as what is present.
-- **Change the language.** Dutch terms, Iconclass notations (13 languages, from the Iconclass server) and English reformulations of semantic queries each reach different material. One concept can sit in several Iconclass branches (a dog as pet under `34B11`, as a symbol of fidelity under `11A(DOG)`).
+- **Change the language.** Dutch terms, Iconclass notations (13 languages, from the separate Iconclass server when it is connected; otherwise use the `iconclassNotations` that `multimodal_search` returns) and English reformulations of semantic queries each reach different material. One concept can sit in several Iconclass branches (a dog as pet under `34B11`, as a symbol of fidelity under `11A(DOG)`).
 
 ## Presenting results
 
