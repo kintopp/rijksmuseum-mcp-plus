@@ -70,7 +70,7 @@ Technical examinations and restoration history for ONE artwork. Follows get_artw
 
 ### 7. `get_artwork_image` *(app tool — user-facing)*
 
-Opens an interactive deep-zoom viewer for the user. Use only when they ask to see, show, or view an artwork — not for list, summary, count, or text-only requests. Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. Not all artworks have images available. Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl).
+Opens an interactive deep-zoom viewer for the user. Use only when they ask to see, show, or view an artwork — not for list, summary, count, or text-only requests. Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. Not all artworks have images available. Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl). To show several artworks, pass objectNumbers (up to 20) in one call: one viewer opens on the first and the user steps through the rest. Some hosts keep only the latest viewer, so separate calls can hide earlier ones.
 
 ### 8. `remount_viewer` *(app tool — internal)*
 

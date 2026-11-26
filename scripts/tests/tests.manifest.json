@@ -881,6 +881,16 @@
     ],
     "purpose": "2026-07-28 wire over HTTP + stdio (server/discover, envelope headers, tools/resources, Origin/405, concurrency) plus legacy-handshake regression, on the fixture DB; raw fetch because the v1 client cannot reach this wire"
   },
+  "test-artwork-image-set.mjs": {
+    "category": "ci",
+    "class": "gate",
+    "status": "promoted",
+    "runtime": "node",
+    "requires": [
+      "dist"
+    ],
+    "purpose": "get_artwork_image objectNumbers: parameter validation, list bounds, per-item failure messages (fixture DB, no network)"
+  },
   "test-tool-schemas.mjs": {
     "category": "ci",
     "class": "gate",

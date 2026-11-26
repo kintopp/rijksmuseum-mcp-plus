@@ -378,7 +378,8 @@ Conservation / forensics record for one artwork by object number — technical e
 
 | Parameter | Description |
 |---|---|
-| `objectNumber` | **Required.** Object identifier, e.g. `SK-C-5` |
+| `objectNumber` | Object identifier, e.g. `SK-C-5`. Give this or `objectNumbers`, not both. |
+| `objectNumbers` | Up to 20 object identifiers. One viewer opens on the first and the user steps through the rest in order; the result lists them as `sequence`, and artworks without a record or image are left out with a warning. |
 
 ---
 

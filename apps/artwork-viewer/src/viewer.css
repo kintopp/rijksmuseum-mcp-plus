@@ -419,6 +419,41 @@ html, body {
 }
 
 /* Footer */
+/* Set navigation, shown only when the host passed several objectNumbers.
+   :not([hidden]) so the display rule doesn't override the hidden attribute. */
+.sequence-bar:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.35rem 1rem;
+  background: var(--color-header-surface);
+  border-top: 1px solid var(--color-border-primary);
+  flex-shrink: 0;
+  font-size: 0.85rem;
+}
+
+.sequence-bar button {
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-sm);
+  padding: 0.2rem 0.6rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sequence-bar button:hover {
+  border-color: var(--color-text-tertiary);
+}
+
+.sequence-position {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5rem;
+  text-align: center;
+}
+
 .footer {
   background: var(--color-header-surface);
   color: var(--color-text-secondary);

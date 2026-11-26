@@ -40,7 +40,10 @@ export type ArtworkImageData = {
   physicalDimensions: string | null;
   url: string;
   viewUUID?: string;
+  sequence?: SequenceItem[];
 };
+
+export type SequenceItem = { objectNumber: string; title: string; creator: string; date: string };
 
 // App state
 let currentData: ArtworkImageData | null = null;
@@ -60,6 +63,13 @@ type RelatedPeer = { objectNumber: string; iiifId: string; relationship: string 
 let seedObjectNumber: string | null = null;
 let viewerRelatedObjects: RelatedPeer[] = [];
 let viewerRelatedIndex = -1; // -1 = on seed; 0..n-1 = on a sibling
+
+// The artworks a host mount passed as objectNumbers. Stepping through them
+// (n/p) makes each one the new seed for related-variant navigation.
+let viewerSequence: SequenceItem[] = [];
+let viewerSequenceIndex = 0;
+// Bumped by every in-viewer mount so a slow reply can't overwrite a newer one.
+let mountGen = 0;
 
 // Selection mode state
 let selectMode = false;
@@ -84,16 +94,18 @@ const app = new App(
 
 // ── Lifecycle handlers ──────────────────────────────────────────────
 
+function inputObjectNumber(args: { objectNumber?: string; objectNumbers?: string[] } | undefined): string | undefined {
+  return args?.objectNumber || args?.objectNumbers?.[0];
+}
+
 app.ontoolinputpartial = (params) => {
-  const args = params.arguments as { objectNumber?: string } | undefined;
-  const objectNumber = args?.objectNumber || '...';
+  const objectNumber = inputObjectNumber(params.arguments as Parameters<typeof inputObjectNumber>[0]) || '...';
   if (!currentData) showLoading(`Loading artwork: ${objectNumber}`);
   app.sendLog({ level: 'info', data: `Partial input: ${objectNumber}` });
 };
 
 app.ontoolinput = (params) => {
-  const args = params.arguments as { objectNumber?: string } | undefined;
-  const objectNumber = args?.objectNumber || 'unknown';
+  const objectNumber = inputObjectNumber(params.arguments as Parameters<typeof inputObjectNumber>[0]) || 'unknown';
   // Tool input notifications do not identify the source tool. After an
   // artwork is mounted, inspect/navigate echoes must not tear down the viewer.
   if (!currentData) showLoading(`Fetching image: ${objectNumber}`);
@@ -120,7 +132,17 @@ app.ontoolresult = (result) => {
 
   const data = parseArtworkImageResult(result);
   if (data) {
-    applyMountedArtwork(data, { isSeed: true });
+    // Every get_artwork_image call mints a new viewUUID, so a result carrying
+    // the current one is a host echo of the viewer's own remount, which has
+    // already been applied. Treating it as a host mount would reset the set.
+    if (data.viewUUID && data.viewUUID === viewUUID) {
+      app.sendLog({ level: 'info', data: 'Echo of an in-viewer mount ignored' });
+      return;
+    }
+    mountGen++;
+    viewerSequence = data.sequence && data.sequence.length > 1 ? data.sequence : [];
+    viewerSequenceIndex = 0;
+    applyMountedArtwork(data, { mode: 'host' });
     void fetchRelatedObjectsForCurrent(data.objectNumber);
     return;
   }
@@ -156,13 +178,14 @@ function parseArtworkImageResult(
   return null;
 }
 
-// Mount an artwork into the viewer. `isSeed: true` for host-initiated mounts
-// (resets the j/k/l anchor); `false` for in-viewer navigation, which preserves
-// the seed so `k` always returns the user to the artwork the host originally
-// mounted.
-function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }): void {
+// Mount an artwork into the viewer. `host` mounts rebuild the layout; `related`
+// and `sequence` steps swap the tile source in place. `host` and `sequence`
+// make the artwork the j/k/l seed; `related` keeps the seed so `k` returns the
+// user to it.
+type MountMode = 'host' | 'related' | 'sequence';
+function applyMountedArtwork(data: ArtworkImageData, opts: { mode: MountMode }): void {
   currentData = data;
-  if (opts.isSeed) {
+  if (opts.mode !== 'related') {
     seedObjectNumber = data.objectNumber;
     viewerRelatedIndex = -1;
   }
@@ -174,7 +197,7 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }):
   // instance. Peer navigation between related variants only changes the artwork:
   // keep the OSD instance, toolbar, and listeners alive and swap the tile
   // source — no blank-canvas flicker, no DOM/listener churn.
-  if (!opts.isSeed && viewer) {
+  if (opts.mode !== 'host' && viewer) {
     swapArtwork(data);
   } else {
     renderViewer(data);
@@ -185,6 +208,7 @@ function applyMountedArtwork(data: ArtworkImageData, opts: { isSeed: boolean }):
   // navigation and seed-returns keep the mouse buttons live as long as
   // viewerRelatedObjects has entries.
   setNavButtonsEnabled(viewerRelatedObjects.length > 0);
+  updateSequenceControls();
   updateModelContext(data);
   if (data.viewUUID) {
     viewUUID = data.viewUUID;
@@ -321,7 +345,8 @@ async function fetchRelatedObjectsForCurrent(objectNumber: string): Promise<void
       name: 'get_artwork_details',
       arguments: { objectNumber },
     });
-    if (result.isError) return;
+    // The user may have stepped to another seed while this was in flight.
+    if (result.isError || seedObjectNumber !== objectNumber) return;
     const sc = result.structuredContent as
       | { relatedObjects?: { objectNumber: string | null; iiifId: string | null; relationship: string }[] }
       | undefined;
@@ -338,20 +363,46 @@ async function fetchRelatedObjectsForCurrent(objectNumber: string): Promise<void
 async function navigateRelated(direction: 'prev' | 'next'): Promise<void> {
   if (viewerRelatedObjects.length === 0) return;
   const len = viewerRelatedObjects.length;
-  if (viewerRelatedIndex === -1) {
-    viewerRelatedIndex = direction === 'next' ? 0 : len - 1;
-  } else {
-    viewerRelatedIndex = direction === 'next'
-      ? (viewerRelatedIndex + 1) % len
-      : (viewerRelatedIndex - 1 + len) % len;
-  }
-  await mountArtwork(viewerRelatedObjects[viewerRelatedIndex].objectNumber);
+  const target = viewerRelatedIndex === -1
+    ? (direction === 'next' ? 0 : len - 1)
+    : (direction === 'next' ? (viewerRelatedIndex + 1) % len : (viewerRelatedIndex - 1 + len) % len);
+  const gen = ++mountGen;
+  const data = await fetchMount(viewerRelatedObjects[target].objectNumber);
+  if (!data || gen !== mountGen) return;
+  viewerRelatedIndex = target;
+  applyMountedArtwork(data, { mode: 'related' });
 }
 
 async function returnToSeed(): Promise<void> {
   if (!seedObjectNumber || viewerRelatedIndex === -1) return;
+  const gen = ++mountGen;
+  const data = await fetchMount(seedObjectNumber);
+  if (!data || gen !== mountGen) return;
   viewerRelatedIndex = -1;
-  await mountArtwork(seedObjectNumber);
+  applyMountedArtwork(data, { mode: 'related' });
+}
+
+async function stepSequence(direction: 'prev' | 'next'): Promise<void> {
+  const len = viewerSequence.length;
+  if (len < 2) return;
+  const target = direction === 'next'
+    ? (viewerSequenceIndex + 1) % len
+    : (viewerSequenceIndex - 1 + len) % len;
+  const gen = ++mountGen;
+  const data = await fetchMount(viewerSequence[target].objectNumber);
+  if (!data || gen !== mountGen) return;
+  viewerSequenceIndex = target;
+  applyMountedArtwork(data, { mode: 'sequence' });
+  void fetchRelatedObjectsForCurrent(data.objectNumber);
+}
+
+function updateSequenceControls(): void {
+  const bar = document.getElementById('sequence-bar');
+  if (!bar) return;
+  const len = viewerSequence.length;
+  bar.hidden = len < 2;
+  const counter = document.getElementById('sequence-position');
+  if (counter) counter.textContent = `${viewerSequenceIndex + 1} of ${len}`;
 }
 
 function resetOrReturn(): void {
@@ -359,7 +410,7 @@ function resetOrReturn(): void {
   else resetView();
 }
 
-async function mountArtwork(objectNumber: string): Promise<void> {
+async function fetchMount(objectNumber: string): Promise<ArtworkImageData | null> {
   // Prefer remount_viewer (preserves viewUUID, keeps the agent's stored UUID
   // valid for navigate_viewer). Fall back to get_artwork_image if the queue
   // was TTL-evicted (30 min idle) or no UUID is yet established.
@@ -371,10 +422,7 @@ async function mountArtwork(objectNumber: string): Promise<void> {
       });
       if (!result.isError) {
         const data = parseArtworkImageResult(result);
-        if (data) {
-          applyMountedArtwork(data, { isSeed: false });
-          return;
-        }
+        if (data) return data;
       }
       // fall through to get_artwork_image fallback on error
     } catch {
@@ -386,11 +434,10 @@ async function mountArtwork(objectNumber: string): Promise<void> {
       name: 'get_artwork_image',
       arguments: { objectNumber },
     });
-    if (result.isError) return;
-    const data = parseArtworkImageResult(result);
-    if (data) applyMountedArtwork(data, { isSeed: false });
+    if (result.isError) return null;
+    return parseArtworkImageResult(result);
   } catch {
-    /* fail silent — user keeps current view */
+    return null; // fail silent — user keeps current view
   }
 }
 
@@ -645,6 +692,11 @@ function renderViewer(data: ArtworkImageData): void {
   appEl.innerHTML = `
     <div class="main">
       <header class="header">${headerInnerHtml(data)}</header>
+      <nav id="sequence-bar" class="sequence-bar" hidden>
+        <button id="prev-artwork" title="Previous artwork (p)">&#8249; Previous</button>
+        <span id="sequence-position" class="sequence-position"></span>
+        <button id="next-artwork" title="Next artwork (n)">Next &#8250;</button>
+      </nav>
 
       <div class="viewport-wrap">
         <div class="content">
@@ -657,6 +709,7 @@ function renderViewer(data: ArtworkImageData): void {
               <div class="shortcut-row"><kbd>+</kbd> / <kbd>&minus;</kbd><span>Zoom in / out</span></div>
               <div class="shortcut-row"><kbd>0</kbd> / <kbd>k</kbd><span>Reset view</span></div>
               <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&uarr;</kbd> <kbd>&rarr;</kbd> <kbd>&darr;</kbd><span>Pan</span></div>
+              <div class="shortcut-row"><kbd>p</kbd> / <kbd>n</kbd><span>Previous / next artwork in the set</span></div>
               <div class="shortcut-row"><kbd>j</kbd> / <kbd>l</kbd><span>Previous / next related variant</span></div>
               <div class="shortcut-row"><kbd>r</kbd> / <kbd>&#8679;r</kbd><span>Rotate left / right</span></div>
               <div class="shortcut-row"><kbd>h</kbd><span>Flip horizontal</span></div>
@@ -797,6 +850,8 @@ function attachEventListeners(): void {
   document.getElementById('prev-related')?.addEventListener('click', () => void navigateRelated('prev'));
   document.getElementById('next-related')?.addEventListener('click', () => void navigateRelated('next'));
   document.getElementById('select-mode')?.addEventListener('click', toggleSelectMode);
+  document.getElementById('prev-artwork')?.addEventListener('click', () => void stepSequence('prev'));
+  document.getElementById('next-artwork')?.addEventListener('click', () => void stepSequence('next'));
 
   // Shortcuts overlay
   const shortcutsOverlay = document.getElementById('shortcuts-overlay');
@@ -862,6 +917,12 @@ function attachEventListeners(): void {
       case 'l':
         void navigateRelated('next');
         break;
+      case 'p':
+        void stepSequence('prev');
+        break;
+      case 'n':
+        void stepSequence('next');
+        break;
       default:
         handled = false;
         break;
@@ -900,6 +961,9 @@ function artworkContextBlock(data: ArtworkImageData) {
     `Date: ${data.date}`,
     `Object number: ${data.objectNumber}`,
     `Image size: ${data.width}x${data.height}`,
+    ...(viewerSequence.length > 1
+      ? [`Artwork ${viewerSequenceIndex + 1} of ${viewerSequence.length} in the set this viewer steps through`]
+      : []),
   ].join('. ');
   return {
     type: 'text' as const,

@@ -429,6 +429,14 @@ export const ImageInfoOutput = {
   url: z.string().optional(),
   iiifInfoUrl: z.string().optional(),
   viewUUID: z.string().optional().describe("Viewer session ID for use with navigate_viewer."),
+  sequence: z.array(z.object({
+    objectNumber: z.string(),
+    title: z.string(),
+    creator: z.string(),
+    date: z.string(),
+  })).optional()
+    .describe("Present when objectNumbers was given: the artworks the viewer steps through, in order; the first is shown."),
+  warnings: z.array(z.string()).optional(),
   error: z.string().optional(),
 };
 

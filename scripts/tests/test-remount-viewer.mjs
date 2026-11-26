@@ -219,6 +219,46 @@ assert(open && (!open._meta?.ui?.visibility || !open._meta.ui.visibility.include
   `get_artwork_image NOT marked app-only (sanity: model-facing tool)`);
 
 // ══════════════════════════════════════════════════════════════════
+//  7. objectNumbers — one viewer steps through several artworks
+// ══════════════════════════════════════════════════════════════════
+
+section("7. objectNumbers — one viewer, ordered sequence, remount keeps the UUID");
+
+const rs = await client.callTool({
+  name: "get_artwork_image",
+  arguments: { objectNumbers: ["SK-C-5", "NOPE-XYZ", "SK-A-2344", "SK-C-5"] },
+});
+const set = parseSc(rs);
+const setText = rs.content?.find((c) => c.type === "text")?.text ?? "";
+assert(!rs.isError, "a list with one bad item still succeeds");
+assert(set.objectNumber === "SK-C-5", `the first artwork is mounted (${set.objectNumber})`);
+assert(typeof set.viewUUID === "string" && set.viewUUID.length === 36, "one viewUUID is minted");
+assert(JSON.stringify(set.sequence?.map((a) => a.objectNumber)) === JSON.stringify(["SK-C-5", "SK-A-2344"]),
+  `sequence keeps order, drops the bad item and the repeat (${JSON.stringify(set.sequence?.map((a) => a.objectNumber))})`);
+assert(set.sequence?.every((a) => a.title && a.creator),
+  "each sequence item carries a title and creator");
+assert(JSON.stringify(set.warnings) === JSON.stringify(["NOPE-XYZ: no artwork found for this object number"]),
+  `the bad item is a warning (${JSON.stringify(set.warnings)})`);
+assert(setText.startsWith("One viewer holds 2 artworks; it shows #1"),
+  `text says one viewer holds the set (${JSON.stringify(setText.slice(0, 60))})`);
+
+const rs2 = await client.callTool({
+  name: "remount_viewer",
+  arguments: { viewUUID: set.viewUUID, objectNumber: "SK-A-2344" },
+});
+const set2 = parseSc(rs2);
+assert(set2.viewUUID === set.viewUUID && set2.objectNumber === "SK-A-2344",
+  "stepping to item 2 via remount_viewer keeps the viewUUID");
+
+const one = await client.callTool({
+  name: "get_artwork_image",
+  arguments: { objectNumbers: ["SK-C-5", "NOPE-XYZ"] },
+});
+const oneText = one.content?.find((c) => c.type === "text")?.text ?? "";
+assert(!one.isError && oneText.startsWith("Only one of the artworks could be shown. SK-C-5"),
+  `a single survivor doesn't claim set controls (${JSON.stringify(oneText.slice(0, 60))})`);
+
+// ══════════════════════════════════════════════════════════════════
 //  Summary
 // ══════════════════════════════════════════════════════════════════
 

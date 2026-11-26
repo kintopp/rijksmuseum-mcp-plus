@@ -32,8 +32,10 @@ import {
   ARTWORK_VIEWER_RESOURCE_URI,
   ANN_READ_OPEN,
   ANN_VIEWER,
+  stripNull,
   stripNullCoerceBool,
   optStr,
+  errorResponse,
   type InferOutput,
   EMIT_STRUCTURED,
   structuredResponse,
@@ -44,6 +46,8 @@ import {
   ImageInfoOutput,
   InspectImageOutput,
 } from "../outputSchemas.js";
+
+const MAX_SEQUENCE = 20;
 
 export function registerViewerTools(
   server: McpServer,
@@ -108,6 +112,59 @@ export function registerViewerTools(
     return { ok: true, data, width: imageInfo.width, height: imageInfo.height, narrationPrefix };
   };
 
+  const openViewerQueue = (payload: Extract<ArtworkImagePayload, { ok: true }>): string => {
+    const viewUUID = randomUUID();
+    viewerQueues.set(viewUUID, {
+      commands: [],
+      createdAt: Date.now(),
+      lastAccess: Date.now(),
+      objectNumber: payload.data.objectNumber,
+      imageWidth: payload.width,
+      imageHeight: payload.height,
+    });
+    return viewUUID;
+  };
+
+  // Only the first artwork's IIIF info is fetched here; the rest are checked
+  // against the local DB and fetched by remount_viewer when the user steps to
+  // them, so a long list costs one network call.
+  const openSequence = async (objectNumbers: string[], signal: AbortSignal) => {
+    const warnings: string[] = [];
+    const sequence: NonNullable<InferOutput<typeof ImageInfoOutput>["sequence"]> = [];
+    let first: Extract<ArtworkImagePayload, { ok: true }> | null = null;
+    for (const objectNumber of objectNumbers) {
+      const artwork = vocabDb?.lookupImageMetadata(objectNumber);
+      if (!artwork) { warnings.push(`${objectNumber}: no artwork found for this object number`); continue; }
+      if (!artwork.iiifId) { warnings.push(`${objectNumber}: no image available for this artwork`); continue; }
+      if (!first) {
+        const payload = await resolveArtworkImagePayload(objectNumber, signal);
+        if (!payload.ok) { warnings.push(`${objectNumber}: ${payload.error.charAt(0).toLowerCase()}${payload.error.slice(1)}`); continue; }
+        first = payload;
+      }
+      sequence.push({ objectNumber: artwork.objectNumber, title: artwork.title, creator: artwork.creator, date: artwork.date });
+    }
+    if (!first) {
+      const error = `None of the artworks could be shown: ${warnings.join("; ")}`;
+      const errorData: InferOutput<typeof ImageInfoOutput> = { objectNumber: objectNumbers[0], error };
+      return { ...structuredResponse(errorData, error), isError: true as const };
+    }
+    const viewUUID = openViewerQueue(first);
+    const viewerData: InferOutput<typeof ImageInfoOutput> = {
+      ...first.data,
+      viewUUID,
+      sequence,
+      ...(warnings.length > 0 ? { warnings } : {}),
+    };
+    const listing = sequence.map((a, i) => `${i + 1}. ${a.objectNumber} — "${a.title}" by ${a.creator}`).join("\n");
+    // The viewer hides its set controls for a single artwork, so only claim
+    // them when there is something to step to.
+    const lead = sequence.length > 1
+      ? `One viewer holds ${sequence.length} artworks; it shows #1, and the user steps through the rest with the viewer's set controls. `
+      : "Only one of the artworks could be shown. ";
+    const text = `${lead}${first.narrationPrefix} | viewUUID: ${viewUUID}\n${listing}`;
+    return structuredResponse(viewerData, text);
+  };
+
   registerAppTool(
     server,
     "get_artwork_image",
@@ -119,11 +176,14 @@ export function registerViewerTools(
         "Use only when they ask to see, show, or view an artwork — not for list, summary, count, or text-only requests. " +
         "Not for visual analysis by the LLM — use inspect_artwork_image to get image bytes. " +
         "Not all artworks have images available. " +
-        "Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl).",
+        "Returns metadata and a viewer link, not the image bytes themselves; do not construct or fetch IIIF image URLs manually (downloadable images are on rijksmuseum.nl). " +
+        `To show several artworks, pass objectNumbers (up to ${MAX_SEQUENCE}) in one call: one viewer opens on the first and the user steps through the rest. ` +
+        "Some hosts keep only the latest viewer, so separate calls can hide earlier ones.",
       inputSchema: z.object({
-        objectNumber: z
-          .string()
-          .describe("The object number of the artwork (e.g. 'SK-C-5')"),
+        objectNumber: optStr()
+          .describe("The object number of the artwork (e.g. 'SK-C-5'). Give this or objectNumbers, not both."),
+        objectNumbers: z.preprocess(stripNull, z.array(z.string().min(1)).min(1).max(MAX_SEQUENCE).optional())
+          .describe("Several object numbers, in the order the viewer should step through them."),
       }).strict(),
       ...withOutputSchema(ImageInfoOutput),
       _meta: {
@@ -131,10 +191,15 @@ export function registerViewerTools(
       },
     },
     withLogging("get_artwork_image", async (args, ctx) => {
-      const payload = await resolveArtworkImagePayload(args.objectNumber, ctx.mcpReq.signal);
+      if ((args.objectNumber ? 1 : 0) + (args.objectNumbers ? 1 : 0) !== 1) {
+        return errorResponse("Provide exactly one of objectNumber or objectNumbers.");
+      }
+      if (args.objectNumbers) return openSequence([...new Set(args.objectNumbers)], ctx.mcpReq.signal);
+      const objectNumber = args.objectNumber!;
+      const payload = await resolveArtworkImagePayload(objectNumber, ctx.mcpReq.signal);
       if (!payload.ok) {
         const errorData: InferOutput<typeof ImageInfoOutput> = {
-          objectNumber: args.objectNumber,
+          objectNumber,
           error: payload.error,
         };
         // Signal failure with isError so the agent treats it as such and the
@@ -144,16 +209,7 @@ export function registerViewerTools(
         return { ...structuredResponse(errorData, payload.error), isError: true as const };
       }
 
-      const viewUUID = randomUUID();
-      viewerQueues.set(viewUUID, {
-        commands: [],
-        createdAt: Date.now(),
-        lastAccess: Date.now(),
-        objectNumber: payload.data.objectNumber,
-        imageWidth: payload.width,
-        imageHeight: payload.height,
-      });
-
+      const viewUUID = openViewerQueue(payload);
       const viewerData: InferOutput<typeof ImageInfoOutput> = { ...payload.data, viewUUID };
       const text = `${payload.narrationPrefix} | viewUUID: ${viewUUID}`;
       return structuredResponse(viewerData, text);

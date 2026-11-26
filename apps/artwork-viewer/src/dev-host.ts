@@ -322,6 +322,32 @@ async function mount(objectNumber: string): Promise<void> {
   });
 }
 
+// Mirrors get_artwork_image({ objectNumbers }): the first artwork's payload plus
+// the ordered sequence the viewer steps through.
+async function mountSet(objectNumbers: string[]): Promise<void> {
+  if (!bridge) {
+    log('error', 'bridge not ready');
+    return;
+  }
+  const r = makeArtworkToolResult(objectNumbers[0]);
+  if (!('structuredContent' in r)) {
+    log('error', `cannot mount: ${objectNumbers[0]}`);
+    return;
+  }
+  const sequence = objectNumbers.map((n) => {
+    const f = FIXTURES[n];
+    return { objectNumber: n, title: f.title, creator: f.creator, date: f.date };
+  });
+  const structuredContent = { ...r.structuredContent, sequence };
+  log('lifecycle', `mounting set ${objectNumbers.join(', ')}`);
+  await bridge.sendToolInput({ arguments: { objectNumbers } });
+  await bridge.sendToolResult({
+    isError: false,
+    content: [{ type: 'text', text: JSON.stringify(structuredContent, null, 2) }],
+    structuredContent,
+  });
+}
+
 async function setupBridgeAndAutoMount(): Promise<void> {
   const frameDocument = iframe.contentDocument;
   if (!frameDocument) return;
@@ -346,6 +372,7 @@ function bindControls(): void {
       const action = btn.dataset.mount;
       if (action === 'seed') void mount('SK-A-1115');
       else if (action === 'peerless') void mount('SK-A-135');
+      else if (action === 'set') void mountSet(['SK-A-135', 'SK-A-1115', 'RP-T-1964-99']);
       else if (action === 'reload') iframe.src = iframe.dataset.src ?? './index.html';
     });
   });
