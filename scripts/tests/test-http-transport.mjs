@@ -107,6 +107,26 @@ function boot(port, nodeArgs = [], env = {}) {
   });
 }
 
+// The log line travels on the stderr pipe and the response on the socket, so
+// a response can arrive before the line it caused.
+function waitForStderr(handle, needle, count, ms = 5000) {
+  const seen = () => handle.stderr.split(needle).length - 1;
+  if (seen() >= count) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const onData = () => {
+      if (seen() < count) return;
+      clearTimeout(t);
+      handle.child.stderr.off("data", onData);
+      resolve();
+    };
+    const t = setTimeout(() => {
+      handle.child.stderr.off("data", onData);
+      reject(new Error(`stderr had ${seen()} of ${count} × ${needle} after ${ms} ms\n${handle.stderr.slice(-2000)}`));
+    }, ms);
+    handle.child.stderr.on("data", onData);
+  });
+}
+
 // ── Server under test ─────────────────────────────────────────────
 const server = await boot(PORT);
 const url = `http://127.0.0.1:${PORT}/mcp`;
@@ -221,6 +241,8 @@ try {
     eq(r.status, 403, "a disallowed Origin is refused before its body is parsed");
   }
   {
+    await waitForStderr(server, '"message":"MCP origin rejected"', 1);
+    await waitForStderr(server, '"message":"Rejected MCP request body"', 3);
     const lines = server.stderr.split("\n").filter(Boolean);
     const bare = lines.filter((l) => {
       try { return typeof JSON.parse(l).level !== "string"; } catch { return true; }
